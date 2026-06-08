@@ -42,6 +42,12 @@ async function renderEnhancedModelConvertersTab(container) {
   let destroyNpsEnhancer = null;
 
   try {
+    await import('../tabs/xml-cii-linelist-smart-map.js?v=20260608-linelist-smart-map-1');
+  } catch (error) {
+    console.warn('[model-converters] XML CII line-list smart map skipped:', error);
+  }
+
+  try {
     await import('../tabs/xml-cii-hydro-ui-patch.js?v=20260608-hydro-restore-1');
   } catch (error) {
     console.warn('[model-converters] XML CII line list/hydro repair skipped:', error);
@@ -63,6 +69,12 @@ async function renderEnhancedModelConvertersTab(container) {
     await import('../tabs/xml-cii-preview-branch-fallback.js?v=20260608-preview-branch-fallback-1');
   } catch (error) {
     console.warn('[model-converters] XML CII preview branch fallback skipped:', error);
+  }
+
+  try {
+    await import('../tabs/xml-cii-preview-enhancements.js?v=20260608-preview-enhancements-1');
+  } catch (error) {
+    console.warn('[model-converters] XML CII preview enhancements skipped:', error);
   }
 
   try {
