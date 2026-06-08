@@ -42,7 +42,7 @@ async function renderEnhancedModelConvertersTab(container) {
   let destroyNpsEnhancer = null;
 
   try {
-    await import('../tabs/xml-cii-linelist-smart-map.js?v=20260608-linelist-smart-map-1');
+    await import('../tabs/xml-cii-linelist-smart-map.js?v=20260608-linelist-smart-map-2');
   } catch (error) {
     console.warn('[model-converters] XML CII line-list smart map skipped:', error);
   }
@@ -72,13 +72,13 @@ async function renderEnhancedModelConvertersTab(container) {
   }
 
   try {
-    await import('../tabs/xml-cii-preview-stable-patch.js?v=20260608-preview-stable-1');
+    await import('../tabs/xml-cii-preview-stable-patch.js?v=20260608-preview-stable-2');
   } catch (error) {
     console.warn('[model-converters] XML CII stable preview patch skipped:', error);
   }
 
   try {
-    await import('../tabs/xml-cii-run-input-process-patch.js?v=20260608-run-input-process-1');
+    await import('../tabs/xml-cii-run-input-process-patch.js?v=20260608-run-input-process-4');
   } catch (error) {
     console.warn('[model-converters] XML CII run input process patch skipped:', error);
   }
