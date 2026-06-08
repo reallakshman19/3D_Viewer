@@ -1,13 +1,21 @@
-const FLAG = '__xmlCiiDefaultMaterialWeightAutoload_v1';
+const FLAG = '__xmlCiiDefaultMaterialWeightAutoload_v2';
 const INPUT_SELECTOR = '[data-option-key="supportConfigJson"]';
-const MASTER_BASE = 'https://raw.githubusercontent.com/reallaksh19/3D_Viewer/main/docs/Masters/';
+const RAW_REPO_BASE = 'https://raw.githubusercontent.com/reallaksh19/3D_Viewer/main/';
+
+const DEFAULT_MASTER_PATHS = Object.freeze({
+  materialMap: 'docs/Masters/PCF_MAT_MAP.TXT',
+  weightValveCa8: 'docs/Masters/wtValveweights.json',
+  pipingClassIndex: 'docs/Masters/SpecwisePipingClass/index.json',
+  pipingClassShardBase: 'docs/Masters/SpecwisePipingClass/',
+  legacyPipingClassMaster: 'docs/Masters/Piping_class_master.json',
+});
 
 const DEFAULTS = Object.freeze({
   material: Object.freeze({
     title: 'Material Map',
     sectionKey: 'material',
     rowsKey: 'mapRows',
-    filename: 'PCF_MAT_MAP.TXT',
+    pathKey: 'materialMap',
     parse: parseMaterialMap,
     fieldMap: Object.freeze({ code: 'code', material: 'material' }),
   }),
@@ -15,7 +23,7 @@ const DEFAULTS = Object.freeze({
     title: 'Weights / Valve CA8',
     sectionKey: 'weight',
     rowsKey: 'masterRows',
-    filename: 'wtValveweights.json',
+    pathKey: 'weightValveCa8',
     parse: parseJsonRows,
     aliases: Object.freeze({
       bore: Object.freeze(['convertedBore', 'Converted Bore', 'Size (NPS)', 'Size', 'NPS', 'DN', 'NB', 'Bore']),
@@ -30,13 +38,19 @@ const DEFAULTS = Object.freeze({
 function text(value) { return value == null ? '' : String(value); }
 function clean(value) { return text(value).replace(/\s+/g, ' ').trim(); }
 function isObject(value) { return !!value && typeof value === 'object' && !Array.isArray(value); }
+function normalizePath(pathValue) { return clean(pathValue).replace(/\\/g, '/').replace(/^\.\//, '').replace(/^\.\.\//, '').replace(/^\/+/, ''); }
 
 function parseConfig() {
   const input = document.querySelector(INPUT_SELECTOR);
   if (!input) return { input: null, config: null };
   try {
     const config = JSON.parse(input.value || '{}');
-    return { input, config: isObject(config) ? config : {} };
+    const cfg = isObject(config) ? config : {};
+    cfg.masterPaths = isObject(cfg.masterPaths) ? cfg.masterPaths : {};
+    for (const [key, value] of Object.entries(DEFAULT_MASTER_PATHS)) {
+      if (!clean(cfg.masterPaths[key])) cfg.masterPaths[key] = value;
+    }
+    return { input, config: cfg };
   } catch {
     return { input, config: null };
   }
@@ -114,34 +128,38 @@ function autoFieldMap(rows, aliases, existingMap = {}) {
   return next;
 }
 
-function candidateUrls(filename) {
-  const encoded = encodeURIComponent(filename);
+function pathCandidates(pathValue) {
+  const raw = clean(pathValue);
+  if (!raw) return [];
+  if (/^https?:\/\//i.test(raw)) return [raw];
+  const normalized = normalizePath(raw);
   const base = location.pathname.replace(/[^/]*$/, '');
   return Array.from(new Set([
-    `docs/Masters/${encoded}`,
-    `./docs/Masters/${encoded}`,
-    `../docs/Masters/${encoded}`,
-    `${location.origin}${base}docs/Masters/${encoded}`,
-    `${location.origin}/3D_Viewer/docs/Masters/${encoded}`,
-    `${MASTER_BASE}${encoded}`,
+    raw,
+    `./${normalized}`,
+    `../${normalized}`,
+    `${location.origin}${base}${normalized}`,
+    `${location.origin}/3D_Viewer/${normalized}`,
+    `${RAW_REPO_BASE}${normalized}`,
   ]));
 }
 
-async function fetchRows(def) {
+async function fetchRows(def, config) {
+  const configuredPath = clean(config?.masterPaths?.[def.pathKey]) || DEFAULT_MASTER_PATHS[def.pathKey];
   const errors = [];
-  for (const url of candidateUrls(def.filename)) {
+  for (const url of pathCandidates(configuredPath)) {
     try {
       const response = await fetch(url, { cache: 'force-cache', mode: 'cors' });
       if (!response.ok) { errors.push(`${url}: HTTP ${response.status}`); continue; }
       const rawText = await response.text();
       const rows = def.parse(rawText);
       if (!rows.length) { errors.push(`${url}: 0 rows`); continue; }
-      return { rows, url };
+      return { rows, url, configuredPath };
     } catch (error) {
       errors.push(`${url}: ${clean(error?.message || error)}`);
     }
   }
-  throw new Error(`${def.title} could not be loaded. ${errors.join(' | ')}`);
+  throw new Error(`${def.title} could not be loaded from ${configuredPath}. ${errors.join(' | ')}`);
 }
 
 let busy = false;
@@ -150,21 +168,26 @@ async function autoloadDefaults() {
   if (busy) return;
   const { input, config } = parseConfig();
   if (!input || !config) return;
-  const signature = Object.entries(DEFAULTS).map(([key, def]) => `${key}:${Array.isArray(config?.[def.sectionKey]?.[def.rowsKey]) ? config[def.sectionKey][def.rowsKey].length : 0}`).join('|');
+  const signature = Object.entries(DEFAULTS)
+    .map(([key, def]) => `${key}:${clean(config.masterPaths?.[def.pathKey])}:${Array.isArray(config?.[def.sectionKey]?.[def.rowsKey]) ? config[def.sectionKey][def.rowsKey].length : 0}`)
+    .join('|');
   if (signature === lastSignature) return;
   lastSignature = signature;
   const missing = Object.entries(DEFAULTS).filter(([, def]) => !Array.isArray(config?.[def.sectionKey]?.[def.rowsKey]) || config[def.sectionKey][def.rowsKey].length <= 0);
-  if (!missing.length) return;
+  if (!missing.length) {
+    writeConfig(input, config);
+    return;
+  }
   busy = true;
   const loaded = [];
   try {
     for (const [, def] of missing) {
-      const { rows, url } = await fetchRows(def);
+      const { rows, url, configuredPath } = await fetchRows(def, config);
       const section = isObject(config[def.sectionKey]) ? config[def.sectionKey] : {};
       section[def.rowsKey] = rows;
       section.fieldMap = def.fieldMap ? { ...(section.fieldMap || {}), ...def.fieldMap } : autoFieldMap(rows, def.aliases, section.fieldMap || {});
-      section.defaultUrl = section.defaultUrl || url;
-      section.masterUrl = section.masterUrl || url;
+      section.defaultUrl = configuredPath;
+      section.masterUrl = configuredPath;
       section._autoloadedFrom = url;
       section._autoloadedRows = rows.length;
       section._autoloadedAt = new Date().toISOString();
@@ -175,7 +198,7 @@ async function autoloadDefaults() {
       ...(config._xmlCiiDefaultMasters || {}),
       materialAndWeightLoadedAt: new Date().toISOString(),
       loaded,
-      note: 'Material Map and Weights/Valve CA8 are autoloaded by default. Piping Class is not autoloaded.',
+      note: 'Material Map and Weights/Valve CA8 are autoloaded by editable configured paths. Piping Class uses specwise shards.',
     };
     writeConfig(input, config);
     console.info(`XML->CII default masters loaded: ${loaded.join(' · ')}`);
