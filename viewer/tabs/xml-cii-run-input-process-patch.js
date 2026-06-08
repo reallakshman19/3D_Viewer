@@ -178,7 +178,8 @@ async function handleRunClick(event) {
   run.click();
   setTimeout(() => { delete run.dataset.xmlCiiInputPatched; }, 0);
 }
-export function installXmlCiiRunInputProcessPatch() {
+function installXmlCiiRunInputProcessPatch() {
+  window.installXmlCiiRunInputProcessPatch = installXmlCiiRunInputProcessPatch;
   if (window[FLAG]) return;
   window[FLAG] = true;
   document.addEventListener('click', (event) => { void handleRunClick(event); }, true);

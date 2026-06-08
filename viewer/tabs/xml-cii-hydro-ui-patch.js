@@ -193,7 +193,8 @@ function refresh() {
   });
 }
 
-export function installXmlCiiLineListHydroFix() {
+function installXmlCiiLineListHydroFix() {
+  window.installXmlCiiLineListHydroFix = installXmlCiiLineListHydroFix;
   if (window[FLAG]) return;
   window[FLAG] = true;
   refresh();

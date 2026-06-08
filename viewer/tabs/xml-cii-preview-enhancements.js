@@ -312,7 +312,8 @@ function schedule() {
     enhanceWeightPopup().catch((error) => console.warn('XML->CII weight popup enhancement failed:', error));
   });
 }
-export function installXmlCiiPreviewEnhancements() {
+function installXmlCiiPreviewEnhancements() {
+  window.installXmlCiiPreviewEnhancements = installXmlCiiPreviewEnhancements;
   if (window[FLAG]) return;
   window[FLAG] = true;
   new MutationObserver(schedule).observe(document.body, { childList: true, subtree: true, characterData: true });

@@ -116,7 +116,8 @@ function refresh() {
     if (!window[CONSOLIDATED_FLAG]) addSavedColumn();
   });
 }
-export function installXmlCiiHydroSavedRowsPatch() {
+function installXmlCiiHydroSavedRowsPatch() {
+  window.installXmlCiiHydroSavedRowsPatch = installXmlCiiHydroSavedRowsPatch;
   if (window[CONSOLIDATED_FLAG] || window[FLAG]) return;
   window[FLAG] = true;
   refresh();

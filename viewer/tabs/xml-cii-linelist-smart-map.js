@@ -273,7 +273,8 @@ function applySmartMap() {
 }
 let raf = 0;
 function schedule() { cancelAnimationFrame(raf); raf = requestAnimationFrame(applySmartMap); }
-export function installXmlCiiLineListSmartMap() {
+function installXmlCiiLineListSmartMap() {
+  window.installXmlCiiLineListSmartMap = installXmlCiiLineListSmartMap;
   if (window[FLAG]) return;
   window[FLAG] = true;
   schedule();

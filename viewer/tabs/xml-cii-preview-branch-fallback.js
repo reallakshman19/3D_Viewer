@@ -176,7 +176,8 @@ function schedule() {
   cancelAnimationFrame(raf);
   raf = requestAnimationFrame(() => renderFallbackIfNeeded().catch((error) => console.warn('XML->CII fallback preview failed:', error)));
 }
-export function installXmlCiiPreviewBranchFallback() {
+function installXmlCiiPreviewBranchFallback() {
+  window.installXmlCiiPreviewBranchFallback = installXmlCiiPreviewBranchFallback;
   if (window[FLAG]) return;
   window[FLAG] = true;
   new MutationObserver(schedule).observe(document.body, { childList: true, subtree: true, characterData: true });

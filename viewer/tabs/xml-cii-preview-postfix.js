@@ -175,7 +175,8 @@ function bind(root) {
 }
 let raf = 0;
 function schedule() { cancelAnimationFrame(raf); raf = requestAnimationFrame(() => fixPreview().catch((e) => console.warn('XML->CII preview postfix failed:', e))); }
-export function installXmlCiiPreviewPostfix() {
+function installXmlCiiPreviewPostfix() {
+  window.installXmlCiiPreviewPostfix = installXmlCiiPreviewPostfix;
   if (window[FLAG]) return;
   window[FLAG] = true;
   new MutationObserver(schedule).observe(document.body, { childList: true, subtree: true, characterData: true });

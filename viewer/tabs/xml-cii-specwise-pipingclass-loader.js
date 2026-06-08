@@ -337,7 +337,8 @@ function refresh() {
   });
 }
 
-export function installXmlCiiSpecwisePipingClassLoader() {
+function installXmlCiiSpecwisePipingClassLoader() {
+  window.installXmlCiiSpecwisePipingClassLoader = installXmlCiiSpecwisePipingClassLoader;
   if (window[FLAG]) return;
   window[FLAG] = true;
   refresh();

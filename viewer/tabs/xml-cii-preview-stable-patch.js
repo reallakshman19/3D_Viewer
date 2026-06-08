@@ -251,7 +251,8 @@ async function patch() {
 let timer = 0;
 function schedule() { clearTimeout(timer); timer = setTimeout(() => patch().catch((e) => console.warn('XML->CII stable preview patch failed:', e)), 180); }
 function scheduleBurst() { schedule(); setTimeout(schedule, 400); setTimeout(schedule, 1000); }
-export function installXmlCiiPreviewStablePatch() {
+function installXmlCiiPreviewStablePatch() {
+  window.installXmlCiiPreviewStablePatch = installXmlCiiPreviewStablePatch;
   if (window[FLAG]) return;
   window[FLAG] = true;
   new MutationObserver(schedule).observe(document.body, { childList: true, subtree: true });

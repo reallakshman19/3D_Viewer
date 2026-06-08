@@ -13,5 +13,6 @@ function moveWeightBeforeRun(){
   });
 }
 let timer=0;function schedule(){clearTimeout(timer);timer=setTimeout(moveWeightBeforeRun,100)}
-export function installXmlCiiWorkflowOrderFix(){if(window[FLAG])return;window[FLAG]=true;new MutationObserver(schedule).observe(document.body,{childList:true,subtree:true});document.addEventListener('click',schedule,true);schedule()}
+function installXmlCiiWorkflowOrderFix() {
+  window.installXmlCiiWorkflowOrderFix = installXmlCiiWorkflowOrderFix;if(window[FLAG])return;window[FLAG]=true;new MutationObserver(schedule).observe(document.body,{childList:true,subtree:true});document.addEventListener('click',schedule,true);schedule()}
 installXmlCiiWorkflowOrderFix();

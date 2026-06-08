@@ -245,7 +245,8 @@ function schedule() {
   raf = requestAnimationFrame(() => autoloadDefaults());
 }
 
-export function installXmlCiiDefaultMaterialWeightAutoload() {
+function installXmlCiiDefaultMaterialWeightAutoload() {
+  window.installXmlCiiDefaultMaterialWeightAutoload = installXmlCiiDefaultMaterialWeightAutoload;
   if (window[FLAG]) return;
   window[FLAG] = true;
   schedule();

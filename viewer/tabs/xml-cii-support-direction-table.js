@@ -36,7 +36,8 @@ function schedule() {
   timer = setTimeout(patchPanel, 100);
 }
 
-export function installXmlCiiSupportDirectionTable() {
+function installXmlCiiSupportDirectionTable() {
+  window.installXmlCiiSupportDirectionTable = installXmlCiiSupportDirectionTable;
   if (window[FLAG]) return;
   window[FLAG] = true;
   new MutationObserver(schedule).observe(document.body, { childList: true, subtree: true });
