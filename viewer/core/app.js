@@ -84,6 +84,12 @@ async function renderEnhancedModelConvertersTab(container) {
   }
 
   try {
+    await import('../tabs/xml-cii-run-input-process-patch.js?v=20260608-run-input-process-1');
+  } catch (error) {
+    console.warn('[model-converters] XML CII run input process patch skipped:', error);
+  }
+
+  try {
     const { enhanceModelConvertersTab } = await import('../tabs/model-converters-ui-enhancements.js?v=20260608-core-safe-1');
     destroyEnhancer = enhanceModelConvertersTab(container);
   } catch (error) {
