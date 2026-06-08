@@ -76,9 +76,10 @@ async function handleRunClick(event) {
   run.click();
   setTimeout(() => { delete run.dataset.xmlCiiElementLengthPatched; }, 0);
 }
-export function installXmlCiiElementLengthRunPatch() {
+function installXmlCiiElementLengthRunPatch() {
   if (window[FLAG]) return;
   window[FLAG] = true;
+  window.installXmlCiiElementLengthRunPatch = installXmlCiiElementLengthRunPatch;
   document.addEventListener('click', (event) => { void handleRunClick(event); }, true);
 }
 installXmlCiiElementLengthRunPatch();
