@@ -1,4 +1,4 @@
-const FLAG = '__xmlCiiSpecwisePipingClassLoader_v1';
+const FLAG = '__xmlCiiSpecwisePipingClassLoader_v2';
 const INPUT_SELECTOR = '[data-option-key="supportConfigJson"]';
 const POPUP_SELECTOR = '.model-converters-workflow-popup-overlay .model-converters-workflow-popup';
 const RAW_REPO_BASE = 'https://raw.githubusercontent.com/reallaksh19/3D_Viewer/main/';
@@ -28,19 +28,9 @@ function clean(value) { return text(value).replace(/\s+/g, ' ').trim(); }
 function isObject(value) { return !!value && typeof value === 'object' && !Array.isArray(value); }
 function popup() { return document.querySelector(POPUP_SELECTOR); }
 function esc(value) { return text(value).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
-
-function normalizeProbe(value) {
-  return clean(value).toUpperCase().replace(/["'\s]/g, '');
-}
-
-function normalizePath(pathValue) {
-  return clean(pathValue).replace(/\\/g, '/').replace(/^\.\//, '').replace(/^\.\.\//, '').replace(/^\/+/, '');
-}
-
-function ensureSlash(pathValue) {
-  const p = clean(pathValue).replace(/\\/g, '/');
-  return p.endsWith('/') ? p : `${p}/`;
-}
+function normalizeProbe(value) { return clean(value).toUpperCase().replace(/["'\s]/g, ''); }
+function normalizePath(pathValue) { return clean(pathValue).replace(/\\/g, '/').replace(/^\.\//, '').replace(/^\.\.\//, '').replace(/^\/+/, ''); }
+function ensureSlash(pathValue) { const p = clean(pathValue).replace(/\\/g, '/'); return p.endsWith('/') ? p : `${p}/`; }
 
 function parseConfig() {
   const input = document.querySelector(INPUT_SELECTOR);
@@ -74,12 +64,12 @@ function pathCandidates(pathValue) {
   const normalized = normalizePath(raw);
   const pageBase = location.pathname.replace(/[^/]*$/, '');
   return Array.from(new Set([
-    raw,
-    `./${normalized}`,
-    `../${normalized}`,
-    `${location.origin}${pageBase}${normalized}`,
-    `${location.origin}/3D_Viewer/${normalized}`,
     `${RAW_REPO_BASE}${normalized}`,
+    `${location.origin}/3D_Viewer/${normalized}`,
+    `${location.origin}${pageBase}${normalized}`,
+    `../${normalized}`,
+    `./${normalized}`,
+    raw,
   ]));
 }
 
@@ -209,14 +199,7 @@ async function loadSpecwisePipingClassForBranches(branchNames, sourceLabel = 'XM
     }
 
     updatePipingClassSection(input, config, index, loadedEntries, loadedRows, indexUrl);
-    window.__xmlCiiPipingClassSpecCache = {
-      branchNames,
-      index,
-      loadedEntries,
-      loadedRows,
-      errors,
-      updatedAt: new Date().toISOString(),
-    };
+    window.__xmlCiiPipingClassSpecCache = { branchNames, index, loadedEntries, loadedRows, errors, updatedAt: new Date().toISOString() };
     lastStatus = {
       ok: true,
       sourceLabel,
@@ -231,12 +214,7 @@ async function loadSpecwisePipingClassForBranches(branchNames, sourceLabel = 'XM
     renderStatusPanel();
     if (errors.length) console.warn(`XML->CII specwise piping class load warnings: ${errors.join(' || ')}`);
   } catch (error) {
-    lastStatus = {
-      ok: false,
-      sourceLabel,
-      branchCount: branchNames.length,
-      message: `Piping Class index load failed: ${clean(error?.message || error)}`,
-    };
+    lastStatus = { ok: false, sourceLabel, branchCount: branchNames.length, message: `Piping Class index load failed: ${clean(error?.message || error)}` };
     renderStatusPanel();
     console.warn('XML->CII specwise piping class load failed:', error);
   } finally {
@@ -249,6 +227,7 @@ async function inspectXmlFile(file) {
   const xmlText = await file.text();
   const branchNames = extractBranchNamesFromXmlText(xmlText);
   window.__xmlCiiLastBranchNames = branchNames;
+  window.__xmlCiiLastXmlText = xmlText;
   if (branchNames.length) await loadSpecwisePipingClassForBranches(branchNames, file.name || 'XML');
   else {
     lastStatus = { ok: false, sourceLabel: file.name || 'XML', branchCount: 0, message: 'No <branchname> values found in selected XML.' };
@@ -337,6 +316,17 @@ function bindPathPanel() {
   });
 }
 
+function interceptLegacyPipingClassDefault(event) {
+  const button = event.target?.closest?.('[data-xml-cii-load-default="pipingClass"]');
+  if (!button) return;
+  event.preventDefault();
+  event.stopPropagation();
+  event.stopImmediatePropagation?.();
+  const branches = Array.isArray(window.__xmlCiiLastBranchNames) ? window.__xmlCiiLastBranchNames : [];
+  if (branches.length) loadSpecwisePipingClassForBranches(branches, 'piping-class-default').catch((error) => console.warn(error));
+  else scanExistingXmlInputs();
+}
+
 let raf = 0;
 function refresh() {
   cancelAnimationFrame(raf);
@@ -353,6 +343,7 @@ export function installXmlCiiSpecwisePipingClassLoader() {
   refresh();
   scanExistingXmlInputs();
   new MutationObserver(refresh).observe(document.body, { childList: true, subtree: true });
+  document.addEventListener('click', interceptLegacyPipingClassDefault, true);
   document.addEventListener('change', (event) => {
     if (event.target?.matches?.('input[type="file"]') && !event.target.matches('[data-xml-cii-import-master]')) {
       const file = event.target.files?.[0];
