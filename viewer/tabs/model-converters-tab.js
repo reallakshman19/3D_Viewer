@@ -2987,10 +2987,13 @@ function _xmlCiiTokenPositionList(value) {
 function _xmlCiiLineKeyFromBranchTokens(branchName, config) {
   const linelist = config.linelist || {};
   const positions = _xmlCiiTokenPositionList(linelist.lineKeyTokenPositions);
-   const safePositions = positions.length ? positions : [4];
-   const delimiter = linelist.tokenDelimiter || '-';
-   const joiner = _toText(linelist.lineKeyJoiner);
-   const parts = safePositions.map((position) => _tokenAtPosition(branchName, delimiter, position)).filter(Boolean);
+  const safePositions = positions.length ? positions : [4];
+  const delimiter = linelist.tokenDelimiter || '-';
+  const joiner = _toText(linelist.lineKeyJoiner);
+  const parts = safePositions.map((position) => _tokenAtPosition(branchName, delimiter, position)).filter(Boolean);
+  return parts.join(joiner);
+}
+
 function _xmlCiiCleanSizeToken(value) {
   const match = _toText(value).match(/\d+(?:\.\d+)?/);
   return match ? match[0] : '';
