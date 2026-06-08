@@ -1,4 +1,4 @@
-const FLAG = '__xmlCiiRunInputProcessPatch_v3';
+const FLAG = '__xmlCiiRunInputProcessPatch_v4';
 const SUPPORT_CONFIG_SELECTOR = '[data-option-key="supportConfigJson"]';
 const RUN_SELECTOR = '#model-converters-run';
 const PRIMARY_SELECTOR = '#model-converters-primary-input';
@@ -41,6 +41,21 @@ function validMappedField(field, cfg) {
   if (field === 'p1') return /pressure/.test(probe) && !/(test\s*pressure|hydro|hydrostatic|proof|temp|temperature|density|fluid|line\s*(number|no)|piping\s*class)/.test(probe);
   return true;
 }
+function normalizeProcessData(cfg) {
+  let changed = false;
+  const validP1 = validMappedField('p1', cfg);
+  for (const [lineKey, row] of Object.entries(cfg.overrides?.processData || {})) {
+    if (!row || typeof row !== 'object') continue;
+    if (!validP1 && row.p1) { delete row.p1; changed = true; }
+    if (validP1 && row.p1 && row.hydroPressure && numberText(row.p1) === numberText(row.hydroPressure)) { delete row.p1; changed = true; }
+    if (validP1 && row.p1 && /hydro|test\s*pressure/i.test(String(row.p1))) { delete row.p1; changed = true; }
+    if (lineKey !== norm(lineKey) && !cfg.overrides.processData[norm(lineKey)]) {
+      cfg.overrides.processData[norm(lineKey)] = { ...row };
+      changed = true;
+    }
+  }
+  return changed;
+}
 function readConfig() {
   const input = document.querySelector(SUPPORT_CONFIG_SELECTOR);
   try {
@@ -50,6 +65,11 @@ function readConfig() {
     cfg.linelist.masterRows = Array.isArray(cfg.linelist.masterRows) ? cfg.linelist.masterRows : [];
     cfg.overrides = isObj(cfg.overrides) ? cfg.overrides : {};
     cfg.overrides.processData = isObj(cfg.overrides.processData) ? cfg.overrides.processData : {};
+    if (normalizeProcessData(cfg) && input) {
+      input.value = JSON.stringify(cfg, null, 2);
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      input.dispatchEvent(new Event('change', { bubbles: true }));
+    }
     return cfg;
   } catch { return { linelist: { fieldMap: {}, masterRows: [] }, overrides: { processData: {} } }; }
 }
