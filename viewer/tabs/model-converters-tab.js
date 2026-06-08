@@ -2973,12 +2973,14 @@ function _tokenAtPosition(branchName, delimiter, oneBasedIndex) {
 
 function _xmlCiiTokenPositionList(value) {
   if (Array.isArray(value)) return value.map((entry) => Number(entry)).filter((entry) => Number.isFinite(entry) && entry > 0);
-   const text = _toText(value).trim();
-   if (!text) return [];
-   // Reject decorated UI/count text such as "24(rows)"; token positions must be
-   // plain 1-based numbers separated by comma or plus.
-   if (!/^\s*\d+(?:\s*[,+]\s*\d+)*\s*$/.test(text)) return [];
-   return text
+  const text = _toText(value).trim();
+  if (!text) return [];
+  // Reject decorated UI/count text such as "24(rows)"; token positions must be
+  // plain 1-based numbers separated by comma or plus.
+  if (!/^\s*\d+(?:\s*[,+]\s*\d+)*\s*$/.test(text)) return [];
+  return text
+    .split(/[,+]/)
+    .map((entry) => Number(entry.trim()))
     .filter((entry) => Number.isFinite(entry) && entry > 0);
 }
 
