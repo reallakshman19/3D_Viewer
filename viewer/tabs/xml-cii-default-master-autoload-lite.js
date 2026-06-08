@@ -1,4 +1,4 @@
-const FLAG = '__xmlCiiDefaultMaterialWeightAutoload_v2';
+const FLAG = '__xmlCiiDefaultMaterialWeightAutoload_v3';
 const INPUT_SELECTOR = '[data-option-key="supportConfigJson"]';
 const RAW_REPO_BASE = 'https://raw.githubusercontent.com/reallaksh19/3D_Viewer/main/';
 
@@ -134,13 +134,17 @@ function pathCandidates(pathValue) {
   if (/^https?:\/\//i.test(raw)) return [raw];
   const normalized = normalizePath(raw);
   const base = location.pathname.replace(/[^/]*$/, '');
+
+  // GitHub Pages currently serves the viewer as the site root, so /docs can be
+  // absent in the deployed artifact. Try raw GitHub first to avoid noisy 404s;
+  // local paths remain as fallback for local/dev deployments.
   return Array.from(new Set([
-    raw,
-    `./${normalized}`,
-    `../${normalized}`,
-    `${location.origin}${base}${normalized}`,
-    `${location.origin}/3D_Viewer/${normalized}`,
     `${RAW_REPO_BASE}${normalized}`,
+    `${location.origin}/3D_Viewer/${normalized}`,
+    `${location.origin}${base}${normalized}`,
+    `../${normalized}`,
+    `./${normalized}`,
+    raw,
   ]));
 }
 
@@ -162,6 +166,36 @@ async function fetchRows(def, config) {
   throw new Error(`${def.title} could not be loaded from ${configuredPath}. ${errors.join(' | ')}`);
 }
 
+async function loadDefault(masterKey, force = false) {
+  const def = DEFAULTS[masterKey];
+  if (!def) return false;
+  const { input, config } = parseConfig();
+  if (!input || !config) return false;
+  if (!force && Array.isArray(config?.[def.sectionKey]?.[def.rowsKey]) && config[def.sectionKey][def.rowsKey].length > 0) {
+    writeConfig(input, config);
+    return true;
+  }
+  const { rows, url, configuredPath } = await fetchRows(def, config);
+  const section = isObject(config[def.sectionKey]) ? config[def.sectionKey] : {};
+  section[def.rowsKey] = rows;
+  section.fieldMap = def.fieldMap ? { ...(section.fieldMap || {}), ...def.fieldMap } : autoFieldMap(rows, def.aliases, section.fieldMap || {});
+  section.defaultUrl = configuredPath;
+  section.masterUrl = configuredPath;
+  section._autoloadedFrom = url;
+  section._autoloadedRows = rows.length;
+  section._autoloadedAt = new Date().toISOString();
+  config[def.sectionKey] = section;
+  config._xmlCiiDefaultMasters = {
+    ...(config._xmlCiiDefaultMasters || {}),
+    materialAndWeightLoadedAt: new Date().toISOString(),
+    loaded: [`${def.title}: ${rows.length} row(s)`],
+    note: 'Material Map and Weights/Valve CA8 are loaded by editable configured paths. Piping Class uses specwise shards.',
+  };
+  writeConfig(input, config);
+  console.info(`XML->CII default master loaded: ${def.title}: ${rows.length} row(s) from ${url}`);
+  return true;
+}
+
 let busy = false;
 let lastSignature = '';
 async function autoloadDefaults() {
@@ -179,34 +213,30 @@ async function autoloadDefaults() {
     return;
   }
   busy = true;
-  const loaded = [];
   try {
-    for (const [, def] of missing) {
-      const { rows, url, configuredPath } = await fetchRows(def, config);
-      const section = isObject(config[def.sectionKey]) ? config[def.sectionKey] : {};
-      section[def.rowsKey] = rows;
-      section.fieldMap = def.fieldMap ? { ...(section.fieldMap || {}), ...def.fieldMap } : autoFieldMap(rows, def.aliases, section.fieldMap || {});
-      section.defaultUrl = configuredPath;
-      section.masterUrl = configuredPath;
-      section._autoloadedFrom = url;
-      section._autoloadedRows = rows.length;
-      section._autoloadedAt = new Date().toISOString();
-      config[def.sectionKey] = section;
-      loaded.push(`${def.title}: ${rows.length} row(s)`);
+    const loaded = [];
+    for (const [key, def] of missing) {
+      await loadDefault(key, true);
+      const { config: after } = parseConfig();
+      const count = Array.isArray(after?.[def.sectionKey]?.[def.rowsKey]) ? after[def.sectionKey][def.rowsKey].length : 0;
+      loaded.push(`${def.title}: ${count} row(s)`);
     }
-    config._xmlCiiDefaultMasters = {
-      ...(config._xmlCiiDefaultMasters || {}),
-      materialAndWeightLoadedAt: new Date().toISOString(),
-      loaded,
-      note: 'Material Map and Weights/Valve CA8 are autoloaded by editable configured paths. Piping Class uses specwise shards.',
-    };
-    writeConfig(input, config);
     console.info(`XML->CII default masters loaded: ${loaded.join(' · ')}`);
   } catch (error) {
     console.warn('XML->CII default material/weight autoload failed:', error);
   } finally {
     busy = false;
   }
+}
+
+function interceptDefaultLoadClicks(event) {
+  const button = event.target?.closest?.('[data-xml-cii-load-default]');
+  const masterKey = button?.getAttribute?.('data-xml-cii-load-default') || '';
+  if (!DEFAULTS[masterKey]) return;
+  event.preventDefault();
+  event.stopPropagation();
+  event.stopImmediatePropagation?.();
+  loadDefault(masterKey, true).catch((error) => console.warn(`XML->CII ${masterKey} default load failed:`, error));
 }
 
 let raf = 0;
@@ -220,6 +250,7 @@ export function installXmlCiiDefaultMaterialWeightAutoload() {
   window[FLAG] = true;
   schedule();
   new MutationObserver(schedule).observe(document.body, { childList: true, subtree: true });
+  document.addEventListener('click', interceptDefaultLoadClicks, true);
   document.addEventListener('change', (event) => { if (event.target?.matches?.(INPUT_SELECTOR)) schedule(); }, true);
 }
 
