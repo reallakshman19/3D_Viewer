@@ -1,12 +1,19 @@
-const FLAG = '__xmlCiiLineListHydroScopedFix_v1';
+const FLAG = '__xmlCiiLineListHydroScopedFix_v3';
 const HYDRO_COL = 'data-xml-cii-hydro-col';
 const PREVIEW_HYDRO_COL = 'data-xml-cii-preview-hydro-col';
+const HYDRO_PANEL_ID = 'xml-cii-hydro-map-panel';
 const FIELD_STORAGE = 'xmlCii.hydroPressureField';
 const POPUP_SELECTOR = '.model-converters-workflow-popup-overlay .model-converters-workflow-popup';
 
+const HYDRO_ALIASES = Object.freeze([
+  'hydroPressure', 'Hydro Test Pressure', 'Hydrotest Pressure', 'Hydro Pressure',
+  'Hydro Pr', 'Hyd Test Pr', 'Hyd. Test Pressure', 'Test Pressure',
+  'TEST_PRESSURE', 'HYDRO_TEST_PRESSURE', 'Pressure Test', 'Proof Pressure',
+]);
+
 function txt(value) { return value == null ? '' : String(value); }
 function clean(value) { return txt(value).replace(/\s+/g, ' ').trim(); }
-function norm(value) { return clean(value).toUpperCase().replace(/\s+/g, ''); }
+function norm(value) { return clean(value).toUpperCase().replace(/[\s_.\-\/()]/g, ''); }
 function activePopup() { return document.querySelector(POPUP_SELECTOR); }
 function esc(value) { return txt(value).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
 
@@ -59,12 +66,30 @@ function allRowKeys(rows) {
   return keys;
 }
 
+function scoreHydroHeader(key, rows) {
+  const k = norm(key);
+  if (!k) return 0;
+  let score = 0;
+  for (const alias of HYDRO_ALIASES) {
+    const a = norm(alias);
+    if (k === a) score = Math.max(score, 100);
+    else if (k.includes(a) || a.includes(k)) score = Math.max(score, 82);
+  }
+  if (/HYDRO|HYD/.test(k)) score = Math.max(score, 75);
+  if (/TEST.*PRESS|PRESS.*TEST|PROOF.*PRESS/.test(k)) score = Math.max(score, 72);
+  const sample = (rows || []).slice(0, 12).map((row) => rowValue(row, [key])).join(' ').toUpperCase();
+  if (/HYDRO|HYD\s*TEST|TEST\s*PRESS|PROOF\s*PRESS/.test(`${key} ${sample}`)) score = Math.max(score, 68);
+  return score;
+}
+
 function detectHydroField(rows) {
-  const keys = allRowKeys(rows);
-  return keys.find((key) => {
-    const probe = `${key} ${(rows || []).slice(0, 12).map((row) => `${rowValue(row, [key])}`).join(' ')}`.toUpperCase();
-    return /HYDRO|HYD\s*TEST|TEST\s*PRESS|TESTPRESS|PROOF\s*PRESS/.test(probe);
-  }) || '';
+  let best = '';
+  let bestScore = 0;
+  for (const key of allRowKeys(rows)) {
+    const score = scoreHydroHeader(key, rows);
+    if (score > bestScore) { best = key; bestScore = score; }
+  }
+  return bestScore >= 68 ? best : '';
 }
 
 function preferredHydroField(linelist) {
@@ -124,6 +149,7 @@ const PROCESS_FIELD_KEYS = Object.freeze({
   t3: ['t3', 'T3', 'Temperature3', 'Temperature 3', 'Temp Min', 'Min Temp', 'Minimum Temp'],
   insThk: ['insThk', 'InsThk', 'Insulation', 'Ins Thk', 'Insulation thickness'],
   density: ['density', 'Density', 'densityMixed', 'Density Mixed', 'Mixed kg/m3', 'Mixed Density', 'densityGas', 'Density Gas', 'Gas kg/m3', 'densityLiquid', 'Density Liquid', 'Liquid kg/m3'],
+  hydroPressure: HYDRO_ALIASES,
 });
 
 function syncLineListRows() {
@@ -156,7 +182,7 @@ function syncLineListRows() {
       const value = rowValue(row, mapped);
       if (clean(value) && clean(row[target]) !== clean(value)) { row[target] = value; changed = true; }
     }
-    const hydro = rowValue(row, [fieldMap.hydroPressure, hydroField, 'hydroPressure', 'Hydro Test Pressure', 'Hydrotest Pressure', 'Hydro Pressure', 'HYDRO_TEST_PRESSURE']);
+    const hydro = rowValue(row, [fieldMap.hydroPressure, hydroField, ...HYDRO_ALIASES]);
     if (clean(hydro) && clean(row.hydroPressure) !== clean(hydro)) { row.hydroPressure = hydro; changed = true; }
     if (key && st.cfg.overrides?.processData) {
       const processOverride = st.cfg.overrides.processData[key] || {};
@@ -176,15 +202,51 @@ function syncLineListRows() {
 function hydroForLineKey(lineKey) {
   const st = parseConfig();
   const rows = st.linelist?.masterRows || [];
+  const override = st.cfg?.overrides?.processData?.[lineKey]?.hydroPressure;
+  if (clean(override)) return clean(override);
   for (const row of rows) {
     if (norm(lineKeyFromRow(row, st.linelist?.fieldMap || {})) === norm(lineKey)) {
-      return rowValue(row, ['hydroPressure', st.linelist?.fieldMap?.hydroPressure, preferredHydroField(st.linelist)]);
+      return rowValue(row, ['hydroPressure', st.linelist?.fieldMap?.hydroPressure, preferredHydroField(st.linelist), ...HYDRO_ALIASES]);
     }
   }
   return '';
 }
 
 function cellTexts(row) { return Array.from(row?.children || []).map((cell) => clean(cell.textContent)); }
+
+function injectHydroMapPanel() {
+  const popup = activePopup();
+  const st = parseConfig();
+  if (!popup || !st.linelist?.masterRows?.length) return;
+  const detail = popup.querySelector('.model-converters-workflow-detail');
+  if (!detail || document.getElementById(HYDRO_PANEL_ID)) return;
+  const headers = allRowKeys(st.linelist.masterRows).filter((key) => key !== '_raw');
+  if (!headers.length) return;
+  const current = preferredHydroField(st.linelist);
+  const options = [''].concat(headers).map((h) => `<option value="${esc(h)}" ${h === current ? 'selected' : ''}>${h ? esc(h) : '— Select hydro pressure column —'}</option>`).join('');
+  const html = `<div id="${HYDRO_PANEL_ID}" style="margin:8px 0 12px;padding:10px;border:1px solid #38506d;border-radius:8px;background:#101b2b;">
+    <div style="font-weight:700;color:#d7e6ff;margin-bottom:6px;">Hydro Test Pressure Mapping</div>
+    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+      <label style="color:#9cc5ff;font-size:12px;">Line List Hydro Pressure Column</label>
+      <select data-xml-cii-hydro-field style="background:#182334;color:#e6edf5;border:1px solid #31455f;border-radius:5px;padding:6px 8px;min-width:260px;">${options}</select>
+      <span style="color:#8da7c3;font-size:12px;">Used for Saved/Mapped Rows, Preview, and overrides.processData[lineKey].hydroPressure.</span>
+    </div>
+  </div>`;
+  const title = detail.querySelector('.model-converters-workflow-detail-title') || detail.firstElementChild;
+  if (title) title.insertAdjacentHTML('afterend', html);
+  const select = detail.querySelector('[data-xml-cii-hydro-field]');
+  select?.addEventListener('change', () => {
+    const next = clean(select.value);
+    const state = parseConfig();
+    if (!state.cfg) return;
+    state.cfg.linelist.fieldMap = state.cfg.linelist.fieldMap || {};
+    state.cfg.linelist.fieldMap.hydroPressure = next;
+    try { localStorage.setItem(FIELD_STORAGE, next); } catch {}
+    writeConfig(state, true);
+    refresh();
+  });
+}
+
 function addSavedRowsHydroColumn() {
   const popup = activePopup();
   const st = parseConfig();
@@ -215,7 +277,7 @@ function addSavedRowsHydroColumn() {
       const row = st.linelist.masterRows[sourceIndex - 1];
       const td = document.createElement('td');
       td.setAttribute(HYDRO_COL, 'true');
-      td.textContent = rowValue(row, ['hydroPressure', hydroField]);
+      td.textContent = rowValue(row, ['hydroPressure', hydroField, ...HYDRO_ALIASES]);
       (cells[Math.min(insertAfter, cells.length - 1)] || tr.lastElementChild).insertAdjacentElement('afterend', td);
     });
   }
@@ -233,17 +295,31 @@ function addPreviewHydroColumn() {
   const th = document.createElement('th');
   th.className = 'mc-preview-th';
   th.setAttribute(PREVIEW_HYDRO_COL, 'true');
-  th.textContent = 'Hydro Test Pressure';
+  th.innerHTML = 'Hydro Test Pressure<span class="mc-preview-edit-hint">Edit</span>';
   (headerRow.children[insertAfter] || headerRow.lastElementChild).insertAdjacentElement('afterend', th);
 
   table.querySelectorAll('tbody tr.mc-preview-row').forEach((tr) => {
     const cells = Array.from(tr.children);
     const lineKey = clean(cells[1]?.textContent).replace(/^—$/, '');
+    const value = hydroForLineKey(lineKey);
     const td = document.createElement('td');
-    td.className = 'mc-preview-td';
+    td.className = 'mc-preview-td mc-preview-pd-td';
     td.setAttribute(PREVIEW_HYDRO_COL, 'true');
-    td.textContent = hydroForLineKey(lineKey) || '—';
+    td.innerHTML = `<div class="mc-preview-pd-cell ${value ? 'mc-preview-pd-linelist' : 'mc-preview-pd-empty'}">
+      <input type="text" class="mc-preview-pd-input" value="${esc(value)}" data-mc-pd-field="hydroPressure" data-mc-pd-linekey="${esc(lineKey)}" title="Hydro Test Pressure from line list — editable" placeholder="—">
+    </div>`;
     (cells[Math.min(insertAfter, cells.length - 1)] || tr.lastElementChild).insertAdjacentElement('afterend', td);
+    const input = td.querySelector('input');
+    input?.addEventListener('input', () => {
+      const state = parseConfig();
+      if (!state.cfg || !lineKey) return;
+      state.cfg.overrides.processData[lineKey] = { ...(state.cfg.overrides.processData[lineKey] || {}), hydroPressure: clean(input.value) };
+      writeConfig(state, true);
+    });
+  });
+  table.querySelectorAll('.mc-preview-node-row .mc-preview-node-cell').forEach((td) => {
+    const colspan = Number(td.getAttribute('colspan') || 0);
+    if (Number.isFinite(colspan) && colspan > 0) td.setAttribute('colspan', String(colspan + 1));
   });
 }
 
@@ -279,6 +355,7 @@ function refresh() {
   raf = requestAnimationFrame(() => {
     if (!activePopup() && !document.querySelector('[data-option-key="supportConfigJson"]')) return;
     syncLineListRows();
+    injectHydroMapPanel();
     refreshRegexLineKeyPreview();
     addSavedRowsHydroColumn();
     addPreviewHydroColumn();
@@ -292,10 +369,10 @@ export function installXmlCiiLineListHydroFix() {
   new MutationObserver(refresh).observe(document.body, { childList: true, subtree: true });
   document.addEventListener('click', refresh, true);
   document.addEventListener('input', (event) => {
-    if (event.target?.matches?.('[data-xml-cii-regex-path], [data-xml-cii-field-map], [data-option-key="supportConfigJson"]')) refresh();
+    if (event.target?.matches?.('[data-xml-cii-regex-path], [data-xml-cii-field-map], [data-option-key="supportConfigJson"], [data-xml-cii-hydro-field]')) refresh();
   }, true);
   document.addEventListener('change', (event) => {
-    if (event.target?.matches?.('[data-xml-cii-regex-path], [data-xml-cii-field-map], [data-option-key="supportConfigJson"]')) refresh();
+    if (event.target?.matches?.('[data-xml-cii-regex-path], [data-xml-cii-field-map], [data-option-key="supportConfigJson"], [data-xml-cii-hydro-field]')) refresh();
   }, true);
 }
 
