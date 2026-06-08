@@ -42,7 +42,7 @@ async function renderEnhancedModelConvertersTab(container) {
   let destroyNpsEnhancer = null;
 
   try {
-    await import('../tabs/xml-cii-linelist-smart-map.js?v=20260608-linelist-smart-map-2');
+    await import('../tabs/xml-cii-linelist-smart-map.js?v=20260608-linelist-smart-map-3');
   } catch (error) {
     console.warn('[model-converters] XML CII line-list smart map skipped:', error);
   }
