@@ -42,6 +42,12 @@ async function renderEnhancedModelConvertersTab(container) {
   let destroyNpsEnhancer = null;
 
   try {
+    await import('../tabs/xml-cii-hydro-ui-patch.js?v=20260608-scoped-linelist-hydro-1');
+  } catch (error) {
+    console.warn('[model-converters] XML CII line list/hydro repair skipped:', error);
+  }
+
+  try {
     const { enhanceModelConvertersTab } = await import('../tabs/model-converters-ui-enhancements.js?v=20260608-core-safe-1');
     destroyEnhancer = enhanceModelConvertersTab(container);
   } catch (error) {
