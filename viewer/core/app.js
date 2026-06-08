@@ -42,21 +42,27 @@ async function renderEnhancedModelConvertersTab(container) {
   let destroyNpsEnhancer = null;
 
   try {
-    await import('../tabs/xml-cii-hydro-ui-patch.js?v=20260608-scoped-linelist-hydro-1');
+    await import('../tabs/xml-cii-hydro-ui-patch.js?v=20260608-hydro-restore-1');
   } catch (error) {
     console.warn('[model-converters] XML CII line list/hydro repair skipped:', error);
   }
 
   try {
-    await import('../tabs/xml-cii-default-master-autoload-lite.js?v=20260608-material-weight-defaults-2');
+    await import('../tabs/xml-cii-default-master-autoload-lite.js?v=20260608-material-weight-defaults-3');
   } catch (error) {
     console.warn('[model-converters] XML CII material/weight default autoload skipped:', error);
   }
 
   try {
-    await import('../tabs/xml-cii-specwise-pipingclass-loader.js?v=20260608-specwise-pipingclass-1');
+    await import('../tabs/xml-cii-specwise-pipingclass-loader.js?v=20260608-specwise-pipingclass-2');
   } catch (error) {
     console.warn('[model-converters] XML CII specwise piping-class loader skipped:', error);
+  }
+
+  try {
+    await import('../tabs/xml-cii-preview-branch-fallback.js?v=20260608-preview-branch-fallback-1');
+  } catch (error) {
+    console.warn('[model-converters] XML CII preview branch fallback skipped:', error);
   }
 
   try {
