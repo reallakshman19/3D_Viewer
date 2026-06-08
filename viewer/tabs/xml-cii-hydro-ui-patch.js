@@ -1,77 +1,87 @@
-const FLAG = '__xmlCiiHydroSavedRowsAndCleanup_v5';
-const LEGACY_FLAG = '__xmlCiiHydroSavedRowsPatch_v1';
-const HYDRO_COL = 'data-xml-cii-hydro-saved-col';
-const HYDRO_MAP = 'data-mc-hydro-pressure-map';
+const FLAG = '__xmlCiiLineListHydroScopedFix_v1';
+const HYDRO_COL = 'data-xml-cii-hydro-col';
+const PREVIEW_HYDRO_COL = 'data-xml-cii-preview-hydro-col';
 const FIELD_STORAGE = 'xmlCii.hydroPressureField';
-const MODAL_STYLE_ID = 'xml-cii-workflow-modal-layout-fix';
 const POPUP_SELECTOR = '.model-converters-workflow-popup-overlay .model-converters-workflow-popup';
-const HYDRO_CONTROL_SELECTOR = `.mc-xml-cii-hydro-map, [${HYDRO_MAP}]`;
 
-function txt(v) { return v == null ? '' : String(v); }
-function clean(v) { return txt(v).replace(/\s+/g, ' ').trim(); }
+function txt(value) { return value == null ? '' : String(value); }
+function clean(value) { return txt(value).replace(/\s+/g, ' ').trim(); }
+function norm(value) { return clean(value).toUpperCase().replace(/\s+/g, ''); }
 function activePopup() { return document.querySelector(POPUP_SELECTOR); }
-function isVisible(el) {
-  if (!el || !el.isConnected) return false;
-  const rect = el.getBoundingClientRect();
-  const style = getComputedStyle(el);
-  return rect.width > 0 && rect.height > 0 && style.display !== 'none' && style.visibility !== 'hidden';
-}
+function esc(value) { return txt(value).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
+
 function parseConfig() {
   const input = document.querySelector('[data-option-key="supportConfigJson"]');
-  if (!input) return { input: null, cfg: null, list: null };
+  if (!input) return { input: null, cfg: null, linelist: null };
   try {
     const cfg = JSON.parse(input.value || '{}');
     cfg.linelist = cfg.linelist && typeof cfg.linelist === 'object' ? cfg.linelist : {};
     cfg.linelist.fieldMap = cfg.linelist.fieldMap && typeof cfg.linelist.fieldMap === 'object' ? cfg.linelist.fieldMap : {};
     cfg.linelist.masterRows = Array.isArray(cfg.linelist.masterRows) ? cfg.linelist.masterRows : [];
-    return { input, cfg, list: cfg.linelist };
-  } catch { return { input, cfg: null, list: null }; }
+    cfg.overrides = cfg.overrides && typeof cfg.overrides === 'object' ? cfg.overrides : {};
+    cfg.overrides.processData = cfg.overrides.processData && typeof cfg.overrides.processData === 'object' ? cfg.overrides.processData : {};
+    return { input, cfg, linelist: cfg.linelist };
+  } catch {
+    return { input, cfg: null, linelist: null };
+  }
 }
-function collectRowKeys(rows) {
+
+function writeConfig(state, changed) {
+  if (!changed || !state?.input || !state?.cfg) return false;
+  const next = JSON.stringify(state.cfg, null, 2);
+  if (state.input.value === next) return false;
+  state.input.value = next;
+  state.input.dispatchEvent(new Event('input', { bubbles: true }));
+  state.input.dispatchEvent(new Event('change', { bubbles: true }));
+  return true;
+}
+
+function rowValue(row, keys) {
+  if (!row) return '';
+  for (const key of (keys || []).filter(Boolean)) {
+    if (row[key] != null && clean(row[key]) !== '') return txt(row[key]);
+    if (row._raw && row._raw[key] != null && clean(row._raw[key]) !== '') return txt(row._raw[key]);
+  }
+  return '';
+}
+
+function allRowKeys(rows) {
   const keys = [];
   const seen = new Set();
-  const addKey = (k) => {
-    if (!k || seen.has(k)) return;
-    seen.add(k);
-    keys.push(k);
-  };
   for (const row of rows || []) {
-    for (const k of Object.keys(row || {})) addKey(k);
-    for (const k of Object.keys(row?._raw || {})) addKey(k);
+    for (const key of Object.keys(row || {})) {
+      if (!seen.has(key)) { seen.add(key); keys.push(key); }
+    }
+    for (const key of Object.keys(row?._raw || {})) {
+      if (!seen.has(key)) { seen.add(key); keys.push(key); }
+    }
   }
   return keys;
 }
+
 function detectHydroField(rows) {
-  const keys = collectRowKeys(rows);
-  return keys.find((k) => {
-    const probe = `${k} ${(rows || []).slice(0, 8).map((r) => `${txt(r?.[k])} ${txt(r?._raw?.[k])}`).join(' ')}`.toUpperCase();
-    return probe.includes('HYDRO') || /TEST\s*PRESS/.test(probe);
+  const keys = allRowKeys(rows);
+  return keys.find((key) => {
+    const probe = `${key} ${(rows || []).slice(0, 12).map((row) => `${rowValue(row, [key])}`).join(' ')}`.toUpperCase();
+    return /HYDRO|HYD\s*TEST|TEST\s*PRESS|TESTPRESS|PROOF\s*PRESS/.test(probe);
   }) || '';
 }
-function hydroField() {
-  const st = parseConfig();
-  let field = txt(st.list?.fieldMap?.hydroPressure || '');
-  if (!field) { try { field = localStorage.getItem(FIELD_STORAGE) || ''; } catch {} }
-  if (!field) field = detectHydroField(st.list?.masterRows || []);
-  if (field && st.input && st.cfg) {
+
+function preferredHydroField(linelist) {
+  const rows = Array.isArray(linelist?.masterRows) ? linelist.masterRows : [];
+  let field = clean(linelist?.fieldMap?.hydroPressure);
+  if (!field) {
+    try { field = clean(localStorage.getItem(FIELD_STORAGE)); } catch {}
+  }
+  if (!field) field = detectHydroField(rows);
+  if (field) {
     try { localStorage.setItem(FIELD_STORAGE, field); } catch {}
-    st.cfg.linelist.fieldMap.hydroPressure = field;
-    st.input.value = JSON.stringify(st.cfg, null, 2);
   }
   return field;
 }
-function sourceValue(row, key) {
-  if (!row || !key) return '';
-  if (row[key] != null && clean(row[key]) !== '') return txt(row[key]);
-  if (row._raw && row._raw[key] != null && clean(row._raw[key]) !== '') return txt(row._raw[key]);
-  if (row.hydroPressure != null && clean(row.hydroPressure) !== '') return txt(row.hydroPressure);
-  if (row._raw?.hydroPressure != null && clean(row._raw.hydroPressure) !== '') return txt(row._raw.hydroPressure);
-  return '';
-}
+
 function branchTokens(branchName, delimiter = '-') {
-  const cleaned = txt(branchName).trim().replace(/^\/+/, '').replace(/\/B\d+$/i, '');
-  const delim = txt(delimiter) || '-';
-  return cleaned.split(delim).map((token) => token.trim()).filter(Boolean);
+  return clean(branchName).replace(/^\/+/, '').replace(/\/B\d+$/i, '').split(txt(delimiter) || '-').map((token) => token.trim()).filter(Boolean);
 }
 function tokenAtPosition(branchName, delimiter, oneBasedIndex) {
   const index = Number(oneBasedIndex);
@@ -79,140 +89,164 @@ function tokenAtPosition(branchName, delimiter, oneBasedIndex) {
   return branchTokens(branchName, delimiter)[Math.round(index) - 1] || '';
 }
 function tokenPositionList(value) {
-  if (Array.isArray(value)) return value.map((entry) => Number(entry)).filter((entry) => Number.isFinite(entry) && entry > 0);
-  return txt(value)
-    .split(/[,+]/)
-    .map((entry) => Number(entry.trim()))
-    .filter((entry) => Number.isFinite(entry) && entry > 0);
+  if (Array.isArray(value)) return value.map(Number).filter((entry) => Number.isFinite(entry) && entry > 0);
+  return txt(value).split(/[,+]/).map((entry) => Number(entry.trim())).filter((entry) => Number.isFinite(entry) && entry > 0);
 }
 function regexGroup(value, pattern, groupIndex = 1) {
-  const source = txt(value);
-  const patternText = txt(pattern).trim();
-  if (!source || !patternText) return '';
+  const patternText = clean(pattern);
+  if (!patternText) return '';
   try {
-    const match = new RegExp(patternText, 'i').exec(source);
-    const index = Math.max(0, Number(groupIndex || 0));
-    return txt(match?.[index] || '').trim();
-  } catch {
-    return '';
-  }
+    const match = new RegExp(patternText, 'i').exec(txt(value));
+    return clean(match?.[Math.max(0, Number(groupIndex || 0))]);
+  } catch { return ''; }
 }
 function lineKeyFromBranch(branchName, linelist = {}) {
   const positions = tokenPositionList(linelist.lineKeyTokenPositions || '4');
-  const delimiter = linelist.tokenDelimiter || '-';
-  const joiner = txt(linelist.lineKeyJoiner);
-  const byToken = positions.map((pos) => tokenAtPosition(branchName, delimiter, pos)).filter(Boolean).join(joiner);
-  if (byToken) return byToken;
-  return regexGroup(branchName, linelist.branchNameRegex, linelist.lineNoGroup || 1);
+  const byToken = positions.map((pos) => tokenAtPosition(branchName, linelist.tokenDelimiter || '-', pos)).filter(Boolean).join(txt(linelist.lineKeyJoiner));
+  return byToken || regexGroup(branchName, linelist.branchNameRegex, linelist.lineNoGroup || 1);
 }
-function normalizeLineKey(value) {
-  return txt(value).trim().toUpperCase().replace(/\s+/g, '');
-}
-function rawValue(row, key) {
-  if (!row || !key) return '';
-  const direct = row[key];
-  if (direct != null && clean(direct) !== '') return txt(direct);
-  const raw = row._raw?.[key];
-  if (raw != null && clean(raw) !== '') return txt(raw);
-  return '';
-}
-function firstRowValue(row, keys) {
-  for (const key of keys || []) {
-    const value = rawValue(row, key);
-    if (clean(value) !== '') return value;
-  }
-  return '';
-}
-function lineListKeyFromRow(row, fieldMap = {}) {
-  if (!row) return '';
-  const key1 = firstRowValue(row, ['lineKey1', 'ColumnX1', 'LINEKEY1', fieldMap.lineKey1].filter(Boolean));
-  const key2 = firstRowValue(row, ['lineKey2', 'ColumnX2', 'LINEKEY2', fieldMap.lineKey2].filter(Boolean));
-  const composed = `${clean(key1)}${clean(key2)}`;
-  if (composed) return composed;
-  return firstRowValue(row, [
+function lineKeyFromRow(row, fieldMap = {}) {
+  const key1 = rowValue(row, ['lineKey1', 'ColumnX1', 'LINEKEY1', 'Line Key 1', fieldMap.lineKey1]);
+  const key2 = rowValue(row, ['lineKey2', 'ColumnX2', 'LINEKEY2', 'Line Key 2', fieldMap.lineKey2]);
+  const composite = `${clean(key1)}${clean(key2)}`;
+  if (composite) return composite;
+  return rowValue(row, [
     'lineNo', 'lineNoKey', 'Line No. Key', 'Line No Key', 'lineKey', 'LineKey',
-    'PipelineReference', 'Pipeline Ref', 'PIPELINE_REF', 'ColumnX1',
-    'lineSeqNo', 'Line Seq No.', 'Line Seq No', fieldMap.lineSeqNo,
-  ].filter(Boolean));
+    'PipelineReference', 'Pipeline Ref', 'PIPELINE_REF', 'ColumnX1', 'lineSeqNo', 'Line Seq No.',
+    fieldMap.lineSeqNo,
+  ]);
 }
-function repairLineListKeysInConfig() {
+
+const PROCESS_FIELD_KEYS = Object.freeze({
+  p1: ['p1', 'P1', 'Design Pr', 'Operating Pressure', 'Op. Pr'],
+  t1: ['t1', 'T1', 'Design Temp', 'Design Temperature', 'Operating Temp', 'Op. Temp'],
+  t2: ['t2', 'T2', 'Temperature2', 'Temperature 2', 'Temp', 'Temp. C', 'Temp C', 'Temperature'],
+  t3: ['t3', 'T3', 'Temperature3', 'Temperature 3', 'Temp Min', 'Min Temp', 'Minimum Temp'],
+  insThk: ['insThk', 'InsThk', 'Insulation', 'Ins Thk', 'Insulation thickness'],
+  density: ['density', 'Density', 'densityMixed', 'Density Mixed', 'Mixed kg/m3', 'Mixed Density', 'densityGas', 'Density Gas', 'Gas kg/m3', 'densityLiquid', 'Density Liquid', 'Liquid kg/m3'],
+});
+
+function syncLineListRows() {
   const st = parseConfig();
-  if (!st.input || !st.cfg || !st.list) return false;
+  if (!st.input || !st.cfg || !st.linelist) return false;
+  const rows = st.linelist.masterRows;
+  const fieldMap = st.linelist.fieldMap || {};
   let changed = false;
-  const lineList = st.cfg.linelist;
-  const positions = tokenPositionList(lineList.lineKeyTokenPositions);
-  if (!positions.length && !clean(lineList.branchNameRegex)) {
-    lineList.lineKeyTokenPositions = '4';
+
+  if (!clean(st.linelist.lineKeyTokenPositions) && !clean(st.linelist.branchNameRegex)) {
+    st.linelist.lineKeyTokenPositions = '4';
     changed = true;
   }
-  const rows = Array.isArray(lineList.masterRows) ? lineList.masterRows : [];
-  const fieldMap = lineList.fieldMap || {};
+
+  const hydroField = preferredHydroField(st.linelist);
+  if (hydroField && st.linelist.fieldMap.hydroPressure !== hydroField) {
+    st.linelist.fieldMap.hydroPressure = hydroField;
+    changed = true;
+  }
+
   for (const row of rows) {
-    const key = clean(lineListKeyFromRow(row, fieldMap));
-    if (!key) continue;
-    if (normalizeLineKey(row.lineNo) !== normalizeLineKey(key)) { row.lineNo = key; changed = true; }
-    if (normalizeLineKey(row.lineNoKey) !== normalizeLineKey(key)) { row.lineNoKey = key; changed = true; }
-    if (!clean(row.ColumnX1)) { row.ColumnX1 = key; changed = true; }
+    const key = clean(lineKeyFromRow(row, fieldMap));
+    if (key) {
+      if (norm(row.lineNo) !== norm(key)) { row.lineNo = key; changed = true; }
+      if (norm(row.lineNoKey) !== norm(key)) { row.lineNoKey = key; changed = true; }
+      if (norm(row.lineKey) !== norm(key)) { row.lineKey = key; changed = true; }
+    }
+    for (const [target, keys] of Object.entries(PROCESS_FIELD_KEYS)) {
+      const mapped = fieldMap[target] ? [fieldMap[target], ...keys] : keys;
+      const value = rowValue(row, mapped);
+      if (clean(value) && clean(row[target]) !== clean(value)) { row[target] = value; changed = true; }
+    }
+    const hydro = rowValue(row, [fieldMap.hydroPressure, hydroField, 'hydroPressure', 'Hydro Test Pressure', 'Hydrotest Pressure', 'Hydro Pressure', 'HYDRO_TEST_PRESSURE']);
+    if (clean(hydro) && clean(row.hydroPressure) !== clean(hydro)) { row.hydroPressure = hydro; changed = true; }
+    if (key && st.cfg.overrides?.processData) {
+      const processOverride = st.cfg.overrides.processData[key] || {};
+      for (const field of ['p1', 't1', 't2', 't3', 'insThk', 'density', 'hydroPressure']) {
+        const value = clean(row[field]);
+        if (value && clean(processOverride[field]) !== value) {
+          processOverride[field] = value;
+          st.cfg.overrides.processData[key] = processOverride;
+          changed = true;
+        }
+      }
+    }
   }
-  if (changed) st.input.value = JSON.stringify(st.cfg, null, 2);
-  return changed;
+  return writeConfig(st, changed);
 }
-function headerTexts(row) {
-  return Array.from(row?.children || []).map((cell) => clean(cell.textContent));
-}
-function findSavedRowsHeader(table) {
-  return Array.from(table.querySelectorAll('tr')).find((tr) => {
-    const heads = headerTexts(tr);
-    if (!heads.length) return false;
-    const joined = heads.join('|').toLowerCase();
-    const hasLineIdentity = joined.includes('_sourcerowindex') || joined.includes('line seq no') || joined.includes('line no. key') || joined.includes('line no key');
-    const hasProcessFields = joined.includes('density mixed') || joined.includes('bore') || joined.includes('p1') || joined.includes('t3');
-    return hasLineIdentity && hasProcessFields;
-  });
-}
-function findInsertIndex(heads) {
-  for (const wanted of ['T3', 'P1', 'Bore', 'Line Seq No.']) {
-    const idx = heads.findIndex((h) => h.toUpperCase() === wanted.toUpperCase());
-    if (idx >= 0) return idx;
-  }
-  return Math.max(0, heads.length - 1);
-}
-function addSavedRowsColumn() {
-  const popup = activePopup();
-  if (!popup) return;
+
+function hydroForLineKey(lineKey) {
   const st = parseConfig();
-  const field = hydroField();
-  if (!field || !st.list) return;
-  const masterRows = Array.isArray(st.list.masterRows) ? st.list.masterRows : [];
-  if (!masterRows.length) return;
+  const rows = st.linelist?.masterRows || [];
+  for (const row of rows) {
+    if (norm(lineKeyFromRow(row, st.linelist?.fieldMap || {})) === norm(lineKey)) {
+      return rowValue(row, ['hydroPressure', st.linelist?.fieldMap?.hydroPressure, preferredHydroField(st.linelist)]);
+    }
+  }
+  return '';
+}
+
+function cellTexts(row) { return Array.from(row?.children || []).map((cell) => clean(cell.textContent)); }
+function addSavedRowsHydroColumn() {
+  const popup = activePopup();
+  const st = parseConfig();
+  if (!popup || !st.linelist?.masterRows?.length) return;
+  const hydroField = preferredHydroField(st.linelist);
+  if (!hydroField) return;
 
   for (const table of Array.from(popup.querySelectorAll('table'))) {
-    table.querySelectorAll(`[${HYDRO_COL}="true"]`).forEach((n) => n.remove());
-    const headerRow = findSavedRowsHeader(table);
-    if (!headerRow) continue;
-    const heads = headerTexts(headerRow);
-    if (heads.some((h) => /hydro\s*test\s*pressure/i.test(h))) continue;
-
-    const after = findInsertIndex(heads);
-    const sourceCol = Math.max(0, heads.findIndex((h) => /_sourcerowindex|^#$|source row/i.test(h)));
-    const th = document.createElement(headerRow.children[after]?.tagName || 'th');
+    table.querySelectorAll(`[${HYDRO_COL}]`).forEach((node) => node.remove());
+    const headerRow = Array.from(table.querySelectorAll('tr')).find((tr) => {
+      const joined = cellTexts(tr).join('|').toLowerCase();
+      return (joined.includes('line no. key') || joined.includes('line seq no') || joined.includes('_sourcerowindex'))
+        && (joined.includes('p1') || joined.includes('t3') || joined.includes('density') || joined.includes('bore'));
+    });
+    if (!headerRow || cellTexts(headerRow).some((h) => /hydro\s*test\s*pressure/i.test(h))) continue;
+    const heads = cellTexts(headerRow);
+    const insertAfter = Math.max(0, heads.findIndex((h) => /^T3$/i.test(h) || /^P1$/i.test(h) || /density/i.test(h)));
+    const sourceCol = Math.max(0, heads.findIndex((h) => /_sourcerowindex|source row|^#$/i.test(h)));
+    const th = document.createElement('th');
     th.setAttribute(HYDRO_COL, 'true');
     th.textContent = 'Hydro Test Pressure';
-    (headerRow.children[after] || headerRow.lastElementChild).insertAdjacentElement('afterend', th);
+    (headerRow.children[insertAfter] || headerRow.lastElementChild).insertAdjacentElement('afterend', th);
 
-    const bodyRows = Array.from(table.tBodies?.[0]?.rows || [])
-      .filter((tr) => tr !== headerRow && tr.children.length);
-    bodyRows.forEach((tr, visualIndex) => {
+    Array.from(table.tBodies?.[0]?.rows || []).filter((tr) => tr !== headerRow && tr.children.length).forEach((tr, visualIndex) => {
       const cells = Array.from(tr.children);
       let sourceIndex = Number.parseInt(clean(cells[sourceCol]?.textContent), 10);
       if (!Number.isFinite(sourceIndex) || sourceIndex < 1) sourceIndex = visualIndex + 1;
-      const td = document.createElement(cells[after]?.tagName === 'TH' ? 'th' : 'td');
+      const row = st.linelist.masterRows[sourceIndex - 1];
+      const td = document.createElement('td');
       td.setAttribute(HYDRO_COL, 'true');
-      td.textContent = sourceValue(masterRows[sourceIndex - 1], field);
-      (cells[Math.min(after, cells.length - 1)] || tr.lastElementChild).insertAdjacentElement('afterend', td);
+      td.textContent = rowValue(row, ['hydroPressure', hydroField]);
+      (cells[Math.min(insertAfter, cells.length - 1)] || tr.lastElementChild).insertAdjacentElement('afterend', td);
     });
   }
 }
+
+function addPreviewHydroColumn() {
+  const popup = activePopup();
+  if (!popup) return;
+  const table = popup.querySelector('.mc-preview-table');
+  const headerRow = table?.querySelector('thead tr');
+  if (!table || !headerRow || headerRow.querySelector(`[${PREVIEW_HYDRO_COL}]`)) return;
+  const heads = cellTexts(headerRow);
+  const densityIndex = heads.findIndex((h) => /^Density$/i.test(h));
+  const insertAfter = densityIndex >= 0 ? densityIndex : Math.max(0, heads.findIndex((h) => /^T3/i.test(h)));
+  const th = document.createElement('th');
+  th.className = 'mc-preview-th';
+  th.setAttribute(PREVIEW_HYDRO_COL, 'true');
+  th.textContent = 'Hydro Test Pressure';
+  (headerRow.children[insertAfter] || headerRow.lastElementChild).insertAdjacentElement('afterend', th);
+
+  table.querySelectorAll('tbody tr.mc-preview-row').forEach((tr) => {
+    const cells = Array.from(tr.children);
+    const lineKey = clean(cells[1]?.textContent).replace(/^—$/, '');
+    const td = document.createElement('td');
+    td.className = 'mc-preview-td';
+    td.setAttribute(PREVIEW_HYDRO_COL, 'true');
+    td.textContent = hydroForLineKey(lineKey) || '—';
+    (cells[Math.min(insertAfter, cells.length - 1)] || tr.lastElementChild).insertAdjacentElement('afterend', td);
+  });
+}
+
 function refreshRegexLineKeyPreview() {
   const popup = activePopup();
   if (!popup) return;
@@ -221,124 +255,48 @@ function refreshRegexLineKeyPreview() {
   if (!sampleInput || !posInput) return;
   const st = parseConfig();
   const linelist = {
-    ...(st.list || {}),
+    ...(st.linelist || {}),
     sampleBranchName: sampleInput.value,
     lineKeyTokenPositions: posInput.value,
-    tokenDelimiter: popup.querySelector('[data-xml-cii-regex-path="linelist.tokenDelimiter"]')?.value ?? st.list?.tokenDelimiter ?? '-',
-    lineKeyJoiner: popup.querySelector('[data-xml-cii-regex-path="linelist.lineKeyJoiner"]')?.value ?? st.list?.lineKeyJoiner ?? '',
-    branchNameRegex: popup.querySelector('[data-xml-cii-regex-path="linelist.branchNameRegex"]')?.value ?? st.list?.branchNameRegex ?? '',
-    lineNoGroup: popup.querySelector('[data-xml-cii-regex-path="linelist.lineNoGroup"]')?.value ?? st.list?.lineNoGroup ?? 1,
+    tokenDelimiter: popup.querySelector('[data-xml-cii-regex-path="linelist.tokenDelimiter"]')?.value ?? st.linelist?.tokenDelimiter ?? '-',
+    lineKeyJoiner: popup.querySelector('[data-xml-cii-regex-path="linelist.lineKeyJoiner"]')?.value ?? st.linelist?.lineKeyJoiner ?? '',
+    branchNameRegex: popup.querySelector('[data-xml-cii-regex-path="linelist.branchNameRegex"]')?.value ?? st.linelist?.branchNameRegex ?? '',
+    lineNoGroup: popup.querySelector('[data-xml-cii-regex-path="linelist.lineNoGroup"]')?.value ?? st.linelist?.lineNoGroup ?? 1,
   };
   const key = lineKeyFromBranch(sampleInput.value, linelist);
-  const lineKeyRow = Array.from(popup.querySelectorAll('.mc-regex-extract-table tbody tr'))
-    .find((tr) => /^line\s*key$/i.test(clean(tr.children?.[0]?.textContent)));
+  const lineKeyRow = Array.from(popup.querySelectorAll('.mc-regex-extract-table tbody tr')).find((tr) => /^line\s*key$/i.test(clean(tr.children?.[0]?.textContent)));
   const strong = lineKeyRow?.querySelector('.mc-regex-preview-cell strong');
   if (strong) strong.textContent = key || '—';
   const tokenBody = popup.querySelector('.mc-regex-tokens-table tbody');
   if (tokenBody) {
-    tokenBody.innerHTML = branchTokens(sampleInput.value, linelist.tokenDelimiter || '-')
-      .map((tok, index) => `<tr><td>${index + 1}</td><td>${tok.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</td></tr>`)
-      .join('');
+    tokenBody.innerHTML = branchTokens(sampleInput.value, linelist.tokenDelimiter || '-').map((tok, index) => `<tr><td>${index + 1}</td><td>${esc(tok)}</td></tr>`).join('');
   }
 }
-function hydroControlCandidates(popup) {
-  const controls = new Set(Array.from(popup.querySelectorAll(HYDRO_CONTROL_SELECTOR)));
-  for (const label of Array.from(popup.querySelectorAll('label'))) {
-    if (/hydro\s*test\s*pressure/i.test(clean(label.textContent))) {
-      const select = label.querySelector('select');
-      if (select) controls.add(select);
-    }
-  }
-  for (const field of Array.from(popup.querySelectorAll('.model-converters-workflow-map-field'))) {
-    if (/hydro\s*test\s*pressure/i.test(clean(field.textContent))) {
-      const select = field.querySelector('select');
-      if (select) controls.add(select);
-    }
-  }
-  return Array.from(controls).filter((el) => el && el.isConnected);
-}
-function hydroControlWrapper(control) {
-  return control.closest('.model-converters-workflow-map-field') || control.closest('label') || control.parentElement || control;
-}
-function pruneDuplicateHydroControls() {
-  const popup = activePopup();
-  if (!popup) return;
-  const controls = hydroControlCandidates(popup);
-  if (controls.length <= 1) return;
-  const keep = controls.find((el) => el.closest('.model-converters-workflow-map-grid')) || controls[0];
-  const keepWrapper = hydroControlWrapper(keep);
-  for (const control of controls) {
-    if (control === keep) continue;
-    const wrapper = hydroControlWrapper(control);
-    if (!wrapper || wrapper === keepWrapper || !popup.contains(wrapper)) continue;
-    try { control.blur?.(); } catch {}
-    wrapper.remove();
-  }
-}
-function injectModalStyle() {
-  if (document.getElementById(MODAL_STYLE_ID)) return;
-  const style = document.createElement('style');
-  style.id = MODAL_STYLE_ID;
-  style.textContent = `body.mc-xml-cii-modal-open{overflow:hidden!important}.model-converters-workflow-popup-overlay{position:fixed!important;inset:0!important;overflow:hidden!important;padding:12px!important;align-items:stretch!important;justify-content:center!important;overscroll-behavior:contain!important}.model-converters-workflow-popup{width:min(98vw,calc(100vw - 24px))!important;height:calc(100dvh - 24px)!important;max-height:calc(100dvh - 24px)!important;min-height:0!important;display:flex!important;flex-direction:column!important;overflow:hidden!important}.model-converters-workflow-popup-head{flex:0 0 auto!important;z-index:20!important}.model-converters-workflow-popup-tabs{flex:0 0 auto!important;z-index:19!important;background:#0f1724!important;overflow-x:auto!important;overflow-y:hidden!important;white-space:nowrap!important;scrollbar-gutter:stable!important}.model-converters-workflow-popup-body{flex:1 1 auto!important;min-height:0!important;overflow:auto!important;overscroll-behavior:contain!important;padding:12px 14px 14px!important;scrollbar-gutter:stable both-edges!important}.model-converters-workflow-popup-body>.model-converters-workflow-detail{min-height:0!important;overflow:visible!important}.model-converters-workflow-popup .model-converters-workflow-master-card{min-width:0!important;overflow:hidden!important}.model-converters-workflow-popup .model-converters-workflow-table-wrap{max-height:min(34dvh,300px)!important;min-height:120px!important;overflow:auto!important;overscroll-behavior:contain!important;scrollbar-gutter:stable both-edges!important}.model-converters-workflow-popup .model-converters-workflow-table{min-width:max-content!important}.model-converters-workflow-popup .model-converters-workflow-table th{position:sticky!important;top:0!important;z-index:5!important}.model-converters-workflow-popup .model-converters-workflow-toolbar{position:sticky!important;bottom:0!important;z-index:15!important;background:#0f1724!important;border-top:1px solid #243247!important;padding:8px 0!important}.model-converters-workflow-popup .model-converters-workflow-map-grid{grid-template-columns:repeat(auto-fit,minmax(160px,1fr))!important}.model-converters-workflow-popup select{max-width:100%!important;min-width:0!important;box-sizing:border-box!important}.model-converters-workflow-popup .mc-xml-cii-hydro-map,.model-converters-workflow-popup [${HYDRO_MAP}]{position:static!important;display:block!important;width:100%!important;max-width:100%!important;min-width:0!important;box-sizing:border-box!important;background:#182334!important;color:#e6edf5!important;border:1px solid #31455f!important;border-radius:6px!important;padding:6px 8px!important;z-index:auto!important}`;
-  document.head.appendChild(style);
-}
-function updateModalLock() {
-  const open = !!activePopup();
-  document.body.classList.toggle('mc-xml-cii-modal-open', open);
-}
-function cleanupFloatingHydro() {
-  const popup = activePopup();
-  for (const el of Array.from(document.querySelectorAll(HYDRO_CONTROL_SELECTOR))) {
-    if (!popup || !popup.contains(el)) {
-      try { el.blur?.(); } catch {}
-      el.remove();
-      continue;
-    }
-    if (!isVisible(el)) {
-      el.remove();
-      continue;
-    }
-    const r = el.getBoundingClientRect();
-    const p = popup.getBoundingClientRect();
-    const outsidePopup = r.left < p.left - 2 || r.right > p.right + 2 || r.top < p.top - 2 || r.bottom > p.bottom + 2;
-    if (outsidePopup) {
-      try { el.blur?.(); } catch {}
-      el.remove();
-      continue;
-    }
-    if (el.hasAttribute(HYDRO_MAP)) {
-      const field = hydroField();
-      if (field && el.value !== field && Array.from(el.options || []).some((o) => o.value === field)) el.value = field;
-    }
-  }
-}
+
 let raf = 0;
 function refresh() {
   cancelAnimationFrame(raf);
   raf = requestAnimationFrame(() => {
-    injectModalStyle();
-    updateModalLock();
-    repairLineListKeysInConfig();
-    cleanupFloatingHydro();
-    pruneDuplicateHydroControls();
+    if (!activePopup() && !document.querySelector('[data-option-key="supportConfigJson"]')) return;
+    syncLineListRows();
     refreshRegexLineKeyPreview();
-    addSavedRowsColumn();
+    addSavedRowsHydroColumn();
+    addPreviewHydroColumn();
   });
 }
-export function installXmlCiiHydroSavedRowsCleanup() {
+
+export function installXmlCiiLineListHydroFix() {
   if (window[FLAG]) return;
   window[FLAG] = true;
-  window[LEGACY_FLAG] = true;
   refresh();
   new MutationObserver(refresh).observe(document.body, { childList: true, subtree: true });
-  document.addEventListener('click', (event) => {
-    const text = clean(event.target?.textContent).toLowerCase();
-    if (text.includes('save mapping') || text.includes('run') || text.includes('dry run')) setTimeout(refresh, 0);
+  document.addEventListener('click', refresh, true);
+  document.addEventListener('input', (event) => {
+    if (event.target?.matches?.('[data-xml-cii-regex-path], [data-xml-cii-field-map], [data-option-key="supportConfigJson"]')) refresh();
   }, true);
-  document.addEventListener('input', (event) => { if (event.target?.matches?.('[data-xml-cii-regex-path]')) setTimeout(refresh, 0); }, true);
   document.addEventListener('change', (event) => {
-    if (event.target?.matches?.(`${HYDRO_CONTROL_SELECTOR}, [data-xml-cii-regex-path], [data-xml-cii-field-map]`)) setTimeout(refresh, 0);
+    if (event.target?.matches?.('[data-xml-cii-regex-path], [data-xml-cii-field-map], [data-option-key="supportConfigJson"]')) refresh();
   }, true);
-  document.addEventListener('blur', (event) => { if (event.target?.matches?.(HYDRO_CONTROL_SELECTOR)) setTimeout(refresh, 0); }, true);
 }
-installXmlCiiHydroSavedRowsCleanup();
+
+installXmlCiiLineListHydroFix();
