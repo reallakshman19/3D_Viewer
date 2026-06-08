@@ -1,4 +1,12 @@
-﻿import { CONVERTER_DEFS, CONVERTER_ORDER, ORDERED_CONVERTER_DEFS, CONVERTERS, getConverterById } from './converter-registry.js';
+﻿import { _collectXmlCiiZeroRigidWeightIssues } from './converters/xml-to-cii2019/weight-match-model.js';
+import { _xmlCiiRowsToTableHtml } from './converters/xml-to-cii2019/preview-renderer.js';
+import { _xmlCiiKnownClasses, _xmlCiiApproximateClass, _findPipingClassMaster, _xmlCiiResolveMaterialCode, _deriveRatingText, _deriveWeightText } from './converters/xml-to-cii2019/preview-model.js';
+import { _xmlCiiForwardElementLengths } from './converters/xml-to-cii2019/element-length.js';
+import { _findWeightMasterMatch, _findAllWeightCandidates, _xmlCiiWeightCandidateFromRow, _scoreXmlCiiWeightCandidates, _normalizedXmlCiiRating } from './converters/xml-to-cii2019/weight-match-model.js';
+import { _buildStagedSupportIndex, _buildStagedComponentIndex, _stagedComponentForXmlNode, _stagedComponentDtxr, _xmlCiiDtxrPsForNode, _xmlCiiDtxrPositionOffset, _xmlCiiApplyDtxrPositionOffset, _xmlCiiPositionsMatch, _buildStagedDtxrPositionIndex, _xmlCiiDtxrPosForNode, _supportTagsFromText, _supportTagsFromAttrs, _normalizeSupportTag } from './converters/xml-to-cii2019/dtxr-resolver.js';
+import { _xmlCiiNormalizeHeader, _xmlCiiWordTokens, _xmlCiiHeaderScore, _xmlCiiHeadersFromRows, _xmlCiiBuildColumnPreviewMap, _xmlCiiLabelRowHint, _xmlCiiDataValueScore, _xmlCiiAutoMapFields, _xmlCiiMapRowsWithFieldMap, _xmlCiiConvertLineListBore, _xmlCiiFindLineListRow, _xmlCiiProcessValue } from './converters/xml-to-cii2019/linelist-mapping.js';
+import { _deriveBranchLineKey, _xmlCiiLineKeyRegexValue, _xmlCiiNormalizeLineKey, _regexGroup, _branchTokens, _tokenAtPosition, _xmlCiiTokenPositionList, _xmlCiiLineKeyFromBranchTokens, _xmlCiiCleanSizeToken, _deriveXmlCiiSizeTokenFromBranchName, _derivePipingClassFromBranchName, _deriveRatingFromPipingClass, _deriveBoreFromBranchName } from './converters/xml-to-cii2019/regex-line-key.js';
+import { CONVERTER_DEFS, CONVERTER_ORDER, ORDERED_CONVERTER_DEFS, CONVERTERS, getConverterById } from './converter-registry.js';
 import { emit } from '../core/event-bus.js';
 import { state } from '../core/state.js';
 import { RuntimeEvents } from '../contracts/runtime-events.js';
