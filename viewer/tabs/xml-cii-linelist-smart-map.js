@@ -1,15 +1,16 @@
-const FLAG = '__xmlCiiLineListSmartMap_v1';
+const FLAG = '__xmlCiiLineListSmartMap_v2';
 const INPUT_SELECTOR = '[data-option-key="supportConfigJson"]';
 
 const TARGETS = Object.freeze({
-  lineKey1: Object.freeze(['service']),
-  lineKey2: Object.freeze(['line number', 'line no', 'lineno', 'line']),
-  pipingClass: Object.freeze(['piping class', 'pipe class', 'spec class', 'class spec', 'spec']),
-  t1: Object.freeze(['temp max', 'maximum temp', 'max temp', 't1']),
-  t2: Object.freeze(['temp ºc', 'temp °c', 'temperature ºc', 'temperature °c', 'operating temp', 'normal temp', 't2']),
-  t3: Object.freeze(['temp min', 'minimum temp', 'min temp', 't3']),
+  lineKey1: Object.freeze(['service', 'fluid service']),
+  lineKey2: Object.freeze(['line number', 'line no', 'line no.', 'lineno', 'line']),
+  pipingClass: Object.freeze(['piping class', 'pipe class', 'construction class', 'spec class', 'class spec', 'spec']),
+  p1: Object.freeze(['pressure max', 'pressure design', 'design pressure', 'operating pressure', 'pressure kpa', 'pressure kg/cm2', 'pressure barg', 'pressure', 'p1']),
+  t1: Object.freeze(['temp max', 'temperature max', 'maximum temp', 'max temp', 't1']),
+  t2: Object.freeze(['temp ºc', 'temp °c', 'temperature ºc', 'temperature °c', 'operating temp', 'normal temp', 'temp', 'temperature', 't2']),
+  t3: Object.freeze(['temp min', 'temperature min', 'minimum temp', 'min temp', 't3']),
   hydroPressure: Object.freeze(['test pressure', 'hydro pressure', 'hydro test pressure', 'hydrostatic pressure', 'pressure test', 'proof pressure', 'hp']),
-  insThk: Object.freeze(['insulation thickness', 'ins thickness', 'insul thickness', 'ins thk', 'insulation thk']),
+  insThk: Object.freeze(['insulation thickness', 'insulation thickness mm', 'ins thickness', 'insul thickness', 'ins thk', 'insulation thk']),
   densityMixed: Object.freeze(['mixed kg/m3', 'mixed kg/m³', 'mixed density', 'density mixed']),
   densityGas: Object.freeze(['gas kg/m3', 'gas kg/m³', 'density gas', 'gas density']),
   densityLiquid: Object.freeze(['liquid kg/m3', 'liquid kg/m³', 'density liquid', 'liquid density']),
@@ -23,17 +24,15 @@ function canon(value) {
     .toLowerCase()
     .replace(/º/g, '°')
     .replace(/³/g, '3')
-    .replace(/[_\-()[\]/]+/g, ' ')
+    .replace(/[_\-()[\]/|]+/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
 }
-function normKey(value) { return clean(value).toUpperCase().replace(/[\s_.\-\/()"']/g, ''); }
 function isObject(value) { return !!value && typeof value === 'object' && !Array.isArray(value); }
 function isMissingData(value) { const v = clean(value); return !v || v === '-' || /^n\/?a$/i.test(v); }
 function firstNumeric(value, preferLast = false) {
-  const nums = clean(value).match(/-?\d+(?:\.\d+)?/g) || [];
-  if (!nums.length) return '';
-  return nums[preferLast ? nums.length - 1 : 0];
+  const nums = clean(value).replace(/,/g, '').match(/-?\d+(?:\.\d+)?/g) || [];
+  return nums.length ? nums[preferLast ? nums.length - 1 : 0] : '';
 }
 
 function parseConfig() {
@@ -70,12 +69,12 @@ function allKeys(rows) {
   const out = [];
   const seen = new Set();
   for (const row of rows || []) {
-    for (const key of Object.keys(row || {})) if (!seen.has(key)) { seen.add(key); out.push(key); }
+    for (const key of Object.keys(row || {})) if (key !== '_raw' && !seen.has(key)) { seen.add(key); out.push(key); }
     for (const key of Object.keys(row?._raw || {})) if (!seen.has(key)) { seen.add(key); out.push(key); }
   }
-  return out.filter((key) => key !== '_raw');
+  return out;
 }
-function columnSamples(rows, key, limit = 10) {
+function columnSamples(rows, key, limit = 14) {
   const values = [];
   for (const row of rows || []) {
     const v = rowValue(row, [key]);
@@ -84,46 +83,61 @@ function columnSamples(rows, key, limit = 10) {
   }
   return values;
 }
-function columnProbe(rows, key) {
-  return canon([key, ...columnSamples(rows, key, 12)].join(' | '));
-}
-function includesAny(probe, aliases) {
-  return aliases.some((alias) => probe.includes(canon(alias)));
+function columnProbe(rows, key) { return canon([key, ...columnSamples(rows, key, 14)].join(' | ')); }
+function includesAny(probe, aliases) { return aliases.some((alias) => probe.includes(canon(alias))); }
+function isBadForTarget(target, probe) {
+  if (target === 'lineKey2' && /(piping|construction|pipe)\s*class|\bspec\b|rating|material|pressure|temp|density|fluid/.test(probe)) return true;
+  if (target === 'lineKey1' && /piping\s*class|line\s*(number|no)|rating|pressure|temp|density/.test(probe)) return true;
+  if (target === 'p1' && /(test\s*pressure|hydro|hydrostatic|proof|temp|temperature|density|fluid|line\s*(number|no)|piping\s*class)/.test(probe)) return true;
+  if (target === 'hydroPressure' && !/(test|hydro|hydrostatic|proof)/.test(probe)) return true;
+  if (target === 'insThk' && /insulation\s*type/.test(probe) && !/(thickness|thk|\bmm\b)/.test(probe)) return true;
+  if (target === 't2' && /(max|min|pressure|test|hydro|density)/.test(probe)) return true;
+  if (target === 't1' && /(min|pressure|test|hydro|density)/.test(probe)) return true;
+  if (target === 't3' && /(max|pressure|test|hydro|density)/.test(probe)) return true;
+  if (target === 'densityMixed' && /(gas|liquid)/.test(probe) && !/mixed/.test(probe)) return true;
+  if (target === 'densityGas' && /(mixed|liquid)/.test(probe) && !/gas/.test(probe)) return true;
+  if (target === 'densityLiquid' && /(mixed|gas)/.test(probe) && !/liquid/.test(probe)) return true;
+  return false;
 }
 function scoreTarget(target, key, rows) {
   const probe = columnProbe(rows, key);
   const header = canon(key);
+  if (isBadForTarget(target, probe)) return -999;
   let score = 0;
   if (includesAny(probe, TARGETS[target] || [])) score += 80;
-  if (includesAny(header, TARGETS[target] || [])) score += 20;
+  if (includesAny(header, TARGETS[target] || [])) score += 30;
 
-  if (target === 'lineKey1' && /service/.test(probe)) score += 50;
-  if (target === 'lineKey2' && /line\s*(number|no)/.test(probe)) score += 55;
-  if (target === 'pipingClass' && /piping\s*class/.test(probe)) score += 70;
-  if (target === 't1' && /temp/.test(probe) && /max/.test(probe)) score += 80;
-  if (target === 't2' && /temp/.test(probe) && !/max|min/.test(probe)) score += 60;
-  if (target === 't3' && /temp/.test(probe) && /min/.test(probe)) score += 80;
-  if (target === 'hydroPressure' && /pressure/.test(probe) && /(test|hydro|hydrostatic|proof)/.test(probe)) score += 95;
-  if (target === 'insThk' && /insulation/.test(probe) && /(thickness|thk)/.test(probe)) score += 95;
-  if (target === 'densityMixed' && /mixed/.test(probe) && /(kg\/m3|density)/.test(probe)) score += 95;
-  if (target === 'densityGas' && /gas/.test(probe) && /(kg\/m3|density)/.test(probe)) score += 95;
-  if (target === 'densityLiquid' && /liquid/.test(probe) && /(kg\/m3|density)/.test(probe)) score += 95;
-  if (target === 'phase' && /(fluid|phase)/.test(probe)) score += 80;
-
-  // Avoid the generic Density column taking mixed/liquid when a specific gas/liquid token is present.
-  if (target === 'densityMixed' && /gas|liquid/.test(probe) && !/mixed/.test(probe)) score -= 80;
-  if (target === 'densityGas' && /liquid|mixed/.test(probe) && !/gas/.test(probe)) score -= 80;
-  if (target === 'densityLiquid' && /gas|mixed/.test(probe) && !/liquid/.test(probe)) score -= 80;
-  if (target === 't2' && /max|min/.test(probe)) score -= 90;
-  if (target === 't1' && /min/.test(probe)) score -= 90;
-  if (target === 't3' && /max/.test(probe)) score -= 90;
+  if (target === 'lineKey1' && /\bservice\b/.test(probe)) score += 120;
+  if (target === 'lineKey2' && /line\s*(number|no\.?)/.test(probe)) score += 140;
+  if (target === 'pipingClass' && /(piping|construction|pipe)\s*class/.test(probe)) score += 140;
+  if (target === 'p1' && /pressure/.test(probe) && !/(test|hydro|hydrostatic|proof)/.test(probe)) score += 120;
+  if (target === 'p1' && /(design|operating|max|normal)/.test(probe) && /pressure/.test(probe)) score += 60;
+  if (target === 't1' && /temp/.test(probe) && /(max|maximum)/.test(probe)) score += 140;
+  if (target === 't2' && /temp/.test(probe) && !/(max|maximum|min|minimum)/.test(probe)) score += 110;
+  if (target === 't3' && /temp/.test(probe) && /(min|minimum)/.test(probe)) score += 140;
+  if (target === 'hydroPressure' && /pressure/.test(probe) && /(test|hydro|hydrostatic|proof)/.test(probe)) score += 160;
+  if (target === 'insThk' && /(insulation|insul|\bins\b)/.test(probe) && /(thickness|thk|\bmm\b)/.test(probe)) score += 150;
+  if (target === 'densityMixed' && /mixed/.test(probe) && /(kg\/m3|density)/.test(probe)) score += 150;
+  if (target === 'densityGas' && /gas/.test(probe) && /(kg\/m3|density)/.test(probe)) score += 150;
+  if (target === 'densityLiquid' && /liquid/.test(probe) && /(kg\/m3|density)/.test(probe)) score += 150;
+  if (target === 'phase' && /(\bfluid\b|\bphase\b)/.test(probe)) score += 100;
   return score;
+}
+function shouldKeepExisting(target, key, rows) {
+  if (!key) return false;
+  const probe = columnProbe(rows, key);
+  return !isBadForTarget(target, probe) && scoreTarget(target, key, rows) >= 80;
 }
 function detectMap(rows, existing = {}) {
   const keys = allKeys(rows);
   const result = { ...(existing || {}) };
-  const claimed = new Set(Object.values(result).filter(Boolean));
-  for (const target of Object.keys(TARGETS)) {
+  const claimed = new Set();
+  for (const [target, key] of Object.entries(result)) {
+    if (shouldKeepExisting(target, key, rows)) claimed.add(key);
+    else if (TARGETS[target]) delete result[target];
+  }
+  const orderedTargets = ['lineKey1', 'lineKey2', 'pipingClass', 'p1', 't1', 't2', 't3', 'hydroPressure', 'insThk', 'densityMixed', 'densityGas', 'densityLiquid', 'phase'];
+  for (const target of orderedTargets) {
     let best = '';
     let bestScore = 0;
     for (const key of keys) {
@@ -137,13 +151,11 @@ function detectMap(rows, existing = {}) {
     }
   }
   if (!result.density && result.densityMixed) result.density = result.densityMixed;
+  if (result.p1 && result.hydroPressure && result.p1 === result.hydroPressure) delete result.p1;
   return result;
 }
 function goodValue(value) { return !isMissingData(value); }
-function normalizedValue(row, map, target) {
-  const v = rowValue(row, [map?.[target], target]);
-  return clean(v);
-}
+function normalizedValue(row, map, target) { return clean(rowValue(row, [map?.[target], target])); }
 function computeLineKey(row, map) {
   const key1 = normalizedValue(row, map, 'lineKey1');
   const key2 = normalizedValue(row, map, 'lineKey2');
@@ -161,16 +173,16 @@ function normalizeRows(cfg) {
     if (lineKey && clean(row.lineNo) !== lineKey) { row.lineNo = lineKey; changed = true; }
     if (lineKey && clean(row.lineKey) !== lineKey) { row.lineKey = lineKey; changed = true; }
 
-    const simpleFields = ['pipingClass', 't1', 't2', 't3', 'hydroPressure', 'insThk', 'densityMixed', 'densityGas', 'densityLiquid', 'phase'];
+    const simpleFields = ['pipingClass', 'p1', 't1', 't2', 't3', 'hydroPressure', 'insThk', 'densityMixed', 'densityGas', 'densityLiquid', 'phase'];
     for (const field of simpleFields) {
       const value = normalizedValue(row, map, field);
       if (goodValue(value) && clean(row[field]) !== value) { row[field] = value; changed = true; }
+      if (!goodValue(value) && field === 'p1' && clean(row.p1) && map.p1 === undefined) { delete row.p1; changed = true; }
     }
     const density = goodValue(row.densityMixed) ? row.densityMixed : (goodValue(row.densityGas) ? row.densityGas : (goodValue(row.densityLiquid) ? row.densityLiquid : normalizedValue(row, map, 'density')));
     if (goodValue(density) && clean(row.density) !== clean(density)) { row.density = clean(density); changed = true; }
 
-    // Store numeric extraction helpers used by preview/converter while keeping raw row intact.
-    const numericTargets = { t1: false, t2: false, t3: false, hydroPressure: false, insThk: false, density: true, densityMixed: true, densityGas: true, densityLiquid: true };
+    const numericTargets = { p1: false, t1: false, t2: false, t3: false, hydroPressure: true, insThk: false, density: true, densityMixed: true, densityGas: true, densityLiquid: true };
     for (const [field, preferLast] of Object.entries(numericTargets)) {
       const numeric = firstNumeric(row[field], preferLast);
       if (numeric && clean(row[`${field}Numeric`]) !== numeric) { row[`${field}Numeric`] = numeric; changed = true; }
@@ -178,8 +190,12 @@ function normalizeRows(cfg) {
 
     if (lineKey) {
       const process = cfg.overrides.processData[lineKey] || {};
-      for (const field of ['pipingClass', 't1', 't2', 't3', 'hydroPressure', 'insThk', 'density', 'densityMixed', 'densityGas', 'densityLiquid', 'phase']) {
+      for (const field of ['pipingClass', 'p1', 't1', 't2', 't3', 'hydroPressure', 'insThk', 'density', 'densityMixed', 'densityGas', 'densityLiquid', 'phase']) {
         const value = clean(row[field]);
+        if (field === 'p1' && (!map.p1 || (process.hydroPressure && firstNumeric(value) === firstNumeric(process.hydroPressure)))) {
+          if (process.p1) { delete process.p1; changed = true; }
+          continue;
+        }
         if (goodValue(value) && clean(process[field]) !== value) { process[field] = value; changed = true; }
       }
       cfg.overrides.processData[lineKey] = process;
@@ -200,10 +216,7 @@ function applySmartMap() {
   if (changed) writeConfig(input, cfg);
 }
 let raf = 0;
-function schedule() {
-  cancelAnimationFrame(raf);
-  raf = requestAnimationFrame(applySmartMap);
-}
+function schedule() { cancelAnimationFrame(raf); raf = requestAnimationFrame(applySmartMap); }
 export function installXmlCiiLineListSmartMap() {
   if (window[FLAG]) return;
   window[FLAG] = true;
