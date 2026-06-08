@@ -1,21 +1,64 @@
-const FLAG = '__xmlCiiLineListSmartMap_v2';
+const FLAG = '__xmlCiiLineListSmartMap_v3';
 const INPUT_SELECTOR = '[data-option-key="supportConfigJson"]';
 
-const TARGETS = Object.freeze({
-  lineKey1: Object.freeze(['service', 'fluid service']),
-  lineKey2: Object.freeze(['line number', 'line no', 'line no.', 'lineno', 'line']),
-  pipingClass: Object.freeze(['piping class', 'pipe class', 'construction class', 'spec class', 'class spec', 'spec']),
-  p1: Object.freeze(['pressure max', 'pressure design', 'design pressure', 'operating pressure', 'pressure kpa', 'pressure kg/cm2', 'pressure barg', 'pressure', 'p1']),
-  t1: Object.freeze(['temp max', 'temperature max', 'maximum temp', 'max temp', 't1']),
-  t2: Object.freeze(['temp ºc', 'temp °c', 'temperature ºc', 'temperature °c', 'operating temp', 'normal temp', 'temp', 'temperature', 't2']),
-  t3: Object.freeze(['temp min', 'temperature min', 'minimum temp', 'min temp', 't3']),
-  hydroPressure: Object.freeze(['test pressure', 'hydro pressure', 'hydro test pressure', 'hydrostatic pressure', 'pressure test', 'proof pressure', 'hp']),
-  insThk: Object.freeze(['insulation thickness', 'insulation thickness mm', 'ins thickness', 'insul thickness', 'ins thk', 'insulation thk']),
-  densityMixed: Object.freeze(['mixed kg/m3', 'mixed kg/m³', 'mixed density', 'density mixed']),
-  densityGas: Object.freeze(['gas kg/m3', 'gas kg/m³', 'density gas', 'gas density']),
-  densityLiquid: Object.freeze(['liquid kg/m3', 'liquid kg/m³', 'density liquid', 'liquid density']),
-  phase: Object.freeze(['fluid', 'phase', 'fluid phase', 'medium']),
+// Mapping rules use AND between groups, OR inside each group.
+// Example densityLiquid: (liquid OR liq) AND (density OR den).
+const FIELD_RULES = Object.freeze({
+  lineKey1: Object.freeze({
+    all: Object.freeze([Object.freeze(['service', 'fluid'])]),
+    reject: Object.freeze([/piping\s*class/, /pipe\s*class/, /line\s*(number|no\.?)/, /rating/, /pressure/, /temp/, /density/]),
+  }),
+  lineKey2: Object.freeze({
+    all: Object.freeze([Object.freeze(['line number', 'line no', 'line no.', 'lineno', 'line'])]),
+    reject: Object.freeze([/(piping|construction|pipe)\s*class/, /\bspec\b/, /rating/, /material/, /pressure/, /temp/, /density/, /fluid/]),
+  }),
+  pipingClass: Object.freeze({
+    all: Object.freeze([Object.freeze(['piping', 'pipe']), Object.freeze(['class', 'spec'])]),
+    reject: Object.freeze([/construction\s*class/, /\bconstruction\b/, /line\s*(number|no\.?)/, /\bservice\b/, /\bfluid\b/, /rating/, /material/, /pressure/, /temp/, /density/, /insulation/]),
+  }),
+  p1: Object.freeze({
+    all: Object.freeze([Object.freeze(['pressure', 'pr']), Object.freeze(['max', 'design'])]),
+    reject: Object.freeze([/test\s*pressure/, /hydro/, /hydrostatic/, /proof/, /temp/, /temperature/, /density/, /fluid/, /line\s*(number|no\.?)/, /piping\s*class/]),
+  }),
+  t1: Object.freeze({
+    all: Object.freeze([Object.freeze(['temp', 'temperature']), Object.freeze(['max', 'design'])]),
+    reject: Object.freeze([/min/, /pressure/, /test/, /hydro/, /density/]),
+  }),
+  t2: Object.freeze({
+    all: Object.freeze([Object.freeze(['temp', 'temperature'])]),
+    optional: Object.freeze([Object.freeze(['normal', 'operating'])]),
+    reject: Object.freeze([/max/, /min/, /pressure/, /test/, /hydro/, /density/]),
+  }),
+  t3: Object.freeze({
+    all: Object.freeze([Object.freeze(['temp', 'temperature']), Object.freeze(['min'])]),
+    reject: Object.freeze([/max/, /pressure/, /test/, /hydro/, /density/]),
+  }),
+  hydroPressure: Object.freeze({
+    all: Object.freeze([Object.freeze(['pressure', 'pr']), Object.freeze(['hydo', 'hydro', 'test'])]),
+    reject: Object.freeze([/temp/, /temperature/, /density/, /line\s*(number|no\.?)/, /piping\s*class/]),
+  }),
+  insThk: Object.freeze({
+    all: Object.freeze([Object.freeze(['insulation', 'ins']), Object.freeze(['thickness', 'thk'])]),
+    reject: Object.freeze([/insulation\s*type/]),
+  }),
+  densityMixed: Object.freeze({
+    all: Object.freeze([Object.freeze(['mixed']), Object.freeze(['density', 'den'])]),
+    reject: Object.freeze([/gas/, /liquid/, /\bliq\b/]),
+  }),
+  densityGas: Object.freeze({
+    all: Object.freeze([Object.freeze(['gas']), Object.freeze(['density', 'den'])]),
+    reject: Object.freeze([/mixed/, /liquid/, /\bliq\b/]),
+  }),
+  densityLiquid: Object.freeze({
+    all: Object.freeze([Object.freeze(['liquid', 'liq']), Object.freeze(['density', 'den'])]),
+    reject: Object.freeze([/mixed/, /gas/]),
+  }),
+  phase: Object.freeze({
+    all: Object.freeze([Object.freeze(['fluid', 'phase', 'medium'])]),
+    reject: Object.freeze([]),
+  }),
 });
+const TARGETS = FIELD_RULES;
 
 function text(value) { return value == null ? '' : String(value); }
 function clean(value) { return text(value).replace(/\s+/g, ' ').trim(); }
@@ -34,6 +77,22 @@ function firstNumeric(value, preferLast = false) {
   const nums = clean(value).replace(/,/g, '').match(/-?\d+(?:\.\d+)?/g) || [];
   return nums.length ? nums[preferLast ? nums.length - 1 : 0] : '';
 }
+function wordPattern(alias) {
+  const a = canon(alias);
+  if (!a) return null;
+  if (/^[a-z0-9]+$/.test(a) && a.length <= 4) return new RegExp(`\\b${a.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`);
+  return null;
+}
+function hasAlias(probe, alias) {
+  const a = canon(alias);
+  if (!a) return false;
+  const word = wordPattern(a);
+  if (word) return word.test(probe);
+  return probe.includes(a);
+}
+function hasAny(probe, aliases) { return (aliases || []).some((alias) => hasAlias(probe, alias)); }
+function groupsMatch(probe, groups) { return (groups || []).every((group) => hasAny(probe, group)); }
+function rejectMatch(probe, rejects) { return (rejects || []).some((rx) => rx.test(probe)); }
 
 function parseConfig() {
   const input = document.querySelector(INPUT_SELECTOR);
@@ -84,49 +143,46 @@ function columnSamples(rows, key, limit = 14) {
   return values;
 }
 function columnProbe(rows, key) { return canon([key, ...columnSamples(rows, key, 14)].join(' | ')); }
-function includesAny(probe, aliases) { return aliases.some((alias) => probe.includes(canon(alias))); }
 function isBadForTarget(target, probe) {
-  if (target === 'lineKey2' && /(piping|construction|pipe)\s*class|\bspec\b|rating|material|pressure|temp|density|fluid/.test(probe)) return true;
-  if (target === 'lineKey1' && /piping\s*class|line\s*(number|no)|rating|pressure|temp|density/.test(probe)) return true;
-  if (target === 'p1' && /(test\s*pressure|hydro|hydrostatic|proof|temp|temperature|density|fluid|line\s*(number|no)|piping\s*class)/.test(probe)) return true;
-  if (target === 'hydroPressure' && !/(test|hydro|hydrostatic|proof)/.test(probe)) return true;
-  if (target === 'insThk' && /insulation\s*type/.test(probe) && !/(thickness|thk|\bmm\b)/.test(probe)) return true;
-  if (target === 't2' && /(max|min|pressure|test|hydro|density)/.test(probe)) return true;
-  if (target === 't1' && /(min|pressure|test|hydro|density)/.test(probe)) return true;
-  if (target === 't3' && /(max|pressure|test|hydro|density)/.test(probe)) return true;
-  if (target === 'densityMixed' && /(gas|liquid)/.test(probe) && !/mixed/.test(probe)) return true;
-  if (target === 'densityGas' && /(mixed|liquid)/.test(probe) && !/gas/.test(probe)) return true;
-  if (target === 'densityLiquid' && /(mixed|gas)/.test(probe) && !/liquid/.test(probe)) return true;
+  const rule = FIELD_RULES[target];
+  if (!rule) return false;
+  if (rejectMatch(probe, rule.reject)) return true;
+  if (!groupsMatch(probe, rule.all)) return true;
   return false;
 }
 function scoreTarget(target, key, rows) {
+  const rule = FIELD_RULES[target];
+  if (!rule) return -999;
   const probe = columnProbe(rows, key);
   const header = canon(key);
   if (isBadForTarget(target, probe)) return -999;
-  let score = 0;
-  if (includesAny(probe, TARGETS[target] || [])) score += 80;
-  if (includesAny(header, TARGETS[target] || [])) score += 30;
+  let score = 200;
+  if (groupsMatch(header, rule.all) && !rejectMatch(header, rule.reject)) score += 90;
+  for (const group of rule.all || []) if (hasAny(header, group)) score += 15;
+  for (const group of rule.optional || []) if (hasAny(probe, group)) score += 35;
 
-  if (target === 'lineKey1' && /\bservice\b/.test(probe)) score += 120;
-  if (target === 'lineKey2' && /line\s*(number|no\.?)/.test(probe)) score += 140;
-  if (target === 'pipingClass' && /(piping|construction|pipe)\s*class/.test(probe)) score += 140;
-  if (target === 'p1' && /pressure/.test(probe) && !/(test|hydro|hydrostatic|proof)/.test(probe)) score += 120;
-  if (target === 'p1' && /(design|operating|max|normal)/.test(probe) && /pressure/.test(probe)) score += 60;
-  if (target === 't1' && /temp/.test(probe) && /(max|maximum)/.test(probe)) score += 140;
-  if (target === 't2' && /temp/.test(probe) && !/(max|maximum|min|minimum)/.test(probe)) score += 110;
-  if (target === 't3' && /temp/.test(probe) && /(min|minimum)/.test(probe)) score += 140;
-  if (target === 'hydroPressure' && /pressure/.test(probe) && /(test|hydro|hydrostatic|proof)/.test(probe)) score += 160;
-  if (target === 'insThk' && /(insulation|insul|\bins\b)/.test(probe) && /(thickness|thk|\bmm\b)/.test(probe)) score += 150;
-  if (target === 'densityMixed' && /mixed/.test(probe) && /(kg\/m3|density)/.test(probe)) score += 150;
-  if (target === 'densityGas' && /gas/.test(probe) && /(kg\/m3|density)/.test(probe)) score += 150;
-  if (target === 'densityLiquid' && /liquid/.test(probe) && /(kg\/m3|density)/.test(probe)) score += 150;
-  if (target === 'phase' && /(\bfluid\b|\bphase\b)/.test(probe)) score += 100;
+  if (target === 'lineKey1' && hasAlias(probe, 'service')) score += 80;
+  if (target === 'lineKey2' && /line\s*(number|no\.?)/.test(probe)) score += 110;
+  if (target === 'pipingClass' && /\bpiping\s*class\b/.test(probe)) score += 180;
+  if (target === 'pipingClass' && /\bpipe\s*class\b/.test(probe)) score += 160;
+  if (target === 'pipingClass' && /\bpiping\s*spec\b|\bpipe\s*spec\b/.test(probe)) score += 130;
+  if (target === 'p1' && /design\s*pressure|pressure\s*design/.test(probe)) score += 140;
+  if (target === 'p1' && /max/.test(probe) && /pressure/.test(probe)) score += 100;
+  if (target === 't1' && /design\s*temp|temp\s*design/.test(probe)) score += 120;
+  if (target === 't1' && /max/.test(probe) && /temp/.test(probe)) score += 100;
+  if (target === 't2' && /(normal|operating)/.test(probe)) score += 80;
+  if (target === 't3' && /min/.test(probe) && /temp/.test(probe)) score += 100;
+  if (target === 'hydroPressure' && /(test\s*pressure|hydro\s*pressure|hydrostatic\s*pressure)/.test(probe)) score += 160;
+  if (target === 'insThk' && /insulation/.test(probe) && /(thickness|thk)/.test(probe)) score += 120;
+  if (target === 'densityMixed' && /mixed/.test(probe) && /(density|\bden\b)/.test(probe)) score += 120;
+  if (target === 'densityGas' && /gas/.test(probe) && /(density|\bden\b)/.test(probe)) score += 120;
+  if (target === 'densityLiquid' && /(liquid|\bliq\b)/.test(probe) && /(density|\bden\b)/.test(probe)) score += 120;
   return score;
 }
 function shouldKeepExisting(target, key, rows) {
   if (!key) return false;
   const probe = columnProbe(rows, key);
-  return !isBadForTarget(target, probe) && scoreTarget(target, key, rows) >= 80;
+  return !isBadForTarget(target, probe) && scoreTarget(target, key, rows) >= 200;
 }
 function detectMap(rows, existing = {}) {
   const keys = allKeys(rows);
@@ -134,7 +190,7 @@ function detectMap(rows, existing = {}) {
   const claimed = new Set();
   for (const [target, key] of Object.entries(result)) {
     if (shouldKeepExisting(target, key, rows)) claimed.add(key);
-    else if (TARGETS[target]) delete result[target];
+    else if (FIELD_RULES[target]) delete result[target];
   }
   const orderedTargets = ['lineKey1', 'lineKey2', 'pipingClass', 'p1', 't1', 't2', 't3', 'hydroPressure', 'insThk', 'densityMixed', 'densityGas', 'densityLiquid', 'phase'];
   for (const target of orderedTargets) {
@@ -145,7 +201,7 @@ function detectMap(rows, existing = {}) {
       const score = scoreTarget(target, key, rows);
       if (score > bestScore) { bestScore = score; best = key; }
     }
-    if (best && bestScore >= 80) {
+    if (best && bestScore >= 200) {
       result[target] = best;
       claimed.add(best);
     }
