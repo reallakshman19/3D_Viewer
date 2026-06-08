@@ -48,6 +48,12 @@ async function renderEnhancedModelConvertersTab(container) {
   }
 
   try {
+    await import('../tabs/xml-cii-default-master-autoload-lite.js?v=20260608-material-weight-defaults-1');
+  } catch (error) {
+    console.warn('[model-converters] XML CII material/weight default autoload skipped:', error);
+  }
+
+  try {
     const { enhanceModelConvertersTab } = await import('../tabs/model-converters-ui-enhancements.js?v=20260608-core-safe-1');
     destroyEnhancer = enhanceModelConvertersTab(container);
   } catch (error) {
