@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 
+// Deterministically split docs/Masters/Piping_class_master.json into one JSON shard per piping class/spec.
 const repoRoot = process.cwd();
 const sourcePath = path.join(repoRoot, 'docs', 'Masters', 'Piping_class_master.json');
 const outDir = path.join(repoRoot, 'docs', 'Masters', 'SpecwisePipingClass');
