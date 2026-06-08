@@ -1,3 +1,7 @@
+/**
+ * @deprecated This patch module has been replaced by the modular architecture
+ * in viewer/tabs/model-converters/. See DEPRECATED_PATCHES.md.
+ */
 const FLAG='__xmlCiiWorkflowOrderFix_v1';
 function clean(v){return String(v??'').replace(/\s+/g,' ').trim()}
 function moveWeightBeforeRun(){

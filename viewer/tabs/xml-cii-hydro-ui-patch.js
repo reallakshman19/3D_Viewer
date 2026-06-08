@@ -1,3 +1,7 @@
+/**
+ * @deprecated This patch module has been replaced by the modular architecture
+ * in viewer/tabs/model-converters/. See DEPRECATED_PATCHES.md.
+ */
 const FLAG = '__xmlCiiLineListHydroScopedFix_v4';
 const HYDRO_COL = 'data-xml-cii-hydro-col';
 const FIELD_STORAGE = 'xmlCii.hydroPressureField';

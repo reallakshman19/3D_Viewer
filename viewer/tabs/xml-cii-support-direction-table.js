@@ -1,3 +1,7 @@
+/**
+ * @deprecated This patch module has been replaced by the modular architecture
+ * in viewer/tabs/model-converters/. See DEPRECATED_PATCHES.md.
+ */
 const FLAG = '__xmlCiiSupportDirectionTable_v1';
 
 function esc(value) {

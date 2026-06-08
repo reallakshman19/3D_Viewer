@@ -1,3 +1,7 @@
+/**
+ * @deprecated This patch module has been replaced by the modular architecture
+ * in viewer/tabs/model-converters/. See DEPRECATED_PATCHES.md.
+ */
 const FLAG = '__xmlCiiElementLengthRunPatch_v1';
 const RUN_SELECTOR = '#model-converters-run';
 const PRIMARY_SELECTOR = '#model-converters-primary-input';

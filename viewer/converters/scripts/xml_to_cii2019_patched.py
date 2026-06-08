@@ -360,6 +360,61 @@ def _renumber_length_bearing_negative_nodes(root: ET.Element, namespace: str) ->
     return changed
 
 
+
+def _edge_delta(edge: base.Edge) -> tuple[float, float, float]:
+    mapped_from = base._map_position_to_cii(edge.from_node.position)
+    mapped_to = base._map_position_to_cii(edge.to_node.position)
+    return (
+        mapped_to[0] - mapped_from[0],
+        mapped_to[1] - mapped_from[1],
+        mapped_to[2] - mapped_from[2],
+    )
+
+def _edge_length_mm(edge: base.Edge) -> float:
+    dx, dy, dz = _edge_delta(edge)
+    return math.sqrt(dx * dx + dy * dy + dz * dz)
+
+def _apply_cii_vector_element_lengths_to_xml(input_xml: Path) -> Path:
+    document = base._parse_xml_document(input_xml)
+    model = base._build_conversion_model(document)
+
+    length_by_to_node: dict[int, float] = {}
+    for edge in model.edges:
+        length_by_to_node[edge.to_node.node_number] = _edge_length_mm(edge)
+
+    tree = ET.parse(input_xml)
+    root = tree.getroot()
+    namespace = _namespace(root.tag)
+
+    changed = False
+    for node in root.iter():
+        if _local_name(node.tag) != "Node":
+            continue
+
+        node_number_text = _child_text(node, namespace, "NodeNumber")
+        try:
+            node_number = int(float(node_number_text))
+        except ValueError:
+            continue
+
+        length = length_by_to_node.get(node_number)
+        if length is None:
+            continue
+
+        next_value = f"{length:.3f}"
+        current = _child_text(node, namespace, "ElementLengthMm")
+        if current != next_value:
+            _set_child(node, namespace, "ElementLengthMm", next_value)
+            changed = True
+
+    if not changed:
+        return input_xml
+
+    output_path = Path(tempfile.gettempdir()) / f"{input_xml.stem}_cii_lengths.xml"
+    tree.write(output_path, encoding="unicode", xml_declaration=True)
+    return output_path
+
+
 def _apply_process_data_to_xml(xml_path: Path, support_config: dict[str, Any]) -> Path:
     _normalize_process_field_map(support_config)
     tree = ET.parse(xml_path)
@@ -516,9 +571,7 @@ def _patched_elements_payload_factory(temperature_map: dict[str, tuple[float, ..
         lines: list[str] = []
         zero6 = base._row([base._format_fixed_float(0.0, 6)] * 6)
         for edge_index, edge in enumerate(model.edges):
-            mapped_from = base._map_position_to_cii(edge.from_node.position)
-            mapped_to = base._map_position_to_cii(edge.to_node.position)
-            dx, dy, dz = (mapped_to[i] - mapped_from[i] for i in range(3))
+            dx, dy, dz = _edge_delta(edge)
             temps = _case_values(temperature_map.get(edge.branch_name, (edge.branch_temperature,)), 9)
             pressures = _case_values(pressure_map.get(edge.branch_name, (edge.branch_pressure,)), 9)
             insulation_density = insulation_density_map.get(edge.branch_name, 0.0)
@@ -590,6 +643,7 @@ def main() -> None:
         support_config["splitCondensedValveFlange"] = bool(args.split_condensed_valve_flange)
     input_xml = _maybe_enrich_from_staged_json(args.input, args.staged_json, support_config)
     input_xml = _apply_process_data_to_xml(input_xml, support_config)
+    input_xml = _apply_cii_vector_element_lengths_to_xml(input_xml)
     insulation_density_map = _branch_insulation_density_map(input_xml)
     hydro_pressure_map = _branch_hydro_pressure_map(input_xml)
     document = base._parse_xml_document(input_xml)

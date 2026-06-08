@@ -152,10 +152,12 @@ def _inputxml_from_final_xml(final_xml: Path, support_config: dict[str, Any], us
                 continue
             edge = base.Edge(from_node=from_node, to_node=to_node, branch_temperature=branch.branch_temperature, branch_pressure=branch.branch_pressure, branch_fluid_density=branch.branch_fluid_density, branch_name=branch.branch_name, branch_material_number=branch.material_number)
             dx, dy, dz = _edge_delta(edge)
+            length_mm = math.sqrt(dx * dx + dy * dy + dz * dz)
             material = to_node.material_code or from_node.material_code or branch.material_number
             attrs = {
                 "FROM_NODE": _fmt(from_node.node_number), "TO_NODE": _fmt(to_node.node_number), "FROM_NAME": from_node.node_name, "TO_NAME": to_node.node_name,
                 "LINE_ID": branch.branch_name, "DELTA_X": _fmt(dx, 4), "DELTA_Y": _fmt(dy, 4), "DELTA_Z": _fmt(dz, 4),
+                "ELEMENT_LENGTH_MM": _fmt(length_mm, 3),
                 "DIAMETER": _fmt(base._element_outside_diameter(edge), 5), "WALL_THICK": _fmt(from_node.wall_thickness if from_node.wall_thickness > 0 else to_node.wall_thickness, 6),
                 "INSUL_THICK": _fmt(to_node.insulation_thickness, 6), "CORR_ALLOW": _fmt(to_node.corrosion_allowance, 6),
                 "TEMP_EXP_C1": _fmt(_case(branch.temperatures, 0), 6), "TEMP_EXP_C2": _fmt(_case(branch.temperatures, 1), 6), "TEMP_EXP_C3": _fmt(_case(branch.temperatures, 2), 6),

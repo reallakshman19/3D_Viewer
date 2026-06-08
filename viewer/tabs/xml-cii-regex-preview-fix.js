@@ -1,3 +1,7 @@
+/**
+ * @deprecated This patch module has been replaced by the modular architecture
+ * in viewer/tabs/model-converters/. See DEPRECATED_PATCHES.md.
+ */
 const FLAG='__xmlCiiRegexPreviewFix_v1';
 const POP='.model-converters-workflow-popup-overlay .model-converters-workflow-popup';
 const PRIMARY='#model-converters-primary-input';
