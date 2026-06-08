@@ -23,14 +23,6 @@ const STATIC_NPS_ROWS = Object.freeze([
   ...['26','28','30','32','34','36','38','40','42','44','46','48','52','56','60','64','66','68','72','76','80'].map((inch) => ({ INCH: `${Number(inch).toFixed(2)}`, 'OD(mm)': {26:660,28:711,30:762,32:813,34:864,36:914,38:965,40:1016,42:1067,44:1118,46:1168,48:1219,52:1321,56:1422,60:1524,64:1626,66:1676,68:1727,72:1829,76:1930,80:2032}[inch], BORE: {26:650,28:700,30:750,32:800,34:850,36:900,38:950,40:1000,42:1050,44:1100,46:1150,48:1200,52:1300,56:1400,60:1500,64:1600,66:1650,68:1700,72:1800,76:1900,80:2000}[inch], STD: ['26','28','30','32','34','36','38','40','42','44','46','48'].includes(inch) ? '9.525' : '', XS: ['26','28','30','32','34','36','38','40','42','44','46','48'].includes(inch) ? '12.7' : '', 'OD(in)': inch })),
 ]);
 
-const CII_SUPPORT_MAPPING_ROWS = Object.freeze([
-  { keyword: 'REST / SHOE / SADDLE / PAD / WEAR PLATE', xmlType: '+Y', ciiType: '+Y', ciiCode: '14', notes: 'Vertical upward support/rest on shoe. Keep +Y in enriched XML and emit the +Y CII support code; do not collapse to generic Y.' },
-  { keyword: 'GUIDE / GUI / PDO-TYPE-603', xmlType: 'GUI', ciiType: 'GUI', ciiCode: '8', notes: 'Guide restraint.' },
-  { keyword: 'LINE STOP / LINESTOP / LIMIT / DIRECTIONAL ANCHOR / XST', xmlType: 'LIM', ciiType: 'LIM', ciiCode: '9', notes: 'Limit stop / line stop.' },
-  { keyword: 'ANCHOR / FIXED / FIX', xmlType: 'ANC', ciiType: 'ANC', ciiCode: '1', notes: 'Full anchor.' },
-  { keyword: 'SPRING / HANGER', xmlType: 'YSPR', ciiType: 'YSPR', ciiCode: '55', notes: 'Spring support placeholder; detailed hanger data belongs in HANGER records.' },
-]);
-
 function esc(value) {
   return String(value ?? '').replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;');
 }
@@ -54,16 +46,6 @@ function renderNpsTable(rows) {
     <div class="model-converters-workflow-table-wrap" style="max-height:68vh;overflow:auto;"><table class="model-converters-workflow-table">
       <thead><tr>${headers.map((h) => `<th>${esc(h)}</th>`).join('')}</tr></thead>
       <tbody>${rows.map((row) => `<tr>${headers.map((h) => `<td>${esc(row[h])}</td>`).join('')}</tr>`).join('')}</tbody>
-    </table></div>`;
-}
-
-function renderSupportMappingTable() {
-  const headers = ['Keyword / DTXR text', 'XML Restraint Type', 'CII Type', 'CII Code', 'Notes'];
-  return `<div class="model-converters-workflow-detail-title">9 CII Support Mapping</div>
-    <div class="model-converters-workflow-detail-text">Keyword-derived supports are mapped through this table before CII RESTRANT output. XML debug type and CII type are kept explicit.</div>
-    <div class="model-converters-workflow-table-wrap" style="max-height:68vh;overflow:auto;"><table class="model-converters-workflow-table">
-      <thead><tr>${headers.map((h) => `<th>${esc(h)}</th>`).join('')}</tr></thead>
-      <tbody>${CII_SUPPORT_MAPPING_ROWS.map((row) => `<tr><td>${esc(row.keyword)}</td><td>${esc(row.xmlType)}</td><td>${esc(row.ciiType)}</td><td>${esc(row.ciiCode)}</td><td>${esc(row.notes)}</td></tr>`).join('')}</tbody>
     </table></div>`;
 }
 

@@ -64,8 +64,8 @@ const XML_CII_WORKFLOW_PHASES = Object.freeze([
   { id: 'import-masters', label: '2 Import Masters', summary: 'Load line list, piping class, material map, and valve weight sources.', state: 'Current' },
   { id: 'preview',        label: '3 Preview',        summary: 'Dry-run enrichment preview per branch \u2014 inspect and override approximate matches.', state: 'Current' },
   { id: 'diagnostics',    label: '4 Diagnostics',    summary: 'Run Dry Run to inspect enrichment data before committing to the full run.', state: 'Current' },
-  { id: 'run',            label: '5 Run',            summary: 'Run the conversion \u2014 generates enriched XML and final CII output.', state: 'Current' },
   { id: 'weight-match',   label: '4A Weight Match',  summary: 'Review approximate component weights matched by bore, rating, and length, then Finalize and Run.', state: 'Current' },
+  { id: 'run',            label: '5 Run',            summary: 'Run the conversion \u2014 generates enriched XML and final CII output.', state: 'Current' },
   { id: 'support-mapper', label: '6 Support Types',  summary: 'Map ATT/RVM fields to CII support kinds for enrichment and 3D symbol rendering.', state: 'Current' },
   { id: 'config',         label: '7 Config',         summary: 'Edit all enrichment configuration fields and export/import the JSON config.', state: 'Current' },
 ]);
@@ -117,7 +117,7 @@ const XML_CII_MASTER_DEFS = Object.freeze({
       densityLiquid: Object.freeze(['Liquid kg/m3', 'Density Liquid', 'Liquid Density', 'Density (Liquid)']),
       phase: Object.freeze(['Phase', 'Fluid Phase', 'Medium Phase']),
     }),
-    autoMapOrder: Object.freeze(['lineSeqNo', 'lineKey1', 'lineKey2', 'pipingClass', 'rating', 'material', 'convertedBore', 'p1', 't3', 't2', 't1', 'insThk', 'densityMixed', 'densityGas', 'densityLiquid', 'phase']),
+    autoMapOrder: Object.freeze(['lineSeqNo', 'lineKey1', 'lineKey2', 'pipingClass', 'rating', 'material', 'convertedBore', 'p1', 'hydroPressure', 't3', 't2', 't1', 'insThk', 'densityMixed', 'densityGas', 'densityLiquid', 'phase']),
   }),
   pipingClass: Object.freeze({
     key: 'pipingClass',
@@ -2773,9 +2773,7 @@ function _stagedComponentForXmlNode(node, stagedIndex, config) {
 
 function _stagedComponentDtxr(indexed) {
   const attrs = indexed?.attrs || {};
-  return _toText(attrs.DTXR || attrs.DESC || attrs.DESCRIPTION || attrs.NAME || indexed?.component?.name || '').trim();
-}
-
+   return _toText(attrs.DTXR_POS || attrs.DTXR || attrs.DESC || attrs.DESCRIPTION || attrs.NAME || indexed?.component?.name || '').trim();
 function _xmlCiiDtxrPsForNode(node, stagedComponentIndex) {
   if (!stagedComponentIndex || stagedComponentIndex.count <= 0) return { text: '', tags: [], values: [] };
   const tags = _xmlNodeSupportTags(node);
@@ -2975,22 +2973,22 @@ function _tokenAtPosition(branchName, delimiter, oneBasedIndex) {
 
 function _xmlCiiTokenPositionList(value) {
   if (Array.isArray(value)) return value.map((entry) => Number(entry)).filter((entry) => Number.isFinite(entry) && entry > 0);
-  return _toText(value)
-    .split(/[,+]/)
-    .map((entry) => Number(entry.trim()))
+   const text = _toText(value).trim();
+   if (!text) return [];
+   // Reject decorated UI/count text such as "24(rows)"; token positions must be
+   // plain 1-based numbers separated by comma or plus.
+   if (!/^\s*\d+(?:\s*[,+]\s*\d+)*\s*$/.test(text)) return [];
+   return text
     .filter((entry) => Number.isFinite(entry) && entry > 0);
 }
 
 function _xmlCiiLineKeyFromBranchTokens(branchName, config) {
   const linelist = config.linelist || {};
   const positions = _xmlCiiTokenPositionList(linelist.lineKeyTokenPositions);
-  if (!positions.length) return '';
-  const delimiter = linelist.tokenDelimiter || '-';
-  const joiner = _toText(linelist.lineKeyJoiner);
-  const parts = positions.map((position) => _tokenAtPosition(branchName, delimiter, position)).filter(Boolean);
-  return parts.join(joiner);
-}
-
+   const safePositions = positions.length ? positions : [4];
+   const delimiter = linelist.tokenDelimiter || '-';
+   const joiner = _toText(linelist.lineKeyJoiner);
+   const parts = safePositions.map((position) => _tokenAtPosition(branchName, delimiter, position)).filter(Boolean);
 function _xmlCiiCleanSizeToken(value) {
   const match = _toText(value).match(/\d+(?:\.\d+)?/);
   return match ? match[0] : '';
@@ -3284,7 +3282,7 @@ function _collectXmlCiiZeroRigidWeightIssues(xmlText, stagedJsonText, config) {
           dtxr: _stagedComponentDtxr(staged.match),
           stagedName: _toText(staged.match?.component?.name || staged.match?.attrs?.NAME || '').trim(),
           stagedMatchMethod: staged.method,
-          candidates: _scoreXmlCiiWeightCandidates({ boreMm, rating, lengthMm }, config).slice(0, 3),
+          candidates: _scoreXmlCiiWeightCandidates({ boreMm, rating, lengthMm }, config).slice(0, 5),
         });
       }
     });

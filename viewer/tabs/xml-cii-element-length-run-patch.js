@@ -24,23 +24,32 @@ function point(value) {
 function distance(a, b) {
   return a && b ? Math.hypot(b[0] - a[0], b[1] - a[1], b[2] - a[2]) : null;
 }
+function positiveNodeNumber(node) {
+  const value = Number(firstText(node, 'NodeNumber'));
+  return Number.isFinite(value) && value > 0;
+}
 function patchElementLengths(xmlText) {
   if (!/<\s*Branchname\b/i.test(xmlText)) return xmlText;
   const doc = new DOMParser().parseFromString(xmlText, 'application/xml');
   if (doc.querySelector('parsererror')) return xmlText;
   let changed = false;
   for (const branch of Array.from(doc.getElementsByTagName('*')).filter((el) => localName(el) === 'branch')) {
-    let previous = null;
-    for (const node of childrenByName(branch, 'Node')) {
-      const current = point(firstText(node, 'Position'));
-      const len = distance(previous, current);
-      if (len != null && Number.isFinite(len)) {
-        ensureChild(doc, node, 'ElementLengthMm').textContent = len.toFixed(3);
-        changed = true;
-      }
-      if (current) previous = current;
-    }
-  }
+     const nodes = childrenByName(branch, 'Node');
+     for (let i = 0; i < nodes.length; i += 1) {
+       const current = point(firstText(nodes[i], 'Position'));
+       if (!current) continue;
+       let len = null;
+       for (let j = i + 1; j < nodes.length; j += 1) {
+         if (!positiveNodeNumber(nodes[j])) continue;
+         len = distance(current, point(firstText(nodes[j], 'Position')));
+         break;
+       }
+       if (len != null && Number.isFinite(len)) {
+         ensureChild(doc, nodes[i], 'ElementLengthMm').textContent = len.toFixed(3);
+         changed = true;
+       }
+     }
+   }
   return changed ? new XMLSerializer().serializeToString(doc) : xmlText;
 }
 async function handleRunClick(event) {

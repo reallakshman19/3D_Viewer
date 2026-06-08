@@ -227,7 +227,7 @@ def _staged_dtxr(entry: dict[str, Any]) -> str:
         attrs = {}
     if not isinstance(component, dict):
         component = {}
-    return str(attrs.get("DTXR") or attrs.get("DESC") or attrs.get("DESCRIPTION") or attrs.get("NAME") or component.get("name") or "").strip()
+    return str(attrs.get("DTXR_POS") or attrs.get("DTXR") or attrs.get("DESC") or attrs.get("DESCRIPTION") or attrs.get("NAME") or component.get("name") or "").strip()
 
 
 def build_dtxr_ps_index(staged_json: Any) -> dict[str, list[str]]:
@@ -355,7 +355,11 @@ def build_dtxr_pos_entries(staged_json: Any, offset_option: dict[str, Any] | Non
         if not isinstance(attrs, dict):
             continue
         dtxr = _staged_dtxr(entry)
-        raw_point = _parse_position_text(attrs.get("POSI"))
+        raw_point = None
+        for key in ("POSI", "POSITION", "POS", "BPOS", "APOS", "LPOS", "CPOS", "HPOS", "TPOS"):
+            raw_point = _parse_position_text(attrs.get(key))
+            if raw_point is not None:
+                break
         point = _apply_dtxr_position_offset(raw_point, offset_option)
         if not dtxr or point is None:
             continue

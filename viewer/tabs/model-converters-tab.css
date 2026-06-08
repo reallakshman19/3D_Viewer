@@ -1370,3 +1370,33 @@
   position: sticky;
   top: 0;
 }
+
+/* XML->CII preview column sizing: keep Material / Mat. Code aligned after
+   adding Hydro as a first-class process column. */
+.mc-preview-table {
+  table-layout: auto;
+  min-width: 1650px;
+}
+
+.mc-preview-table th,
+.mc-preview-table td {
+  box-sizing: border-box;
+}
+
+.mc-preview-table th:nth-child(1),
+.mc-preview-table td:nth-child(1) { min-width: 260px; }
+.mc-preview-table th:nth-child(5),
+.mc-preview-table td:nth-child(5) { min-width: 170px; }
+.mc-preview-table th:nth-child(7),
+.mc-preview-table td:nth-child(7) { min-width: 110px; }
+.mc-preview-table th:nth-child(n+8):nth-child(-n+13),
+.mc-preview-table td:nth-child(n+8):nth-child(-n+13) { min-width: 116px; }
+.mc-preview-table th:nth-child(14),
+.mc-preview-table td:nth-child(14),
+.mc-preview-table th:nth-child(15),
+.mc-preview-table td:nth-child(15) { min-width: 92px; }
+
+.mc-preview-node-table {
+  table-layout: auto;
+  min-width: 980px;
+}
