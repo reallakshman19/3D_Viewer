@@ -48,9 +48,15 @@ async function renderEnhancedModelConvertersTab(container) {
   }
 
   try {
-    await import('../tabs/xml-cii-default-master-autoload-lite.js?v=20260608-material-weight-defaults-1');
+    await import('../tabs/xml-cii-default-master-autoload-lite.js?v=20260608-material-weight-defaults-2');
   } catch (error) {
     console.warn('[model-converters] XML CII material/weight default autoload skipped:', error);
+  }
+
+  try {
+    await import('../tabs/xml-cii-specwise-pipingclass-loader.js?v=20260608-specwise-pipingclass-1');
+  } catch (error) {
+    console.warn('[model-converters] XML CII specwise piping-class loader skipped:', error);
   }
 
   try {
