@@ -48,9 +48,21 @@ async function renderEnhancedModelConvertersTab(container) {
   }
 
   try {
-    await import('../tabs/xml-cii-hydro-ui-patch.js?v=20260608-hydro-restore-1');
+    await import('../tabs/xml-cii-hydro-ui-patch.js?v=20260608-hydro-ui-no-panel-4');
   } catch (error) {
     console.warn('[model-converters] XML CII line list/hydro repair skipped:', error);
+  }
+
+  try {
+    await import('../tabs/xml-cii-regex-preview-fix.js?v=20260608-regex-preview-1');
+  } catch (error) {
+    console.warn('[model-converters] XML CII regex preview fix skipped:', error);
+  }
+
+  try {
+    await import('../tabs/xml-cii-workflow-order-fix.js?v=20260608-workflow-order-1');
+  } catch (error) {
+    console.warn('[model-converters] XML CII workflow order fix skipped:', error);
   }
 
   try {
