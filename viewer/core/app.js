@@ -7,9 +7,6 @@ import { renderPcfxConverterTab } from '../tabs/pcfx-converter-tab.js';
 import { renderModelExchangeTab } from '../tabs/model-exchange-tab.js';
 import { renderInterchangeConfigTab } from '../tabs/interchange-config-tab.js';
 import { renderSupportMappingConfigTab } from '../tabs/support-mapping-config-tab.js';
-import { renderModelConvertersTab } from '../tabs/model-converters-tab.js?v=20260605-xml-cii-linelist-map-1';
-import { enhanceModelConvertersTab } from '../tabs/model-converters-ui-enhancements.js?v=20260607-xml-cii-ui-3';
-import { enhanceNpsBoreMasterTab } from '../tabs/nps-bore-master-enhancements.js?v=20260607-nps-master-2';
 import { renderAdapterMappingTab } from '../tabs/adapter-mapping-tab.js';
 import { mount as mountRvmJsonPcfExtractTab } from '../tabs/rvm-json-pcf-extract-tab.js';
 import { renderUniversalXmlConverterTab } from '../tabs/universal-xml-converter-tab.js';
@@ -29,10 +26,35 @@ const TAB_CONFIG_URL = './opt/tab-visibility.json';
 
 const IS_DEV = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
 
-function renderEnhancedModelConvertersTab(container) {
+function _renderHome(container) {
+  container.innerHTML = `
+    <section style="padding:20px;min-height:100%;font-family:system-ui;background:#0f1724;color:#d9e6f7;">
+      <h1 style="margin:0 0 8px;color:#8fc5ff;">PCF / GLB / RVM Viewer</h1>
+      <p style="margin:0;color:#a9bad0;">Select a tab to load that module. Model Converters are loaded only when opened.</p>
+    </section>`;
+  return null;
+}
+
+async function renderEnhancedModelConvertersTab(container) {
+  const { renderModelConvertersTab } = await import('../tabs/model-converters-tab.js?v=20260608-core-safe-1');
   const destroyBase = renderModelConvertersTab(container);
-  const destroyEnhancer = enhanceModelConvertersTab(container);
-  const destroyNpsEnhancer = enhanceNpsBoreMasterTab(container);
+  let destroyEnhancer = null;
+  let destroyNpsEnhancer = null;
+
+  try {
+    const { enhanceModelConvertersTab } = await import('../tabs/model-converters-ui-enhancements.js?v=20260608-core-safe-1');
+    destroyEnhancer = enhanceModelConvertersTab(container);
+  } catch (error) {
+    console.warn('[model-converters] UI enhancement skipped:', error);
+  }
+
+  try {
+    const { enhanceNpsBoreMasterTab } = await import('../tabs/nps-bore-master-enhancements.js?v=20260608-core-safe-1');
+    destroyNpsEnhancer = enhanceNpsBoreMasterTab(container);
+  } catch (error) {
+    console.warn('[model-converters] NPS/Bore enhancement skipped:', error);
+  }
+
   return () => {
     try { destroyNpsEnhancer?.(); } catch {}
     try { destroyEnhancer?.(); } catch {}
@@ -41,6 +63,7 @@ function renderEnhancedModelConvertersTab(container) {
 }
 
 const TABS = [
+  { id: 'home',         label: 'Home',          group: 'Start', render: _renderHome },
   { id: 'viewer3d',     label: '3D Viewer',     group: 'Viewers', render: renderViewer3D },
   { id: 'viewer3d-rvm', label: '3D RVM Viewer', group: 'Viewers', render: renderViewer3DRvm },
   { id: 'rvm-json-pcf-extract',    label: 'JSON → PCF Extract',     group: 'Extraction', render: (container, ctx) => mountRvmJsonPcfExtractTab(container, ctx) },
@@ -69,11 +92,17 @@ export async function init() {
   _buildTabBar();
   _bindAppSwitchHandler();
   _bindGlobalEvents();
-  if (state.activeTab && _visibleTabs.some((tab) => tab.id === state.activeTab)) {
-    setActiveTab(state.activeTab);
-  } else {
-    setActiveTab(_visibleTabs[0]?.id || 'viewer3d');
+  setActiveTab(_initialTabId());
+}
+
+function _initialTabId() {
+  const params = new URLSearchParams(window.location.search);
+  const requested = params.get('tab') || window.location.hash.replace(/^#/, '');
+  if (requested && _visibleTabs.some((tab) => tab.id === requested)) return requested;
+  if (state.activeTab && state.activeTab !== 'summary' && state.activeTab !== 'model-converters' && _visibleTabs.some((tab) => tab.id === state.activeTab)) {
+    return state.activeTab;
   }
+  return _visibleTabs.some((tab) => tab.id === 'home') ? 'home' : (_visibleTabs[0]?.id || 'viewer3d');
 }
 
 async function _loadVisibleTabs() {
@@ -86,9 +115,10 @@ async function _loadVisibleTabs() {
     const order = Array.isArray(config.order) ? config.order : [];
     const tabById = new Map(TABS.map((tab) => [tab.id, tab]));
     const ordered = [];
+    if (tabById.has('home') && !hidden.has('home')) ordered.push(tabById.get('home'));
     for (const id of order) {
       const tab = tabById.get(id);
-      if (tab && !hidden.has(id)) ordered.push(tab);
+      if (tab && !hidden.has(id) && !ordered.includes(tab)) ordered.push(tab);
     }
     for (const tab of TABS) {
       if (!hidden.has(tab.id) && !ordered.includes(tab)) ordered.push(tab);
@@ -142,26 +172,41 @@ function _bindAppSwitchHandler() {
 
 function _bindGlobalEvents() {
   on(RuntimeEvents.TAB_CHANGED, (tabId) => {
-    _renderActiveTab(tabId);
+    void _renderActiveTab(tabId);
   });
 }
 
 let _destroyActiveTab = null;
-function _renderActiveTab(tabId) {
-  const container = document.getElementById('app');
+let _renderSerial = 0;
+async function _renderActiveTab(tabId) {
+  const serial = ++_renderSerial;
+  const container = document.getElementById('app') || document.getElementById('tab-content');
   if (!container) return;
   try { _destroyActiveTab?.(); } catch {}
   _destroyActiveTab = null;
-  const tab = _visibleTabs.find((entry) => entry.id === tabId) || _visibleTabs[0];
+  const tab = _visibleTabs.find((entry) => entry.id === tabId) || _visibleTabs.find((entry) => entry.id === 'home') || _visibleTabs[0];
   document.querySelectorAll('.tab-btn').forEach((button) => {
     button.classList.toggle('active', button.dataset.tab === tab?.id);
   });
   container.innerHTML = '';
   if (!tab) return;
+  if (tab.id !== 'home') {
+    const loading = document.createElement('div');
+    loading.className = 'model-converters-muted';
+    loading.style.cssText = 'padding:16px;color:#9fb2c7;font-family:system-ui';
+    loading.textContent = `Loading ${tab.label}…`;
+    container.appendChild(loading);
+  }
   try {
-    _destroyActiveTab = tab.render(container, { state, emit, showToast, showLoading, hideLoading, requestPat, loadRvmSource, RvmStaticBundleLoader, RvmHelperBridge, RvmGitHubActionsBridge });
+    const destroy = await tab.render(container, { state, emit, showToast, showLoading, hideLoading, requestPat, loadRvmSource, RvmStaticBundleLoader, RvmHelperBridge, RvmGitHubActionsBridge, convertRevFileToAvevaHierarchy });
+    if (serial !== _renderSerial) {
+      try { destroy?.(); } catch {}
+      return;
+    }
+    _destroyActiveTab = typeof destroy === 'function' ? destroy : null;
   } catch (error) {
+    if (serial !== _renderSerial) return;
     console.error(error);
-    container.innerHTML = `<div class="error-card">Failed to render tab: ${String(error?.message || error)}</div>`;
+    container.innerHTML = `<div class="error-card">Failed to render ${tab?.label || 'tab'}: ${String(error?.message || error)}</div>`;
   }
 }
