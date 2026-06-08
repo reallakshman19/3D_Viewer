@@ -1,4 +1,4 @@
-const FLAG = '__xmlCiiRunInputProcessPatch_v1';
+const FLAG = '__xmlCiiRunInputProcessPatch_v3';
 const SUPPORT_CONFIG_SELECTOR = '[data-option-key="supportConfigJson"]';
 const RUN_SELECTOR = '#model-converters-run';
 const PRIMARY_SELECTOR = '#model-converters-primary-input';
@@ -6,12 +6,15 @@ const CONVERTER_SELECTOR = '#model-converters-select';
 
 function text(value) { return value == null ? '' : String(value); }
 function clean(value) { return text(value).replace(/\s+/g, ' ').trim(); }
+function canon(value) { return clean(value).toLowerCase().replace(/º/g, '°').replace(/³/g, '3').replace(/[_\-()[\]/|]+/g, ' ').replace(/\s+/g, ' ').trim(); }
 function norm(value) { return clean(value).toUpperCase().replace(/[\s_.\-\/()"']/g, ''); }
 function isObj(value) { return !!value && typeof value === 'object' && !Array.isArray(value); }
 function localName(el) { return clean(el?.localName || el?.nodeName).replace(/^.*:/, '').toLowerCase(); }
 function childrenByName(parent, name) { return Array.from(parent?.children || []).filter((el) => localName(el) === name.toLowerCase()); }
 function firstChild(parent, name) { return childrenByName(parent, name)[0] || null; }
 function firstText(parent, name) { return clean(firstChild(parent, name)?.textContent); }
+function parsePoint(value) { const nums = clean(value).match(/-?\d+(?:\.\d+)?/g)?.map(Number).filter(Number.isFinite) || []; return nums.length >= 3 ? nums.slice(0, 3) : null; }
+function distanceMm(a, b) { return a && b ? Math.hypot(b[0] - a[0], b[1] - a[1], b[2] - a[2]) : null; }
 function rowValue(row, keys) {
   for (const key of (keys || []).filter(Boolean)) {
     if (row?.[key] != null && clean(row[key]) !== '') return text(row[key]);
@@ -22,6 +25,21 @@ function rowValue(row, keys) {
 function numberText(value, preferLast = false) {
   const nums = clean(value).replace(/,/g, '').match(/-?\d+(?:\.\d+)?/g) || [];
   return nums.length ? nums[preferLast ? nums.length - 1 : 0] : '';
+}
+function columnProbe(rows, key) {
+  const values = [key];
+  for (const row of (rows || []).slice(0, 14)) {
+    const v = rowValue(row, [key]);
+    if (v) values.push(v);
+  }
+  return canon(values.join(' | '));
+}
+function validMappedField(field, cfg) {
+  const key = cfg.linelist?.fieldMap?.[field];
+  if (!key) return false;
+  const probe = columnProbe(cfg.linelist?.masterRows || [], key);
+  if (field === 'p1') return /pressure/.test(probe) && !/(test\s*pressure|hydro|hydrostatic|proof|temp|temperature|density|fluid|line\s*(number|no)|piping\s*class)/.test(probe);
+  return true;
 }
 function readConfig() {
   const input = document.querySelector(SUPPORT_CONFIG_SELECTOR);
@@ -43,8 +61,8 @@ function lineKeyFromBranch(branchName, cfg) {
 }
 function rowLineKey(row, cfg) {
   const fm = cfg.linelist?.fieldMap || {};
-  const composite = `${clean(rowValue(row, [fm.lineKey1, 'lineKey1']))}${clean(rowValue(row, [fm.lineKey2, 'lineKey2']))}`;
-  if (composite && !/^service\s*line\s*(number|no)?$/i.test(composite)) return composite;
+  const composite = `${clean(rowValue(row, [fm.lineKey1, 'lineKey1', 'Service']))}${clean(rowValue(row, [fm.lineKey2, 'lineKey2', 'Line number', 'Line Number']))}`;
+  if (composite && !/^service\s*line\s*(number|no)?$/i.test(composite) && !/pipingclass/i.test(composite)) return composite;
   return rowValue(row, [fm.lineNoKey, fm.lineNo, fm.lineSeqNo, 'lineNoKey', 'lineNo', 'lineKey', 'lineSeqNo', 'Line No', 'Line Number', 'ColumnX1']);
 }
 function matchingRow(lineKey, cfg) {
@@ -52,8 +70,13 @@ function matchingRow(lineKey, cfg) {
   return (cfg.linelist?.masterRows || []).find((row) => norm(rowLineKey(row, cfg)) === wanted) || null;
 }
 function valueFor(lineKey, cfg, field, fallbacks = [], preferLast = false) {
+  const hydro = cfg.overrides?.processData?.[lineKey]?.hydroPressure || cfg.overrides?.processData?.[norm(lineKey)]?.hydroPressure;
   const override = cfg.overrides?.processData?.[lineKey]?.[field] || cfg.overrides?.processData?.[norm(lineKey)]?.[field];
-  if (clean(override)) return clean(override);
+  if (field !== 'p1' && clean(override)) return clean(override);
+  if (field === 'p1') {
+    if (!validMappedField('p1', cfg)) return '';
+    if (clean(override) && (!hydro || numberText(override) !== numberText(hydro))) return clean(override);
+  } else if (clean(override)) return clean(override);
   const row = matchingRow(lineKey, cfg);
   if (!row) return '';
   const fm = cfg.linelist?.fieldMap || {};
@@ -74,12 +97,28 @@ function setChild(doc, parent, name, value) {
   ensureChild(doc, parent, name).textContent = v;
   return true;
 }
+function applyPrecedingNodeElementLengths(doc, branch) {
+  let changed = false;
+  let previous = null;
+  for (const node of childrenByName(branch, 'Node')) {
+    const current = parsePoint(firstText(node, 'Position'));
+    const length = distanceMm(previous, current);
+    if (length != null && Number.isFinite(length)) {
+      const next = length.toFixed(3);
+      const child = ensureChild(doc, node, 'ElementLengthMm');
+      if (child.textContent !== next) { child.textContent = next; changed = true; }
+    }
+    if (current) previous = current;
+  }
+  return changed;
+}
 function patchXml(xmlText, cfg) {
   if (!/<\s*Branchname\b/i.test(xmlText)) return xmlText;
   const doc = new DOMParser().parseFromString(xmlText, 'application/xml');
   if (doc.querySelector('parsererror')) return xmlText;
   let changed = false;
   for (const branch of Array.from(doc.getElementsByTagName('*')).filter((el) => localName(el) === 'branch')) {
+    changed = applyPrecedingNodeElementLengths(doc, branch) || changed;
     const lineKey = lineKeyFromBranch(firstText(branch, 'Branchname'), cfg);
     if (!lineKey) continue;
     const pressure = ensureChild(doc, branch, 'Pressure');
@@ -106,8 +145,9 @@ async function handleRunClick(event) {
   event.preventDefault();
   event.stopPropagation();
   event.stopImmediatePropagation();
-  const patchedText = patchXml(await file.text(), readConfig());
-  if (patchedText !== await file.text()) {
+  const originalText = await file.text();
+  const patchedText = patchXml(originalText, readConfig());
+  if (patchedText !== originalText) {
     const patchedFile = new File([patchedText], file.name, { type: file.type || 'application/xml', lastModified: file.lastModified });
     const dt = new DataTransfer();
     dt.items.add(patchedFile);
