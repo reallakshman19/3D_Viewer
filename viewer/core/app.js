@@ -72,15 +72,9 @@ async function renderEnhancedModelConvertersTab(container) {
   }
 
   try {
-    await import('../tabs/xml-cii-preview-enhancements.js?v=20260608-preview-enhancements-1');
+    await import('../tabs/xml-cii-preview-stable-patch.js?v=20260608-preview-stable-1');
   } catch (error) {
-    console.warn('[model-converters] XML CII preview enhancements skipped:', error);
-  }
-
-  try {
-    await import('../tabs/xml-cii-preview-postfix.js?v=20260608-preview-postfix-1');
-  } catch (error) {
-    console.warn('[model-converters] XML CII preview postfix skipped:', error);
+    console.warn('[model-converters] XML CII stable preview patch skipped:', error);
   }
 
   try {
