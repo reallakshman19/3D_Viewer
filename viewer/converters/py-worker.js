@@ -122,6 +122,22 @@ function _inferTextMime(fileName) {
   return 'text/plain;charset=utf-8';
 }
 
+function _patchConverterScriptText(fileName, text) {
+  if (fileName !== 'xml_to_cii2019_patched.py') return text;
+  let patched = String(text || '');
+  const lineKeyFn = `def _line_key_from_row(row: dict[str, Any], config: dict[str, Any]) -> str:\n    field_map = config.get("linelist", {}).get("fieldMap", {}) if isinstance(config.get("linelist"), dict) else {}\n\n    def pick(key: object) -> str:\n        return _row_value(row, _safe_text(key))\n\n    def normalize(value: str) -> str:\n        return re.sub(r"\\s+", "", _safe_text(value).upper())\n\n    # Robust line-list keys can be stored either directly or as a composite\n    # Key1 + Key2 pair. Example: Service=D and Line number=8810274 -> D8810274.\n    key1 = pick(field_map.get("lineKey1"))\n    key2 = pick(field_map.get("lineKey2"))\n    composite = normalize(f"{key1}{key2}")\n    if composite and composite not in {"SERVICE", "LINENUMBER", "SERVICELINENUMBER", "SERVICELINENO"}: \n        return composite\n\n    for key in [\n        field_map.get("lineNoKey"), field_map.get("lineNo"), field_map.get("lineSeqNo"),\n        "lineNoKey", "Line No. Key", "Line No Key", "lineNo", "lineKey", "lineSeqNo",\n        "Line No", "Line Number", "PipelineReference", "ColumnX1",\n    ]:\n        value = pick(key)\n        if value:\n            return normalize(value)\n    return ""\n\n`;
+  patched = patched.replace(
+    /def _line_key_from_row\(row: dict\[str, Any\], config: dict\[str, Any\]\) -> str:\n[\s\S]*?\n\n(?=def _matching_linelist_rows)/,
+    lineKeyFn,
+  );
+  const mappedFn = `def _mapped_process_value(line_key: str, config: dict[str, Any], field: str, fallbacks: list[str]) -> str:\n    overrides = config.get("overrides", {}) if isinstance(config.get("overrides"), dict) else {}\n    process_overrides = overrides.get("processData", {}) if isinstance(overrides.get("processData"), dict) else {}\n    override_row = process_overrides.get(line_key) or process_overrides.get(_safe_text(line_key).upper())\n    if isinstance(override_row, dict) and _safe_text(override_row.get(field)):\n        return _safe_text(override_row.get(field))\n\n    field_map = config.get("linelist", {}).get("fieldMap", {}) if isinstance(config.get("linelist"), dict) else {}\n    keys = [_safe_text(field_map.get(field)) if isinstance(field_map, dict) else "", field, field.upper(), *fallbacks]\n    values: list[str] = []\n    for row in _matching_linelist_rows(line_key, config):\n        for key in keys:\n            value = _row_value(row, key)\n            if value and value.strip() not in {"-", "--"}:\n                values.append(value)\n                break\n    numeric_values = [_numeric_token(value) for value in values if _numeric_token(value)]\n    if numeric_values:\n        return numeric_values[-1] if field in {"t3", "densityMixed", "hydroPressure"} else numeric_values[0]\n    return values[0] if values else ""\n\n`;
+  patched = patched.replace(
+    /def _mapped_process_value\(line_key: str, config: dict\[str, Any\], field: str, fallbacks: list\[str\]\) -> str:\n[\s\S]*?\n\n(?=def _branch_nodes)/,
+    mappedFn,
+  );
+  return patched;
+}
+
 async function _getPyodide() {
   if (!_pyodidePromise) _pyodidePromise = loadPyodide({ indexURL: PYODIDE_INDEX_URL });
   return _pyodidePromise;
@@ -141,7 +157,7 @@ await micropip.install('pypdf')
     const url = new URL(`./scripts/${fileName}`, import.meta.url);
     const response = await fetch(url, { cache: 'no-store' });
     if (!response.ok) throw new Error(`Failed to load converter script ${fileName}: HTTP ${response.status}`);
-    const text = await response.text();
+    const text = _patchConverterScriptText(fileName, await response.text());
     pyodide.FS.writeFile(`/scripts/${fileName}`, text, { encoding: 'utf8' });
   }
   pyodide.runPython(`
