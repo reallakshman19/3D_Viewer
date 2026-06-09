@@ -111,7 +111,39 @@ export function xmlCiiDryRunPreview(xmlText, config, stagedJsonText) {
     if (resolved.materialSource === 'override' || resolved.materialSource === 'override-material-map') matMethod = 'override';
     else if (resolved.materialSource === 'line-list-material-map' || resolved.materialSource === 'piping-class-material-map') matMethod = 'exact';
     else if (resolved.materialSource === 'xml-fallback') matMethod = 'xml-fallback';
-    branchRows.push({ branchName, lineKey, lineMiss: !lineListMatch, size: boreMm != null ? `${boreMm}mm` : '', sizeMm: boreMm, pipingClass: resolved.pipingClass || '', pipingClassDerived: derivedClassRaw || '', pipingClassMethod: resolved.pipingClassMatchMethod, pipingClassConfidence: resolved.pipingClassConfidence, pipingClassNeedsReview: resolved.pipingClassNeedsReview, pipingClassCandidates: resolved.pipingClassCandidates || [], material: resolved.material || '', materialSource: _overrideSource(config.overrides, 'material', lineKey), materialCode: resolved.materialCode || '', materialCodeMethod: matMethod, materialCodeNeedsReview: !resolved.materialCode, rating: branchRating || '', ratingSource: _overrideSource(config.overrides, 'rating', lineKey), p1, t1, t2, t3, density, p1Source: _hasOwn(pdOverride, 'p1') ? 'override' : (p1 ? 'linelist' : 'none'), t1Source: _hasOwn(pdOverride, 't1') ? 'override' : (t1 ? 'linelist' : 'none'), t2Source: _hasOwn(pdOverride, 't2') ? 'override' : (t2 ? 'linelist' : 'none'), t3Source: _hasOwn(pdOverride, 't3') ? 'override' : (t3 ? 'linelist' : 'none'), densitySource: _hasOwn(pdOverride, 'density') ? 'override' : (density ? 'linelist' : 'none'), wallThickness, wallThicknessSource: _overrideSource(config.overrides, 'wallThickness', lineKey), corrosion, corrosionSource: _overrideSource(config.overrides, 'corrosion', lineKey) });
+    branchRows.push({
+      branchName,
+      lineKey,
+      lineMiss: !lineListMatch,
+      size: boreMm != null ? `${boreMm}mm` : '',
+      sizeMm: boreMm,
+      pipingClass: resolved.pipingClass || '',
+      pipingClassDerived: derivedClassRaw || '',
+      pipingClassMethod: resolved.pipingClassMatchMethod,
+      pipingClassConfidence: resolved.pipingClassConfidence,
+      pipingClassScore: resolved.pipingClassScore,
+      pipingClassRowScore: resolved.pipingClassRowScore,
+      pipingClassRowReasons: resolved.pipingClassRowReasons || [],
+      pipingClassNeedsReview: resolved.pipingClassNeedsReview,
+      pipingClassCandidates: resolved.pipingClassCandidates || [],
+      material: resolved.material || '',
+      materialSource: _overrideSource(config.overrides, 'material', lineKey),
+      materialCode: resolved.materialCode || '',
+      materialCodeMethod: matMethod,
+      materialCodeNeedsReview: !resolved.materialCode,
+      rating: branchRating || '',
+      ratingSource: _overrideSource(config.overrides, 'rating', lineKey),
+      p1, t1, t2, t3, density,
+      p1Source: _hasOwn(pdOverride, 'p1') ? 'override' : (p1 ? 'linelist' : 'none'),
+      t1Source: _hasOwn(pdOverride, 't1') ? 'override' : (t1 ? 'linelist' : 'none'),
+      t2Source: _hasOwn(pdOverride, 't2') ? 'override' : (t2 ? 'linelist' : 'none'),
+      t3Source: _hasOwn(pdOverride, 't3') ? 'override' : (t3 ? 'linelist' : 'none'),
+      densitySource: _hasOwn(pdOverride, 'density') ? 'override' : (density ? 'linelist' : 'none'),
+      wallThickness,
+      wallThicknessSource: _overrideSource(config.overrides, 'wallThickness', lineKey),
+      corrosion,
+      corrosionSource: _overrideSource(config.overrides, 'corrosion', lineKey),
+    });
     let previousPosition = null;
     for (const node of _xmlChildrenByName(branch, 'Node')) {
       const positionText = _xmlText(node, 'Position');
