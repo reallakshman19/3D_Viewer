@@ -10,6 +10,7 @@
 // Existing overrides with no metadata are treated as manual to avoid destructive overwrites.
 
 const FILL_META_KEY = '__previewFillDown';
+const OVERRIDE_CATEGORIES = ['pipingClass', 'material', 'materialCode', 'rating', 'wallThickness', 'corrosion'];
 
 function text(value) {
   return String(value ?? '').trim();
@@ -17,49 +18,34 @@ function text(value) {
 
 function ensureFillMeta(overrides) {
   if (!overrides[FILL_META_KEY] || typeof overrides[FILL_META_KEY] !== 'object') {
-    overrides[FILL_META_KEY] = {
-      processData: {},
-      pipingClass: {},
-      material: {},
-    };
+    overrides[FILL_META_KEY] = { processData: {} };
   }
   if (!overrides[FILL_META_KEY].processData || typeof overrides[FILL_META_KEY].processData !== 'object') {
     overrides[FILL_META_KEY].processData = {};
   }
-  if (!overrides[FILL_META_KEY].pipingClass || typeof overrides[FILL_META_KEY].pipingClass !== 'object') {
-    overrides[FILL_META_KEY].pipingClass = {};
-  }
-  if (!overrides[FILL_META_KEY].material || typeof overrides[FILL_META_KEY].material !== 'object') {
-    overrides[FILL_META_KEY].material = {};
+  for (const category of OVERRIDE_CATEGORIES) {
+    if (!overrides[FILL_META_KEY][category] || typeof overrides[FILL_META_KEY][category] !== 'object') {
+      overrides[FILL_META_KEY][category] = {};
+    }
   }
   return overrides[FILL_META_KEY];
 }
 
 function processFieldMeta(meta, field) {
-  if (!meta.processData[field] || typeof meta.processData[field] !== 'object') {
-    meta.processData[field] = {};
-  }
+  if (!meta.processData[field] || typeof meta.processData[field] !== 'object') meta.processData[field] = {};
   return meta.processData[field];
 }
 
 function setProcessState(meta, field, lineKey, fillState, sourceKey = null) {
   if (!lineKey) return;
   const bucket = processFieldMeta(meta, field);
-  bucket[lineKey] = {
-    fillState,
-    sourceKey,
-    updatedAt: new Date().toISOString(),
-  };
+  bucket[lineKey] = { fillState, sourceKey, updatedAt: new Date().toISOString() };
 }
 
 function setOverrideState(meta, category, key, fillState, sourceKey = null) {
   if (!key) return;
   if (!meta[category] || typeof meta[category] !== 'object') meta[category] = {};
-  meta[category][key] = {
-    fillState,
-    sourceKey,
-    updatedAt: new Date().toISOString(),
-  };
+  meta[category][key] = { fillState, sourceKey, updatedAt: new Date().toISOString() };
 }
 
 function hasOwn(obj, key) {
@@ -67,37 +53,33 @@ function hasOwn(obj, key) {
 }
 
 function sortedByPreviewRow(elements, attrName) {
-  return [...elements].sort((a, b) => {
-    const av = Number(a.getAttribute(attrName) || 0);
-    const bv = Number(b.getAttribute(attrName) || 0);
-    return av - bv;
-  });
+  return [...elements].sort((a, b) => Number(a.getAttribute(attrName) || 0) - Number(b.getAttribute(attrName) || 0));
 }
 
 function overrideCategoryForField(field) {
   if (field === 'pipingClass') return 'pipingClass';
-  if (field === 'materialCode') return 'material';
+  if (field === 'materialCode') return 'materialCode';
+  if (field === 'material') return 'material';
+  if (field === 'rating') return 'rating';
+  if (field === 'wallThickness') return 'wallThickness';
+  if (field === 'corrosion') return 'corrosion';
   return field;
 }
 
 function keyForOverrideCell(field, cell) {
   if (field === 'pipingClass') return text(cell?.getAttribute('data-mc-edit-derived'));
-  if (field === 'materialCode') return text(cell?.getAttribute('data-mc-edit-mat'));
-  return text(cell?.getAttribute('data-mc-edit-key'));
+  return text(cell?.getAttribute('data-mc-edit-key') || cell?.getAttribute('data-mc-edit-mat'));
 }
 
 function valueFromOverrideCell(cell) {
-  return text(cell?.querySelector('.mc-preview-editable-val')?.textContent);
+  const value = text(cell?.querySelector('.mc-preview-editable-val')?.textContent);
+  return value === '—' ? '' : value;
 }
 
 function inferOverrideFillState({ metaBucket, overridesBucket, key, visibleValue }) {
   const state = metaBucket?.[key]?.fillState;
   if (state === 'manual' || state === 'auto' || state === 'blank') return state;
-
-  // Old configs had no fill metadata. Treat existing explicit overrides as manual.
   if (hasOwn(overridesBucket, key)) return 'manual';
-
-  // Visible non-empty non-dash value from master/exact/approximate resolution is an original boundary.
   if (visibleValue && visibleValue !== '—') return 'manual';
   return 'blank';
 }
@@ -105,13 +87,8 @@ function inferOverrideFillState({ metaBucket, overridesBucket, key, visibleValue
 function inferProcessFillState({ metaBucket, overrides, lineKey, field, cell, value }) {
   const state = metaBucket?.[lineKey]?.fillState;
   if (state === 'manual' || state === 'auto' || state === 'blank') return state;
-
-  const hasOverride = hasOwn(overrides.processData?.[lineKey], field);
-  if (hasOverride) return 'manual';
-
-  // Line-list values are original data boundaries.
+  if (hasOwn(overrides.processData?.[lineKey], field)) return 'manual';
   if (cell?.classList?.contains('mc-preview-pd-linelist') && text(value)) return 'manual';
-
   return text(value) ? 'manual' : 'blank';
 }
 
@@ -120,7 +97,7 @@ export function markPreviewOverrideManual({ config, ensureOverrides, field, key,
   const meta = ensureFillMeta(overrides);
   const category = overrideCategoryForField(field);
   const cleanValue = text(value);
-
+  if (!overrides[category] || typeof overrides[category] !== 'object') overrides[category] = {};
   if (cleanValue) setOverrideState(meta, category, key, 'manual', null);
   else setOverrideState(meta, category, key, 'blank', null);
 }
@@ -129,7 +106,6 @@ export function markPreviewProcessManual({ config, ensureOverrides, field, lineK
   const overrides = ensureOverrides(config);
   const meta = ensureFillMeta(overrides);
   const cleanValue = text(value);
-
   if (cleanValue) setProcessState(meta, field, lineKey, 'manual', null);
   else setProcessState(meta, field, lineKey, 'blank', null);
 }
@@ -147,11 +123,7 @@ export function applyPreviewOverrideFillDown({ host, config, ensureOverrides, fi
   let sourceValue = sourceValueInitial;
   let sourceKey = '';
   let filled = 0;
-
-  const cells = sortedByPreviewRow(
-    host.querySelectorAll(`[data-mc-edit-type="${field}"]`),
-    'data-mc-edit-row'
-  );
+  const cells = sortedByPreviewRow(host.querySelectorAll(`[data-mc-edit-type="${field}"]`), 'data-mc-edit-row');
 
   for (const cell of cells) {
     const rowIndex = Number(cell.getAttribute('data-mc-edit-row') || 0);
@@ -165,24 +137,16 @@ export function applyPreviewOverrideFillDown({ host, config, ensureOverrides, fi
       overrides[category][key] = sourceValue;
       continue;
     }
-
     if (rowIndex < fromRow) continue;
 
     const visibleValue = valueFromOverrideCell(cell);
-    const fillState = inferOverrideFillState({
-      metaBucket,
-      overridesBucket: bucket,
-      key,
-      visibleValue,
-    });
-
+    const fillState = inferOverrideFillState({ metaBucket, overridesBucket: bucket, key, visibleValue });
     if (fillState === 'manual') {
       sourceValue = visibleValue;
       sourceKey = key;
       continue;
     }
 
-    // blank or previous auto-fill: overwrite with active source.
     if (!overrides[category]) overrides[category] = {};
     overrides[category][key] = sourceValue;
     setOverrideState(meta, category, key, 'auto', sourceKey);
@@ -197,28 +161,20 @@ export function applyPreviewOverrideFillDown({ host, config, ensureOverrides, fi
     cell.dataset.mcFillState = 'auto';
     filled += 1;
   }
-
   return filled;
 }
 
 export function applyPreviewProcessFillDown({ host, config, ensureOverrides, field, fromRow, currentValue }) {
   const sourceValueInitial = text(currentValue);
   if (!sourceValueInitial) return 0;
-
   const overrides = ensureOverrides(config);
   if (!overrides.processData || typeof overrides.processData !== 'object') overrides.processData = {};
-
   const meta = ensureFillMeta(overrides);
   const fieldMeta = processFieldMeta(meta, field);
-
   let sourceValue = sourceValueInitial;
   let sourceKey = '';
   let filled = 0;
-
-  const inputs = sortedByPreviewRow(
-    [...host.querySelectorAll('[data-mc-pd-field]')].filter((input) => input.dataset.mcPdField === field),
-    'data-mc-pd-row'
-  );
+  const inputs = sortedByPreviewRow([...host.querySelectorAll('[data-mc-pd-field]')].filter((input) => input.dataset.mcPdField === field), 'data-mc-pd-row');
 
   for (const input of inputs) {
     const rowIndex = Number(input.getAttribute('data-mc-pd-row') || 0);
@@ -232,37 +188,22 @@ export function applyPreviewProcessFillDown({ host, config, ensureOverrides, fie
       overrides.processData[lineKey][field] = sourceValue;
       continue;
     }
-
     if (rowIndex < fromRow) continue;
 
     const cell = input.closest('.mc-preview-pd-cell');
-    const fillState = inferProcessFillState({
-      metaBucket: fieldMeta,
-      overrides,
-      lineKey,
-      field,
-      cell,
-      value: input.value,
-    });
-
+    const fillState = inferProcessFillState({ metaBucket: fieldMeta, overrides, lineKey, field, cell, value: input.value });
     if (fillState === 'manual') {
       sourceValue = text(input.value);
       sourceKey = lineKey;
       continue;
     }
 
-    // blank or previous auto-fill: overwrite with active source.
     if (!overrides.processData[lineKey]) overrides.processData[lineKey] = {};
     overrides.processData[lineKey][field] = sourceValue;
     setProcessState(meta, field, lineKey, 'auto', sourceKey);
-
     input.value = sourceValue;
     input.dataset.mcFillState = 'auto';
-    if (cell) {
-      cell.className = 'mc-preview-pd-cell mc-preview-pd-override mc-preview-pd-auto';
-    }
     filled += 1;
   }
-
   return filled;
 }
