@@ -1,3 +1,8 @@
+import {
+  migrateSupportMappingConfig,
+  supportKindToXmlTypeFromMapping,
+} from './support-mapping-config.js';
+
 export function toText(value) {
   if (value === undefined || value === null) return '';
   return String(value);
@@ -9,14 +14,26 @@ export function toFiniteNumber(value, fallback) {
   return fallback;
 }
 
+function withNormalizedSupportMapping(config) {
+  const supportMapping = migrateSupportMappingConfig(config);
+  return {
+    ...config,
+    supportMapping,
+    supportKindToXmlType: supportKindToXmlTypeFromMapping(supportMapping),
+  };
+}
+
 export function migrateXmlCiiSupportConfigJson(rawJson) {
   const text = toText(rawJson).trim();
   if (!text) return text;
   try {
     const parsed = JSON.parse(text);
     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return text;
-    parsed.supportKindToXmlType = normalizeXmlCiiSupportKindToTypeConfig(parsed.supportKindToXmlType);
-    return JSON.stringify(parsed, null, 2);
+    const normalized = withNormalizedSupportMapping({
+      ...parsed,
+      supportKindToXmlType: normalizeXmlCiiSupportKindToTypeConfig(parsed.supportKindToXmlType),
+    });
+    return JSON.stringify(normalized, null, 2);
   } catch {
     return text;
   }
@@ -72,6 +89,7 @@ export function parseXmlCiiEnrichmentConfig(rawJson) {
     dtxrPositionOffset: { enabled: true, xOffset: 150500, yOffset: 43000, zOffset: 100000, tolerance: 0.5 },
     xmlAxisToCiiAxis: { Z: 'Y' },
     supportKindToXmlType: { REST: '+Y', GUIDE: 'GUI', LINESTOP: 'LIM', LIMIT: 'LIM', ANCHOR: 'A', SPRING: 'Y' },
+    supportMapping: null,
     defaultXmlSupportType: 'Y',
     defaultStiffness: '1.751270E+12',
     defaultFriction: '0.3',
@@ -132,17 +150,18 @@ export function parseXmlCiiEnrichmentConfig(rawJson) {
     },
   };
   const text = toText(rawJson).trim();
-  if (!text) return defaults;
+  if (!text) return withNormalizedSupportMapping(defaults);
   try {
     const parsed = JSON.parse(text);
-    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return defaults;
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return withNormalizedSupportMapping(defaults);
     const parsedOverrides = parsed.overrides || {};
     const parsedPipingClassMatch = parsed.pipingClassMatch || {};
     const supportKindToXmlType = normalizeXmlCiiSupportKindToTypeConfig({
       ...defaults.supportKindToXmlType,
       ...(parsed.supportKindToXmlType || {}),
     });
-    return {
+
+    const merged = {
       ...defaults,
       ...parsed,
       dtxrPositionOffset: { ...defaults.dtxrPositionOffset, ...(parsed.dtxrPositionOffset || {}) },
@@ -173,7 +192,9 @@ export function parseXmlCiiEnrichmentConfig(rawJson) {
         __previewFillDown: parsedOverrides.__previewFillDown || undefined,
       },
     };
+
+    return withNormalizedSupportMapping(merged);
   } catch {
-    return defaults;
+    return withNormalizedSupportMapping(defaults);
   }
 }
