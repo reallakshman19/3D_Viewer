@@ -63,6 +63,15 @@ export const PSNM_PHASE_MANIFEST = Object.freeze([
     ],
     contract: 'Popup extension modules are loaded through one consolidated suite entry point before native v7 consolidation.',
   },
+  {
+    id: '4H',
+    name: 'Cache Health',
+    files: [
+      'psnm-cache-health-ui.js',
+      'psnm-phase-suite.js',
+    ],
+    contract: 'Popup can report the loaded phase-suite version and whether acceptance/manifest globals are available at runtime.',
+  },
 ]);
 
 export function PSNM_getPhaseManifest() {
