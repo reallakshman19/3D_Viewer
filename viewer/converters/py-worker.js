@@ -258,73 +258,238 @@ async function _runInputXml2019CiiHardener(pyodide, converterId, sourcePath, out
     '--strict',
   ];
 
-  await _runPythonScript(pyodide, '/scripts/cii2019_miscel_hardener.py', argv, stdout, stderr);
-  return outputPath;
-}
-
-async function _runConverterJob(pyodide, request) {
-  const stdout = [];
-  const stderr = [];
-  pyodide.setStdout({ batched: (line) => stdout.push(line) });
-  pyodide.setStderr({ batched: (line) => stderr.push(line) });
-
-  const jobId = Math.random().toString(36).slice(2);
-  const jobDir = `/work/${jobId}`;
-  pyodide.FS.mkdirTree(jobDir);
-
-  const primaryPath = _writeInputFile(pyodide, jobDir, request.primaryFile);
-  const secondaryPath = request.secondaryFile ? _writeInputFile(pyodide, jobDir, request.secondaryFile) : '';
-  const invocation = buildInvocation(
-    request.converterId,
-    primaryPath,
-    request.primaryFile?.name,
-    secondaryPath,
-    request.options || {},
-    jobDir,
+  await _runPythonScript(
+    pyodide,
+    '/scripts/cii2019_miscel_hardener.py',
+    argv,
+    stdout,
+    stderr,
   );
 
-  await _runPythonScript(pyodide, invocation.scriptPath, invocation.argv, stdout, stderr);
-  await _runInputXml2019CiiHardener(pyodide, request.converterId, primaryPath, invocation.outputPath, stdout, stderr);
-  const outputBytes = pyodide.FS.readFile(invocation.outputPath);
-  return buildConverterWorkerResponse({
-    ok: true,
-    converterId: request.converterId,
-    outputName: invocation.outputName,
-    outputMime: _inferTextMime(invocation.outputName),
-    outputBytes,
-    stdout: _decodeLogBatches(stdout),
-    stderr: _decodeLogBatches(stderr),
-  });
+  return {
+    script: 'cii2019_miscel_hardener.py',
+    outputPath,
+  };
 }
 
-self.onmessage = async (event) => {
+async function _runInputXml2019DisplmntSync(pyodide, converterId, sourcePath, outputPath, stdout, stderr) {
+  if (converterId !== 'inputxml_to_cii2019') return null;
+
+  const argv = [
+    '/scripts/cii2019_displmnt_sync.py',
+    '--input',
+    outputPath,
+    '--output',
+    outputPath,
+    '--input-xml',
+    sourcePath,
+    '--strict',
+  ];
+
+  await _runPythonScript(
+    pyodide,
+    '/scripts/cii2019_displmnt_sync.py',
+    argv,
+    stdout,
+    stderr,
+  );
+
+  return {
+    script: 'cii2019_displmnt_sync.py',
+    outputPath,
+  };
+}
+
+async function _runContractGate(pyodide, converterId, sourcePath, outputPath, jobDir, stdout, stderr) {
+  if (!XML_CONTRACT_GATED_CONVERTERS.has(converterId)) return null;
+  const reportPath = `${jobDir}/${_sanitizeFileName(converterId)}_psi116_contract_report.json`;
+  const argv = [
+    '/scripts/psi116_contract_check.py',
+    '--xml', outputPath,
+    '--source-input', sourcePath,
+    '--source-kind', _contractSourceKind(converterId),
+    '--report', reportPath,
+    '--strict',
+  ];
+  await _runPythonScript(pyodide, '/scripts/psi116_contract_check.py', argv, stdout, stderr);
   try {
-    const request = validateConverterWorkerRequest(event.data || {});
-    const pyodide = await _getPyodide();
-    await _ensureScripts(pyodide);
-
-    if (XML_CONTRACT_GATED_CONVERTERS.has(request.converterId)) {
-      // Contract check runs after script loading and before conversion.
-      const sourceKind = _contractSourceKind(request.converterId);
-      const primaryPath = '/work/contract_input.json';
-      pyodide.FS.mkdirTree('/work');
-      pyodide.FS.writeFile(primaryPath, new Uint8Array(request.primaryFile?.bytes || new ArrayBuffer(0)));
-      const argv = [
-        '/scripts/psi116_contract_check.py',
-        '--input',
-        primaryPath,
-        '--source-kind',
-        sourceKind,
-      ];
-      const stdout = [];
-      const stderr = [];
-      pyodide.setStdout({ batched: (line) => stdout.push(line) });
-      pyodide.setStderr({ batched: (line) => stderr.push(line) });
-      await _runPythonScript(pyodide, '/scripts/psi116_contract_check.py', argv, stdout, stderr);
-    }
-
-    self.postMessage(await _runConverterJob(pyodide, request));
-  } catch (error) {
-    self.postMessage(buildConverterWorkerResponse({ ok: false, error }));
+    return pyodide.FS.readFile(reportPath, { encoding: 'utf8' });
+  } catch {
+    return null;
   }
-};
+}
+
+async function _runInputXml2019SyntaxCheck(pyodide, converterId, outputPath, jobDir, stdout, stderr) {
+  if (converterId !== 'inputxml_to_cii2019') return null;
+
+  const reportPath = `${jobDir}/inputxml_to_cii2019_syntax_report.json`;
+  const argv = [
+    '/scripts/cii_syntax_check_2019.py',
+    '--input',
+    outputPath,
+    '--output',
+    reportPath,
+  ];
+
+  await _runPythonScript(pyodide, '/scripts/cii_syntax_check_2019.py', argv, stdout, stderr);
+
+  return {
+    script: 'cii_syntax_check_2019.py',
+    reportPath,
+  };
+}
+
+function _primaryStem(primaryName) {
+  const safe = _sanitizeFileName(primaryName || 'input.xml');
+  const idx = safe.lastIndexOf('.');
+  return idx > 0 ? safe.slice(0, idx) : safe;
+}
+
+async function _runXmlCiiEnrichedInputXmlExport(pyodide, converterId, primaryPath, primaryName, secondaryPath, options, jobDir, stdout, stderr) {
+  if (converterId !== 'xml_to_cii') return null;
+  const outputName = `${_primaryStem(primaryName)}_xml_to_cii2019_enriched.input.xml`;
+  const outputPath = `${jobDir}/${outputName}`;
+  const argv = [
+    '/scripts/xml_to_inputxml_debug.py',
+    '--input',
+    primaryPath,
+    '--output',
+    outputPath,
+  ];
+  const supportConfig = _toString(options?.supportConfigJson).trim();
+  if (supportConfig) argv.push('--support-config-json', supportConfig);
+  if (secondaryPath) argv.push('--staged-json', secondaryPath);
+  if (options?.useRestraintTypeBasedOnJson === false) {
+    argv.push('--no-use-restraint-type-based-on-json');
+  } else {
+    argv.push('--use-restraint-type-based-on-json');
+  }
+  await _runPythonScript(pyodide, '/scripts/xml_to_inputxml_debug.py', argv, stdout, stderr);
+  return { script: 'xml_to_inputxml_debug.py', outputPath, outputName };
+}
+
+async function _runJob(message) {
+  const converterId = _toString(message?.converterId);
+  if (!converterId) throw new Error('Missing converterId.');
+
+  const primary = (message?.inputFiles || []).find((f) => f?.role === 'primary');
+  if (!primary) throw new Error('Primary input file is required.');
+
+  const secondary = (message?.inputFiles || []).find((f) => f?.role === 'secondary');
+  const options = message?.options || {};
+  const pyodide = await _getPyodide();
+  await _ensureScripts(pyodide);
+
+  const stdout = [];
+  const stderr = [];
+  pyodide.setStdout({ batched: (text) => stdout.push(text) });
+  pyodide.setStderr({ batched: (text) => stderr.push(text) });
+
+  const jobDir = `/work/job_${Date.now()}_${Math.floor(Math.random() * 1000000)}`;
+  pyodide.FS.mkdirTree(jobDir);
+
+  const primaryPath = _writeInputFile(pyodide, jobDir, primary);
+  const secondaryPath = secondary ? _writeInputFile(pyodide, jobDir, secondary) : null;
+  const invocation = buildInvocation(converterId, primaryPath, primary.name, secondaryPath, options, jobDir);
+
+  await _runPythonScript(pyodide, invocation.scriptPath, invocation.argv, stdout, stderr);
+
+  const sourcePathForHardener =
+    invocation.argv[invocation.argv.indexOf('--input') + 1] || primaryPath;
+
+  const hardenerResult = await _runInputXml2019CiiHardener(
+    pyodide,
+    converterId,
+    sourcePathForHardener,
+    invocation.outputPath,
+    stdout,
+    stderr,
+  );
+
+  const displmntSyncResult = await _runInputXml2019DisplmntSync(
+    pyodide,
+    converterId,
+    sourcePathForHardener,
+    invocation.outputPath,
+    stdout,
+    stderr,
+  );
+
+  const contractReportText = await _runContractGate(
+    pyodide,
+    converterId,
+    invocation.argv[invocation.argv.indexOf('--input') + 1] || primaryPath,
+    invocation.outputPath,
+    jobDir,
+    stdout,
+    stderr,
+  );
+
+  const syntaxCheckResult = await _runInputXml2019SyntaxCheck(
+    pyodide,
+    converterId,
+    invocation.outputPath,
+    jobDir,
+    stdout,
+    stderr,
+  );
+
+  const enrichedInputXmlResult = await _runXmlCiiEnrichedInputXmlExport(
+    pyodide,
+    converterId,
+    primaryPath,
+    primary.name,
+    secondaryPath,
+    options,
+    jobDir,
+    stdout,
+    stderr,
+  );
+
+  const stdoutLines = _decodeLogBatches(stdout);
+  const stderrLines = _decodeLogBatches(stderr);
+  const outputText = pyodide.FS.readFile(invocation.outputPath, { encoding: 'utf8' });
+  const outputs = [
+    { name: invocation.outputName, text: outputText, mime: _inferTextMime(invocation.outputName) },
+  ];
+  if (contractReportText) {
+    outputs.push({
+      name: invocation.outputName.replace(/\.[^.]+$/, '_psi116_contract_report.json'),
+      text: contractReportText,
+      mime: 'application/json;charset=utf-8',
+    });
+  }
+  if (enrichedInputXmlResult) {
+    outputs.push({
+      name: enrichedInputXmlResult.outputName,
+      text: pyodide.FS.readFile(enrichedInputXmlResult.outputPath, { encoding: 'utf8' }),
+      mime: _inferTextMime(enrichedInputXmlResult.outputName),
+    });
+  }
+  return {
+    output: outputs,
+    logs: {
+      stdout: stdoutLines,
+      stderr: stderrLines,
+      argv: invocation.argv.slice(1),
+      postprocess: [hardenerResult, displmntSyncResult, syntaxCheckResult, enrichedInputXmlResult].filter(Boolean),
+    },
+  };
+}
+
+self.addEventListener('message', async (event) => {
+  const message = event.data || {};
+  if (message.type !== 'run') return;
+  const jobId = message.jobId;
+  const validation = validateConverterWorkerRequest(message);
+  if (!validation.ok) {
+    self.postMessage(buildConverterWorkerResponse(jobId, false, null, null, validation.error));
+    return;
+  }
+  try {
+    const result = await _runJob(message);
+    self.postMessage(buildConverterWorkerResponse(jobId, true, result.output, result.logs, null));
+  } catch (error) {
+    self.postMessage(buildConverterWorkerResponse(jobId, false, null, null, _toString(error?.message || error)));
+  }
+});
