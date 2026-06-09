@@ -1455,6 +1455,13 @@ function _saveStoredState(selectedConverter, defaultsByConverter) {
 
 const XML_CII_MASTER_HIDDEN_PREFIX = '⟨hidden — ';
 
+const STORAGE_MASTER_ARRAY_PATHS = Object.freeze([
+  Object.freeze(['linelist', 'masterRows']),
+  Object.freeze(['pipingClass', 'masterRows']),
+  Object.freeze(['material', 'mapRows']),
+  Object.freeze(['weight', 'masterRows']),
+]);
+
 // Build a compact view of the enrichment config for the 7 Config editor: the
 // bulky master arrays are replaced by a short placeholder string so the editor
 // stays small (KB, not MB) and never freezes the page. The full data is kept in
