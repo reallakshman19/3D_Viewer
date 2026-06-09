@@ -28,6 +28,17 @@ assert.strictEqual(approx.method, 'leading-numeric-base');
 assert.strictEqual(approx.needsReview, true);
 assert.ok(approx.candidates.some((candidate) => candidate.candidate === '91260'));
 
+const redundantOverride = resolveApproximatePipingClass({
+  requestedClass: '91261M7',
+  pipingClassIndex: index,
+  overrides: { pipingClass: { '91261M7': '91261' } },
+});
+
+assert.strictEqual(redundantOverride.pipingClass, '91261');
+assert.strictEqual(redundantOverride.method, 'leading-numeric-base');
+assert.strictEqual(redundantOverride.needsReview, true);
+assert.ok(redundantOverride.reasons.includes('redundant-override-same-as-auto'));
+
 const override = resolveApproximatePipingClass({
   requestedClass: '91261M7',
   pipingClassIndex: index,
