@@ -1453,14 +1453,30 @@ function _saveStoredState(selectedConverter, defaultsByConverter) {
   return saveStoredState(selectedConverter, defaultsByConverter);
 }
 
-const XML_CII_MASTER_HIDDEN_PREFIX = '⟨hidden — ';
-
-const STORAGE_MASTER_ARRAY_PATHS = Object.freeze([
+const XML_CII_STORAGE_MASTER_ARRAY_PATHS = Object.freeze([
   Object.freeze(['linelist', 'masterRows']),
   Object.freeze(['pipingClass', 'masterRows']),
   Object.freeze(['material', 'mapRows']),
   Object.freeze(['weight', 'masterRows']),
 ]);
+
+if (!globalThis.XML_CII_STORAGE_MASTER_ARRAY_PATHS) {
+  Object.defineProperty(globalThis, 'XML_CII_STORAGE_MASTER_ARRAY_PATHS', {
+    value: XML_CII_STORAGE_MASTER_ARRAY_PATHS,
+    configurable: true,
+  });
+}
+
+if (!globalThis.STORAGE_MASTER_ARRAY_PATHS) {
+  Object.defineProperty(globalThis, 'STORAGE_MASTER_ARRAY_PATHS', {
+    value: globalThis.XML_CII_STORAGE_MASTER_ARRAY_PATHS,
+    configurable: true,
+  });
+}
+
+const XML_CII_MASTER_HIDDEN_PREFIX = '⟨hidden — ';
+
+const STORAGE_MASTER_ARRAY_PATHS = XML_CII_STORAGE_MASTER_ARRAY_PATHS;
 
 // Build a compact view of the enrichment config for the 7 Config editor: the
 // bulky master arrays are replaced by a short placeholder string so the editor
@@ -2685,7 +2701,7 @@ function _xmlCiiApplyLineListProcessData(document, branch, row, config, branchLi
   const t3 = _xmlCiiProcessValue(pdOverride, row, 't3', ['t3', 'T3', 'Temperature3', 'Temperature 3', 'Temp Min', 'Temp Min C', 'Temp Min °C', 'Min']);
   const insThk = _xmlCiiProcessValue(pdOverride, row, 'insThk', ['insThk', 'InsThk']);
   const density = _xmlCiiProcessValue(pdOverride, row, 'density', ['density', 'Density']);
-  
+
   const pressure = _xmlEnsureChild(document, branch, 'Pressure');
   if (p1) {
     _xmlSetText(document, pressure, 'Pressure1', p1);
@@ -2695,7 +2711,7 @@ function _xmlCiiApplyLineListProcessData(document, branch, row, config, branchLi
     _xmlSetText(document, pressure, 'HydroPressure', hydro);
     count += 1;
   }
-  
+
   const temperature = _xmlEnsureChild(document, branch, 'Temperature');
   if (t1) {
     _xmlSetText(document, temperature, 'Temperature1', t1);
@@ -6422,7 +6438,7 @@ export function renderModelConvertersTab(container) {
       const config = _parseXmlCiiEnrichmentConfig(activeVal.supportConfigJson);
       const overrides = xmlCiiEnsureOverrides(config);
       if (!overrides.processData) overrides.processData = {};
-      
+
       let updated = false;
       for (const row of rows) {
         const key = (row.lineNo || '').trim();
@@ -7015,14 +7031,14 @@ export function renderModelConvertersTab(container) {
     // Populate with the compact config (masters hidden) so even a multi-MB config
     // loads instantly and the page never sticks.
     if (textarea) textarea.value = _xmlCiiCompactConfigForEditor(activeValues().supportConfigJson || '').text;
-    
+
     const saveNow = () => {
       const raw = textarea?.value || '';
       try {
         // Re-merge hidden master tables before saving the full config.
         const merged = _xmlCiiMergeEditedConfig(raw, activeValues().supportConfigJson || '');
         const config = JSON.parse(merged);
-        
+
         // Also force the checkbox values onto the config
         const cbFriction = detailEl?.querySelector('#mc-cfg-friction-sentinel');
         const cbDensity = detailEl?.querySelector('#mc-cfg-convert-density');
@@ -7036,10 +7052,10 @@ export function renderModelConvertersTab(container) {
         if (cbSupportTag) {
           config.disableCiiSupportTagPopulation = cbSupportTag.checked;
         }
-        
+
         xmlCiiSaveConfig(config);
         setStatus('✓ Saved', true);
-        
+
         // Also update textarea with possibly updated/re-formatted JSON
         if (textarea) {
           textarea.value = _xmlCiiCompactConfigForEditor(activeValues().supportConfigJson || '').text;
@@ -7048,7 +7064,7 @@ export function renderModelConvertersTab(container) {
         setStatus(`JSON error: ${e.message}`, false);
       }
     };
-    
+
     const updateTextareaFromCheckboxes = () => {
       const raw = textarea?.value || '';
       try {
@@ -7071,7 +7087,7 @@ export function renderModelConvertersTab(container) {
         // Ignore JSON errors while typing, the checkboxes will be merged on save anyway
       }
     };
-    
+
     detailEl?.querySelector('#mc-cfg-friction-sentinel')?.addEventListener('change', updateTextareaFromCheckboxes);
     detailEl?.querySelector('#mc-cfg-convert-density')?.addEventListener('change', updateTextareaFromCheckboxes);
     detailEl?.querySelector('[data-xml-cii-config-bool="disableCiiSupportTagPopulation"]')?.addEventListener('change', updateTextareaFromCheckboxes);
@@ -7091,7 +7107,7 @@ export function renderModelConvertersTab(container) {
         const parsed = JSON.parse(text);
         xmlCiiSaveConfig(parsed); // validate + save full config
         if (textarea) textarea.value = _xmlCiiCompactConfigForEditor(activeValues().supportConfigJson || '').text;
-        
+
         // Sync checkboxes
         const cbFriction = detailEl?.querySelector('#mc-cfg-friction-sentinel');
         const cbDensity = detailEl?.querySelector('#mc-cfg-convert-density');
@@ -7105,7 +7121,7 @@ export function renderModelConvertersTab(container) {
         if (cbSupportTag) {
           cbSupportTag.checked = parsed.disableCiiSupportTagPopulation === true;
         }
-        
+
         setStatus(`✓ Imported ${file.name}`, true);
       } catch (err) {
         setStatus(`Import failed: ${err.message}`, false);
@@ -7164,7 +7180,7 @@ export function renderModelConvertersTab(container) {
       xmlCiiRenderWorkflowRoot(xmlCiiWorkflowPopupEl, xmlCiiWorkflowPopupDetailEl);
       return;
     }
-    
+
     const initialPhase = xmlCiiWorkflowEl?.dataset.selectedPhase || 'regex';
 
     workflowModalInstance = new WorkflowModal({
@@ -7460,7 +7476,7 @@ export function renderModelConvertersTab(container) {
         const config = _parseXmlCiiEnrichmentConfig(activeVal.supportConfigJson);
         const masterDef = XML_CII_MASTER_DEFS.linelist;
         const rows = _xmlCiiMapRowsWithFieldMap(local.rawRows, local.fieldMap, 'linelist');
-        
+
         if (!config.linelist || typeof config.linelist !== 'object') {
           config.linelist = {};
         }
@@ -7484,4 +7500,3 @@ export function renderModelConvertersTab(container) {
 }
 
 export { renderModelConvertersTab as renderLegacyModelConvertersTab };
-
