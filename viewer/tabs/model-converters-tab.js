@@ -1,3 +1,4 @@
+import './model-converters/xml-cii-compact-config-globals.js';
 import { renderLegacyModelConvertersTab } from './model-converters/legacy-adapter.js';
 import { installXmlCiiDefaultMasterAutoload } from './xml-cii-master-autoload-patch.js';
 
