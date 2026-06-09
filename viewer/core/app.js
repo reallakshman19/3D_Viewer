@@ -11,6 +11,7 @@ import { renderAdapterMappingTab } from '../tabs/adapter-mapping-tab.js';
 import { mount as mountRvmJsonPcfExtractTab } from '../tabs/rvm-json-pcf-extract-tab.js';
 import { renderUniversalXmlConverterTab } from '../tabs/universal-xml-converter-tab.js';
 import { renderXmlCompareTab } from '../tabs/xml-compare-tab.js';
+import { renderPSNM_UtilityTab } from '../tabs/psnm-utility-tab.js?v=20260609-psnm-1';
 import { emit, on } from './event-bus.js';
 import { initDevDebugWindow, destroyDevDebugWindow } from '../debug/dev-debug-window.js';
 import { loadRvmSource } from '../rvm/RvmLoadPipeline.js';
@@ -92,7 +93,7 @@ async function renderEnhancedModelConvertersTab(container) {
   try {
     await import('../tabs/xml-cii-run-input-process-patch.js?v=20260608-run-input-process-4');
   } catch (error) {
-    console.warn('[model-converters] XML CII run input process patch skipped:', error);
+    console.warn('[model-converters] XML CII run input process skipped:', error);
   }
 
   try {
@@ -120,6 +121,7 @@ const TABS = [
   { id: 'home',         label: 'Home',          group: 'Start', render: _renderHome },
   { id: 'viewer3d',     label: '3D Viewer',     group: 'Viewers', render: renderViewer3D },
   { id: 'viewer3d-rvm', label: '3D RVM Viewer', group: 'Viewers', render: renderViewer3DRvm },
+  { id: 'psnm-utility', label: 'Utilities',     group: 'Utilities', render: renderPSNM_UtilityTab },
   { id: 'rvm-json-pcf-extract',    label: 'JSON → PCF Extract',     group: 'Extraction', render: (container, ctx) => mountRvmJsonPcfExtractTab(container, ctx) },
   { id: 'universal-xml-converter', label: 'XML Converter',           group: 'Extraction', render: renderUniversalXmlConverterTab },
   { id: 'xml-compare',             label: 'XML Compare',             group: 'Extraction', render: renderXmlCompareTab },
