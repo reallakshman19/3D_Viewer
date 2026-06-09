@@ -64,7 +64,7 @@ function converterSpec(converterId) {
   if (converterId === 'stagedjson_to_xml') return { script: 'stagedjson_to_xml.py', extension: '.xml' };
   if (converterId === 'stagedjson_to_inputxml') return { script: 'stagedjson_to_inputxml.py', extension: '.xml' };
   if (converterId === 'rev_to_stp') return { script: 'rev_to_stp.py', extension: '.stp' };
-  if (converterId === 'xml_to_cii') return { script: 'xml_to_cii2019_patched.py', extension: '.cii' };
+  if (converterId === 'xml_to_cii') return { script: 'xml_to_cii2019_direction.py', extension: '.cii' };
   if (converterId === 'cii_syntax_check_2019') return { script: 'cii_syntax_check_2019.py', extension: '.json' };
   if (converterId === 'inputxml_to_cii') return { script: 'inputxml_to_cii2014.py', extension: '.cii' };
   if (converterId === 'inputxml14_to_cii') return { script: 'inputxml_to_cii2014.py', extension: '.cii' };
