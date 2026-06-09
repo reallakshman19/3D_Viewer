@@ -32,14 +32,11 @@ function numericOverrideValue(overrides, bucketName, keys = []) {
 }
 
 function readClassRowRating(row) {
-  return text(
-    row?.rating ??
-    row?.Rating ??
-    row?.RATING ??
-    row?.['Pressure Class'] ??
-    row?.ratingClass ??
-    ''
-  );
+  return text(row?.rating ?? row?.Rating ?? row?.RATING ?? row?.['Pressure Class'] ?? row?.ratingClass ?? '');
+}
+
+function classRowMaterial(row) {
+  return text(row?.materialName || row?.Material_Name || row?.Material || row?.material || row?.MATERIAL || '');
 }
 
 function materialMapRowCode(row) {
@@ -47,16 +44,7 @@ function materialMapRowCode(row) {
 }
 
 function materialMapRowNames(row) {
-  return [
-    row?.material,
-    row?.Material,
-    row?.materialName,
-    row?.Material_Name,
-    row?.description,
-    row?.Description,
-    row?.name,
-    row?.Name,
-  ].map(text).filter(Boolean);
+  return [row?.material, row?.Material, row?.materialName, row?.Material_Name, row?.description, row?.Description, row?.name, row?.Name].map(text).filter(Boolean);
 }
 
 function materialComparable(value) {
@@ -72,7 +60,6 @@ function materialComparable(value) {
 function mapMaterialTextToCiiCodeRobust(materialText, materialMap) {
   const exact = mapMaterialTextToCiiCode(materialText, materialMap);
   if (exact) return exact;
-
   const key = materialComparable(materialText);
   if (!key) return null;
   const rows = Array.isArray(materialMap) ? materialMap : [];
@@ -81,280 +68,103 @@ function mapMaterialTextToCiiCodeRobust(materialText, materialMap) {
     return materialMapRowNames(row).some((candidate) => {
       const cand = materialComparable(candidate);
       if (!cand) return false;
-      if (cand === key) return true;
-      if (cand.length >= 4 && key.endsWith(cand)) return true;
-      if (key.length >= 4 && cand.endsWith(key)) return true;
-      return false;
+      return cand === key || (cand.length >= 4 && key.endsWith(cand)) || (key.length >= 4 && cand.endsWith(key));
     });
   }) || null;
 }
 
-export function resolveMaterialCodeFromLineMaterial({
-  lineRow,
-  materialMap,
-  pipingClassRow,
-  overrides = {},
-  overrideKeys = [],
-  xmlNode,
-  xmlBranch
-}) {
-  const lineMaterialRaw = firstText(lineRow, ['material', 'Material', 'MATERIAL', 'Material_Name', 'MOC']);
-  const classMaterialRaw = text(
-    pipingClassRow?.materialName ||
-    pipingClassRow?.Material_Name ||
-    pipingClassRow?.Material ||
-    pipingClassRow?.material ||
-    ''
-  );
+function shouldUseNumericOverride(value, classValue, config) {
+  if (value == null) return false;
+  if (value !== 0) return true;
+  if (config?.allowZeroWallCorrosionOverrides === true) return true;
+  if (classValue != null && classValue !== 0) return false;
+  return true;
+}
 
+export function resolveMaterialCodeFromLineMaterial({ lineRow, materialMap, pipingClassRow, overrides = {}, overrideKeys = [], xmlNode, xmlBranch }) {
+  const lineMaterialRaw = firstText(lineRow, ['material', 'Material', 'MATERIAL', 'Material_Name', 'MOC']);
+  const classMaterialRaw = classRowMaterial(pipingClassRow);
   const materialOverride = overrideValue(overrides, 'material', overrideKeys);
-  const materialText = cleanMaterialText(materialOverride || lineMaterialRaw || classMaterialRaw);
-  const materialOverrideKeys = [...overrideKeys, lineMaterialRaw, classMaterialRaw, materialText].filter(Boolean);
+
+  // The class master is authoritative for piping-class dependent pipe items.
+  // The line list material may be a broad construction/material family such as CSS.
+  const preferredMaterial = materialOverride || classMaterialRaw || lineMaterialRaw;
+  const materialText = cleanMaterialText(preferredMaterial);
+  const materialOverrideKeys = [...overrideKeys, classMaterialRaw, lineMaterialRaw, materialText].filter(Boolean);
 
   const explicitMaterialCode = overrideValue(overrides, 'materialCode', materialOverrideKeys);
-  if (explicitMaterialCode) {
-    return {
-      material: materialText,
-      materialCode: cleanMaterialCode(explicitMaterialCode),
-      source: 'override'
-    };
-  }
+  if (explicitMaterialCode) return { material: materialText, materialCode: cleanMaterialCode(explicitMaterialCode), source: 'override' };
 
-  // Backward compatibility: old preview stored material-code overrides in overrides.material keyed by material text.
-  const legacyMaterialCode = overrideValue(overrides, 'material', [lineMaterialRaw, classMaterialRaw, materialText].filter(Boolean));
-  if (legacyMaterialCode && legacyMaterialCode !== materialOverride) {
-    return {
-      material: materialText,
-      materialCode: cleanMaterialCode(legacyMaterialCode),
-      source: 'override'
-    };
-  }
-
-  const fromLineMaterial = mapMaterialTextToCiiCodeRobust(materialText || lineMaterialRaw, materialMap);
-  const fromLineCode = materialMapRowCode(fromLineMaterial);
-  if (fromLineCode) {
-    return {
-      material: cleanMaterialText(materialText || lineMaterialRaw),
-      materialCode: fromLineCode,
-      source: materialOverride ? 'override-material-map' : 'line-list-material-map',
-      matchedRow: fromLineMaterial
-    };
-  }
+  const legacyMaterialCode = overrideValue(overrides, 'material', [classMaterialRaw, lineMaterialRaw, materialText].filter(Boolean));
+  if (legacyMaterialCode && legacyMaterialCode !== materialOverride) return { material: materialText, materialCode: cleanMaterialCode(legacyMaterialCode), source: 'override' };
 
   const fromClassMaterial = mapMaterialTextToCiiCodeRobust(classMaterialRaw, materialMap);
   const fromClassCode = materialMapRowCode(fromClassMaterial);
-  if (fromClassCode) {
-    return {
-      material: materialText || cleanMaterialText(classMaterialRaw),
-      materialCode: fromClassCode,
-      source: 'piping-class-material-map',
-      matchedRow: fromClassMaterial
-    };
-  }
+  if (fromClassCode) return { material: cleanMaterialText(classMaterialRaw), materialCode: fromClassCode, source: 'piping-class-material-map', matchedRow: fromClassMaterial };
+
+  const fromLineMaterial = mapMaterialTextToCiiCodeRobust(materialText || lineMaterialRaw, materialMap);
+  const fromLineCode = materialMapRowCode(fromLineMaterial);
+  if (fromLineCode) return { material: cleanMaterialText(materialText || lineMaterialRaw), materialCode: fromLineCode, source: materialOverride ? 'override-material-map' : 'line-list-material-map', matchedRow: fromLineMaterial };
 
   const xmlMaterial = cleanMaterialText(xmlNode?.material || xmlBranch?.material || '');
-  return {
-    material: materialText || cleanMaterialText(lineMaterialRaw) || cleanMaterialText(classMaterialRaw) || xmlMaterial,
-    materialCode: '',
-    source: xmlMaterial ? 'xml-fallback' : 'blank',
-    matchedRow: null
-  };
+  return { material: materialText || cleanMaterialText(lineMaterialRaw) || cleanMaterialText(classMaterialRaw) || xmlMaterial, materialCode: '', source: xmlMaterial ? 'xml-fallback' : 'blank', matchedRow: null };
 }
 
-export function resolveCorrosionFromPipingClass({
-  lineRow,
-  boreMm,
-  componentType,
-  rating,
-  pipingClassIndex,
-  overrides = {},
-  overrideKeys = [],
-  xmlNode,
-  xmlBranch,
-  config = {}
-}) {
+function classCorrosionValue(row) {
+  return toFiniteNumber(row?.corrosion ?? row?.Corrosion ?? row?.corrosionAllowance ?? row?.CORROSION_ALLOWANCE ?? row?.CA);
+}
+
+function classWallValue(row) {
+  return toFiniteNumber(row?.wallThickness ?? row?.WallThickness ?? row?.['Wall Thickness'] ?? row?.['Wall thickness'] ?? row?.WALL_THICKNESS ?? row?.WT);
+}
+
+export function resolveCorrosionFromPipingClass({ lineRow, boreMm, componentType, rating, pipingClassIndex, overrides = {}, overrideKeys = [], xmlNode, xmlBranch, config = {} }) {
+  const pipingClass = lineRow?.pipingClass || lineRow?.['Piping Class'] || '';
+  const classMatch = findBestPipingClassRow({ pipingClass, boreMm, componentType, rating, pipingClassIndex, overrides, config });
+  const classRow = classMatch?.row || null;
+  const fromClass = classCorrosionValue(classRow);
   const overrideCorrosion = numericOverrideValue(overrides, 'corrosion', overrideKeys);
-  if (overrideCorrosion != null) {
-    return { corrosionAllowanceMm: overrideCorrosion, source: 'override', matchedRow: null, needsReview: false };
-  }
+  if (shouldUseNumericOverride(overrideCorrosion, fromClass, config)) return { corrosionAllowanceMm: overrideCorrosion, source: 'override', matchedRow: null, needsReview: false };
 
   const legacyOverride = toFiniteNumber(overrides.corrosionAllowanceMm);
-  if (legacyOverride != null) {
-    return { corrosionAllowanceMm: legacyOverride, source: 'override', matchedRow: null, needsReview: false };
-  }
+  if (shouldUseNumericOverride(legacyOverride, fromClass, config)) return { corrosionAllowanceMm: legacyOverride, source: 'override', matchedRow: null, needsReview: false };
 
-  const pipingClass = lineRow?.pipingClass || lineRow?.['Piping Class'] || '';
-  const classMatch = findBestPipingClassRow({
-    pipingClass,
-    boreMm,
-    componentType,
-    rating,
-    pipingClassIndex,
-    overrides,
-    config
-  });
-  const classRow = classMatch?.row || null;
-  const fromClass = toFiniteNumber(
-    classRow?.corrosion ??
-    classRow?.Corrosion ??
-    classRow?.corrosionAllowance ??
-    classRow?.CORROSION_ALLOWANCE ??
-    classRow?.CA
-  );
-
-  if (fromClass != null) {
-    return {
-      corrosionAllowanceMm: fromClass,
-      source: 'piping-class-master',
-      matchedPipingClass: pipingClass,
-      matchedRow: classRow,
-      matchMethod: classMatch.method,
-      matchScore: classMatch.score,
-      matchReasons: classMatch.reasons,
-      needsReview: classMatch.needsReview,
-      candidates: classMatch.candidates
-    };
-  }
+  if (fromClass != null) return { corrosionAllowanceMm: fromClass, source: 'piping-class-master', matchedPipingClass: pipingClass, matchedRow: classRow, matchMethod: classMatch.method, matchScore: classMatch.score, matchReasons: classMatch.reasons, needsReview: classMatch.needsReview, candidates: classMatch.candidates };
 
   const fromXml = toFiniteNumber(xmlNode?.corrosionAllowance ?? xmlNode?.CorrosionAllowance ?? xmlBranch?.corrosionAllowance);
-  if (fromXml != null) {
-    return {
-      corrosionAllowanceMm: fromXml,
-      source: 'xml-fallback',
-      matchedPipingClass: pipingClass,
-      matchedRow: classRow || null,
-      matchMethod: classMatch?.method || 'none',
-      matchScore: classMatch?.score || 0,
-      matchReasons: classMatch?.reasons || [],
-      needsReview: classMatch?.needsReview ?? true,
-      candidates: classMatch?.candidates || []
-    };
-  }
+  if (fromXml != null) return { corrosionAllowanceMm: fromXml, source: 'xml-fallback', matchedPipingClass: pipingClass, matchedRow: classRow || null, matchMethod: classMatch?.method || 'none', matchScore: classMatch?.score || 0, matchReasons: classMatch?.reasons || [], needsReview: classMatch?.needsReview ?? true, candidates: classMatch?.candidates || [] };
 
   const fromConfig = toFiniteNumber(config.defaultCorrosionAllowance);
-  return {
-    corrosionAllowanceMm: fromConfig ?? 0,
-    source: fromConfig != null ? 'config-default' : 'default-zero',
-    matchedPipingClass: pipingClass,
-    matchedRow: classRow || null,
-    matchMethod: classMatch?.method || 'none',
-    matchScore: classMatch?.score || 0,
-    matchReasons: classMatch?.reasons || [],
-    needsReview: classMatch?.needsReview ?? true,
-    candidates: classMatch?.candidates || []
-  };
+  return { corrosionAllowanceMm: fromConfig ?? 0, source: fromConfig != null ? 'config-default' : 'default-zero', matchedPipingClass: pipingClass, matchedRow: classRow || null, matchMethod: classMatch?.method || 'none', matchScore: classMatch?.score || 0, matchReasons: classMatch?.reasons || [], needsReview: classMatch?.needsReview ?? true, candidates: classMatch?.candidates || [] };
 }
 
 export function resolveWallThicknessFromPipingClass({ pipingClassRow, overrides = {}, overrideKeys = [], xmlNode, xmlBranch, config = {} }) {
+  const fromClass = classWallValue(pipingClassRow);
   const overrideWall = numericOverrideValue(overrides, 'wallThickness', overrideKeys);
-  if (overrideWall != null) return { valueMm: overrideWall, source: 'override' };
-
-  const fromClass = toFiniteNumber(
-    pipingClassRow?.wallThickness ??
-    pipingClassRow?.WallThickness ??
-    pipingClassRow?.['Wall Thickness'] ??
-    pipingClassRow?.['Wall thickness'] ??
-    pipingClassRow?.WALL_THICKNESS ??
-    pipingClassRow?.WT
-  );
+  if (shouldUseNumericOverride(overrideWall, fromClass, config)) return { valueMm: overrideWall, source: 'override' };
   if (fromClass != null) return { valueMm: fromClass, source: 'piping-class-master' };
-
   const fromXml = toFiniteNumber(xmlNode?.wallThickness ?? xmlNode?.WallThickness ?? xmlBranch?.wallThickness);
   if (fromXml != null) return { valueMm: fromXml, source: 'xml-fallback' };
   const fromConfig = toFiniteNumber(config.defaultWallThickness);
   return { valueMm: fromConfig ?? 0, source: fromConfig != null ? 'config-default' : 'default-zero' };
 }
 
-export function resolveBranchProcessData({
-  branchName,
-  lineKey,
-  lineRow,
-  boreMm,
-  componentType,
-  rating,
-  schedule,
-  materialMap,
-  pipingClassIndex,
-  overrides = {},
-  xmlNode,
-  xmlBranch,
-  config = {}
-}) {
-  const requestedPipingClass =
-    firstText(lineRow, ['pipingClass', 'Piping Class', 'PIPING_CLASS']) || '';
+export function resolveBranchProcessData({ branchName, lineKey, lineRow, boreMm, componentType, rating, schedule, materialMap, pipingClassIndex, overrides = {}, xmlNode, xmlBranch, config = {} }) {
+  const requestedPipingClass = firstText(lineRow, ['pipingClass', 'Piping Class', 'PIPING_CLASS']) || '';
   const overrideKeys = [lineKey, branchName, requestedPipingClass].filter(Boolean);
-
-  const classMatch = findBestPipingClassRow({
-    pipingClass: requestedPipingClass,
-    boreMm,
-    componentType,
-    rating: rating || firstText(lineRow, ['rating', 'Rating', 'RATING']),
-    schedule,
-    pipingClassIndex,
-    overrides,
-    config
-  });
+  const classMatch = findBestPipingClassRow({ pipingClass: requestedPipingClass, boreMm, componentType, rating: rating || firstText(lineRow, ['rating', 'Rating', 'RATING']), schedule, pipingClassIndex, overrides, config });
   const pipingClassRow = classMatch?.row || null;
   const resolvedPipingClass = classMatch?.resolvedPipingClass || classMatch?.classMatch?.pipingClass || requestedPipingClass;
-
-  const resolvedRating =
-    overrideValue(overrides, 'rating', overrideKeys) ||
-    readClassRowRating(pipingClassRow) ||
-    text(rating || firstText(lineRow, ['rating', 'Rating', 'RATING']));
-
+  const resolvedRating = overrideValue(overrides, 'rating', overrideKeys) || readClassRowRating(pipingClassRow) || text(rating || firstText(lineRow, ['rating', 'Rating', 'RATING']));
   const resolverLineRow = { ...(lineRow || {}), pipingClass: resolvedPipingClass };
-
-  const material = resolveMaterialCodeFromLineMaterial({
-    lineRow: resolverLineRow,
-    materialMap,
-    pipingClassRow,
-    overrides,
-    overrideKeys,
-    xmlNode,
-    xmlBranch
-  });
-
-  const corrosion = resolveCorrosionFromPipingClass({
-    lineRow: resolverLineRow,
-    boreMm,
-    componentType,
-    rating: resolvedRating,
-    pipingClassIndex,
-    overrides,
-    overrideKeys,
-    xmlNode,
-    xmlBranch,
-    config
-  });
-
-  const wallThicknessMm = resolveWallThicknessFromPipingClass({
-    pipingClassRow,
-    overrides,
-    overrideKeys,
-    xmlNode,
-    xmlBranch,
-    config
-  });
-
+  const material = resolveMaterialCodeFromLineMaterial({ lineRow: resolverLineRow, materialMap, pipingClassRow, overrides, overrideKeys, xmlNode, xmlBranch });
+  const corrosion = resolveCorrosionFromPipingClass({ lineRow: resolverLineRow, boreMm, componentType, rating: resolvedRating, pipingClassIndex, overrides, overrideKeys, xmlNode, xmlBranch, config });
+  const wallThicknessMm = resolveWallThicknessFromPipingClass({ pipingClassRow, overrides, overrideKeys, xmlNode, xmlBranch, config });
   return {
-    branchName,
-    lineKey,
-    requestedPipingClass,
-    resolvedPipingClass,
-    normalizedPipingClass: normalizePipingClass(resolvedPipingClass),
-    pipingClass: resolvedPipingClass,
-    rating: resolvedRating,
-
-    material: material.material,
-    materialCode: material.materialCode,
-    materialSource: material.source,
-
-    corrosionAllowanceMm: corrosion.corrosionAllowanceMm,
-    corrosionSource: corrosion.source,
-
-    wallThicknessMm: wallThicknessMm.valueMm,
-    wallThicknessSource: wallThicknessMm.source,
-
+    branchName, lineKey, requestedPipingClass, resolvedPipingClass, normalizedPipingClass: normalizePipingClass(resolvedPipingClass), pipingClass: resolvedPipingClass, rating: resolvedRating,
+    material: material.material, materialCode: material.materialCode, materialSource: material.source,
+    corrosionAllowanceMm: corrosion.corrosionAllowanceMm, corrosionSource: corrosion.source,
+    wallThicknessMm: wallThicknessMm.valueMm, wallThicknessSource: wallThicknessMm.source,
     pipingClassMatchedRow: pipingClassRow,
     pipingClassMatchMethod: classMatch.classMatch?.method || classMatch.method,
     pipingClassConfidence: classMatch.classMatch?.confidence ?? classMatch.confidence,
