@@ -18,17 +18,28 @@ export function toFiniteNumber(value, fallback) {
 function withNormalizedLineListDensity(config) {
   const rows = config?.linelist?.masterRows;
   if (!Array.isArray(rows) || !rows.length) return config;
+  let anyDerivedDensity = false;
+  const masterRows = rows.map((row) => {
+    const current = toText(row?.density).trim();
+    if (current) {
+      anyDerivedDensity = true;
+      return row;
+    }
+    const resolved = resolveLineListDensity(row, null);
+    if (!resolved.value) return row;
+    anyDerivedDensity = true;
+    return { ...row, density: resolved.value, densitySource: resolved.source };
+  });
+  const fieldMap = config.linelist?.fieldMap && typeof config.linelist.fieldMap === 'object'
+    ? { ...config.linelist.fieldMap }
+    : {};
+  if (anyDerivedDensity && !fieldMap.density) fieldMap.density = '__xmlcii_derived_density';
   return {
     ...config,
     linelist: {
       ...config.linelist,
-      masterRows: rows.map((row) => {
-        const current = toText(row?.density).trim();
-        if (current) return row;
-        const resolved = resolveLineListDensity(row, null);
-        if (!resolved.value) return row;
-        return { ...row, density: resolved.value, densitySource: resolved.source };
-      }),
+      fieldMap,
+      masterRows,
     },
   };
 }
@@ -182,11 +193,7 @@ export function parseXmlCiiEnrichmentConfig(rawJson) {
     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return normalizeFullConfig(defaults);
     const parsedOverrides = parsed.overrides || {};
     const parsedPipingClassMatch = parsed.pipingClassMatch || {};
-    const supportKindToXmlType = normalizeXmlCiiSupportKindToTypeConfig({
-      ...defaults.supportKindToXmlType,
-      ...(parsed.supportKindToXmlType || {}),
-    });
-
+    const supportKindToXmlType = normalizeXmlCiiSupportKindToTypeConfig({ ...defaults.supportKindToXmlType, ...(parsed.supportKindToXmlType || {}) });
     const merged = {
       ...defaults,
       ...parsed,
@@ -197,29 +204,21 @@ export function parseXmlCiiEnrichmentConfig(rawJson) {
       rating: { ...defaults.rating, ...(parsed.rating || {}) },
       weight: { ...defaults.weight, ...(parsed.weight || {}) },
       pipingClass: { ...defaults.pipingClass, ...(parsed.pipingClass || {}) },
-      pipingClassMatch: {
-        ...DEFAULT_PIPING_CLASS_MATCH,
-        ...parsedPipingClassMatch,
-        rowScoring: {
-          ...DEFAULT_PIPING_CLASS_MATCH.rowScoring,
-          ...(parsedPipingClassMatch.rowScoring || {}),
-        },
-      },
+      pipingClassMatch: { ...DEFAULT_PIPING_CLASS_MATCH, ...parsedPipingClassMatch, rowScoring: { ...DEFAULT_PIPING_CLASS_MATCH.rowScoring, ...(parsedPipingClassMatch.rowScoring || {}) } },
       material: { ...defaults.material, ...(parsed.material || {}) },
       processDefaults: { ...defaults.processDefaults, ...(parsed.processDefaults || {}) },
       overrides: {
-        pipingClass:  { ...(defaults.overrides.pipingClass),  ...(parsedOverrides.pipingClass  || {}) },
-        material:     { ...(defaults.overrides.material),     ...(parsedOverrides.material     || {}) },
+        pipingClass: { ...(defaults.overrides.pipingClass), ...(parsedOverrides.pipingClass || {}) },
+        material: { ...(defaults.overrides.material), ...(parsedOverrides.material || {}) },
         materialCode: { ...(defaults.overrides.materialCode), ...(parsedOverrides.materialCode || {}) },
-        rating:       { ...(defaults.overrides.rating),       ...(parsedOverrides.rating       || {}) },
-        wallThickness:{ ...(defaults.overrides.wallThickness),...(parsedOverrides.wallThickness|| {}) },
-        corrosion:    { ...(defaults.overrides.corrosion),    ...(parsedOverrides.corrosion    || {}) },
-        rigidWeight:  { ...(defaults.overrides.rigidWeight),  ...(parsedOverrides.rigidWeight  || {}) },
-        processData:  { ...(parsedOverrides.processData || {}) },
+        rating: { ...(defaults.overrides.rating), ...(parsedOverrides.rating || {}) },
+        wallThickness: { ...(defaults.overrides.wallThickness), ...(parsedOverrides.wallThickness || {}) },
+        corrosion: { ...(defaults.overrides.corrosion), ...(parsedOverrides.corrosion || {}) },
+        rigidWeight: { ...(defaults.overrides.rigidWeight), ...(parsedOverrides.rigidWeight || {}) },
+        processData: { ...(parsedOverrides.processData || {}) },
         __previewFillDown: parsedOverrides.__previewFillDown || undefined,
       },
     };
-
     return normalizeFullConfig(merged);
   } catch {
     return normalizeFullConfig(defaults);
