@@ -9,7 +9,9 @@ import {
 } from './psnm-master-types.js';
 
 function PSNM_number(value) {
-  const match = String(value ?? '').replace(/,/g, '').match(/-?\d+(?:\.\d+)?/);
+  const text = String(value ?? '').trim();
+  if (!text || text === '-') return NaN;
+  const match = text.replace(/,/g, '').match(/-?\d+(?:\.\d+)?/);
   return match ? Number(match[0]) : NaN;
 }
 
@@ -20,8 +22,98 @@ function PSNM_splitCells(line) {
   return raw.split(/ {2,}/).map((cell) => cell.trim()).filter(Boolean);
 }
 
+function PSNM_normHeader(value) {
+  return String(value ?? '').toLowerCase().replace(/[_.-]+/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
 function PSNM_isTrue(value) {
   return /^(yes|y|true|1|m|mandatory|required|req|must)$/i.test(String(value ?? '').trim());
+}
+
+function PSNM_positionFromAnyText(value) {
+  const text = String(value || '').replace(/,/g, ' ');
+  const parts = [];
+  const e = text.match(/\b([EW])\s*(-?\d+(?:\.\d+)?)\s*(?:mm)?\b/i);
+  const s = text.match(/\b([SN])\s*(-?\d+(?:\.\d+)?)\s*(?:mm)?\b/i);
+  const u = text.match(/\b([UD])\s*(-?\d+(?:\.\d+)?)\s*(?:mm)?\b/i);
+  if (e) parts.push(`${e[1].toUpperCase()} ${e[2]}mm`);
+  if (s) parts.push(`${s[1].toUpperCase()} ${s[2]}mm`);
+  if (u) parts.push(`${u[1].toUpperCase()} ${u[2]}mm`);
+  return parts.length === 3 ? parts.join(' ') : '';
+}
+
+function PSNM_findPsName(cells, byHeader = {}) {
+  const direct = byHeader['ps name'] || byHeader.psname || byHeader['ps no'] || byHeader['ps number'] || byHeader.ps || byHeader.name || byHeader['support name'] || byHeader['support point'];
+  if (direct) return PSNM_normalizePsName(direct);
+  const joined = cells.join(' ');
+  const psMatch = joined.match(/\bPS[-_/A-Z0-9.]+(?:\/DATUM)?\b/i);
+  if (psMatch) return PSNM_normalizePsName(psMatch[0]);
+  return PSNM_normalizePsName(cells[0] || '');
+}
+
+function PSNM_positionFromRow(cells, byHeader = {}) {
+  const direct = byHeader.position || byHeader['ps position'] || byHeader['position raw'] || byHeader['coordinates'] || byHeader['coord'] || byHeader['coordinate'];
+  const fromDirect = PSNM_positionFromAnyText(direct);
+  if (fromDirect) return fromDirect;
+
+  const e = byHeader.e || byHeader['ps e'] || byHeader.east || byHeader.easting;
+  const s = byHeader.s || byHeader['ps s'] || byHeader.south || byHeader.southing || byHeader.north || byHeader.northing;
+  const u = byHeader.u || byHeader['ps u'] || byHeader.up || byHeader.elevation || byHeader.el || byHeader.z;
+  if (e !== undefined && s !== undefined && u !== undefined) {
+    const eVal = PSNM_number(e);
+    const sVal = PSNM_number(s);
+    const uVal = PSNM_number(u);
+    if (Number.isFinite(eVal) && Number.isFinite(sVal) && Number.isFinite(uVal)) return `E ${eVal}mm S ${sVal}mm U ${uVal}mm`;
+  }
+
+  return PSNM_positionFromAnyText(cells.join(' '));
+}
+
+function PSNM_boreFromRow(cells, byHeader = {}) {
+  const direct = byHeader.p1bore || byHeader['p1 bore'] || byHeader.bore || byHeader.nb || byHeader.dn || byHeader['bore mm'] || byHeader['bore(mm)'];
+  const n = PSNM_number(direct);
+  if (Number.isFinite(n)) return n;
+  return NaN;
+}
+
+function PSNM_parseTable1Fallback(text, logger = null) {
+  const lines = String(text || '')
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .filter((line) => !/^-{3,}$/.test(line));
+  if (!lines.length) return [];
+
+  const firstCells = PSNM_splitCells(lines[0]);
+  const firstHeaders = firstCells.map(PSNM_normHeader);
+  const hasHeader = firstHeaders.some((h) => ['ps name', 'ps no', 'ps number', 'ps', 'position', 'ps position', 'e', 's', 'u'].includes(h));
+  const headers = hasHeader ? firstHeaders : null;
+  const dataLines = hasHeader ? lines.slice(1) : lines;
+  const rows = [];
+
+  for (const [index, line] of dataLines.entries()) {
+    const cells = PSNM_splitCells(line);
+    if (!cells.length) continue;
+    const byHeader = {};
+    if (headers) headers.forEach((header, cellIndex) => { byHeader[header] = cells[cellIndex] ?? ''; });
+    const psName = PSNM_findPsName(cells, byHeader);
+    const position = PSNM_positionFromRow(cells, byHeader);
+    if (!psName || !position) {
+      logger?.user?.('WARNING', 'PS Row Skipped', 'Table 1', line, 'Fallback parser could not find both PS name and E/S/U position.', 'Check Table 1 columns or include a Position column with E ... S ... U ... format.', { rowIndex: index + 1 });
+      continue;
+    }
+    rows.push({
+      psName,
+      position,
+      p1bore: PSNM_boreFromRow(cells, byHeader),
+      isMandatoryPs: PSNM_isTrue(byHeader.mandatory || byHeader.required || byHeader.req || byHeader.m || ''),
+      mandatorySource: '',
+      rowIndex: index + 1,
+    });
+  }
+
+  if (rows.length) logger?.user?.('INFO', 'Table 1 Fallback Parser', 'Table 1', `${rows.length} PS rows`, 'Strict PS parser returned no rows; fallback parser recovered PS rows.', 'Verify Master PS No preview before matching.', {});
+  return rows;
 }
 
 export function PSNM_parseTable4A(text, logger = null) {
@@ -35,7 +127,7 @@ export function PSNM_parseTable4A(text, logger = null) {
   let headers = null;
   for (const [index, line] of lines.entries()) {
     const cells = PSNM_splitCells(line);
-    const lowered = cells.map((cell) => cell.toLowerCase().replace(/[_.-]+/g, ' ').trim());
+    const lowered = cells.map(PSNM_normHeader);
     const looksLikeHeader = lowered.some((cell) => cell.includes('ps name') || cell === 'psname' || cell === 'mandatory ps name');
     if (index === 0 && looksLikeHeader) {
       headers = lowered;
@@ -102,7 +194,8 @@ export function PSNM_recomputeMasterPsRow(row, logger = null) {
 }
 
 export function PSNM_resolveMasterPsTable({ table1Text, table4AText, logger = null }) {
-  const table1Rows = PSNM_parsePsRows(table1Text, logger);
+  let table1Rows = PSNM_parsePsRows(table1Text, logger);
+  if (!table1Rows.length && String(table1Text || '').trim()) table1Rows = PSNM_parseTable1Fallback(table1Text, logger);
   const table4ARows = PSNM_parseTable4A(table4AText, logger);
   const byPs = new Map();
   const duplicateKeys = new Set();
