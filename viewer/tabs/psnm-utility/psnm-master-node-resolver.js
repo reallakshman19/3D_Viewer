@@ -9,6 +9,7 @@ import {
   PSNM_makeMasterNodeRow,
   PSNM_MASTER_STATUS,
 } from './psnm-master-types.js';
+import { PSNM_logNodeTableLogic } from './psnm-table-logic-log.js';
 
 function PSNM_number(value) {
   const text = String(value ?? '').trim();
@@ -147,6 +148,7 @@ export function PSNM_resolveMasterNodeTable({ table2Text, table3Text, table4BTex
   const table2Rows = PSNM_parseNodeRows(table2Text, logger);
   const table3Rows = PSNM_parseNodeDiaRows(table3Text, logger);
   const table4BRows = PSNM_parseTable4B(table4BText, logger);
+  PSNM_logNodeTableLogic({ logger, table2Text, table2Rows, table3Text, table3Rows, table4BText, table4BRows });
 
   const odByNode = new Map();
   for (const dia of table3Rows) {
