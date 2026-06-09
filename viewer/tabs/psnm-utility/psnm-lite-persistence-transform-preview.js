@@ -116,6 +116,10 @@ function findModal(target) {
   return target?.closest?.('[data-psnm="modal"]') || document.querySelector('[data-psnm="modal"]');
 }
 
+function liveModal() {
+  return document.querySelector('[data-psnm="modal"]');
+}
+
 function sourceValues(modal) {
   const out = {};
   modal.querySelectorAll('[data-source]').forEach((el) => { out[el.dataset.source] = el.value; });
@@ -137,7 +141,8 @@ function saveFromModal(modal) {
   clearTimeout(saveTimer);
   saveTimer = setTimeout(() => {
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify({ version: 1, savedAt: new Date().toISOString(), source: sourceValues(modal), setup: setupValues(modal) }));
+      const current = liveModal() || modal;
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({ version: 1, savedAt: new Date().toISOString(), source: sourceValues(current), setup: setupValues(current) }));
     } catch {}
   }, 150);
 }
@@ -150,16 +155,17 @@ function loadSnapshot() {
 }
 
 function restoreIntoModal(modal) {
+  const current = modal || liveModal();
   const saved = loadSnapshot();
-  if (!modal || !saved) return;
+  if (!current || !saved) return;
   restoreInProgress = true;
-  modal.querySelectorAll('[data-source]').forEach((el) => {
+  current.querySelectorAll('[data-source]').forEach((el) => {
     if (Object.prototype.hasOwnProperty.call(saved.source || {}, el.dataset.source)) {
       el.value = saved.source[el.dataset.source] ?? '';
       el.dispatchEvent(new Event('input', { bubbles: true }));
     }
   });
-  modal.querySelectorAll('[data-setup]').forEach((el) => {
+  current.querySelectorAll('[data-setup]').forEach((el) => {
     const key = el.dataset.setup;
     if (key === 'anchorPsRowId' || key === 'anchorNodeRowId') return;
     if (!Object.prototype.hasOwnProperty.call(saved.setup || {}, key)) return;
@@ -168,31 +174,32 @@ function restoreIntoModal(modal) {
     el.dispatchEvent(new Event('change', { bubbles: true }));
   });
   restoreInProgress = false;
-  renderTransformPreview(modal);
+  schedulePreview();
 }
 
 function setupPanelElement(modal) {
   return modal?.querySelector('[data-psnm-panel="setup"]');
 }
 
-function renderTransformPreview(modal) {
-  if (!modal) return;
+function renderTransformPreview(modal = null) {
+  const current = modal && modal.isConnected ? modal : liveModal();
+  if (!current) return;
   installStyle();
-  const setupPanel = setupPanelElement(modal);
+  const setupPanel = setupPanelElement(current);
   if (!setupPanel) return;
-  let panel = modal.querySelector('[data-psnm-transform-preview]');
-  if (!panel) {
+  let panel = current.querySelector('[data-psnm-transform-preview]');
+  if (!panel || !panel.isConnected) {
     panel = document.createElement('section');
     panel.className = 'psnm-card';
     panel.dataset.psnmTransformPreview = '1';
     setupPanel.appendChild(panel);
   }
-  const psPosition = modal.querySelector('[data-psnm-panel="setup"] input[readonly]')?.value || '';
-  const readonlyInputs = Array.from(modal.querySelectorAll('[data-psnm-panel="setup"] input[readonly]'));
+  const readonlyInputs = Array.from(current.querySelectorAll('[data-psnm-panel="setup"] input[readonly]'));
+  const psPosition = readonlyInputs[0]?.value || '';
   const nodePosition = readonlyInputs[1]?.value || '';
   const ps = parsePsPosition(psPosition);
   const anchorNode = parseXyz(nodePosition);
-  const rows = parseTable2(modal.querySelector('[data-source="table2Text"]')?.value || '').slice(0, 300);
+  const rows = parseTable2(current.querySelector('[data-source="table2Text"]')?.value || '').slice(0, 300);
   if (!Number.isFinite(ps.e) || !Number.isFinite(ps.u) || !Number.isFinite(ps.s) || !Number.isFinite(anchorNode.x) || !Number.isFinite(anchorNode.y) || !Number.isFinite(anchorNode.z)) {
     panel.innerHTML = `<div class="psnm-card-head"><b>Transformed Table 2 Preview from Anchor Bases</b></div><div class="psnm-card-body"><div class="psnm-lite-note">Resolve Master Tables, then select Anchor PS and Anchor Node. Preview formula: E=X+datumE, U=Y+datumU, S=Z+datumS.</div></div>`;
     return;
@@ -204,21 +211,24 @@ function renderTransformPreview(modal) {
   panel.innerHTML = `<div class="psnm-card-head"><b>Transformed Table 2 Preview from Anchor Bases</b><span class="psnm-badge">${rows.length} row(s)</span></div><div class="psnm-card-body"><div class="psnm-lite-note"><b>Formula:</b> datumE = Anchor PS E - Anchor Node X; datumU = Anchor PS U - Anchor Node Y; datumS = Anchor PS S - Anchor Node Z. Then E=X+datumE, U=Y+datumU, S=Z+datumS.</div><div class="psnm-lite-metrics"><div class="psnm-lite-metric"><b>${fmt(datumE)}</b><span>datumE</span></div><div class="psnm-lite-metric"><b>${fmt(datumU)}</b><span>datumU</span></div><div class="psnm-lite-metric"><b>${fmt(datumS)}</b><span>datumS</span></div></div><div class="psnm-lite-scroll"><table class="psnm-transform-preview-table"><thead><tr><th>Node</th><th>Occurrence</th><th>Raw X</th><th>Raw Y</th><th>Raw Z</th><th>Node E</th><th>Node U</th><th>Node S</th><th>Bore</th></tr></thead><tbody>${body}</tbody></table></div></div>`;
 }
 
-function schedulePreview(modal) {
+function schedulePreview() {
   clearTimeout(renderTimer);
-  renderTimer = setTimeout(() => renderTransformPreview(modal || document.querySelector('[data-psnm="modal"]')), 80);
+  renderTimer = setTimeout(() => renderTransformPreview(liveModal()), 120);
+}
+
+function scheduleRestoreAndPreview() {
+  setTimeout(() => restoreIntoModal(liveModal()), 0);
+  setTimeout(() => renderTransformPreview(liveModal()), 160);
+  setTimeout(() => renderTransformPreview(liveModal()), 350);
 }
 
 document.addEventListener('click', (event) => {
   const open = event.target.closest?.('[data-psnm-action="open"]');
   if (open) {
-    setTimeout(() => restoreIntoModal(document.querySelector('[data-psnm="modal"]')), 0);
-    setTimeout(() => renderTransformPreview(document.querySelector('[data-psnm="modal"]')), 80);
+    scheduleRestoreAndPreview();
     return;
   }
-  const modal = findModal(event.target);
-  if (!modal) return;
-  if (event.target.closest('[data-psnm-tab="setup"], [data-psnm-action="resolveMasters"]')) schedulePreview(modal);
+  if (event.target.closest('[data-psnm-tab="setup"], [data-psnm-action="resolveMasters"]')) schedulePreview();
 }, false);
 
 document.addEventListener('input', (event) => {
@@ -226,7 +236,7 @@ document.addEventListener('input', (event) => {
   if (!modal) return;
   if (event.target.closest('[data-source], [data-setup]')) {
     saveFromModal(modal);
-    schedulePreview(modal);
+    schedulePreview();
   }
 }, false);
 
@@ -235,7 +245,7 @@ document.addEventListener('change', (event) => {
   if (!modal) return;
   if (event.target.closest('[data-source], [data-setup]')) {
     saveFromModal(modal);
-    schedulePreview(modal);
+    schedulePreview();
   }
 }, false);
 
