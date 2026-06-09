@@ -20,6 +20,10 @@ function PSNM_nextRowId(prefix) {
   return `${prefix}-${Date.now().toString(36)}-${PSNM_ROW_SEQUENCE.toString(36)}`;
 }
 
+function PSNM_unresolvedNumber(value) {
+  return value == null || value === '' ? NaN : value;
+}
+
 export function PSNM_normalizePsName(value) {
   return String(value ?? '').trim().replace(/\.$/, '');
 }
@@ -30,9 +34,9 @@ export function PSNM_makeMasterPsRow(seed = {}) {
     psKey: seed.psKey || PSNM_normalizePsName(seed.psName || ''),
     psName: seed.psName || '',
     positionRaw: seed.positionRaw || '',
-    psE: seed.psE ?? null,
-    psU: seed.psU ?? null,
-    psS: seed.psS ?? null,
+    psE: PSNM_unresolvedNumber(seed.psE),
+    psU: PSNM_unresolvedNumber(seed.psU),
+    psS: PSNM_unresolvedNumber(seed.psS),
     p1bore: seed.p1bore ?? null,
     isMandatoryPs: seed.isMandatoryPs === true,
     mandatorySource: seed.mandatorySource || '',
@@ -54,9 +58,9 @@ export function PSNM_makeMasterNodeRow(seed = {}) {
     rawX: seed.rawX ?? null,
     rawY: seed.rawY ?? null,
     rawZ: seed.rawZ ?? null,
-    nodeE: seed.nodeE ?? null,
-    nodeU: seed.nodeU ?? null,
-    nodeS: seed.nodeS ?? null,
+    nodeE: PSNM_unresolvedNumber(seed.nodeE),
+    nodeU: PSNM_unresolvedNumber(seed.nodeU),
+    nodeS: PSNM_unresolvedNumber(seed.nodeS),
     table2Bore: seed.table2Bore ?? null,
     table3Od: seed.table3Od ?? null,
     table3DerivedBore: seed.table3DerivedBore ?? null,
