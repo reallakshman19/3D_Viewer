@@ -4,6 +4,7 @@ import { findAllWeightCandidates } from '../../../../converters/xml-cii2019-core
 import { buildPipingClassIndex } from '../../../../converters/xml-cii2019-core/piping-class-resolver.js';
 import { resolveBranchProcessData } from '../../../../converters/xml-cii2019-core/branch-process-resolver.js';
 import { buildStagedDtxrIndex, resolveXmlCiiNodeDtxr } from '../../../../converters/xml-cii2019-core/dtxr-resolver.js';
+import { resolveLineListDensity } from '../../../../converters/xml-cii2019-core/line-density-resolver.js';
 import {
   applyPreviewOverrideFillDown,
   applyPreviewProcessFillDown,
@@ -85,18 +86,14 @@ function _fieldOverrideKey(editType, derivedKey) { return _toText(derivedKey).tr
 function _hasOwn(obj, key) { return !!obj && Object.prototype.hasOwnProperty.call(obj, key); }
 function _overrideSource(overrides, bucket, key) { return _hasOwn(overrides?.[bucket], key) ? 'override' : 'auto'; }
 function _isDefaultSource(source) { return source === 'default' || source === 'config-default' || source === 'default-zero'; }
-function _percentText(confidence) {
-  const numeric = Number(confidence);
-  if (!Number.isFinite(numeric)) return '';
-  return `${Math.max(0, Math.min(100, Math.round(numeric * 100)))}%`;
-}
+function _percentText(confidence) { const numeric = Number(confidence); return Number.isFinite(numeric) ? `${Math.max(0, Math.min(100, Math.round(numeric * 100)))}%` : ''; }
 
 export function xmlCiiRenderPreviewPhase(xmlFile, config) {
   const llRows = Array.isArray(config.linelist?.masterRows) ? config.linelist.masterRows.length : 0;
   const pcRows = Array.isArray(config.pipingClass?.masterRows) ? config.pipingClass.masterRows.length : 0;
   if (!xmlFile) return `<div class="model-converters-workflow-detail-title">4 Preview</div><div class="model-converters-workflow-detail-note">⚠ Load an XML file in the sidebar first, then return here to preview enrichment.</div>`;
   if (!llRows && !pcRows) return `<div class="model-converters-workflow-detail-title">4 Preview</div><div class="model-converters-workflow-detail-note">⚠ Import at least one master in 2 Import Masters, then return here.</div>`;
-  return `<div class="model-converters-workflow-detail-title">4 Preview</div><div class="model-converters-workflow-detail-text">Dry-run enrichment per branch — editable overrides and group-wise fill-down.</div><div id="mc-preview-table-host"><div class="model-converters-workflow-detail-note" style="text-align:center;padding:18px;">Loading preview...</div></div>`;
+  return `<div class="model-converters-workflow-detail-title">4 Preview</div><div class="model-converters-workflow-detail-text">Dry-run enrichment preview per branch — inspect and override approximate matches.</div><div id="mc-preview-table-host"><div class="model-converters-workflow-detail-note" style="text-align:center;padding:18px;">Loading preview...</div></div>`;
 }
 
 export function xmlCiiDryRunPreview(xmlText, config, stagedJsonText) {
@@ -124,46 +121,16 @@ export function xmlCiiDryRunPreview(xmlText, config, stagedJsonText) {
     const t1 = _xmlCiiProcessValue(pdOverride, lineListMatch, 't1', ['t1'], config);
     const t2 = _xmlCiiProcessValue(pdOverride, lineListMatch, 't2', ['t2'], config);
     const t3 = _xmlCiiProcessValue(pdOverride, lineListMatch, 't3', ['t3'], config);
-    const density = _xmlCiiProcessValue(pdOverride, lineListMatch, 'density', ['density'], config);
+    const densityInfo = resolveLineListDensity(lineListMatch, pdOverride);
+    const density = densityInfo.value || _processDefaultValue(config, 'density');
+    const densitySource = densityInfo.value ? densityInfo.source : (_processDefaultValue(config, 'density') ? 'default' : 'none');
     const wallThickness = resolved.wallThicknessMm != null ? Number(resolved.wallThicknessMm.toPrecision(6)).toString() : '';
     const corrosion = resolved.corrosionAllowanceMm != null ? String(resolved.corrosionAllowanceMm) : '';
     let matMethod = 'none';
     if (resolved.materialSource === 'override' || resolved.materialSource === 'override-material-map') matMethod = 'override';
     else if (resolved.materialSource === 'line-list-material-map' || resolved.materialSource === 'piping-class-material-map') matMethod = 'exact';
     else if (resolved.materialSource === 'xml-fallback') matMethod = 'xml-fallback';
-    branchRows.push({
-      branchName,
-      lineKey,
-      lineMiss: !lineListMatch,
-      size: boreMm != null ? `${boreMm}mm` : '',
-      sizeMm: boreMm,
-      pipingClass: resolved.pipingClass || '',
-      pipingClassDerived: derivedClassRaw || '',
-      pipingClassMethod: resolved.pipingClassMatchMethod,
-      pipingClassConfidence: resolved.pipingClassConfidence,
-      pipingClassScore: resolved.pipingClassScore,
-      pipingClassRowScore: resolved.pipingClassRowScore,
-      pipingClassRowReasons: resolved.pipingClassRowReasons || [],
-      pipingClassNeedsReview: resolved.pipingClassNeedsReview,
-      pipingClassCandidates: resolved.pipingClassCandidates || [],
-      material: resolved.material || '',
-      materialSource: _overrideSource(config.overrides, 'material', lineKey),
-      materialCode: resolved.materialCode || '',
-      materialCodeMethod: matMethod,
-      materialCodeNeedsReview: !resolved.materialCode,
-      rating: branchRating || '',
-      ratingSource: _overrideSource(config.overrides, 'rating', lineKey),
-      p1, t1, t2, t3, density,
-      p1Source: _xmlCiiProcessSource(pdOverride, lineListMatch, 'p1', ['p1'], config),
-      t1Source: _xmlCiiProcessSource(pdOverride, lineListMatch, 't1', ['t1'], config),
-      t2Source: _xmlCiiProcessSource(pdOverride, lineListMatch, 't2', ['t2'], config),
-      t3Source: _xmlCiiProcessSource(pdOverride, lineListMatch, 't3', ['t3'], config),
-      densitySource: _xmlCiiProcessSource(pdOverride, lineListMatch, 'density', ['density'], config),
-      wallThickness,
-      wallThicknessSource: resolved.wallThicknessSource || _overrideSource(config.overrides, 'wallThickness', lineKey),
-      corrosion,
-      corrosionSource: resolved.corrosionSource || _overrideSource(config.overrides, 'corrosion', lineKey),
-    });
+    branchRows.push({ branchName, lineKey, lineMiss: !lineListMatch, size: boreMm != null ? `${boreMm}mm` : '', sizeMm: boreMm, pipingClass: resolved.pipingClass || '', pipingClassDerived: derivedClassRaw || '', pipingClassMethod: resolved.pipingClassMatchMethod, pipingClassConfidence: resolved.pipingClassConfidence, pipingClassScore: resolved.pipingClassScore, pipingClassRowScore: resolved.pipingClassRowScore, pipingClassRowReasons: resolved.pipingClassRowReasons || [], pipingClassNeedsReview: resolved.pipingClassNeedsReview, pipingClassCandidates: resolved.pipingClassCandidates || [], material: resolved.material || '', materialSource: resolved.materialSource || _overrideSource(config.overrides, 'material', lineKey), materialCode: resolved.materialCode || '', materialCodeMethod: matMethod, materialCodeNeedsReview: !resolved.materialCode, rating: branchRating || '', ratingSource: _overrideSource(config.overrides, 'rating', lineKey), p1, t1, t2, t3, density, p1Source: _xmlCiiProcessSource(pdOverride, lineListMatch, 'p1', ['p1'], config), t1Source: _xmlCiiProcessSource(pdOverride, lineListMatch, 't1', ['t1'], config), t2Source: _xmlCiiProcessSource(pdOverride, lineListMatch, 't2', ['t2'], config), t3Source: _xmlCiiProcessSource(pdOverride, lineListMatch, 't3', ['t3'], config), densitySource, wallThickness, wallThicknessSource: resolved.wallThicknessSource || _overrideSource(config.overrides, 'wallThickness', lineKey), corrosion, corrosionSource: resolved.corrosionSource || _overrideSource(config.overrides, 'corrosion', lineKey) });
     let previousPosition = null;
     for (const node of _xmlChildrenByName(branch, 'Node')) {
       const positionText = _xmlText(node, 'Position');
@@ -191,11 +158,9 @@ export async function xmlCiiBuildAndRenderPreview(rootEl, xmlText, config, optio
   const nodesByBranch = {};
   for (const nr of nodeRows) (nodesByBranch[nr.branchName] = nodesByBranch[nr.branchName] || []).push(nr);
   const table = new EditablePreviewTable({
-    branchRows,
-    nodesByBranch,
+    branchRows, nodesByBranch,
     matchBadgeHtmlRenderer: (method, confidence, needsReview, value, derived) => {
-      const valEsc = _esc(value || '—'), derivedEsc = _esc(derived || '');
-      const pctText = _percentText(confidence);
+      const valEsc = _esc(value || '—'), derivedEsc = _esc(derived || ''), pctText = _percentText(confidence);
       if (method === 'override') return `<span class="mc-preview-editable-val">${valEsc}</span> <span class="mc-preview-badge exact" title="Manual override${pctText ? ` · ${pctText}` : ''}">✓ override${pctText ? ` ${pctText}` : ''}</span>`;
       if (method === 'exact') return `<span class="mc-preview-editable-val">${valEsc}</span> <span class="mc-preview-badge exact">✓ exact ${pctText || '100%'}</span>`;
       if (['startsWith', 'leading-numeric-base', 'prefix-base', 'leading-numeric-exact'].includes(method)) return `<span class="mc-preview-editable-val">${valEsc}</span> <span class="mc-preview-badge amber" title="Approximate match ${pctText || ''} from ${derivedEsc}">approx${pctText ? ` ${pctText}` : ''}</span>`;
@@ -205,7 +170,7 @@ export async function xmlCiiBuildAndRenderPreview(rootEl, xmlText, config, optio
       return `<span class="mc-preview-editable-val">${valEsc}</span>`;
     },
     processInputHtmlRenderer: (fieldKey, lineKey, val, src, ri) => {
-      const cls = src === 'override' ? 'mc-preview-pd-cell mc-preview-pd-override' : (src === 'linelist' ? 'mc-preview-pd-cell mc-preview-pd-linelist' : (src === 'default' ? 'mc-preview-pd-cell mc-preview-pd-default' : 'mc-preview-pd-cell mc-preview-pd-empty'));
+      const cls = src === 'override' ? 'mc-preview-pd-cell mc-preview-pd-override' : (src === 'linelist' || src.startsWith('linelist-density') ? 'mc-preview-pd-cell mc-preview-pd-linelist' : (src === 'default' ? 'mc-preview-pd-cell mc-preview-pd-default' : 'mc-preview-pd-cell mc-preview-pd-empty'));
       const inputStyle = src === 'default' ? ' style="color:#7f1d1d;font-weight:600;font-style:italic;" title="Config default value"' : '';
       return `<div class="${cls}"><input type="text" class="mc-preview-pd-input" value="${_esc(val)}" placeholder="${fieldKey}" data-mc-pd-field="${_esc(fieldKey)}" data-mc-pd-linekey="${_esc(lineKey)}" data-mc-pd-row="${ri}"${inputStyle}><button type="button" class="mc-preview-filldown-btn mc-pd-filldown" data-mc-fill-field="${_esc(fieldKey)}" data-mc-fill-from="${ri}" title="Group-wise fill down: blanks/auto-filled cells only, stop at next manual value">↓</button></div>`;
     },
@@ -215,13 +180,8 @@ export async function xmlCiiBuildAndRenderPreview(rootEl, xmlText, config, optio
     onProcessFillDownClick: ({ fieldKey, fromRow, value }) => { const filled = applyPreviewProcessFillDown({ host, config, ensureOverrides, field: fieldKey, fromRow, currentValue: value }); if (filled > 0) onSaveConfig(config); }
   });
   host.innerHTML = table.renderHTML();
-
   const defaultFields = ['p1', 't1', 't2', 't3', 'density', 'wallThickness', 'corrosion'];
-  const defaultRows = branchRows
-    .map((row, ri) => ({ row, ri, fields: defaultFields.filter((field) => _isDefaultSource(row[`${field}Source`])) }))
-    .filter((item) => item.fields.length > 0);
-  if (defaultRows.length) {
-    host.insertAdjacentHTML('afterbegin', `<div class="model-converters-workflow-detail-note" style="margin:0 0 8px;border-color:#7f1d1d;color:#7f1d1d;background:#fff7f7;">${defaultRows.length} line${defaultRows.length === 1 ? '' : 's'} use config defaults. Default values are shown in dark red.</div>`);
-  }
+  const defaultRows = branchRows.map((row, ri) => ({ row, ri, fields: defaultFields.filter((field) => _isDefaultSource(row[`${field}Source`])) })).filter((item) => item.fields.length > 0);
+  if (defaultRows.length) host.insertAdjacentHTML('afterbegin', `<div class="model-converters-workflow-detail-note" style="margin:0 0 8px;border-color:#7f1d1d;color:#7f1d1d;background:#fff7f7;">${defaultRows.length} line${defaultRows.length === 1 ? '' : 's'} use config defaults. Default values are shown in dark red.</div>`);
   table.bind(host);
 }
