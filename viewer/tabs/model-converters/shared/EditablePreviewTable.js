@@ -106,7 +106,7 @@ export class EditablePreviewTable {
         </td>
         <td ${tdApprox(false, editAttrs('material', row.lineKey))}>${editablePlain('material', row.material, row.lineKey, row.materialSource)}</td>
         <td ${tdApprox(false, editAttrs('rating', row.lineKey))}>${editablePlain('rating', row.rating, row.lineKey, row.ratingSource)}</td>
-        <td ${tdApprox(row.materialCodeNeedsReview, editAttrs('materialCode', row.lineKey, `data-mc-edit-mat="${this._escapeAttr(row.material || '')}"`))}>
+        <td ${tdApprox(row.materialCodeNeedsReview, editAttrs('materialCode', row.material || row.lineKey, `data-mc-edit-mat="${this._escapeAttr(row.material || '')}" data-mc-edit-linekey="${this._escapeAttr(row.lineKey || '')}"`))}>
           ${mcBadge}${row.materialCodeNeedsReview ? fillDownBtn('materialCode', ri) : ''}
         </td>
         <td class="mc-preview-td mc-preview-pd-td">${renderProcessField('p1', row.p1, row.p1Source)}</td>
