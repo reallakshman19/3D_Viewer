@@ -1,0 +1,284 @@
+import { renderColGroup, attachColumnResizers, loadColumnWidths } from './resizable-table.js';
+
+export const BRANCH_COLUMNS = [
+  { id: 'branchName', label: 'Branch Name', width: 220, minWidth: 120 },
+  { id: 'lineKey', label: 'Line Key', width: 120, minWidth: 80 },
+  { id: 'size', label: 'Size', width: 90, minWidth: 60 },
+  { id: 'pipingClass', label: 'Piping Class', hint: 'Edit', width: 130, minWidth: 90 },
+  { id: 'material', label: 'Material', width: 120, minWidth: 80 },
+  { id: 'rating', label: 'Rating', width: 90, minWidth: 60 },
+  { id: 'materialCode', label: 'Material Code', hint: 'Edit', width: 130, minWidth: 90 },
+  { id: 'p1', label: 'P1 (MPa)', hint: 'Edit', width: 100, minWidth: 70 },
+  { id: 't1', label: 'T1 (C)', hint: 'Edit', width: 90, minWidth: 60 },
+  { id: 't2', label: 'T2 (C)', hint: 'Edit', width: 90, minWidth: 60 },
+  { id: 't3', label: 'T3 (C)', hint: 'Edit', width: 90, minWidth: 60 },
+  { id: 'density', label: 'Density', hint: 'Edit', width: 90, minWidth: 60 },
+  { id: 'wallThickness', label: 'Wall Thk', width: 90, minWidth: 60 },
+  { id: 'corrosion', label: 'Corrosion', width: 90, minWidth: 60 },
+  { id: 'wt', label: 'Wt', width: 80, minWidth: 50 }
+];
+
+export const NODE_WEIGHT_COLUMNS = [
+  { id: 'nodeNumber', label: 'Node', width: 80, minWidth: 60 },
+  { id: 'type', label: 'Type', width: 90, minWidth: 70 },
+  { id: 'bore', label: 'Bore', width: 90, minWidth: 70 },
+  { id: 'rating', label: 'Rating', width: 90, minWidth: 70 },
+  { id: 'lengthMm', label: 'Length', width: 110, minWidth: 80 },
+  { id: 'dtxr', label: 'DTXR', width: 180, minWidth: 100 },
+  { id: 'weightKg', label: 'Weight', width: 110, minWidth: 80 },
+  { id: 'deltaLengthMm', label: 'ΔLen', width: 90, minWidth: 70 },
+  { id: 'candidates', label: 'All Candidates (Valve Type · Weight · ΔLength)', width: 360, minWidth: 180 }
+];
+
+/**
+ * Reusable preview table component with editable class, material, and process fields.
+ */
+export class EditablePreviewTable {
+  constructor({
+    branchRows,
+    nodesByBranch,
+    onCellEditClick,
+    onFillDownClick,
+    onProcessInputChange,
+    onProcessFillDownClick,
+    processInputHtmlRenderer,
+    matchBadgeHtmlRenderer
+  }) {
+    this.branchRows = branchRows;
+    this.nodesByBranch = nodesByBranch;
+    this.onCellEditClick = onCellEditClick;
+    this.onFillDownClick = onFillDownClick;
+    this.onProcessInputChange = onProcessInputChange;
+    this.onProcessFillDownClick = onProcessFillDownClick;
+    this.processInputHtmlRenderer = processInputHtmlRenderer;
+    this.matchBadgeHtmlRenderer = matchBadgeHtmlRenderer;
+  }
+
+  renderHTML() {
+    const branchWidths = loadColumnWidths('xmlCii.preview.branch.columnWidths.v1');
+    const nodeWidths = loadColumnWidths('xmlCii.preview.nodeWeight.columnWidths.v1');
+
+    const colHdr = (col) => `
+      <th class="mc-preview-th" data-col-id="${this._escapeAttr(col.id)}" style="position: relative;">
+        <span class="xml-cii-th-label">${this._escape(col.label)}</span>${col.hint ? `<span class="mc-preview-edit-hint">${this._escape(col.hint)}</span>` : ''}
+        <span class="xml-cii-col-resizer" data-resize-col="${this._escapeAttr(col.id)}"></span>
+      </th>
+    `;
+
+    const branchColgroup = renderColGroup(BRANCH_COLUMNS, branchWidths);
+    const branchThead = BRANCH_COLUMNS.map(colHdr).join('');
+
+    return `
+      <div class="mc-preview-wrap xml-cii-preview-table-wrap">
+        <table class="mc-preview-table xml-cii-preview-table--fixed" data-resizable-table="branch-preview">
+          ${branchColgroup}
+          <thead><tr>${branchThead}</tr></thead>
+          <tbody>
+            ${this.branchRows.map((row, ri) => {
+              const nw = this.nodesByBranch[row.branchName] || [];
+              const pcBadge = this.matchBadgeHtmlRenderer
+                ? this.matchBadgeHtmlRenderer(row.pipingClassMethod, row.pipingClassConfidence, row.pipingClassNeedsReview, row.pipingClass, row.pipingClassDerived)
+                : `<span>${this._escape(row.pipingClass || '')}</span>`;
+              const mcBadge = row.material
+                ? (this.matchBadgeHtmlRenderer
+                    ? this.matchBadgeHtmlRenderer(row.materialCodeMethod, null, row.materialCodeNeedsReview, row.materialCode, row.material)
+                    : `<span>${this._escape(row.materialCode || '')}</span>`)
+                : '<span class="mc-preview-muted">—</span>';
+              
+              const wIcon = nw.length
+                ? `<button type="button" class="mc-preview-weight-btn" data-mc-preview-row="${ri}" title="Show node weights">Wt ${nw.length}</button>`
+                : '<span class="mc-preview-muted">—</span>';
+              
+              const tdApprox = (needs, attrs = '') => needs ? `class="mc-preview-td mc-preview-approx" ${attrs}` : `class="mc-preview-td" ${attrs}`;
+              const fillDownBtn = (field, fromRow) => `
+                 <button type="button" class="mc-preview-filldown-btn" data-mc-fill-field="${this._escape(field)}" data-mc-fill-from="${fromRow}" title="Fill down same override to all rows below">↓</button>
+              `;
+
+              const renderProcessField = (fieldKey, val, src) => {
+                if (this.processInputHtmlRenderer) {
+                  return this.processInputHtmlRenderer(fieldKey, row.lineKey, val, src, ri);
+                }
+                return `
+                  <input type="text" value="${this._escape(val)}" data-mc-pd-field="${this._escape(fieldKey)}" data-mc-pd-linekey="${this._escape(row.lineKey)}" data-mc-pd-row="${ri}">
+                `;
+              };
+
+              return `
+                <tr class="mc-preview-row${row.lineMiss ? ' mc-preview-line-miss' : ''}">
+                  <td class="mc-preview-td mc-preview-branch" title="${this._escape(row.branchName)}">
+                    ${this._escape(row.branchName.length > 36 ? '…' + row.branchName.slice(-32) : row.branchName)}
+                  </td>
+                  <td class="mc-preview-td${row.lineMiss ? ' mc-preview-warn' : ''}">${this._escape(row.lineKey || '—')}</td>
+                  <td class="mc-preview-td">${this._escape(row.size || '—')}</td>
+                  <td ${tdApprox(row.pipingClassNeedsReview, `data-mc-edit-type="pipingClass" data-mc-edit-derived="${this._escape(row.pipingClassDerived)}" data-mc-edit-row="${ri}"`)}>
+                    ${pcBadge}${row.pipingClassNeedsReview ? fillDownBtn('pipingClass', ri) : ''}
+                  </td>
+                  <td class="mc-preview-td">${this._escape(row.material || '—')}</td>
+                  <td class="mc-preview-td">${this._escape(row.rating || '—')}</td>
+                  <td ${tdApprox(row.materialCodeNeedsReview, `data-mc-edit-type="materialCode" data-mc-edit-mat="${this._escape(row.material)}" data-mc-edit-row="${ri}"`)}>
+                    ${mcBadge}${row.materialCodeNeedsReview ? fillDownBtn('materialCode', ri) : ''}
+                  </td>
+                  <td class="mc-preview-td mc-preview-pd-td">${renderProcessField('p1', row.p1, row.p1Source)}</td>
+                  <td class="mc-preview-td mc-preview-pd-td">${renderProcessField('t1', row.t1, row.t1Source)}</td>
+                  <td class="mc-preview-td mc-preview-pd-td">${renderProcessField('t2', row.t2, row.t2Source)}</td>
+                  <td class="mc-preview-td mc-preview-pd-td">${renderProcessField('t3', row.t3, row.t3Source)}</td>
+                  <td class="mc-preview-td mc-preview-pd-td">${renderProcessField('density', row.density, row.densitySource)}</td>
+                  <td class="mc-preview-td">${this._escape(row.wallThickness || '—')}</td>
+                  <td class="mc-preview-td">${this._escape(row.corrosion || '—')}</td>
+                  <td class="mc-preview-td">${wIcon}</td>
+                </tr>
+                <tr class="mc-preview-node-row" id="mc-preview-nodes-${ri}" style="display:none">
+                  <td colspan="${BRANCH_COLUMNS.length}" class="mc-preview-node-cell">
+                    ${nw.length ? `
+                      <table class="mc-preview-node-table xml-cii-preview-table--fixed" data-resizable-table="node-weight-${ri}">
+                        ${renderColGroup(NODE_WEIGHT_COLUMNS, nodeWidths)}
+                        <thead>
+                          <tr>
+                            ${NODE_WEIGHT_COLUMNS.map(col => `
+                              <th data-col-id="${this._escapeAttr(col.id)}" style="position: relative;">
+                                <span class="xml-cii-th-label">${this._escape(col.label)}</span>
+                                <span class="xml-cii-col-resizer" data-resize-col="${this._escapeAttr(col.id)}"></span>
+                              </th>
+                            `).join('')}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          ${nw.map(nr => `
+                            <tr>
+                              <td>${this._escape(nr.nodeNumber)}</td>
+                              <td>${this._escape(nr.componentType)}</td>
+                              <td>${nr.boreMm != null ? nr.boreMm.toFixed(0) + 'mm' : '—'}</td>
+                              <td>${this._escape(nr.rating)}</td>
+                              <td>${nr.lengthMm != null ? nr.lengthMm.toFixed(1) + 'mm' : '—'}</td>
+                              <td class="xml-cii-dtxr-cell" title="${this._escape(nr.dtxrSource || '')}">
+                                ${this._escape(nr.dtxr || 'Not found')}
+                              </td>
+                              <td>${nr.weightMatch ? nr.weightMatch.weight + ' kg' : '—'}</td>
+                              <td>${nr.weightMatch ? nr.weightMatch.lengthDelta.toFixed(1) + 'mm' : '—'}</td>
+                              <td class="mc-preview-candidates">
+                                ${nr.weightCandidates.map((c, ci) => `
+                                  <span class="mc-preview-candidate${ci === 0 ? ' best' : ''}" title="${this._escape(c.valveType)}">
+                                    ${this._escape(c.valveType || 'Unknown')} · ${c.weight}kg · Δ${c.lengthDelta.toFixed(1)}mm
+                                  </span>
+                                `).join('')}
+                              </td>
+                            </tr>
+                          `).join('')}
+                        </tbody>
+                      </table>
+                    ` : ''}
+                  </td>
+                </tr>
+              `;
+            }).join('')}
+          </tbody>
+        </table>
+      </div>
+    `;
+  }
+
+  bind(hostEl) {
+    // Attach branch table resizers
+    const branchTable = hostEl.querySelector('[data-resizable-table="branch-preview"]');
+    if (branchTable) {
+      attachColumnResizers(branchTable, BRANCH_COLUMNS, {
+        storageKey: 'xmlCii.preview.branch.columnWidths.v1'
+      });
+    }
+
+    // Attach node weight table resizers
+    hostEl.querySelectorAll('.mc-preview-node-table').forEach(nodeTable => {
+      attachColumnResizers(nodeTable, NODE_WEIGHT_COLUMNS, {
+        storageKey: 'xmlCii.preview.nodeWeight.columnWidths.v1'
+      });
+    });
+
+    // ---- Toggle Node Row ----
+    hostEl.querySelectorAll('[data-mc-preview-row]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const ri = btn.getAttribute('data-mc-preview-row');
+        const nodeRow = hostEl.querySelector(`#mc-preview-nodes-${ri}`);
+        if (nodeRow) {
+          nodeRow.style.display = nodeRow.style.display === 'none' ? '' : 'none';
+        }
+      });
+    });
+
+    // ---- Cell edits click ----
+    hostEl.querySelectorAll('[data-mc-edit-type]').forEach(td => {
+      td.style.cursor = 'pointer';
+      td.addEventListener('click', (e) => {
+        if (e.target.closest('.mc-preview-filldown-btn')) return;
+        const editType = td.getAttribute('data-mc-edit-type');
+        const derivedKey = td.getAttribute('data-mc-edit-derived') || td.getAttribute('data-mc-edit-mat') || '';
+        const currentVal = td.querySelector('.mc-preview-editable-val')?.textContent?.trim() || '';
+        const rowIndex = Number(td.getAttribute('data-mc-edit-row') || 0);
+
+        if (typeof this.onCellEditClick === 'function') {
+          this.onCellEditClick({ editType, derivedKey, currentVal, rowIndex, td });
+        }
+      });
+    });
+
+    // ---- Class/Material Fill Down ----
+    hostEl.querySelectorAll('.mc-preview-filldown-btn[data-mc-fill-field]:not(.mc-pd-filldown)').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const field = btn.getAttribute('data-mc-fill-field') || '';
+        const fromRow = Number(btn.getAttribute('data-mc-fill-from') || 0);
+        const sourceTd = btn.closest('[data-mc-edit-type]');
+        const currentVal = sourceTd?.querySelector('.mc-preview-editable-val')?.textContent?.trim() || '';
+
+        if (typeof this.onFillDownClick === 'function') {
+          this.onFillDownClick({ field, fromRow, currentVal, sourceTd, btn });
+        }
+      });
+    });
+
+    // ---- Process Input Change ----
+    hostEl.querySelectorAll('[data-mc-pd-field]').forEach(input => {
+      input.addEventListener('change', () => {
+        const fieldKey = input.dataset.mcPdField;
+        const lineKey = input.dataset.mcPdLinekey;
+        const rowIndex = Number(input.dataset.mcPdRow || 0);
+        const value = input.value;
+
+        if (typeof this.onProcessInputChange === 'function') {
+          this.onProcessInputChange({ fieldKey, lineKey, value, rowIndex, input });
+        }
+      });
+    });
+
+    // ---- Process Input Fill Down ----
+    hostEl.querySelectorAll('.mc-pd-filldown[data-mc-fill-field]').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const fieldKey = btn.getAttribute('data-mc-fill-field') || '';
+        const fromRow = Number(btn.getAttribute('data-mc-fill-from') || 0);
+        const cell = btn.closest('.mc-preview-pd-cell');
+        const input = cell?.querySelector('.mc-preview-pd-input');
+        const value = input ? input.value : '';
+
+        if (typeof this.onProcessFillDownClick === 'function') {
+          this.onProcessFillDownClick({ fieldKey, fromRow, value, btn });
+        }
+      });
+    });
+  }
+
+  _escape(str) {
+    if (!str) return '';
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
+  }
+
+  _escapeAttr(str) {
+    if (!str) return '';
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+}

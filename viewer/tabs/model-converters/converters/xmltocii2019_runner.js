@@ -1,0 +1,125 @@
+import { decodeTextUtf8, encodeTextUtf8, baseNameWithoutExtension } from '../core/output-utils.js';
+import { parseXmlCiiEnrichmentConfig } from '../../../converters/xml-cii2019-core/config.js';
+import { collectXmlCiiZeroRigidWeightIssues, applyXmlCiiRigidWeightOverrides } from '../../../converters/xml-cii2019-core/weight-match-model.js';
+import { enrichXmlForCii2019 } from './xmltocii2019_helper/enrichment-core.js';
+
+export async function run(context) {
+  const primary = context.inputFiles.find(f => f.role === 'primary');
+  if (!primary || !primary.bytes) {
+    throw new Error('Primary XML input is required for XML->CII(2019).');
+  }
+  const secondary = context.inputFiles.find(f => f.role === 'secondary');
+  const secondaryBytes = secondary ? secondary.bytes : null;
+  
+  const originalXmlText = decodeTextUtf8(primary.bytes);
+  const stagedJsonText = secondaryBytes ? decodeTextUtf8(secondaryBytes) : '';
+  const runValues = context.options || {};
+  
+  const stem = baseNameWithoutExtension(primary.name);
+  
+  if (runValues.createEnrichedXml === false) {
+    if (!context.workerRunner) {
+      throw new Error('Python worker runtime is not available.');
+    }
+    const serializableOptions = Object.fromEntries(
+      Object.entries(runValues)
+        .filter(([, v]) => typeof v !== 'function')
+    );
+    return await context.workerRunner.runJob({
+      converterId: context.converterId,
+      inputFiles: context.inputFiles,
+      options: serializableOptions
+    });
+  }
+  
+  const enriched = await enrichXmlForCii2019(originalXmlText, stagedJsonText, runValues);
+  const rigidReviewLogLines = [];
+  const rigidWeightIssues = collectXmlCiiZeroRigidWeightIssues(enriched.xmlText, stagedJsonText, enriched.config);
+  
+  if (rigidWeightIssues.length > 0 && typeof runValues.openXmlCiiZeroRigidWeightPopup === 'function') {
+    context.setStatus(`Review needed: ${rigidWeightIssues.length} rigid weight(s) are zero.`, 'running');
+    const review = await runValues.openXmlCiiZeroRigidWeightPopup(rigidWeightIssues);
+    if (review.cancelled) {
+      throw new Error('Cancelled: rigid zero-weight review was dismissed.');
+    }
+    if (review.skipped) {
+      rigidReviewLogLines.push(`Rigid zero-weight review skipped: ${rigidWeightIssues.length} unresolved rigid(s) left unchanged.`);
+    } else {
+      const applied = applyXmlCiiRigidWeightOverrides(enriched.xmlText, review.weightsByKey);
+      enriched.xmlText = applied.xmlText;
+      enriched.stats.rigidWeightManualOverrides = applied.appliedCount;
+      enriched.stats.weightAnnotations = (enriched.stats.weightAnnotations || 0) + applied.appliedCount;
+      
+      enriched.diagnostics.push(...applied.appliedRows);
+      
+      if (typeof runValues.saveXmlCiiRigidWeightOverrides === 'function') {
+        runValues.saveXmlCiiRigidWeightOverrides(review.weightsByKey);
+      }
+      rigidReviewLogLines.push(`Rigid zero-weight review applied: ${applied.appliedCount} manual rigid weight(s).`);
+    }
+  }
+  
+  const enrichedName = `${stem}_enriched.xml`;
+  
+  if (!context.workerRunner) {
+    throw new Error('Python worker runtime is not available.');
+  }
+  
+  // Strip all function-valued properties so the options object is safe to send
+  // via postMessage (functions cannot be structured-cloned).
+  const serializableOptions = Object.fromEntries(
+    Object.entries({ ...runValues, createEnrichedXml: false })
+      .filter(([, v]) => typeof v !== 'function')
+  );
+
+  const ciiResponse = await context.workerRunner.runJob({
+    converterId: context.converterId,
+    inputFiles: [{ role: 'primary', name: enrichedName, bytes: encodeTextUtf8(enriched.xmlText) }],
+    options: serializableOptions
+  });
+  
+  const ciiOutputs = Array.isArray(ciiResponse.outputs) ? ciiResponse.outputs : [];
+  
+  const stats = enriched.stats;
+  const diagnostics = enriched.diagnostics;
+  const diagnosticText = JSON.stringify({ generatedAt: new Date().toISOString(), stats, diagnostics }, null, 2);
+  
+  const diagnosticRows = (Array.isArray(diagnostics) ? diagnostics : []).map((item) => ({
+    type: item?.type || '',
+    nodeNumber: item?.nodeNumber || item?.keptNode || item?.removedNode || '',
+    branchName: item?.branchName || '',
+    pipingClass: item?.pipingClass || '',
+    rating: item?.rating || '',
+    boreMm: item?.boreMm == null ? '' : Number(item.boreMm).toFixed ? Number(item.boreMm).toFixed(3) : item.boreMm,
+    lengthMm: item?.lengthMm == null ? '' : Number(item.lengthMm).toFixed ? Number(item.lengthMm).toFixed(3) : item.lengthMm,
+    weight: item?.weight ?? '',
+    method: item?.method || item?.reason || item?.source || '',
+    kind: item?.kind || '',
+    message: item?.message || item?.stagedName || item?.url || item?.reason || '',
+  }));
+  
+  return {
+    outputs: [
+      { name: enrichedName, text: enriched.xmlText, mime: 'text/xml;charset=utf-8' },
+      { name: `${stem}_enrichment_diagnostics.json`, text: diagnosticText, mime: 'application/json;charset=utf-8' },
+      ...ciiOutputs,
+    ],
+    logs: {
+      stdout: [
+        'Created enriched XML before XML->CII(2019).',
+        `DATUM duplicate support nodes removed: ${stats.removedDuplicateSupports}.`,
+        `XML restraints normalized: ${stats.normalizedRestraints}.`,
+        `Staged JSON support matches applied: ${stats.stagedSupportsMapped}.`,
+        `DTXR_PS annotations: ${stats.dtxrPsAnnotations || 0}.`,
+        `DTXR_POS annotations: ${stats.dtxrPosAnnotations || 0}.`,
+        `Branch line keys annotated from Branchname: ${stats.branchLineKeys}.`,
+        `Rating annotations: ${stats.ratingAnnotations}; weight annotations: ${stats.weightAnnotations}.`,
+        ...rigidReviewLogLines,
+        `Enrichment diagnostics written: ${stem}_enrichment_diagnostics.json`,
+        ...(ciiResponse.logs?.stdout || []),
+      ],
+      stderr: [...(ciiResponse.logs?.stderr || [])]
+    },
+    diagnosticsRows: diagnosticRows
+  };
+}
