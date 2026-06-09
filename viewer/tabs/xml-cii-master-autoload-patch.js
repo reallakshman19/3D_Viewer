@@ -522,7 +522,7 @@ function normalizePipingRow(row, index = 0) {
     rating: rawValue(row, ['rating', 'Rating', 'RATING', 'Class Rating', 'Pressure Class']),
     materialName: rawValue(row, ['materialName', 'Material_Name', 'Material', 'MATERIAL', 'Material Name']),
     schedule: rawValue(row, ['schedule', 'Schedule', 'SCHEDULE', 'SCH']),
-    wallThickness: rawValue(row, ['wallThickness', 'Wall Thickness', 'WALL_THICKNESS', 'WT', 'WallThickness']),
+    wallThickness: rawValue(row, ['wallThickness', 'Wall Thickness', 'Wall thickness', 'WALL_THICKNESS', 'WT', 'WallThickness']),
     corrosion: rawValue(row, ['corrosion', 'Corrosion', 'Corrosion Allowance', 'CORROSION_ALLOWANCE', 'CA']),
     endCondition: rawValue(row, ['endCondition', 'End Condition', 'END_CONDITION', 'End Type']),
   };
@@ -847,7 +847,7 @@ async function rescanPipingClassFromXml({ force = false, notifyUser = false } = 
 
   const xmlFile = primaryXmlFile();
   if (!xmlFile) {
-    renderMasterPathsPanel(input, 'Piping Class: waiting for XML input; use Rescan XML after selecting XML.', 'info');
+    renderMasterPathsPanel(input, 'Piping Class: select XML, then Rescan XML to load spec wise shard rows.', 'info');
     return false;
   }
 

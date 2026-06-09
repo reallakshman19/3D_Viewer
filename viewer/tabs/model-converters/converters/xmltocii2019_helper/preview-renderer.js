@@ -57,7 +57,21 @@ function _xmlCiiFindLineListRow(branchLineKey, config) {
   }
   return null;
 }
-function _xmlCiiProcessValue(pdOverride, row, overrideKey, rowKeys) { return pdOverride && Object.prototype.hasOwnProperty.call(pdOverride, overrideKey) ? _toText(pdOverride[overrideKey]).trim() : _rowText(row, rowKeys); }
+function _processDefaultValue(config, fieldKey) {
+  const defaults = config?.processDefaults && typeof config.processDefaults === 'object' ? config.processDefaults : {};
+  return _toText(defaults[fieldKey]).trim();
+}
+function _xmlCiiProcessValue(pdOverride, row, overrideKey, rowKeys, config) {
+  if (pdOverride && Object.prototype.hasOwnProperty.call(pdOverride, overrideKey)) return _toText(pdOverride[overrideKey]).trim();
+  const rowVal = _rowText(row, rowKeys);
+  if (rowVal) return rowVal;
+  return _processDefaultValue(config, overrideKey);
+}
+function _xmlCiiProcessSource(pdOverride, row, overrideKey, rowKeys, config) {
+  if (pdOverride && Object.prototype.hasOwnProperty.call(pdOverride, overrideKey)) return 'override';
+  if (_rowText(row, rowKeys)) return 'linelist';
+  return _processDefaultValue(config, overrideKey) ? 'default' : 'none';
+}
 function _derivePipingClassFromBranchName(branchName, config) { return _regexGroup(branchName, config.rating?.pipingClassRegex, config.rating?.pipingClassGroup || 1) || tokenAtPosition(branchName, config.rating?.tokenDelimiter || '-', config.rating?.pipingClassTokenIndex || 5); }
 function _deriveRatingFromPipingClass(pipingClass, config) {
   const text = _toText(pipingClass).trim().toUpperCase();
@@ -105,11 +119,11 @@ export function xmlCiiDryRunPreview(xmlText, config, stagedJsonText) {
     const resolved = resolveBranchProcessData({ branchName, lineKey, lineRow: resolverLineRow, boreMm, componentType: 'PIPE', rating: _rowText(lineListMatch, ['rating', 'Rating', 'RATING']) || _deriveRatingFromPipingClass(derivedClassRaw, config), materialMap, pipingClassIndex, overrides: config.overrides || {}, xmlNode: null, xmlBranch: branch, config });
     const branchRating = resolved.rating || _deriveRatingFromPipingClass(resolved.pipingClass, config) || _rowText(lineListMatch, ['rating', 'Rating']);
     const pdOverride = (lineKey && config?.overrides?.processData?.[lineKey]) || {};
-    const p1 = _xmlCiiProcessValue(pdOverride, lineListMatch, 'p1', ['p1']);
-    const t1 = _xmlCiiProcessValue(pdOverride, lineListMatch, 't1', ['t1']);
-    const t2 = _xmlCiiProcessValue(pdOverride, lineListMatch, 't2', ['t2']);
-    const t3 = _xmlCiiProcessValue(pdOverride, lineListMatch, 't3', ['t3']);
-    const density = _xmlCiiProcessValue(pdOverride, lineListMatch, 'density', ['density']);
+    const p1 = _xmlCiiProcessValue(pdOverride, lineListMatch, 'p1', ['p1'], config);
+    const t1 = _xmlCiiProcessValue(pdOverride, lineListMatch, 't1', ['t1'], config);
+    const t2 = _xmlCiiProcessValue(pdOverride, lineListMatch, 't2', ['t2'], config);
+    const t3 = _xmlCiiProcessValue(pdOverride, lineListMatch, 't3', ['t3'], config);
+    const density = _xmlCiiProcessValue(pdOverride, lineListMatch, 'density', ['density'], config);
     const wallThickness = resolved.wallThicknessMm ? Number(resolved.wallThicknessMm.toPrecision(6)).toString() : '';
     const corrosion = resolved.corrosionAllowanceMm != null ? String(resolved.corrosionAllowanceMm) : '';
     let matMethod = 'none';
@@ -139,11 +153,11 @@ export function xmlCiiDryRunPreview(xmlText, config, stagedJsonText) {
       rating: branchRating || '',
       ratingSource: _overrideSource(config.overrides, 'rating', lineKey),
       p1, t1, t2, t3, density,
-      p1Source: _hasOwn(pdOverride, 'p1') ? 'override' : (p1 ? 'linelist' : 'none'),
-      t1Source: _hasOwn(pdOverride, 't1') ? 'override' : (t1 ? 'linelist' : 'none'),
-      t2Source: _hasOwn(pdOverride, 't2') ? 'override' : (t2 ? 'linelist' : 'none'),
-      t3Source: _hasOwn(pdOverride, 't3') ? 'override' : (t3 ? 'linelist' : 'none'),
-      densitySource: _hasOwn(pdOverride, 'density') ? 'override' : (density ? 'linelist' : 'none'),
+      p1Source: _xmlCiiProcessSource(pdOverride, lineListMatch, 'p1', ['p1'], config),
+      t1Source: _xmlCiiProcessSource(pdOverride, lineListMatch, 't1', ['t1'], config),
+      t2Source: _xmlCiiProcessSource(pdOverride, lineListMatch, 't2', ['t2'], config),
+      t3Source: _xmlCiiProcessSource(pdOverride, lineListMatch, 't3', ['t3'], config),
+      densitySource: _xmlCiiProcessSource(pdOverride, lineListMatch, 'density', ['density'], config),
       wallThickness,
       wallThicknessSource: _overrideSource(config.overrides, 'wallThickness', lineKey),
       corrosion,
@@ -189,12 +203,73 @@ export async function xmlCiiBuildAndRenderPreview(rootEl, xmlText, config, optio
       if (needsReview) return `<span class="mc-preview-editable-val">${valEsc}</span> <span class="mc-preview-badge bad" title="Review ${derivedEsc}">review${pctText ? ` ${pctText}` : ''}</span>`;
       return `<span class="mc-preview-editable-val">${valEsc}</span>`;
     },
-    processInputHtmlRenderer: (fieldKey, lineKey, val, src, ri) => `<div class="${src === 'override' ? 'mc-preview-pd-cell mc-preview-pd-override' : (src === 'linelist' ? 'mc-preview-pd-cell mc-preview-pd-linelist' : 'mc-preview-pd-cell mc-preview-pd-empty')}"><input type="text" class="mc-preview-pd-input" value="${_esc(val)}" placeholder="${fieldKey}" data-mc-pd-field="${_esc(fieldKey)}" data-mc-pd-linekey="${_esc(lineKey)}" data-mc-pd-row="${ri}"><button type="button" class="mc-preview-filldown-btn mc-pd-filldown" data-mc-fill-field="${_esc(fieldKey)}" data-mc-fill-from="${ri}" title="Group-wise fill down: blanks/auto-filled cells only, stop at next manual value">↓</button></div>`,
+    processInputHtmlRenderer: (fieldKey, lineKey, val, src, ri) => {
+      const cls = src === 'override' ? 'mc-preview-pd-cell mc-preview-pd-override' : (src === 'linelist' ? 'mc-preview-pd-cell mc-preview-pd-linelist' : (src === 'default' ? 'mc-preview-pd-cell mc-preview-pd-default' : 'mc-preview-pd-cell mc-preview-pd-empty'));
+      const style = src === 'default' ? 'style="color:#7f1d1d;font-weight:600;font-style:italic;" title="Config default value — click Review defaults to edit line-specific values"' : '';
+      return `↓`;
+    },
     onCellEditClick: ({ editType, derivedKey, currentVal, td }) => openOverridePopup({ editType, derivedKey, currentVal, config, onSave: (newVal) => { const overrides = ensureOverrides(config); if (!overrides[editType] || typeof overrides[editType] !== 'object') overrides[editType] = {}; if (editType === 'pipingClass') overrides.pipingClass = { ...overrides.pipingClass, [derivedKey]: newVal }; else if (editType === 'materialCode') overrides.materialCode = { ...overrides.materialCode, [derivedKey]: newVal }; else if (editType === 'material') overrides.material = { ...overrides.material, [derivedKey]: newVal }; else if (editType === 'rating') overrides.rating = { ...overrides.rating, [derivedKey]: newVal }; else if (editType === 'wallThickness') overrides.wallThickness = { ...overrides.wallThickness, [derivedKey]: newVal }; else if (editType === 'corrosion') overrides.corrosion = { ...overrides.corrosion, [derivedKey]: newVal }; markPreviewOverrideManual({ config, ensureOverrides, field: editType, key: _fieldOverrideKey(editType, derivedKey), value: newVal }); onSaveConfig(config); td.dataset.mcFillState = 'manual'; refreshPreview(); }}),
     onFillDownClick: ({ field, fromRow, currentVal }) => { const filled = applyPreviewOverrideFillDown({ host, config, ensureOverrides, field, fromRow, currentValue: currentVal }); if (filled > 0) { onSaveConfig(config); refreshPreview(); } },
     onProcessInputChange: ({ field, fieldKey, lineKey, value, input }) => { const overrides = ensureOverrides(config); if (!overrides.processData) overrides.processData = {}; if (!overrides.processData[lineKey]) overrides.processData[lineKey] = {}; const cleanVal = _toText(value).trim(); const actualField = field || fieldKey; if (cleanVal === '') delete overrides.processData[lineKey][actualField]; else overrides.processData[lineKey][actualField] = cleanVal; if (Object.keys(overrides.processData[lineKey]).length === 0) delete overrides.processData[lineKey]; markPreviewProcessManual({ config, ensureOverrides, field: actualField, lineKey, value: cleanVal }); onSaveConfig(config); const cell = input.closest('.mc-preview-pd-cell'); if (cell) cell.className = cleanVal ? 'mc-preview-pd-cell mc-preview-pd-override' : 'mc-preview-pd-cell mc-preview-pd-empty'; },
     onProcessFillDownClick: ({ fieldKey, fromRow, value }) => { const filled = applyPreviewProcessFillDown({ host, config, ensureOverrides, field: fieldKey, fromRow, currentValue: value }); if (filled > 0) onSaveConfig(config); }
   });
   host.innerHTML = table.renderHTML();
+
+  const defaultFields = ['p1', 't1', 't2', 't3', 'density', 'wallThickness', 'corrosion'];
+  const defaultRows = branchRows
+    .map((row, ri) => ({ row, ri, fields: defaultFields.filter((field) => row[`${field}Source`] === 'default' || row[`${field}Source`] === 'config-default' || row[`${field}Source`] === 'default-zero') }))
+    .filter((item) => item.fields.length > 0);
+  if (defaultRows.length) {
+    host.insertAdjacentHTML('afterbegin', `Review defaults (${defaultRows.length} line${defaultRows.length === 1 ? '' : 's'}) Config default values are shown in dark red.`);
+    host.querySelector('#mc-review-default-values')?.addEventListener('click', () => {
+      const modal = document.createElement('div');
+      modal.style.cssText = 'position:fixed;inset:5vh 5vw;z-index:9999;background:#0f1724;color:#e6edf5;border:1px solid #31455f;border-radius:10px;padding:14px;overflow:auto;box-shadow:0 20px 80px rgba(0,0,0,.45);';
+      modal.innerHTML = `
+        
+          Lines using config defaults
+          Close
+        
+        Edit values below to create line-specific overrides. Blank fields stay as defaults.
+        
+          BranchLine Key${defaultFields.map((f) => `${_esc(f)}`).join('')}
+          
+            ${defaultRows.map(({ row, ri }) => `
+              ${_esc(row.branchName)}
+              ${_esc(row.lineKey)}
+              ${defaultFields.map((field) => {
+                const isDefault = row[`${field}Source`] === 'default' || row[`${field}Source`] === 'config-default' || row[`${field}Source`] === 'default-zero';
+                return ``;
+              }).join('')}
+            `).join('')}
+          
+        
+        
+          Apply line overrides
+        `;
+      document.body.appendChild(modal);
+      modal.querySelector('[data-close-defaults]')?.addEventListener('click', () => modal.remove());
+      modal.querySelector('[data-apply-defaults]')?.addEventListener('click', () => {
+        const overrides = ensureOverrides(config);
+        if (!overrides.processData) overrides.processData = {};
+        modal.querySelectorAll('[data-default-edit-row][data-default-edit-field]').forEach((input) => {
+          const ri = Number(input.getAttribute('data-default-edit-row') || -1);
+          const field = input.getAttribute('data-default-edit-field') || '';
+          const row = branchRows[ri];
+          const value = _toText(input.value).trim();
+          if (!row?.lineKey || !field || !value) return;
+          if (field === 'wallThickness' || field === 'corrosion') {
+            if (!overrides[field]) overrides[field] = {};
+            overrides[field][row.lineKey] = value;
+          } else {
+            if (!overrides.processData[row.lineKey]) overrides.processData[row.lineKey] = {};
+            overrides.processData[row.lineKey][field] = value;
+          }
+        });
+        onSaveConfig(config);
+        modal.remove();
+        refreshPreview();
+      });
+    });
+  }
   table.bind(host);
 }

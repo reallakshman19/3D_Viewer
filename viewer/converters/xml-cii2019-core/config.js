@@ -93,6 +93,9 @@ export function parseXmlCiiEnrichmentConfig(rawJson) {
     defaultXmlSupportType: 'Y',
     defaultStiffness: '1.751270E+12',
     defaultFriction: '0.3',
+    defaultWallThickness: 0,
+    defaultCorrosionAllowance: 0,
+    processDefaults: { p1: '700', t1: '120', t2: '309', t3: '-5', density: '100' },
     linelist: {
       sampleBranchName: '/ASIM-1885-10"-S8810101-91261M7-HC/B1',
       tokenDelimiter: '-',
@@ -180,6 +183,7 @@ export function parseXmlCiiEnrichmentConfig(rawJson) {
         },
       },
       material: { ...defaults.material, ...(parsed.material || {}) },
+      processDefaults: { ...defaults.processDefaults, ...(parsed.processDefaults || {}) },
       overrides: {
         pipingClass:  { ...(defaults.overrides.pipingClass),  ...(parsedOverrides.pipingClass  || {}) },
         material:     { ...(defaults.overrides.material),     ...(parsedOverrides.material     || {}) },

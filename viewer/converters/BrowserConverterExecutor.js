@@ -1,14 +1,8 @@
 /**
  * BrowserConverterExecutor.js
  *
- * Thin browser-side adapter around the converter worker contract used by
- * model-converters. It exposes a simple function that accepts File/Blob input
- * and returns a normalized output payload with outputText.
- *
- * Boundary:
- * - No topology work.
- * - No PCF generation.
- * - No master resolution.
+ * Browser-side adapter around the converter worker contract used by
+ * model-converters. It accepts File/Blob input and returns normalized output.
  */
 
 import {
@@ -31,15 +25,60 @@ function inferMime(fileName) {
 
 function firstTextOutput(outputs) {
   const list = Array.isArray(outputs) ? outputs : [];
-  return list.find(entry => entry && typeof entry.text === 'string') || null;
+  return list.find((entry) => entry && typeof entry.text === 'string') || null;
+}
+
+function sanitizeCloneable(obj) {
+  if (obj === null || obj === undefined) return obj;
+  if (typeof obj === 'function') return undefined;
+  if (typeof obj !== 'object') return obj;
+  if (Array.isArray(obj)) return obj.map(sanitizeCloneable).filter((value) => value !== undefined);
+  const clean = {};
+  for (const [key, value] of Object.entries(obj)) {
+    const cleaned = sanitizeCloneable(value);
+    if (cleaned !== undefined) clean[key] = cleaned;
+  }
+  return clean;
+}
+
+function buildWorkerErrorMessage(event, fallback = 'Converter worker crashed.') {
+  return [
+    toText(event?.message || fallback),
+    event?.filename ? `file=${event.filename}` : '',
+    event?.lineno ? `line=${event.lineno}` : '',
+    event?.colno ? `col=${event.colno}` : '',
+    event?.error?.name ? `name=${event.error.name}` : '',
+    event?.error?.message ? `error=${event.error.message}` : '',
+    event?.error?.stack ? `stack=${event.error.stack}` : '',
+  ].filter(Boolean).join(' | ');
 }
 
 export function createBrowserConverterExecutor() {
-  const worker = new Worker(new URL('./py-worker.js?v=20260516-uxml-bridge', import.meta.url), {
+  const worker = new Worker(new URL('./py-worker.js?v=20260609-worker-diagnostics-1', import.meta.url), {
     type: 'module',
   });
+
   const pending = new Map();
   let nextJobId = 1;
+  let disposed = false;
+
+  function rejectAll(error) {
+    for (const request of pending.values()) request.reject(error);
+    pending.clear();
+  }
+
+  function normalizeSuccessfulPayload(payload) {
+    const outputs = Array.isArray(payload.outputs) ? payload.outputs : [];
+    const primaryOutput = firstTextOutput(outputs);
+    return {
+      ok: true,
+      outputs,
+      logs: payload.logs || {},
+      outputText: primaryOutput ? String(primaryOutput.text) : '',
+      outputName: primaryOutput ? String(primaryOutput.name || '') : '',
+      outputMime: primaryOutput ? String(primaryOutput.mime || inferMime(primaryOutput.name || 'output.txt')) : 'text/plain;charset=utf-8',
+    };
+  }
 
   function onMessage(event) {
     const payload = event.data || {};
@@ -54,36 +93,36 @@ export function createBrowserConverterExecutor() {
     }
 
     if (!payload.ok) {
-      request.reject(new Error(toText(payload.error || 'Converter worker failed.')));
+      const errorMessage = toText(payload.error || 'Converter worker failed.');
+      const logs = payload.logs || {};
+      const tail = [
+        ...(Array.isArray(logs.stderr) ? logs.stderr.slice(-8) : []),
+        ...(Array.isArray(logs.stdout) ? logs.stdout.slice(-5) : []),
+      ].map(toText).filter(Boolean).join(' | ');
+      request.reject(new Error(tail ? `${errorMessage} | ${tail}` : errorMessage));
       return;
     }
 
-    const outputs = Array.isArray(payload.outputs) ? payload.outputs : [];
-    const primaryOutput = firstTextOutput(outputs);
-    request.resolve({
-      ok: true,
-      outputs,
-      logs: payload.logs || {},
-      outputText: primaryOutput ? String(primaryOutput.text) : '',
-      outputName: primaryOutput ? String(primaryOutput.name || '') : '',
-      outputMime: primaryOutput ? String(primaryOutput.mime || inferMime(primaryOutput.name || 'output.txt')) : 'text/plain;charset=utf-8',
-    });
+    request.resolve(normalizeSuccessfulPayload(payload));
   }
 
   function onError(event) {
-    const error = new Error(toText(event?.message || 'Converter worker crashed.'));
-    for (const request of pending.values()) request.reject(error);
-    pending.clear();
+    rejectAll(new Error(buildWorkerErrorMessage(event)));
+  }
+
+  function onMessageError(event) {
+    rejectAll(new Error(buildWorkerErrorMessage(event, 'Converter worker message serialization failed.')));
   }
 
   worker.addEventListener('message', onMessage);
   worker.addEventListener('error', onError);
+  worker.addEventListener('messageerror', onMessageError);
 
   async function execute(request) {
+    if (disposed) throw new Error('Converter executor has been disposed.');
+
     const converterId = toText(request?.converterId || '').trim();
-    if (!converterId) {
-      throw new Error('converterId is required for browser converter execution.');
-    }
+    if (!converterId) throw new Error('converterId is required for browser converter execution.');
 
     const sourceFile = request?.sourceFile || request?.sourceBlob || null;
     const sourceArrayBuffer = request?.sourceArrayBuffer instanceof ArrayBuffer
@@ -105,54 +144,33 @@ export function createBrowserConverterExecutor() {
 
     const inputFiles = Array.isArray(request?.inputFiles) && request.inputFiles.length
       ? request.inputFiles
-      : [
-          {
-            role: 'primary',
-            name: sourceName,
-            bytes: sourceArrayBuffer,
-          },
-        ];
+      : [{ role: 'primary', name: sourceName, bytes: sourceArrayBuffer }];
 
     const transfer = [];
-    for (const fileSpec of inputFiles) {
-      if (fileSpec?.bytes instanceof ArrayBuffer) transfer.push(fileSpec.bytes);
-    }
+    for (const fileSpec of inputFiles) if (fileSpec?.bytes instanceof ArrayBuffer) transfer.push(fileSpec.bytes);
 
     const jobId = nextJobId;
     nextJobId += 1;
 
     return new Promise((resolve, reject) => {
       pending.set(jobId, { resolve, reject });
-      worker.postMessage(
-        buildConverterWorkerRequest(
-          jobId,
-          converterId,
-          inputFiles,
-          sanitizeCloneable(request?.options || {})
-        ),
-        transfer
-      );
+      try {
+        worker.postMessage(
+          buildConverterWorkerRequest(jobId, converterId, inputFiles, sanitizeCloneable(request?.options || {})),
+          transfer
+        );
+      } catch (error) {
+        pending.delete(jobId);
+        reject(new Error(`Failed to post converter job to worker: ${toText(error?.message || error)}`));
+      }
     });
   }
 
-  function sanitizeCloneable(obj) {
-    if (obj === null || obj === undefined) return obj;
-    if (typeof obj === 'function') return undefined;
-    if (typeof obj !== 'object') return obj;
-    if (Array.isArray(obj)) {
-      return obj.map(sanitizeCloneable).filter(val => val !== undefined);
-    }
-    const clean = {};
-    for (const [key, val] of Object.entries(obj)) {
-      const cleaned = sanitizeCloneable(val);
-      if (cleaned !== undefined) clean[key] = cleaned;
-    }
-    return clean;
-  }
-
   function dispose() {
+    disposed = true;
     worker.removeEventListener('message', onMessage);
     worker.removeEventListener('error', onError);
+    worker.removeEventListener('messageerror', onMessageError);
     worker.terminate();
     pending.clear();
   }

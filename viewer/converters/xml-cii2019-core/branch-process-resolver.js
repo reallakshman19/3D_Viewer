@@ -253,6 +253,7 @@ export function resolveWallThicknessFromPipingClass({ pipingClassRow, overrides 
     pipingClassRow?.wallThickness ??
     pipingClassRow?.WallThickness ??
     pipingClassRow?.['Wall Thickness'] ??
+    pipingClassRow?.['Wall thickness'] ??
     pipingClassRow?.WALL_THICKNESS ??
     pipingClassRow?.WT
   );
@@ -260,7 +261,8 @@ export function resolveWallThicknessFromPipingClass({ pipingClassRow, overrides 
 
   const fromXml = toFiniteNumber(xmlNode?.wallThickness ?? xmlNode?.WallThickness ?? xmlBranch?.wallThickness);
   if (fromXml != null) return { valueMm: fromXml, source: 'xml-fallback' };
-  return { valueMm: 0, source: 'default-zero' };
+  const fromConfig = toFiniteNumber(config.defaultWallThickness);
+  return { valueMm: fromConfig ?? 0, source: fromConfig != null ? 'config-default' : 'default-zero' };
 }
 
 export function resolveBranchProcessData({

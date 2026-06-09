@@ -18,7 +18,20 @@ import { buildPipingClassIndex } from '../../converters/xml-cii2019-core/piping-
 import { resolveBranchProcessData } from '../../converters/xml-cii2019-core/branch-process-resolver.js';
 import { buildStagedDtxrIndex, resolveXmlCiiNodeDtxr } from '../../converters/xml-cii2019-core/dtxr-resolver.js';
 import { xmlCiiDtxrPsForNode, xmlCiiDtxrPosForNode, buildStagedDtxrPositionIndex } from '../../converters/xml-cii2019-core/dtxr-resolver.js';
-import { findWeightMasterMatch, collectXmlCiiZeroRigidWeightIssues, applyXmlCiiRigidWeightOverrides, xmlCiiForwardElementLengths } from '../../converters/xml-cii2019-core/weight-match-model.js';
+import {
+  findWeightMasterMatch,
+  collectXmlCiiZeroRigidWeightIssues,
+  applyXmlCiiRigidWeightOverrides,
+  xmlCiiForwardElementLengths,
+  xmlCiiRigidWeightOverrideKey,
+  isXmlCiiRigidNode,
+  xmlCiiNumberText,
+  xmlCiiRigidWeightOverrideForNode,
+  xmlCiiAncestorBranchName,
+  scoreXmlCiiWeightCandidates,
+  buildStagedComponentIndex,
+  stagedComponentForXmlNode,
+} from '../../converters/xml-cii2019-core/weight-match-model.js';
 import {
   FIELD_RULES as _FIELD_RULES,
   DETECTION_ORDER as _DETECTION_ORDER,
@@ -2915,48 +2928,24 @@ function _xmlCiiForwardElementLengths(nodes) {
   return xmlCiiForwardElementLengths(nodes);
 }
 
+function _xmlCiiAncestorBranchName(node) {
+  return xmlCiiAncestorBranchName(node);
+}
+
+function _scoreXmlCiiWeightCandidates({ boreMm, rating, lengthMm }, config) {
+  return scoreXmlCiiWeightCandidates({ boreMm, rating, lengthMm }, config);
+}
+
+function _buildStagedComponentIndex(stagedJsonText, config) {
+  return buildStagedComponentIndex(stagedJsonText, config);
+}
+
+function _stagedComponentForXmlNode(node, stagedIndex, config) {
+  return stagedComponentForXmlNode(node, stagedIndex, config);
+}
+
 function _collectXmlCiiZeroRigidWeightIssues(xmlText, stagedJsonText, config) {
-  if (typeof DOMParser === 'undefined') return [];
-  const document = new DOMParser().parseFromString(_toText(xmlText), 'application/xml');
-  if (document.getElementsByTagName('parsererror').length) return [];
-  const stagedIndex = _buildStagedComponentIndex(stagedJsonText, config);
-  const issues = [];
-  for (const branch of [...document.getElementsByTagName('Branch')]) {
-    const branchName = _xmlText(branch, 'Branchname');
-    const branchNodeList = _xmlChildrenByName(branch, 'Node');
-    const forwardLengths = _xmlCiiForwardElementLengths(branchNodeList);
-    branchNodeList.forEach((node, nodeIdx) => {
-      const lengthRaw = _xmlText(node, 'ElementLengthMm');
-      const lengthFromXml = lengthRaw ? _xmlCiiNumberText(lengthRaw) : null;
-      const lengthMm = lengthFromXml !== null ? lengthFromXml : forwardLengths[nodeIdx];
-      const weight = _xmlCiiNumberText(_xmlText(node, 'Weight'));
-      const nodeNumber = _xmlText(node, 'NodeNumber');
-      // Only positive-numbered nodes become CAESAR elements; -1 fittings are dropped.
-      // Include every zero-weight rigid that starts a real element (forward length
-      // defined, incl. 0 for genuine zero-length valves); skip dangling end-of-branch
-      // occurrences so a branch-connection valve is listed once.
-      if (_isXmlCiiRigidNode(node) && Number(nodeNumber) > 0 && lengthMm !== null && (weight === null || Math.abs(weight) <= 1e-12)) {
-        const staged = _stagedComponentForXmlNode(node, stagedIndex, config);
-        const boreMm = _xmlCiiNumberText(_xmlText(node, 'BoreMm')) ?? _xmlCiiNumberText(_xmlText(node, 'OutsideDiameter'));
-        const rating = _xmlText(node, 'Rating');
-        issues.push({
-          key: _xmlCiiRigidWeightOverrideKey(branchName, nodeNumber),
-          branchName,
-          nodeNumber,
-          nodeName: _xmlText(node, 'NodeName'),
-          componentType: _xmlText(node, 'ComponentType'),
-          boreMm,
-          rating,
-          lengthMm,
-          dtxr: _stagedComponentDtxr(staged.match),
-          stagedName: _toText(staged.match?.component?.name || staged.match?.attrs?.NAME || '').trim(),
-          stagedMatchMethod: staged.method,
-          candidates: _scoreXmlCiiWeightCandidates({ boreMm, rating, lengthMm }, config).slice(0, 5),
-        });
-      }
-    });
-  }
-  return issues;
+  return collectXmlCiiZeroRigidWeightIssues(xmlText, stagedJsonText, config);
 }
 
 function _applyXmlCiiRigidWeightOverrides(xmlText, weightsByKey) {

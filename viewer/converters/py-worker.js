@@ -75,10 +75,31 @@ exit_code
 
 let _pyodidePromise = null;
 let _scriptsLoaded = false;
+let _activeJobId = null;
 
 function _toString(value) {
   if (value === undefined || value === null) return '';
   return String(value);
+}
+
+function _errorToString(error) {
+  return [
+    _toString(error?.name),
+    _toString(error?.message || error),
+    _toString(error?.stack),
+  ].filter(Boolean).join(' | ');
+}
+
+function _postFailure(jobId, message, logs = null) {
+  try {
+    self.postMessage(buildConverterWorkerResponse(
+      jobId,
+      false,
+      null,
+      logs,
+      _toString(message || 'Converter worker failed.')
+    ));
+  } catch {}
 }
 
 function _sanitizeFileName(name) {
@@ -206,8 +227,10 @@ await micropip.install('pypdf')
   for (const fileName of SCRIPT_FILE_NAMES) {
     const url = new URL(`./scripts/${fileName}`, import.meta.url);
     const response = await fetch(url, { cache: 'no-store' });
-    if (!response.ok) throw new Error(`Failed to load converter script ${fileName}: HTTP ${response.status}`);
-    const text = _patchConverterScriptText(fileName, await response.text());
+    if (!response.ok) throw new Error(`Failed to load converter script ${fileName}: HTTP ${response.status} ${response.statusText || ''}`);
+    const rawText = await response.text();
+    const text = _patchConverterScriptText(fileName, rawText);
+    if (!text.trim()) throw new Error(`Converter script ${fileName} loaded as empty text.`);
     pyodide.FS.writeFile(`/scripts/${fileName}`, text, { encoding: 'utf8' });
   }
   pyodide.runPython(`
@@ -480,16 +503,40 @@ async function _runJob(message) {
 self.addEventListener('message', async (event) => {
   const message = event.data || {};
   if (message.type !== 'run') return;
+
   const jobId = message.jobId;
+  _activeJobId = jobId;
+
   const validation = validateConverterWorkerRequest(message);
   if (!validation.ok) {
-    self.postMessage(buildConverterWorkerResponse(jobId, false, null, null, validation.error));
+    _postFailure(jobId, validation.error);
+    _activeJobId = null;
     return;
   }
+
   try {
     const result = await _runJob(message);
     self.postMessage(buildConverterWorkerResponse(jobId, true, result.output, result.logs, null));
   } catch (error) {
-    self.postMessage(buildConverterWorkerResponse(jobId, false, null, null, _toString(error?.message || error)));
+    _postFailure(jobId, _errorToString(error));
+  } finally {
+    _activeJobId = null;
   }
+});
+
+self.addEventListener('error', (event) => {
+  const message = [
+    event?.message || 'Unhandled worker error.',
+    event?.filename ? `file=${event.filename}` : '',
+    event?.lineno ? `line=${event.lineno}` : '',
+    event?.colno ? `col=${event.colno}` : '',
+    event?.error ? _errorToString(event.error) : '',
+  ].filter(Boolean).join(' | ');
+
+  if (_activeJobId !== null && _activeJobId !== undefined) _postFailure(_activeJobId, message);
+});
+
+self.addEventListener('unhandledrejection', (event) => {
+  const message = `Unhandled worker promise rejection: ${_errorToString(event?.reason)}`;
+  if (_activeJobId !== null && _activeJobId !== undefined) _postFailure(_activeJobId, message);
 });
