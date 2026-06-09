@@ -215,13 +215,31 @@ export class EditablePreviewTable {
     return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   }
 
+  _scorePercentFromConfidenceOrScore(confidence, rawScore, rawMax = 1000) {
+    const confidenceValue = Number(confidence);
+    if (Number.isFinite(confidenceValue)) return `${Math.round(confidenceValue * 100)}%`;
+    const scoreValue = Number(rawScore);
+    const maxValue = Number(rawMax);
+    if (Number.isFinite(scoreValue) && Number.isFinite(maxValue) && maxValue > 0) {
+      return `${Math.max(0, Math.min(100, Math.round((scoreValue / maxValue) * 100)))}%`;
+    }
+    return '';
+  }
+
+  _rawScoreSuffix(rawScore) {
+    return rawScore === null || rawScore === undefined || rawScore === '' ? '' : ` (raw ${rawScore})`;
+  }
+
   _pipingClassTitle(row) {
+    const classPercent = this._scorePercentFromConfidenceOrScore(row.pipingClassConfidence, row.pipingClassScore, 1000);
+    const rowPercent = this._scorePercentFromConfidenceOrScore(row.pipingClassRowConfidence, row.pipingClassRowScore, 1620);
     const candidates = Array.isArray(row.pipingClassCandidates)
       ? row.pipingClassCandidates
         .slice(0, 8)
         .map((candidate) => {
           const reasons = Array.isArray(candidate.reasons) ? candidate.reasons.join(', ') : '';
-          return `${candidate.candidate || ''} | score ${candidate.score ?? ''} | ${candidate.method || ''}${reasons ? ` | ${reasons}` : ''}`;
+          const percent = this._scorePercentFromConfidenceOrScore(candidate.confidence, candidate.score, 1000);
+          return `${candidate.candidate || ''} | ${percent || '—'}${this._rawScoreSuffix(candidate.score)} | ${candidate.method || ''}${reasons ? ` | ${reasons}` : ''}`;
         })
         .join('\n')
       : '';
@@ -230,8 +248,8 @@ export class EditablePreviewTable {
       `Requested class: ${row.pipingClassDerived || ''}`,
       `Resolved class: ${row.pipingClass || ''}`,
       `Method: ${row.pipingClassMethod || ''}`,
-      `Class score: ${row.pipingClassScore ?? ''}`,
-      `Row score: ${row.pipingClassRowScore ?? ''}`,
+      `Class score: ${classPercent || '—'}${this._rawScoreSuffix(row.pipingClassScore)}`,
+      `Row score: ${rowPercent || '—'}${this._rawScoreSuffix(row.pipingClassRowScore)}`,
       rowReasons ? `Row reasons: ${rowReasons}` : '',
       candidates ? `Candidates:\n${candidates}` : '',
     ].filter(Boolean).join('\n');
