@@ -11,7 +11,7 @@ import { renderAdapterMappingTab } from '../tabs/adapter-mapping-tab.js';
 import { mount as mountRvmJsonPcfExtractTab } from '../tabs/rvm-json-pcf-extract-tab.js';
 import { renderUniversalXmlConverterTab } from '../tabs/universal-xml-converter-tab.js';
 import { renderXmlCompareTab } from '../tabs/xml-compare-tab.js';
-import { renderPSNM_UtilityTab } from '../tabs/psnm-utility-tab.js?v=20260609-psnm-8';
+import { renderPSNM_UtilityTab } from '../tabs/psnm-utility-tab.js?v=20260609-psnm-9';
 import '../tabs/psnm-utility/psnm-ui-p2-enhancements.js?v=20260609-p2-1';
 import { emit, on } from './event-bus.js';
 import { initDevDebugWindow, destroyDevDebugWindow } from '../debug/dev-debug-window.js';
