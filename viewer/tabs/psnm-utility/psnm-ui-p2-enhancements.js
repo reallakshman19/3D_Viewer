@@ -1,4 +1,6 @@
-const PSNM_P2_VERSION = '20260609-p2-1';
+import './psnm-phase4e-acceptance-ui.js?v=20260609-phase4e-1';
+
+const PSNM_P2_VERSION = '20260609-p2-2';
 
 function PSNM_P2_escapeCsv(value) {
   return `"${String(value ?? '').replace(/"/g, '""')}"`;
