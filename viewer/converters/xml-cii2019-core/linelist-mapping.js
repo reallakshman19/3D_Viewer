@@ -305,7 +305,10 @@ export function buildColumnProbe(key, rows) {
       vals.push(String(v).trim());
     }
   }
-  return vals.join(' ');
+  // Keep pipe delimiters in the probe so table previews like
+  // "3 | Line number | 8010125 | 8010126" can be split and compared
+  // segment-by-segment instead of only as one flattened string.
+  return vals.join(' | ');
 }
 
 export function getAllColumnKeys(rows) {
@@ -340,6 +343,23 @@ export function rejectMatch(probe, rejects) {
   return rejects.some((rx) => rx.test(probe));
 }
 
+export function splitPipeSegments(value) {
+  return String(value ?? '')
+    .split(/\s*\|\s*/g)
+    .map((segment) => segment.trim())
+    .filter(Boolean);
+}
+
+export function pipeSegmentMatchesField(field, value) {
+  const rule = FIELD_RULES[field];
+  if (!rule) return false;
+  return splitPipeSegments(value).some((segment) => {
+    if (!groupsMatch(segment, rule.all || [])) return false;
+    if (rejectMatch(segment, rule.reject || [])) return false;
+    return true;
+  });
+}
+
 export function isValidFieldMatch(field, probe, key) {
   const rule = FIELD_RULES[field];
   if (!rule) return false;
@@ -348,10 +368,14 @@ export function isValidFieldMatch(field, probe, key) {
   if (!groupsMatch(probe, rule.all || [])) return false;
 
   // If the rule requires a header match, the column key itself must satisfy
-  // the AND-groups — sample-value-only matches are rejected.
+  // the AND-groups. For lineKey2, also allow pipe-delimited preview/probe
+  // segments such as "3 | Line number | 8010125 | 8010126" to match the
+  // semantic header segment without accepting numeric-only sample values.
   if (rule.requireHeaderMatch && key !== undefined) {
     const header = canon(key);
-    if (!groupsMatch(header, rule.all || []) || rejectMatch(header, rule.reject || [])) {
+    const headerMatches = groupsMatch(header, rule.all || []) && !rejectMatch(header, rule.reject || []);
+    const pipeHeaderMatches = field === 'lineKey2' && pipeSegmentMatchesField(field, probe);
+    if (!headerMatches && !pipeHeaderMatches) {
       return false;
     }
   }
@@ -379,6 +403,9 @@ export function scoreField(field, key, rows) {
   for (const group of rule.all || []) {
     if (hasAny(header, group)) score += 15;
   }
+
+  // Pipe-delimited header/probe segment boost, e.g. "3 | Line number | 8010125".
+  if (field === 'lineKey2' && pipeSegmentMatchesField(field, probe)) score += 80;
 
   // Optional group boost, e.g. normal/operating for T2.
   for (const group of rule.optional || []) {
