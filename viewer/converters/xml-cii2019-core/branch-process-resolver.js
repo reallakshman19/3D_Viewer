@@ -42,6 +42,53 @@ function readClassRowRating(row) {
   );
 }
 
+function materialMapRowCode(row) {
+  return cleanMaterialCode(row?.code ?? row?.Code ?? row?.materialCode ?? row?.MaterialCode ?? row?.CA3 ?? '');
+}
+
+function materialMapRowNames(row) {
+  return [
+    row?.material,
+    row?.Material,
+    row?.materialName,
+    row?.Material_Name,
+    row?.description,
+    row?.Description,
+    row?.name,
+    row?.Name,
+  ].map(text).filter(Boolean);
+}
+
+function materialComparable(value) {
+  return cleanMaterialText(value)
+    .replace(/\b(ASTM|ASME|API)\b/g, ' ')
+    .replace(/\bA\s*\/\s*SA\b/g, ' ')
+    .replace(/\bSA\b/g, ' ')
+    .replace(/\bGR(?:ADE)?\.?\b/g, ' ')
+    .replace(/\bCL(?:ASS)?\.?\b/g, 'CL')
+    .replace(/[^A-Z0-9]/g, '');
+}
+
+function mapMaterialTextToCiiCodeRobust(materialText, materialMap) {
+  const exact = mapMaterialTextToCiiCode(materialText, materialMap);
+  if (exact) return exact;
+
+  const key = materialComparable(materialText);
+  if (!key) return null;
+  const rows = Array.isArray(materialMap) ? materialMap : [];
+  return rows.find((row) => {
+    if (!materialMapRowCode(row)) return false;
+    return materialMapRowNames(row).some((candidate) => {
+      const cand = materialComparable(candidate);
+      if (!cand) return false;
+      if (cand === key) return true;
+      if (cand.length >= 4 && key.endsWith(cand)) return true;
+      if (key.length >= 4 && cand.endsWith(key)) return true;
+      return false;
+    });
+  }) || null;
+}
+
 export function resolveMaterialCodeFromLineMaterial({
   lineRow,
   materialMap,
@@ -62,8 +109,9 @@ export function resolveMaterialCodeFromLineMaterial({
 
   const materialOverride = overrideValue(overrides, 'material', overrideKeys);
   const materialText = cleanMaterialText(materialOverride || lineMaterialRaw || classMaterialRaw);
+  const materialOverrideKeys = [...overrideKeys, lineMaterialRaw, classMaterialRaw, materialText].filter(Boolean);
 
-  const explicitMaterialCode = overrideValue(overrides, 'materialCode', overrideKeys);
+  const explicitMaterialCode = overrideValue(overrides, 'materialCode', materialOverrideKeys);
   if (explicitMaterialCode) {
     return {
       material: materialText,
@@ -82,21 +130,23 @@ export function resolveMaterialCodeFromLineMaterial({
     };
   }
 
-  const fromLineMaterial = mapMaterialTextToCiiCode(cleanMaterialText(materialText || lineMaterialRaw), materialMap);
-  if (fromLineMaterial?.code) {
+  const fromLineMaterial = mapMaterialTextToCiiCodeRobust(materialText || lineMaterialRaw, materialMap);
+  const fromLineCode = materialMapRowCode(fromLineMaterial);
+  if (fromLineCode) {
     return {
       material: cleanMaterialText(materialText || lineMaterialRaw),
-      materialCode: cleanMaterialCode(fromLineMaterial.code),
+      materialCode: fromLineCode,
       source: materialOverride ? 'override-material-map' : 'line-list-material-map',
       matchedRow: fromLineMaterial
     };
   }
 
-  const fromClassMaterial = mapMaterialTextToCiiCode(cleanMaterialText(classMaterialRaw), materialMap);
-  if (fromClassMaterial?.code) {
+  const fromClassMaterial = mapMaterialTextToCiiCodeRobust(classMaterialRaw, materialMap);
+  const fromClassCode = materialMapRowCode(fromClassMaterial);
+  if (fromClassCode) {
     return {
       material: materialText || cleanMaterialText(classMaterialRaw),
-      materialCode: cleanMaterialCode(fromClassMaterial.code),
+      materialCode: fromClassCode,
       source: 'piping-class-material-map',
       matchedRow: fromClassMaterial
     };
