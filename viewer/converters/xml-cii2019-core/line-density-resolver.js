@@ -1,5 +1,17 @@
-function text(value) {
+const BLANK_DENSITY_VALUES = new Set(['', '-', '--', '---', 'NA', 'N/A', 'NULL', 'NONE', 'NIL']);
+
+function rawText(value) {
   return value === undefined || value === null ? '' : String(value).trim();
+}
+
+export function isBlankDensityValue(value) {
+  const normalized = rawText(value).toUpperCase().replace(/\s+/g, '');
+  return BLANK_DENSITY_VALUES.has(normalized);
+}
+
+function text(value) {
+  const raw = rawText(value);
+  return isBlankDensityValue(raw) ? '' : raw;
 }
 
 function upper(value) {
@@ -11,7 +23,8 @@ function readRowValue(row, keys = []) {
   for (const key of keys) {
     if (!key) continue;
     const value = row[key] ?? row._raw?.[key];
-    if (text(value)) return text(value);
+    const cleaned = text(value);
+    if (cleaned) return cleaned;
   }
   return '';
 }

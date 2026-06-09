@@ -2,7 +2,7 @@ import {
   migrateSupportMappingConfig,
   supportKindToXmlTypeFromMapping,
 } from './support-mapping-config.js';
-import { resolveLineListDensity } from './line-density-resolver.js';
+import { isBlankDensityValue, resolveLineListDensity } from './line-density-resolver.js';
 
 export function toText(value) {
   if (value === undefined || value === null) return '';
@@ -21,7 +21,7 @@ function withNormalizedLineListDensity(config) {
   let anyDerivedDensity = false;
   const masterRows = rows.map((row) => {
     const current = toText(row?.density).trim();
-    if (current) {
+    if (current && !isBlankDensityValue(current)) {
       anyDerivedDensity = true;
       return row;
     }
