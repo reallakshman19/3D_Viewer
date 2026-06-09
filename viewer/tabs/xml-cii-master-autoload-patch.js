@@ -1,20 +1,30 @@
 import { notify } from '../diagnostics/notification-center.js';
 
-const FLAG = '__xmlCiiDefaultMasterAutoload_v5';
-const FETCH_PATCH_FLAG = '__xmlCiiDefaultMasterFetchFallback_v3';
+const FLAG = '__xmlCiiDefaultMasterAutoload_v6_specwise';
+const FETCH_PATCH_FLAG = '__xmlCiiDefaultMasterFetchFallback_v4_specwise';
 const INPUT_SELECTOR = '[data-option-key="supportConfigJson"]';
 const STATUS_ID = 'xml-cii-master-autoload-status';
+const PATH_PANEL_ID = 'xml-cii-master-paths-panel';
 const RAW_BASE = 'https://raw.githubusercontent.com/reallaksh19/3D_Viewer/main/';
-const PIPING_MASTER_PATH = 'docs/Masters/Piping_class_master.json';
+
+const DEFAULT_MASTER_PATHS = Object.freeze({
+  materialMapPath: 'docs/Masters/PCF_MAT_MAP.TXT',
+  weightPath: 'docs/Masters/wtValveweights.json',
+  pipingClassIndexPath: 'docs/Masters/SpecwisePipingClass/index.json',
+  pipingClassIndexCompatPath: 'docs/Masters/SpecwisePipingClass/index.js',
+  pipingClassShardFolder: 'docs/Masters/SpecwisePipingClass/',
+  legacyPipingMasterPath: 'docs/Masters/Piping_class_master.json',
+});
 
 const PIPING_PLACEHOLDER_ROW = Object.freeze({
   _smartMasterPlaceholder: true,
-  'Piping Class': '__ON_DEMAND__',
+  pipingClass: '__ON_DEMAND__',
   convertedBore: '',
-  'Wall thickness': '',
-  Material_Name: '',
-  Rating: '',
-  Corrosion: '',
+  wallThickness: '',
+  materialName: '',
+  rating: '',
+  corrosion: '',
+  schedule: '',
 });
 
 const MASTER_SOURCES = Object.freeze({
@@ -23,18 +33,28 @@ const MASTER_SOURCES = Object.freeze({
     sectionKey: 'pipingClass',
     rowsKey: 'masterRows',
     fieldMapKey: 'fieldMap',
-    path: PIPING_MASTER_PATH,
-    smartOnDemand: true,
+    pathKey: 'pipingClassIndexPath',
     aliases: Object.freeze({
-      pipingClass: Object.freeze(['Piping Class', 'PIPING_CLASS', 'Class', 'SPEC', 'Spec']),
+      pipingClass: Object.freeze(['Piping Class', 'PIPING_CLASS', 'Class', 'SPEC', 'Spec', 'pipingClass']),
       convertedBore: Object.freeze(['convertedBore', 'Converted Bore', 'Size', 'DN', 'NB', 'Bore', 'NPS']),
-      componentType: Object.freeze(['Component Type', 'COMPONENT_TYPE', 'Type', 'Item Type']),
-      rating: Object.freeze(['Rating', 'RATING', 'Pressure Class', 'Class Rating']),
-      materialName: Object.freeze(['Material_Name', 'Material', 'MATERIAL', 'Material Name']),
-      schedule: Object.freeze(['Schedule', 'SCHEDULE', 'SCH']),
-      wallThickness: Object.freeze(['Wall Thickness', 'WALL_THICKNESS', 'WT', 'WallThickness']),
-      corrosion: Object.freeze(['Corrosion', 'Corrosion Allowance', 'CORROSION_ALLOWANCE', 'CA']),
-      endCondition: Object.freeze(['End Condition', 'END_CONDITION', 'End Type']),
+      componentType: Object.freeze(['Component Type', 'COMPONENT_TYPE', 'Type', 'Item Type', 'componentType']),
+      rating: Object.freeze(['Rating', 'RATING', 'Pressure Class', 'Class Rating', 'rating']),
+      materialName: Object.freeze(['Material_Name', 'Material', 'MATERIAL', 'Material Name', 'materialName']),
+      schedule: Object.freeze(['Schedule', 'SCHEDULE', 'SCH', 'schedule']),
+      wallThickness: Object.freeze(['Wall Thickness', 'WALL_THICKNESS', 'WT', 'WallThickness', 'wallThickness']),
+      corrosion: Object.freeze(['Corrosion', 'Corrosion Allowance', 'CORROSION_ALLOWANCE', 'CA', 'corrosion']),
+      endCondition: Object.freeze(['End Condition', 'END_CONDITION', 'End Type', 'endCondition']),
+    }),
+    canonicalFieldMap: Object.freeze({
+      pipingClass: 'pipingClass',
+      convertedBore: 'convertedBore',
+      componentType: 'componentType',
+      rating: 'rating',
+      materialName: 'materialName',
+      schedule: 'schedule',
+      wallThickness: 'wallThickness',
+      corrosion: 'corrosion',
+      endCondition: 'endCondition',
     }),
   }),
   material: Object.freeze({
@@ -42,25 +62,33 @@ const MASTER_SOURCES = Object.freeze({
     sectionKey: 'material',
     rowsKey: 'mapRows',
     fieldMapKey: 'fieldMap',
-    path: 'docs/Masters/PCF_MAT_MAP.TXT',
+    pathKey: 'materialMapPath',
     aliases: Object.freeze({
       code: Object.freeze(['code', 'Code', 'Material Code', 'MATERIAL_CODE', 'CA3']),
       material: Object.freeze(['material', 'Material', 'Material_Name', 'Description', 'Name']),
       spec: Object.freeze(['Spec', 'Specification']),
     }),
+    canonicalFieldMap: Object.freeze({ code: 'code', material: 'material', spec: 'spec' }),
   }),
   weight: Object.freeze({
     title: 'Weights / Valve CA8',
     sectionKey: 'weight',
     rowsKey: 'masterRows',
     fieldMapKey: 'fieldMap',
-    path: 'docs/Masters/wtValveweights.json',
+    pathKey: 'weightPath',
     aliases: Object.freeze({
-      bore: Object.freeze(['convertedBore', 'Converted Bore', 'Size (NPS)', 'Size', 'NPS', 'NS', 'DN', 'NB', 'Bore']),
-      rating: Object.freeze(['Rating', 'RATING', 'Class', 'CLASS', 'Pressure Class']),
-      length: Object.freeze(['Length (RF-F/F)', 'RF-F/F', 'Length', 'LEN', 'Face To Face', 'faceToFace']),
-      valveType: Object.freeze(['Type Description', 'TypeDesc', 'Valve Type', 'Type', 'Description']),
-      weight: Object.freeze(['RF/RTJ KG', 'Valve Weight', 'Weight', 'weight', 'valveWeight']),
+      bore: Object.freeze(['bore', 'convertedBore', 'Converted Bore', 'Size (NPS)', 'Size', 'NPS', 'NS', 'DN', 'NB', 'Bore']),
+      rating: Object.freeze(['rating', 'Rating', 'RATING', 'Class', 'CLASS', 'Pressure Class']),
+      length: Object.freeze(['length', 'Length (RF-F/F)', 'RF-F/F', 'Length', 'LEN', 'Face To Face', 'faceToFace']),
+      valveType: Object.freeze(['valveType', 'Type Description', 'TypeDesc', 'Valve Type', 'Type', 'Description']),
+      weight: Object.freeze(['weight', 'RF/RTJ KG', 'Valve Weight', 'Weight', 'valveWeight']),
+    }),
+    canonicalFieldMap: Object.freeze({
+      bore: 'bore',
+      rating: 'rating',
+      length: 'length',
+      valveType: 'valveType',
+      weight: 'weight',
     }),
   }),
 });
@@ -77,6 +105,15 @@ function text(value) {
 
 function clean(value) {
   return text(value).replace(/\s+/g, ' ').trim();
+}
+
+function esc(value) {
+  return text(value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
 }
 
 function rowCount(section, source) {
@@ -102,24 +139,43 @@ function ensureSection(config, section) {
   return config[key];
 }
 
+function masterPaths(config) {
+  const existing = config.masterPaths && typeof config.masterPaths === 'object' && !Array.isArray(config.masterPaths)
+    ? config.masterPaths
+    : {};
+  return { ...DEFAULT_MASTER_PATHS, ...existing };
+}
+
+function saveMasterPath(config, key, value) {
+  if (!config.masterPaths || typeof config.masterPaths !== 'object' || Array.isArray(config.masterPaths)) config.masterPaths = {};
+  config.masterPaths[key] = clean(value) || DEFAULT_MASTER_PATHS[key] || '';
+}
+
 function normalizeHeader(value) {
   return clean(value).toLowerCase().replace(/[_\-/()."'°]/g, ' ').replace(/\s+/g, ' ').trim();
 }
 
+function splitPipeSegments(value) {
+  return text(value).split(/\s*\|\s*/g).map((segment) => segment.trim()).filter(Boolean);
+}
+
 function scoreHeader(header, aliases) {
-  const h = normalizeHeader(header);
-  if (!h) return 0;
+  const candidates = splitPipeSegments(header).length > 1 ? splitPipeSegments(header) : [header];
   let best = 0;
-  for (const alias of aliases || []) {
-    const a = normalizeHeader(alias);
-    if (!a) continue;
-    if (h === a) best = Math.max(best, 100);
-    else if (h.includes(a) || a.includes(h)) best = Math.max(best, 82);
-    else {
-      const hTokens = new Set(h.split(' ').filter(Boolean));
-      const aTokens = a.split(' ').filter(Boolean);
-      const hits = aTokens.filter((token) => hTokens.has(token)).length;
-      if (hits) best = Math.max(best, Math.round((hits / aTokens.length) * 70));
+  for (const candidate of candidates) {
+    const h = normalizeHeader(candidate);
+    if (!h) continue;
+    for (const alias of aliases || []) {
+      const a = normalizeHeader(alias);
+      if (!a) continue;
+      if (h === a) best = Math.max(best, 100);
+      else if (h.includes(a) || a.includes(h)) best = Math.max(best, 82);
+      else {
+        const hTokens = new Set(h.split(' ').filter(Boolean));
+        const aTokens = a.split(' ').filter(Boolean);
+        const hits = aTokens.filter((token) => hTokens.has(token)).length;
+        if (hits) best = Math.max(best, Math.round((hits / aTokens.length) * 70));
+      }
     }
   }
   return best;
@@ -166,8 +222,68 @@ function autoFieldMap(rows, section, existingMap = {}) {
   return next;
 }
 
+function rawValue(row, keys) {
+  if (!row) return '';
+  for (const key of keys || []) {
+    if (!key) continue;
+    const value = row[key] ?? row._raw?.[key];
+    if (value != null && clean(value) !== '') return clean(value);
+  }
+  return '';
+}
+
+function numericText(value) {
+  const match = clean(value).match(/[-+]?\d*\.?\d+/);
+  return match ? match[0] : '';
+}
+
+function normalizePipingRow(row, index = 0) {
+  return {
+    ...row,
+    _raw: row,
+    _sourceRowIndex: row?._sourceRowIndex || row?._rowIndex || index + 1,
+    pipingClass: rawValue(row, ['pipingClass', 'Piping Class', 'PIPING_CLASS', 'Class', 'SPEC', 'Spec']),
+    convertedBore: rawValue(row, ['convertedBore', 'Converted Bore', 'DN', 'NB', 'Bore', 'NPS', 'Size']),
+    componentType: rawValue(row, ['componentType', 'Component Type', 'COMPONENT_TYPE', 'Type', 'Item Type']),
+    rating: rawValue(row, ['rating', 'Rating', 'RATING', 'Class Rating', 'Pressure Class']),
+    materialName: rawValue(row, ['materialName', 'Material_Name', 'Material', 'MATERIAL', 'Material Name']),
+    schedule: rawValue(row, ['schedule', 'Schedule', 'SCHEDULE', 'SCH']),
+    wallThickness: rawValue(row, ['wallThickness', 'Wall Thickness', 'WALL_THICKNESS', 'WT', 'WallThickness']),
+    corrosion: rawValue(row, ['corrosion', 'Corrosion', 'Corrosion Allowance', 'CORROSION_ALLOWANCE', 'CA']),
+    endCondition: rawValue(row, ['endCondition', 'End Condition', 'END_CONDITION', 'End Type']),
+  };
+}
+
+function normalizeWeightRow(row, index = 0) {
+  const bore = rawValue(row, ['bore', 'convertedBore', 'Converted Bore', 'DN', 'NB', 'Bore', 'NPS', 'NS', 'Size', 'Size (NPS)']);
+  const length = rawValue(row, ['length', 'lengthMm', 'Length (RF-F/F)', 'RF-F/F', 'Length', 'LEN', 'faceToFace', 'Face To Face']);
+  return {
+    ...row,
+    _raw: row,
+    _sourceRowIndex: row?._sourceRowIndex || row?._rowIndex || index + 1,
+    bore: numericText(bore) || bore,
+    convertedBore: numericText(bore) || bore,
+    rating: rawValue(row, ['rating', 'Rating', 'RATING', 'Class', 'CLASS', 'Pressure Class']),
+    length: numericText(length) || length,
+    valveType: rawValue(row, ['valveType', 'Type Description', 'TypeDesc', 'Valve Type', 'Type', 'Description']),
+    weight: rawValue(row, ['weight', 'valveWeight', 'RF/RTJ KG', 'Valve Weight', 'Weight']),
+  };
+}
+
+function normalizeRows(sectionKey, rows) {
+  if (!Array.isArray(rows)) return [];
+  if (sectionKey === 'pipingClass') return rows.map(normalizePipingRow).filter((row) => clean(row.pipingClass) && !row._smartMasterPlaceholder);
+  if (sectionKey === 'weight') return rows.map(normalizeWeightRow).filter((row) => clean(row.bore) || clean(row.rating) || clean(row.length) || clean(row.weight));
+  return rows;
+}
+
+function canonicalFieldMap(section) {
+  return { ...(section.canonicalFieldMap || {}) };
+}
+
 function parseJsonRows(rawText) {
-  const parsed = JSON.parse(rawText || '[]');
+  const trimmed = clean(rawText).replace(/^export\s+default\s+/i, '').replace(/;\s*$/g, '');
+  const parsed = JSON.parse(trimmed || '[]');
   if (Array.isArray(parsed)) return parsed;
   if (!parsed || typeof parsed !== 'object') return [];
   for (const key of ['rows', 'masterRows', 'mapRows', 'data', 'items']) {
@@ -177,6 +293,17 @@ function parseJsonRows(rawText) {
     if (Array.isArray(value) && value.every((item) => item && typeof item === 'object' && !Array.isArray(item))) return value;
   }
   return [];
+}
+
+function parseIndex(rawText) {
+  const trimmed = clean(rawText)
+    .replace(/^export\s+default\s+/i, '')
+    .replace(/^window\.[A-Za-z0-9_$]+\s*=\s*/i, '')
+    .replace(/;\s*$/g, '');
+  const parsed = JSON.parse(trimmed || '{}');
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error('Piping class index must be an object.');
+  if (!parsed.classes || typeof parsed.classes !== 'object') throw new Error('Piping class index has no classes object.');
+  return parsed;
 }
 
 function parseMaterialMap(rawText) {
@@ -204,8 +331,13 @@ function appBasePath() {
   return first ? `/${first}/` : '/';
 }
 
+function normalizeMasterPath(value) {
+  return clean(value).replace(/^\/+/, '');
+}
+
 function rawUrlForMasterPath(masterPath) {
-  const encoded = text(masterPath).split('/').map(encodeURIComponent).join('/').replace(/%2F/g, '/');
+  const normalized = normalizeMasterPath(masterPath);
+  const encoded = normalized.split('/').map(encodeURIComponent).join('/').replace(/%2F/g, '/');
   return `${RAW_BASE}${encoded}`;
 }
 
@@ -214,15 +346,15 @@ function masterPathFromUrl(input) {
   if (!raw || !/docs\/Masters\//i.test(raw)) return '';
   try {
     const url = new URL(raw, location.href);
-    const match = url.pathname.match(/(?:^|\/)docs\/Masters\/([^/?#]+)$/i);
-    return match ? `docs/Masters/${decodeURIComponent(match[1])}` : '';
+    const match = url.pathname.match(/(?:^|\/)docs\/Masters\/(.+)$/i);
+    return match ? `docs/Masters/${decodeURIComponent(match[1]).replace(/[?#].*$/, '')}` : '';
   } catch {
-    const match = raw.match(/docs\/Masters\/([^/?#]+)$/i);
-    return match ? `docs/Masters/${decodeURIComponent(match[1])}` : '';
+    const match = raw.match(/docs\/Masters\/(.+)$/i);
+    return match ? `docs/Masters/${decodeURIComponent(match[1]).replace(/[?#].*$/, '')}` : '';
   }
 }
 
-function isPipingMasterPath(masterPath) {
+function isLegacyPipingMasterPath(masterPath) {
   return /Piping_class_master\.json$/i.test(text(masterPath));
 }
 
@@ -234,15 +366,14 @@ function pipingPlaceholderResponse() {
 }
 
 function candidateUrls(masterPath) {
-  const filename = text(masterPath).split('/').pop();
+  const normalized = normalizeMasterPath(masterPath);
   const origin = location.origin;
   return unique([
-    new URL(`../${masterPath}`, import.meta.url).href,
-    new URL(`../../${masterPath}`, import.meta.url).href,
-    `${origin}${appBasePath()}${masterPath}`,
-    `${origin}/${masterPath}`,
-    rawUrlForMasterPath(masterPath),
-    filename ? rawUrlForMasterPath(`docs/Masters/${filename}`) : '',
+    new URL(`../${normalized}`, import.meta.url).href,
+    new URL(`../../${normalized}`, import.meta.url).href,
+    `${origin}${appBasePath()}${normalized}`,
+    `${origin}/${normalized}`,
+    rawUrlForMasterPath(normalized),
   ]);
 }
 
@@ -256,7 +387,7 @@ function installMasterFetchFallback() {
     const masterPath = masterPathFromUrl(input);
     if (!masterPath) return originalFetch(input, init);
 
-    if (isPipingMasterPath(masterPath) && !/[?&]xmlCiiFullMaster=1\b/.test(rawInput)) {
+    if (isLegacyPipingMasterPath(masterPath) && !/[?&]xmlCiiFullMaster=1\b/.test(rawInput)) {
       return pipingPlaceholderResponse();
     }
 
@@ -282,36 +413,35 @@ function installMasterFetchFallback() {
   window[FETCH_PATCH_FLAG] = true;
 }
 
-async function fetchTextFromCandidates(section, { fullPiping = false } = {}) {
+async function fetchTextByPath(masterPath) {
   const errors = [];
-  for (const url of candidateUrls(section.path)) {
+  for (const url of candidateUrls(masterPath)) {
     try {
-      const requestUrl = fullPiping && isPipingMasterPath(section.path)
-        ? `${url}${url.includes('?') ? '&' : '?'}xmlCiiFullMaster=1`
-        : url;
-      const fetchFn = fullPiping ? (window.__xmlCiiMasterOriginalFetch || window.fetch).bind(window) : window.fetch.bind(window);
-      const response = await fetchFn(requestUrl, { cache: 'no-store', mode: 'cors' });
+      const response = await window.fetch(url, { cache: 'no-store', mode: 'cors' });
       if (!response.ok) {
-        errors.push(`${requestUrl}: HTTP ${response.status}`);
+        errors.push(`${url}: HTTP ${response.status}`);
         continue;
       }
       const rawText = await response.text();
       if (!clean(rawText)) {
-        errors.push(`${requestUrl}: empty response`);
+        errors.push(`${url}: empty response`);
         continue;
       }
-      return { rawText, url: requestUrl };
+      return { rawText, url };
     } catch (error) {
       errors.push(`${url}: ${clean(error?.message || error)}`);
     }
   }
-  throw new Error(`${section.title} default master failed to load. Tried: ${errors.join(' | ')}`);
+  throw new Error(`Failed to load ${masterPath}. Tried: ${errors.join(' | ')}`);
 }
 
-async function fetchRows(sectionKey, section, options = {}) {
-  const { rawText, url } = await fetchTextFromCandidates(section, options);
-  const rows = sectionKey === 'material' ? parseMaterialMap(rawText) : parseJsonRows(rawText);
-  if (!Array.isArray(rows) || rows.length <= 0) throw new Error(`${section.title} default master loaded 0 rows from ${url}`);
+async function fetchRows(sectionKey, section, config) {
+  const paths = masterPaths(config);
+  const path = paths[section.pathKey] || DEFAULT_MASTER_PATHS[section.pathKey];
+  const { rawText, url } = await fetchTextByPath(path);
+  const parsedRows = sectionKey === 'material' ? parseMaterialMap(rawText) : parseJsonRows(rawText);
+  const rows = normalizeRows(sectionKey, parsedRows);
+  if (!Array.isArray(rows) || rows.length <= 0) throw new Error(`${section.title} default master loaded 0 usable rows from ${url}`);
   return { rows, url };
 }
 
@@ -346,160 +476,157 @@ function maybeRefreshWorkflow() {
   if (activeImportTab) setTimeout(() => activeImportTab.click(), 30);
 }
 
-function sectionIsSmartLoaded(config, sectionKey) {
-  const section = config?.[sectionKey];
-  return section && (section._smartMode === 'on-demand' || section._smartMode === 'filtered-on-demand');
+function normalizeContainsText(value) {
+  return clean(value).toUpperCase().replace(/\s+/g, '').replace(/^\/+/, '').replace(/["']/g, '');
+}
+
+function extractBranchNames(xmlText) {
+  const source = text(xmlText);
+  const names = [];
+  if (typeof DOMParser !== 'undefined') {
+    try {
+      const document = new DOMParser().parseFromString(source, 'application/xml');
+      if (!document.getElementsByTagName('parsererror').length) {
+        for (const node of [...document.getElementsByTagName('Branchname')]) {
+          const name = clean(node.textContent);
+          if (name) names.push(name);
+        }
+      }
+    } catch {}
+  }
+  if (!names.length) {
+    for (const match of source.matchAll(/<Branchname[^>]*>([\s\S]*?)<\/Branchname>/gi)) {
+      const name = clean(match[1].replace(/<[^>]+>/g, ''));
+      if (name) names.push(name);
+    }
+  }
+  return Array.from(new Set(names));
+}
+
+function matchedClassesFromIndex(index, branchNames) {
+  const normalizedBranches = branchNames.map(normalizeContainsText).filter(Boolean);
+  const classes = index?.classes && typeof index.classes === 'object' ? index.classes : {};
+  const matches = [];
+  for (const [classKey, meta] of Object.entries(classes)) {
+    const tokens = unique([classKey, ...(Array.isArray(meta?.matchTokens) ? meta.matchTokens : [])])
+      .map(normalizeContainsText)
+      .filter(Boolean);
+    if (!tokens.length) continue;
+    const branchHits = normalizedBranches.filter((branch) => tokens.some((token) => branch.includes(token)));
+    if (branchHits.length) matches.push({ classKey, meta, branchHits });
+  }
+  return matches;
+}
+
+function joinPath(folder, file) {
+  const f = normalizeMasterPath(folder || '').replace(/\/+$/, '');
+  const n = clean(file).replace(/^\/+/, '');
+  return f ? `${f}/${n}` : n;
+}
+
+function primaryXmlFile() {
+  const fileInput = document.querySelector('#model-converters-primary-input');
+  return fileInput?.files?.[0] || null;
+}
+
+function pipingFieldMap() {
+  return canonicalFieldMap(MASTER_SOURCES.pipingClass);
+}
+
+async function rescanPipingClassFromXml({ force = false, notifyUser = false } = {}) {
+  const input = document.querySelector(INPUT_SELECTOR);
+  if (!input) return false;
+  const config = parseConfig(input);
+  if (!config) return false;
+  if (!force && config.disableDefaultMasterAutoload === true) return false;
+
+  const xmlFile = primaryXmlFile();
+  if (!xmlFile) {
+    renderMasterPathsPanel(input, 'Piping Class: waiting for XML input; use Rescan XML after selecting XML.', 'info');
+    return false;
+  }
+
+  const paths = masterPaths(config);
+  const xmlText = await xmlFile.text();
+  const branchNames = extractBranchNames(xmlText);
+  if (!branchNames.length) {
+    renderMasterPathsPanel(input, 'Piping Class: no Branchname values found in XML.', 'error');
+    return false;
+  }
+
+  renderMasterPathsPanel(input, `Scanning ${branchNames.length} XML branchname(s) against specwise piping class index…`, 'info');
+
+  let indexLoad = null;
+  let index = null;
+  const indexCandidates = unique([paths.pipingClassIndexPath, paths.pipingClassIndexCompatPath, DEFAULT_MASTER_PATHS.pipingClassIndexPath, DEFAULT_MASTER_PATHS.pipingClassIndexCompatPath].filter(Boolean));
+  const indexErrors = [];
+  for (const indexPath of indexCandidates) {
+    try {
+      indexLoad = await fetchTextByPath(indexPath);
+      index = parseIndex(indexLoad.rawText);
+      paths.pipingClassIndexPath = indexPath;
+      break;
+    } catch (error) {
+      indexErrors.push(`${indexPath}: ${clean(error?.message || error)}`);
+    }
+  }
+  if (!index) throw new Error(`Unable to load specwise piping class index. ${indexErrors.join(' | ')}`);
+
+  const matches = matchedClassesFromIndex(index, branchNames);
+  const rows = [];
+  const loadedShardFiles = [];
+  const shardFolder = paths.pipingClassShardFolder || index.shardBase || DEFAULT_MASTER_PATHS.pipingClassShardFolder;
+
+  for (const match of matches) {
+    const file = clean(match.meta?.file);
+    if (!file) continue;
+    const shardPath = joinPath(shardFolder, file);
+    const shardLoad = await fetchTextByPath(shardPath);
+    const shardRows = normalizeRows('pipingClass', parseJsonRows(shardLoad.rawText));
+    if (shardRows.length) {
+      rows.push(...shardRows);
+      loadedShardFiles.push(file);
+    }
+  }
+
+  const section = ensureSection(config, MASTER_SOURCES.pipingClass);
+  section.masterRows = rows.length ? rows : [{ ...PIPING_PLACEHOLDER_ROW }];
+  section.fieldMap = pipingFieldMap();
+  section.masterUrl = indexLoad.url;
+  section.defaultUrl = indexLoad.url;
+  section.indexPath = paths.pipingClassIndexPath;
+  section.shardFolder = shardFolder;
+  section._smartMode = rows.length ? 'specwise-shard' : 'specwise-index-no-match';
+  section._sourceTotalRows = Number(index.rowCount) || null;
+  section._sourceClassCount = Number(index.classCount) || Object.keys(index.classes || {}).length;
+  section._autoloadedRows = rows.length;
+  section._matchedClassCount = matches.length;
+  section._loadedShardCount = loadedShardFiles.length;
+  section._loadedShardFiles = loadedShardFiles;
+  section._branchNameCount = branchNames.length;
+  section._rescanAt = new Date().toISOString();
+
+  if (!config.masterPaths || typeof config.masterPaths !== 'object') config.masterPaths = {};
+  Object.assign(config.masterPaths, paths);
+
+  input.value = JSON.stringify(config, null, 2);
+  dispatchConfigChange(input);
+
+  const msg = rows.length
+    ? `Piping Class: ${loadedShardFiles.length}/${matches.length} shard(s), ${rows.length} row(s), ${branchNames.length} branchname(s).`
+    : `Piping Class: 0/${matches.length} shard(s), 0 row(s), ${branchNames.length} branchname(s).`;
+  renderMasterPathsPanel(input, msg, rows.length ? 'ok' : 'error');
+  showStatus(msg, rows.length ? 'ok' : 'error');
+  if (notifyUser) notify({ level: rows.length ? 'success' : 'warning', title: 'XML->CII Masters', message: msg });
+  maybeRefreshWorkflow();
+  return rows.length > 0;
 }
 
 function missingMasterSignature(config) {
   return Object.entries(MASTER_SOURCES)
-    .map(([key, section]) => `${key}:${rowCount(section, config[section.sectionKey])}:${config?.[section.sectionKey]?._smartMode || ''}`)
+    .filter(([key]) => key !== 'pipingClass')
+    .map(([key, section]) => `${key}:${rowCount(section, config[section.sectionKey])}:${masterPaths(config)[section.pathKey] || ''}`)
     .join('|');
-}
-
-function ensurePipingPlaceholder(config, url = rawUrlForMasterPath(PIPING_MASTER_PATH)) {
-  const section = ensureSection(config, MASTER_SOURCES.pipingClass);
-  const rows = Array.isArray(section.masterRows) ? section.masterRows : [];
-  if (rows.length && !rows.every((row) => row?._smartMasterPlaceholder)) return false;
-  section.masterRows = [{ ...PIPING_PLACEHOLDER_ROW }];
-  section.fieldMap = {
-    pipingClass: 'Piping Class',
-    convertedBore: 'convertedBore',
-    materialName: 'Material_Name',
-    rating: 'Rating',
-    wallThickness: 'Wall thickness',
-    corrosion: 'Corrosion',
-    ...(section.fieldMap || {}),
-  };
-  section.masterUrl = section.masterUrl || url;
-  section.defaultUrl = section.defaultUrl || url;
-  section._smartMode = 'on-demand';
-  section._autoloadedRows = 0;
-  section._sourceTotalRows = section._sourceTotalRows || 10699;
-  section._note = 'Full piping class master is not embedded. It is fetched and filtered when XML/line-list keys are available.';
-  return true;
-}
-
-function rawValue(row, key) {
-  if (!row || !key) return '';
-  if (row[key] != null && clean(row[key]) !== '') return clean(row[key]);
-  if (row._raw && row._raw[key] != null && clean(row._raw[key]) !== '') return clean(row._raw[key]);
-  return '';
-}
-
-function firstRowValue(row, keys) {
-  for (const key of keys || []) {
-    const value = rawValue(row, key);
-    if (value) return value;
-  }
-  return '';
-}
-
-function normalizeClass(value) {
-  return clean(value).toUpperCase().replace(/\s+/g, '').replace(/^["']|["']$/g, '');
-}
-
-function normalizeBore(value) {
-  const source = clean(value).toLowerCase();
-  if (!source) return '';
-  const n = Number(source.replace(/[^0-9.\-]/g, ''));
-  if (!Number.isFinite(n)) return '';
-  if (/in|"/.test(source) && n < 100) {
-    const npsToDn = new Map([[0.5, 15], [0.75, 20], [1, 25], [1.5, 40], [2, 50], [3, 80], [4, 100], [6, 150], [8, 200], [10, 250], [12, 300], [14, 350], [16, 400], [18, 450], [20, 500], [24, 600], [30, 750], [36, 900], [42, 1050], [48, 1200]]);
-    return String(npsToDn.get(n) || Math.round(n * 25.4));
-  }
-  return String(Math.round(n));
-}
-
-function lineListPairs(config) {
-  const list = config?.linelist || {};
-  const rows = Array.isArray(list.masterRows) ? list.masterRows : [];
-  const fm = list.fieldMap || {};
-  const pairs = new Map();
-
-  for (const row of rows) {
-    const cls = normalizeClass(firstRowValue(row, ['pipingClass', 'Piping Class', 'PIPING_CLASS', 'Class', fm.pipingClass].filter(Boolean)));
-    const bore = normalizeBore(firstRowValue(row, ['convertedBore', 'Bore', 'Size', 'NPS', 'DN', 'NB', fm.convertedBore].filter(Boolean)));
-    if (!cls) continue;
-    const key = `${cls}|${bore || '*'}`;
-    pairs.set(key, { cls, bore });
-  }
-
-  return [...pairs.values()];
-}
-
-async function fullPipingClassRows() {
-  if (Array.isArray(window.__xmlCiiPipingClassFullRows) && window.__xmlCiiPipingClassFullRows.length) return window.__xmlCiiPipingClassFullRows;
-  const { rows } = await fetchRows('pipingClass', MASTER_SOURCES.pipingClass, { fullPiping: true });
-  window.__xmlCiiPipingClassFullRows = rows;
-  return rows;
-}
-
-function filterPipingRows(rows, pairs) {
-  if (!Array.isArray(rows) || !pairs.length) return [];
-  const classSet = new Set(pairs.map((p) => p.cls).filter(Boolean));
-  const exactPairs = new Set(pairs.filter((p) => p.cls && p.bore).map((p) => `${p.cls}|${p.bore}`));
-  const classOnly = pairs.some((p) => p.cls && !p.bore);
-
-  return rows.filter((row) => {
-    const cls = normalizeClass(row['Piping Class'] ?? row.PIPING_CLASS ?? row.Class ?? row.Spec ?? row.SPEC);
-    if (!classSet.has(cls)) return false;
-    if (classOnly) return true;
-    const bore = normalizeBore(row.convertedBore ?? row['Converted Bore'] ?? row.Size ?? row.NPS ?? row.DN ?? row.NB ?? row.Bore);
-    return exactPairs.has(`${cls}|${bore}`);
-  });
-}
-
-let hydrateBusy = false;
-let lastHydrateSignature = '';
-
-async function hydratePipingMasterFromLineList({ force = false } = {}) {
-  if (hydrateBusy) return;
-  const input = document.querySelector(INPUT_SELECTOR);
-  if (!input) return;
-  const config = parseConfig(input);
-  if (!config) return;
-  const pairs = lineListPairs(config);
-  if (!pairs.length) return;
-
-  const signature = pairs.map((p) => `${p.cls}|${p.bore || '*'}`).sort().join(';');
-  const piping = config.pipingClass || {};
-  const currentRows = Array.isArray(piping.masterRows) ? piping.masterRows.filter((row) => !row?._smartMasterPlaceholder) : [];
-  if (!force && signature === lastHydrateSignature && currentRows.length > 0 && piping._smartMode === 'filtered-on-demand') return;
-
-  hydrateBusy = true;
-  lastHydrateSignature = signature;
-  showStatus(`Filtering Piping Class master for ${pairs.length} line-list class/bore key(s)…`);
-
-  try {
-    const allRows = await fullPipingClassRows();
-    const filtered = filterPipingRows(allRows, pairs);
-    const section = ensureSection(config, MASTER_SOURCES.pipingClass);
-    section.masterRows = filtered.length ? filtered : [{ ...PIPING_PLACEHOLDER_ROW }];
-    section.fieldMap = autoFieldMap(filtered.length ? filtered : allRows.slice(0, 20), MASTER_SOURCES.pipingClass, section.fieldMap);
-    section.masterUrl = rawUrlForMasterPath(PIPING_MASTER_PATH);
-    section.defaultUrl = rawUrlForMasterPath(PIPING_MASTER_PATH);
-    section._smartMode = filtered.length ? 'filtered-on-demand' : 'on-demand';
-    section._sourceTotalRows = allRows.length;
-    section._autoloadedRows = filtered.length;
-    section._filterKeyCount = pairs.length;
-    section._filteredAt = new Date().toISOString();
-    input.value = JSON.stringify(config, null, 2);
-    dispatchConfigChange(input);
-
-    const msg = filtered.length
-      ? `Piping Class filtered: ${filtered.length} of ${allRows.length} row(s) kept for this line list.`
-      : `Piping Class kept on-demand: no class/bore rows matched ${pairs.length} key(s).`;
-    showStatus(msg, filtered.length ? 'ok' : 'info');
-    notify({ level: filtered.length ? 'success' : 'warning', title: 'XML->CII Masters', message: msg });
-    maybeRefreshWorkflow();
-  } catch (error) {
-    const msg = `Piping Class smart filter failed: ${clean(error?.message || error)}`;
-    showStatus(msg, 'error');
-    notify({ level: 'error', title: 'XML->CII Masters', message: msg });
-  } finally {
-    hydrateBusy = false;
-  }
 }
 
 let busy = false;
@@ -511,24 +638,24 @@ async function autoloadMasters(input) {
   if (busy) return;
   const config = parseConfig(input);
   if (config == null) return;
+  renderMasterPathsPanel(input);
   if (config.disableDefaultMasterAutoload === true || config._disableDefaultMasterAutoload === true) return;
 
   const signature = missingMasterSignature(config);
   const missing = Object.entries(MASTER_SOURCES).filter(([sectionKey, section]) => {
-    const target = config[section.sectionKey];
-    if (sectionKey === 'pipingClass' && sectionIsSmartLoaded(config, sectionKey)) return false;
-    return rowCount(section, target) <= 0;
+    if (sectionKey === 'pipingClass') return false;
+    return rowCount(section, config[section.sectionKey]) <= 0;
   });
 
-  if (!missing.length) {
-    hydratePipingMasterFromLineList().catch((error) => console.warn('XML->CII piping smart filter failed', error));
+  if (!missing.length && signature === lastAttemptSignature) {
+    rescanPipingClassFromXml({ force: false }).catch((error) => console.warn('XML->CII specwise piping scan failed', error));
     return;
   }
-  if (signature === lastAttemptSignature || signature === lastFailureSignature) return;
+  if (missing.length && (signature === lastAttemptSignature || signature === lastFailureSignature)) return;
 
   busy = true;
   lastAttemptSignature = signature;
-  showStatus(`Autoloading ${missing.map(([, section]) => section.title).join(', ')} from docs/Masters…`);
+  if (missing.length) showStatus(`Autoloading ${missing.map(([, section]) => section.title).join(', ')} from docs/Masters…`);
   const loaded = [];
   const errors = [];
 
@@ -536,15 +663,9 @@ async function autoloadMasters(input) {
     for (const [sectionKey, section] of missing) {
       try {
         const target = ensureSection(config, section);
-        if (sectionKey === 'pipingClass') {
-          ensurePipingPlaceholder(config);
-          loaded.push('Piping Class: smart on-demand (full 10,699-row preview skipped)');
-          continue;
-        }
-
-        const { rows, url } = await fetchRows(sectionKey, section);
+        const { rows, url } = await fetchRows(sectionKey, section, config);
         target[section.rowsKey] = rows;
-        target[section.fieldMapKey] = autoFieldMap(rows, section, target[section.fieldMapKey]);
+        target[section.fieldMapKey] = canonicalFieldMap(section);
         target.masterUrl = target.masterUrl || url;
         target.defaultUrl = target.defaultUrl || url;
         target._autoloadedFrom = url;
@@ -559,7 +680,7 @@ async function autoloadMasters(input) {
       config._defaultMastersAutoloaded = {
         loadedAt: new Date().toISOString(),
         source: 'docs/Masters + raw.githubusercontent.com fallback',
-        mode: 'smart-piping-on-demand; compact config',
+        mode: 'material+weight canonical rows; specwise piping shards',
         counts: Object.fromEntries(Object.entries(MASTER_SOURCES).map(([key, section]) => [key, rowCount(section, config[section.sectionKey])])),
       };
       input.value = JSON.stringify(config, null, 2);
@@ -567,7 +688,6 @@ async function autoloadMasters(input) {
       showStatus(`Autoloaded ${loaded.join(' · ')}.`, 'ok');
       notify({ level: 'success', title: 'XML->CII Masters', message: `Autoloaded ${loaded.join(' · ')}.` });
       maybeRefreshWorkflow();
-      hydratePipingMasterFromLineList().catch((error) => console.warn('XML->CII piping smart filter failed', error));
     }
 
     if (errors.length) {
@@ -582,22 +702,109 @@ async function autoloadMasters(input) {
   } finally {
     busy = false;
   }
+
+  rescanPipingClassFromXml({ force: false }).catch((error) => console.warn('XML->CII specwise piping scan failed', error));
+}
+
+function pathPanelHtml(config, statusText = '', tone = 'info') {
+  const paths = masterPaths(config);
+  const status = statusText || (() => {
+    const piping = config?.pipingClass || {};
+    if (piping._smartMode === 'specwise-shard') {
+      return `Piping Class: ${piping._loadedShardCount || 0}/${piping._matchedClassCount || 0} shard(s), ${rowCount(MASTER_SOURCES.pipingClass, piping)} row(s), ${piping._branchNameCount || 0} branchname(s).`;
+    }
+    return 'Piping Class: select XML, then Rescan XML to load specwise shard rows.';
+  })();
+  return `
+    <div id="${PATH_PANEL_ID}" class="model-converters-workflow-master-card" style="margin:10px 0;border-color:#25466b;">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;">
+        <div>
+          <div class="model-converters-workflow-detail-title">Master Paths / Specwise Piping Class Index</div>
+          <div class="model-converters-workflow-detail-text">Editable paths used by XML→CII master loading. Piping Class uses shard index + branchname contains search.</div>
+        </div>
+        <button type="button" class="model-converters-run-btn" data-xml-cii-rescan-piping>Rescan XML</button>
+      </div>
+      <div class="model-converters-workflow-regex-grid" style="margin-top:10px;grid-template-columns:repeat(5,minmax(160px,1fr));">
+        ${pathFieldHtml('Material Map Path', 'materialMapPath', paths.materialMapPath, DEFAULT_MASTER_PATHS.materialMapPath)}
+        ${pathFieldHtml('Weights / Valve CA8 Path', 'weightPath', paths.weightPath, DEFAULT_MASTER_PATHS.weightPath)}
+        ${pathFieldHtml('Piping Class Index Path', 'pipingClassIndexPath', paths.pipingClassIndexPath, DEFAULT_MASTER_PATHS.pipingClassIndexPath)}
+        ${pathFieldHtml('Piping Class Shard Folder', 'pipingClassShardFolder', paths.pipingClassShardFolder, DEFAULT_MASTER_PATHS.pipingClassShardFolder)}
+        ${pathFieldHtml('Legacy Full Piping Class Master', 'legacyPipingMasterPath', paths.legacyPipingMasterPath, DEFAULT_MASTER_PATHS.legacyPipingMasterPath, 'Fallback/source file only; not autoloaded')}
+      </div>
+      <div data-xml-cii-path-status style="margin-top:8px;padding:8px 10px;border:1px solid ${tone === 'error' ? '#7f3040' : '#2b7656'};border-radius:8px;color:${tone === 'error' ? '#ffc2c2' : '#7dffc0'};background:#0f1b2c;font-size:12px;">${esc(status)}</div>
+    </div>
+  `;
+}
+
+function pathFieldHtml(label, key, value, defaultValue, note = '') {
+  return `
+    <label class="model-converters-workflow-regex-field">
+      <span>${esc(label)}</span>
+      <input type="text" value="${esc(value)}" data-xml-cii-master-path="${esc(key)}">
+      <small>Default: ${esc(defaultValue)}${note ? `<br>${esc(note)}` : ''}</small>
+    </label>
+  `;
+}
+
+function renderMasterPathsPanel(input, statusText = '', tone = 'info') {
+  if (!input) return;
+  const config = parseConfig(input);
+  if (!config) return;
+  const importTitle = Array.from(document.querySelectorAll('.model-converters-workflow-detail-title'))
+    .find((el) => /^1\s+Import Masters$/i.test(clean(el.textContent)));
+  if (!importTitle) return;
+  let panel = document.getElementById(PATH_PANEL_ID);
+  const html = pathPanelHtml(config, statusText, tone);
+  if (panel) {
+    panel.outerHTML = html;
+  } else {
+    const textBlock = importTitle.nextElementSibling;
+    (textBlock || importTitle).insertAdjacentHTML('afterend', html);
+  }
+  bindPathPanel(input);
+}
+
+function bindPathPanel(input) {
+  const panel = document.getElementById(PATH_PANEL_ID);
+  if (!panel || panel.dataset.bound === 'true') return;
+  panel.dataset.bound = 'true';
+  panel.querySelectorAll('[data-xml-cii-master-path]').forEach((field) => {
+    field.addEventListener('change', () => {
+      const config = parseConfig(input);
+      if (!config) return;
+      saveMasterPath(config, field.getAttribute('data-xml-cii-master-path') || '', field.value);
+      input.value = JSON.stringify(config, null, 2);
+      dispatchConfigChange(input);
+      renderMasterPathsPanel(input, 'Master paths updated. Rescan XML to reload specwise piping class rows.', 'ok');
+    });
+  });
+  panel.querySelector('[data-xml-cii-rescan-piping]')?.addEventListener('click', () => {
+    rescanPipingClassFromXml({ force: true, notifyUser: true }).catch((error) => {
+      const message = `Piping Class rescan failed: ${clean(error?.message || error)}`;
+      renderMasterPathsPanel(input, message, 'error');
+      showStatus(message, 'error');
+      notify({ level: 'error', title: 'XML->CII Masters', message });
+    });
+  });
 }
 
 let raf = 0;
 let observer = null;
 
 function schedule() {
-  cancelAnimationFrame(raf);
-  raf = requestAnimationFrame(() => {
+  if (typeof cancelAnimationFrame === 'function') cancelAnimationFrame(raf);
+  const run = () => {
     const input = document.querySelector(INPUT_SELECTOR);
     if (!input) return;
     if (observer) {
       observer.disconnect();
       observer = null;
     }
+    renderMasterPathsPanel(input);
     autoloadMasters(input).catch((error) => console.warn('XML->CII master autoload failed', error));
-  });
+  };
+  if (typeof requestAnimationFrame === 'function') raf = requestAnimationFrame(run);
+  else setTimeout(run, 0);
 }
 
 export function installXmlCiiDefaultMasterAutoload() {
@@ -608,25 +815,13 @@ export function installXmlCiiDefaultMasterAutoload() {
   schedule();
 
   if (typeof MutationObserver !== 'undefined') {
-    observer = new MutationObserver(() => {
-      if (document.querySelector(INPUT_SELECTOR)) schedule();
-    });
+    observer = new MutationObserver(() => schedule());
     observer.observe(document.body, { childList: true, subtree: true });
   }
 
-  document.addEventListener('click', (event) => {
-    if (event.target?.closest?.('[data-xml-cii-phase], [data-json-popup-key="supportConfigJson"], [data-xml-cii-load-default]')) schedule();
-  }, true);
-
-  document.addEventListener('change', (event) => {
-    if (event.target?.matches?.(INPUT_SELECTOR)) {
-      lastAttemptSignature = '';
-      lastFailureSignature = '';
-      schedule();
-      hydratePipingMasterFromLineList({ force: true }).catch((error) => console.warn('XML->CII piping smart filter failed', error));
-    }
-    if (event.target?.matches?.('input[type="file"]')) {
-      setTimeout(() => hydratePipingMasterFromLineList({ force: true }).catch((error) => console.warn('XML->CII piping smart filter failed', error)), 0);
-    }
+  document.addEventListener('click', () => setTimeout(schedule, 0), true);
+  document.addEventListener('change', () => setTimeout(schedule, 0), true);
+  document.addEventListener('input', (event) => {
+    if (event.target?.matches?.(INPUT_SELECTOR)) setTimeout(schedule, 0);
   }, true);
 }
