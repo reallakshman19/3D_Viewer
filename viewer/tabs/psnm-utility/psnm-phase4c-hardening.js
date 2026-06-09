@@ -55,7 +55,8 @@ function findModal(target) {
 
 function masterIsBuilt(modal) {
   const text = modal.textContent || '';
-  return /Master PS\s*\d+/i.test(text) && /Master Node\s*\d+/i.test(text) && !/Not Built/i.test(text);
+  if (/Master PS No is not built|Master Node is not built|Not Built/i.test(text)) return false;
+  return /Master Tables Ready|Complete|Master PS\s*\d+|Master Node\s*\d+|Master PS|Master Node/i.test(text);
 }
 
 function runIsBlocked(modal) {
