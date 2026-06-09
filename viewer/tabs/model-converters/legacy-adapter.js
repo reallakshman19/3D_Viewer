@@ -1462,6 +1462,20 @@ const STORAGE_MASTER_ARRAY_PATHS = Object.freeze([
   Object.freeze(['weight', 'masterRows']),
 ]);
 
+const XML_CII_STORAGE_MASTER_ARRAY_PATHS = STORAGE_MASTER_ARRAY_PATHS;
+if (typeof globalThis !== 'undefined' && !globalThis.XML_CII_STORAGE_MASTER_ARRAY_PATHS) {
+  Object.defineProperty(globalThis, 'XML_CII_STORAGE_MASTER_ARRAY_PATHS', {
+    value: XML_CII_STORAGE_MASTER_ARRAY_PATHS,
+    configurable: true,
+  });
+}
+if (typeof globalThis !== 'undefined' && !globalThis.STORAGE_MASTER_ARRAY_PATHS) {
+  Object.defineProperty(globalThis, 'STORAGE_MASTER_ARRAY_PATHS', {
+    value: XML_CII_STORAGE_MASTER_ARRAY_PATHS,
+    configurable: true,
+  });
+}
+
 // Build a compact view of the enrichment config for the 7 Config editor: the
 // bulky master arrays are replaced by a short placeholder string so the editor
 // stays small (KB, not MB) and never freezes the page. The full data is kept in
@@ -2880,6 +2894,13 @@ function _xmlCiiRigidWeightOverrideKey(branchName, nodeNumber) {
 
 function _isXmlCiiRigidNode(node) {
   return isXmlCiiRigidNode(node);
+}
+
+if (typeof globalThis !== 'undefined' && !globalThis.isXmlCiiRigidNode) {
+  Object.defineProperty(globalThis, 'isXmlCiiRigidNode', {
+    value: _isXmlCiiRigidNode,
+    configurable: true,
+  });
 }
 
 function _xmlCiiNumberText(value) {

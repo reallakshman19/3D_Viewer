@@ -69,6 +69,7 @@ class RestraintSpec:
     gap: float
     friction: float
     is_open_end: bool
+    direction_cosines: tuple[float, float, float] | None = None
 
 
 @dataclass(frozen=True)
@@ -306,6 +307,35 @@ def _restraint_type_to_code(restraint_type: str) -> int:
     )
 
 
+def _normalize_direction(values: tuple[float, float, float] | None) -> tuple[float, float, float] | None:
+    if values is None:
+        return None
+    x, y, z = values
+    if not all(math.isfinite(v) for v in (x, y, z)):
+        return None
+    length = math.sqrt((x * x) + (y * y) + (z * z))
+    if length <= 0.0:
+        return None
+    return (x / length, y / length, z / length)
+
+
+def _parse_direction_cosines(restraint_element: ET.Element, namespace: str) -> tuple[float, float, float] | None:
+    raw = (
+        _child_text(restraint_element, namespace, "DirectionCosineX"),
+        _child_text(restraint_element, namespace, "DirectionCosineY"),
+        _child_text(restraint_element, namespace, "DirectionCosineZ"),
+    )
+    if not any(_safe_text(value) for value in raw):
+        return None
+    values: list[float] = []
+    for index, value in enumerate(raw, start=1):
+        parsed = _parse_optional_float(value, f"Restraint/DirectionCosine{index}")
+        if parsed is None:
+            return None
+        values.append(parsed)
+    return _normalize_direction((values[0], values[1], values[2]))
+
+
 def _parse_restraints(node_element: ET.Element, namespace: str) -> tuple[RestraintSpec, ...]:
     restraint_elements = node_element.findall(_q(namespace, "Restraint"))
     if not restraint_elements:
@@ -334,6 +364,7 @@ def _parse_restraints(node_element: ET.Element, namespace: str) -> tuple[Restrai
                 gap=0.0 if gap is None else gap,
                 friction=0.0 if friction is None else friction,
                 is_open_end=False,
+                direction_cosines=_parse_direction_cosines(restraint_element, namespace),
             )
         )
     return tuple(specs)
@@ -1178,7 +1209,10 @@ def _build_restraint_payload(model: ConversionModel, support_config: dict[str, A
             if slot_index < len(assigned.specs):
                 spec = assigned.specs[slot_index]
                 secondary_flag = _format_fixed_float(0.0, 6) if spec.is_open_end else _format_fixed_float(1.0, 5)
-                cx, cy, cz = _direction_cosines_for_restraint_type(spec.type_code, spec.is_open_end)
+                if getattr(spec, 'direction_cosines', None) is not None:
+                    cx, cy, cz = spec.direction_cosines
+                else:
+                    cx, cy, cz = _direction_cosines_for_restraint_type(spec.type_code, spec.is_open_end)
                 line1 = _row([
                     _format_auto_float(float(assigned.node_number)),
                     _format_auto_float(float(spec.type_code)),

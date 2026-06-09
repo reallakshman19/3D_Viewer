@@ -537,6 +537,12 @@ def _case_values(values: tuple[float, ...], size: int) -> list[float]:
     return [0.0 if abs(v - SENTINEL_TEMPERATURE) < 1e-9 else v for v in out]
 
 
+def _direction_for_spec(spec: base.RestraintSpec) -> tuple[float, float, float]:
+    if getattr(spec, 'direction_cosines', None) is not None:
+        return spec.direction_cosines
+    return base._direction_cosines_for_restraint_type(spec.type_code, spec.is_open_end)
+
+
 def _patched_build_restraint_payload_factory(support_config: dict[str, Any]):
     def _patched_build_restraint_payload(model: base.ConversionModel, cfg: dict[str, Any] | None = None) -> list[str]:
         actual_config = support_config if cfg is None else cfg
@@ -546,7 +552,7 @@ def _patched_build_restraint_payload_factory(support_config: dict[str, Any]):
                 if slot_index < len(assigned.specs):
                     spec = assigned.specs[slot_index]
                     secondary_flag = base._format_fixed_float(0.0, 6) if spec.is_open_end else base._format_fixed_float(1.0, 5)
-                    cx, cy, cz = base._direction_cosines_for_restraint_type(spec.type_code, spec.is_open_end)
+                    cx, cy, cz = _direction_for_spec(spec)
                     fric_val = _cii_friction_value(spec.friction, actual_config)
                     line1 = base._row([
                         base._format_auto_float(float(assigned.node_number)),
