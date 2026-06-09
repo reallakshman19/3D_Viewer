@@ -76,6 +76,7 @@ export class EditablePreviewTable {
 
   _renderBranchRow(row, ri, nodeWidths) {
     const nw = this.nodesByBranch[row.branchName] || [];
+    const pipingClassTitle = this._pipingClassTitle(row);
     const pcBadge = this.matchBadgeHtmlRenderer
       ? this.matchBadgeHtmlRenderer(row.pipingClassMethod, row.pipingClassConfidence, row.pipingClassNeedsReview, row.pipingClass, row.pipingClassDerived)
       : `<span class="mc-preview-editable-val">${this._escape(row.pipingClass || '')}</span>`;
@@ -101,7 +102,7 @@ export class EditablePreviewTable {
         <td class="mc-preview-td mc-preview-branch" title="${this._escapeAttr(row.branchName)}">${this._escape(row.branchName.length > 36 ? '…' + row.branchName.slice(-32) : row.branchName)}</td>
         <td class="mc-preview-td${row.lineMiss ? ' mc-preview-warn' : ''}">${this._escape(row.lineKey || '—')}</td>
         <td class="mc-preview-td">${this._escape(row.size || '—')}</td>
-        <td ${tdApprox(row.pipingClassNeedsReview, editAttrs('pipingClass', row.pipingClassDerived, `data-mc-edit-derived="${this._escapeAttr(row.pipingClassDerived || '')}"`))}>
+        <td ${tdApprox(row.pipingClassNeedsReview, editAttrs('pipingClass', row.pipingClassDerived, `data-mc-edit-derived="${this._escapeAttr(row.pipingClassDerived || '')}" title="${this._escapeAttr(pipingClassTitle)}"`))}>
           ${pcBadge}${row.pipingClassNeedsReview ? fillDownBtn('pipingClass', ri) : ''}
         </td>
         <td ${tdApprox(false, editAttrs('material', row.lineKey))}>${editablePlain('material', row.material, row.lineKey, row.materialSource)}</td>
@@ -212,6 +213,28 @@ export class EditablePreviewTable {
   _escape(str) {
     if (!str) return '';
     return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+
+  _pipingClassTitle(row) {
+    const candidates = Array.isArray(row.pipingClassCandidates)
+      ? row.pipingClassCandidates
+        .slice(0, 8)
+        .map((candidate) => {
+          const reasons = Array.isArray(candidate.reasons) ? candidate.reasons.join(', ') : '';
+          return `${candidate.candidate || ''} | score ${candidate.score ?? ''} | ${candidate.method || ''}${reasons ? ` | ${reasons}` : ''}`;
+        })
+        .join('\n')
+      : '';
+    const rowReasons = Array.isArray(row.pipingClassRowReasons) ? row.pipingClassRowReasons.join(', ') : '';
+    return [
+      `Requested class: ${row.pipingClassDerived || ''}`,
+      `Resolved class: ${row.pipingClass || ''}`,
+      `Method: ${row.pipingClassMethod || ''}`,
+      `Class score: ${row.pipingClassScore ?? ''}`,
+      `Row score: ${row.pipingClassRowScore ?? ''}`,
+      rowReasons ? `Row reasons: ${rowReasons}` : '',
+      candidates ? `Candidates:\n${candidates}` : '',
+    ].filter(Boolean).join('\n');
   }
 
   _escapeAttr(str) {

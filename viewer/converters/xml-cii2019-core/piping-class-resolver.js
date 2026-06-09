@@ -226,24 +226,6 @@ export function resolveApproximatePipingClass({ requestedClass, knownClasses, pi
   const requestedNorm = normalizePipingClass(rawRequested);
   const classes = uniqueClasses(knownClasses || knownClassesFromIndex(pipingClassIndex));
 
-  const override = overrideForClass(overrides, rawRequested);
-  if (override) {
-    return {
-      requestedClass: rawRequested,
-      pipingClass: override,
-      normalizedRequestedClass: requestedNorm,
-      method: 'override',
-      confidence: 1.0,
-      score: cfg.overrideScore,
-      needsReview: false,
-      reasons: ['manual-override'],
-      candidates: classes
-        .map((cls) => scorePipingClassCandidate(rawRequested, cls, config))
-        .sort((a, b) => b.score - a.score)
-        .slice(0, cfg.maxCandidates),
-    };
-  }
-
   if (!requestedNorm) {
     return {
       requestedClass: rawRequested,
@@ -264,6 +246,37 @@ export function resolveApproximatePipingClass({ requestedClass, knownClasses, pi
     .sort((a, b) => b.score - a.score);
   const best = scored[0] || null;
   const second = scored[1] || null;
+
+  const override = overrideForClass(overrides, rawRequested);
+  if (override) {
+    const overrideNorm = normalizePipingClass(override);
+    const bestNorm = normalizePipingClass(best?.candidate);
+    if (best && overrideNorm && overrideNorm === bestNorm) {
+      const ambiguous = second && Math.abs(best.score - second.score) <= cfg.ambiguousScoreDelta;
+      return {
+        requestedClass: rawRequested,
+        pipingClass: best.candidate,
+        normalizedRequestedClass: requestedNorm,
+        method: ambiguous ? 'ambiguous-approximate' : best.method,
+        confidence: best.confidence,
+        score: best.score,
+        needsReview: ambiguous || best.confidence < cfg.reviewBelowConfidence || best.method !== 'exact',
+        reasons: [...(best.reasons || []), 'redundant-override-same-as-auto'],
+        candidates: scored.slice(0, cfg.maxCandidates),
+      };
+    }
+    return {
+      requestedClass: rawRequested,
+      pipingClass: override,
+      normalizedRequestedClass: requestedNorm,
+      method: 'override',
+      confidence: 1.0,
+      score: cfg.overrideScore,
+      needsReview: false,
+      reasons: ['manual-override'],
+      candidates: scored.slice(0, cfg.maxCandidates),
+    };
+  }
 
   if (!best || best.score < cfg.minAcceptScore) {
     return {
