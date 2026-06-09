@@ -2,6 +2,7 @@ import {
   migrateSupportMappingConfig,
   supportKindToXmlTypeFromMapping,
 } from './support-mapping-config.js';
+import { resolveLineListDensity } from './line-density-resolver.js';
 
 export function toText(value) {
   if (value === undefined || value === null) return '';
@@ -14,6 +15,24 @@ export function toFiniteNumber(value, fallback) {
   return fallback;
 }
 
+function withNormalizedLineListDensity(config) {
+  const rows = config?.linelist?.masterRows;
+  if (!Array.isArray(rows) || !rows.length) return config;
+  return {
+    ...config,
+    linelist: {
+      ...config.linelist,
+      masterRows: rows.map((row) => {
+        const current = toText(row?.density).trim();
+        if (current) return row;
+        const resolved = resolveLineListDensity(row, null);
+        if (!resolved.value) return row;
+        return { ...row, density: resolved.value, densitySource: resolved.source };
+      }),
+    },
+  };
+}
+
 function withNormalizedSupportMapping(config) {
   const supportMapping = migrateSupportMappingConfig(config);
   return {
@@ -23,13 +42,17 @@ function withNormalizedSupportMapping(config) {
   };
 }
 
+function normalizeFullConfig(config) {
+  return withNormalizedSupportMapping(withNormalizedLineListDensity(config));
+}
+
 export function migrateXmlCiiSupportConfigJson(rawJson) {
   const text = toText(rawJson).trim();
   if (!text) return text;
   try {
     const parsed = JSON.parse(text);
     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return text;
-    const normalized = withNormalizedSupportMapping({
+    const normalized = normalizeFullConfig({
       ...parsed,
       supportKindToXmlType: normalizeXmlCiiSupportKindToTypeConfig(parsed.supportKindToXmlType),
     });
@@ -153,10 +176,10 @@ export function parseXmlCiiEnrichmentConfig(rawJson) {
     },
   };
   const text = toText(rawJson).trim();
-  if (!text) return withNormalizedSupportMapping(defaults);
+  if (!text) return normalizeFullConfig(defaults);
   try {
     const parsed = JSON.parse(text);
-    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return withNormalizedSupportMapping(defaults);
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return normalizeFullConfig(defaults);
     const parsedOverrides = parsed.overrides || {};
     const parsedPipingClassMatch = parsed.pipingClassMatch || {};
     const supportKindToXmlType = normalizeXmlCiiSupportKindToTypeConfig({
@@ -197,8 +220,8 @@ export function parseXmlCiiEnrichmentConfig(rawJson) {
       },
     };
 
-    return withNormalizedSupportMapping(merged);
+    return normalizeFullConfig(merged);
   } catch {
-    return withNormalizedSupportMapping(defaults);
+    return normalizeFullConfig(defaults);
   }
 }
