@@ -14,6 +14,7 @@ const {
   resolveXmlCiiSupportDescriptor,
   resolveXmlCiiSupportKind,
   restraintEntriesFromSupportKind,
+  supportDirectionAudit,
   xmlCiiRestraintEntriesFromSupportMatch,
   xmlCiiTypeEntriesFromSupportKind,
 } = support;
@@ -65,10 +66,18 @@ assert.strictEqual(bridgedEntries[0].frictionMode, 'sentinel');
 assert.ok(Math.abs(bridgedEntries[0].direction.x - 0) < 1e-12);
 assert.ok(Math.abs(bridgedEntries[0].direction.y - 0) < 1e-12);
 assert.ok(Math.abs(Math.abs(bridgedEntries[0].direction.z) - 1) < 1e-12);
+assert.strictEqual(
+  supportDirectionAudit(bridgedEntries),
+  'GUI:pipe-normal:0.000000000,0.000000000,-1.000000000'
+);
 
 const restEntries = restraintEntriesFromSupportKind('REST', {}, null, config);
 assert.strictEqual(restEntries[0].type, '+Y');
 assert.deepStrictEqual(restEntries[0].direction, { x: 0, y: 1, z: 0 });
+assert.strictEqual(
+  supportDirectionAudit(restEntries),
+  '+Y:fixed:0.000000000,1.000000000,0.000000000'
+);
 
 const lineStopEntries = xmlCiiRestraintEntriesFromSupportMatch({
   kind: 'LINESTOP',
@@ -77,6 +86,10 @@ const lineStopEntries = xmlCiiRestraintEntriesFromSupportMatch({
 assert.strictEqual(lineStopEntries[0].type, 'LIM');
 assert.strictEqual(lineStopEntries[0].frictionMode, 'sentinel');
 assert.deepStrictEqual(lineStopEntries[0].direction, { x: 1, y: 0, z: 0 });
+assert.strictEqual(
+  supportDirectionAudit(lineStopEntries),
+  'LIM:pipe-axis:1.000000000,0.000000000,0.000000000'
+);
 
 const guideEntries = xmlCiiRestraintEntriesFromSupportMatch({
   kind: 'GUIDE',
