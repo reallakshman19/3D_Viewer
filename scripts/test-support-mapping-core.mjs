@@ -51,6 +51,21 @@ assert.ok(index.byCoord.has('100|200|300'), 'coordinate key must use real coordi
 assert.ok(index.byTag.has('PS-100'));
 assert.strictEqual(diagnostics[0].type, 'staged-support-index');
 
+const stagedMatch = index.byTag.get('PS-100')[0];
+assert.strictEqual(String(stagedMatch.kind), 'GUIDE');
+assert.deepStrictEqual(stagedMatch.kinds, ['GUIDE']);
+
+// Phase 3 bridge: existing enrichment code calls xmlCiiTypeEntriesFromSupportKind(m.kind, config).
+// For staged matches, that legacy API now returns rich entries while still stringifying to type text.
+const bridgedEntries = xmlCiiTypeEntriesFromSupportKind(stagedMatch.kind, config);
+assert.strictEqual(bridgedEntries[0].type, 'GUI');
+assert.strictEqual(String(bridgedEntries[0]), 'GUI');
+assert.strictEqual(bridgedEntries.join('+'), 'GUI');
+assert.strictEqual(bridgedEntries[0].frictionMode, 'sentinel');
+assert.ok(Math.abs(bridgedEntries[0].direction.x - 0) < 1e-12);
+assert.ok(Math.abs(bridgedEntries[0].direction.y - 0) < 1e-12);
+assert.ok(Math.abs(Math.abs(bridgedEntries[0].direction.z) - 1) < 1e-12);
+
 const restEntries = restraintEntriesFromSupportKind('REST', {}, null, config);
 assert.strictEqual(restEntries[0].type, '+Y');
 assert.deepStrictEqual(restEntries[0].direction, { x: 0, y: 1, z: 0 });
@@ -72,5 +87,14 @@ assert.strictEqual(guideEntries[0].frictionMode, 'sentinel');
 assert.ok(Math.abs(guideEntries[0].direction.x - 0) < 1e-12);
 assert.ok(Math.abs(guideEntries[0].direction.y - 0) < 1e-12);
 assert.ok(Math.abs(Math.abs(guideEntries[0].direction.z) - 1) < 1e-12);
+
+const jsonOffConfig = parseXmlCiiEnrichmentConfig(JSON.stringify({
+  supportMapping: { ...config.supportMapping, useJsonForRestraints: false },
+}));
+const offDiagnostics = [];
+const offIndex = buildStagedSupportIndex(JSON.stringify(staged), jsonOffConfig, offDiagnostics);
+assert.strictEqual(offIndex.count, 0);
+assert.strictEqual(offIndex.byCoord.size, 0);
+assert.strictEqual(offDiagnostics[0].disabled, true);
 
 console.log('✅ support mapping core regression tests passed');
