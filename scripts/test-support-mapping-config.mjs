@@ -82,6 +82,7 @@ assert.strictEqual(supportKindToXmlTypeFromMapping(existingV2).GUIDE, 'GUI');
 
 assert.deepStrictEqual(normalizeXmlTypes('+Y'), ['+Y']);
 assert.deepStrictEqual(normalizeXmlTypes('GUI+LIM'), ['GUI', 'LIM']);
+assert.deepStrictEqual(normalizeXmlTypes('+Y+GUI'), ['+Y', 'GUI']);
 assert.deepStrictEqual(normalizeXmlTypes(['+Y', 'GUI']), ['+Y', 'GUI']);
 
 console.log('✅ support mapping config migration regression tests passed');
