@@ -6,11 +6,7 @@ function _toText(val) {
 }
 
 function _esc(value) {
-  return _toText(value)
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;');
+  return _toText(value).replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;');
 }
 
 function _escAttr(value) {
@@ -23,8 +19,8 @@ export function xmlCiiRenderWeightMatchPhase() {
     <div class="model-converters-workflow-detail-text">
       Approximate component weights matched from the valve weight master by
       <strong>rating</strong> (×3), <strong>bore</strong> (×2), and <strong>length</strong> (×1).
-      The preferred suggestion <strong>★</strong> has an exact bore + rating match with the weight
-      linearly scaled to the actual length. Review and adjust, then <strong>Finalize and Run</strong>.
+      DTXR is resolved from XML <strong>DTXR_POS</strong> / <strong>DTXR_PS</strong> first, then staged JSON by ComponentRefNo, PS tag, node and coordinates.
+      Review and adjust, then <strong>Finalize and Run</strong>.
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:10px 0;">
       <button type="button" class="model-converters-download-btn" id="mc-wm-refresh">↻ Recompute matches</button>
@@ -33,21 +29,11 @@ export function xmlCiiRenderWeightMatchPhase() {
     </div>
     <div id="mc-wm-content"><div class="model-converters-workflow-detail-note">Computing weight matches…</div></div>
     <div style="margin-top:14px;">
-      <button type="button" class="model-converters-run-btn" id="mc-wm-finalize" style="width:100%;padding:12px;">
-        ✓ Finalize and Run
-      </button>
+      <button type="button" class="model-converters-run-btn" id="mc-wm-finalize" style="width:100%;padding:12px;">✓ Finalize and Run</button>
     </div>`;
 }
 
-export function bindXmlCiiWeightMatchPhase(detailEl, {
-  xmlFile,
-  stagedJsonText,
-  config,
-  enrichXmlForCii2019,
-  onSaveConfig,
-  ensureOverrides,
-  onFinalize
-}) {
+export function bindXmlCiiWeightMatchPhase(detailEl, { xmlFile, stagedJsonText, config, enrichXmlForCii2019, onSaveConfig, ensureOverrides, onFinalize }) {
   if (!detailEl) return;
   const contentEl = detailEl.querySelector('#mc-wm-content');
   const statusEl = detailEl.querySelector('#mc-wm-status');
@@ -58,7 +44,6 @@ export function bindXmlCiiWeightMatchPhase(detailEl, {
     }
   };
   if (!contentEl) return;
-
   let localIssues = [];
 
   const renderIssues = (issues) => {
@@ -77,13 +62,15 @@ export function bindXmlCiiWeightMatchPhase(detailEl, {
             ${candidate.preferred ? '★ ' : ''}${_esc(value)} kg · ${Math.round(candidate.score * 100)}%
           </button>`;
       }).join('');
+      const ratingTitle = `Piping Class ${issue.resolvedPipingClass || ''} (${issue.pipingClassMatchMethod || ''})`;
+      const dtxrTitle = [issue.dtxrSource, issue.dtxrMatchedKey].filter(Boolean).join(' · ');
       return `
         <tr>
           <td class="mc-rigid-review-branch" title="${_escAttr(issue.branchName)}">${_esc(issue.branchName)}</td>
           <td>${_esc(issue.boreMm == null ? '' : `${Number(issue.boreMm).toFixed(0)} mm`)}</td>
-          <td>${_esc(issue.rating || '')}</td>
+          <td title="${_escAttr(ratingTitle)}">${_esc(issue.rating || '')}</td>
           <td>${_esc(issue.nodeNumber)}</td>
-          <td class="mc-rigid-review-dtxr" title="${_escAttr(issue.stagedMatchMethod || '')}">${_esc(issue.dtxr || issue.stagedName || 'Not found')}</td>
+          <td class="mc-rigid-review-dtxr" title="${_escAttr(dtxrTitle)}">${_esc(issue.dtxr || 'Not found')}</td>
           <td>${_esc(issue.lengthMm == null ? '' : `${Number(issue.lengthMm).toFixed(1)} mm`)}</td>
           <td><input type="number" min="0" step="0.001" class="mc-rigid-review-input" data-wm-key="${_escAttr(issue.key)}" value="${_escAttr(best ? (best.suggestedWeight ?? best.weight) : '')}" placeholder="kg"></td>
           <td class="mc-rigid-review-candidates">${candidates || '<span class="model-converters-muted">No suggestion</span>'}</td>
@@ -148,6 +135,5 @@ export function bindXmlCiiWeightMatchPhase(detailEl, {
     }
     onFinalize();
   });
-
   void compute();
 }

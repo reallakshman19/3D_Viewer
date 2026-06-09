@@ -33,6 +33,35 @@ export function normalizeXmlCiiSupportKindToTypeConfig(value) {
   return mapping;
 }
 
+const DEFAULT_PIPING_CLASS_MATCH = Object.freeze({
+  classExactScore: 1000,
+  overrideScore: 1100,
+  leadingNumericExactScore: 940,
+  prefixBaseScore: 910,
+  startsWithScore: 860,
+  numericDistanceBaseScore: 760,
+  numericDistancePenalty: 45,
+  numericDistanceMax: 5,
+  fuzzyRatioWeight: 780,
+  fuzzyMinRatio: 0.60,
+  ambiguousScoreDelta: 50,
+  minAcceptScore: 760,
+  reviewBelowConfidence: 1.0,
+  maxCandidates: 8,
+  rowScoring: {
+    boreToleranceMm: 1.0,
+    classExactWeight: 1000,
+    boreExactWeight: 300,
+    boreNearWeight: 220,
+    componentExactWeight: 180,
+    pipeRigidWeight: 120,
+    ratingExactWeight: 80,
+    scheduleExactWeight: 60,
+    minAcceptScore: 1000,
+    ambiguousScoreDelta: 50,
+  }
+});
+
 export function parseXmlCiiEnrichmentConfig(rawJson) {
   const defaults = {
     useFrictionSentinelForNonYSupports: true,
@@ -84,19 +113,31 @@ export function parseXmlCiiEnrichmentConfig(rawJson) {
       fuzzyThreshold: 0.6,
       reviewBelow: 1.0,
     },
+    pipingClassMatch: DEFAULT_PIPING_CLASS_MATCH,
     material: {
       masterUrl: '../docs/Masters/PCF_MAT_MAP.TXT',
       mapRows: [],
       containsConfidence: 0.9,
       tokenJaccardThreshold: 0.35,
     },
-    overrides: { pipingClass: {}, material: {}, rigidWeight: {} },
+    overrides: {
+      pipingClass: {},
+      material: {},
+      materialCode: {},
+      rating: {},
+      wallThickness: {},
+      corrosion: {},
+      rigidWeight: {},
+      processData: {},
+    },
   };
   const text = toText(rawJson).trim();
   if (!text) return defaults;
   try {
     const parsed = JSON.parse(text);
     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return defaults;
+    const parsedOverrides = parsed.overrides || {};
+    const parsedPipingClassMatch = parsed.pipingClassMatch || {};
     const supportKindToXmlType = normalizeXmlCiiSupportKindToTypeConfig({
       ...defaults.supportKindToXmlType,
       ...(parsed.supportKindToXmlType || {}),
@@ -111,12 +152,25 @@ export function parseXmlCiiEnrichmentConfig(rawJson) {
       rating: { ...defaults.rating, ...(parsed.rating || {}) },
       weight: { ...defaults.weight, ...(parsed.weight || {}) },
       pipingClass: { ...defaults.pipingClass, ...(parsed.pipingClass || {}) },
+      pipingClassMatch: {
+        ...DEFAULT_PIPING_CLASS_MATCH,
+        ...parsedPipingClassMatch,
+        rowScoring: {
+          ...DEFAULT_PIPING_CLASS_MATCH.rowScoring,
+          ...(parsedPipingClassMatch.rowScoring || {}),
+        },
+      },
       material: { ...defaults.material, ...(parsed.material || {}) },
       overrides: {
-        pipingClass:  { ...(defaults.overrides.pipingClass),  ...((parsed.overrides || {}).pipingClass  || {}) },
-        material:     { ...(defaults.overrides.material),     ...((parsed.overrides || {}).material     || {}) },
-        rigidWeight:  { ...(defaults.overrides.rigidWeight),  ...((parsed.overrides || {}).rigidWeight  || {}) },
-        processData:  { ...((parsed.overrides || {}).processData || {}) },
+        pipingClass:  { ...(defaults.overrides.pipingClass),  ...(parsedOverrides.pipingClass  || {}) },
+        material:     { ...(defaults.overrides.material),     ...(parsedOverrides.material     || {}) },
+        materialCode: { ...(defaults.overrides.materialCode), ...(parsedOverrides.materialCode || {}) },
+        rating:       { ...(defaults.overrides.rating),       ...(parsedOverrides.rating       || {}) },
+        wallThickness:{ ...(defaults.overrides.wallThickness),...(parsedOverrides.wallThickness|| {}) },
+        corrosion:    { ...(defaults.overrides.corrosion),    ...(parsedOverrides.corrosion    || {}) },
+        rigidWeight:  { ...(defaults.overrides.rigidWeight),  ...(parsedOverrides.rigidWeight  || {}) },
+        processData:  { ...(parsedOverrides.processData || {}) },
+        __previewFillDown: parsedOverrides.__previewFillDown || undefined,
       },
     };
   } catch {
