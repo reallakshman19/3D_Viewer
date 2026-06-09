@@ -54,6 +54,15 @@ export const PSNM_PHASE_MANIFEST = Object.freeze([
     ],
     contract: 'User can inspect the implemented PSNM phases and their contracts directly in the popup.',
   },
+  {
+    id: '4G',
+    name: 'Phase Suite Loader',
+    files: [
+      'psnm-phase-suite.js',
+      'psnm-utility-tab.js',
+    ],
+    contract: 'Popup extension modules are loaded through one consolidated suite entry point before native v7 consolidation.',
+  },
 ]);
 
 export function PSNM_getPhaseManifest() {
