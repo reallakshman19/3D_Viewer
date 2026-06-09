@@ -1,7 +1,8 @@
 import { PSNM_runMasterSmokeTest } from './psnm-master-smoke-test.js';
 
-const STATE_BY_MODAL = new WeakMap();
 const STYLE_ID = 'psnm-phase4c-hardening-style';
+const STATE_BY_MODAL = new WeakMap();
+let scanScheduled = false;
 
 function installStyle() {
   if (document.getElementById(STYLE_ID)) return;
@@ -12,41 +13,13 @@ function installStyle() {
   document.head.appendChild(style);
 }
 
-function getState(modal) {
-  if (!STATE_BY_MODAL.has(modal)) {
-    STATE_BY_MODAL.set(modal, {
-      sourceDirty: false,
-      masterEditDirty: false,
-      smoke: null,
-      lastMessage: 'Resolve Master Tables before matching. After edits, click Apply Master Edits.',
-    });
-  }
-  return STATE_BY_MODAL.get(modal);
-}
-
-function escapeHtml(value) {
+function h(value) {
   return String(value ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
-function downloadText(filename, text, mime = 'text/csv;charset=utf-8') {
-  const blob = new Blob([String(text || '')], { type: mime });
-  const url = URL.createObjectURL(blob);
-  const anchor = document.createElement('a');
-  anchor.href = url;
-  anchor.download = filename;
-  document.body.appendChild(anchor);
-  anchor.click();
-  anchor.remove();
-  URL.revokeObjectURL(url);
-}
-
-function tableToCsv(card) {
-  const rows = Array.from(card.querySelectorAll('table tr'));
-  return rows.map((tr) => Array.from(tr.querySelectorAll('th,td')).map((cell) => {
-    const input = cell.querySelector('input,select,textarea');
-    const value = input ? (input.type === 'checkbox' ? (input.checked ? 'YES' : 'NO') : input.value) : cell.textContent;
-    return `"${String(value ?? '').replace(/"/g, '""').trim()}"`;
-  }).join(',')).join('\n');
+function getState(modal) {
+  if (!STATE_BY_MODAL.has(modal)) STATE_BY_MODAL.set(modal, { sourceDirty: false, masterEditDirty: false });
+  return STATE_BY_MODAL.get(modal);
 }
 
 function findModal(target) {
@@ -67,6 +40,17 @@ function runIsBlocked(modal) {
   return '';
 }
 
+function setHtmlIfChanged(el, html) {
+  if (el.dataset.psnmLastHtml === html) return;
+  el.dataset.psnmLastHtml = html;
+  el.innerHTML = html;
+}
+
+function setClassIfChanged(el, className) {
+  if (el.className === className) return;
+  el.className = className;
+}
+
 function ensureGate(modal) {
   const body = modal.querySelector('.psnm-body');
   if (!body) return;
@@ -76,26 +60,20 @@ function ensureGate(modal) {
     gate.dataset.psnm4cGate = '1';
     body.insertBefore(gate, body.firstElementChild?.nextSibling || body.firstChild);
   }
-  const state = getState(modal);
   const blockReason = runIsBlocked(modal);
-  gate.className = `psnm-4c-gate ${blockReason ? 'error' : 'ok'}`;
-  gate.innerHTML = blockReason
-    ? `<b>Workflow Gate:</b> ${escapeHtml(blockReason)}`
-    : '<b>Workflow Gate:</b> Ready. Matching will use Master PS No + Master Node only.';
-
+  setClassIfChanged(gate, `psnm-4c-gate ${blockReason ? 'error' : 'ok'}`);
+  setHtmlIfChanged(gate, blockReason ? `<b>Workflow Gate:</b> ${h(blockReason)}` : '<b>Workflow Gate:</b> Ready. Matching will use Master PS No + Master Node only.');
   modal.querySelectorAll('[data-psnm-action="runMatch"]').forEach((button) => {
-    if (blockReason) {
-      button.classList.add('psnm-4c-blocked');
+    const blocked = Boolean(blockReason);
+    button.classList.toggle('psnm-4c-blocked', blocked);
+    if (blocked) {
       button.setAttribute('aria-disabled', 'true');
       button.title = blockReason;
     } else {
-      button.classList.remove('psnm-4c-blocked');
       button.removeAttribute('aria-disabled');
       button.title = '';
     }
   });
-
-  state.lastMessage = blockReason || 'Ready';
 }
 
 function ensureMasterActions(modal) {
@@ -115,12 +93,8 @@ function ensureDownloadButtons(modal) {
     if (!card.querySelector('table')) return;
     const head = card.querySelector('.psnm-card-head');
     if (!head || head.querySelector('[data-psnm-4c-download]')) return;
-    let actions = head.querySelector('.psnm-actions');
-    if (!actions) {
-      actions = document.createElement('div');
-      actions.className = 'psnm-4c-actions';
-      head.appendChild(actions);
-    }
+    const actions = head.querySelector('.psnm-actions') || head.appendChild(document.createElement('div'));
+    actions.classList.add('psnm-4c-actions');
     const btn = document.createElement('button');
     btn.type = 'button';
     btn.className = 'psnm-btn psnm-btn-secondary psnm-4c-download';
@@ -131,14 +105,34 @@ function ensureDownloadButtons(modal) {
 }
 
 function ensureSmokeButton(modal) {
-  const statusActions = modal.querySelector('.psnm-statusbar .psnm-actions');
-  if (!statusActions || statusActions.querySelector('[data-psnm-4c-action="smoke"]')) return;
+  const actions = modal.querySelector('.psnm-statusbar .psnm-actions');
+  if (!actions || actions.querySelector('[data-psnm-4c-action="smoke"]')) return;
   const smoke = document.createElement('button');
   smoke.type = 'button';
   smoke.className = 'psnm-btn psnm-btn-secondary';
   smoke.dataset.psnm4cAction = 'smoke';
   smoke.textContent = 'Run Smoke Test';
-  statusActions.appendChild(smoke);
+  actions.appendChild(smoke);
+}
+
+function tableToCsv(card) {
+  return Array.from(card.querySelectorAll('table tr')).map((tr) => Array.from(tr.querySelectorAll('th,td')).map((cell) => {
+    const input = cell.querySelector('input,select,textarea');
+    const value = input ? (input.type === 'checkbox' ? (input.checked ? 'YES' : 'NO') : input.value) : cell.textContent;
+    return `"${String(value ?? '').replace(/"/g, '""').trim()}"`;
+  }).join(',')).join('\n');
+}
+
+function downloadText(filename, text) {
+  const blob = new Blob([String(text || '')], { type: 'text/csv;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = filename;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(url);
 }
 
 function showSmokeResult(modal, result) {
@@ -151,34 +145,44 @@ function showSmokeResult(modal, result) {
     panel.dataset.psnm4cSmokeResult = '1';
     body.appendChild(panel);
   }
-  panel.innerHTML = `<div class="psnm-card-head"><b>Phase 4C Smoke Test</b><span class="${result.ok ? 'psnm-4c-smoke-ok' : 'psnm-4c-smoke-fail'}">${result.ok ? 'PASS' : 'FAIL'}</span></div><div class="psnm-card-body"><div class="psnm-banner">Master PS: ${result.counts.masterPs} | Master Node: ${result.counts.masterNode} | Match Rows: ${result.counts.matchRows}</div><table class="psnm-4c-smoke-table"><thead><tr><th>Check</th><th>Status</th><th>Details</th></tr></thead><tbody>${result.checks.map((item) => `<tr><td>${escapeHtml(item.name)}</td><td class="${item.pass ? 'psnm-4c-smoke-ok' : 'psnm-4c-smoke-fail'}">${item.pass ? 'PASS' : 'FAIL'}</td><td>${escapeHtml(item.details)}</td></tr>`).join('')}</tbody></table></div>`;
+  const html = `<div class="psnm-card-head"><b>Phase 4C Smoke Test</b><span class="${result.ok ? 'psnm-4c-smoke-ok' : 'psnm-4c-smoke-fail'}">${result.ok ? 'PASS' : 'FAIL'}</span></div><div class="psnm-card-body"><div class="psnm-banner">Master PS: ${result.counts.masterPs} | Master Node: ${result.counts.masterNode} | Match Rows: ${result.counts.matchRows}</div><table class="psnm-4c-smoke-table"><thead><tr><th>Check</th><th>Status</th><th>Details</th></tr></thead><tbody>${result.checks.map((item) => `<tr><td>${h(item.name)}</td><td class="${item.pass ? 'psnm-4c-smoke-ok' : 'psnm-4c-smoke-fail'}">${item.pass ? 'PASS' : 'FAIL'}</td><td>${h(item.details)}</td></tr>`).join('')}</tbody></table></div>`;
+  setHtmlIfChanged(panel, html);
 }
 
 function enhanceModal(modal) {
+  if (!modal || modal.dataset.psnm4cEnhancing === '1') return;
+  modal.dataset.psnm4cEnhancing = '1';
   installStyle();
   ensureGate(modal);
   ensureMasterActions(modal);
   ensureDownloadButtons(modal);
   ensureSmokeButton(modal);
+  modal.dataset.psnm4cEnhancing = '0';
 }
 
-function markAndRefresh(modal, patch) {
-  Object.assign(getState(modal), patch);
-  setTimeout(() => enhanceModal(modal), 0);
+function scheduleScan() {
+  if (scanScheduled) return;
+  scanScheduled = true;
+  requestAnimationFrame(() => {
+    scanScheduled = false;
+    document.querySelectorAll('[data-psnm="modal"]').forEach(enhanceModal);
+  });
 }
 
 document.addEventListener('input', (event) => {
   const modal = findModal(event.target);
   if (!modal) return;
-  if (event.target.closest('[data-source]')) markAndRefresh(modal, { sourceDirty: true, masterEditDirty: false });
-  if (event.target.closest('[data-master-ps-field], [data-master-node-field]')) markAndRefresh(modal, { masterEditDirty: true });
+  if (event.target.closest('[data-source]')) Object.assign(getState(modal), { sourceDirty: true, masterEditDirty: false });
+  if (event.target.closest('[data-master-ps-field], [data-master-node-field]')) Object.assign(getState(modal), { masterEditDirty: true });
+  scheduleScan();
 }, true);
 
 document.addEventListener('change', (event) => {
   const modal = findModal(event.target);
   if (!modal) return;
-  if (event.target.closest('[data-source]')) markAndRefresh(modal, { sourceDirty: true, masterEditDirty: false });
-  if (event.target.closest('[data-master-ps-field], [data-master-node-field]')) markAndRefresh(modal, { masterEditDirty: true });
+  if (event.target.closest('[data-source]')) Object.assign(getState(modal), { sourceDirty: true, masterEditDirty: false });
+  if (event.target.closest('[data-master-ps-field], [data-master-node-field]')) Object.assign(getState(modal), { masterEditDirty: true });
+  scheduleScan();
 }, true);
 
 document.addEventListener('click', (event) => {
@@ -186,40 +190,33 @@ document.addEventListener('click', (event) => {
   if (!modal) return;
   const action = event.target.closest('[data-psnm-action]')?.dataset?.psnmAction;
   const hardAction = event.target.closest('[data-psnm-4c-action]')?.dataset?.psnm4cAction;
-
   if (action === 'runMatch') {
     const reason = runIsBlocked(modal);
     if (reason) {
       event.preventDefault();
       event.stopImmediatePropagation();
-      markAndRefresh(modal, { lastMessage: reason });
+      scheduleScan();
       return;
     }
   }
-
   if (action === 'resolveMasters') {
-    setTimeout(() => {
-      const fresh = findModal(modal) || document.querySelector('[data-psnm="modal"]');
-      if (fresh) markAndRefresh(fresh, { sourceDirty: false, masterEditDirty: false });
-    }, 80);
+    Object.assign(getState(modal), { sourceDirty: false, masterEditDirty: false });
+    setTimeout(scheduleScan, 80);
     return;
   }
-
   if (hardAction === 'applyEdits') {
     event.preventDefault();
     event.stopImmediatePropagation();
-    markAndRefresh(modal, { masterEditDirty: false, lastMessage: 'Master edits applied. Ready to run match.' });
+    Object.assign(getState(modal), { masterEditDirty: false });
+    scheduleScan();
     return;
   }
-
   if (hardAction === 'smoke') {
     event.preventDefault();
     event.stopImmediatePropagation();
-    const result = PSNM_runMasterSmokeTest();
-    showSmokeResult(modal, result);
+    showSmokeResult(modal, PSNM_runMasterSmokeTest());
     return;
   }
-
   const download = event.target.closest('[data-psnm-4c-download]');
   if (download) {
     event.preventDefault();
@@ -230,12 +227,9 @@ document.addEventListener('click', (event) => {
   }
 }, true);
 
-const observer = new MutationObserver(() => {
-  document.querySelectorAll('[data-psnm="modal"]').forEach(enhanceModal);
-});
+const observer = new MutationObserver(scheduleScan);
 observer.observe(document.documentElement, { childList: true, subtree: true });
-
-setTimeout(() => document.querySelectorAll('[data-psnm="modal"]').forEach(enhanceModal), 0);
+scheduleScan();
 
 export function PSNM_phase4cHardeningInstalled() {
   return true;
