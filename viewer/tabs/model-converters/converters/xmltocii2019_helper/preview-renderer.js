@@ -1,10 +1,15 @@
 import { EditablePreviewTable } from '../../shared/EditablePreviewTable.js';
-import { parseXmlCiiEnrichmentConfig } from '../../../../converters/xml-cii2019-core/config.js';
 import { deriveLineKeyFromBranchName, tokenAtPosition } from '../../../../converters/xml-cii2019-core/regex-line-key.js';
-import { findAllWeightCandidates, scoreXmlCiiWeightCandidates, findWeightMasterMatch, xmlCiiNumberText } from '../../../../converters/xml-cii2019-core/weight-match-model.js';
+import { findAllWeightCandidates } from '../../../../converters/xml-cii2019-core/weight-match-model.js';
 import { buildPipingClassIndex } from '../../../../converters/xml-cii2019-core/piping-class-resolver.js';
 import { resolveBranchProcessData } from '../../../../converters/xml-cii2019-core/branch-process-resolver.js';
 import { buildStagedDtxrIndex, resolveXmlCiiNodeDtxr } from '../../../../converters/xml-cii2019-core/dtxr-resolver.js';
+import {
+  applyPreviewOverrideFillDown,
+  applyPreviewProcessFillDown,
+  markPreviewOverrideManual,
+  markPreviewProcessManual,
+} from '../../shared/preview-filldown.js';
 
 function _toText(val) {
   if (val === null || val === undefined) return '';
@@ -23,10 +28,6 @@ function _esc(value) {
     .replaceAll('<', '&lt;')
     .replaceAll('>', '&gt;')
     .replaceAll('"', '&quot;');
-}
-
-function _escAttr(value) {
-  return _esc(value).replaceAll("'", '&#39;');
 }
 
 function _xmlLocalName(node) {
@@ -136,98 +137,6 @@ function _xmlCiiProcessValue(pdOverride, row, overrideKey, rowKeys) {
   return _rowText(row, rowKeys);
 }
 
-function _xcNorm(value) {
-  return _toText(value).toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
-}
-function _xcTokens(value) {
-  return new Set(_xcNorm(value).split(' ').filter(Boolean));
-}
-function _xcJaccard(a, b) {
-  const ta = _xcTokens(a); const tb = _xcTokens(b);
-  if (!ta.size || !tb.size) return 0;
-  let inter = 0; for (const t of ta) if (tb.has(t)) inter += 1;
-  return inter / (ta.size + tb.size - inter);
-}
-function _xcRatio(a, b) {
-  const x = _xcNorm(a); const y = _xcNorm(b);
-  if (!x || !y) return 0;
-  if (x === y) return 1;
-  const longer = x.length >= y.length ? x : y;
-  const shorter = x.length >= y.length ? y : x;
-  return longer.includes(shorter) ? shorter.length / longer.length : _xcJaccard(x, y);
-}
-function _xcOverride(overrides, kind, key) {
-  const bucket = overrides?.[kind];
-  if (!bucket || typeof bucket !== 'object') return null;
-  const nk = _xcNorm(key);
-  for (const k of Object.keys(bucket)) if (_xcNorm(k) === nk) return bucket[k];
-  return null;
-}
-
-function _xmlCiiKnownClasses(config) {
-  const rows = Array.isArray(config.pipingClass?.masterRows) ? config.pipingClass.masterRows : [];
-  return [...new Set(rows.map((r) => _rowText(r, ['pipingClass', 'Piping Class', 'PIPING_CLASS', 'Class'])).filter(Boolean))];
-}
-
-function _xmlCiiApproximateClass(derived, config) {
-  const ov = _xcOverride(config.overrides, 'pipingClass', derived);
-  if (ov != null && _toText(ov) !== '') return { pipingClass: _toText(ov), method: 'override', confidence: 1, needsReview: false };
-  const d = _xcNorm(derived);
-  const classes = _xmlCiiKnownClasses(config);
-  if (!d || !classes.length) return { pipingClass: derived || null, method: 'none', confidence: 0, needsReview: true };
-  for (const c of classes) if (_xcNorm(c) === d) return { pipingClass: c, method: 'exact', confidence: 1, needsReview: false };
-  const reviewBelow = _toFiniteNumber(config.pipingClass?.reviewBelow, 1);
-  const sw = classes.filter((c) => _xcNorm(c).startsWith(d) || d.startsWith(_xcNorm(c)));
-  if (sw.length === 1) { const conf = _toFiniteNumber(config.pipingClass?.startsWithConfidence, 0.8); return { pipingClass: sw[0], method: 'startsWith', confidence: conf, needsReview: conf < reviewBelow }; }
-  if (sw.length > 1) return { pipingClass: null, method: 'ambiguous', confidence: _toFiniteNumber(config.pipingClass?.startsWithConfidence, 0.8), needsReview: true, candidates: sw };
-  let best = null; let bestS = 0;
-  for (const c of classes) { const s = _xcRatio(d, c); if (s > bestS) { best = c; bestS = s; } }
-  if (best && bestS >= _toFiniteNumber(config.pipingClass?.fuzzyThreshold, 0.6)) return { pipingClass: best, method: 'fuzzy', confidence: bestS, needsReview: bestS < reviewBelow };
-  return { pipingClass: null, method: 'none', confidence: bestS, needsReview: true };
-}
-
-function _findPipingClassMaster({ pipingClass, boreMm }, config) {
-  const rows = Array.isArray(config.pipingClass?.masterRows) ? config.pipingClass.masterRows : [];
-  if (!rows.length || !pipingClass) return null;
-  const want = _xcNorm(pipingClass);
-  for (const row of rows) {
-    if (_xcNorm(_rowText(row, ['pipingClass', 'Piping Class', 'PIPING_CLASS', 'Class'])) !== want) continue;
-    const rBore = _rowNumber(row, ['convertedBore', 'Converted Bore', 'DN', 'NB', 'Size', 'bore', 'Bore']);
-    if (boreMm != null && rBore != null && Math.abs(rBore - boreMm) >= 1) continue;
-    return {
-      wallThickness: _rowText(row, ['Wall thickness', 'Wall Thickness', 'wallThickness', 'WT']),
-      corrosion: _rowText(row, ['Corrosion Allowance', 'Corrosion allowance', 'corrosion', 'CA']),
-      materialName: _rowText(row, ['Material', 'Material Name', 'material', 'MAT']),
-      rating: _rowText(row, ['Rating', 'Pressure Class', 'rating', 'RatingClass']),
-    };
-  }
-  return null;
-}
-
-function _xmlCiiResolveMaterialCode(materialName, config) {
-  const rows = Array.isArray(config.material?.mapRows) ? config.material.mapRows : [];
-  if (!rows.length || !materialName) return null;
-  const ov = _xcOverride(config.overrides, 'material', materialName);
-  if (ov != null && _toText(ov) !== '') return { code: _toText(ov), method: 'override', needsReview: false };
-  const want = _xcNorm(materialName);
-  for (const row of rows) {
-    if (_xcNorm(row.material) === want) return { code: row.code, method: 'exact', needsReview: false };
-  }
-  let best = null; let bestS = 0;
-  for (const row of rows) {
-    const s = _xcRatio(want, row.material);
-    if (s > bestS) { best = row; bestS = s; }
-  }
-  const thresh = _toFiniteNumber(config.material?.containsConfidence, 0.9);
-  if (best && bestS >= thresh) return { code: best.code, method: 'fuzzy', confidence: bestS, needsReview: bestS < 1.0 };
-  return { code: '', method: 'none', confidence: bestS, needsReview: true };
-}
-
-function _xmlCiiCleanSizeToken(value) {
-  const match = _toText(value).match(/\d+(?:\.\d+)?/);
-  return match ? match[0] : '';
-}
-
 function _derivePipingClassFromBranchName(branchName, config) {
   const byRegex = _regexGroup(branchName, config.rating?.pipingClassRegex, config.rating?.pipingClassGroup || 1);
   if (byRegex) return byRegex;
@@ -262,6 +171,10 @@ function _deriveBoreFromBranchName(branchName, config) {
   return _nominalDnFromNps(inches, config);
 }
 
+function _fieldOverrideKey(editType, derivedKey) {
+  return _toText(derivedKey).trim();
+}
+
 export function xmlCiiRenderPreviewPhase(xmlFile, config) {
   const llRows = Array.isArray(config.linelist?.masterRows) ? config.linelist.masterRows.length : 0;
   const pcRows = Array.isArray(config.pipingClass?.masterRows) ? config.pipingClass.masterRows.length : 0;
@@ -283,7 +196,7 @@ export function xmlCiiRenderPreviewPhase(xmlFile, config) {
   return `
     <div class="model-converters-workflow-detail-title">4 Preview</div>
     <div class="model-converters-workflow-detail-text">
-      Dry-run enrichment per branch — editable overrides for approximate matches.
+      Dry-run enrichment per branch — editable overrides and group-wise fill-down.
     </div>
     <div id="mc-preview-table-host">
       <div class="model-converters-workflow-detail-note" style="text-align:center;padding:18px;">
@@ -314,7 +227,6 @@ export function xmlCiiDryRunPreview(xmlText, config, stagedJsonText) {
     const derivedClassRaw = _derivePipingClassFromBranchName(branchName, config) || _rowText(lineListMatch, ['pipingClass', 'PipingClass']);
     const boreMm = _deriveBoreFromBranchName(branchName, config) || _rowNumber(lineListMatch, ['convertedBore', 'Bore']);
 
-    // Call unified resolver to compute branch data
     const resolved = resolveBranchProcessData({
       branchName,
       lineKey,
@@ -330,7 +242,6 @@ export function xmlCiiDryRunPreview(xmlText, config, stagedJsonText) {
       config
     });
 
-    const pcMaster = resolved.pipingClassMatchedRow;
     const branchRating = resolved.pipingClassMatchedRow?.rating || _deriveRatingFromPipingClass(resolved.pipingClass, config) || _rowText(lineListMatch, ['rating', 'Rating']);
 
     const pdOverride = (lineKey && config?.overrides?.processData?.[lineKey]) || {};
@@ -384,7 +295,6 @@ export function xmlCiiDryRunPreview(xmlText, config, stagedJsonText) {
       const nodeNoNum = Number(nodeNumber);
       const isSkipType = /^(TEE|TEES|ELBO|ELBOW|OLET|BRANCH|DATUM|BEND|BENDS|GASK|GASKET|REDU|REDUCER)$/i.test(componentType);
 
-      // Call node dtxr resolver
       const dtxrRes = resolveXmlCiiNodeDtxr(node, stagedIndex, config);
       const dtxr = dtxrRes.value || '';
       const dtxrSource = dtxrRes.source || 'none';
@@ -446,16 +356,16 @@ export async function xmlCiiBuildAndRenderPreview(rootEl, xmlText, config, optio
       if (method === 'exact') {
         return `<span class="mc-preview-editable-val">${valEsc}</span> <span class="mc-preview-badge exact">✓ exact</span>`;
       }
-      if (method === 'startsWith') {
-        return `<span class="mc-preview-editable-val">${valEsc}</span> <span class="mc-preview-badge amber" title="Started with ${derivedEsc}">starts-with</span>`;
+      if (method === 'startsWith' || method === 'leading-numeric-base' || method === 'prefix-base') {
+        return `<span class="mc-preview-editable-val">${valEsc}</span> <span class="mc-preview-badge amber" title="Approximate match from ${derivedEsc}">approx</span>`;
       }
-      if (method === 'fuzzy') {
+      if (method === 'fuzzy' || method === 'numeric-near') {
         const pct = confidence != null ? Math.round(confidence * 100) : null;
         const pctText = pct != null ? ` ${pct}%` : '';
         const badgeClass = needsReview ? 'orange' : 'amber';
-        return `<span class="mc-preview-editable-val">${valEsc}</span> <span class="mc-preview-badge ${badgeClass}" title="Fuzzy match${pctText} to ${derivedEsc}">fuzzy${pctText}</span>`;
+        return `<span class="mc-preview-editable-val">${valEsc}</span> <span class="mc-preview-badge ${badgeClass}" title="Approximate match${pctText} to ${derivedEsc}">fuzzy${pctText}</span>`;
       }
-      if (method === 'ambiguous') {
+      if (method === 'ambiguous' || method === 'ambiguous-approximate') {
         return `<span class="mc-preview-editable-val">—</span> <span class="mc-preview-badge bad" title="Ambiguous match for ${derivedEsc}">ambiguous</span>`;
       }
       if (needsReview) {
@@ -470,14 +380,14 @@ export async function xmlCiiBuildAndRenderPreview(rootEl, xmlText, config, optio
       const placeholder = fieldKey === 'p1' ? 'P1' : (fieldKey === 't1' ? 'T1' : (fieldKey === 't2' ? 'T2' : (fieldKey === 't3' ? 'T3' : 'density')));
       return `
         <div class="${cellClass}">
-          <input type="text" class="mc-preview-pd-input" value="${_esc(val)}" 
+          <input type="text" class="mc-preview-pd-input" value="${_esc(val)}"
                  placeholder="${placeholder}"
-                 data-mc-pd-field="${_esc(fieldKey)}" 
-                 data-mc-pd-linekey="${_esc(lineKey)}" 
+                 data-mc-pd-field="${_esc(fieldKey)}"
+                 data-mc-pd-linekey="${_esc(lineKey)}"
                  data-mc-pd-row="${ri}">
-          <button type="button" class="mc-preview-filldown-btn mc-pd-filldown" 
-                  data-mc-fill-field="${_esc(fieldKey)}" 
-                  data-mc-fill-from="${ri}" title="Fill down same value to all rows below">↓</button>
+          <button type="button" class="mc-preview-filldown-btn mc-pd-filldown"
+                  data-mc-fill-field="${_esc(fieldKey)}"
+                  data-mc-fill-from="${ri}" title="Group-wise fill down: blanks/auto-filled cells only, stop at next manual value">↓</button>
         </div>
       `;
     },
@@ -486,6 +396,15 @@ export async function xmlCiiBuildAndRenderPreview(rootEl, xmlText, config, optio
         const overrides = ensureOverrides(config);
         if (editType === 'pipingClass') overrides.pipingClass = { ...overrides.pipingClass, [derivedKey]: newVal };
         else if (editType === 'materialCode') overrides.material = { ...overrides.material, [derivedKey]: newVal };
+
+        markPreviewOverrideManual({
+          config,
+          ensureOverrides,
+          field: editType,
+          key: _fieldOverrideKey(editType, derivedKey),
+          value: newVal,
+        });
+
         onSaveConfig(config);
         const valSpan = td.querySelector('.mc-preview-editable-val');
         if (valSpan) valSpan.textContent = newVal;
@@ -493,25 +412,16 @@ export async function xmlCiiBuildAndRenderPreview(rootEl, xmlText, config, optio
         if (badge) { badge.textContent = '✓ override'; badge.className = 'mc-preview-badge exact'; }
       }});
     },
-    onFillDownClick: ({ field, fromRow, currentVal, sourceTd, btn }) => {
-      if (!currentVal) return;
-      const overrides = ensureOverrides(config);
-      let filled = 0;
-      host.querySelectorAll(`[data-mc-edit-type="${field}"]`).forEach((td) => {
-        const tdRow = Number(td.getAttribute('data-mc-edit-row') || 0);
-        if (tdRow <= fromRow) return;
-        const tdKey = td.getAttribute('data-mc-edit-derived') || td.getAttribute('data-mc-edit-mat') || '';
-        if (field === 'pipingClass') overrides.pipingClass = { ...overrides.pipingClass, [tdKey]: currentVal };
-        else if (field === 'materialCode') overrides.material = { ...overrides.material, [tdKey]: currentVal };
-        filled += 1;
-        const valSpan = td.querySelector('.mc-preview-editable-val');
-        if (valSpan) valSpan.textContent = currentVal;
-        const badge = td.querySelector('.mc-preview-badge');
-        if (badge) { badge.textContent = '✓ override'; badge.className = 'mc-preview-badge exact'; }
+    onFillDownClick: ({ field, fromRow, currentVal }) => {
+      const filled = applyPreviewOverrideFillDown({
+        host,
+        config,
+        ensureOverrides,
+        field,
+        fromRow,
+        currentValue: currentVal,
       });
-      if (filled > 0) {
-        onSaveConfig(config);
-      }
+      if (filled > 0) onSaveConfig(config);
     },
     onProcessInputChange: ({ field, fieldKey, lineKey, value, input }) => {
       const overrides = ensureOverrides(config);
@@ -522,57 +432,31 @@ export async function xmlCiiBuildAndRenderPreview(rootEl, xmlText, config, optio
       if (cleanVal === '') delete overrides.processData[lineKey][actualField];
       else overrides.processData[lineKey][actualField] = cleanVal;
       if (Object.keys(overrides.processData[lineKey]).length === 0) delete overrides.processData[lineKey];
+
+      markPreviewProcessManual({
+        config,
+        ensureOverrides,
+        field: actualField,
+        lineKey,
+        value: cleanVal,
+      });
+
       onSaveConfig(config);
       const cell = input.closest('.mc-preview-pd-cell');
       if (cell) {
         cell.className = cleanVal ? 'mc-preview-pd-cell mc-preview-pd-override' : 'mc-preview-pd-cell mc-preview-pd-empty';
       }
     },
-    onProcessFillDown: ({ field, fromRow, currentVal }) => {
-      if (!currentVal) return;
-      const overrides = ensureOverrides(config);
-      if (!overrides.processData) overrides.processData = {};
-      let filled = 0;
-      host.querySelectorAll(`[data-mc-pd-field="${field}"]`).forEach((input) => {
-        const rowIdx = Number(input.getAttribute('data-mc-pd-row') || 0);
-        if (rowIdx <= fromRow) return;
-        const lineKey = input.getAttribute('data-mc-pd-linekey') || '';
-        if (lineKey) {
-          if (!overrides.processData[lineKey]) overrides.processData[lineKey] = {};
-          overrides.processData[lineKey][field] = currentVal;
-          input.value = currentVal;
-          const cell = input.closest('.mc-preview-pd-cell');
-          if (cell) cell.className = 'mc-preview-pd-cell mc-preview-pd-override';
-          filled += 1;
-        }
-      });
-      if (filled > 0) {
-        onSaveConfig(config);
-      }
-    },
     onProcessFillDownClick: ({ fieldKey, fromRow, value }) => {
-      const field = fieldKey;
-      const currentVal = value;
-      if (!currentVal) return;
-      const overrides = ensureOverrides(config);
-      if (!overrides.processData) overrides.processData = {};
-      let filled = 0;
-      host.querySelectorAll(`[data-mc-pd-field="${field}"]`).forEach((input) => {
-        const rowIdx = Number(input.getAttribute('data-mc-pd-row') || 0);
-        if (rowIdx <= fromRow) return;
-        const lineKey = input.getAttribute('data-mc-pd-linekey') || '';
-        if (lineKey) {
-          if (!overrides.processData[lineKey]) overrides.processData[lineKey] = {};
-          overrides.processData[lineKey][field] = currentVal;
-          input.value = currentVal;
-          const cell = input.closest('.mc-preview-pd-cell');
-          if (cell) cell.className = 'mc-preview-pd-cell mc-preview-pd-override';
-          filled += 1;
-        }
+      const filled = applyPreviewProcessFillDown({
+        host,
+        config,
+        ensureOverrides,
+        field: fieldKey,
+        fromRow,
+        currentValue: value,
       });
-      if (filled > 0) {
-        onSaveConfig(config);
-      }
+      if (filled > 0) onSaveConfig(config);
     }
   });
 
