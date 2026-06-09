@@ -2928,6 +2928,10 @@ function _xmlCiiForwardElementLengths(nodes) {
   return xmlCiiForwardElementLengths(nodes);
 }
 
+function _xmlCiiAncestorBranchName(node) {
+  return xmlCiiAncestorBranchName(node);
+}
+
 function _collectXmlCiiZeroRigidWeightIssues(xmlText, stagedJsonText, config) {
   return collectXmlCiiZeroRigidWeightIssues(xmlText, stagedJsonText, config);
 }
