@@ -2,6 +2,22 @@ import { decodeTextUtf8, encodeTextUtf8, baseNameWithoutExtension } from '../cor
 import { collectXmlCiiZeroRigidWeightIssues, applyXmlCiiRigidWeightOverrides } from '../../../converters/xml-cii2019-core/weight-match-model.js';
 import { enrichXmlForCii2019 } from './xmltocii2019_helper/enrichment-core.js';
 
+const XML_CII_STAGE_TIMEOUT_MS = 120000;
+
+function timeoutMessage(stage, timeoutMs) {
+  return `XML->CII(2019) timed out during ${stage} after ${Math.round(timeoutMs / 1000)}s. Check network access to Pyodide/CDN and converter script loading.`;
+}
+
+function withTimeout(promise, stage, timeoutMs = XML_CII_STAGE_TIMEOUT_MS) {
+  let timeoutId = null;
+  const timeout = new Promise((_, reject) => {
+    timeoutId = setTimeout(() => reject(new Error(timeoutMessage(stage, timeoutMs))), timeoutMs);
+  });
+  return Promise.race([promise, timeout]).finally(() => {
+    if (timeoutId) clearTimeout(timeoutId);
+  });
+}
+
 export async function run(context) {
   const primary = context.inputFiles.find(f => f.role === 'primary');
   if (!primary || !primary.bytes) throw new Error('Primary XML input is required for XML->CII(2019).');
@@ -14,11 +30,19 @@ export async function run(context) {
 
   if (runValues.createEnrichedXml === false) {
     if (!context.workerRunner) throw new Error('Python worker runtime is not available.');
+    context.setStatus?.('Starting Python worker...', 'running');
     const serializableOptions = Object.fromEntries(Object.entries(runValues).filter(([, v]) => typeof v !== 'function'));
-    return await context.workerRunner.runJob({ converterId: context.converterId, inputFiles: context.inputFiles, options: serializableOptions });
+    return await withTimeout(
+      context.workerRunner.runJob({ converterId: context.converterId, inputFiles: context.inputFiles, options: serializableOptions }),
+      'Python worker conversion',
+    );
   }
 
-  const enriched = await enrichXmlForCii2019(originalXmlText, stagedJsonText, runValues);
+  context.setStatus?.('Enriching XML before CII conversion...', 'running');
+  const enriched = await withTimeout(
+    enrichXmlForCii2019(originalXmlText, stagedJsonText, runValues),
+    'browser-side XML enrichment',
+  );
   const rigidReviewLogLines = [];
   const rigidWeightIssues = collectXmlCiiZeroRigidWeightIssues(enriched.xmlText, stagedJsonText, enriched.config);
 
@@ -26,7 +50,7 @@ export async function run(context) {
     context.setStatus(`Review needed: ${rigidWeightIssues.length} rigid weight(s) are zero.`, 'running');
     let review = null;
     try {
-      review = await runValues.openXmlCiiZeroRigidWeightPopup(rigidWeightIssues);
+      review = await withTimeout(runValues.openXmlCiiZeroRigidWeightPopup(rigidWeightIssues), 'rigid zero-weight review', 300000);
     } catch (error) {
       review = { cancelled: true, error };
     }
@@ -59,11 +83,15 @@ export async function run(context) {
   const enrichedName = `${stem}_enriched.xml`;
   if (!context.workerRunner) throw new Error('Python worker runtime is not available.');
   const serializableOptions = Object.fromEntries(Object.entries({ ...runValues, createEnrichedXml: false }).filter(([, v]) => typeof v !== 'function'));
-  const ciiResponse = await context.workerRunner.runJob({
-    converterId: context.converterId,
-    inputFiles: [{ role: 'primary', name: enrichedName, bytes: encodeTextUtf8(enriched.xmlText) }],
-    options: serializableOptions
-  });
+  context.setStatus?.('Running CII conversion in Python worker...', 'running');
+  const ciiResponse = await withTimeout(
+    context.workerRunner.runJob({
+      converterId: context.converterId,
+      inputFiles: [{ role: 'primary', name: enrichedName, bytes: encodeTextUtf8(enriched.xmlText) }],
+      options: serializableOptions
+    }),
+    'Python worker conversion',
+  );
 
   const ciiOutputs = Array.isArray(ciiResponse.outputs) ? ciiResponse.outputs : [];
   const stats = enriched.stats;
