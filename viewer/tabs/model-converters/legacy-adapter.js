@@ -2928,22 +2928,6 @@ function _xmlCiiForwardElementLengths(nodes) {
   return xmlCiiForwardElementLengths(nodes);
 }
 
-function _xmlCiiAncestorBranchName(node) {
-  return xmlCiiAncestorBranchName(node);
-}
-
-function _scoreXmlCiiWeightCandidates({ boreMm, rating, lengthMm }, config) {
-  return scoreXmlCiiWeightCandidates({ boreMm, rating, lengthMm }, config);
-}
-
-function _buildStagedComponentIndex(stagedJsonText, config) {
-  return buildStagedComponentIndex(stagedJsonText, config);
-}
-
-function _stagedComponentForXmlNode(node, stagedIndex, config) {
-  return stagedComponentForXmlNode(node, stagedIndex, config);
-}
-
 function _collectXmlCiiZeroRigidWeightIssues(xmlText, stagedJsonText, config) {
   return collectXmlCiiZeroRigidWeightIssues(xmlText, stagedJsonText, config);
 }
