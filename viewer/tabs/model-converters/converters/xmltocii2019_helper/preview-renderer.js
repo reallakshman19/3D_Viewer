@@ -84,6 +84,7 @@ function _deriveBoreFromBranchName(branchName, config) { const raw = _regexGroup
 function _fieldOverrideKey(editType, derivedKey) { return _toText(derivedKey).trim(); }
 function _hasOwn(obj, key) { return !!obj && Object.prototype.hasOwnProperty.call(obj, key); }
 function _overrideSource(overrides, bucket, key) { return _hasOwn(overrides?.[bucket], key) ? 'override' : 'auto'; }
+function _isDefaultSource(source) { return source === 'default' || source === 'config-default' || source === 'default-zero'; }
 function _percentText(confidence) {
   const numeric = Number(confidence);
   if (!Number.isFinite(numeric)) return '';
@@ -124,7 +125,7 @@ export function xmlCiiDryRunPreview(xmlText, config, stagedJsonText) {
     const t2 = _xmlCiiProcessValue(pdOverride, lineListMatch, 't2', ['t2'], config);
     const t3 = _xmlCiiProcessValue(pdOverride, lineListMatch, 't3', ['t3'], config);
     const density = _xmlCiiProcessValue(pdOverride, lineListMatch, 'density', ['density'], config);
-    const wallThickness = resolved.wallThicknessMm ? Number(resolved.wallThicknessMm.toPrecision(6)).toString() : '';
+    const wallThickness = resolved.wallThicknessMm != null ? Number(resolved.wallThicknessMm.toPrecision(6)).toString() : '';
     const corrosion = resolved.corrosionAllowanceMm != null ? String(resolved.corrosionAllowanceMm) : '';
     let matMethod = 'none';
     if (resolved.materialSource === 'override' || resolved.materialSource === 'override-material-map') matMethod = 'override';
@@ -159,9 +160,9 @@ export function xmlCiiDryRunPreview(xmlText, config, stagedJsonText) {
       t3Source: _xmlCiiProcessSource(pdOverride, lineListMatch, 't3', ['t3'], config),
       densitySource: _xmlCiiProcessSource(pdOverride, lineListMatch, 'density', ['density'], config),
       wallThickness,
-      wallThicknessSource: _overrideSource(config.overrides, 'wallThickness', lineKey),
+      wallThicknessSource: resolved.wallThicknessSource || _overrideSource(config.overrides, 'wallThickness', lineKey),
       corrosion,
-      corrosionSource: _overrideSource(config.overrides, 'corrosion', lineKey),
+      corrosionSource: resolved.corrosionSource || _overrideSource(config.overrides, 'corrosion', lineKey),
     });
     let previousPosition = null;
     for (const node of _xmlChildrenByName(branch, 'Node')) {
@@ -205,8 +206,8 @@ export async function xmlCiiBuildAndRenderPreview(rootEl, xmlText, config, optio
     },
     processInputHtmlRenderer: (fieldKey, lineKey, val, src, ri) => {
       const cls = src === 'override' ? 'mc-preview-pd-cell mc-preview-pd-override' : (src === 'linelist' ? 'mc-preview-pd-cell mc-preview-pd-linelist' : (src === 'default' ? 'mc-preview-pd-cell mc-preview-pd-default' : 'mc-preview-pd-cell mc-preview-pd-empty'));
-      const style = src === 'default' ? 'style="color:#7f1d1d;font-weight:600;font-style:italic;" title="Config default value — click Review defaults to edit line-specific values"' : '';
-      return `↓`;
+      const inputStyle = src === 'default' ? ' style="color:#7f1d1d;font-weight:600;font-style:italic;" title="Config default value"' : '';
+      return `<div class="${cls}"><input type="text" class="mc-preview-pd-input" value="${_esc(val)}" placeholder="${fieldKey}" data-mc-pd-field="${_esc(fieldKey)}" data-mc-pd-linekey="${_esc(lineKey)}" data-mc-pd-row="${ri}"${inputStyle}><button type="button" class="mc-preview-filldown-btn mc-pd-filldown" data-mc-fill-field="${_esc(fieldKey)}" data-mc-fill-from="${ri}" title="Group-wise fill down: blanks/auto-filled cells only, stop at next manual value">↓</button></div>`;
     },
     onCellEditClick: ({ editType, derivedKey, currentVal, td }) => openOverridePopup({ editType, derivedKey, currentVal, config, onSave: (newVal) => { const overrides = ensureOverrides(config); if (!overrides[editType] || typeof overrides[editType] !== 'object') overrides[editType] = {}; if (editType === 'pipingClass') overrides.pipingClass = { ...overrides.pipingClass, [derivedKey]: newVal }; else if (editType === 'materialCode') overrides.materialCode = { ...overrides.materialCode, [derivedKey]: newVal }; else if (editType === 'material') overrides.material = { ...overrides.material, [derivedKey]: newVal }; else if (editType === 'rating') overrides.rating = { ...overrides.rating, [derivedKey]: newVal }; else if (editType === 'wallThickness') overrides.wallThickness = { ...overrides.wallThickness, [derivedKey]: newVal }; else if (editType === 'corrosion') overrides.corrosion = { ...overrides.corrosion, [derivedKey]: newVal }; markPreviewOverrideManual({ config, ensureOverrides, field: editType, key: _fieldOverrideKey(editType, derivedKey), value: newVal }); onSaveConfig(config); td.dataset.mcFillState = 'manual'; refreshPreview(); }}),
     onFillDownClick: ({ field, fromRow, currentVal }) => { const filled = applyPreviewOverrideFillDown({ host, config, ensureOverrides, field, fromRow, currentValue: currentVal }); if (filled > 0) { onSaveConfig(config); refreshPreview(); } },
@@ -217,59 +218,10 @@ export async function xmlCiiBuildAndRenderPreview(rootEl, xmlText, config, optio
 
   const defaultFields = ['p1', 't1', 't2', 't3', 'density', 'wallThickness', 'corrosion'];
   const defaultRows = branchRows
-    .map((row, ri) => ({ row, ri, fields: defaultFields.filter((field) => row[`${field}Source`] === 'default' || row[`${field}Source`] === 'config-default' || row[`${field}Source`] === 'default-zero') }))
+    .map((row, ri) => ({ row, ri, fields: defaultFields.filter((field) => _isDefaultSource(row[`${field}Source`])) }))
     .filter((item) => item.fields.length > 0);
   if (defaultRows.length) {
-    host.insertAdjacentHTML('afterbegin', `Review defaults (${defaultRows.length} line${defaultRows.length === 1 ? '' : 's'}) Config default values are shown in dark red.`);
-    host.querySelector('#mc-review-default-values')?.addEventListener('click', () => {
-      const modal = document.createElement('div');
-      modal.style.cssText = 'position:fixed;inset:5vh 5vw;z-index:9999;background:#0f1724;color:#e6edf5;border:1px solid #31455f;border-radius:10px;padding:14px;overflow:auto;box-shadow:0 20px 80px rgba(0,0,0,.45);';
-      modal.innerHTML = `
-        
-          Lines using config defaults
-          Close
-        
-        Edit values below to create line-specific overrides. Blank fields stay as defaults.
-        
-          BranchLine Key${defaultFields.map((f) => `${_esc(f)}`).join('')}
-          
-            ${defaultRows.map(({ row, ri }) => `
-              ${_esc(row.branchName)}
-              ${_esc(row.lineKey)}
-              ${defaultFields.map((field) => {
-                const isDefault = row[`${field}Source`] === 'default' || row[`${field}Source`] === 'config-default' || row[`${field}Source`] === 'default-zero';
-                return ``;
-              }).join('')}
-            `).join('')}
-          
-        
-        
-          Apply line overrides
-        `;
-      document.body.appendChild(modal);
-      modal.querySelector('[data-close-defaults]')?.addEventListener('click', () => modal.remove());
-      modal.querySelector('[data-apply-defaults]')?.addEventListener('click', () => {
-        const overrides = ensureOverrides(config);
-        if (!overrides.processData) overrides.processData = {};
-        modal.querySelectorAll('[data-default-edit-row][data-default-edit-field]').forEach((input) => {
-          const ri = Number(input.getAttribute('data-default-edit-row') || -1);
-          const field = input.getAttribute('data-default-edit-field') || '';
-          const row = branchRows[ri];
-          const value = _toText(input.value).trim();
-          if (!row?.lineKey || !field || !value) return;
-          if (field === 'wallThickness' || field === 'corrosion') {
-            if (!overrides[field]) overrides[field] = {};
-            overrides[field][row.lineKey] = value;
-          } else {
-            if (!overrides.processData[row.lineKey]) overrides.processData[row.lineKey] = {};
-            overrides.processData[row.lineKey][field] = value;
-          }
-        });
-        onSaveConfig(config);
-        modal.remove();
-        refreshPreview();
-      });
-    });
+    host.insertAdjacentHTML('afterbegin', `<div class="model-converters-workflow-detail-note" style="margin:0 0 8px;border-color:#7f1d1d;color:#7f1d1d;background:#fff7f7;">${defaultRows.length} line${defaultRows.length === 1 ? '' : 's'} use config defaults. Default values are shown in dark red.</div>`);
   }
   table.bind(host);
 }
