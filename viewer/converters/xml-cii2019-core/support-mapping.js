@@ -448,6 +448,39 @@ function normalizeXmlType(type) {
   return XML_CII_NATIVE_RESTRAINT_TYPE_ALIASES[upper] || upper;
 }
 
+function formatDirection(direction) {
+  const vector = normalizeDirectionVector(direction);
+  return vector ? `${vector.x.toFixed(9)},${vector.y.toFixed(9)},${vector.z.toFixed(9)}` : '';
+}
+
+export function supportDirectionAudit(entries = []) {
+  return (Array.isArray(entries) ? entries : [])
+    .map((entry) => {
+      if (!entry || typeof entry === 'string') return '';
+      const dir = formatDirection(entry.direction);
+      const mode = toText(entry.directionMode || 'none');
+      if (!dir && mode === 'none') return '';
+      return `${toText(entry.type || '')}:${mode}${dir ? `:${dir}` : ':missing'}`;
+    })
+    .filter(Boolean)
+    .join('|');
+}
+
+export function supportDirectionAuditForNode(nodeElement) {
+  return xmlChildrenByName(nodeElement, 'Restraint')
+    .map((restraint) => {
+      const type = normalizeXmlType(xmlText(restraint, 'Type'));
+      const dir = formatDirection({
+        x: xmlText(restraint, 'DirectionCosineX'),
+        y: xmlText(restraint, 'DirectionCosineY'),
+        z: xmlText(restraint, 'DirectionCosineZ'),
+      });
+      return dir ? `${type}:from-xml:${dir}` : '';
+    })
+    .filter(Boolean)
+    .join('|');
+}
+
 function createRestraintEntry(fields) {
   return {
     ...fields,
