@@ -4,8 +4,12 @@ export const PSNM_MASTER_STATUS = Object.freeze({
   ERROR: 'ERROR',
   DISABLED: 'DISABLED',
   MISSING_FROM_TABLE1: 'MISSING_FROM_TABLE1',
+  MISSING_FROM_TABLE2: 'MISSING_FROM_TABLE2',
   INVALID_POSITION: 'INVALID_POSITION',
+  INVALID_COORDINATE: 'INVALID_COORDINATE',
   DUPLICATE_PS: 'DUPLICATE_PS',
+  BORE_CONFLICT: 'BORE_CONFLICT',
+  MISSING_BORE: 'MISSING_BORE',
 });
 
 let PSNM_ROW_SEQUENCE = 0;
@@ -41,8 +45,42 @@ export function PSNM_makeMasterPsRow(seed = {}) {
   };
 }
 
+export function PSNM_makeMasterNodeRow(seed = {}) {
+  return {
+    rowId: seed.rowId || PSNM_nextRowId('node'),
+    node: String(seed.node ?? '').trim(),
+    occurrenceIndex: seed.occurrenceIndex ?? 1,
+    occurrenceId: seed.occurrenceId || '',
+    rawX: seed.rawX ?? null,
+    rawY: seed.rawY ?? null,
+    rawZ: seed.rawZ ?? null,
+    nodeE: seed.nodeE ?? null,
+    nodeU: seed.nodeU ?? null,
+    nodeS: seed.nodeS ?? null,
+    table2Bore: seed.table2Bore ?? null,
+    table3Od: seed.table3Od ?? null,
+    table3DerivedBore: seed.table3DerivedBore ?? null,
+    finalNodeBore: seed.finalNodeBore ?? null,
+    boreSource: seed.boreSource || 'MISSING',
+    boreConflict: seed.boreConflict === true,
+    isMandatoryNode: seed.isMandatoryNode === true,
+    mandatorySource: seed.mandatorySource || '',
+    isTerminal: seed.isTerminal === true,
+    sourceTable: seed.sourceTable || '',
+    sourceRow: seed.sourceRow ?? null,
+    status: seed.status || PSNM_MASTER_STATUS.OK,
+    enabled: seed.enabled !== false,
+    userEdited: seed.userEdited === true,
+    remarks: seed.remarks || '',
+  };
+}
+
 export function PSNM_cloneMasterPsRow(row) {
   return PSNM_makeMasterPsRow({ ...row, rowId: row.rowId });
+}
+
+export function PSNM_cloneMasterNodeRow(row) {
+  return PSNM_makeMasterNodeRow({ ...row, rowId: row.rowId });
 }
 
 export const PSNM_EDITABLE_MASTER_PS_FIELDS = new Set([
@@ -50,6 +88,17 @@ export const PSNM_EDITABLE_MASTER_PS_FIELDS = new Set([
   'positionRaw',
   'p1bore',
   'isMandatoryPs',
+  'enabled',
+  'remarks',
+]);
+
+export const PSNM_EDITABLE_MASTER_NODE_FIELDS = new Set([
+  'node',
+  'rawX',
+  'rawY',
+  'rawZ',
+  'finalNodeBore',
+  'isMandatoryNode',
   'enabled',
   'remarks',
 ]);
