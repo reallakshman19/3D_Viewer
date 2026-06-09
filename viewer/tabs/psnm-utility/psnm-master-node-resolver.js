@@ -115,6 +115,7 @@ export function PSNM_applyMasterNodeTransform(masterNodeRows = [], transform, co
 
 export function PSNM_recomputeMasterNodeRow(row, transform = null, coordinateDecimals = 0) {
   row.node = String(row.node ?? '').trim();
+  if (Number(row.occurrenceIndex) > 0 && row.node) row.occurrenceId = PSNM_occurrenceId(row.node, Number(row.occurrenceIndex));
   row.rawX = Number.isFinite(Number(row.rawX)) ? Number(row.rawX) : null;
   row.rawY = Number.isFinite(Number(row.rawY)) ? Number(row.rawY) : null;
   row.rawZ = Number.isFinite(Number(row.rawZ)) ? Number(row.rawZ) : null;
