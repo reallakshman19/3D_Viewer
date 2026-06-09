@@ -46,13 +46,54 @@ function PSNM_occurrenceId(node, index) {
   return `${node}#${String(index).padStart(3, '0')}`;
 }
 
-export function PSNM_parseTable4B(text, logger = null) {
-  const rows = [];
-  const lines = String(text || '')
+function PSNM_lines(text) {
+  return String(text || '')
     .split(/\r?\n/)
     .map((line) => line.trim())
     .filter(Boolean)
     .filter((line) => !/^-{3,}$/.test(line));
+}
+
+function PSNM_parseTable2Fallback(text, logger = null) {
+  const rows = [];
+  const lines = PSNM_lines(text);
+  for (const [index, line] of lines.entries()) {
+    const cells = PSNM_splitCells(line);
+    if (cells.length < 4) {
+      logger?.user?.('WARNING', 'Table 2 Row Skipped', 'Table 2', line, 'Headerless Table 2 row must contain at least Node, X, Y, Z.', 'Use headerless order: Node | X | Y | Z | Bore optional | Mandatory optional.', { rowIndex: index + 1, cells });
+      continue;
+    }
+    const node = String(cells[0] ?? '').trim();
+    const x = PSNM_number(cells[1]);
+    const y = PSNM_number(cells[2]);
+    const z = PSNM_number(cells[3]);
+    if (!node || !Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(z)) {
+      logger?.user?.('WARNING', 'Table 2 Row Skipped', 'Table 2', line, 'Could not derive Node/X/Y/Z from headerless canonical order.', 'Use order: Node | X | Y | Z, or add headers Node, X, Y, Z.', { rowIndex: index + 1, cells });
+      continue;
+    }
+    const directBoreMm = PSNM_number(cells[4]);
+    const isMandatoryNode = PSNM_bool(cells[5]);
+    rows.push({
+      node,
+      x,
+      y,
+      z,
+      position: `${x}, ${y}, ${z}`,
+      directBoreMm: Number.isFinite(directBoreMm) ? directBoreMm : null,
+      isMandatoryNode,
+      rowMandatorySource: isMandatoryNode ? 'TABLE2' : '',
+      rowIndex: index + 1,
+    });
+  }
+  if (rows.length) {
+    logger?.user?.('INFO', 'Table 2 Fallback Parser', 'Table 2', `${rows.length} node rows`, 'Strict Node parser returned no rows; headerless canonical parser recovered Node/X/Y/Z rows.', 'Verify Master Node preview before matching.', { mode: 'HEADERLESS_CANONICAL', assumedOrder: ['Node', 'X', 'Y', 'Z', 'Bore?', 'Mandatory?'] });
+  }
+  return rows;
+}
+
+export function PSNM_parseTable4B(text, logger = null) {
+  const rows = [];
+  const lines = PSNM_lines(text);
   let headers = null;
 
   for (const [index, line] of lines.entries()) {
@@ -145,7 +186,8 @@ export function PSNM_recomputeMasterNodeRow(row, transform = null, coordinateDec
 }
 
 export function PSNM_resolveMasterNodeTable({ table2Text, table3Text, table4BText, logger = null }) {
-  const table2Rows = PSNM_parseNodeRows(table2Text, logger);
+  let table2Rows = PSNM_parseNodeRows(table2Text, logger);
+  if (!table2Rows.length && String(table2Text || '').trim()) table2Rows = PSNM_parseTable2Fallback(table2Text, logger);
   const table3Rows = PSNM_parseNodeDiaRows(table3Text, logger);
   const table4BRows = PSNM_parseTable4B(table4BText, logger);
   PSNM_logNodeTableLogic({ logger, table2Text, table2Rows, table3Text, table3Rows, table4BText, table4BRows });
