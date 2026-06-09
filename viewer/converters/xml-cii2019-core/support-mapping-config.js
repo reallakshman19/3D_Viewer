@@ -28,19 +28,33 @@ function normalizeXmlType(type) {
   return t;
 }
 
+function splitCompositeXmlType(part) {
+  const value = toText(part);
+  if (!value) return [];
+  const out = [];
+  let current = '';
+  for (let i = 0; i < value.length; i += 1) {
+    const ch = value[i];
+    if (ch === '+' && i > 0) {
+      if (current.trim()) out.push(current.trim());
+      current = '';
+    } else {
+      current += ch;
+    }
+  }
+  if (current.trim()) out.push(current.trim());
+  return out;
+}
+
 function splitXmlTypeText(value) {
   const text = toText(value);
   if (!text) return [];
   const primary = text.split(/[,;\n]+/g).map((part) => part.trim()).filter(Boolean);
   const out = [];
   for (const part of primary) {
-    // Split composite text such as GUI+LIM, but do not split signed native axes
-    // such as +Y, -X, +RX, etc.
-    if (/^[+-]/.test(part)) {
-      out.push(part);
-    } else {
-      out.push(...part.split(/\s*\+\s*/g).map((item) => item.trim()).filter(Boolean));
-    }
+    // Split composite text such as GUI+LIM and +Y+GUI, while preserving signed
+    // native axes as complete individual tokens: +Y, -X, +RX, etc.
+    out.push(...splitCompositeXmlType(part));
   }
   return out;
 }
