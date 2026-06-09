@@ -11,8 +11,19 @@ import {
 } from './psnm-master-types.js';
 
 function PSNM_number(value) {
-  const match = String(value ?? '').replace(/,/g, '').match(/-?\d+(?:\.\d+)?/);
+  const text = String(value ?? '').trim();
+  if (!text || text === '-') return NaN;
+  const match = text.replace(/,/g, '').match(/-?\d+(?:\.\d+)?/);
   return match ? Number(match[0]) : NaN;
+}
+
+function PSNM_optionalNumber(value) {
+  const text = String(value ?? '').trim();
+  if (!text || text === '-') return null;
+  const n = Number(text.replace(/,/g, ''));
+  if (Number.isFinite(n)) return n;
+  const parsed = PSNM_number(text);
+  return Number.isFinite(parsed) ? parsed : null;
 }
 
 function PSNM_bool(value) {
@@ -116,10 +127,10 @@ export function PSNM_applyMasterNodeTransform(masterNodeRows = [], transform, co
 export function PSNM_recomputeMasterNodeRow(row, transform = null, coordinateDecimals = 0) {
   row.node = String(row.node ?? '').trim();
   if (Number(row.occurrenceIndex) > 0 && row.node) row.occurrenceId = PSNM_occurrenceId(row.node, Number(row.occurrenceIndex));
-  row.rawX = Number.isFinite(Number(row.rawX)) ? Number(row.rawX) : null;
-  row.rawY = Number.isFinite(Number(row.rawY)) ? Number(row.rawY) : null;
-  row.rawZ = Number.isFinite(Number(row.rawZ)) ? Number(row.rawZ) : null;
-  row.finalNodeBore = Number.isFinite(Number(row.finalNodeBore)) ? Number(row.finalNodeBore) : null;
+  row.rawX = PSNM_optionalNumber(row.rawX);
+  row.rawY = PSNM_optionalNumber(row.rawY);
+  row.rawZ = PSNM_optionalNumber(row.rawZ);
+  row.finalNodeBore = PSNM_optionalNumber(row.finalNodeBore);
   row.isTerminal = row.node === '-1';
 
   if (row.enabled === false) row.status = PSNM_MASTER_STATUS.DISABLED;
