@@ -33,6 +33,15 @@ function normHeader(value) {
   return String(value ?? '').toLowerCase().replace(/[_.-]+/g, ' ').replace(/\s+/g, ' ').trim();
 }
 
+function readSnapshot() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(STORAGE_KEY) || 'null');
+    return parsed?.version === 1 ? parsed : { version: 1 };
+  } catch {
+    return { version: 1 };
+  }
+}
+
 function parsePsPosition(text) {
   const src = String(text || '').replace(/,/g, ' ');
   const out = { e: NaN, u: NaN, s: NaN };
@@ -142,16 +151,22 @@ function saveFromModal(modal) {
   saveTimer = setTimeout(() => {
     try {
       const current = liveModal() || modal;
-      localStorage.setItem(STORAGE_KEY, JSON.stringify({ version: 1, savedAt: new Date().toISOString(), source: sourceValues(current), setup: setupValues(current) }));
+      const previous = readSnapshot();
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({
+        ...previous,
+        version: 1,
+        savedAt: new Date().toISOString(),
+        source: sourceValues(current),
+        setup: setupValues(current),
+        manualAnchors: previous.manualAnchors || null,
+      }));
     } catch {}
   }, 150);
 }
 
 function loadSnapshot() {
-  try {
-    const parsed = JSON.parse(localStorage.getItem(STORAGE_KEY) || 'null');
-    return parsed?.version === 1 ? parsed : null;
-  } catch { return null; }
+  const parsed = readSnapshot();
+  return parsed?.version === 1 ? parsed : null;
 }
 
 function restoreIntoModal(modal) {
