@@ -7,6 +7,7 @@ import {
   PSNM_MASTER_STATUS,
   PSNM_normalizePsName,
 } from './psnm-master-types.js';
+import { PSNM_logPsTableLogic } from './psnm-table-logic-log.js';
 
 function PSNM_number(value) {
   const text = String(value ?? '').trim();
@@ -74,8 +75,6 @@ function PSNM_boreFromRow(cells, byHeader = {}) {
   const n = PSNM_number(direct);
   if (Number.isFinite(n)) return n;
 
-  // Headerless Table 1 canonical positional format:
-  // PS-12697/DATUM <tab> E ... S ... U ... <tab> 100.00
   if (!Object.keys(byHeader || {}).length && cells.length >= 3) {
     const last = PSNM_number(cells[cells.length - 1]);
     const beforeLast = PSNM_number(cells[cells.length - 2]);
@@ -207,6 +206,7 @@ export function PSNM_resolveMasterPsTable({ table1Text, table4AText, logger = nu
   let table1Rows = PSNM_parsePsRows(table1Text, logger);
   if (!table1Rows.length && String(table1Text || '').trim()) table1Rows = PSNM_parseTable1Fallback(table1Text, logger);
   const table4ARows = PSNM_parseTable4A(table4AText, logger);
+  PSNM_logPsTableLogic({ logger, table1Text, table1Rows, table4AText, table4ARows });
   const byPs = new Map();
   const duplicateKeys = new Set();
 
