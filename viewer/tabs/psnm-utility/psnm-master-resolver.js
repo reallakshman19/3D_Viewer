@@ -73,6 +73,16 @@ function PSNM_boreFromRow(cells, byHeader = {}) {
   const direct = byHeader.p1bore || byHeader['p1 bore'] || byHeader.bore || byHeader.nb || byHeader.dn || byHeader['bore mm'] || byHeader['bore(mm)'];
   const n = PSNM_number(direct);
   if (Number.isFinite(n)) return n;
+
+  // Headerless Table 1 canonical positional format:
+  // PS-12697/DATUM <tab> E ... S ... U ... <tab> 100.00
+  if (!Object.keys(byHeader || {}).length && cells.length >= 3) {
+    const last = PSNM_number(cells[cells.length - 1]);
+    const beforeLast = PSNM_number(cells[cells.length - 2]);
+    if (Number.isFinite(last) && !/\b[ESUWND]\b/i.test(cells[cells.length - 1])) return last;
+    if (Number.isFinite(beforeLast) && !/\b[ESUWND]\b/i.test(cells[cells.length - 2])) return beforeLast;
+  }
+
   return NaN;
 }
 
