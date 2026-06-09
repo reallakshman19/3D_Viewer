@@ -13,6 +13,8 @@ import {
   normalizeXmlTypes,
 } from './support-mapping-config.js';
 
+const KIND_REF_FLAG = Symbol('xmlCiiSupportKindReference');
+
 function toText(value) {
   if (value === undefined || value === null) return '';
   return String(value);
@@ -205,6 +207,22 @@ function normalizeSupportKind(value) {
   return SUPPORT_KINDS.includes(kind) ? kind : '';
 }
 
+function createKindReference(descriptor, attrs) {
+  const ref = new String(descriptor.primaryKind || '');
+  ref[KIND_REF_FLAG] = true;
+  ref.primaryKind = descriptor.primaryKind || '';
+  ref.kinds = descriptor.kinds?.length ? [...descriptor.kinds] : (descriptor.primaryKind ? [descriptor.primaryKind] : []);
+  ref.attrs = attrs || {};
+  ref.toString = () => descriptor.primaryKind || '';
+  ref.valueOf = () => descriptor.primaryKind || '';
+  ref[Symbol.toPrimitive] = () => descriptor.primaryKind || '';
+  return ref;
+}
+
+function isKindReference(value) {
+  return !!(value && typeof value === 'object' && value[KIND_REF_FLAG]);
+}
+
 export function resolveXmlCiiSupportDescriptor(attrs, config = {}) {
   const direct = normalizeSupportKind(
     attrs?.SUPPORT_KIND ||
@@ -246,6 +264,16 @@ export function resolveXmlCiiSupportKind(attrs, config = {}) {
 
 export function buildStagedSupportIndex(stagedJsonText, config = {}, diagnostics = []) {
   const empty = { byCoord: new Map(), byTag: new Map(), count: 0 };
+  const supportMapping = migrateSupportMappingConfig(config);
+
+  // Phase 3 integration: both enrichment paths already preserve XML restraints
+  // when no staged support match exists. Returning an empty index here makes the
+  // global OFF switch preserve XML restraints without patching both large files.
+  if (supportMapping.useJsonForRestraints === false) {
+    diagnostics.push({ type: 'staged-support-index', supports: 0, coordinateKeys: 0, psTagKeys: 0, disabled: true });
+    return empty;
+  }
+
   if (!toText(stagedJsonText).trim()) return empty;
 
   let parsed = null;
@@ -282,9 +310,11 @@ export function buildStagedSupportIndex(stagedJsonText, config = {}, diagnostics
       if (point) break;
     }
 
+    const kindRef = createKindReference(descriptor, attrs);
     const indexed = {
       ...entry,
-      kind: descriptor.primaryKind,
+      kind: kindRef,
+      primaryKind: descriptor.primaryKind,
       kinds: descriptor.kinds?.length ? descriptor.kinds : [descriptor.primaryKind],
       dofs: descriptor.dofs || {},
       supportDescriptorSource: descriptor.source,
@@ -418,6 +448,15 @@ function normalizeXmlType(type) {
   return XML_CII_NATIVE_RESTRAINT_TYPE_ALIASES[upper] || upper;
 }
 
+function createRestraintEntry(fields) {
+  return {
+    ...fields,
+    toString() { return this.type || ''; },
+    valueOf() { return this.type || ''; },
+    [Symbol.toPrimitive]() { return this.type || ''; },
+  };
+}
+
 export function restraintEntriesFromSupportKind(kind, attrs = {}, nodeElement = null, config = {}) {
   const upperKind = normalizeSupportKind(kind);
   if (!upperKind) return [];
@@ -429,7 +468,7 @@ export function restraintEntriesFromSupportKind(kind, attrs = {}, nodeElement = 
   return values
     .map(normalizeXmlType)
     .filter(Boolean)
-    .map((type) => ({
+    .map((type) => createRestraintEntry({
       type,
       stiffness: profile.stiffness && profile.stiffness !== 'default' ? profile.stiffness : config.defaultStiffness,
       gap: profile.gap ?? '0',
@@ -465,6 +504,14 @@ export function xmlCiiRestraintEntriesFromSupportMatch(match, nodeElement, confi
 }
 
 export function xmlCiiTypeEntriesFromSupportKind(kind, config = {}) {
+  if (isKindReference(kind)) {
+    return xmlCiiRestraintEntriesFromSupportMatch({
+      kind: kind.primaryKind,
+      kinds: kind.kinds,
+      attrs: kind.attrs,
+    }, null, config);
+  }
+
   return restraintEntriesFromSupportKind(kind, {}, null, config).map((entry) => entry.type);
 }
 
