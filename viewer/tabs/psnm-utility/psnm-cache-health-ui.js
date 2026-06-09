@@ -1,6 +1,6 @@
-import { PSNM_PHASE_SUITE_VERSION } from './psnm-phase-suite.js';
-
 const STYLE_ID = 'psnm-cache-health-style';
+const EXPECTED_PHASE_SUITE_VERSION = '20260609-phase-suite-2';
+let scanScheduled = false;
 
 function installStyle() {
   if (document.getElementById(STYLE_ID)) return;
@@ -41,14 +41,19 @@ function showHealth(modal) {
     panel.dataset.psnmCacheHealth = '1';
     body.appendChild(panel);
   }
+  const loadedVersion = window.PSNM_PHASE_SUITE_VERSION || '';
   const rows = [
-    ['Phase suite module', PSNM_PHASE_SUITE_VERSION, 'OK'],
-    ['window.PSNM_PHASE_SUITE_VERSION', window.PSNM_PHASE_SUITE_VERSION || '', window.PSNM_PHASE_SUITE_VERSION === PSNM_PHASE_SUITE_VERSION ? 'OK' : 'CHECK'],
+    ['Expected phase suite version', EXPECTED_PHASE_SUITE_VERSION, 'INFO'],
+    ['Loaded window.PSNM_PHASE_SUITE_VERSION', loadedVersion, loadedVersion === EXPECTED_PHASE_SUITE_VERSION ? 'OK' : 'CHECK'],
     ['Acceptance suite function', typeof window.PSNM_runMasterAcceptanceSuite, typeof window.PSNM_runMasterAcceptanceSuite === 'function' ? 'OK' : 'CHECK'],
     ['Phase manifest function', typeof window.PSNM_getPhaseManifest, typeof window.PSNM_getPhaseManifest === 'function' ? 'OK' : 'CHECK'],
     ['Current page URL', location.href, 'INFO'],
   ];
-  panel.innerHTML = `<div class="psnm-card-head"><b>PSNM Cache Health</b><span class="psnm-cache-ok">${h(PSNM_PHASE_SUITE_VERSION)}</span></div><div class="psnm-card-body"><table class="psnm-cache-table"><thead><tr><th>Item</th><th>Value</th><th>Status</th></tr></thead><tbody>${rows.map(([item, value, status]) => `<tr><td>${h(item)}</td><td>${h(value)}</td><td class="${status === 'OK' ? 'psnm-cache-ok' : 'psnm-cache-warn'}">${h(status)}</td></tr>`).join('')}</tbody></table></div>`;
+  const html = `<div class="psnm-card-head"><b>PSNM Cache Health</b><span class="${loadedVersion === EXPECTED_PHASE_SUITE_VERSION ? 'psnm-cache-ok' : 'psnm-cache-warn'}">${h(loadedVersion || 'NOT LOADED')}</span></div><div class="psnm-card-body"><table class="psnm-cache-table"><thead><tr><th>Item</th><th>Value</th><th>Status</th></tr></thead><tbody>${rows.map(([item, value, status]) => `<tr><td>${h(item)}</td><td>${h(value)}</td><td class="${status === 'OK' ? 'psnm-cache-ok' : 'psnm-cache-warn'}">${h(status)}</td></tr>`).join('')}</tbody></table></div>`;
+  if (panel.dataset.psnmLastHtml !== html) {
+    panel.dataset.psnmLastHtml = html;
+    panel.innerHTML = html;
+  }
 }
 
 document.addEventListener('click', (event) => {
@@ -61,11 +66,18 @@ document.addEventListener('click', (event) => {
   showHealth(modal);
 }, true);
 
-const observer = new MutationObserver(() => {
-  document.querySelectorAll('[data-psnm="modal"]').forEach(ensureButton);
-});
+function scheduleScan() {
+  if (scanScheduled) return;
+  scanScheduled = true;
+  requestAnimationFrame(() => {
+    scanScheduled = false;
+    document.querySelectorAll('[data-psnm="modal"]').forEach(ensureButton);
+  });
+}
+
+const observer = new MutationObserver(scheduleScan);
 observer.observe(document.documentElement, { childList: true, subtree: true });
-setTimeout(() => document.querySelectorAll('[data-psnm="modal"]').forEach(ensureButton), 0);
+scheduleScan();
 
 export function PSNM_cacheHealthUiInstalled() {
   return true;
