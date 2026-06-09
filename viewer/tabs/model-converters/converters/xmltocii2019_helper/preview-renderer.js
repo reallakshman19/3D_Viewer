@@ -70,6 +70,11 @@ function _deriveBoreFromBranchName(branchName, config) { const raw = _regexGroup
 function _fieldOverrideKey(editType, derivedKey) { return _toText(derivedKey).trim(); }
 function _hasOwn(obj, key) { return !!obj && Object.prototype.hasOwnProperty.call(obj, key); }
 function _overrideSource(overrides, bucket, key) { return _hasOwn(overrides?.[bucket], key) ? 'override' : 'auto'; }
+function _percentText(confidence) {
+  const numeric = Number(confidence);
+  if (!Number.isFinite(numeric)) return '';
+  return `${Math.max(0, Math.min(100, Math.round(numeric * 100)))}%`;
+}
 
 export function xmlCiiRenderPreviewPhase(xmlFile, config) {
   const llRows = Array.isArray(config.linelist?.masterRows) ? config.linelist.masterRows.length : 0;
@@ -175,12 +180,13 @@ export async function xmlCiiBuildAndRenderPreview(rootEl, xmlText, config, optio
     nodesByBranch,
     matchBadgeHtmlRenderer: (method, confidence, needsReview, value, derived) => {
       const valEsc = _esc(value || '—'), derivedEsc = _esc(derived || '');
-      if (method === 'override') return `<span class="mc-preview-editable-val">${valEsc}</span> <span class="mc-preview-badge exact">✓ override</span>`;
-      if (method === 'exact') return `<span class="mc-preview-editable-val">${valEsc}</span> <span class="mc-preview-badge exact">✓ exact</span>`;
-      if (['startsWith', 'leading-numeric-base', 'prefix-base', 'leading-numeric-exact'].includes(method)) return `<span class="mc-preview-editable-val">${valEsc}</span> <span class="mc-preview-badge amber" title="Approximate match from ${derivedEsc}">approx</span>`;
-      if (['fuzzy', 'fuzzy-ratio', 'numeric-near'].includes(method)) { const pct = confidence != null ? Math.round(confidence * 100) : null; const pctText = pct != null ? ` ${pct}%` : ''; return `<span class="mc-preview-editable-val">${valEsc}</span> <span class="mc-preview-badge ${needsReview ? 'orange' : 'amber'}" title="Approximate match${pctText} to ${derivedEsc}">fuzzy${pctText}</span>`; }
-      if (method === 'ambiguous' || method === 'ambiguous-approximate') return `<span class="mc-preview-editable-val">—</span> <span class="mc-preview-badge bad" title="Ambiguous match for ${derivedEsc}">ambiguous</span>`;
-      if (needsReview) return `<span class="mc-preview-editable-val">${valEsc}</span> <span class="mc-preview-badge bad" title="Review ${derivedEsc}">review</span>`;
+      const pctText = _percentText(confidence);
+      if (method === 'override') return `<span class="mc-preview-editable-val">${valEsc}</span> <span class="mc-preview-badge exact" title="Manual override${pctText ? ` · ${pctText}` : ''}">✓ override${pctText ? ` ${pctText}` : ''}</span>`;
+      if (method === 'exact') return `<span class="mc-preview-editable-val">${valEsc}</span> <span class="mc-preview-badge exact">✓ exact ${pctText || '100%'}</span>`;
+      if (['startsWith', 'leading-numeric-base', 'prefix-base', 'leading-numeric-exact'].includes(method)) return `<span class="mc-preview-editable-val">${valEsc}</span> <span class="mc-preview-badge amber" title="Approximate match ${pctText || ''} from ${derivedEsc}">approx${pctText ? ` ${pctText}` : ''}</span>`;
+      if (['fuzzy', 'fuzzy-ratio', 'numeric-near'].includes(method)) return `<span class="mc-preview-editable-val">${valEsc}</span> <span class="mc-preview-badge ${needsReview ? 'orange' : 'amber'}" title="Approximate match ${pctText || ''} to ${derivedEsc}">fuzzy${pctText ? ` ${pctText}` : ''}</span>`;
+      if (method === 'ambiguous' || method === 'ambiguous-approximate') return `<span class="mc-preview-editable-val">—</span> <span class="mc-preview-badge bad" title="Ambiguous match for ${derivedEsc}">ambiguous${pctText ? ` ${pctText}` : ''}</span>`;
+      if (needsReview) return `<span class="mc-preview-editable-val">${valEsc}</span> <span class="mc-preview-badge bad" title="Review ${derivedEsc}">review${pctText ? ` ${pctText}` : ''}</span>`;
       return `<span class="mc-preview-editable-val">${valEsc}</span>`;
     },
     processInputHtmlRenderer: (fieldKey, lineKey, val, src, ri) => `<div class="${src === 'override' ? 'mc-preview-pd-cell mc-preview-pd-override' : (src === 'linelist' ? 'mc-preview-pd-cell mc-preview-pd-linelist' : 'mc-preview-pd-cell mc-preview-pd-empty')}"><input type="text" class="mc-preview-pd-input" value="${_esc(val)}" placeholder="${fieldKey}" data-mc-pd-field="${_esc(fieldKey)}" data-mc-pd-linekey="${_esc(lineKey)}" data-mc-pd-row="${ri}"><button type="button" class="mc-preview-filldown-btn mc-pd-filldown" data-mc-fill-field="${_esc(fieldKey)}" data-mc-fill-from="${ri}" title="Group-wise fill down: blanks/auto-filled cells only, stop at next manual value">↓</button></div>`,
