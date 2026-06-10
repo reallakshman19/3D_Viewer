@@ -1,255 +1,30 @@
 import { collectXmlCiiWeightMatchRows } from '../../../../converters/xml-cii2019-core/weight-match-model.js';
+import { buildRankedWeightCandidates, ensureValveHintConfig, formatValveHint, resolveNodeNameValveHint, valveHintLengthToleranceMm, valveHintMappingRows } from '../../../../converters/xml-cii2019-core/weight-valve-hints.js';
 
-function _toText(val) {
-  if (val === null || val === undefined) return '';
-  return String(val);
-}
+function t(v) { return v === null || v === undefined ? '' : String(v); }
+function esc(v) { return t(v).replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;'); }
+function attr(v) { return esc(v).replaceAll("'", '&#39;'); }
+function nfmt(v, d = 1) { const n = Number(v); return Number.isFinite(n) ? n.toFixed(d) : ''; }
+function desc(c) { return t(c?.typeDesc || c?.valveType || c?.type || 'Unknown').trim() || 'Unknown'; }
+function convOn(config) { return config?.weight?.convertSmallLengthsInToMm === true; }
+function allowedType(v) { const x = t(v).trim().toUpperCase(); return x === 'RIGID' || x.startsWith('FLAN') || ['VALV', 'VALVE', 'VLV'].includes(x); }
+function unsafeDtxr(row) { const s = t(row?.dtxrSource).toLowerCase(); const d = t(row?.dtxr).toUpperCase(); return /owner|support|ps-tag/.test(s) && /(PIPE REST|SUPPORT|GUIDE|STOP|SHOE|WEAR PLATE|TEE|ELBOW|BEND|REDUCER)/.test(d); }
+function cleanRow(row) { if (!allowedType(row?.componentType)) return null; return unsafeDtxr(row) ? { ...row, dtxr: '', dtxrSource: 'weight-dtxr-suppressed' } : row; }
+async function stagedText(stagedJsonText) { const direct = t(stagedJsonText).trim(); if (direct) return direct; const f = document?.querySelector?.('#model-converters-secondary-input')?.files?.[0]; return f ? await f.text().catch(() => '') : ''; }
+function mergeDtxr(enrichedRows, rawRows) { const rawMap = new Map((rawRows || []).map((r) => [r.key, r])); return (enrichedRows || []).map((r) => { const cur = cleanRow(r); if (!cur) return null; if (t(cur.dtxr).trim() && cur.dtxr !== 'Not found') return cur; const raw = cleanRow(rawMap.get(cur.key)); return t(raw?.dtxr).trim() ? { ...cur, dtxr: raw.dtxr, dtxrSource: raw.dtxrSource || cur.dtxrSource, dtxrMatchedKey: raw.dtxrMatchedKey || cur.dtxrMatchedKey } : cur; }).filter(Boolean); }
+function decorate(rows, config) { return (rows || []).map((r) => { const hint = resolveNodeNameValveHint(r.nodeName, config); return { ...r, valveHint: formatValveHint(hint), candidates: buildRankedWeightCandidates({ boreMm: r.boreMm, rating: r.rating, lengthMm: r.lengthMm, nodeName: r.nodeName }, config) }; }); }
+function helpText(config) { const tol = valveHintLengthToleranceMm(config); return ['Rows: only RIGID, FLAN*, VALV / VALVE / VLV.', 'ATTA/support, TEE, ELBO/BEND, REDUCER, OLET, PIPE, GASK are excluded.', `Length gate: master length must be within ±${tol} mm of XML ElementLengthMm.`, 'NodeName valve hint and Type/TypeDesc regex only rank candidates after length passes.', 'Length-failed candidates are not first suggestion and are not auto-filled.'].join('\n'); }
+function hintRows(config) { return valveHintMappingRows(config).map((r, i) => `<tr><td><input type="checkbox" data-hint-i="${i}" data-hint-f="on" ${r.on ? 'checked' : ''}></td><td><input type="number" data-hint-i="${i}" data-hint-f="priority" value="${attr(r.priority)}" style="width:58px"></td><td><input data-hint-i="${i}" data-hint-f="code" value="${attr(r.code)}" style="width:62px"></td><td><input data-hint-i="${i}" data-hint-f="label" value="${attr(r.label)}" style="width:110px"></td><td><input data-hint-i="${i}" data-hint-f="subtype" value="${attr(r.subtype)}" style="width:82px"></td><td><input data-hint-i="${i}" data-hint-f="nodeNameRegex" value="${attr(r.nodeNameRegex)}" style="width:110px"></td><td><input data-hint-i="${i}" data-hint-f="masterRegex" value="${attr(r.masterRegex)}" style="width:190px"></td><td><input data-hint-i="${i}" data-hint-f="notes" value="${attr(r.notes)}" style="width:150px"></td></tr>`).join(''); }
+function hintPanel(config) { ensureValveHintConfig(config); const on = config.weight.useNodeNameValveHints !== false; const tol = valveHintLengthToleranceMm(config); return `<details open style="margin:10px 0;border:1px solid #334155;border-radius:8px;padding:8px;background:#07111f;"><summary style="cursor:pointer;font-weight:700;color:#e5edf8;">Valve Hint / TypeDesc Ranking Rules <span title="${attr(helpText(config))}" style="cursor:help;color:#8bb7ff;border:1px solid #406089;border-radius:50%;padding:0 5px;font-size:11px;margin-left:6px;">i</span></summary><div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin:8px 0;color:#dbeafe;font-size:12px;"><label><input type="checkbox" id="mc-wm-use-valve-hints" ${on ? 'checked' : ''}> Use NodeName valve hint</label><label>Mandatory length tolerance ± <input type="number" id="mc-wm-valve-tol" min="0" step="0.1" value="${attr(tol)}" style="width:76px;"> mm</label><span>Type/TypeDesc regex only ranks after length passes.</span></div><div style="overflow:auto;max-height:220px;"><table style="border-collapse:collapse;font-size:11px;min-width:980px;"><thead><tr><th>On</th><th>Priority</th><th>Code</th><th>Label</th><th>Subtype</th><th>NodeName Regex</th><th>Master Type/TypeDesc Regex</th><th>Notes</th></tr></thead><tbody>${hintRows(config)}</tbody></table></div></details>`; }
 
-function _esc(value) {
-  return _toText(value).replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;');
-}
-
-function _escAttr(value) {
-  return _esc(value).replaceAll("'", '&#39;');
-}
-
-function _fmtNum(value, digits = 1) {
-  const num = Number(value);
-  return Number.isFinite(num) ? num.toFixed(digits) : '';
-}
-
-function _typeDesc(candidate) {
-  return _toText(candidate?.typeDesc || candidate?.valveType || candidate?.type || 'Unknown').trim() || 'Unknown';
-}
-
-function _conversionEnabled(config) {
-  return config?.weight?.convertSmallLengthsInToMm === true;
-}
-
-function _strictWeightComponentType(value) {
-  const type = _toText(value).trim().toUpperCase();
-  if (type === 'RIGID') return true;
-  if (/^FLAN/.test(type)) return true;
-  if (/^(VALV|VALVE|VLV)$/.test(type)) return true;
-  return false;
-}
-
-function _isUnsafeWeightDtxr(issue) {
-  const type = _toText(issue?.componentType).trim().toUpperCase();
-  const source = _toText(issue?.dtxrSource).trim().toLowerCase();
-  const text = _toText(issue?.dtxr).trim().toUpperCase();
-  if (!text) return false;
-  if (/^(RIGID|FLAN|VALV|VALVE|VLV)/.test(type)) {
-    if (/owner|support|ps-tag/.test(source) && /\b(PIPE\s+REST|SUPPORT|GUIDE|STOP|SHOE|WEAR\s+PLATE|TEE|ELBOW|BEND|REDUCER)\b/.test(text)) return true;
-  }
-  return false;
-}
-
-function _sanitizeWeightRow(row) {
-  if (!_strictWeightComponentType(row?.componentType)) return null;
-  if (_isUnsafeWeightDtxr(row)) {
-    return { ...row, dtxr: '', dtxrSource: 'weight-dtxr-suppressed', dtxrMatchedKey: row.dtxrMatchedKey || '' };
-  }
-  return row;
-}
-
-async function _resolveStagedJsonText(stagedJsonText) {
-  const direct = _toText(stagedJsonText).trim();
-  if (direct) return direct;
-  if (typeof document === 'undefined') return '';
-  const fileInput = document.querySelector('#model-converters-secondary-input');
-  const file = fileInput?.files?.[0];
-  if (!file) return '';
-  try {
-    return await file.text();
-  } catch {
-    return '';
-  }
-}
-
-function _mergeDtxrFromRawRows(enrichedRows, rawRows) {
-  const byKey = new Map((rawRows || []).map((row) => [row.key, row]));
-  return (enrichedRows || []).map((row) => {
-    const current = _sanitizeWeightRow(row);
-    if (!current) return null;
-    if (_toText(current.dtxr).trim() && current.dtxr !== 'Not found') return current;
-    const raw = _sanitizeWeightRow(byKey.get(current.key));
-    if (!_toText(raw?.dtxr).trim()) return current;
-    return {
-      ...current,
-      dtxr: raw.dtxr,
-      dtxrSource: raw.dtxrSource || current.dtxrSource,
-      dtxrMatchedKey: raw.dtxrMatchedKey || current.dtxrMatchedKey,
-    };
-  }).filter(Boolean);
-}
-
-export function xmlCiiRenderWeightMatchPhase() {
-  const info = 'Shows only actual XML ComponentType RIGID, FLAN*, or VALVE/VLV rows with ElementLengthMm > 6 mm. ATTA/supports, bends, reducers, tees, olets, gaskets and pipes are excluded. Green rows already have XML/override weight; amber rows still need a weight decision. Length conversion is OFF by default; use ⇄ in→mm only for masters that explicitly store small face-to-face lengths in inches.';
-  return `
-    <div class="model-converters-workflow-detail-title">5 Weight Match <span title="${_escAttr(info)}" style="cursor:help;color:#8bb7ff;border:1px solid #406089;border-radius:50%;padding:0 5px;font-size:11px;">i</span></div>
-    <div class="model-converters-workflow-detail-text">
-      Approximate component weights matched from the valve weight master by
-      <strong>rating</strong> (×3), <strong>bore</strong> (×2), and <strong>length</strong> (×1).
-      DTXR is resolved for the exact weight component only; support/branch DTXR is not used to include rows.
-      Review and adjust; final conversion is launched from <strong>6 Run</strong>.
-    </div>
-    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:10px 0;">
-      <button type="button" class="model-converters-download-btn" id="mc-wm-refresh">↻ Recompute matches</button>
-      <button type="button" class="model-converters-download-btn" id="mc-wm-fill-best">Use all ★ preferred</button>
-      <button type="button" class="model-converters-download-btn" id="mc-wm-length-toggle" title="Convert small master lengths (<100) from inch to mm. Default OFF. Use only when this weight master stores small lengths in inches.">⇄ in→mm: OFF</button>
-      <span style="display:inline-flex;align-items:center;gap:4px;color:#fff;font-weight:600;"><span style="width:12px;height:12px;background:#123c25;border:1px solid #2f9e63;border-radius:3px;"></span>Mapped</span>
-      <span style="display:inline-flex;align-items:center;gap:4px;color:#fff;font-weight:600;"><span style="width:12px;height:12px;background:#4a2d12;border:1px solid #d08a22;border-radius:3px;"></span>Unresolved</span>
-      <span id="mc-wm-status" class="mc-diag-run-status"></span>
-    </div>
-    <div id="mc-wm-content"><div class="model-converters-workflow-detail-note">Computing weight matches…</div></div>`;
-}
+export function xmlCiiRenderWeightMatchPhase() { const info = 'Length gate is mandatory. Valve hint / TypeDesc regex only ranks candidates after length passes.'; return `<div class="model-converters-workflow-detail-title">5 Weight Match <span title="${attr(info)}" style="cursor:help;color:#8bb7ff;border:1px solid #406089;border-radius:50%;padding:0 5px;font-size:11px;">i</span></div><div class="model-converters-workflow-detail-text">Approximate component weights from the valve weight master. NodeName valve hints can re-rank Type/TypeDesc matches only inside the mandatory length tolerance.</div><div id="mc-wm-hint-panel"></div><div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:10px 0;"><button type="button" class="model-converters-download-btn" id="mc-wm-refresh">↻ Recompute matches</button><button type="button" class="model-converters-download-btn" id="mc-wm-fill-best">Use all ★ preferred</button><button type="button" class="model-converters-download-btn" id="mc-wm-length-toggle" title="Convert small master lengths (<100) from inch to mm. Default OFF.">⇄ in→mm: OFF</button><span style="display:inline-flex;align-items:center;gap:4px;color:#fff;font-weight:600;"><span style="width:12px;height:12px;background:#123c25;border:1px solid #2f9e63;border-radius:3px;"></span>Mapped</span><span style="display:inline-flex;align-items:center;gap:4px;color:#fff;font-weight:600;"><span style="width:12px;height:12px;background:#4a2d12;border:1px solid #d08a22;border-radius:3px;"></span>Unresolved</span><span id="mc-wm-status" class="mc-diag-run-status"></span></div><div id="mc-wm-content"><div class="model-converters-workflow-detail-note">Computing weight matches…</div></div>`; }
 
 export function bindXmlCiiWeightMatchPhase(detailEl, { xmlFile, stagedJsonText, config, enrichXmlForCii2019, onSaveConfig, ensureOverrides }) {
-  if (!detailEl) return;
-  const contentEl = detailEl.querySelector('#mc-wm-content');
-  const statusEl = detailEl.querySelector('#mc-wm-status');
-  const lengthToggleEl = detailEl.querySelector('#mc-wm-length-toggle');
-  const setStatus = (msg, tone) => {
-    if (statusEl) {
-      statusEl.textContent = msg || '';
-      statusEl.className = `mc-diag-run-status ${tone || ''}`.trim();
-    }
-  };
-  const syncLengthToggle = () => {
-    if (!lengthToggleEl) return;
-    const on = _conversionEnabled(config);
-    lengthToggleEl.textContent = `⇄ in→mm: ${on ? 'ON' : 'OFF'}`;
-    lengthToggleEl.style.borderColor = on ? '#2f9e63' : '';
-    lengthToggleEl.style.color = on ? '#ffffff' : '';
-    lengthToggleEl.style.background = on ? '#14532d' : '';
-  };
-  if (!contentEl) return;
-  let localIssues = [];
-
-  const renderIssues = (issues) => {
-    if (!issues.length) {
-      contentEl.innerHTML = '<div class="model-converters-workflow-detail-note">No actual RIGID / FLAN* / VALVE nodes with ElementLengthMm &gt; 6 mm were found. ATTA/supports, bends, reducers, tees, olets, gaskets and pipes are intentionally excluded. Use 6 Run to generate the CII.</div>';
-      return;
-    }
-    const rowsHtml = issues.map((issue, index) => {
-      const best = issue.candidates?.[0] || null;
-      const initialWeight = issue.weight && issue.weight > 0 ? issue.weight : (best ? (best.suggestedWeight ?? best.weight) : '');
-      const rowStyle = issue.mapped
-        ? 'background:#0f2a1b;border-left:4px solid #2f9e63;'
-        : 'background:#3a240f;border-left:4px solid #d08a22;';
-      const statusText = issue.mapped ? `Mapped (${issue.weightSource || 'weight'})` : 'Unresolved';
-      const candidates = (issue.candidates || []).map((candidate) => {
-        const value = candidate.suggestedWeight ?? candidate.weight;
-        const desc = _typeDesc(candidate);
-        const title = [
-          `Type: ${candidate.type || candidate.valveType || '-'}`,
-          `TypeDesc: ${desc}`,
-          candidate.preferred ? 'Preferred: exact bore/rating, length-scaled' : '',
-          `Bore: ${candidate.rowBore}`,
-          `Rating: ${candidate.rowRating || '-'}`,
-          `Master length: ${_fmtNum(candidate.rowLength)}`,
-          `Delta length: ${_fmtNum(candidate.lengthDelta)}`,
-          `Score: ${Math.round(candidate.score * 100)}%`,
-        ].filter(Boolean).join(' | ');
-        return `
-          <button type="button" class="mc-rigid-review-candidate${candidate.preferred ? ' best' : ''}"
-            data-wm-candidate="${index}" data-wm-weight="${_escAttr(value)}"
-            title="${_escAttr(title)}"
-            style="font-size:11px;line-height:1.1;padding:3px 6px;border-radius:999px;white-space:nowrap;max-width:280px;overflow:hidden;text-overflow:ellipsis;">
-            ${candidate.preferred ? '★ ' : ''}${_esc(desc)} · ${_esc(value)}kg · Δ${_esc(_fmtNum(candidate.lengthDelta))}
-          </button>`;
-      }).join('');
-      const ratingTitle = `Piping Class ${issue.resolvedPipingClass || ''} (${issue.pipingClassMatchMethod || ''})`;
-      const dtxrTitle = [issue.dtxrSource, issue.dtxrMatchedKey].filter(Boolean).join(' · ');
-      return `
-        <tr style="${rowStyle}">
-          <td style="padding:4px 6px;line-height:1.2;">${_esc(statusText)}</td>
-          <td class="mc-rigid-review-branch" style="padding:4px 6px;line-height:1.2;" title="${_escAttr(issue.branchName)}">${_esc(issue.branchName)}</td>
-          <td style="padding:4px 6px;line-height:1.2;">${_esc(issue.componentType || '')}</td>
-          <td style="padding:4px 6px;line-height:1.2;">${_esc(issue.boreMm == null ? '' : `${Number(issue.boreMm).toFixed(0)} mm`)}</td>
-          <td style="padding:4px 6px;line-height:1.2;" title="${_escAttr(ratingTitle)}">${_esc(issue.rating || '')}</td>
-          <td style="padding:4px 6px;line-height:1.2;">${_esc(issue.nodeNumber)}</td>
-          <td class="mc-rigid-review-dtxr" style="padding:4px 6px;line-height:1.2;" title="${_escAttr(dtxrTitle)}">${_esc(issue.dtxr || 'Not found')}</td>
-          <td style="padding:4px 6px;line-height:1.2;" title="${_escAttr(issue.elementLengthSource || '')}">${_esc(issue.lengthMm == null ? '' : `${Number(issue.lengthMm).toFixed(1)} mm`)}</td>
-          <td style="padding:4px 6px;line-height:1.2;"><input type="number" min="0" step="0.001" class="mc-rigid-review-input" data-wm-key="${_escAttr(issue.key)}" value="${_escAttr(initialWeight)}" placeholder="kg" style="width:86px;"></td>
-          <td class="mc-rigid-review-candidates" style="padding:4px 6px;line-height:1.2;max-width:430px;">
-            <div style="display:flex;flex-wrap:wrap;gap:4px;max-height:46px;overflow:auto;align-items:flex-start;">${candidates || '<span class="model-converters-muted">No suggestion</span>'}</div>
-          </td>
-        </tr>`;
-    }).join('');
-    contentEl.innerHTML = `
-      <div class="model-converters-workflow-detail-note" style="margin-bottom:8px;">
-        Filter: actual XML ComponentType is RIGID, FLAN*, or VALVE/VLV and ElementLengthMm &gt; 6 mm. ATTA/supports, bends, reducers, tees, olets, gaskets and pipes are excluded. Length conversion ⇄ in→mm is ${_conversionEnabled(config) ? 'ON' : 'OFF'}.
-      </div>
-      <div class="mc-rigid-review-table-wrap" style="overflow:auto;max-height:48vh;">
-        <table class="mc-rigid-review-table" style="border-collapse:collapse;font-size:12px;">
-          <thead><tr><th>Status</th><th>Branch</th><th>Type</th><th>Bore</th><th>Rating</th><th>Node</th><th>DTXR</th><th>Length</th><th>Weight (kg)</th><th>Nearest Suggestions (TypeDesc · Weight · ΔLength)</th></tr></thead>
-          <tbody>${rowsHtml}</tbody>
-        </table>
-      </div>`;
-    contentEl.querySelectorAll('[data-wm-candidate]').forEach((button) => {
-      button.addEventListener('click', () => {
-        const rowIndex = Number(button.getAttribute('data-wm-candidate'));
-        const input = contentEl.querySelectorAll('.mc-rigid-review-input')[rowIndex];
-        if (input) input.value = button.getAttribute('data-wm-weight') || '';
-      });
-    });
-  };
-
-  const compute = async () => {
-    syncLengthToggle();
-    if (!xmlFile) {
-      localIssues = [];
-      contentEl.innerHTML = '<div class="model-converters-workflow-detail-note">No XML source loaded. Import an XML file first.</div>';
-      setStatus('No input', 'bad');
-      return;
-    }
-    setStatus('Computing…');
-    try {
-      const xmlText = await xmlFile.text();
-      const resolvedStagedJsonText = await _resolveStagedJsonText(stagedJsonText);
-      const enriched = await enrichXmlForCii2019(xmlText, resolvedStagedJsonText, { dryRun: true });
-      const enrichedRows = collectXmlCiiWeightMatchRows(enriched.xmlText, resolvedStagedJsonText, enriched.config || config)
-        .map(_sanitizeWeightRow).filter(Boolean);
-      const rawRows = collectXmlCiiWeightMatchRows(xmlText, resolvedStagedJsonText, enriched.config || config)
-        .map(_sanitizeWeightRow).filter(Boolean);
-      localIssues = _mergeDtxrFromRawRows(enrichedRows, rawRows);
-      const mapped = localIssues.filter((item) => item.mapped).length;
-      const unresolved = localIssues.length - mapped;
-      setStatus(`${mapped} mapped · ${unresolved} unresolved · ${localIssues.length} shown`, unresolved ? 'bad' : 'ok');
-      renderIssues(localIssues);
-    } catch (err) {
-      localIssues = [];
-      const message = _toText(err?.message || err);
-      contentEl.innerHTML = `<div class="model-converters-workflow-detail-note">Could not compute weight matches: ${_esc(message)}</div>`;
-      setStatus('Error', 'bad');
-    }
-  };
-
-  detailEl.querySelector('#mc-wm-refresh')?.addEventListener('click', compute);
-  detailEl.querySelector('#mc-wm-length-toggle')?.addEventListener('click', () => {
-    if (!config.weight || typeof config.weight !== 'object') config.weight = {};
-    config.weight.convertSmallLengthsInToMm = config.weight.convertSmallLengthsInToMm !== true;
-    onSaveConfig(config);
-    void compute();
-  });
-  detailEl.querySelector('#mc-wm-fill-best')?.addEventListener('click', () => {
-    contentEl.querySelectorAll('.mc-rigid-review-input').forEach((input, index) => {
-      const best = localIssues[index]?.candidates?.[0];
-      if (best) input.value = best.suggestedWeight ?? best.weight;
-    });
-  });
-  contentEl.addEventListener('change', (event) => {
-    const input = event.target.closest?.('.mc-rigid-review-input');
-    if (!input) return;
-    const key = input.getAttribute('data-wm-key') || '';
-    const numeric = Number(input.value);
-    if (!key || !Number.isFinite(numeric) || numeric <= 0) return;
-    const overrides = ensureOverrides(config);
-    overrides.rigidWeight = { ...(overrides.rigidWeight || {}), [key]: numeric };
-    onSaveConfig(config);
-  });
-  syncLengthToggle();
-  void compute();
+  if (!detailEl) return; const contentEl = detailEl.querySelector('#mc-wm-content'); const statusEl = detailEl.querySelector('#mc-wm-status'); const toggleEl = detailEl.querySelector('#mc-wm-length-toggle'); const panelEl = detailEl.querySelector('#mc-wm-hint-panel'); if (!contentEl) return; let localIssues = [];
+  const status = (m, tone) => { if (statusEl) { statusEl.textContent = m || ''; statusEl.className = `mc-diag-run-status ${tone || ''}`.trim(); } };
+  const syncToggle = () => { if (!toggleEl) return; const on = convOn(config); toggleEl.textContent = `⇄ in→mm: ${on ? 'ON' : 'OFF'}`; toggleEl.style.borderColor = on ? '#2f9e63' : ''; toggleEl.style.color = on ? '#fff' : ''; toggleEl.style.background = on ? '#14532d' : ''; };
+  const drawPanel = () => { if (panelEl) panelEl.innerHTML = hintPanel(config); };
+  const drawRows = (issues) => { if (!issues.length) { contentEl.innerHTML = '<div class="model-converters-workflow-detail-note">No actual RIGID / FLAN* / VALVE nodes with ElementLengthMm &gt; 6 mm were found.</div>'; return; } const rows = issues.map((issue, i) => { const best = issue.candidates?.[0]; const initial = issue.weight && issue.weight > 0 ? issue.weight : (best ? (best.suggestedWeight ?? best.weight) : ''); const rowStyle = issue.mapped ? 'background:#0f2a1b;border-left:4px solid #2f9e63;' : 'background:#3a240f;border-left:4px solid #d08a22;'; const buttons = (issue.candidates || []).map((c) => { const value = c.suggestedWeight ?? c.weight; const d = desc(c); const title = [`Node hint: ${c.valveHintLabel || issue.valveHint || '-'}`, `Semantic: ${c.semanticReason || '-'}`, `TypeDesc: ${d}`, `Length: passed, delta ${nfmt(c.lengthDelta)} mm <= ±${nfmt(c.lengthToleranceMm)} mm`].join(' | '); return `<button type="button" class="mc-rigid-review-candidate${c.preferred ? ' best' : ''}" data-wm-candidate="${i}" data-wm-weight="${attr(value)}" title="${attr(title)}" style="font-size:11px;line-height:1.1;padding:3px 6px;border-radius:999px;white-space:nowrap;max-width:300px;overflow:hidden;text-overflow:ellipsis;">${c.preferred ? '★ ' : ''}${esc(d)} · ${esc(value)}kg · Δ${esc(nfmt(c.lengthDelta))}${c.semanticTier > 0 ? ` · ${esc(c.valveHintLabel || '')}` : ''}</button>`; }).join(''); return `<tr style="${rowStyle}"><td>${esc(issue.mapped ? `Mapped (${issue.weightSource || 'weight'})` : 'Unresolved')}</td><td title="${attr(issue.branchName)}">${esc(issue.branchName)}</td><td>${esc(issue.componentType || '')}</td><td>${esc(issue.boreMm == null ? '' : `${Number(issue.boreMm).toFixed(0)} mm`)}</td><td>${esc(issue.rating || '')}</td><td>${esc(issue.nodeNumber)}</td><td title="${attr([issue.dtxrSource, issue.dtxrMatchedKey].filter(Boolean).join(' · '))}">${esc(issue.dtxr || 'Not found')}</td><td>${esc(issue.valveHint || '—')}</td><td title="${attr(issue.elementLengthSource || '')}">${esc(issue.lengthMm == null ? '' : `${Number(issue.lengthMm).toFixed(1)} mm`)}</td><td><input type="number" min="0" step="0.001" class="mc-rigid-review-input" data-wm-key="${attr(issue.key)}" value="${attr(initial)}" placeholder="kg" style="width:86px;"></td><td style="max-width:470px;"><div style="display:flex;flex-wrap:wrap;gap:4px;max-height:52px;overflow:auto;align-items:flex-start;">${buttons || '<span class="model-converters-muted">No suggestion</span>'}</div></td></tr>`; }).join(''); contentEl.innerHTML = `<div class="model-converters-workflow-detail-note" style="margin-bottom:8px;">Candidate length gate is ±${nfmt(valveHintLengthToleranceMm(config))} mm. Valve hint/TypeDesc regex only ranks after length passes. Length conversion is ${convOn(config) ? 'ON' : 'OFF'}.</div><div class="mc-rigid-review-table-wrap" style="overflow:auto;max-height:48vh;"><table class="mc-rigid-review-table" style="border-collapse:collapse;font-size:12px;"><thead><tr><th>Status</th><th>Branch</th><th>Type</th><th>Bore</th><th>Rating</th><th>Node</th><th>DTXR</th><th>Valve Hint</th><th>Length</th><th>Weight (kg)</th><th>Nearest Suggestions (TypeDesc · Weight · ΔLength)</th></tr></thead><tbody>${rows}</tbody></table></div>`; contentEl.querySelectorAll('[data-wm-candidate]').forEach((b) => b.addEventListener('click', () => { const input = contentEl.querySelectorAll('.mc-rigid-review-input')[Number(b.dataset.wmCandidate)]; if (input) input.value = b.dataset.wmWeight || ''; })); };
+  const compute = async () => { syncToggle(); drawPanel(); if (!xmlFile) { localIssues = []; contentEl.innerHTML = '<div class="model-converters-workflow-detail-note">No XML source loaded. Import an XML file first.</div>'; status('No input', 'bad'); return; } status('Computing…'); try { const xmlText = await xmlFile.text(); const jsonText = await stagedText(stagedJsonText); const enriched = await enrichXmlForCii2019(xmlText, jsonText, { dryRun: true }); const cfg = enriched.config || config; const er = collectXmlCiiWeightMatchRows(enriched.xmlText, jsonText, cfg).map(cleanRow).filter(Boolean); const rr = collectXmlCiiWeightMatchRows(xmlText, jsonText, cfg).map(cleanRow).filter(Boolean); localIssues = decorate(mergeDtxr(er, rr), cfg); const mapped = localIssues.filter((x) => x.mapped).length; const unresolved = localIssues.length - mapped; status(`${mapped} mapped · ${unresolved} unresolved · ${localIssues.length} shown`, unresolved ? 'bad' : 'ok'); drawRows(localIssues); } catch (err) { localIssues = []; contentEl.innerHTML = `<div class="model-converters-workflow-detail-note">Could not compute weight matches: ${esc(err?.message || err)}</div>`; status('Error', 'bad'); } };
+  detailEl.querySelector('#mc-wm-refresh')?.addEventListener('click', compute); toggleEl?.addEventListener('click', () => { if (!config.weight || typeof config.weight !== 'object') config.weight = {}; config.weight.convertSmallLengthsInToMm = config.weight.convertSmallLengthsInToMm !== true; onSaveConfig(config); void compute(); }); detailEl.querySelector('#mc-wm-fill-best')?.addEventListener('click', () => { contentEl.querySelectorAll('.mc-rigid-review-input').forEach((input, i) => { const best = localIssues[i]?.candidates?.[0]; if (best) input.value = best.suggestedWeight ?? best.weight; }); }); panelEl?.addEventListener('change', (event) => { ensureValveHintConfig(config); const use = event.target.closest?.('#mc-wm-use-valve-hints'); if (use) config.weight.useNodeNameValveHints = use.checked; const tol = event.target.closest?.('#mc-wm-valve-tol'); if (tol) config.weight.valveHintLengthToleranceMm = Math.max(0, Number(tol.value) || 0); const input = event.target.closest?.('[data-hint-i]'); if (input) { const rows = valveHintMappingRows(config); const row = rows[Number(input.dataset.hintI)]; if (row) { const f = input.dataset.hintF; if (f === 'on') row.on = input.checked; else if (f === 'priority') row.priority = Number(input.value) || row.priority; else row[f] = input.value; config.weight.valveHintMapping = rows; } } onSaveConfig(config); void compute(); }); contentEl.addEventListener('change', (event) => { const input = event.target.closest?.('.mc-rigid-review-input'); if (!input) return; const key = input.getAttribute('data-wm-key') || ''; const v = Number(input.value); if (!key || !Number.isFinite(v) || v <= 0) return; const o = ensureOverrides(config); o.rigidWeight = { ...(o.rigidWeight || {}), [key]: v }; onSaveConfig(config); }); syncToggle(); drawPanel(); void compute();
 }
