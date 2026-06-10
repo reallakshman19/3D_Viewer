@@ -53,18 +53,18 @@ function PSNM_findPsName(cells, byHeader = {}) {
 }
 
 function PSNM_positionFromRow(cells, byHeader = {}) {
-  const direct = byHeader.position || byHeader['ps position'] || byHeader['position raw'] || byHeader['coordinates'] || byHeader['coord'] || byHeader['coordinate'];
+  const direct = byHeader.position || byHeader['ps position'] || byHeader['position raw'] || byHeader['coordinates'] || byHeader.coord || byHeader.coordinate;
   const fromDirect = PSNM_positionFromAnyText(direct);
   if (fromDirect) return fromDirect;
 
   const e = byHeader.e || byHeader['ps e'] || byHeader.east || byHeader.easting;
-  const s = byHeader.s || byHeader['ps s'] || byHeader.south || byHeader.southing || byHeader.north || byHeader.northing;
+  const nOrS = byHeader.s || byHeader['ps s'] || byHeader.south || byHeader.southing || byHeader.n || byHeader['ps n'] || byHeader.north || byHeader.northing;
   const u = byHeader.u || byHeader['ps u'] || byHeader.up || byHeader.elevation || byHeader.el || byHeader.z;
-  if (e !== undefined && s !== undefined && u !== undefined) {
+  if (e !== undefined && nOrS !== undefined && u !== undefined) {
     const eVal = PSNM_number(e);
-    const sVal = PSNM_number(s);
+    const nOrSVal = PSNM_number(nOrS);
     const uVal = PSNM_number(u);
-    if (Number.isFinite(eVal) && Number.isFinite(sVal) && Number.isFinite(uVal)) return `E ${eVal}mm S ${sVal}mm U ${uVal}mm`;
+    if (Number.isFinite(eVal) && Number.isFinite(nOrSVal) && Number.isFinite(uVal)) return `E ${eVal}mm S ${nOrSVal}mm U ${uVal}mm`;
   }
 
   return PSNM_positionFromAnyText(cells.join(' '));
@@ -95,7 +95,7 @@ function PSNM_parseTable1Fallback(text, logger = null) {
 
   const firstCells = PSNM_splitCells(lines[0]);
   const firstHeaders = firstCells.map(PSNM_normHeader);
-  const hasHeader = firstHeaders.some((h) => ['ps name', 'ps no', 'ps number', 'ps', 'position', 'ps position', 'e', 's', 'u'].includes(h));
+  const hasHeader = firstHeaders.some((h) => ['ps name', 'ps no', 'ps number', 'ps', 'position', 'ps position', 'e', 'n', 's', 'u', 'bore'].includes(h));
   const headers = hasHeader ? firstHeaders : null;
   const dataLines = hasHeader ? lines.slice(1) : lines;
   const rows = [];
@@ -108,7 +108,7 @@ function PSNM_parseTable1Fallback(text, logger = null) {
     const psName = PSNM_findPsName(cells, byHeader);
     const position = PSNM_positionFromRow(cells, byHeader);
     if (!psName || !position) {
-      logger?.user?.('WARNING', 'PS Row Skipped', 'Table 1', line, 'Fallback parser could not find both PS name and E/S/U position.', 'Check Table 1 columns or include a Position column with E ... S ... U ... format.', { rowIndex: index + 1 });
+      logger?.user?.('WARNING', 'PS Row Skipped', 'Table 1', line, 'Fallback parser could not find both PS name and E/N/S/U position.', 'Check Table 1 columns or include a Position column with E ... S/N ... U ... format.', { rowIndex: index + 1 });
       continue;
     }
     rows.push({
@@ -121,7 +121,7 @@ function PSNM_parseTable1Fallback(text, logger = null) {
     });
   }
 
-  if (rows.length) logger?.user?.('INFO', 'Table 1 Fallback Parser', 'Table 1', `${rows.length} PS rows`, 'Strict PS parser returned no rows; fallback parser recovered PS rows.', 'Verify Master PS No preview before matching.', {});
+  if (rows.length) logger?.user?.('INFO', 'Table 1 Fallback Parser', 'Table 1', `${rows.length} PS rows`, 'Strict PS parser returned no rows; fallback parser recovered PS rows including E/N/U benchmark columns.', 'Verify Master PS No preview before matching.', {});
   return rows;
 }
 
@@ -186,7 +186,7 @@ function PSNM_parseMasterPsPosition(row, logger = null) {
     row.psS = null;
     row.status = row.positionRaw ? PSNM_MASTER_STATUS.INVALID_POSITION : row.status;
     if (row.positionRaw) {
-      logger?.user?.('ERROR', 'Invalid PS Position', row.sourceTable || 'Master PS', row.psName, error.message || String(error), 'Correct PS position format: E ...mm S ...mm U ...mm.', { rowId: row.rowId });
+      logger?.user?.('ERROR', 'Invalid PS Position', row.sourceTable || 'Master PS', row.psName, error.message || String(error), 'Correct PS position format: E ...mm S/N ...mm U ...mm.', { rowId: row.rowId });
     }
   }
   return row;
@@ -238,54 +238,40 @@ export function PSNM_resolveMasterPsTable({ table1Text, table4AText, logger = nu
     const psKey = PSNM_normalizePsName(override.psName);
     if (!psKey) continue;
     const existing = byPs.get(psKey);
-
     if (!existing) {
       const missing = PSNM_makeMasterPsRow({
         psKey,
         psName: override.psName,
         p1bore: override.p1boreOverride,
-        positionRaw: override.positionOverride || '',
-        isMandatoryPs: override.isMandatoryPs === true,
-        mandatorySource: override.isMandatoryPs ? 'TABLE4A' : '',
+        positionRaw: override.positionOverride,
+        isMandatoryPs: override.isMandatoryPs,
+        mandatorySource: 'TABLE4A',
         sourceTable: 'TABLE4A',
         sourceRow: override.sourceRow,
         status: PSNM_MASTER_STATUS.MISSING_FROM_TABLE1,
         remarks: override.remarks || 'Listed in Table 4A but absent from Table 1.',
       });
-      if (override.positionOverride) PSNM_parseMasterPsPosition(missing, logger);
+      if (missing.positionRaw) PSNM_parseMasterPsPosition(missing, logger);
       byPs.set(psKey, missing);
       logger?.user?.('WARNING', 'Mandatory PS Missing', 'Table 4A', override.psName, 'PS is mandatory/overridden in Table 4A but absent from Table 1.', 'Add this PS to Table 1 or remove it from Table 4A.', { psName: override.psName });
       continue;
     }
-
-    if (override.isMandatoryPs) {
-      existing.isMandatoryPs = true;
-      existing.mandatorySource = existing.mandatorySource ? `${existing.mandatorySource};TABLE4A` : 'TABLE4A';
-    }
-    if (override.p1boreOverride != null) {
-      existing.p1bore = override.p1boreOverride;
-      existing.userEdited = true;
-      existing.sourceTable = `${existing.sourceTable};TABLE4A_OVERRIDE`;
-    }
+    existing.isMandatoryPs = existing.isMandatoryPs || override.isMandatoryPs;
+    existing.mandatorySource = [existing.mandatorySource, override.mandatorySource].filter(Boolean).join(';');
+    if (override.p1boreOverride != null) existing.p1bore = override.p1boreOverride;
     if (override.positionOverride) {
       existing.positionRaw = override.positionOverride;
-      existing.userEdited = true;
-      existing.sourceTable = `${existing.sourceTable};TABLE4A_OVERRIDE`;
       PSNM_parseMasterPsPosition(existing, logger);
     }
-    if (override.remarks) existing.remarks = override.remarks;
+    if (override.remarks) existing.remarks = [existing.remarks, override.remarks].filter(Boolean).join(' | ');
   }
 
-  for (const key of duplicateKeys) {
-    const row = byPs.get(key);
-    if (row && row.status === PSNM_MASTER_STATUS.OK) row.status = PSNM_MASTER_STATUS.DUPLICATE_PS;
-  }
-
-  const rows = Array.from(byPs.values());
+  const rows = Array.from(byPs.values()).map((row) => PSNM_recomputeMasterPsRow(row, logger));
   return {
     rows,
     table1Rows,
     table4ARows,
     issues: rows.filter((row) => row.status !== PSNM_MASTER_STATUS.OK),
+    duplicateKeys: Array.from(duplicateKeys),
   };
 }
