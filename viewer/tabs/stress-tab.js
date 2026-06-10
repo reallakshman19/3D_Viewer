@@ -3,7 +3,7 @@
  */
 
 import { STRESS_TABLE, DISPLACEMENT_TABLE } from '../data/report-data.js';
-import { fmt, fmtPct, fmtSigned, fmtNode, prettyUnit, unitSuffix } from '../utils/formatter.js';
+import { fmt, fmtPct, fmtSigned, fmtNode, prettyUnit, unitSuffix } from '../utils/formatter.js?v=20260610-format-1';
 import { renderTableToggles } from '../utils/table-toggle.js';
 import { state } from '../core/state.js';
 
