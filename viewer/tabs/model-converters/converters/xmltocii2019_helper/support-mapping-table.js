@@ -82,7 +82,7 @@ export function renderUnifiedSupportMappingTable(container, config) {
   const rows = supportMappingRowsForTable(config);
 
   container.innerHTML = `
-    <div class="model-converters-workflow-detail-title">6 Support Mapping</div>
+    <div class="model-converters-workflow-detail-title">7 Support Mapping</div>
     <div class="model-converters-workflow-detail-text">
       One table for support detection and XML/CII restraint output. Detection columns map staged/XML/RVM/ATT attributes to support kinds.
       Output columns map each kind to XML/CII type, direction cosines, stiffness, gap, friction, and support tag behavior.
@@ -100,28 +100,28 @@ export function renderUnifiedSupportMappingTable(container, config) {
 
     <div style="overflow:auto;max-height:58vh;border:1px solid #26384f;border-radius:8px;">
       <table class="xml-cii-support-mapping-table" style="border-collapse:collapse;min-width:1900px;width:100%;font-size:12px;">
-        <thead>
+        <thead style="color:#fff;background:#111827;">
           <tr>
-            <th>On</th>
-            <th>Priority</th>
-            <th>Source</th>
-            <th>Fields</th>
-            <th>Match</th>
-            <th>Pattern / Keywords</th>
-            <th>Kind</th>
-            <th>XML/CII Type(s)</th>
-            <th>Direction Mode</th>
-            <th>Dir X</th>
-            <th>Dir Y</th>
-            <th>Dir Z</th>
-            <th>Stiffness</th>
-            <th>Gap</th>
-            <th>Friction</th>
-            <th>Fixed Fric.</th>
-            <th>Tag Mode</th>
-            <th>Tag Value</th>
-            <th>Notes</th>
-            <th></th>
+            <th style="color:#fff;">On</th>
+            <th style="color:#fff;">Priority</th>
+            <th style="color:#fff;">Source</th>
+            <th style="color:#fff;">Fields</th>
+            <th style="color:#fff;">Match</th>
+            <th style="color:#fff;">Pattern / Keywords</th>
+            <th style="color:#fff;">Kind</th>
+            <th style="color:#fff;">XML/CII Type(s)</th>
+            <th style="color:#fff;">Direction Mode</th>
+            <th style="color:#fff;">Dir X</th>
+            <th style="color:#fff;">Dir Y</th>
+            <th style="color:#fff;">Dir Z</th>
+            <th style="color:#fff;">Stiffness</th>
+            <th style="color:#fff;">Gap</th>
+            <th style="color:#fff;">Friction</th>
+            <th style="color:#fff;">Fixed Fric.</th>
+            <th style="color:#fff;">Tag Mode</th>
+            <th style="color:#fff;">Tag Value</th>
+            <th style="color:#fff;">Notes</th>
+            <th style="color:#fff;"></th>
           </tr>
         </thead>
         <tbody>${rows.map(rowHtml).join('')}</tbody>
