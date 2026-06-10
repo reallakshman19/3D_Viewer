@@ -1,4 +1,4 @@
-import { pipeLength } from '../utils/formatter.js';
+import { pipeLength } from '../utils/formatter.js?v=20260610-format-1';
 
 export function parsePdfElements(rawText, fileName, log) {
   const elements = [];
