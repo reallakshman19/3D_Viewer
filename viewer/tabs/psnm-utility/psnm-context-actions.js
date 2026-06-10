@@ -1,5 +1,6 @@
 import './psnm-anchor-selection.js?v=20260609-anchor-selection-1';
 import './psnm-auto-anchor.js?v=20260609-auto-anchor-1';
+import './psnm-auto-datum-groups.js?v=20260609-auto-datum-groups-1';
 
 const STYLE_ID = 'psnm-context-actions-style';
 
