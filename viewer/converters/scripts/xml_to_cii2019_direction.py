@@ -3,8 +3,9 @@
 
 The active browser converter invokes this wrapper. It keeps enriched
 Restraint/DirectionCosineX/Y/Z values, lets staged-json CMPSUPGAP annotations
-control restraint gap values, and maps SIF&TEES type code from enriched TEE
-DTXR/description fields.
+control restraint gap values, maps SIF&TEES type code from enriched TEE
+DTXR/description fields, and avoids hard-failing when multiple support nodes
+map to the same CII element edge.
 """
 from __future__ import annotations
 
@@ -325,9 +326,140 @@ def _sif_payload_factory(tee_desc_by_node: dict[int, str], support_config: dict)
     return _build_sif_payload
 
 
+def _restraint_kind_for_node(node: base.XmlNode, support_map: dict | None) -> str:
+    if not support_map:
+        return ""
+    raw = support_map.get(base._safe_text(node.node_name))
+    if isinstance(raw, dict):
+        raw = raw.get("kind") or raw.get("SUPPORT_KIND") or raw.get("supportKind")
+    return base._safe_text(raw).upper()
+
+
+def _has_real_restraint(specs: tuple[base.RestraintSpec, ...]) -> bool:
+    return any(not getattr(spec, "is_open_end", False) for spec in specs)
+
+
+def _merge_restraint_specs(left: tuple[base.RestraintSpec, ...], right: tuple[base.RestraintSpec, ...]) -> tuple[base.RestraintSpec, ...]:
+    out: list[base.RestraintSpec] = []
+    seen: set[tuple[int, float, float, float]] = set()
+    for spec in [*left, *right]:
+        key = (int(round(spec.type_code)), round(float(spec.stiffness), 6), round(float(spec.gap), 6), round(float(spec.friction), 6))
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(spec)
+        if len(out) >= base.RESTRAINT_SLOTS_PER_AUX:
+            break
+    return tuple(out)
+
+
+def _tolerant_build_restraints(
+    metadata: base.XmlMetadata,
+    edges: list[base.Edge],
+    degrees: base.Counter[int],
+    explicit_specs: dict[int, tuple[base.RestraintSpec, ...]],
+    support_map: dict | None = None,
+) -> tuple[list[base.AssignedRestraint], dict[int, int]]:
+    node_specs: dict[int, tuple[base.RestraintSpec, ...]] = dict(explicit_specs)
+
+    if metadata.restrain_open_ends:
+        for node_number, degree in degrees.items():
+            if degree != 1 or node_number in node_specs:
+                continue
+            node_specs[node_number] = (
+                base.RestraintSpec(
+                    type_code=1,
+                    stiffness=base.OPEN_END_STIFFNESS,
+                    gap=0.0,
+                    friction=0.0,
+                    is_open_end=True,
+                ),
+            )
+
+    if not node_specs:
+        return [], {}
+
+    assigned_node_numbers: set[int] = set()
+    restraints: list[base.AssignedRestraint] = []
+    edge_to_index: dict[int, int] = {}
+
+    def assign(edge_index: int, node: base.XmlNode) -> bool:
+        if node.node_number in assigned_node_numbers:
+            return False
+        specs = node_specs.get(node.node_number)
+        if not specs:
+            return False
+        kind = _restraint_kind_for_node(node, support_map)
+        if edge_index in edge_to_index:
+            # CII ELEMENT can point to one RESTRANT auxiliary block only. When
+            # two XML support nodes collapse onto the same generated element,
+            # keep the first real support; replace an open-end placeholder with
+            # a real support; merge specs only if it is the same node. Never hard
+            # fail the conversion for this geometry aliasing condition.
+            existing_index = edge_to_index[edge_index] - 1
+            existing = restraints[existing_index]
+            existing_real = _has_real_restraint(existing.specs)
+            incoming_real = _has_real_restraint(specs)
+            if existing.node_number == node.node_number:
+                restraints[existing_index] = base.AssignedRestraint(
+                    node_number=existing.node_number,
+                    specs=_merge_restraint_specs(existing.specs, specs),
+                    position=existing.position,
+                    node_name=existing.node_name,
+                    kind=existing.kind or kind,
+                )
+            elif incoming_real and not existing_real:
+                restraints[existing_index] = base.AssignedRestraint(
+                    node_number=node.node_number,
+                    specs=specs,
+                    position=node.position,
+                    node_name=base._safe_text(node.node_name),
+                    kind=kind,
+                )
+            assigned_node_numbers.add(node.node_number)
+            return True
+        restraints.append(
+            base.AssignedRestraint(
+                node_number=node.node_number,
+                specs=specs,
+                position=node.position,
+                node_name=base._safe_text(node.node_name),
+                kind=kind,
+            )
+        )
+        edge_to_index[edge_index] = len(restraints)
+        assigned_node_numbers.add(node.node_number)
+        return True
+
+    for edge_index, edge in enumerate(edges):
+        if assign(edge_index, edge.to_node):
+            continue
+        from_is_open_end = degrees[edge.from_node.node_number] == 1
+        if from_is_open_end:
+            assign(edge_index, edge.from_node)
+
+    unresolved = [node_number for node_number in node_specs if node_number not in assigned_node_numbers]
+    for node_number in unresolved:
+        matched = False
+        for edge_index, edge in enumerate(edges):
+            if edge.to_node.node_number == node_number:
+                if assign(edge_index, edge.to_node):
+                    matched = True
+                    break
+            if edge.from_node.node_number == node_number:
+                if assign(edge_index, edge.from_node):
+                    matched = True
+                    break
+        if not matched:
+            raise ValueError(f"Unable to assign restraint for NodeNumber {node_number}.")
+
+    return restraints, edge_to_index
+
+
 def install_direction_cosine_patch() -> None:
     base.RestraintSpec = DirectionRestraintSpec  # type: ignore[assignment]
     base._parse_restraints = _parse_restraints_with_direction  # type: ignore[assignment]
+    base._build_restraints = _tolerant_build_restraints  # type: ignore[assignment]
     patched._patched_build_restraint_payload_factory = _direction_enabled_restraint_payload_factory
 
 

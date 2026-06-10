@@ -137,6 +137,8 @@ export function isXmlCiiRigidNode(node) { return xmlText(node, 'ComponentType').
 export function isXmlCiiWeightReviewNode(node, dtxrText = '') { const text = `${xmlText(node, 'ComponentType')} ${xmlText(node, 'NodeName')} ${dtxrText}`.toUpperCase(); return isXmlCiiRigidNode(node) || /FLAN/.test(text) || /VALV|\bVLV\b/.test(text); }
 export function xmlCiiNumberText(value) { const text = toText(value).replace(/,/g, '').trim(); if (text === '') return null; const numeric = Number(text); return Number.isFinite(numeric) ? numeric : null; }
 export function xmlCiiAncestorBranchName(node) { let current = node?.parentNode || null; while (current) { if (current.nodeType === 1 && xmlLocalName(current) === 'Branch') return xmlText(current, 'Branchname'); current = current.parentNode || null; } return ''; }
+function isOwnerBranchDtxrLeak(componentType, dtxrResult) { const source = toText(dtxrResult?.source); const text = toText(dtxrResult?.value).toUpperCase(); return /^staged-owner-dtxr-ps/.test(source) && /^(RIGID|FLAN)$/.test(toText(componentType).toUpperCase()) && /\bTEE\b/.test(text); }
+function resolveWeightMatchDtxr(node, stagedDtxrIndex, config) { const result = resolveXmlCiiNodeDtxr(node, stagedDtxrIndex, config); const componentType = xmlText(node, 'ComponentType'); if (isOwnerBranchDtxrLeak(componentType, result)) return { value: '', source: 'staged-owner-dtxr-suppressed', confidence: 0, matchedKey: result.matchedKey || '' }; return result; }
 export function xmlCiiRigidWeightOverrideForNode(branchName, node, config) { const nodeNumber = xmlText(node, 'NodeNumber'); const overrides = config?.overrides?.rigidWeight || {}; const raw = overrides[xmlCiiRigidWeightOverrideKey(branchName, nodeNumber)] ?? overrides[nodeNumber]; const numeric = xmlCiiNumberText(raw); return numeric !== null && numeric > 0 ? numeric : null; }
 export function xmlCiiForwardElementLengths(nodes) { const out = new Array(nodes.length).fill(null); const mapPositionToCii = (posStr) => { const p = normalizePoint(posStr); return p ? [p.x, p.z, -p.y] : null; }; for (let j = 0; j < nodes.length; j += 1) { const toNum = Number(xmlText(nodes[j], 'NodeNumber')); if (!Number.isFinite(toNum) || toNum <= 0) continue; const toPos = xmlText(nodes[j], 'Position'); if (!toPos) continue; let fromPos = null; for (let i = j - 1; i >= 0; i -= 1) { const fromNum = Number(xmlText(nodes[i], 'NodeNumber')); if (Number.isFinite(fromNum) && fromNum > 0) { fromPos = xmlText(nodes[i], 'Position'); break; } } if (fromPos) { const pFrom = mapPositionToCii(fromPos), pTo = mapPositionToCii(toPos); if (pFrom && pTo) { const dx = pTo[0] - pFrom[0], dy = pTo[1] - pFrom[1], dz = pTo[2] - pFrom[2]; out[j] = Math.sqrt(dx * dx + dy * dy + dz * dz); } } } return out; }
 
@@ -164,7 +166,7 @@ function collectWeightRows(xmlTextVal, stagedJsonText, config, mode = 'zero-rigi
     branchNodeList.forEach((node, nodeIdx) => {
       const nodeNumber = xmlText(node, 'NodeNumber');
       if (Number(nodeNumber) <= 0) return;
-      const dtxrResult = resolveXmlCiiNodeDtxr(node, stagedDtxrIndex, config);
+      const dtxrResult = resolveWeightMatchDtxr(node, stagedDtxrIndex, config);
       const componentType = xmlText(node, 'ComponentType');
       const reviewNode = isXmlCiiWeightReviewNode(node, dtxrResult.value || '');
       const lengthRaw = xmlText(node, 'ElementLengthMm');
