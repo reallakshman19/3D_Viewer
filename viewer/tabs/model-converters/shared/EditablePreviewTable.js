@@ -139,7 +139,13 @@ export class EditablePreviewTable {
         ${renderColGroup(NODE_WEIGHT_COLUMNS, nodeWidths)}
         <thead><tr>${NODE_WEIGHT_COLUMNS.map(col => `<th data-col-id="${this._escapeAttr(col.id)}" style="position: relative;"><span class="xml-cii-th-label">${this._escape(col.label)}</span><span class="xml-cii-col-resizer" data-resize-col="${this._escapeAttr(col.id)}"></span></th>`).join('')}</tr></thead>
         <tbody>
-          ${nw.map((nr, ni) => `
+          ${nw.map((nr, ni) => {
+            const rowKey = nr.key || `${nr.branchName}::${nr.nodeNumber}`;
+            const selectedWeight = nr.weightMatch
+              ? (nr.weightMatch.selectedWeight ?? nr.weightMatch.suggestedWeight ?? nr.weightMatch.weight ?? '')
+              : '';
+            const selectedWeightMethod = nr.weightMatch?.weightMethod || '';
+            return `
             <tr>
               <td>${this._escape(nr.nodeNumber)}</td>
               <td>${this._escape(nr.componentType)}</td>
@@ -147,19 +153,41 @@ export class EditablePreviewTable {
               <td title="${this._escapeAttr(nr.resolvedPipingClass ? `Piping Class ${nr.resolvedPipingClass}` : '')}">${this._escape(nr.rating)}</td>
               <td>${nr.lengthMm != null ? nr.lengthMm.toFixed(1) + 'mm' : '—'}</td>
               <td class="xml-cii-dtxr-cell" title="${this._escapeAttr(nr.dtxrSource || nr.dtxrMatchedKey || '')}">${this._escape(nr.dtxr || 'Not found')}</td>
-              <td class="mc-preview-weight-value" data-mc-weight-cell="${this._escapeAttr(nr.key || `${nr.branchName}::${nr.nodeNumber}`)}">${nr.weightMatch ? nr.weightMatch.weight + ' kg' : '—'}</td>
+              <td class="mc-preview-weight-value">
+                <input
+                  type="number"
+                  min="0"
+                  step="0.001"
+                  class="mc-preview-weight-input${selectedWeight !== '' ? ' mc-preview-weight-selected' : ''}"
+                  data-mc-weight-cell="${this._escapeAttr(rowKey)}"
+                  data-mc-weight-key="${this._escapeAttr(rowKey)}"
+                  value="${this._escapeAttr(selectedWeight)}"
+                  placeholder="kg"
+                  title="${this._escapeAttr(selectedWeightMethod ? `Weight method: ${selectedWeightMethod}` : 'Weight override')}"
+                >
+              </td>
               <td>${nr.weightMatch ? nr.weightMatch.lengthDelta.toFixed(1) + 'mm' : '—'}</td>
               <td class="mc-preview-candidates">
                 ${nr.weightCandidates.map((c, ci) => {
-                  const weight = c.suggestedWeight ?? c.weight;
+                  const weight = c.selectedWeight ?? c.suggestedWeight ?? c.weight;
                   const typeDesc = c.typeDesc || c.valveType || c.type || 'Unknown';
                   const type = c.type || c.valveType || '';
                   const delta = Number(c.lengthDelta);
-                  const title = [`Type: ${type || '-'}`, `TypeDesc: ${typeDesc}`, `Weight: ${weight} kg`, Number.isFinite(delta) ? `ΔLength: ${delta.toFixed(1)} mm` : '', 'Click to use this candidate weight'].filter(Boolean).join('\n');
-                  return `<button type="button" class="mc-preview-candidate${ci === 0 ? ' best' : ''}" data-mc-weight-candidate="1" data-mc-weight-key="${this._escapeAttr(nr.key || `${nr.branchName}::${nr.nodeNumber}`)}" data-mc-weight-value="${this._escapeAttr(weight)}" data-mc-weight-valvetype="${this._escapeAttr(typeDesc)}" data-mc-weight-node-index="${ni}" data-mc-weight-candidate-index="${ci}" title="${this._escapeAttr(title)}">${this._escape(typeDesc)} · ${this._escape(weight)}kg · Δ${Number.isFinite(delta) ? delta.toFixed(1) : '—'}mm</button>`;
+                  const method = c.weightMethod || '';
+                  const title = [
+                    `Type: ${type || '-'}`,
+                    `TypeDesc: ${typeDesc}`,
+                    `Weight: ${weight} kg`,
+                    method ? `Weight method: ${method}` : '',
+                    Number.isFinite(delta) ? `ΔLength: ${delta.toFixed(1)} mm` : '',
+                    c.semanticReason ? `Semantic: ${c.semanticReason}` : '',
+                    'Click to use this candidate weight'
+                  ].filter(Boolean).join('\n');
+                  return `<button type="button" class="mc-preview-candidate${ci === 0 ? ' best' : ''}${method === 'length-extrapolated' ? ' is-extrapolated' : ''}" data-mc-weight-candidate="1" data-mc-weight-key="${this._escapeAttr(rowKey)}" data-mc-weight-value="${this._escapeAttr(weight)}" data-mc-weight-valvetype="${this._escapeAttr(typeDesc)}" data-mc-weight-method="${this._escapeAttr(method)}" data-mc-weight-node-index="${ni}" data-mc-weight-candidate-index="${ci}" title="${this._escapeAttr(title)}">${this._escape(typeDesc)} · ${this._escape(weight)}kg · Δ${Number.isFinite(delta) ? delta.toFixed(1) : '—'}mm</button>`;
                 }).join('')}
               </td>
-            </tr>`).join('')}
+            </tr>`;
+          }).join('')}
         </tbody>
       </table>`;
   }
@@ -183,15 +211,30 @@ export class EditablePreviewTable {
         const key = btn.getAttribute('data-mc-weight-key') || '';
         const weight = btn.getAttribute('data-mc-weight-value') || '';
         const typeDesc = btn.getAttribute('data-mc-weight-valvetype') || '';
-        const weightCell = key ? hostEl.querySelector(`[data-mc-weight-cell="${CSS.escape(key)}"]`) : null;
-        if (weightCell) {
-          weightCell.textContent = `${weight} kg`;
-          weightCell.title = typeDesc ? `Selected TypeDesc: ${typeDesc}` : 'Selected candidate weight';
-          weightCell.classList.add('mc-preview-weight-selected');
+        const method = btn.getAttribute('data-mc-weight-method') || '';
+        const weightInput = key ? hostEl.querySelector(`input[data-mc-weight-cell="${CSS.escape(key)}"]`) : null;
+        if (weightInput) {
+          weightInput.value = weight;
+          weightInput.title = typeDesc ? `Selected TypeDesc: ${typeDesc}` : 'Selected candidate weight';
+          weightInput.classList.add('mc-preview-weight-selected');
+          weightInput.dispatchEvent(new Event('input', { bubbles: true }));
+          weightInput.dispatchEvent(new Event('change', { bubbles: true }));
         }
         hostEl.querySelectorAll(`[data-mc-weight-key="${CSS.escape(key)}"]`).forEach((el) => el.classList.remove('selected'));
         btn.classList.add('selected');
-        if (typeof this.onWeightCandidateSelect === 'function') this.onWeightCandidateSelect({ key, weight, valveType: typeDesc, typeDesc, button: btn });
+        if (typeof this.onWeightCandidateSelect === 'function') {
+          this.onWeightCandidateSelect({ key, weight, valveType: typeDesc, typeDesc, weightMethod: method, button: btn, input: weightInput });
+        }
+      });
+    });
+
+    hostEl.querySelectorAll('.mc-preview-weight-input[data-mc-weight-key]').forEach(input => {
+      input.addEventListener('change', () => {
+        const key = input.getAttribute('data-mc-weight-key') || '';
+        const weight = input.value || '';
+        if (typeof this.onWeightCandidateSelect === 'function') {
+          this.onWeightCandidateSelect({ key, weight, valveType: '', typeDesc: '', input });
+        }
       });
     });
 
