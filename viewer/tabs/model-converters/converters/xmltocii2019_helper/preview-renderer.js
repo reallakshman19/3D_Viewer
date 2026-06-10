@@ -1,6 +1,6 @@
 import { EditablePreviewTable } from '../../shared/EditablePreviewTable.js';
 import { deriveLineKeyFromBranchName, tokenAtPosition } from '../../../../converters/xml-cii2019-core/regex-line-key.js';
-import { findAllWeightCandidates, xmlCiiRigidWeightOverrideKey } from '../../../../converters/xml-cii2019-core/weight-match-model.js';
+import { findAllWeightCandidates, xmlCiiRigidWeightOverrideKey, isXmlCiiWeightReviewNode, xmlCiiNumberText } from '../../../../converters/xml-cii2019-core/weight-match-model.js';
 import { buildPipingClassIndex } from '../../../../converters/xml-cii2019-core/piping-class-resolver.js';
 import { resolveBranchProcessData } from '../../../../converters/xml-cii2019-core/branch-process-resolver.js';
 import { buildStagedDtxrIndex, resolveXmlCiiNodeDtxr } from '../../../../converters/xml-cii2019-core/dtxr-resolver.js';
@@ -134,18 +134,20 @@ export function xmlCiiDryRunPreview(xmlText, config, stagedJsonText) {
     let previousPosition = null;
     for (const node of _xmlChildrenByName(branch, 'Node')) {
       const positionText = _xmlText(node, 'Position');
-      const lengthMm = previousPosition ? _pointDistanceMm(previousPosition, positionText) : null;
+      const computedLengthMm = previousPosition ? _pointDistanceMm(previousPosition, positionText) : null;
+      const explicitLengthMm = xmlCiiNumberText(_xmlText(node, 'ElementLengthMm'));
+      const lengthMm = explicitLengthMm !== null ? explicitLengthMm : computedLengthMm;
       const nodeNumber = _xmlText(node, 'NodeNumber');
       const componentType = _xmlText(node, 'ComponentType');
       const nodeNoNum = Number(nodeNumber);
-      const isSkipType = /^(TEE|TEES|ELBO|ELBOW|OLET|BRANCH|DATUM|BEND|BENDS|GASK|GASKET|REDU|REDUCER)$/i.test(componentType);
-      const dtxrRes = resolveXmlCiiNodeDtxr(node, stagedIndex, config);
-      const candidates = (boreMm != null && branchRating && lengthMm != null) ? findAllWeightCandidates({ boreMm, rating: branchRating, lengthMm }, config) : [];
+      const weightEligible = isXmlCiiWeightReviewNode(node);
+      const dtxrRes = weightEligible ? resolveXmlCiiNodeDtxr(node, stagedIndex, config) : { value: '', source: 'not-weight-eligible', matchedKey: '' };
+      const candidates = (weightEligible && boreMm != null && branchRating && lengthMm != null) ? findAllWeightCandidates({ boreMm, rating: branchRating, lengthMm }, config) : [];
       const weightKey = xmlCiiRigidWeightOverrideKey(branchName, nodeNumber);
       const overrideWeight = Number(config?.overrides?.rigidWeight?.[weightKey]);
       const selectedWeight = Number.isFinite(overrideWeight) && overrideWeight > 0 ? overrideWeight : null;
       const selectedMatch = selectedWeight != null ? { ...(candidates[0] || {}), weight: selectedWeight, selectedOverride: true } : (candidates[0] || null);
-      if (nodeNoNum > 0 && !isSkipType && candidates.length) nodeRows.push({ key: weightKey, branchName, nodeNumber, componentType, boreMm, rating: branchRating, resolvedPipingClass: resolved.pipingClass, lengthMm, dtxr: dtxrRes.value || '', dtxrSource: dtxrRes.source || 'none', dtxrMatchedKey: dtxrRes.matchedKey || '', weightMatch: selectedMatch, weightCandidates: candidates });
+      if (nodeNoNum > 0 && weightEligible && candidates.length) nodeRows.push({ key: weightKey, branchName, nodeNumber, componentType, boreMm, rating: branchRating, resolvedPipingClass: resolved.pipingClass, lengthMm, dtxr: dtxrRes.value || '', dtxrSource: dtxrRes.source || 'none', dtxrMatchedKey: dtxrRes.matchedKey || '', weightMatch: selectedMatch, weightCandidates: candidates });
       previousPosition = positionText || previousPosition;
     }
   }
