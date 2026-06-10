@@ -3,25 +3,26 @@ function num(v,f){const n=Number(v);return Number.isFinite(n)?n:f}
 function pick(row,keys){for(const k of keys){const v=row?.[k]??row?._raw?.[k];if(text(v).trim())return text(v).trim()}return''}
 function pickNum(row,keys){for(const k of keys){const m=text(row?.[k]??row?._raw?.[k]).replace(/,/g,'').match(/-?\d+(?:\.\d+)?/);if(m){const n=Number(m[0]);if(Number.isFinite(n))return n}}return null}
 function clean(v){return text(v).toUpperCase().replace(/[_/\\]+/g,'-').replace(/[^A-Z0-9#+.-]+/g,'-').replace(/-+/g,'-').replace(/^-|-$/g,'')}
+function safeRe(pattern){try{return pattern?new RegExp(pattern,'i'):null}catch{return null}}
 
 export const DEFAULT_VALVE_HINT_MAPPING=Object.freeze([
- {on:true,priority:10,code:'VGT',label:'Gate Valve',subtype:'GATE',nodeNameRegex:'VGT',masterRegex:'GATE',notes:'Gate valve tag'},
- {on:true,priority:20,code:'VCH',label:'Check Valve',subtype:'CHECK',nodeNameRegex:'VCH',masterRegex:'CHECK|SWING|NRV|NON RETURN|NON-RETURN',notes:'Check valve tag'},
- {on:true,priority:30,code:'VBL',label:'Ball Valve',subtype:'BALL',nodeNameRegex:'VBL',masterRegex:'BALL',notes:'Ball valve tag'},
- {on:true,priority:40,code:'VCV',label:'Control Valve',subtype:'CONTROL',nodeNameRegex:'VCV',masterRegex:'CONTROL',notes:'Control valve tag'},
- {on:true,priority:50,code:'VGL',label:'Globe Valve',subtype:'GLOBE',nodeNameRegex:'VGL',masterRegex:'GLOBE',notes:'Globe valve tag'},
- {on:true,priority:60,code:'VBF',label:'Butterfly Valve',subtype:'BUTTERFLY',nodeNameRegex:'VBF',masterRegex:'BUTTERFLY',notes:'Butterfly valve tag'},
- {on:true,priority:70,code:'VBV',label:'Ball Valve',subtype:'BALL',nodeNameRegex:'VBV',masterRegex:'BALL',notes:'Alternate ball valve tag'}
+ {on:true,priority:10,code:'VGT',label:'Gate Valve',subtype:'GATE',nodeNameRegex:'(?:^|[-_/\\s])VGT(?=$|[-_/\\s]|\\d)',masterRegex:'GATE',notes:'Gate valve tag'},
+ {on:true,priority:20,code:'VCH',label:'Check Valve',subtype:'CHECK',nodeNameRegex:'(?:^|[-_/\\s])VCH(?=$|[-_/\\s]|\\d)',masterRegex:'CHECK|SWING|NRV|NON RETURN|NON-RETURN',notes:'Check valve tag'},
+ {on:true,priority:30,code:'VBL',label:'Ball Valve',subtype:'BALL',nodeNameRegex:'(?:^|[-_/\\s])VBL(?=$|[-_/\\s]|\\d)',masterRegex:'BALL',notes:'Ball valve tag'},
+ {on:true,priority:40,code:'VCV',label:'Control Valve',subtype:'CONTROL',nodeNameRegex:'(?:^|[-_/\\s])VCV(?=$|[-_/\\s]|\\d)',masterRegex:'CONTROL',notes:'Control valve tag'},
+ {on:true,priority:50,code:'VGL',label:'Globe Valve',subtype:'GLOBE',nodeNameRegex:'(?:^|[-_/\\s])VGL(?=$|[-_/\\s]|\\d)',masterRegex:'GLOBE',notes:'Globe valve tag'},
+ {on:true,priority:60,code:'VBF',label:'Butterfly Valve',subtype:'BUTTERFLY',nodeNameRegex:'(?:^|[-_/\\s])VBF(?=$|[-_/\\s]|\\d)',masterRegex:'BUTTERFLY',notes:'Butterfly valve tag'},
+ {on:true,priority:70,code:'VBV',label:'Ball Valve',subtype:'BALL',nodeNameRegex:'(?:^|[-_/\\s])VBV(?=$|[-_/\\s]|\\d)',masterRegex:'BALL',notes:'Alternate ball valve tag'}
 ]);
 
 export function valveHintLengthToleranceMm(config){return Math.max(0,num(config?.weight?.valveHintLengthToleranceMm,6))}
 export function useNodeNameValveHints(config){return config?.weight?.useNodeNameValveHints!==false}
 export function valveHintMappingRows(config){const rows=Array.isArray(config?.weight?.valveHintMapping)&&config.weight.valveHintMapping.length?config.weight.valveHintMapping:DEFAULT_VALVE_HINT_MAPPING;return rows.map((r,i)=>({on:r?.on!==false,priority:num(r?.priority,(i+1)*10),code:text(r?.code).trim().toUpperCase(),label:text(r?.label).trim(),subtype:text(r?.subtype).trim().toUpperCase(),nodeNameRegex:text(r?.nodeNameRegex).trim(),masterRegex:text(r?.masterRegex).trim(),notes:text(r?.notes).trim()}))}
 export function ensureValveHintConfig(config){if(!config.weight||typeof config.weight!=='object')config.weight={};if(!Array.isArray(config.weight.valveHintMapping)||!config.weight.valveHintMapping.length)config.weight.valveHintMapping=valveHintMappingRows(config);if(!Number.isFinite(Number(config.weight.valveHintLengthToleranceMm)))config.weight.valveHintLengthToleranceMm=6;if(config.weight.useNodeNameValveHints!==false)config.weight.useNodeNameValveHints=true;return config.weight}
-export function resolveNodeNameValveHint(nodeName,config){if(!useNodeNameValveHints(config))return null;const raw=text(nodeName);if(!raw.trim())return null;const norm=clean(raw);for(const row of valveHintMappingRows(config).filter(r=>r.on!==false).sort((a,b)=>a.priority-b.priority)){const token=clean(row.nodeNameRegex||row.code);if(token&&(`-${norm}-`).includes(`-${token}-`))return{...row,family:'VALVE'}}return null}
+export function resolveNodeNameValveHint(nodeName,config){if(!useNodeNameValveHints(config))return null;const raw=text(nodeName);if(!raw.trim())return null;const norm=clean(raw);for(const row of valveHintMappingRows(config).filter(r=>r.on!==false).sort((a,b)=>a.priority-b.priority)){const re=safeRe(row.nodeNameRegex);if(re&&(re.test(raw)||re.test(norm)))return{...row,family:'VALVE'};const token=clean(row.nodeNameRegex||row.code);if(token&&(`-${norm}-`).includes(`-${token}-`))return{...row,family:'VALVE'}}return null}
 export function formatValveHint(h){return h?`${h.code} → ${h.label||h.subtype||'Valve'}`:''}
 function classify(master){const t=clean(master);if(/SPECTACLE|SPADE|SPACER|BLIND/.test(t))return{family:'BLIND',subtype:'BLIND'};if(/FLANGE|WELDNECK|WELDING-NECK|WNFL/.test(t))return{family:'FLANGE',subtype:'FLANGE'};if(/CHECK|SWING|NRV|NON-RETURN|NONRETURN/.test(t))return{family:'VALVE',subtype:'CHECK'};for(const s of ['GATE','BALL','GLOBE','CONTROL','BUTTERFLY'])if(t.includes(s))return{family:'VALVE',subtype:s};if(/VALVE|VLV/.test(t))return{family:'VALVE',subtype:'VALVE_GENERIC'};return{family:'',subtype:''}}
-function semantic(h,c,master){if(!h)return 0;const mt=clean(master);const rx=clean(h.masterRegex).split('-').filter(Boolean);if(rx.some(x=>mt.includes(x)))return 120;if(h.subtype&&c.family==='VALVE'&&h.subtype===c.subtype)return 110;if(c.family==='VALVE'&&c.subtype&&c.subtype!=='VALVE_GENERIC')return 70;if(c.family==='VALVE')return 50;if(['FLANGE','BLIND'].includes(c.family))return -80;return 0}
+function semantic(h,c,master){if(!h)return 0;const mt=text(master);const re=safeRe(h.masterRegex);if(re&&re.test(mt))return 120;const mclean=clean(master);const rx=clean(h.masterRegex).split('-').filter(Boolean);if(rx.some(x=>mclean.includes(x)))return 120;if(h.subtype&&c.family==='VALVE'&&h.subtype===c.subtype)return 110;if(c.family==='VALVE'&&c.subtype&&c.subtype!=='VALVE_GENERIC')return 70;if(c.family==='VALVE')return 50;if(['FLANGE','BLIND'].includes(c.family))return -80;return 0}
 function rating(v){return text(v).replace(/#/g,'').trim().toUpperCase()}
 function masterLength(raw,xmlLength,config){if(raw==null)return null;if(config?.weight?.convertSmallLengthsInToMm!==true)return raw;return raw<100&&xmlLength>100?raw*num(config?.weight?.inchToMm,25.4):raw}
 
