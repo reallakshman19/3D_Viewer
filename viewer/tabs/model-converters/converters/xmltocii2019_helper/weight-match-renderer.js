@@ -26,6 +26,33 @@ function _conversionEnabled(config) {
   return config?.weight?.convertSmallLengthsInToMm === true;
 }
 
+function _strictWeightComponentType(value) {
+  const type = _toText(value).trim().toUpperCase();
+  if (type === 'RIGID') return true;
+  if (/^FLAN/.test(type)) return true;
+  if (/^(VALV|VALVE|VLV)$/.test(type)) return true;
+  return false;
+}
+
+function _isUnsafeWeightDtxr(issue) {
+  const type = _toText(issue?.componentType).trim().toUpperCase();
+  const source = _toText(issue?.dtxrSource).trim().toLowerCase();
+  const text = _toText(issue?.dtxr).trim().toUpperCase();
+  if (!text) return false;
+  if (/^(RIGID|FLAN|VALV|VALVE|VLV)/.test(type)) {
+    if (/owner|support|ps-tag/.test(source) && /\b(PIPE\s+REST|SUPPORT|GUIDE|STOP|SHOE|WEAR\s+PLATE|TEE|ELBOW|BEND|REDUCER)\b/.test(text)) return true;
+  }
+  return false;
+}
+
+function _sanitizeWeightRow(row) {
+  if (!_strictWeightComponentType(row?.componentType)) return null;
+  if (_isUnsafeWeightDtxr(row)) {
+    return { ...row, dtxr: '', dtxrSource: 'weight-dtxr-suppressed', dtxrMatchedKey: row.dtxrMatchedKey || '' };
+  }
+  return row;
+}
+
 async function _resolveStagedJsonText(stagedJsonText) {
   const direct = _toText(stagedJsonText).trim();
   if (direct) return direct;
@@ -43,26 +70,28 @@ async function _resolveStagedJsonText(stagedJsonText) {
 function _mergeDtxrFromRawRows(enrichedRows, rawRows) {
   const byKey = new Map((rawRows || []).map((row) => [row.key, row]));
   return (enrichedRows || []).map((row) => {
-    if (_toText(row.dtxr).trim() && row.dtxr !== 'Not found') return row;
-    const raw = byKey.get(row.key);
-    if (!_toText(raw?.dtxr).trim()) return row;
+    const current = _sanitizeWeightRow(row);
+    if (!current) return null;
+    if (_toText(current.dtxr).trim() && current.dtxr !== 'Not found') return current;
+    const raw = _sanitizeWeightRow(byKey.get(current.key));
+    if (!_toText(raw?.dtxr).trim()) return current;
     return {
-      ...row,
+      ...current,
       dtxr: raw.dtxr,
-      dtxrSource: raw.dtxrSource || row.dtxrSource,
-      dtxrMatchedKey: raw.dtxrMatchedKey || row.dtxrMatchedKey,
+      dtxrSource: raw.dtxrSource || current.dtxrSource,
+      dtxrMatchedKey: raw.dtxrMatchedKey || current.dtxrMatchedKey,
     };
-  });
+  }).filter(Boolean);
 }
 
 export function xmlCiiRenderWeightMatchPhase() {
-  const info = 'Shows all XML nodes where ComponentType/NodeName/DTXR indicates RIGID, FLAN*, or VALVE/VLV and ElementLengthMm > 6 mm. Green rows already have XML/override weight; amber rows still need a weight decision. Length conversion is OFF by default; use ⇄ in→mm only for masters that explicitly store small face-to-face lengths in inches.';
+  const info = 'Shows only actual XML ComponentType RIGID, FLAN*, or VALVE/VLV rows with ElementLengthMm > 6 mm. ATTA/supports, bends, reducers, tees, olets, gaskets and pipes are excluded. Green rows already have XML/override weight; amber rows still need a weight decision. Length conversion is OFF by default; use ⇄ in→mm only for masters that explicitly store small face-to-face lengths in inches.';
   return `
     <div class="model-converters-workflow-detail-title">5 Weight Match <span title="${_escAttr(info)}" style="cursor:help;color:#8bb7ff;border:1px solid #406089;border-radius:50%;padding:0 5px;font-size:11px;">i</span></div>
     <div class="model-converters-workflow-detail-text">
       Approximate component weights matched from the valve weight master by
       <strong>rating</strong> (×3), <strong>bore</strong> (×2), and <strong>length</strong> (×1).
-      DTXR is resolved from XML <strong>DTXR_POS</strong> / <strong>DTXR_PS</strong> first, then staged JSON by OWNER/Branchname, ComponentRefNo, PS tag, node and coordinates.
+      DTXR is resolved for the exact weight component only; support/branch DTXR is not used to include rows.
       Review and adjust; final conversion is launched from <strong>6 Run</strong>.
     </div>
     <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:10px 0;">
@@ -100,7 +129,7 @@ export function bindXmlCiiWeightMatchPhase(detailEl, { xmlFile, stagedJsonText, 
 
   const renderIssues = (issues) => {
     if (!issues.length) {
-      contentEl.innerHTML = '<div class="model-converters-workflow-detail-note">No RIGID / FLAN* / VALVE nodes with ElementLengthMm &gt; 6 mm were found. Use 6 Run to generate the CII.</div>';
+      contentEl.innerHTML = '<div class="model-converters-workflow-detail-note">No actual RIGID / FLAN* / VALVE nodes with ElementLengthMm &gt; 6 mm were found. ATTA/supports, bends, reducers, tees, olets, gaskets and pipes are intentionally excluded. Use 6 Run to generate the CII.</div>';
       return;
     }
     const rowsHtml = issues.map((issue, index) => {
@@ -151,7 +180,7 @@ export function bindXmlCiiWeightMatchPhase(detailEl, { xmlFile, stagedJsonText, 
     }).join('');
     contentEl.innerHTML = `
       <div class="model-converters-workflow-detail-note" style="margin-bottom:8px;">
-        Filter: ComponentType/NodeName/DTXR contains RIGID, FLAN*, or VALVE/VLV and ElementLengthMm &gt; 6 mm. Length conversion ⇄ in→mm is ${_conversionEnabled(config) ? 'ON' : 'OFF'}.
+        Filter: actual XML ComponentType is RIGID, FLAN*, or VALVE/VLV and ElementLengthMm &gt; 6 mm. ATTA/supports, bends, reducers, tees, olets, gaskets and pipes are excluded. Length conversion ⇄ in→mm is ${_conversionEnabled(config) ? 'ON' : 'OFF'}.
       </div>
       <div class="mc-rigid-review-table-wrap" style="overflow:auto;max-height:48vh;">
         <table class="mc-rigid-review-table" style="border-collapse:collapse;font-size:12px;">
@@ -181,8 +210,10 @@ export function bindXmlCiiWeightMatchPhase(detailEl, { xmlFile, stagedJsonText, 
       const xmlText = await xmlFile.text();
       const resolvedStagedJsonText = await _resolveStagedJsonText(stagedJsonText);
       const enriched = await enrichXmlForCii2019(xmlText, resolvedStagedJsonText, { dryRun: true });
-      const enrichedRows = collectXmlCiiWeightMatchRows(enriched.xmlText, resolvedStagedJsonText, enriched.config || config);
-      const rawRows = collectXmlCiiWeightMatchRows(xmlText, resolvedStagedJsonText, enriched.config || config);
+      const enrichedRows = collectXmlCiiWeightMatchRows(enriched.xmlText, resolvedStagedJsonText, enriched.config || config)
+        .map(_sanitizeWeightRow).filter(Boolean);
+      const rawRows = collectXmlCiiWeightMatchRows(xmlText, resolvedStagedJsonText, enriched.config || config)
+        .map(_sanitizeWeightRow).filter(Boolean);
       localIssues = _mergeDtxrFromRawRows(enrichedRows, rawRows);
       const mapped = localIssues.filter((item) => item.mapped).length;
       const unresolved = localIssues.length - mapped;
