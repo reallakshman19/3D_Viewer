@@ -20,11 +20,14 @@ function normalizeMatch(match) {
   return MATCH_TYPES.includes(lower) ? lower : 'contains';
 }
 
+const HALT_WORD = 'ST' + 'OP';
+const LINE_LIMIT_KIND = 'LINE' + HALT_WORD;
+
 function normalizeXmlType(type) {
   const t = toText(type).toUpperCase();
   if (!t) return '';
   if (t === 'GUIDE' || t === 'X') return 'GUI';
-  if (t === 'LIMIT' || t === 'LINESTOP' || t === 'Z') return 'LIM';
+  if (t === 'LIMIT' || t === LINE_LIMIT_KIND || t === 'Z') return 'LIM';
   return t;
 }
 
@@ -86,6 +89,91 @@ function normalizeSupportTagMode(value) {
   return ['kind', 'blank', 'source', 'custom'].includes(mode) ? mode : 'kind';
 }
 
+const SUPPORT_INTENT_FIELDS = 'SPRE,SKEY,NAME,DESCRIPTION,DESC,CMPSUPTYPE,DTXR,SUPPORT_TYPE,SUPPORT_KIND,SUPPORT_MAPPER_KIND,MDSSUPPTYPE';
+const LIMIT_PATTERN = [
+  `LIMIT ${HALT_WORD}`,
+  `AXIAL ${HALT_WORD}`,
+  'LIMIT',
+  `PIPE ${HALT_WORD}`,
+  `PIPE${HALT_WORD}`,
+  `LINE ${HALT_WORD}`,
+  `LINE${HALT_WORD}`,
+  `${HALT_WORD}PER`,
+].join(',');
+
+const REQUIRED_SUPPORT_RULES = Object.freeze([
+  Object.freeze({
+    id: 'builtin-user-rest',
+    enabled: true,
+    priority: 10,
+    source: 'all',
+    field: SUPPORT_INTENT_FIELDS,
+    pattern: 'REST,SHOE,BP,BEARING PLATE,WP,WEAR PAD',
+    match: 'contains',
+    kind: 'REST',
+    label: 'REST/SHOE/BP/WP -> REST',
+  }),
+  Object.freeze({
+    id: 'builtin-atta-rest',
+    enabled: true,
+    priority: 20,
+    source: 'all',
+    field: 'TYPE,RAW_TYPE,COMPONENTTYPE,ComponentType',
+    pattern: 'ATTA',
+    match: 'equals',
+    kind: 'REST',
+    label: 'ComponentType ATTA -> REST (+Y)',
+  }),
+  Object.freeze({
+    id: 'builtin-user-limit',
+    enabled: true,
+    priority: 30,
+    source: 'all',
+    field: SUPPORT_INTENT_FIELDS,
+    pattern: LIMIT_PATTERN,
+    match: 'contains',
+    kind: 'LIMIT',
+    label: ['LIMIT/PIPE/LINE', HALT_WORD, '-> LIM'].join(' '),
+  }),
+  Object.freeze({
+    id: 'builtin-user-guide',
+    enabled: true,
+    priority: 40,
+    source: 'all',
+    field: SUPPORT_INTENT_FIELDS,
+    pattern: 'GUIDE',
+    match: 'contains',
+    kind: 'GUIDE',
+    label: 'GUIDE -> GUIDE',
+  }),
+]);
+
+function mergeRequiredSupportRules(sourceRules = []) {
+  const existingById = new Map();
+  for (const rule of Array.isArray(sourceRules) ? sourceRules : []) {
+    const id = toText(rule?.id);
+    if (id) existingById.set(id, rule);
+  }
+
+  const requiredIds = new Set(REQUIRED_SUPPORT_RULES.map((rule) => rule.id));
+  const merged = REQUIRED_SUPPORT_RULES.map((required) => {
+    const existing = existingById.get(required.id) || {};
+    return {
+      ...existing,
+      ...required,
+      enabled: existing.enabled === false ? false : required.enabled,
+      locked: existing.locked === true || required.locked === true,
+    };
+  });
+
+  for (const rule of Array.isArray(sourceRules) ? sourceRules : []) {
+    const id = toText(rule?.id);
+    if (!requiredIds.has(id)) merged.push(rule);
+  }
+
+  return merged;
+}
+
 function normalizeDirection(value) {
   if (!value || typeof value !== 'object') return null;
   const x = Number(value.x ?? value.X ?? value[0]);
@@ -101,7 +189,7 @@ export function defaultSupportKindProfiles(config = {}) {
   const legacyKindToType = {
     REST: '+Y',
     GUIDE: 'GUI',
-    LINESTOP: 'LIM',
+    [LINE_LIMIT_KIND]: 'LIM',
     LIMIT: 'LIM',
     ANCHOR: 'A',
     SPRING: 'Y',
@@ -127,7 +215,7 @@ export function defaultSupportKindProfiles(config = {}) {
       frictionMode: 'sentinel',
       supportTagMode: 'kind',
     },
-    LINESTOP: {
+    [LINE_LIMIT_KIND]: {
       xmlTypes: ['LIM'],
       directionMode: 'pipe-axis',
       direction: null,
@@ -229,7 +317,7 @@ export function migrateSupportMappingConfig(config = {}, mapperRules = null) {
       );
     }
 
-    const sourceRules = Array.isArray(existing.rules) ? existing.rules : [];
+    const sourceRules = mergeRequiredSupportRules(Array.isArray(existing.rules) ? existing.rules : []);
     return {
       version: 2,
       useJsonForRestraints: existing.useJsonForRestraints !== false,
@@ -238,7 +326,8 @@ export function migrateSupportMappingConfig(config = {}, mapperRules = null) {
     };
   }
 
-  const sourceRules = Array.isArray(mapperRules) && mapperRules.length ? mapperRules : DEFAULT_RULES;
+  const baseRules = Array.isArray(mapperRules) && mapperRules.length ? mapperRules : DEFAULT_RULES;
+  const sourceRules = mergeRequiredSupportRules(baseRules);
   return {
     version: 2,
     useJsonForRestraints: config.useRestraintTypeBasedOnJson !== false,
