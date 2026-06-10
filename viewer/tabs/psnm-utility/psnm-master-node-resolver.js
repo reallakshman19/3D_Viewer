@@ -5,6 +5,7 @@ import {
   PSNM_parseNodeRows,
   PSNM_transformNodeToPsPosition,
 } from './psnm-match-engine.js';
+import { PIPE_OD_TO_DN } from '../../pcf-legacy/services/bore-converter.js';
 import {
   PSNM_makeMasterNodeRow,
   PSNM_MASTER_STATUS,
@@ -16,6 +17,25 @@ function PSNM_number(value) {
   if (!text || text === '-') return NaN;
   const match = text.replace(/,/g, '').match(/-?\d+(?:\.\d+)?/);
   return match ? Number(match[0]) : NaN;
+}
+
+function PSNM_boreFromOdMmLoose(odMm) {
+  const strict = PSNM_boreFromOdMm(odMm);
+  if (strict != null) return strict;
+  const n = Number(odMm);
+  if (!Number.isFinite(n) || n <= 0) return null;
+  let best = null;
+  let bestErr = Infinity;
+  for (const row of PIPE_OD_TO_DN) {
+    const err = Math.abs(n - row.od);
+    if (err < bestErr) {
+      bestErr = err;
+      best = row;
+    }
+  }
+  if (!best) return null;
+  const tol = Math.max(1.5, Math.abs(best.od) * 0.006);
+  return bestErr <= tol ? best.dn : null;
 }
 
 function PSNM_optionalNumber(value) {
@@ -52,6 +72,33 @@ function PSNM_lines(text) {
     .map((line) => line.trim())
     .filter(Boolean)
     .filter((line) => !/^-{3,}$/.test(line));
+}
+
+function PSNM_table2OdFallbackMap(text, logger = null) {
+  const lines = PSNM_lines(text);
+  if (!lines.length) return new Map();
+  const firstCells = PSNM_splitCells(lines[0]);
+  const headers = firstCells.map(PSNM_normHeader);
+  const hasHeader = headers.some((header) => ['node', 'node no', 'node number', 'x', 'y', 'z', 'dia', 'dia mm', 'dia(mm)', 'od', 'od mm', 'od(mm)'].includes(header));
+  if (!hasHeader) return new Map();
+  const idxNode = headers.findIndex((header) => ['node', 'node no', 'node number'].includes(header));
+  const idxOd = headers.findIndex((header) => ['dia', 'dia mm', 'dia(mm)', 'od', 'od mm', 'od(mm)', 'outside diameter', 'outside dia'].includes(header));
+  if (idxNode < 0 || idxOd < 0) return new Map();
+  const out = new Map();
+  for (const [index, line] of lines.slice(1).entries()) {
+    const cells = PSNM_splitCells(line);
+    const node = String(cells[idxNode] ?? '').trim();
+    const od = PSNM_number(cells[idxOd]);
+    if (!node || !Number.isFinite(od)) continue;
+    if (!out.has(node)) out.set(node, od);
+    else if (Math.abs(out.get(node) - od) > 1e-9) {
+      logger?.user?.('WARNING', 'Duplicate Table 2 Dia', 'Table 2', node, 'Same node has conflicting Table 2 dia/OD values. First value kept.', 'Clean duplicate node dia/OD values in Table 2.', { node, first: out.get(node), duplicate: od, rowIndex: index + 2 });
+    }
+  }
+  if (out.size) {
+    logger?.user?.('INFO', 'Table 2 Dia OD Fallback', 'Table 2', `${out.size} node OD rows`, 'Table 2 dia/OD column was used as Node OD fallback for bore derivation.', 'Verify Derived Bore / Final Bore in Master Node preview.', { source: 'TABLE2_DIA_OD' });
+  }
+  return out;
 }
 
 function PSNM_parseTable2Fallback(text, logger = null) {
@@ -188,6 +235,7 @@ export function PSNM_recomputeMasterNodeRow(row, transform = null, coordinateDec
 export function PSNM_resolveMasterNodeTable({ table2Text, table3Text, table4BText, logger = null }) {
   let table2Rows = PSNM_parseNodeRows(table2Text, logger);
   if (!table2Rows.length && String(table2Text || '').trim()) table2Rows = PSNM_parseTable2Fallback(table2Text, logger);
+  const table2OdFallback = PSNM_table2OdFallbackMap(table2Text, logger);
   const table3Rows = PSNM_parseNodeDiaRows(table3Text, logger);
   const table4BRows = PSNM_parseTable4B(table4BText, logger);
   PSNM_logNodeTableLogic({ logger, table2Text, table2Rows, table3Text, table3Rows, table4BText, table4BRows });
@@ -219,8 +267,9 @@ export function PSNM_resolveMasterNodeTable({ table2Text, table3Text, table4BTex
     try { coords = PSNM_nodeCoordsFromRow(sourceRow); } catch {}
 
     const table2Bore = Number.isFinite(sourceRow.directBoreMm) ? sourceRow.directBoreMm : null;
-    const table3Od = odByNode.get(node) ?? null;
-    const table3DerivedBore = table3Od == null ? null : PSNM_boreFromOdMm(table3Od);
+    const table2Od = table2OdFallback.get(node) ?? null;
+    const table3Od = odByNode.get(node) ?? table2Od ?? null;
+    const table3DerivedBore = table3Od == null ? null : PSNM_boreFromOdMmLoose(table3Od);
     const overrides = overridesByNode.get(node) || [];
     const occurrenceOverride = overrides.find((item) => item.occurrenceId === occurrenceId) || overrides.find((item) => !item.occurrenceId);
 
@@ -239,7 +288,7 @@ export function PSNM_resolveMasterNodeTable({ table2Text, table3Text, table4BTex
       if (boreConflict) boreSource = 'TABLE2_BORE_CONFLICT_PRIMARY';
     } else if (table3DerivedBore != null) {
       finalNodeBore = table3DerivedBore;
-      boreSource = 'TABLE3_OD_MAP';
+      boreSource = odByNode.has(node) ? 'TABLE3_OD_MAP' : 'TABLE2_DIA_OD_MAP';
     }
 
     const mandatorySources = [];
