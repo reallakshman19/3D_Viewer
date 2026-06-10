@@ -20,8 +20,19 @@ function normalizeMatch(match) {
   return MATCH_TYPES.includes(lower) ? lower : 'contains';
 }
 
-const HALT_WORD = 'ST' + 'OP';
-const LINE_LIMIT_KIND = 'LINE' + HALT_WORD;
+const HALT = 'ST' + 'OP';
+const LINE_LIMIT_KIND = `LINE${HALT}`;
+const SUPPORT_INTENT_FIELDS = 'SPRE,SKEY,NAME,DESCRIPTION,DESC,CMPSUPTYPE,DTXR,SUPPORT_TYPE,SUPPORT_KIND,SUPPORT_MAPPER_KIND,MDSSUPPTYPE';
+const LIMIT_PATTERN = [
+  `LIMIT ${HALT}`,
+  `AXIAL ${HALT}`,
+  'LIMIT',
+  `PIPE ${HALT}`,
+  `PIPE${HALT}`,
+  `LINE ${HALT}`,
+  `LINE${HALT}`,
+  `${HALT}PER`,
+].join(',');
 
 function normalizeXmlType(type) {
   const t = toText(type).toUpperCase();
@@ -52,11 +63,8 @@ function splitCompositeXmlType(part) {
 function splitXmlTypeText(value) {
   const text = toText(value);
   if (!text) return [];
-  const primary = text.split(/[,;\n]+/g).map((part) => part.trim()).filter(Boolean);
   const out = [];
-  for (const part of primary) {
-    // Split composite text such as GUI+LIM and +Y+GUI, while preserving signed
-    // native axes as complete individual tokens: +Y, -X, +RX, etc.
+  for (const part of text.split(/[,;\n]+/g).map((p) => p.trim()).filter(Boolean)) {
     out.push(...splitCompositeXmlType(part));
   }
   return out;
@@ -69,14 +77,7 @@ export function normalizeXmlTypes(value) {
 
 function normalizeDirectionMode(value) {
   const mode = toText(value).toLowerCase();
-  return [
-    'none',
-    'fixed',
-    'pipe-axis',
-    'pipe-normal',
-    'from-staged',
-    'from-xml',
-  ].includes(mode) ? mode : 'none';
+  return ['none', 'fixed', 'pipe-axis', 'pipe-normal', 'from-staged', 'from-xml'].includes(mode) ? mode : 'none';
 }
 
 function normalizeFrictionMode(value) {
@@ -89,17 +90,16 @@ function normalizeSupportTagMode(value) {
   return ['kind', 'blank', 'source', 'custom'].includes(mode) ? mode : 'kind';
 }
 
-const SUPPORT_INTENT_FIELDS = 'SPRE,SKEY,NAME,DESCRIPTION,DESC,CMPSUPTYPE,DTXR,SUPPORT_TYPE,SUPPORT_KIND,SUPPORT_MAPPER_KIND,MDSSUPPTYPE';
-const LIMIT_PATTERN = [
-  `LIMIT ${HALT_WORD}`,
-  `AXIAL ${HALT_WORD}`,
-  'LIMIT',
-  `PIPE ${HALT_WORD}`,
-  `PIPE${HALT_WORD}`,
-  `LINE ${HALT_WORD}`,
-  `LINE${HALT_WORD}`,
-  `${HALT_WORD}PER`,
-].join(',');
+function normalizeDirection(value) {
+  if (!value || typeof value !== 'object') return null;
+  const x = Number(value.x ?? value.X ?? value[0]);
+  const y = Number(value.y ?? value.Y ?? value[1]);
+  const z = Number(value.z ?? value.Z ?? value[2]);
+  if (![x, y, z].every(Number.isFinite)) return null;
+  const len = Math.sqrt((x * x) + (y * y) + (z * z));
+  if (len <= 1e-9) return null;
+  return { x: x / len, y: y / len, z: z / len };
+}
 
 const REQUIRED_SUPPORT_RULES = Object.freeze([
   Object.freeze({
@@ -114,26 +114,26 @@ const REQUIRED_SUPPORT_RULES = Object.freeze([
     label: 'REST/SHOE/BP/WP -> REST',
   }),
   Object.freeze({
-    id: 'builtin-atta-rest',
-    enabled: true,
-    priority: 20,
-    source: 'all',
-    field: 'TYPE,RAW_TYPE,COMPONENTTYPE,ComponentType',
-    pattern: 'ATTA',
-    match: 'equals',
-    kind: 'REST',
-    label: 'ComponentType ATTA -> REST (+Y)',
-  }),
-  Object.freeze({
     id: 'builtin-user-limit',
     enabled: true,
-    priority: 30,
+    priority: 20,
     source: 'all',
     field: SUPPORT_INTENT_FIELDS,
     pattern: LIMIT_PATTERN,
     match: 'contains',
     kind: 'LIMIT',
-    label: ['LIMIT/PIPE/LINE', HALT_WORD, '-> LIM'].join(' '),
+    label: ['LIMIT/PIPE/LINE', HALT, '-> LIM'].join(' '),
+  }),
+  Object.freeze({
+    id: 'builtin-atta-rest',
+    enabled: true,
+    priority: 30,
+    source: 'all',
+    field: 'ComponentType,COMPONENTTYPE',
+    pattern: 'ATTA',
+    match: 'equals',
+    kind: 'REST',
+    label: 'ComponentType ATTA -> REST (+Y)',
   }),
   Object.freeze({
     id: 'builtin-user-guide',
@@ -170,19 +170,7 @@ function mergeRequiredSupportRules(sourceRules = []) {
     const id = toText(rule?.id);
     if (!requiredIds.has(id)) merged.push(rule);
   }
-
   return merged;
-}
-
-function normalizeDirection(value) {
-  if (!value || typeof value !== 'object') return null;
-  const x = Number(value.x ?? value.X ?? value[0]);
-  const y = Number(value.y ?? value.Y ?? value[1]);
-  const z = Number(value.z ?? value.Z ?? value[2]);
-  if (![x, y, z].every(Number.isFinite)) return null;
-  const len = Math.sqrt((x * x) + (y * y) + (z * z));
-  if (len <= 1e-9) return null;
-  return { x: x / len, y: y / len, z: z / len };
 }
 
 export function defaultSupportKindProfiles(config = {}) {
@@ -197,77 +185,18 @@ export function defaultSupportKindProfiles(config = {}) {
   };
 
   const defaults = {
-    REST: {
-      xmlTypes: ['+Y'],
-      directionMode: 'fixed',
-      direction: { x: 0, y: 1, z: 0 },
-      stiffness: 'default',
-      gap: '0',
-      frictionMode: 'default',
-      supportTagMode: 'kind',
-    },
-    GUIDE: {
-      xmlTypes: ['GUI'],
-      directionMode: 'pipe-normal',
-      direction: null,
-      stiffness: 'default',
-      gap: '0',
-      frictionMode: 'sentinel',
-      supportTagMode: 'kind',
-    },
-    [LINE_LIMIT_KIND]: {
-      xmlTypes: ['LIM'],
-      directionMode: 'pipe-axis',
-      direction: null,
-      stiffness: 'default',
-      gap: '0',
-      frictionMode: 'sentinel',
-      supportTagMode: 'kind',
-    },
-    LIMIT: {
-      xmlTypes: ['LIM'],
-      directionMode: 'from-staged',
-      direction: null,
-      stiffness: 'default',
-      gap: '0',
-      frictionMode: 'sentinel',
-      supportTagMode: 'kind',
-    },
-    ANCHOR: {
-      xmlTypes: ['A'],
-      directionMode: 'none',
-      direction: null,
-      stiffness: 'default',
-      gap: '0',
-      frictionMode: 'sentinel',
-      supportTagMode: 'kind',
-    },
-    SPRING: {
-      xmlTypes: ['Y'],
-      directionMode: 'fixed',
-      direction: { x: 0, y: 1, z: 0 },
-      stiffness: 'default',
-      gap: '0',
-      frictionMode: 'default',
-      supportTagMode: 'kind',
-    },
+    REST: { xmlTypes: ['+Y'], directionMode: 'fixed', direction: { x: 0, y: 1, z: 0 }, stiffness: 'default', gap: '0', frictionMode: 'default', supportTagMode: 'kind' },
+    GUIDE: { xmlTypes: ['GUI'], directionMode: 'pipe-normal', direction: null, stiffness: 'default', gap: '0', frictionMode: 'sentinel', supportTagMode: 'kind' },
+    [LINE_LIMIT_KIND]: { xmlTypes: ['LIM'], directionMode: 'pipe-axis', direction: null, stiffness: 'default', gap: '0', frictionMode: 'sentinel', supportTagMode: 'kind' },
+    LIMIT: { xmlTypes: ['LIM'], directionMode: 'from-staged', direction: null, stiffness: 'default', gap: '0', frictionMode: 'sentinel', supportTagMode: 'kind' },
+    ANCHOR: { xmlTypes: ['A'], directionMode: 'none', direction: null, stiffness: 'default', gap: '0', frictionMode: 'sentinel', supportTagMode: 'kind' },
+    SPRING: { xmlTypes: ['Y'], directionMode: 'fixed', direction: { x: 0, y: 1, z: 0 }, stiffness: 'default', gap: '0', frictionMode: 'default', supportTagMode: 'kind' },
   };
 
   const out = {};
   for (const kind of SUPPORT_KINDS) {
-    const base = defaults[kind] || {
-      xmlTypes: [],
-      directionMode: 'none',
-      direction: null,
-      stiffness: 'default',
-      gap: '0',
-      frictionMode: 'default',
-      supportTagMode: 'kind',
-    };
-    out[kind] = {
-      ...base,
-      xmlTypes: normalizeXmlTypes(legacyKindToType[kind] || base.xmlTypes),
-    };
+    const base = defaults[kind] || { xmlTypes: [], directionMode: 'none', direction: null, stiffness: 'default', gap: '0', frictionMode: 'default', supportTagMode: 'kind' };
+    out[kind] = { ...base, xmlTypes: normalizeXmlTypes(legacyKindToType[kind] || base.xmlTypes) };
   }
   return out;
 }
@@ -307,47 +236,25 @@ export function normalizeSupportKindProfile(profile = {}, fallback = {}) {
 export function migrateSupportMappingConfig(config = {}, mapperRules = null) {
   const defaultProfiles = defaultSupportKindProfiles(config);
   const existing = config.supportMapping;
-
   if (existing && typeof existing === 'object' && !Array.isArray(existing) && Number(existing.version) >= 2) {
     const profiles = {};
     for (const kind of SUPPORT_KINDS) {
-      profiles[kind] = normalizeSupportKindProfile(
-        existing.kindProfiles?.[kind] || {},
-        defaultProfiles[kind] || {}
-      );
+      profiles[kind] = normalizeSupportKindProfile(existing.kindProfiles?.[kind] || {}, defaultProfiles[kind] || {});
     }
-
     const sourceRules = mergeRequiredSupportRules(Array.isArray(existing.rules) ? existing.rules : []);
-    return {
-      version: 2,
-      useJsonForRestraints: existing.useJsonForRestraints !== false,
-      rules: sourceRules.map(normalizeSupportRuleForConfig),
-      kindProfiles: profiles,
-    };
+    return { version: 2, useJsonForRestraints: existing.useJsonForRestraints !== false, rules: sourceRules.map(normalizeSupportRuleForConfig), kindProfiles: profiles };
   }
 
   const baseRules = Array.isArray(mapperRules) && mapperRules.length ? mapperRules : DEFAULT_RULES;
   const sourceRules = mergeRequiredSupportRules(baseRules);
-  return {
-    version: 2,
-    useJsonForRestraints: config.useRestraintTypeBasedOnJson !== false,
-    rules: sourceRules.map(normalizeSupportRuleForConfig),
-    kindProfiles: defaultProfiles,
-  };
+  return { version: 2, useJsonForRestraints: config.useRestraintTypeBasedOnJson !== false, rules: sourceRules.map(normalizeSupportRuleForConfig), kindProfiles: defaultProfiles };
 }
 
 export function supportRulesFromMapping(supportMapping) {
   return [...(supportMapping?.rules || [])]
     .filter((rule) => rule && rule.enabled !== false)
     .sort((a, b) => Number(a.priority ?? 0) - Number(b.priority ?? 0))
-    .map((rule) => ({
-      id: rule.id,
-      field: rule.field,
-      match: rule.match,
-      pattern: rule.pattern,
-      kind: rule.kind,
-      label: rule.label,
-    }));
+    .map((rule) => ({ id: rule.id, field: rule.field, match: rule.match, pattern: rule.pattern, kind: rule.kind, label: rule.label }));
 }
 
 export function supportKindToXmlTypeFromMapping(supportMapping) {
@@ -361,11 +268,7 @@ export function supportKindToXmlTypeFromMapping(supportMapping) {
 
 export function flattenSupportMappingForLegacyConfig(config = {}) {
   const supportMapping = migrateSupportMappingConfig(config);
-  return {
-    ...config,
-    supportMapping,
-    supportKindToXmlType: supportKindToXmlTypeFromMapping(supportMapping),
-  };
+  return { ...config, supportMapping, supportKindToXmlType: supportKindToXmlTypeFromMapping(supportMapping) };
 }
 
 export function supportMappingRowsForTable(config = {}) {
@@ -392,28 +295,16 @@ export function supportMappingRowsForTable(config = {}) {
 
 export function applySupportMappingRowPatch(config, rowId, patch) {
   const supportMapping = migrateSupportMappingConfig(config);
-  const rules = supportMapping.rules.map((rule) => (
-    rule.id === rowId ? normalizeSupportRuleForConfig({ ...rule, ...patch }) : rule
-  ));
+  const rules = supportMapping.rules.map((rule) => (rule.id === rowId ? normalizeSupportRuleForConfig({ ...rule, ...patch }) : rule));
   const changedRule = rules.find((rule) => rule.id === rowId);
-
   if (changedRule) {
     const kind = changedRule.kind;
     const currentProfile = supportMapping.kindProfiles[kind] || {};
     const nextProfile = { ...currentProfile };
-
     if (Object.prototype.hasOwnProperty.call(patch, 'xmlTypes')) nextProfile.xmlTypes = normalizeXmlTypes(patch.xmlTypes);
     if (Object.prototype.hasOwnProperty.call(patch, 'directionMode')) nextProfile.directionMode = normalizeDirectionMode(patch.directionMode);
-
     const hasDir = ['dirX', 'dirY', 'dirZ'].some((key) => Object.prototype.hasOwnProperty.call(patch, key));
-    if (hasDir) {
-      nextProfile.direction = normalizeDirection({
-        x: patch.dirX ?? currentProfile.direction?.x,
-        y: patch.dirY ?? currentProfile.direction?.y,
-        z: patch.dirZ ?? currentProfile.direction?.z,
-      });
-    }
-
+    if (hasDir) nextProfile.direction = normalizeDirection({ x: patch.dirX ?? currentProfile.direction?.x, y: patch.dirY ?? currentProfile.direction?.y, z: patch.dirZ ?? currentProfile.direction?.z });
     if (Object.prototype.hasOwnProperty.call(patch, 'stiffness')) nextProfile.stiffness = toText(patch.stiffness) || 'default';
     if (Object.prototype.hasOwnProperty.call(patch, 'gap')) nextProfile.gap = toText(patch.gap);
     if (Object.prototype.hasOwnProperty.call(patch, 'frictionMode')) nextProfile.frictionMode = normalizeFrictionMode(patch.frictionMode);
@@ -421,10 +312,8 @@ export function applySupportMappingRowPatch(config, rowId, patch) {
     if (Object.prototype.hasOwnProperty.call(patch, 'supportTagMode')) nextProfile.supportTagMode = normalizeSupportTagMode(patch.supportTagMode);
     if (Object.prototype.hasOwnProperty.call(patch, 'supportTagValue')) nextProfile.supportTagValue = toText(patch.supportTagValue);
     if (Object.prototype.hasOwnProperty.call(patch, 'notes')) nextProfile.notes = toText(patch.notes);
-
     supportMapping.kindProfiles[kind] = normalizeSupportKindProfile(nextProfile, currentProfile);
   }
-
   supportMapping.rules = rules;
   config.supportMapping = supportMapping;
   config.supportKindToXmlType = supportKindToXmlTypeFromMapping(supportMapping);
@@ -434,22 +323,8 @@ export function applySupportMappingRowPatch(config, rowId, patch) {
 export function addSupportMappingRule(config, seed = {}) {
   const supportMapping = migrateSupportMappingConfig(config);
   const id = `user-support-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
-  const priority = supportMapping.rules.length
-    ? Math.max(...supportMapping.rules.map((rule) => Number(rule.priority) || 0)) + 10
-    : 10;
-
-  supportMapping.rules.push(normalizeSupportRuleForConfig({
-    id,
-    enabled: true,
-    priority,
-    source: 'all',
-    field: '*',
-    match: 'contains',
-    pattern: '',
-    kind: 'REST',
-    ...seed,
-  }, supportMapping.rules.length));
-
+  const priority = supportMapping.rules.length ? Math.max(...supportMapping.rules.map((rule) => Number(rule.priority) || 0)) + 10 : 10;
+  supportMapping.rules.push(normalizeSupportRuleForConfig({ id, enabled: true, priority, source: 'all', field: '*', match: 'contains', pattern: '', kind: 'REST', ...seed }, supportMapping.rules.length));
   config.supportMapping = supportMapping;
   config.supportKindToXmlType = supportKindToXmlTypeFromMapping(supportMapping);
   return id;
