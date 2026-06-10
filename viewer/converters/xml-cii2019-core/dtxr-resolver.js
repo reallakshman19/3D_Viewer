@@ -80,14 +80,14 @@ function supportTagsFromAttrs(attrs, componentName = '') {
   return [...tags];
 }
 
-function xmlNodeSupportTags(node) {
+export function xmlNodeSupportTags(node) {
   const parts = [];
-  if (typeof node.getElementsByTagName === 'function') {
+  if (typeof node?.getElementsByTagName === 'function') {
     parts.push(xmlText(node, 'NodeName'), xmlText(node, 'ComponentRefNo'));
     for (const child of xmlChildrenByName(node, 'SupportTag')) parts.push(toText(child.textContent));
   } else {
     parts.push(getXmlNodeProperty(node, 'NodeName'), getXmlNodeProperty(node, 'ComponentRefNo'));
-    const tagsVal = node.SupportTag || node.supportTag || '';
+    const tagsVal = node?.SupportTag || node?.supportTag || '';
     if (Array.isArray(tagsVal)) parts.push(...tagsVal.map(toText));
     else if (tagsVal) parts.push(toText(tagsVal));
   }
@@ -204,7 +204,7 @@ function walkStagedComponents(value, branchName = '', out = []) {
   const currentBranch = (type === 'BRANCH' || Array.isArray(value.children))
     ? toText(value.name || attrs.NAME || attrs.OWNER || branchName)
     : branchName;
-  out.push({ component: value, attrs, branchName: currentBranch });
+  out.push({ component: value, attrs, branchName: currentBranch, type });
   if (Array.isArray(value.children)) value.children.forEach((child) => walkStagedComponents(child, currentBranch, out));
   return out;
 }
@@ -278,6 +278,18 @@ function addRefIndex(map, item, refs = []) {
   for (const ref of refs) addArrayMap(map, ref, item);
 }
 
+function stagedTypeOf(indexed) {
+  return toText(
+    indexed?.type ||
+    indexed?.raw?.type ||
+    indexed?.attrs?.TYPE ||
+    indexed?.attrs?.ComponentType ||
+    indexed?.attrs?.COMPONENTTYPE ||
+    indexed?.component?.type ||
+    ''
+  ).trim().toUpperCase();
+}
+
 export function buildStagedDtxrIndex(stagedJson, config = {}) {
   let items = [];
   try {
@@ -300,7 +312,17 @@ export function buildStagedDtxrIndex(stagedJson, config = {}) {
     if (!dtxr && !dtxrPs && !cmpSupGap) continue;
 
     const attrs = item.attrs || {};
-    const indexedItem = { raw: item, attrs, dtxr, dtxrPs, cmpSupGap, owner: stagedOwnerValue(item), ownerNorm: normalizeOwnerBranchName(stagedOwnerValue(item)), coord: null };
+    const indexedItem = {
+      raw: item,
+      attrs,
+      dtxr,
+      dtxrPs,
+      cmpSupGap,
+      owner: stagedOwnerValue(item),
+      ownerNorm: normalizeOwnerBranchName(stagedOwnerValue(item)),
+      coord: null,
+      type: stagedTypeOf(item),
+    };
 
     addRefIndex(byComponentRefNo, indexedItem, [
       attrs.ComponentRefNo, attrs.COMPONENTREFNO, attrs.componentRefNo,
@@ -337,30 +359,210 @@ export function buildStagedDtxrIndex(stagedJson, config = {}) {
   return { items, byComponentRefNo, byPsTag, byNodeNumber, byNodeName, byCoordKey, byOwnerBranch, ownerItems };
 }
 
-function chooseBestDtxrCandidate(candidates, xmlNode, config) {
-  if (!candidates.length) return null;
-  if (candidates.length === 1) return candidates[0];
+export function buildDtxrContext(stagedJsonText, config = {}) {
+  const stagedIndex = buildStagedDtxrIndex(stagedJsonText, config);
+  return {
+    stagedIndex,
+    items: stagedIndex.items,
+    byComponentRefNo: stagedIndex.byComponentRefNo,
+    byPsTag: stagedIndex.byPsTag,
+    byNodeNumber: stagedIndex.byNodeNumber,
+    byNodeName: stagedIndex.byNodeName,
+    byCoordKey: stagedIndex.byCoordKey,
+    byOwnerBranch: stagedIndex.byOwnerBranch,
+    ownerItems: stagedIndex.ownerItems,
+  };
+}
+
+function chooseBestDtxrCandidate(candidates, xmlNode, config = {}) {
+  const list = (Array.isArray(candidates) ? candidates : []).filter(Boolean);
+  if (!list.length) return null;
+  if (list.length === 1) return list[0];
   const xmlType = getXmlNodeProperty(xmlNode, 'ComponentType').toUpperCase();
-  for (const cand of candidates) {
-    const candType = String(cand.raw?.type || cand.attrs?.TYPE || '').toUpperCase();
+  for (const cand of list) {
+    const candType = stagedTypeOf(cand);
     if (candType && candType === xmlType) return cand;
   }
-  return candidates[0];
+  const allowed = config?._allowedStagedTypes || [];
+  if (allowed.length) {
+    const typed = list.find((cand) => allowed.includes(stagedTypeOf(cand)));
+    if (typed) return typed;
+  }
+  return list[0];
 }
 
-function resolvedFromIndexedItem(indexed, source, matchedKey) {
-  return { value: cleanDtxr(indexed.dtxr), source, confidence: 1.0, matchedKey: String(matchedKey || '') };
+function candidateArrayFromMap(map, key) {
+  if (!map || !key) return [];
+  const direct = map.get(canonKey(key));
+  if (Array.isArray(direct)) return direct;
+  return direct ? [direct] : [];
 }
 
-function resolvedDtxrPsFromOwner(indexed, source, matchedKey, confidence = 1) {
-  return { value: cleanDtxr(indexed.dtxrPs), source, confidence, matchedKey: String(matchedKey || '') };
+function emptyDtxrResult(reason = 'not-found') {
+  return {
+    canonicalText: '',
+    value: '',
+    dtxrPos: '',
+    dtxrPs: '',
+    teeDesc: '',
+    cmpSupGap: '',
+    supportTags: [],
+    source: reason,
+    matchedBy: '',
+    matchedKey: '',
+    stagedType: '',
+    componentRefNo: '',
+    confidence: 0,
+    suppressed: false,
+    suppressionReason: '',
+    candidates: [],
+  };
+}
+
+function resultFromStagedItem(indexed, { source, matchedBy, matchedKey, purpose, confidence = 1 } = {}) {
+  const dtxrPos = cleanDtxr(indexed?.dtxr || '');
+  const dtxrPs = cleanDtxr(indexed?.dtxrPs || '');
+  const cmpSupGap = toText(indexed?.cmpSupGap || '').trim();
+  const stagedType = stagedTypeOf(indexed);
+  const canonicalText = purpose === 'support-restraint'
+    ? (dtxrPs || dtxrPos)
+    : (dtxrPos || dtxrPs);
+
+  return {
+    ...emptyDtxrResult(source || 'staged'),
+    canonicalText,
+    value: canonicalText,
+    dtxrPos,
+    dtxrPs,
+    teeDesc: purpose === 'tee-description' ? dtxrPos : '',
+    cmpSupGap,
+    supportTags: [],
+    source: source || 'staged',
+    matchedBy: matchedBy || '',
+    matchedKey: String(matchedKey || ''),
+    stagedType,
+    componentRefNo: toText(indexed?.attrs?.ComponentRefNo || indexed?.attrs?.COMPONENTREFNO || '').trim(),
+    confidence,
+  };
+}
+
+function resultFromExistingXml(xmlNode, { purpose, source, matchedBy, confidence = 0.75 } = {}) {
+  const nodeNumber = getXmlNodeProperty(xmlNode, 'NodeNumber');
+  const dtxrPos = cleanDtxr(getXmlNodeProperty(xmlNode, 'DTXR_POS') || getXmlNodeProperty(xmlNode, 'DtxrPos'));
+  const dtxrPs = cleanDtxr(getXmlNodeProperty(xmlNode, 'DTXR_PS') || getXmlNodeProperty(xmlNode, 'DtxrPs'));
+  const canonicalText = purpose === 'support-restraint' ? (dtxrPs || dtxrPos) : (dtxrPos || dtxrPs);
+  if (!canonicalText) return null;
+  return {
+    ...emptyDtxrResult(source || 'xml-existing'),
+    canonicalText,
+    value: canonicalText,
+    dtxrPos,
+    dtxrPs,
+    source: source || (dtxrPos ? 'xml-dtxr-pos' : 'xml-dtxr-ps'),
+    matchedBy: matchedBy || (dtxrPos ? 'xml-dtxr-pos' : 'xml-dtxr-ps'),
+    matchedKey: `NodeNumber:${nodeNumber}`,
+    confidence,
+  };
+}
+
+export const DTXR_PURPOSE_RULES = Object.freeze({
+  'weight-review': {
+    allowExistingXmlDtxr: true,
+    allowComponentRef: true,
+    allowPsTag: false,
+    allowNodeNumber: false,
+    allowNodeNameAsDtxr: false,
+    allowCoordinate: true,
+    allowNearestCoordinate: false,
+    allowOwnerFallback: false,
+    allowedStagedTypes: ['RIGID', 'FLAN', 'FLANGE', 'VALV', 'VALVE', 'VLV'],
+    suppressTextPatterns: [
+      /\bTEE\b/i,
+      /\bELBOW\b|\bBEND\b/i,
+      /\bPIPE\s*REST\b|\bSUPPORT\b|\bGUIDE\b|\bSTOP\b|\bWEAR\s*PLATE\b/i,
+      /\bRESTRAINT\b|\bSHOE\b|\bANCHOR\b|\bLINE\s*STOP\b/i,
+    ],
+  },
+  'tee-description': {
+    allowExistingXmlDtxr: true,
+    allowComponentRef: true,
+    allowPsTag: false,
+    allowNodeNumber: true,
+    allowNodeNameAsDtxr: true,
+    allowCoordinate: true,
+    allowNearestCoordinate: true,
+    allowOwnerFallback: true,
+    allowedStagedTypes: ['TEE'],
+    suppressTextPatterns: [/\bPIPE\s*REST\b|\bSUPPORT\b|\bGUIDE\b|\bSTOP\b|\bWEAR\s*PLATE\b/i],
+  },
+  'support-restraint': {
+    allowExistingXmlDtxr: true,
+    allowComponentRef: true,
+    allowPsTag: true,
+    allowNodeNumber: true,
+    allowNodeNameAsDtxr: true,
+    allowCoordinate: true,
+    allowNearestCoordinate: true,
+    allowOwnerFallback: true,
+    allowedStagedTypes: ['SUPPORT', 'ATTA', 'REST', 'RESTRAINT'],
+    suppressTextPatterns: [],
+  },
+  'component-description': {
+    allowExistingXmlDtxr: true,
+    allowComponentRef: true,
+    allowPsTag: false,
+    allowNodeNumber: true,
+    allowNodeNameAsDtxr: true,
+    allowCoordinate: true,
+    allowNearestCoordinate: true,
+    allowOwnerFallback: false,
+    allowedStagedTypes: [],
+    suppressTextPatterns: [],
+  },
+});
+
+export function dtxrPurposeForComponentType(componentType, fallback = 'component-description') {
+  const type = toText(componentType).trim().toUpperCase();
+  if (type === 'TEE') return 'tee-description';
+  if (['ATTA', 'REST', 'RESTRAINT', 'SUPPORT'].includes(type)) return 'support-restraint';
+  if (type === 'RIGID' || /^FLAN/.test(type) || ['VALV', 'VALVE', 'VLV'].includes(type)) return 'component-description';
+  return fallback;
+}
+
+function suppressIfUnsafe(result, { xmlNode, purpose, rules }) {
+  if (!result || (!result.canonicalText && !result.dtxrPs && !result.dtxrPos && !result.cmpSupGap)) return result;
+  const xmlType = getXmlNodeProperty(xmlNode, 'ComponentType').toUpperCase();
+  const stagedType = toText(result.stagedType).toUpperCase();
+  const text = toText(result.canonicalText || result.dtxrPos || result.dtxrPs).toUpperCase();
+  const allowed = Array.isArray(rules?.allowedStagedTypes) ? rules.allowedStagedTypes : [];
+  const hasStagedType = !!stagedType;
+  const badStagedType = hasStagedType && allowed.length > 0 && !allowed.includes(stagedType) && result.matchedBy !== 'component-refno';
+  const unsafeStagedForWeight = purpose === 'weight-review'
+    && ['RIGID', 'FLAN', 'VALV', 'VALVE', 'VLV'].some((prefix) => xmlType === prefix || xmlType.startsWith(prefix))
+    && ['TEE', 'ELBO', 'ELBOW', 'BEND', 'SUPPORT', 'ATTA', 'PIPE', 'GASK'].includes(stagedType)
+    && result.matchedBy !== 'component-refno';
+  const unsafeText = Array.isArray(rules?.suppressTextPatterns)
+    && rules.suppressTextPatterns.some((re) => re.test(text));
+
+  if (badStagedType || unsafeStagedForWeight || unsafeText) {
+    return {
+      ...result,
+      canonicalText: '',
+      value: '',
+      suppressed: true,
+      suppressionReason: badStagedType
+        ? `unsafe staged type ${stagedType} for ${purpose}`
+        : (unsafeStagedForWeight ? `unsafe staged type ${stagedType} for ${purpose}` : `text suppressed for ${purpose}`),
+    };
+  }
+  return result;
 }
 
 function dtxrPsByOwnerBranch(branchName, stagedIndex, config = {}) {
   if (!branchName || !stagedIndex?.byOwnerBranch) return null;
   for (const key of ownerBranchVariants(branchName)) {
     const exact = stagedIndex.byOwnerBranch.get(key);
-    if (exact?.length) return resolvedDtxrPsFromOwner(exact[0], 'staged-owner-dtxr-ps', `OWNER:${exact[0].owner}`);
+    if (exact?.length) return resultFromStagedItem(exact[0], { purpose: 'support-restraint', source: 'staged-owner-dtxr-ps', matchedBy: 'owner-branch', matchedKey: `OWNER:${exact[0].owner}`, confidence: 1 });
   }
   const threshold = toFiniteNumber(config.dtxrOwnerFuzzyThreshold, 0.86);
   let best = null;
@@ -368,7 +570,9 @@ function dtxrPsByOwnerBranch(branchName, stagedIndex, config = {}) {
     const score = ownerBranchSimilarity(branchName, item.owner);
     if (score >= threshold && (!best || score > best.score)) best = { item, score };
   }
-  return best ? resolvedDtxrPsFromOwner(best.item, 'staged-owner-dtxr-ps-fuzzy', `OWNER:${best.item.owner} · ${Math.round(best.score * 100)}%`, best.score) : null;
+  return best
+    ? resultFromStagedItem(best.item, { purpose: 'support-restraint', source: 'staged-owner-dtxr-ps-fuzzy', matchedBy: 'owner-branch-fuzzy', matchedKey: `OWNER:${best.item.owner} · ${Math.round(best.score * 100)}%`, confidence: best.score })
+    : null;
 }
 
 function xmlAncestorBranchName(node) {
@@ -378,6 +582,181 @@ function xmlAncestorBranchName(node) {
     current = current.parentNode || null;
   }
   return '';
+}
+
+function findNearestCoordinateMatch(target, items, tolerance) {
+  let nearestItem = null;
+  let nearestDist = Infinity;
+  for (const item of items || []) {
+    let itemCoord = item.coord;
+    if (!itemCoord) {
+      const attrs = item.attrs || {};
+      for (const key of ['SUPPORTCOORD', 'POS', 'POSI', 'BPOS', 'APOS', 'LPOS', 'CPOS', 'HPOS', 'TPOS']) {
+        itemCoord = normalizePoint(attrs[key]);
+        if (itemCoord) break;
+      }
+    }
+    if (!itemCoord) continue;
+    const dx = itemCoord.x - target.x;
+    const dy = itemCoord.y - target.y;
+    const dz = itemCoord.z - target.z;
+    const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
+    if (dist <= tolerance && dist < nearestDist) {
+      nearestDist = dist;
+      nearestItem = item;
+    }
+  }
+  return nearestItem ? { item: nearestItem, distanceMm: nearestDist } : null;
+}
+
+export function resolveDtxrForXmlNode({
+  xmlNode,
+  context,
+  purpose = 'component-description',
+  config = {},
+  trustExistingXmlDtxr = true,
+} = {}) {
+  const rules = DTXR_PURPOSE_RULES[purpose] || DTXR_PURPOSE_RULES['component-description'];
+  const stagedIndex = context?.stagedIndex || context;
+  if (!xmlNode) return emptyDtxrResult('not-found');
+
+  const attempts = [];
+  const accept = (result) => {
+    if (!result) return null;
+    const checked = suppressIfUnsafe(result, { xmlNode, purpose, rules });
+    attempts.push(checked);
+    return checked.suppressed ? null : checked;
+  };
+
+  const xmlType = getXmlNodeProperty(xmlNode, 'ComponentType').toUpperCase();
+  const allowStagedConfig = { ...config, _allowedStagedTypes: rules.allowedStagedTypes || [] };
+
+  if (rules.allowComponentRef && stagedIndex) {
+    const componentRefNo = getXmlNodeProperty(xmlNode, 'ComponentRefNo');
+    const byRef = chooseBestDtxrCandidate(candidateArrayFromMap(stagedIndex.byComponentRefNo, componentRefNo), xmlNode, allowStagedConfig);
+    if (byRef) {
+      const hit = accept(resultFromStagedItem(byRef, { purpose, source: 'staged-component-refno', matchedBy: 'component-refno', matchedKey: componentRefNo, confidence: 1 }));
+      if (hit) return { ...hit, supportTags: xmlNodeSupportTags(xmlNode), candidates: attempts };
+    }
+  }
+
+  if (rules.allowPsTag && stagedIndex) {
+    const tags = xmlNodeSupportTags(xmlNode);
+    for (const tag of tags) {
+      const byPs = chooseBestDtxrCandidate(candidateArrayFromMap(stagedIndex.byPsTag, tag), xmlNode, allowStagedConfig);
+      if (byPs) {
+        const hit = accept(resultFromStagedItem(byPs, { purpose, source: 'staged-ps-tag', matchedBy: 'ps-tag', matchedKey: tag, confidence: 1 }));
+        if (hit) return { ...hit, supportTags: tags, candidates: attempts };
+      }
+    }
+  }
+
+  if (rules.allowCoordinate && stagedIndex) {
+    const coord = normalizePoint(getXmlNodeProperty(xmlNode, 'Position'));
+    if (coord) {
+      const precisionKey = coordKey(coord, config.coordinatePrecision ?? 1);
+      const exact = chooseBestDtxrCandidate(stagedIndex.byCoordKey?.get(precisionKey) || [], xmlNode, allowStagedConfig);
+      if (exact) {
+        const hit = accept(resultFromStagedItem(exact, { purpose, source: 'staged-coordinate-key', matchedBy: 'coordinate', matchedKey: precisionKey, confidence: 0.9 }));
+        if (hit) return { ...hit, supportTags: xmlNodeSupportTags(xmlNode), candidates: attempts };
+      }
+      if (rules.allowNearestCoordinate) {
+        const nearest = findNearestCoordinateMatch(coord, stagedIndex.items, config.dtxrCoordinateToleranceMm ?? 2.0);
+        if (nearest) {
+          const hit = accept(resultFromStagedItem(nearest.item, { purpose, source: 'staged-nearest-coordinate', matchedBy: 'nearest-coordinate', matchedKey: `${nearest.distanceMm.toFixed(3)} mm`, confidence: 0.65 }));
+          if (hit) return { ...hit, supportTags: xmlNodeSupportTags(xmlNode), candidates: attempts };
+        }
+      }
+    }
+  }
+
+  if (trustExistingXmlDtxr && rules.allowExistingXmlDtxr !== false) {
+    const existing = resultFromExistingXml(xmlNode, { purpose });
+    const hit = accept(existing);
+    if (hit) return { ...hit, supportTags: xmlNodeSupportTags(xmlNode), candidates: attempts };
+  }
+
+  if (rules.allowNodeNumber && stagedIndex) {
+    const nodeNumber = getXmlNodeProperty(xmlNode, 'NodeNumber');
+    const byNode = nodeNumber ? stagedIndex.byNodeNumber?.get(nodeNumber) : null;
+    if (byNode) {
+      const hit = accept(resultFromStagedItem(byNode, { purpose, source: 'staged-node-number', matchedBy: 'node-number', matchedKey: nodeNumber, confidence: 0.75 }));
+      if (hit) return { ...hit, supportTags: xmlNodeSupportTags(xmlNode), candidates: attempts };
+    }
+  }
+
+  if (rules.allowNodeNameAsDtxr && stagedIndex) {
+    const nodeName = getXmlNodeProperty(xmlNode, 'NodeName');
+    const byName = nodeName ? stagedIndex.byNodeName?.get(canonKey(nodeName)) : null;
+    if (byName) {
+      const hit = accept(resultFromStagedItem(byName, { purpose, source: 'staged-node-name', matchedBy: 'node-name', matchedKey: nodeName, confidence: 0.7 }));
+      if (hit) return { ...hit, supportTags: xmlNodeSupportTags(xmlNode), candidates: attempts };
+    }
+  }
+
+  if (rules.allowOwnerFallback && stagedIndex) {
+    const byOwner = dtxrPsByOwnerBranch(xmlAncestorBranchName(xmlNode), stagedIndex, config);
+    const hit = accept(byOwner);
+    if (hit) return { ...hit, supportTags: xmlNodeSupportTags(xmlNode), candidates: attempts };
+  }
+
+  return { ...emptyDtxrResult('not-found'), stagedType: xmlType, supportTags: xmlNodeSupportTags(xmlNode), candidates: attempts };
+}
+
+export function applyDtxrAnnotations(document, node, resolved, purpose = 'component-description') {
+  if (!document || !node || !resolved || resolved.suppressed) return 0;
+  let count = 0;
+  if (purpose === 'tee-description') {
+    const text = resolved.teeDesc || resolved.dtxrPos || resolved.canonicalText;
+    if (text) {
+      xmlSetText(document, node, 'TEEDESC_POS', text);
+      xmlSetText(document, node, 'DTXR_SOURCE', resolved.source);
+      count += 1;
+    }
+    return count;
+  }
+  if (purpose === 'support-restraint') {
+    const text = resolved.dtxrPs || resolved.canonicalText;
+    if (text) {
+      xmlSetText(document, node, 'DTXR_PS', text);
+      xmlSetText(document, node, 'DTXR_SOURCE', resolved.source);
+      count += 1;
+    }
+    if (resolved.cmpSupGap) {
+      xmlSetText(document, node, 'CMPSUPGAP_PS', resolved.cmpSupGap);
+      if (!xmlText(node, 'CMPSUPGAP')) xmlSetText(document, node, 'CMPSUPGAP', resolved.cmpSupGap);
+      count += 1;
+    }
+    return count;
+  }
+  const text = resolved.dtxrPos || resolved.canonicalText;
+  if (text) {
+    xmlSetText(document, node, 'DTXR_POS', text);
+    xmlSetText(document, node, 'DTXR_SOURCE', resolved.source);
+    count += 1;
+  }
+  return count;
+}
+
+// Legacy API retained for older callers. It now routes through the centralized resolver.
+export function resolveXmlCiiNodeDtxr(xmlNode, stagedIndex, config = {}) {
+  const result = resolveDtxrForXmlNode({
+    xmlNode,
+    context: stagedIndex,
+    purpose: 'component-description',
+    config,
+    trustExistingXmlDtxr: config.trustExistingXmlDtxr !== false,
+  });
+  return {
+    value: result.canonicalText || result.value || '',
+    source: result.source,
+    confidence: result.confidence,
+    matchedKey: result.matchedKey,
+    matchedBy: result.matchedBy,
+    stagedType: result.stagedType,
+    suppressed: result.suppressed,
+    suppressionReason: result.suppressionReason,
+  };
 }
 
 function componentDescPrefix(node) {
@@ -400,13 +779,6 @@ function annotateCmpSupGap(node, suffix, value) {
   if (!xmlText(node, 'CMPSUPGAP')) xmlSetText(node.ownerDocument, node, 'CMPSUPGAP', text);
 }
 
-function candidateArrayFromMap(map, key) {
-  if (!map || !key) return [];
-  const direct = map.get(canonKey(key));
-  if (Array.isArray(direct)) return direct;
-  return direct ? [direct] : [];
-}
-
 function annotateFromRefAndTags(node, index) {
   const componentRefNo = getXmlNodeProperty(node, 'ComponentRefNo');
   const ref = chooseBestDtxrCandidate(candidateArrayFromMap(index?.byComponentRefNo, componentRefNo), node, {}) || null;
@@ -417,85 +789,6 @@ function annotateFromRefAndTags(node, index) {
   const ps = chooseBestDtxrCandidate(tagCandidates, node, {}) || null;
   if (ps?.cmpSupGap) annotateCmpSupGap(node, 'PS', ps.cmpSupGap);
   return { ref, ps };
-}
-
-export function resolveXmlCiiNodeDtxr(xmlNode, stagedIndex, config = {}) {
-  const nodeNumber = getXmlNodeProperty(xmlNode, 'NodeNumber');
-  const dtxrPos = cleanDtxr(getXmlNodeProperty(xmlNode, 'DTXR_POS') || getXmlNodeProperty(xmlNode, 'DtxrPos'));
-  if (dtxrPos) return { value: dtxrPos, source: 'xml-dtxr-pos', confidence: 1.0, matchedKey: `NodeNumber:${nodeNumber}` };
-
-  const dtxrPs = cleanDtxr(getXmlNodeProperty(xmlNode, 'DTXR_PS') || getXmlNodeProperty(xmlNode, 'DtxrPs'));
-  if (dtxrPs) return { value: dtxrPs, source: 'xml-dtxr-ps', confidence: 1.0, matchedKey: `NodeNumber:${nodeNumber}` };
-
-  if (!stagedIndex) return { value: '', source: 'not-found', confidence: 0, matchedKey: '' };
-
-  const componentRefNo = getXmlNodeProperty(xmlNode, 'ComponentRefNo');
-  if (componentRefNo) {
-    const byRef = chooseBestDtxrCandidate(candidateArrayFromMap(stagedIndex.byComponentRefNo, componentRefNo), xmlNode, config);
-    if (byRef) return resolvedFromIndexedItem(byRef, 'staged-component-refno', componentRefNo);
-  }
-
-  for (const psKey of xmlNodeSupportTags(xmlNode)) {
-    const byPs = chooseBestDtxrCandidate(candidateArrayFromMap(stagedIndex.byPsTag, psKey), xmlNode, config);
-    if (byPs) return resolvedFromIndexedItem(byPs, 'staged-ps-tag', psKey);
-  }
-
-  if (nodeNumber) {
-    const byNode = stagedIndex.byNodeNumber.get(nodeNumber);
-    if (byNode) return resolvedFromIndexedItem(byNode, 'staged-node-number', nodeNumber);
-  }
-
-  const nodeName = getXmlNodeProperty(xmlNode, 'NodeName');
-  if (nodeName) {
-    const byName = stagedIndex.byNodeName.get(canonKey(nodeName));
-    if (byName) return resolvedFromIndexedItem(byName, 'staged-node-name', nodeName);
-  }
-
-  const posText = getXmlNodeProperty(xmlNode, 'Position');
-  const coord = normalizePoint(posText);
-  if (coord) {
-    const precisionKey = coordKey(coord, config.coordinatePrecision ?? 1);
-    const exactCandidates = stagedIndex.byCoordKey.get(precisionKey) || [];
-    const exact = chooseBestDtxrCandidate(exactCandidates, xmlNode, config);
-    if (exact) return resolvedFromIndexedItem(exact, 'staged-coordinate-key', precisionKey);
-
-    const nearest = findNearestCoordinateMatch(coord, stagedIndex.items, config.dtxrCoordinateToleranceMm ?? 2.0);
-    if (nearest) {
-      const indexedNearest = { raw: nearest.item, attrs: nearest.item.attrs || {}, dtxr: stagedComponentDtxr(nearest.item), coord: nearest.item.coord };
-      return resolvedFromIndexedItem(indexedNearest, 'staged-nearest-coordinate', `${nearest.distanceMm.toFixed(3)} mm`);
-    }
-  }
-
-  const branchName = xmlAncestorBranchName(xmlNode);
-  const byOwner = dtxrPsByOwnerBranch(branchName, stagedIndex, config);
-  if (byOwner?.value) return byOwner;
-
-  return { value: '', source: 'not-found', confidence: 0, matchedKey: '' };
-}
-
-function findNearestCoordinateMatch(target, items, tolerance) {
-  let nearestItem = null;
-  let nearestDist = Infinity;
-  for (const item of items) {
-    let itemCoord = item.coord;
-    if (!itemCoord) {
-      const attrs = item.attrs || {};
-      for (const key of ['SUPPORTCOORD', 'POS', 'POSI', 'BPOS', 'APOS', 'LPOS', 'CPOS', 'HPOS', 'TPOS']) {
-        itemCoord = normalizePoint(attrs[key]);
-        if (itemCoord) break;
-      }
-    }
-    if (!itemCoord) continue;
-    const dx = itemCoord.x - target.x;
-    const dy = itemCoord.y - target.y;
-    const dz = itemCoord.z - target.z;
-    const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
-    if (dist <= tolerance && dist < nearestDist) {
-      nearestDist = dist;
-      nearestItem = item;
-    }
-  }
-  return nearestItem ? { item: nearestItem, distanceMm: nearestDist } : null;
 }
 
 // Legacy exports for backwards compatibility
