@@ -27,7 +27,7 @@ export const NODE_WEIGHT_COLUMNS = [
   { id: 'dtxr', label: 'DTXR', width: 180, minWidth: 100 },
   { id: 'weightKg', label: 'Weight', width: 110, minWidth: 80 },
   { id: 'deltaLengthMm', label: 'ΔLen', width: 90, minWidth: 70 },
-  { id: 'candidates', label: 'All Candidates (Valve Type · Weight · ΔLength)', width: 360, minWidth: 180 }
+  { id: 'candidates', label: 'All Candidates (TypeDesc · Weight · ΔLength)', width: 360, minWidth: 180 }
 ];
 
 export class EditablePreviewTable {
@@ -152,10 +152,11 @@ export class EditablePreviewTable {
               <td class="mc-preview-candidates">
                 ${nr.weightCandidates.map((c, ci) => {
                   const weight = c.suggestedWeight ?? c.weight;
-                  const valveType = c.valveType || 'Unknown';
+                  const typeDesc = c.typeDesc || c.valveType || c.type || 'Unknown';
+                  const type = c.type || c.valveType || '';
                   const delta = Number(c.lengthDelta);
-                  const title = [`Valve type: ${valveType}`, `Weight: ${weight} kg`, Number.isFinite(delta) ? `ΔLength: ${delta.toFixed(1)} mm` : '', 'Click to use this candidate weight'].filter(Boolean).join('\n');
-                  return `<button type="button" class="mc-preview-candidate${ci === 0 ? ' best' : ''}" data-mc-weight-candidate="1" data-mc-weight-key="${this._escapeAttr(nr.key || `${nr.branchName}::${nr.nodeNumber}`)}" data-mc-weight-value="${this._escapeAttr(weight)}" data-mc-weight-valvetype="${this._escapeAttr(valveType)}" data-mc-weight-node-index="${ni}" data-mc-weight-candidate-index="${ci}" title="${this._escapeAttr(title)}">${this._escape(valveType)} · ${this._escape(weight)}kg · Δ${Number.isFinite(delta) ? delta.toFixed(1) : '—'}mm</button>`;
+                  const title = [`Type: ${type || '-'}`, `TypeDesc: ${typeDesc}`, `Weight: ${weight} kg`, Number.isFinite(delta) ? `ΔLength: ${delta.toFixed(1)} mm` : '', 'Click to use this candidate weight'].filter(Boolean).join('\n');
+                  return `<button type="button" class="mc-preview-candidate${ci === 0 ? ' best' : ''}" data-mc-weight-candidate="1" data-mc-weight-key="${this._escapeAttr(nr.key || `${nr.branchName}::${nr.nodeNumber}`)}" data-mc-weight-value="${this._escapeAttr(weight)}" data-mc-weight-valvetype="${this._escapeAttr(typeDesc)}" data-mc-weight-node-index="${ni}" data-mc-weight-candidate-index="${ci}" title="${this._escapeAttr(title)}">${this._escape(typeDesc)} · ${this._escape(weight)}kg · Δ${Number.isFinite(delta) ? delta.toFixed(1) : '—'}mm</button>`;
                 }).join('')}
               </td>
             </tr>`).join('')}
@@ -181,16 +182,16 @@ export class EditablePreviewTable {
         event.stopPropagation();
         const key = btn.getAttribute('data-mc-weight-key') || '';
         const weight = btn.getAttribute('data-mc-weight-value') || '';
-        const valveType = btn.getAttribute('data-mc-weight-valvetype') || '';
+        const typeDesc = btn.getAttribute('data-mc-weight-valvetype') || '';
         const weightCell = key ? hostEl.querySelector(`[data-mc-weight-cell="${CSS.escape(key)}"]`) : null;
         if (weightCell) {
           weightCell.textContent = `${weight} kg`;
-          weightCell.title = valveType ? `Selected valve type: ${valveType}` : 'Selected candidate weight';
+          weightCell.title = typeDesc ? `Selected TypeDesc: ${typeDesc}` : 'Selected candidate weight';
           weightCell.classList.add('mc-preview-weight-selected');
         }
         hostEl.querySelectorAll(`[data-mc-weight-key="${CSS.escape(key)}"]`).forEach((el) => el.classList.remove('selected'));
         btn.classList.add('selected');
-        if (typeof this.onWeightCandidateSelect === 'function') this.onWeightCandidateSelect({ key, weight, valveType, button: btn });
+        if (typeof this.onWeightCandidateSelect === 'function') this.onWeightCandidateSelect({ key, weight, valveType: typeDesc, typeDesc, button: btn });
       });
     });
 
@@ -241,53 +242,9 @@ export class EditablePreviewTable {
     });
   }
 
-  _escape(str) {
-    if (!str) return '';
-    return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-  }
-
-  _scorePercentFromConfidenceOrScore(confidence, rawScore, rawMax = 1000) {
-    const confidenceValue = Number(confidence);
-    if (Number.isFinite(confidenceValue)) return `${Math.round(confidenceValue * 100)}%`;
-    const scoreValue = Number(rawScore);
-    const maxValue = Number(rawMax);
-    if (Number.isFinite(scoreValue) && Number.isFinite(maxValue) && maxValue > 0) {
-      return `${Math.max(0, Math.min(100, Math.round((scoreValue / maxValue) * 100)))}%`;
-    }
-    return '';
-  }
-
-  _rawScoreSuffix(rawScore) {
-    return rawScore === null || rawScore === undefined || rawScore === '' ? '' : ` (raw ${rawScore})`;
-  }
-
-  _pipingClassTitle(row) {
-    const classPercent = this._scorePercentFromConfidenceOrScore(row.pipingClassConfidence, row.pipingClassScore, 1000);
-    const rowPercent = this._scorePercentFromConfidenceOrScore(row.pipingClassRowConfidence, row.pipingClassRowScore, 1620);
-    const candidates = Array.isArray(row.pipingClassCandidates)
-      ? row.pipingClassCandidates
-        .slice(0, 8)
-        .map((candidate) => {
-          const reasons = Array.isArray(candidate.reasons) ? candidate.reasons.join(', ') : '';
-          const percent = this._scorePercentFromConfidenceOrScore(candidate.confidence, candidate.score, 1000);
-          return `${candidate.candidate || ''} | ${percent || '—'}${this._rawScoreSuffix(candidate.score)} | ${candidate.method || ''}${reasons ? ` | ${reasons}` : ''}`;
-        })
-        .join('\n')
-      : '';
-    const rowReasons = Array.isArray(row.pipingClassRowReasons) ? row.pipingClassRowReasons.join(', ') : '';
-    return [
-      `Requested class: ${row.pipingClassDerived || ''}`,
-      `Resolved class: ${row.pipingClass || ''}`,
-      `Method: ${row.pipingClassMethod || ''}`,
-      `Class score: ${classPercent || '—'}${this._rawScoreSuffix(row.pipingClassScore)}`,
-      `Row score: ${rowPercent || '—'}${this._rawScoreSuffix(row.pipingClassRowScore)}`,
-      rowReasons ? `Row reasons: ${rowReasons}` : '',
-      candidates ? `Candidates:\n${candidates}` : '',
-    ].filter(Boolean).join('\n');
-  }
-
-  _escapeAttr(str) {
-    if (!str) return '';
-    return String(str).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
-  }
+  _escape(str) { if (!str) return ''; return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+  _scorePercentFromConfidenceOrScore(confidence, rawScore, rawMax = 1000) { const confidenceValue = Number(confidence); if (Number.isFinite(confidenceValue)) return `${Math.round(confidenceValue * 100)}%`; const scoreValue = Number(rawScore); const maxValue = Number(rawMax); if (Number.isFinite(scoreValue) && Number.isFinite(maxValue) && maxValue > 0) return `${Math.max(0, Math.min(100, Math.round((scoreValue / maxValue) * 100)))}%`; return ''; }
+  _rawScoreSuffix(rawScore) { return rawScore === null || rawScore === undefined || rawScore === '' ? '' : ` (raw ${rawScore})`; }
+  _pipingClassTitle(row) { const classPercent = this._scorePercentFromConfidenceOrScore(row.pipingClassConfidence, row.pipingClassScore, 1000); const rowPercent = this._scorePercentFromConfidenceOrScore(row.pipingClassRowConfidence, row.pipingClassRowScore, 1620); const candidates = Array.isArray(row.pipingClassCandidates) ? row.pipingClassCandidates.slice(0, 8).map((candidate) => { const reasons = Array.isArray(candidate.reasons) ? candidate.reasons.join(', ') : ''; const percent = this._scorePercentFromConfidenceOrScore(candidate.confidence, candidate.score, 1000); return `${candidate.candidate || ''} | ${percent || '—'}${this._rawScoreSuffix(candidate.score)} | ${candidate.method || ''}${reasons ? ` | ${reasons}` : ''}`; }).join('\n') : ''; const rowReasons = Array.isArray(row.pipingClassRowReasons) ? row.pipingClassRowReasons.join(', ') : ''; return [`Requested class: ${row.pipingClassDerived || ''}`, `Resolved class: ${row.pipingClass || ''}`, `Method: ${row.pipingClassMethod || ''}`, `Class score: ${classPercent || '—'}${this._rawScoreSuffix(row.pipingClassScore)}`, `Row score: ${rowPercent || '—'}${this._rawScoreSuffix(row.pipingClassRowScore)}`, rowReasons ? `Row reasons: ${rowReasons}` : '', candidates ? `Candidates:\n${candidates}` : ''].filter(Boolean).join('\n'); }
+  _escapeAttr(str) { if (!str) return ''; return String(str).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/'/g, '&#39;'); }
 }
