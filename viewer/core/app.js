@@ -36,6 +36,7 @@ const renderers = {
 
 let activeDestroy = null;
 let shellRefs = null;
+let mountedDestroy = null;
 
 function setStatus(message) {
   if (!shellRefs?.status) return;
@@ -80,9 +81,17 @@ export function renderActiveTab(tab = state.activeTab) {
   if (typeof result === 'function') activeDestroy = result;
 }
 
+function resolveShellRefs(shell = {}) {
+  return {
+    nav: shell.nav || document.getElementById('tab-bar'),
+    main: shell.main || document.getElementById('tab-content'),
+    status: shell.status || document.getElementById('app-status') || null,
+  };
+}
+
 export function mountApp(shell) {
   loadStickyState();
-  shellRefs = shell;
+  shellRefs = resolveShellRefs(shell);
   initDevDebugWindow();
   if (shellRefs?.nav) {
     shellRefs.nav.addEventListener('click', (event) => {
@@ -98,6 +107,15 @@ export function mountApp(shell) {
     if (activeDestroy) activeDestroy();
     destroyDevDebugWindow();
   };
+}
+
+export async function init(shell) {
+  if (mountedDestroy) {
+    try { mountedDestroy(); } catch (error) { console.warn('Previous app mount cleanup failed', error); }
+    mountedDestroy = null;
+  }
+  mountedDestroy = mountApp(resolveShellRefs(shell));
+  return mountedDestroy;
 }
 
 export { loadRvmSource };
