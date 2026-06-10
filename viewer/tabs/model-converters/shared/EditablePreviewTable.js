@@ -38,6 +38,7 @@ export class EditablePreviewTable {
     onFillDownClick,
     onProcessInputChange,
     onProcessFillDownClick,
+    onWeightCandidateSelect,
     processInputHtmlRenderer,
     matchBadgeHtmlRenderer
   }) {
@@ -47,6 +48,7 @@ export class EditablePreviewTable {
     this.onFillDownClick = onFillDownClick;
     this.onProcessInputChange = onProcessInputChange;
     this.onProcessFillDownClick = onProcessFillDownClick;
+    this.onWeightCandidateSelect = onWeightCandidateSelect;
     this.processInputHtmlRenderer = processInputHtmlRenderer;
     this.matchBadgeHtmlRenderer = matchBadgeHtmlRenderer;
   }
@@ -137,7 +139,7 @@ export class EditablePreviewTable {
         ${renderColGroup(NODE_WEIGHT_COLUMNS, nodeWidths)}
         <thead><tr>${NODE_WEIGHT_COLUMNS.map(col => `<th data-col-id="${this._escapeAttr(col.id)}" style="position: relative;"><span class="xml-cii-th-label">${this._escape(col.label)}</span><span class="xml-cii-col-resizer" data-resize-col="${this._escapeAttr(col.id)}"></span></th>`).join('')}</tr></thead>
         <tbody>
-          ${nw.map(nr => `
+          ${nw.map((nr, ni) => `
             <tr>
               <td>${this._escape(nr.nodeNumber)}</td>
               <td>${this._escape(nr.componentType)}</td>
@@ -145,10 +147,16 @@ export class EditablePreviewTable {
               <td title="${this._escapeAttr(nr.resolvedPipingClass ? `Piping Class ${nr.resolvedPipingClass}` : '')}">${this._escape(nr.rating)}</td>
               <td>${nr.lengthMm != null ? nr.lengthMm.toFixed(1) + 'mm' : '—'}</td>
               <td class="xml-cii-dtxr-cell" title="${this._escapeAttr(nr.dtxrSource || nr.dtxrMatchedKey || '')}">${this._escape(nr.dtxr || 'Not found')}</td>
-              <td>${nr.weightMatch ? nr.weightMatch.weight + ' kg' : '—'}</td>
+              <td class="mc-preview-weight-value" data-mc-weight-cell="${this._escapeAttr(nr.key || `${nr.branchName}::${nr.nodeNumber}`)}">${nr.weightMatch ? nr.weightMatch.weight + ' kg' : '—'}</td>
               <td>${nr.weightMatch ? nr.weightMatch.lengthDelta.toFixed(1) + 'mm' : '—'}</td>
               <td class="mc-preview-candidates">
-                ${nr.weightCandidates.map((c, ci) => `<span class="mc-preview-candidate${ci === 0 ? ' best' : ''}" title="${this._escapeAttr(c.valveType)}">${this._escape(c.valveType || 'Unknown')} · ${c.weight}kg · Δ${c.lengthDelta.toFixed(1)}mm</span>`).join('')}
+                ${nr.weightCandidates.map((c, ci) => {
+                  const weight = c.suggestedWeight ?? c.weight;
+                  const valveType = c.valveType || 'Unknown';
+                  const delta = Number(c.lengthDelta);
+                  const title = [`Valve type: ${valveType}`, `Weight: ${weight} kg`, Number.isFinite(delta) ? `ΔLength: ${delta.toFixed(1)} mm` : '', 'Click to use this candidate weight'].filter(Boolean).join('\n');
+                  return `<button type="button" class="mc-preview-candidate${ci === 0 ? ' best' : ''}" data-mc-weight-candidate="1" data-mc-weight-key="${this._escapeAttr(nr.key || `${nr.branchName}::${nr.nodeNumber}`)}" data-mc-weight-value="${this._escapeAttr(weight)}" data-mc-weight-valvetype="${this._escapeAttr(valveType)}" data-mc-weight-node-index="${ni}" data-mc-weight-candidate-index="${ci}" title="${this._escapeAttr(title)}">${this._escape(valveType)} · ${this._escape(weight)}kg · Δ${Number.isFinite(delta) ? delta.toFixed(1) : '—'}mm</button>`;
+                }).join('')}
               </td>
             </tr>`).join('')}
         </tbody>
@@ -165,6 +173,24 @@ export class EditablePreviewTable {
         const ri = btn.getAttribute('data-mc-preview-row');
         const nodeRow = hostEl.querySelector(`#mc-preview-nodes-${ri}`);
         if (nodeRow) nodeRow.style.display = nodeRow.style.display === 'none' ? '' : 'none';
+      });
+    });
+
+    hostEl.querySelectorAll('[data-mc-weight-candidate]').forEach(btn => {
+      btn.addEventListener('click', (event) => {
+        event.stopPropagation();
+        const key = btn.getAttribute('data-mc-weight-key') || '';
+        const weight = btn.getAttribute('data-mc-weight-value') || '';
+        const valveType = btn.getAttribute('data-mc-weight-valvetype') || '';
+        const weightCell = key ? hostEl.querySelector(`[data-mc-weight-cell="${CSS.escape(key)}"]`) : null;
+        if (weightCell) {
+          weightCell.textContent = `${weight} kg`;
+          weightCell.title = valveType ? `Selected valve type: ${valveType}` : 'Selected candidate weight';
+          weightCell.classList.add('mc-preview-weight-selected');
+        }
+        hostEl.querySelectorAll(`[data-mc-weight-key="${CSS.escape(key)}"]`).forEach((el) => el.classList.remove('selected'));
+        btn.classList.add('selected');
+        if (typeof this.onWeightCandidateSelect === 'function') this.onWeightCandidateSelect({ key, weight, valveType, button: btn });
       });
     });
 
