@@ -225,7 +225,7 @@ function buildCandidate(model, ref, options, log) {
   const eligible = boreEval.eligible && lineEval.eligible;
   const parts = [psBasis];
   if (boreEval.basis && boreEval.basis !== 'BORE_IGNORED') parts.push(boreEval.basis);
-  if (lineEval.basis && !['LINE_IGNORED', 'LINE_MISSING'].includes(lineEval.basis)) parts.push(lineEval.basis);
+  if (['LINE_EXACT', 'LINE_SUBSTRING', 'LINE_FAMILY'].includes(lineEval.basis)) parts.push(lineEval.basis);
   const candidate = {
     modelId: model.id, refId: ref.id, psnoModel: model.psnoModel, node: ref.node, tag: ref.tag || '',
     table1PsNo: ref.rawPsNo, table1Row: ref.sourceRow, table2Row: model.sourceRow,
@@ -237,7 +237,6 @@ function buildCandidate(model, ref, options, log) {
   };
   if (!eligible) candidate.rejectReason = !boreEval.eligible ? boreEval.basis : lineEval.basis;
   if (boreEval.basis === 'BORE_CONFLICT') candidate.warnings.push('BORE_CONFLICT');
-  if (lineEval.basis === 'LINE_CONFLICT') candidate.warnings.push('LINE_CONFLICT');
   log.debug('DEBUG', 'CANDIDATE_BUILT', `${model.psnoModel} -> ${ref.node}`, candidate);
   return candidate;
 }
