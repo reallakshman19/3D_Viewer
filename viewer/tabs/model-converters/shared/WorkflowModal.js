@@ -21,7 +21,9 @@ export class WorkflowModal {
     this.onClose = onClose;
 
     this.overlayEl = null;
+    this.popupEl = null;
     this.bodyEl = null;
+    this.fullscreen = false;
   }
 
   /**
@@ -36,7 +38,7 @@ export class WorkflowModal {
 
     const overlay = document.createElement('div');
     overlay.className = 'model-converters-workflow-popup-overlay';
-    
+
     overlay.innerHTML = `
       <div class="model-converters-workflow-popup" role="dialog" aria-modal="true" aria-label="${this.title}">
         <div class="model-converters-workflow-popup-head">
@@ -44,7 +46,10 @@ export class WorkflowModal {
             <div class="model-converters-workflow-popup-title">${this.title}</div>
             ${this.subtitle ? `<div class="model-converters-workflow-detail-text">${this.subtitle}</div>` : ''}
           </div>
-          <button type="button" class="model-converters-download-btn model-converters-workflow-popup-close" data-modal-close>Close</button>
+          <div class="model-converters-workflow-popup-actions">
+            <button type="button" class="model-converters-download-btn model-converters-workflow-popup-fullscreen" data-modal-fullscreen>Fullscreen</button>
+            <button type="button" class="model-converters-download-btn model-converters-workflow-popup-close" data-modal-close>Close</button>
+          </div>
         </div>
         ${this.tabs.length ? `
           <div class="model-converters-workflow-popup-tabs">
@@ -62,13 +67,14 @@ export class WorkflowModal {
 
     document.body.appendChild(overlay);
     this.overlayEl = overlay;
+    this.popupEl = overlay.querySelector('.model-converters-workflow-popup');
     this.bodyEl = overlay.querySelector('[data-modal-body]');
 
-    // Bind close listeners
+    // Bind close listeners. Backdrop click intentionally does not close the modal:
+    // users frequently interact with large XML/CII workflow popups and accidental
+    // outside clicks must not discard the current review state.
     overlay.querySelector('[data-modal-close]')?.addEventListener('click', () => this.close());
-    overlay.addEventListener('click', (e) => {
-      if (e.target === overlay) this.close();
-    });
+    overlay.querySelector('[data-modal-fullscreen]')?.addEventListener('click', () => this.toggleFullscreen());
 
     // Bind tab listeners
     if (this.tabs.length) {
@@ -86,7 +92,7 @@ export class WorkflowModal {
 
   /**
    * Sets the active tab visually.
-   * @param {string} tabId 
+   * @param {string} tabId
    */
   setActiveTab(tabId) {
     this.activeTabId = tabId;
@@ -100,6 +106,14 @@ export class WorkflowModal {
     });
   }
 
+  toggleFullscreen() {
+    if (!this.popupEl) return;
+    this.fullscreen = !this.fullscreen;
+    this.popupEl.classList.toggle('is-fullscreen', this.fullscreen);
+    const button = this.overlayEl?.querySelector('[data-modal-fullscreen]');
+    if (button) button.textContent = this.fullscreen ? 'Restore' : 'Fullscreen';
+  }
+
   /**
    * Closes the modal and restores scroll.
    */
@@ -111,7 +125,9 @@ export class WorkflowModal {
 
     this.overlayEl.remove();
     this.overlayEl = null;
+    this.popupEl = null;
     this.bodyEl = null;
+    this.fullscreen = false;
 
     if (typeof this.onClose === 'function') {
       this.onClose();
