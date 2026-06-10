@@ -1,27 +1,878 @@
 import { deriveLineKeyFromBranchName, tokenAtPosition } from './regex-line-key.js';
 import { buildPipingClassIndex } from './piping-class-resolver.js';
 import { resolveBranchProcessData } from './branch-process-resolver.js';
-import { buildDtxrContext, resolveDtxrForXmlNode } from './dtxr-resolver.js';
+import {
+  buildDtxrContext,
+  resolveDtxrForXmlNode,
+} from './dtxr-resolver.js';
 
-const T=(v)=>v==null?'':String(v);const N=(v,f)=>{const n=Number(v);return Number.isFinite(n)?n:f};
-function mm(v){const m=T(v).replace(/mm/gi,' ').match(/-?\d+(?:\.\d+)?/);const n=m?Number(m[0]):NaN;return Number.isFinite(n)?n:null}
-function rt(r,ks){for(const k of ks||[]){const v=r?.[k]??r?._raw?.[k];if(T(v).trim())return T(v).trim()}return''}
-function rn(r,ks){for(const k of ks||[]){const n=mm(r?.[k]??r?._raw?.[k]);if(n!==null)return n}return null}
-function ln(n){return T(n?.localName||n?.nodeName).replace(/^.*:/,'')}function kids(p,n){return[...(p?.childNodes||[])].filter(c=>c.nodeType===1&&ln(c)===n)}function kid(p,n){return kids(p,n)[0]||null}function xt(p,n){return T(kid(p,n)?.textContent).trim()}function xs(d,p,n,v){let e=kid(p,n);if(!e){e=p?.namespaceURI?d.createElementNS(p.namespaceURI,n):d.createElement(n);p.appendChild(e)}e.textContent=T(v);return e}
-function pt(p){if(p==null||p==='')return null;if(Array.isArray(p)&&p.length>=3){const x=Number(p[0]),y=Number(p[1]),z=Number(p[2]);return Number.isFinite(x)&&Number.isFinite(y)&&Number.isFinite(z)?{x,y,z}:null}if(typeof p==='object'){const x=Number(p.x??p.X),y=Number(p.y??p.Y),z=Number(p.z??p.Z);return Number.isFinite(x)&&Number.isFinite(y)&&Number.isFinite(z)?{x,y,z}:null}const s=T(p).trim(),tok=s.split(/\s+/g),d={x:0,y:0,z:0};let ok=false;for(let i=0;i<tok.length-1;i+=2){const a=tok[i].toUpperCase(),v=mm(tok[i+1]);if(!Number.isFinite(v))continue;if(a==='E'){d.x=v;ok=true}else if(a==='W'){d.x=-v;ok=true}else if(a==='N'){d.y=v;ok=true}else if(a==='S'){d.y=-v;ok=true}else if(a==='U'){d.z=v;ok=true}else if(a==='D'){d.z=-v;ok=true}}if(ok)return d;const nums=s.match(/-?\d+(?:\.\d+)?/g)?.map(Number).filter(Number.isFinite)||[];return nums.length>=3?{x:nums[0],y:nums[1],z:nums[2]}:null}
-function pk(s,t){const p=pt(s);if(!p)return'';const q=N(t,1)||1;return[p.x,p.y,p.z].map(v=>Math.round(v/q)).join('|')}
-function stag(v){const m=T(v).trim().toUpperCase().replace(/^\/+/, '').match(/PS-\d+(?:\.\d+)?/i);return m?m[0].replace(/\.\d+$/,''):''}function stags(v){const a=new Set;for(const m of T(v).matchAll(/\/?PS-\d+(?:\.\d+)?/ig)){const s=stag(m[0]);if(s)a.add(s)}return[...a]}function stagsAttrs(a,n=''){const out=new Set(stags(n));for(const[k,v]of Object.entries(a||{})){if(v&&typeof v==='object')continue;for(const s of stags(`${k} ${v}`))out.add(s)}return[...out]}function stagsNode(n){const a=[xt(n,'NodeName'),xt(n,'ComponentRefNo')];for(const c of kids(n,'SupportTag'))a.push(T(c.textContent));return[...new Set(a.flatMap(stags))]}
-function walk(v,b='',o=[]){if(Array.isArray(v)){v.forEach(x=>walk(x,b,o));return o}if(!v||typeof v!=='object')return o;const a=v.attributes&&typeof v.attributes==='object'?v.attributes:{},ty=T(v.type||a.TYPE).toUpperCase(),br=(ty==='BRANCH'||Array.isArray(v.children))?T(v.name||a.NAME||a.OWNER||b):b;o.push({component:v,attrs:a,branchName:br});if(Array.isArray(v.children))v.children.forEach(c=>walk(c,br,o));return o}
-function scd(i){const a=i?.attrs||{};return T(a.DTXR_POS||a.DTXR_PS||a.DTXR||a.DESC||a.DESCRIPTION||a.NAME||i?.component?.name||'').trim()}
-export function buildStagedComponentIndex(txt,cfg){const empty={byCoord:new Map,byTag:new Map,count:0};if(!T(txt).trim())return empty;let parsed=null;try{parsed=JSON.parse(txt)}catch{return empty}const byCoord=new Map,byTag=new Map;let count=0;for(const e of walk(parsed)){const a=e.attrs||{};let p=null;for(const k of['SUPPORTCOORD','POS','BPOS','APOS','LPOS','CPOS','HPOS','TPOS']){p=pt(a[k]);if(p)break}const ix={...e,point:p};if(p){const k=pk(`${p.x} ${p.y} ${p.z}`,N(cfg.coordinateTolerance,1));if(k){if(!byCoord.has(k))byCoord.set(k,[]);byCoord.get(k).push(ix)}}for(const s of stagsAttrs(a,e.component?.name||'')){if(!byTag.has(s))byTag.set(s,[]);byTag.get(s).push(ix)}count++}return{byCoord,byTag,count}}
-export function stagedComponentForXmlNode(n,idx,cfg){if(!idx||idx.count<=0)return{match:null,method:''};for(const s of stagsNode(n)){const m=idx.byTag.get(s)||[];if(m.length)return{match:m[0],method:`PS tag ${s}`}}const k=pk(xt(n,'Position'),N(cfg.coordinateTolerance,1)),m=k?(idx.byCoord.get(k)||[]):[];return m.length?{match:m[0],method:'coordinate'}:{match:null,method:''}}
-export function shouldConvertSmallWeightLengthsToMm(c){return c?.weight?.convertSmallLengthsInToMm===true}function mlen(l,x,c){if(l===null)return null;if(!shouldConvertSmallWeightLengthsToMm(c))return l;return l<100&&x>100?l*N(c.weight?.inchToMm,25.4):l}function wt(r){return rt(r,['type','Type','TYPE','valveType','Valve Type'])}function wd(r){return rt(r,['typeDesc','TypeDesc','Type Desc','Type Description','Description','Valve Type'])}
-export function findWeightMasterMatch(q,c){return findAllWeightCandidates(q,c)[0]||null}export function findAllWeightCandidates({boreMm,rating,lengthMm},c){const rows=Array.isArray(c.weight?.masterRows)?c.weight.masterRows:[];if(!rows.length||boreMm===null||!rating||lengthMm===null)return[];const tol=N(c.weight?.lengthToleranceMm,4),wr=T(rating).replace(/#/g,'').toUpperCase(),out=[];for(const r of rows){const rb=rn(r,['boreMm','convertedBore','Converted Bore','bore','Bore','DN','NB']),rl=mlen(rn(r,['lengthMm','length','Length (RF-F/F)','RF-F/F','LEN','faceToFace']),lengthMm,c),rw=rn(r,['valveWeight','directWeight','weight','Weight','RF/RTJ KG','Valve Weight']),rr=rt(r,['ratingClass','rating','Rating','RATING','Class','CLASS','Pressure Class']).replace(/#/g,'').toUpperCase(),type=wt(r),typeDesc=wd(r);if(rb===null||rl===null||rw===null||!rr)continue;if(Math.abs(rb-boreMm)>=1||rr!==wr)continue;const d=Math.abs(rl-lengthMm);if(d>tol)continue;out.push({weight:rw,lengthDelta:d,valveType:type,type,typeDesc,rowLength:rl,rowBore:rb,rowRating:rr,rowData:r})}return out.sort((a,b)=>a.lengthDelta-b.lengthDelta)}
-export function normalizedXmlCiiRating(v){return T(v).replace(/#/g,'').trim().toUpperCase()}export function xmlCiiWeightCandidateFromRow(r,c,l){const rb=rn(r,['boreMm','convertedBore','Converted Bore','bore','Bore','DN','NB']),rl=mlen(rn(r,['lengthMm','length','Length (RF-F/F)','RF-F/F','LEN','faceToFace']),l,c),rw=rn(r,['valveWeight','directWeight','weight','Weight','RF/RTJ KG','Valve Weight']),rr=normalizedXmlCiiRating(rt(r,['ratingClass','rating','Rating','RATING','Class','CLASS','Pressure Class'])),type=wt(r),typeDesc=wd(r);return rb===null||rl===null||rw===null?null:{weight:rw,rowBore:rb,rowLength:rl,rowRating:rr,valveType:type,type,typeDesc,rowData:r}}
-const W={bore:2,rating:3,length:1};export function scoreXmlCiiWeightCandidates({boreMm,rating,lengthMm},c){const rows=Array.isArray(c.weight?.masterRows)?c.weight.masterRows:[];if(!rows.length||boreMm===null||lengthMm===null)return[];const nr=normalizedXmlCiiRating(rating),ls=Math.max(N(c.weight?.lengthToleranceMm,4)*5,Math.abs(lengthMm)*.2,25),bs=Math.max(Math.abs(boreMm)*.25,25),tot=W.bore+W.rating+W.length,out=[];for(const r of rows){const b=xmlCiiWeightCandidateFromRow(r,c,lengthMm);if(!b)continue;const ld=Math.abs(b.rowLength-lengthMm),bd=Math.abs(b.rowBore-boreMm),lsc=1-Math.min(ld/ls,1),bsc=1-Math.min(bd/bs,1);let rs=0;if(b.rowRating&&nr&&b.rowRating===nr)rs=1;else if(b.rowRating&&nr&&(b.rowRating.includes(nr)||nr.includes(b.rowRating)))rs=.65;const score=(bsc*W.bore+rs*W.rating+lsc*W.length)/tot;if(score<=0)continue;const preferred=bd<1&&rs===1,suggestedWeight=preferred&&b.rowLength>0?b.weight*(lengthMm/b.rowLength):b.weight;out.push({...b,lengthDelta:ld,boreDelta:bd,score,preferred,suggestedWeight:Math.round(suggestedWeight*1000)/1000})}return out.sort((a,b)=>(Number(b.preferred)-Number(a.preferred))||(b.score-a.score)||(a.lengthDelta-b.lengthDelta)||(a.boreDelta-b.boreDelta)).slice(0,5)}
-export function xmlCiiRigidWeightOverrideKey(b,n){return`${T(b).trim()}::${T(n).trim()}`}export function isXmlCiiRigidNode(n){return xt(n,'ComponentType').toUpperCase()==='RIGID'||Number(xt(n,'Rigid'))===2}export function isXmlCiiWeightReviewNode(n,d=''){const s=`${xt(n,'ComponentType')} ${xt(n,'NodeName')} ${d}`.toUpperCase();return isXmlCiiRigidNode(n)||/FLAN/.test(s)||/VALV|\bVLV\b/.test(s)}export function xmlCiiNumberText(v){const s=T(v).replace(/,/g,'').trim();if(s==='')return null;const n=Number(s);return Number.isFinite(n)?n:null}export function xmlCiiAncestorBranchName(n){let c=n?.parentNode||null;while(c){if(c.nodeType===1&&ln(c)==='Branch')return xt(c,'Branchname');c=c.parentNode||null}return''}
-function resolveWeightDtxr(n,ctx,c){return resolveDtxrForXmlNode({xmlNode:n,context:ctx,purpose:'weight-review',config:c,trustExistingXmlDtxr:false})}export function xmlCiiRigidWeightOverrideForNode(b,n,c){const nn=xt(n,'NodeNumber'),o=c?.overrides?.rigidWeight||{},raw=o[xmlCiiRigidWeightOverrideKey(b,nn)]??o[nn],x=xmlCiiNumberText(raw);return x!==null&&x>0?x:null}
-export function xmlCiiForwardElementLengths(nodes){const out=new Array(nodes.length).fill(null),toC=p=>{const q=pt(p);return q?[q.x,q.z,-q.y]:null};for(let j=0;j<nodes.length;j++){const tn=Number(xt(nodes[j],'NodeNumber'));if(!Number.isFinite(tn)||tn<=0)continue;const tp=xt(nodes[j],'Position');if(!tp)continue;let fp=null;for(let i=j-1;i>=0;i--){const fn=Number(xt(nodes[i],'NodeNumber'));if(Number.isFinite(fn)&&fn>0){fp=xt(nodes[i],'Position');break}}if(fp){const a=toC(fp),b=toC(tp);if(a&&b){const dx=b[0]-a[0],dy=b[1]-a[1],dz=b[2]-a[2];out[j]=Math.sqrt(dx*dx+dy*dy+dz*dz)}}}return out}
-const OD=[[10.3,6],[13.7,8],[17.1,10],[21.3,15],[26.7,20],[33.4,25],[42.2,32],[48.3,40],[60.3,50],[73,65],[88.9,80],[114.3,100],[141.3,125],[168.3,150],[219.1,200],[273,250],[273.1,250],[323.8,300],[323.9,300],[355.6,350],[406.4,400],[457,450],[457.2,450],[508,500],[609.6,600],[610,600],[711,700],[762,750]];function dn(o){if(o===null||!Number.isFinite(o))return null;let best=null;for(const[a,b]of OD){const e=Math.abs(o-a);if(!best||e<best.e)best={a,b,e}}return best&&best.e<=Math.max(1.5,Math.abs(best.a)*.006)?best.b:o}function nk(v){return T(v).trim().toUpperCase().replace(/\s+/g,'')}function llrow(b,c){const rows=Array.isArray(c.linelist?.masterRows)?c.linelist.masterRows:[],lk=deriveLineKeyFromBranchName(b,c),want=nk(lk);if(!want)return{lineKey:'',row:null};for(const r of rows){const raw=rt(r,['lineNoKey','lineNo','lineKey','LineNo','Line No','Line Number','PipelineReference']);if(nk(raw)===want)return{lineKey:lk,row:r}}return{lineKey:lk,row:null}}function pcFromBranch(b,c){const re=T(c.rating?.pipingClassRegex).trim();if(re){try{const m=new RegExp(re,'i').exec(b),g=Number(c.rating?.pipingClassGroup||1);if(m?.[g])return T(m[g]).trim()}catch{}}return tokenAtPosition(b,c.rating?.tokenDelimiter||'-',c.rating?.pipingClassTokenIndex||5)}function branchBore(br){for(const n of kids(br,'Node')){let b=xmlCiiNumberText(xt(n,'BoreMm'));if(b!==null)return b;const o=xmlCiiNumberText(xt(n,'OutsideDiameter'));if(o!==null){b=dn(o);if(b!==null)return b}}return null}function branchCtx(br,c,pi){const branchName=xt(br,'Branchname'),{lineKey,row}=llrow(branchName,c),derived=pcFromBranch(branchName,c),lr={...(row||{}),pipingClass:rt(row,['pipingClass','Piping Class','PIPING_CLASS'])||derived},boreMm=branchBore(br),res=resolveBranchProcessData({branchName,lineKey,lineRow:lr,boreMm,componentType:'PIPE',rating:rt(row,['rating','Rating','RATING']),materialMap:c.material?.mapRows||[],pipingClassIndex:pi,overrides:c.overrides||{},xmlNode:null,xmlBranch:br,config:c});return{branchName,lineKey,lineRow:lr,boreMm,requestedPipingClass:lr.pipingClass,resolvedPipingClass:res.pipingClass,rating:res.rating,pipingClassMatchMethod:res.pipingClassMatchMethod,pipingClassNeedsReview:res.pipingClassNeedsReview,pipingClassCandidates:res.pipingClassCandidates||[]}}function ratingFor(n,bc){return T(bc.rating).trim()||xt(n,'Rating')}
-function collect(xml,staged,cfg,mode='zero-rigid'){if(typeof DOMParser==='undefined')return[];const doc=new DOMParser().parseFromString(T(xml),'application/xml');if(doc.getElementsByTagName('parsererror').length)return[];const ctx=buildDtxrContext(staged,cfg),pi=buildPipingClassIndex(cfg.pipingClass?.masterRows||[]),rows=[];for(const br of[...doc.getElementsByTagName('Branch')]){const bc=branchCtx(br,cfg,pi),bn=bc.branchName,ns=kids(br,'Node'),fl=xmlCiiForwardElementLengths(ns);ns.forEach((node,i)=>{const nn=xt(node,'NodeNumber');if(Number(nn)<=0)return;const dr=resolveWeightDtxr(node,ctx,cfg),dtxr=dr.suppressed?'':(dr.canonicalText||dr.value||''),ct=xt(node,'ComponentType'),review=isXmlCiiWeightReviewNode(node,dtxr),lr=xt(node,'ElementLengthMm'),ex=lr?xmlCiiNumberText(lr):null,len=ex!==null?ex:fl[i],w=xmlCiiNumberText(xt(node,'Weight')),ow=xmlCiiRigidWeightOverrideForNode(bn,node,cfg),mw=ow??w,mapped=mw!==null&&mw>0;if(mode==='all-review-nodes'){if(!review||len===null||len<=6)return}else if(!isXmlCiiRigidNode(node)||len===null||(w!==null&&Math.abs(w)>1e-12))return;let bore=xmlCiiNumberText(xt(node,'BoreMm'));if(bore===null){const o=xmlCiiNumberText(xt(node,'OutsideDiameter'));if(o!==null)bore=dn(o)}if(bore===null)bore=bc.boreMm;const rating=ratingFor(node,bc);rows.push({key:xmlCiiRigidWeightOverrideKey(bn,nn),branchName:bn,nodeNumber:nn,nodeName:xt(node,'NodeName'),componentType:ct,boreMm:bore,rating,requestedPipingClass:bc.requestedPipingClass,resolvedPipingClass:bc.resolvedPipingClass,pipingClassMatchMethod:bc.pipingClassMatchMethod,pipingClassNeedsReview:bc.pipingClassNeedsReview,pipingClassCandidates:bc.pipingClassCandidates,lengthMm:len,elementLengthSource:ex!==null?'ElementLengthMm':'computed-forward',weight:mw,originalWeight:w,overrideWeight:ow,weightSource:ow!==null?'override':(w!==null&&w>0?'xml-weight':'unresolved'),mapped,status:mapped?'mapped':'unresolved',dtxr,dtxrSource:dr.source,dtxrMatchedKey:dr.matchedKey,dtxrMatchedBy:dr.matchedBy,dtxrStagedType:dr.stagedType,dtxrSuppressed:dr.suppressed,dtxrSuppressionReason:dr.suppressionReason,candidates:scoreXmlCiiWeightCandidates({boreMm:bore,rating,lengthMm:len},cfg).slice(0,5)})})}return rows}
-export function collectXmlCiiWeightMatchRows(xml,staged,cfg){return collect(xml,staged,cfg,'all-review-nodes')}export function collectXmlCiiZeroRigidWeightIssues(xml,staged,cfg){return collect(xml,staged,cfg,'zero-rigid').filter(r=>!r.mapped)}export function applyXmlCiiRigidWeightOverrides(xml,weights){if(typeof DOMParser==='undefined'||typeof XMLSerializer==='undefined')return{xmlText:xml,appliedCount:0,appliedRows:[]};const doc=new DOMParser().parseFromString(T(xml),'application/xml');if(doc.getElementsByTagName('parsererror').length)return{xmlText:xml,appliedCount:0,appliedRows:[]};const rows=[];for(const br of[...doc.getElementsByTagName('Branch')]){const bn=xt(br,'Branchname');for(const n of kids(br,'Node')){const nn=xt(n,'NodeNumber'),k=xmlCiiRigidWeightOverrideKey(bn,nn),x=xmlCiiNumberText(weights?.[k]);if(x===null||x<=0)continue;xs(doc,n,'Weight',String(x));rows.push({type:'rigid-weight-manual-override',branchName:bn,nodeNumber:nn,weight:x})}}return{xmlText:new XMLSerializer().serializeToString(doc),appliedCount:rows.length,appliedRows:rows}}
+// -----------------------------------------------------------------------------
+// Generic helpers
+// -----------------------------------------------------------------------------
+
+function toText(value) {
+  return value === undefined || value === null ? '' : String(value);
+}
+
+function toFiniteNumber(value, fallback) {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? numeric : fallback;
+}
+
+function parseNumericMm(value) {
+  const match = toText(value)
+    .replace(/mm/gi, ' ')
+    .match(/-?\d+(?:\.\d+)?/);
+  const numeric = match ? Number(match[0]) : NaN;
+  return Number.isFinite(numeric) ? numeric : null;
+}
+
+function rowText(row, keys) {
+  for (const key of keys || []) {
+    const value = row?.[key] ?? row?._raw?.[key];
+    if (toText(value).trim()) return toText(value).trim();
+  }
+  return '';
+}
+
+function rowNumber(row, keys) {
+  for (const key of keys || []) {
+    const numeric = parseNumericMm(row?.[key] ?? row?._raw?.[key]);
+    if (numeric !== null) return numeric;
+  }
+  return null;
+}
+
+// -----------------------------------------------------------------------------
+// XML helpers
+// -----------------------------------------------------------------------------
+
+function xmlLocalName(node) {
+  return toText(node?.localName || node?.nodeName).replace(/^.*:/, '');
+}
+
+function xmlChildrenByName(parent, localName) {
+  return [...(parent?.childNodes || [])].filter(
+    (child) => child.nodeType === 1 && xmlLocalName(child) === localName,
+  );
+}
+
+function xmlFirstChild(parent, localName) {
+  return xmlChildrenByName(parent, localName)[0] || null;
+}
+
+function xmlText(parent, localName) {
+  return toText(xmlFirstChild(parent, localName)?.textContent).trim();
+}
+
+function xmlSetText(document, parent, localName, value) {
+  let element = xmlFirstChild(parent, localName);
+  if (!element) {
+    element = parent?.namespaceURI
+      ? document.createElementNS(parent.namespaceURI, localName)
+      : document.createElement(localName);
+    parent.appendChild(element);
+  }
+  element.textContent = toText(value);
+  return element;
+}
+
+// -----------------------------------------------------------------------------
+// Coordinate and support-tag compatibility helpers
+// -----------------------------------------------------------------------------
+
+function normalizePoint(point) {
+  if (point === undefined || point === null || point === '') return null;
+
+  if (Array.isArray(point) && point.length >= 3) {
+    const x = Number(point[0]);
+    const y = Number(point[1]);
+    const z = Number(point[2]);
+    return Number.isFinite(x) && Number.isFinite(y) && Number.isFinite(z)
+      ? { x, y, z }
+      : null;
+  }
+
+  if (typeof point === 'object') {
+    const x = Number(point.x ?? point.X);
+    const y = Number(point.y ?? point.Y);
+    const z = Number(point.z ?? point.Z);
+    return Number.isFinite(x) && Number.isFinite(y) && Number.isFinite(z)
+      ? { x, y, z }
+      : null;
+  }
+
+  const text = toText(point).trim();
+  const tokens = text.split(/\s+/g);
+  const directional = { x: 0, y: 0, z: 0 };
+  let parsedDirectional = false;
+
+  for (let i = 0; i < tokens.length - 1; i += 2) {
+    const axis = tokens[i].toUpperCase();
+    const value = parseNumericMm(tokens[i + 1]);
+    if (!Number.isFinite(value)) continue;
+
+    if (axis === 'E') {
+      directional.x = value;
+      parsedDirectional = true;
+    } else if (axis === 'W') {
+      directional.x = -value;
+      parsedDirectional = true;
+    } else if (axis === 'N') {
+      directional.y = value;
+      parsedDirectional = true;
+    } else if (axis === 'S') {
+      directional.y = -value;
+      parsedDirectional = true;
+    } else if (axis === 'U') {
+      directional.z = value;
+      parsedDirectional = true;
+    } else if (axis === 'D') {
+      directional.z = -value;
+      parsedDirectional = true;
+    }
+  }
+
+  if (parsedDirectional) return directional;
+
+  const values = text
+    .match(/-?\d+(?:\.\d+)?/g)
+    ?.map(Number)
+    .filter(Number.isFinite) || [];
+
+  return values.length >= 3
+    ? { x: values[0], y: values[1], z: values[2] }
+    : null;
+}
+
+function xmlPositionKey(positionText, tolerance) {
+  const point = normalizePoint(positionText);
+  if (!point) return '';
+
+  const tol = toFiniteNumber(tolerance, 1) || 1;
+  return [point.x, point.y, point.z]
+    .map((value) => Math.round(value / tol))
+    .join('|');
+}
+
+function normalizeSupportTag(value) {
+  const match = toText(value)
+    .trim()
+    .toUpperCase()
+    .replace(/^\/+/, '')
+    .match(/PS-\d+(?:\.\d+)?/i);
+
+  return match ? match[0].replace(/\.\d+$/, '') : '';
+}
+
+function supportTagsFromText(value) {
+  const tags = new Set();
+  for (const match of toText(value).matchAll(/\/?PS-\d+(?:\.\d+)?/ig)) {
+    const tag = normalizeSupportTag(match[0]);
+    if (tag) tags.add(tag);
+  }
+  return [...tags];
+}
+
+function supportTagsFromAttrs(attrs, componentName = '') {
+  const tags = new Set(supportTagsFromText(componentName));
+
+  for (const [key, value] of Object.entries(attrs || {})) {
+    if (value && typeof value === 'object') continue;
+    for (const tag of supportTagsFromText(`${key} ${value}`)) {
+      tags.add(tag);
+    }
+  }
+
+  return [...tags];
+}
+
+function xmlNodeSupportTags(node) {
+  const parts = [xmlText(node, 'NodeName'), xmlText(node, 'ComponentRefNo')];
+  for (const child of xmlChildrenByName(node, 'SupportTag')) {
+    parts.push(toText(child.textContent));
+  }
+  return [...new Set(parts.flatMap(supportTagsFromText))];
+}
+
+// -----------------------------------------------------------------------------
+// Staged component compatibility index
+// -----------------------------------------------------------------------------
+
+function walkStagedComponents(value, branchName = '', out = []) {
+  if (Array.isArray(value)) {
+    value.forEach((item) => walkStagedComponents(item, branchName, out));
+    return out;
+  }
+
+  if (!value || typeof value !== 'object') return out;
+
+  const attrs = value.attributes && typeof value.attributes === 'object'
+    ? value.attributes
+    : {};
+  const type = toText(value.type || attrs.TYPE).toUpperCase();
+  const currentBranch = type === 'BRANCH' || Array.isArray(value.children)
+    ? toText(value.name || attrs.NAME || attrs.OWNER || branchName)
+    : branchName;
+
+  out.push({ component: value, attrs, branchName: currentBranch });
+
+  if (Array.isArray(value.children)) {
+    value.children.forEach((child) => walkStagedComponents(child, currentBranch, out));
+  }
+
+  return out;
+}
+
+function stagedComponentDtxr(indexed) {
+  const attrs = indexed?.attrs || {};
+  return toText(
+    attrs.DTXR_POS ||
+    attrs.DTXR_PS ||
+    attrs.DTXR ||
+    attrs.DESC ||
+    attrs.DESCRIPTION ||
+    attrs.NAME ||
+    indexed?.component?.name ||
+    '',
+  ).trim();
+}
+
+export function buildStagedComponentIndex(stagedJsonText, config) {
+  const empty = { byCoord: new Map(), byTag: new Map(), count: 0 };
+  if (!toText(stagedJsonText).trim()) return empty;
+
+  let parsed = null;
+  try {
+    parsed = JSON.parse(stagedJsonText);
+  } catch {
+    return empty;
+  }
+
+  const byCoord = new Map();
+  const byTag = new Map();
+  let count = 0;
+
+  for (const entry of walkStagedComponents(parsed)) {
+    const attrs = entry.attrs || {};
+    let point = null;
+
+    for (const key of ['SUPPORTCOORD', 'POS', 'BPOS', 'APOS', 'LPOS', 'CPOS', 'HPOS', 'TPOS']) {
+      point = normalizePoint(attrs[key]);
+      if (point) break;
+    }
+
+    const indexed = { ...entry, point };
+
+    if (point) {
+      const key = xmlPositionKey(
+        `${point.x} ${point.y} ${point.z}`,
+        toFiniteNumber(config.coordinateTolerance, 1),
+      );
+      if (key) {
+        if (!byCoord.has(key)) byCoord.set(key, []);
+        byCoord.get(key).push(indexed);
+      }
+    }
+
+    for (const tag of supportTagsFromAttrs(attrs, entry.component?.name || '')) {
+      if (!byTag.has(tag)) byTag.set(tag, []);
+      byTag.get(tag).push(indexed);
+    }
+
+    count += 1;
+  }
+
+  return { byCoord, byTag, count };
+}
+
+export function stagedComponentForXmlNode(node, stagedIndex, config) {
+  if (!stagedIndex || stagedIndex.count <= 0) {
+    return { match: null, method: '' };
+  }
+
+  for (const tag of xmlNodeSupportTags(node)) {
+    const matches = stagedIndex.byTag.get(tag) || [];
+    if (matches.length) return { match: matches[0], method: `PS tag ${tag}` };
+  }
+
+  const positionKey = xmlPositionKey(
+    xmlText(node, 'Position'),
+    toFiniteNumber(config.coordinateTolerance, 1),
+  );
+  const coordMatches = positionKey ? (stagedIndex.byCoord.get(positionKey) || []) : [];
+
+  if (coordMatches.length) return { match: coordMatches[0], method: 'coordinate' };
+  return { match: null, method: '' };
+}
+
+// -----------------------------------------------------------------------------
+// Weight master candidate helpers
+// -----------------------------------------------------------------------------
+
+export function shouldConvertSmallWeightLengthsToMm(config) {
+  return config?.weight?.convertSmallLengthsInToMm === true;
+}
+
+function resolveWeightMasterLength(rowLengthRaw, xmlLengthMm, config) {
+  if (rowLengthRaw === null) return null;
+  if (!shouldConvertSmallWeightLengthsToMm(config)) return rowLengthRaw;
+
+  return rowLengthRaw < 100 && xmlLengthMm > 100
+    ? rowLengthRaw * toFiniteNumber(config.weight?.inchToMm, 25.4)
+    : rowLengthRaw;
+}
+
+function weightType(row) {
+  return rowText(row, ['type', 'Type', 'TYPE', 'valveType', 'Valve Type']);
+}
+
+function weightTypeDesc(row) {
+  return rowText(row, [
+    'typeDesc',
+    'TypeDesc',
+    'Type Desc',
+    'Type Description',
+    'Description',
+    'Valve Type',
+  ]);
+}
+
+export function findWeightMasterMatch(query, config) {
+  return findAllWeightCandidates(query, config)[0] || null;
+}
+
+export function findAllWeightCandidates({ boreMm, rating, lengthMm }, config) {
+  const rows = Array.isArray(config.weight?.masterRows) ? config.weight.masterRows : [];
+
+  if (!rows.length || boreMm === null || !rating || lengthMm === null) {
+    return [];
+  }
+
+  const tolerance = toFiniteNumber(config.weight?.lengthToleranceMm, 4);
+  const normalizedRating = toText(rating).replace(/#/g, '').toUpperCase();
+  const candidates = [];
+
+  for (const row of rows) {
+    const rowBore = rowNumber(row, ['boreMm', 'convertedBore', 'Converted Bore', 'bore', 'Bore', 'DN', 'NB']);
+    const rowLengthRaw = rowNumber(row, ['lengthMm', 'length', 'Length (RF-F/F)', 'RF-F/F', 'LEN', 'faceToFace']);
+    const rowLength = resolveWeightMasterLength(rowLengthRaw, lengthMm, config);
+    const rowWeight = rowNumber(row, ['valveWeight', 'directWeight', 'weight', 'Weight', 'RF/RTJ KG', 'Valve Weight']);
+    const rowRating = rowText(row, ['ratingClass', 'rating', 'Rating', 'RATING', 'Class', 'CLASS', 'Pressure Class'])
+      .replace(/#/g, '')
+      .toUpperCase();
+    const valveType = weightType(row);
+    const typeDesc = weightTypeDesc(row);
+
+    if (rowBore === null || rowLength === null || rowWeight === null || !rowRating) continue;
+    if (Math.abs(rowBore - boreMm) >= 1) continue;
+    if (rowRating !== normalizedRating) continue;
+
+    const lengthDelta = Math.abs(rowLength - lengthMm);
+    if (lengthDelta > tolerance) continue;
+
+    candidates.push({
+      weight: rowWeight,
+      lengthDelta,
+      valveType,
+      type: valveType,
+      typeDesc,
+      rowLength,
+      rowBore,
+      rowRating,
+      rowData: row,
+    });
+  }
+
+  return candidates.sort((a, b) => a.lengthDelta - b.lengthDelta);
+}
+
+export function normalizedXmlCiiRating(value) {
+  return toText(value).replace(/#/g, '').trim().toUpperCase();
+}
+
+export function xmlCiiWeightCandidateFromRow(row, config, lengthMm) {
+  const rowBore = rowNumber(row, ['boreMm', 'convertedBore', 'Converted Bore', 'bore', 'Bore', 'DN', 'NB']);
+  const rowLengthRaw = rowNumber(row, ['lengthMm', 'length', 'Length (RF-F/F)', 'RF-F/F', 'LEN', 'faceToFace']);
+  const rowLength = resolveWeightMasterLength(rowLengthRaw, lengthMm, config);
+  const rowWeight = rowNumber(row, ['valveWeight', 'directWeight', 'weight', 'Weight', 'RF/RTJ KG', 'Valve Weight']);
+  const rowRating = normalizedXmlCiiRating(
+    rowText(row, ['ratingClass', 'rating', 'Rating', 'RATING', 'Class', 'CLASS', 'Pressure Class']),
+  );
+  const valveType = weightType(row);
+  const typeDesc = weightTypeDesc(row);
+
+  return rowBore === null || rowLength === null || rowWeight === null
+    ? null
+    : {
+        weight: rowWeight,
+        rowBore,
+        rowLength,
+        rowRating,
+        valveType,
+        type: valveType,
+        typeDesc,
+        rowData: row,
+      };
+}
+
+const XML_CII_WEIGHT_MATCH_WEIGHTS = Object.freeze({
+  bore: 2,
+  rating: 3,
+  length: 1,
+});
+
+export function scoreXmlCiiWeightCandidates({ boreMm, rating, lengthMm }, config) {
+  const rows = Array.isArray(config.weight?.masterRows) ? config.weight.masterRows : [];
+
+  if (!rows.length || boreMm === null || lengthMm === null) {
+    return [];
+  }
+
+  const normalizedRating = normalizedXmlCiiRating(rating);
+  const lengthScale = Math.max(
+    toFiniteNumber(config.weight?.lengthToleranceMm, 4) * 5,
+    Math.abs(lengthMm) * 0.2,
+    25,
+  );
+  const boreScale = Math.max(Math.abs(boreMm) * 0.25, 25);
+  const { bore: wBore, rating: wRating, length: wLength } = XML_CII_WEIGHT_MATCH_WEIGHTS;
+  const wTotal = wBore + wRating + wLength;
+  const candidates = [];
+
+  for (const row of rows) {
+    const base = xmlCiiWeightCandidateFromRow(row, config, lengthMm);
+    if (!base) continue;
+
+    const lengthDelta = Math.abs(base.rowLength - lengthMm);
+    const boreDelta = Math.abs(base.rowBore - boreMm);
+    const lengthScore = 1 - Math.min(lengthDelta / lengthScale, 1);
+    const boreScore = 1 - Math.min(boreDelta / boreScale, 1);
+    let ratingScore = 0;
+
+    if (base.rowRating && normalizedRating && base.rowRating === normalizedRating) {
+      ratingScore = 1;
+    } else if (
+      base.rowRating &&
+      normalizedRating &&
+      (base.rowRating.includes(normalizedRating) || normalizedRating.includes(base.rowRating))
+    ) {
+      ratingScore = 0.65;
+    }
+
+    const score = (boreScore * wBore + ratingScore * wRating + lengthScore * wLength) / wTotal;
+    if (score <= 0) continue;
+
+    const preferred = boreDelta < 1 && ratingScore === 1;
+    const suggestedWeight = preferred && base.rowLength > 0
+      ? base.weight * (lengthMm / base.rowLength)
+      : base.weight;
+
+    candidates.push({
+      ...base,
+      lengthDelta,
+      boreDelta,
+      score,
+      preferred,
+      suggestedWeight: Math.round(suggestedWeight * 1000) / 1000,
+    });
+  }
+
+  return candidates
+    .sort((a, b) => (
+      Number(b.preferred) - Number(a.preferred) ||
+      b.score - a.score ||
+      a.lengthDelta - b.lengthDelta ||
+      a.boreDelta - b.boreDelta
+    ))
+    .slice(0, 5);
+}
+
+// -----------------------------------------------------------------------------
+// XML CII weight review helpers
+// -----------------------------------------------------------------------------
+
+export function xmlCiiRigidWeightOverrideKey(branchName, nodeNumber) {
+  return `${toText(branchName).trim()}::${toText(nodeNumber).trim()}`;
+}
+
+export function isXmlCiiRigidNode(node) {
+  return xmlText(node, 'ComponentType').toUpperCase() === 'RIGID' ||
+    Number(xmlText(node, 'Rigid')) === 2;
+}
+
+export function isXmlCiiWeightReviewNode(node, dtxr = '') {
+  const searchText = `${xmlText(node, 'ComponentType')} ${xmlText(node, 'NodeName')} ${dtxr}`.toUpperCase();
+  return isXmlCiiRigidNode(node) || /FLAN/.test(searchText) || /VALV|\bVLV\b/.test(searchText);
+}
+
+export function xmlCiiNumberText(value) {
+  const text = toText(value).replace(/,/g, '').trim();
+  if (text === '') return null;
+
+  const numeric = Number(text);
+  return Number.isFinite(numeric) ? numeric : null;
+}
+
+export function xmlCiiAncestorBranchName(node) {
+  let current = node?.parentNode || null;
+
+  while (current) {
+    if (current.nodeType === 1 && xmlLocalName(current) === 'Branch') {
+      return xmlText(current, 'Branchname');
+    }
+    current = current.parentNode || null;
+  }
+
+  return '';
+}
+
+function resolveWeightDtxr(node, dtxrContext, config) {
+  return resolveDtxrForXmlNode({
+    xmlNode: node,
+    context: dtxrContext,
+    purpose: 'weight-review',
+    config,
+    trustExistingXmlDtxr: false,
+  });
+}
+
+export function xmlCiiRigidWeightOverrideForNode(branchName, node, config) {
+  const nodeNumber = xmlText(node, 'NodeNumber');
+  const overrides = config?.overrides?.rigidWeight || {};
+  const raw = overrides[xmlCiiRigidWeightOverrideKey(branchName, nodeNumber)] ?? overrides[nodeNumber];
+  const numeric = xmlCiiNumberText(raw);
+
+  return numeric !== null && numeric > 0 ? numeric : null;
+}
+
+export function xmlCiiForwardElementLengths(nodes) {
+  const out = new Array(nodes.length).fill(null);
+  const mapPositionToCii = (positionText) => {
+    const point = normalizePoint(positionText);
+    return point ? [point.x, point.z, -point.y] : null;
+  };
+
+  for (let j = 0; j < nodes.length; j += 1) {
+    const toNumber = Number(xmlText(nodes[j], 'NodeNumber'));
+    if (!Number.isFinite(toNumber) || toNumber <= 0) continue;
+
+    const toPosition = xmlText(nodes[j], 'Position');
+    if (!toPosition) continue;
+
+    let fromPosition = null;
+    for (let i = j - 1; i >= 0; i -= 1) {
+      const fromNumber = Number(xmlText(nodes[i], 'NodeNumber'));
+      if (Number.isFinite(fromNumber) && fromNumber > 0) {
+        fromPosition = xmlText(nodes[i], 'Position');
+        break;
+      }
+    }
+
+    if (!fromPosition) continue;
+
+    const from = mapPositionToCii(fromPosition);
+    const to = mapPositionToCii(toPosition);
+    if (!from || !to) continue;
+
+    const dx = to[0] - from[0];
+    const dy = to[1] - from[1];
+    const dz = to[2] - from[2];
+    out[j] = Math.sqrt(dx * dx + dy * dy + dz * dz);
+  }
+
+  return out;
+}
+
+// -----------------------------------------------------------------------------
+// Branch context helpers
+// -----------------------------------------------------------------------------
+
+const OD_TO_DN = [
+  [10.3, 6],
+  [13.7, 8],
+  [17.1, 10],
+  [21.3, 15],
+  [26.7, 20],
+  [33.4, 25],
+  [42.2, 32],
+  [48.3, 40],
+  [60.3, 50],
+  [73.0, 65],
+  [88.9, 80],
+  [114.3, 100],
+  [141.3, 125],
+  [168.3, 150],
+  [219.1, 200],
+  [273.0, 250],
+  [273.1, 250],
+  [323.8, 300],
+  [323.9, 300],
+  [355.6, 350],
+  [406.4, 400],
+  [457.0, 450],
+  [457.2, 450],
+  [508.0, 500],
+  [609.6, 600],
+  [610.0, 600],
+  [711.0, 700],
+  [762.0, 750],
+];
+
+function nominalDnFromOd(odNum) {
+  if (odNum === null || !Number.isFinite(odNum)) return null;
+
+  let best = null;
+  for (const [od, dn] of OD_TO_DN) {
+    const err = Math.abs(odNum - od);
+    if (!best || err < best.err) best = { od, dn, err };
+  }
+
+  if (best && best.err <= Math.max(1.5, Math.abs(best.od) * 0.006)) {
+    return best.dn;
+  }
+
+  return odNum;
+}
+
+function normalizeLineKey(value) {
+  return toText(value).trim().toUpperCase().replace(/\s+/g, '');
+}
+
+function lineListRowForBranch(branchName, config) {
+  const rows = Array.isArray(config.linelist?.masterRows) ? config.linelist.masterRows : [];
+  const lineKey = deriveLineKeyFromBranchName(branchName, config);
+  const wanted = normalizeLineKey(lineKey);
+
+  if (!wanted) return { lineKey: '', row: null };
+
+  for (const row of rows) {
+    const raw = rowText(row, [
+      'lineNoKey',
+      'lineNo',
+      'lineKey',
+      'LineNo',
+      'Line No',
+      'Line Number',
+      'PipelineReference',
+    ]);
+    if (normalizeLineKey(raw) === wanted) return { lineKey, row };
+  }
+
+  return { lineKey, row: null };
+}
+
+function derivePipingClassFromBranchName(branchName, config) {
+  const regex = toText(config.rating?.pipingClassRegex).trim();
+
+  if (regex) {
+    try {
+      const match = new RegExp(regex, 'i').exec(branchName);
+      const group = Number(config.rating?.pipingClassGroup || 1);
+      if (match?.[group]) return toText(match[group]).trim();
+    } catch {
+      // Ignore invalid user regex and fall back to token parsing.
+    }
+  }
+
+  return tokenAtPosition(
+    branchName,
+    config.rating?.tokenDelimiter || '-',
+    config.rating?.pipingClassTokenIndex || 5,
+  );
+}
+
+function branchBoreFromFirstUsefulNode(branch) {
+  for (const node of xmlChildrenByName(branch, 'Node')) {
+    let boreMm = xmlCiiNumberText(xmlText(node, 'BoreMm'));
+    if (boreMm !== null) return boreMm;
+
+    const od = xmlCiiNumberText(xmlText(node, 'OutsideDiameter'));
+    if (od !== null) {
+      boreMm = nominalDnFromOd(od);
+      if (boreMm !== null) return boreMm;
+    }
+  }
+
+  return null;
+}
+
+function resolveRigidWeightBranchContext(branch, config, pipingClassIndex) {
+  const branchName = xmlText(branch, 'Branchname');
+  const { lineKey, row: lineRow } = lineListRowForBranch(branchName, config);
+  const derivedClass = derivePipingClassFromBranchName(branchName, config);
+  const resolverLineRow = {
+    ...(lineRow || {}),
+    pipingClass: rowText(lineRow, ['pipingClass', 'Piping Class', 'PIPING_CLASS']) || derivedClass,
+  };
+  const boreMm = branchBoreFromFirstUsefulNode(branch);
+
+  const resolved = resolveBranchProcessData({
+    branchName,
+    lineKey,
+    lineRow: resolverLineRow,
+    boreMm,
+    componentType: 'PIPE',
+    rating: rowText(lineRow, ['rating', 'Rating', 'RATING']),
+    materialMap: config.material?.mapRows || [],
+    pipingClassIndex,
+    overrides: config.overrides || {},
+    xmlNode: null,
+    xmlBranch: branch,
+    config,
+  });
+
+  return {
+    branchName,
+    lineKey,
+    lineRow: resolverLineRow,
+    boreMm,
+    requestedPipingClass: resolverLineRow.pipingClass,
+    resolvedPipingClass: resolved.pipingClass,
+    rating: resolved.rating,
+    pipingClassMatchMethod: resolved.pipingClassMatchMethod,
+    pipingClassNeedsReview: resolved.pipingClassNeedsReview,
+    pipingClassCandidates: resolved.pipingClassCandidates || [],
+  };
+}
+
+function ratingForRigidWeightIssue(node, branchContext) {
+  return toText(branchContext.rating).trim() || xmlText(node, 'Rating');
+}
+
+// -----------------------------------------------------------------------------
+// Review row collection
+// -----------------------------------------------------------------------------
+
+function collectWeightRows(xmlTextVal, stagedJsonText, config, mode = 'zero-rigid') {
+  if (typeof DOMParser === 'undefined') return [];
+
+  const document = new DOMParser().parseFromString(toText(xmlTextVal), 'application/xml');
+  if (document.getElementsByTagName('parsererror').length) return [];
+
+  const dtxrContext = buildDtxrContext(stagedJsonText, config);
+  const pipingClassIndex = buildPipingClassIndex(config.pipingClass?.masterRows || []);
+  const rows = [];
+
+  for (const branch of [...document.getElementsByTagName('Branch')]) {
+    const branchContext = resolveRigidWeightBranchContext(branch, config, pipingClassIndex);
+    const branchName = branchContext.branchName;
+    const branchNodeList = xmlChildrenByName(branch, 'Node');
+    const forwardLengths = xmlCiiForwardElementLengths(branchNodeList);
+
+    branchNodeList.forEach((node, nodeIdx) => {
+      const nodeNumber = xmlText(node, 'NodeNumber');
+      if (Number(nodeNumber) <= 0) return;
+
+      const dtxrResult = resolveWeightDtxr(node, dtxrContext, config);
+      const dtxrText = dtxrResult?.suppressed ? '' : toText(dtxrResult?.canonicalText);
+      const componentType = xmlText(node, 'ComponentType');
+      const reviewNode = isXmlCiiWeightReviewNode(node, dtxrText);
+      const lengthRaw = xmlText(node, 'ElementLengthMm');
+      const explicitLength = lengthRaw ? xmlCiiNumberText(lengthRaw) : null;
+      const lengthMm = explicitLength !== null ? explicitLength : forwardLengths[nodeIdx];
+      const weight = xmlCiiNumberText(xmlText(node, 'Weight'));
+      const overrideWeight = xmlCiiRigidWeightOverrideForNode(branchName, node, config);
+      const mappedWeight = overrideWeight ?? weight;
+      const isMapped = mappedWeight !== null && mappedWeight > 0;
+
+      if (mode === 'all-review-nodes') {
+        if (!reviewNode || lengthMm === null || lengthMm <= 6) return;
+      } else if (!isXmlCiiRigidNode(node) || lengthMm === null || (weight !== null && Math.abs(weight) > 1e-12)) {
+        return;
+      }
+
+      let boreMm = xmlCiiNumberText(xmlText(node, 'BoreMm'));
+      if (boreMm === null) {
+        const od = xmlCiiNumberText(xmlText(node, 'OutsideDiameter'));
+        if (od !== null) boreMm = nominalDnFromOd(od);
+      }
+      if (boreMm === null) boreMm = branchContext.boreMm;
+
+      const rating = ratingForRigidWeightIssue(node, branchContext);
+
+      rows.push({
+        key: xmlCiiRigidWeightOverrideKey(branchName, nodeNumber),
+        branchName,
+        nodeNumber,
+        nodeName: xmlText(node, 'NodeName'),
+        componentType,
+        boreMm,
+        rating,
+        requestedPipingClass: branchContext.requestedPipingClass,
+        resolvedPipingClass: branchContext.resolvedPipingClass,
+        pipingClassMatchMethod: branchContext.pipingClassMatchMethod,
+        pipingClassNeedsReview: branchContext.pipingClassNeedsReview,
+        pipingClassCandidates: branchContext.pipingClassCandidates,
+        lengthMm,
+        elementLengthSource: explicitLength !== null ? 'ElementLengthMm' : 'computed-forward',
+        weight: mappedWeight,
+        originalWeight: weight,
+        overrideWeight,
+        weightSource: overrideWeight !== null
+          ? 'override'
+          : (weight !== null && weight > 0 ? 'xml-weight' : 'unresolved'),
+        mapped: isMapped,
+        status: isMapped ? 'mapped' : 'unresolved',
+        dtxr: dtxrText,
+        dtxrSource: dtxrResult?.source || '',
+        dtxrMatchedBy: dtxrResult?.matchedBy || '',
+        dtxrMatchedKey: dtxrResult?.matchedKey || '',
+        dtxrStagedType: dtxrResult?.stagedType || '',
+        dtxrSuppressed: Boolean(dtxrResult?.suppressed),
+        dtxrSuppressionReason: dtxrResult?.suppressionReason || '',
+        candidates: scoreXmlCiiWeightCandidates({ boreMm, rating, lengthMm }, config).slice(0, 5),
+      });
+    });
+  }
+
+  return rows;
+}
+
+export function collectXmlCiiWeightMatchRows(xmlTextVal, stagedJsonText, config) {
+  return collectWeightRows(xmlTextVal, stagedJsonText, config, 'all-review-nodes');
+}
+
+export function collectXmlCiiZeroRigidWeightIssues(xmlTextVal, stagedJsonText, config) {
+  return collectWeightRows(xmlTextVal, stagedJsonText, config, 'zero-rigid')
+    .filter((row) => !row.mapped);
+}
+
+export function applyXmlCiiRigidWeightOverrides(xmlTextVal, weightsByKey) {
+  if (typeof DOMParser === 'undefined' || typeof XMLSerializer === 'undefined') {
+    return { xmlText: xmlTextVal, appliedCount: 0, appliedRows: [] };
+  }
+
+  const document = new DOMParser().parseFromString(toText(xmlTextVal), 'application/xml');
+  if (document.getElementsByTagName('parsererror').length) {
+    return { xmlText: xmlTextVal, appliedCount: 0, appliedRows: [] };
+  }
+
+  const appliedRows = [];
+
+  for (const branch of [...document.getElementsByTagName('Branch')]) {
+    const branchName = xmlText(branch, 'Branchname');
+
+    for (const node of xmlChildrenByName(branch, 'Node')) {
+      const nodeNumber = xmlText(node, 'NodeNumber');
+      const key = xmlCiiRigidWeightOverrideKey(branchName, nodeNumber);
+      const numeric = xmlCiiNumberText(weightsByKey?.[key]);
+
+      if (numeric === null || numeric <= 0) continue;
+
+      xmlSetText(document, node, 'Weight', String(numeric));
+      appliedRows.push({
+        type: 'rigid-weight-manual-override',
+        branchName,
+        nodeNumber,
+        weight: numeric,
+      });
+    }
+  }
+
+  return {
+    xmlText: new XMLSerializer().serializeToString(document),
+    appliedCount: appliedRows.length,
+    appliedRows,
+  };
+}
