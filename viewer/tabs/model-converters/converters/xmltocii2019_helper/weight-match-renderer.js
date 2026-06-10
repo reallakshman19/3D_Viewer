@@ -1,4 +1,4 @@
-import { collectXmlCiiZeroRigidWeightIssues, xmlCiiRigidWeightOverrideKey } from '../../../../converters/xml-cii2019-core/weight-match-model.js';
+import { collectXmlCiiWeightMatchRows, xmlCiiRigidWeightOverrideKey } from '../../../../converters/xml-cii2019-core/weight-match-model.js';
 
 function _toText(val) {
   if (val === null || val === undefined) return '';
@@ -13,18 +13,26 @@ function _escAttr(value) {
   return _esc(value).replaceAll("'", '&#39;');
 }
 
+function _fmtNum(value, digits = 1) {
+  const num = Number(value);
+  return Number.isFinite(num) ? num.toFixed(digits) : '';
+}
+
 export function xmlCiiRenderWeightMatchPhase() {
+  const info = 'Shows all XML nodes where ComponentType/NodeName/DTXR indicates RIGID, FLAN*, or VALVE/VLV and ElementLengthMm > 6 mm. Green rows already have XML/override weight; amber rows still need a weight decision.';
   return `
-    <div class="model-converters-workflow-detail-title">4A Weight Match</div>
+    <div class="model-converters-workflow-detail-title">4A Weight Match <span title="${_escAttr(info)}" style="cursor:help;color:#8bb7ff;border:1px solid #406089;border-radius:50%;padding:0 5px;font-size:11px;">i</span></div>
     <div class="model-converters-workflow-detail-text">
       Approximate component weights matched from the valve weight master by
       <strong>rating</strong> (×3), <strong>bore</strong> (×2), and <strong>length</strong> (×1).
-      DTXR is resolved from XML <strong>DTXR_POS</strong> / <strong>DTXR_PS</strong> first, then staged JSON by ComponentRefNo, PS tag, node and coordinates.
+      DTXR is resolved from XML <strong>DTXR_POS</strong> / <strong>DTXR_PS</strong> first, then staged JSON by OWNER/Branchname, ComponentRefNo, PS tag, node and coordinates.
       Review and adjust, then <strong>Finalize and Run</strong>.
     </div>
-    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:10px 0;">
+    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:10px 0;">
       <button type="button" class="model-converters-download-btn" id="mc-wm-refresh">↻ Recompute matches</button>
       <button type="button" class="model-converters-download-btn" id="mc-wm-fill-best">Use all ★ preferred</button>
+      <span style="display:inline-flex;align-items:center;gap:4px;"><span style="width:12px;height:12px;background:#123c25;border:1px solid #2f9e63;border-radius:3px;"></span>Mapped</span>
+      <span style="display:inline-flex;align-items:center;gap:4px;"><span style="width:12px;height:12px;background:#4a2d12;border:1px solid #d08a22;border-radius:3px;"></span>Unresolved</span>
       <span id="mc-wm-status" class="mc-diag-run-status"></span>
     </div>
     <div id="mc-wm-content"><div class="model-converters-workflow-detail-note">Computing weight matches…</div></div>
@@ -48,11 +56,16 @@ export function bindXmlCiiWeightMatchPhase(detailEl, { xmlFile, stagedJsonText, 
 
   const renderIssues = (issues) => {
     if (!issues.length) {
-      contentEl.innerHTML = '<div class="model-converters-workflow-detail-note">No rigid components need a weight decision — everything matched automatically (or there are no rigids). You can Finalize and Run.</div>';
+      contentEl.innerHTML = '<div class="model-converters-workflow-detail-note">No RIGID / FLAN* / VALVE nodes with ElementLengthMm &gt; 6 mm were found. You can Finalize and Run.</div>';
       return;
     }
     const rowsHtml = issues.map((issue, index) => {
       const best = issue.candidates?.[0] || null;
+      const initialWeight = issue.weight && issue.weight > 0 ? issue.weight : (best ? (best.suggestedWeight ?? best.weight) : '');
+      const rowStyle = issue.mapped
+        ? 'background:#0f2a1b;border-left:4px solid #2f9e63;'
+        : 'background:#3a240f;border-left:4px solid #d08a22;';
+      const statusText = issue.mapped ? `Mapped (${issue.weightSource || 'weight'})` : 'Unresolved';
       const candidates = (issue.candidates || []).map((candidate) => {
         const value = candidate.suggestedWeight ?? candidate.weight;
         const valveType = candidate.valveType || 'Unknown';
@@ -61,34 +74,40 @@ export function bindXmlCiiWeightMatchPhase(detailEl, { xmlFile, stagedJsonText, 
           candidate.preferred ? 'Preferred: exact bore/rating, length-scaled' : '',
           `Bore: ${candidate.rowBore}`,
           `Rating: ${candidate.rowRating || '-'}`,
-          `Master length: ${Number(candidate.rowLength).toFixed(1)}`,
+          `Master length: ${_fmtNum(candidate.rowLength)}`,
+          `Delta length: ${_fmtNum(candidate.lengthDelta)}`,
           `Score: ${Math.round(candidate.score * 100)}%`,
         ].filter(Boolean).join(' | ');
         return `
           <button type="button" class="mc-rigid-review-candidate${candidate.preferred ? ' best' : ''}"
             data-wm-candidate="${index}" data-wm-weight="${_escAttr(value)}"
             title="${_escAttr(title)}">
-            ${candidate.preferred ? '★ ' : ''}${_esc(value)} kg · ${Math.round(candidate.score * 100)}%
+            ${candidate.preferred ? '★ ' : ''}${_esc(candidate.valveType || 'Unknown')} · ${_esc(value)} kg · Δ${_esc(_fmtNum(candidate.lengthDelta))} mm
           </button>`;
       }).join('');
       const ratingTitle = `Piping Class ${issue.resolvedPipingClass || ''} (${issue.pipingClassMatchMethod || ''})`;
       const dtxrTitle = [issue.dtxrSource, issue.dtxrMatchedKey].filter(Boolean).join(' · ');
       return `
-        <tr>
+        <tr style="${rowStyle}">
+          <td>${_esc(statusText)}</td>
           <td class="mc-rigid-review-branch" title="${_escAttr(issue.branchName)}">${_esc(issue.branchName)}</td>
+          <td>${_esc(issue.componentType || '')}</td>
           <td>${_esc(issue.boreMm == null ? '' : `${Number(issue.boreMm).toFixed(0)} mm`)}</td>
           <td title="${_escAttr(ratingTitle)}">${_esc(issue.rating || '')}</td>
           <td>${_esc(issue.nodeNumber)}</td>
           <td class="mc-rigid-review-dtxr" title="${_escAttr(dtxrTitle)}">${_esc(issue.dtxr || 'Not found')}</td>
-          <td>${_esc(issue.lengthMm == null ? '' : `${Number(issue.lengthMm).toFixed(1)} mm`)}</td>
-          <td><input type="number" min="0" step="0.001" class="mc-rigid-review-input" data-wm-key="${_escAttr(issue.key)}" value="${_escAttr(best ? (best.suggestedWeight ?? best.weight) : '')}" placeholder="kg"></td>
+          <td title="${_escAttr(issue.elementLengthSource || '')}">${_esc(issue.lengthMm == null ? '' : `${Number(issue.lengthMm).toFixed(1)} mm`)}</td>
+          <td><input type="number" min="0" step="0.001" class="mc-rigid-review-input" data-wm-key="${_escAttr(issue.key)}" value="${_escAttr(initialWeight)}" placeholder="kg"></td>
           <td class="mc-rigid-review-candidates">${candidates || '<span class="model-converters-muted">No suggestion</span>'}</td>
         </tr>`;
     }).join('');
     contentEl.innerHTML = `
+      <div class="model-converters-workflow-detail-note" style="margin-bottom:8px;">
+        Filter: ComponentType/NodeName/DTXR contains RIGID, FLAN*, or VALVE/VLV and ElementLengthMm &gt; 6 mm.
+      </div>
       <div class="mc-rigid-review-table-wrap" style="overflow:auto;max-height:48vh;">
         <table class="mc-rigid-review-table">
-          <thead><tr><th>Branch</th><th>Bore</th><th>Rating</th><th>Node</th><th>DTXR</th><th>Length</th><th>Suggested Weight (kg)</th><th>Nearest Suggestions</th></tr></thead>
+          <thead><tr><th>Status</th><th>Branch</th><th>Type</th><th>Bore</th><th>Rating</th><th>Node</th><th>DTXR</th><th>Length</th><th>Weight (kg)</th><th>Nearest Suggestions</th></tr></thead>
           <tbody>${rowsHtml}</tbody>
         </table>
       </div>`;
@@ -112,8 +131,10 @@ export function bindXmlCiiWeightMatchPhase(detailEl, { xmlFile, stagedJsonText, 
     try {
       const xmlText = await xmlFile.text();
       const enriched = await enrichXmlForCii2019(xmlText, stagedJsonText, { dryRun: true });
-      localIssues = collectXmlCiiZeroRigidWeightIssues(enriched.xmlText, stagedJsonText, enriched.config || config);
-      setStatus(`${localIssues.length} component(s) to review`, 'ok');
+      localIssues = collectXmlCiiWeightMatchRows(enriched.xmlText, stagedJsonText, enriched.config || config);
+      const mapped = localIssues.filter((item) => item.mapped).length;
+      const unresolved = localIssues.length - mapped;
+      setStatus(`${mapped} mapped · ${unresolved} unresolved · ${localIssues.length} shown`, unresolved ? 'bad' : 'ok');
       renderIssues(localIssues);
     } catch (err) {
       localIssues = [];
