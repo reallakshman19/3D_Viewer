@@ -1,18 +1,15 @@
 #!/usr/bin/env python3
 """XML -> CII(2019) wrapper that preserves enriched restraint direction cosines.
 
-The active browser converter invokes xml_to_cii2019_patched.py.  That wrapper
-uses xml_to_cii2019.py for parsing and CII writing, but the base parser ignored
-Restraint/DirectionCosineX/Y/Z and the patched writer recomputed direction from
-restraint type code.  This small wrapper installs a focused runtime patch before
-calling the existing patched main(), so final CII RESTRANT direction rows prefer
-the enriched XML direction when present and fall back to the historical type-code
-logic otherwise.
+The active browser converter invokes this wrapper.  It keeps enriched
+Restraint/DirectionCosineX/Y/Z values and also lets staged-json CMPSUPGAP
+annotations drive the CII restraint gap value when present.
 """
 from __future__ import annotations
 
 from dataclasses import dataclass
 import math
+import re
 import xml.etree.ElementTree as ET
 
 import xml_to_cii2019 as base
@@ -58,6 +55,34 @@ def _parse_direction_cosines(restraint_element: ET.Element, namespace: str) -> t
     return _normalize_direction((values[0], values[1], values[2]))
 
 
+def _first_child_text(parent: ET.Element, namespace: str, names: tuple[str, ...]) -> str:
+    for name in names:
+        value = base._safe_text(base._child_text(parent, namespace, name))
+        if value:
+            return value
+    return ""
+
+
+def _parse_cmpsupgap_value(text: str) -> float | None:
+    match = re.search(r"[-+]?\d*\.?\d+(?:[Ee][-+]?\d+)?", base._safe_text(text))
+    if not match:
+        return None
+    value = float(match.group(0))
+    return value if math.isfinite(value) else None
+
+
+def _cmpsupgap_for_restraint(node_element: ET.Element, restraint_element: ET.Element, namespace: str) -> float | None:
+    # PS value is preferred over POS because support tag matching is less ambiguous
+    # than coordinate matching.  Restraint-level fields are accepted for forward
+    # compatibility; current enrichment writes node-level fields.
+    for parent in (restraint_element, node_element):
+        value = _first_child_text(parent, namespace, ("CMPSUPGAP_PS", "CMPSUPGAP_POS", "CMPSUPGAP"))
+        parsed = _parse_cmpsupgap_value(value)
+        if parsed is not None:
+            return parsed
+    return None
+
+
 def _parse_restraints_with_direction(node_element: ET.Element, namespace: str) -> tuple[DirectionRestraintSpec, ...]:
     restraint_elements = node_element.findall(base._q(namespace, "Restraint"))
     if not restraint_elements:
@@ -75,7 +100,9 @@ def _parse_restraints_with_direction(node_element: ET.Element, namespace: str) -
         stiffness = base._parse_optional_float(
             base._child_text(restraint_element, namespace, "Stiffness"), "Restraint/Stiffness"
         )
-        gap = base._parse_optional_float(base._child_text(restraint_element, namespace, "Gap"), "Restraint/Gap")
+        cmpsupgap = _cmpsupgap_for_restraint(node_element, restraint_element, namespace)
+        xml_gap = base._parse_optional_float(base._child_text(restraint_element, namespace, "Gap"), "Restraint/Gap")
+        gap = cmpsupgap if cmpsupgap is not None else xml_gap
         friction = base._parse_optional_float(
             base._child_text(restraint_element, namespace, "Friction"), "Restraint/Friction"
         )
