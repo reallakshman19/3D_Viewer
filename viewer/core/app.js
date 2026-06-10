@@ -11,7 +11,7 @@ import { renderAdapterMappingTab } from '../tabs/adapter-mapping-tab.js';
 import { mount as mountRvmJsonPcfExtractTab } from '../tabs/rvm-json-pcf-extract-tab.js';
 import { renderUniversalXmlConverterTab } from '../tabs/universal-xml-converter-tab.js';
 import { renderXmlCompareTab } from '../tabs/xml-compare-tab.js';
-import { renderPSNM_UtilityTab } from '../tabs/psnm-utility-tab.js?v=20260610-psnm-13';
+import { renderPSNM_UtilityTab } from '../tabs/psnm-utility-tab.js?v=20260610-psnm-14';
 import '../tabs/psnm-utility/psnm-ui-p2-enhancements.js?v=20260609-p2-1';
 import '../tabs/psnm-utility/psnm-phase4c-hardening.js?v=20260609-phase4c-1';
 import '../tabs/psnm-utility/psnm-phase4d-persistence.js?v=20260609-phase4d-1';
@@ -66,7 +66,7 @@ async function renderEnhancedModelConvertersTab(container) {
   try {
     await import('../tabs/xml-cii-workflow-order-fix.js?v=20260608-workflow-order-1');
   } catch (error) {
-    console.warn('[model-converters] XML CII workflow order fix skipped:', error);
+    console.warn('[model-converters] XML CII workflow order skipped:', error);
   }
 
   try {
@@ -220,52 +220,25 @@ function _buildTabBar() {
 function _bindAppSwitchHandler() {
   if (_switchHandlerBound) return;
   _switchHandlerBound = true;
-  const tabBar = document.getElementById('tab-bar');
-  tabBar?.addEventListener('click', (event) => {
-    const button = event.target?.closest?.('.tab-btn');
+  document.addEventListener('click', async (event) => {
+    const button = event.target.closest('[data-tab]');
     if (!button) return;
     const tabId = button.dataset.tab;
-    if (tabId) setActiveTab(tabId);
+    const tab = _visibleTabs.find((item) => item.id === tabId);
+    if (!tab) return;
+    await setActiveTab(tab.id, { render: tab.render });
   });
 }
 
 function _bindGlobalEvents() {
-  on(RuntimeEvents.TAB_CHANGED, (tabId) => {
-    void _renderActiveTab(tabId);
-  });
-}
-
-let _destroyActiveTab = null;
-let _renderSerial = 0;
-async function _renderActiveTab(tabId) {
-  const serial = ++_renderSerial;
-  const container = document.getElementById('app') || document.getElementById('tab-content');
-  if (!container) return;
-  try { _destroyActiveTab?.(); } catch {}
-  _destroyActiveTab = null;
-  const tab = _visibleTabs.find((entry) => entry.id === tabId) || _visibleTabs.find((entry) => entry.id === 'home') || _visibleTabs[0];
-  document.querySelectorAll('.tab-btn').forEach((button) => {
-    button.classList.toggle('active', button.dataset.tab === tab?.id);
-  });
-  container.innerHTML = '';
-  if (!tab) return;
-  if (tab.id !== 'home') {
-    const loading = document.createElement('div');
-    loading.className = 'model-converters-muted';
-    loading.style.cssText = 'padding:16px;color:#9fb2c7;font-family:system-ui';
-    loading.textContent = `Loading ${tab.label}…`;
-    container.appendChild(loading);
-  }
-  try {
-    const destroy = await tab.render(container, { state, emit, showToast, showLoading, hideLoading, requestPat, loadRvmSource, RvmStaticBundleLoader, RvmHelperBridge, RvmGitHubActionsBridge, convertRevFileToAvevaHierarchy });
-    if (serial !== _renderSerial) {
-      try { destroy?.(); } catch {}
-      return;
-    }
-    _destroyActiveTab = typeof destroy === 'function' ? destroy : null;
-  } catch (error) {
-    if (serial !== _renderSerial) return;
-    console.error(error);
-    container.innerHTML = `<div class="error-card">Failed to render ${tab?.label || 'tab'}: ${String(error?.message || error)}</div>`;
-  }
+  on(RuntimeEvents.LOADING_SHOW, (payload) => showLoading(payload?.message || 'Loading…'));
+  on(RuntimeEvents.LOADING_HIDE, () => hideLoading());
+  on(RuntimeEvents.TOAST, (payload) => showToast(payload?.message || '', payload?.type || 'info'));
+  on(RuntimeEvents.PAT_REQUEST, (payload) => requestPat(payload));
+  on(RuntimeEvents.RVM_LOAD_SOURCE, (payload) => loadRvmSource(payload));
+  on(RuntimeEvents.RVM_STATIC_BUNDLE, (payload) => RvmStaticBundleLoader.load(payload));
+  on(RuntimeEvents.RVM_HELPER_BRIDGE, (payload) => RvmHelperBridge.handle(payload));
+  on(RuntimeEvents.RVM_GITHUB_BRIDGE, (payload) => RvmGitHubActionsBridge.handle(payload));
+  on(RuntimeEvents.REV_TO_HIERARCHY, (payload) => convertRevFileToAvevaHierarchy(payload));
+  emit(RuntimeEvents.APP_READY, { time: Date.now() });
 }
