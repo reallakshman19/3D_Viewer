@@ -1,6 +1,6 @@
 import { EditablePreviewTable } from '../../shared/EditablePreviewTable.js';
 import { deriveLineKeyFromBranchName, tokenAtPosition } from '../../../../converters/xml-cii2019-core/regex-line-key.js';
-import { findAllWeightCandidates } from '../../../../converters/xml-cii2019-core/weight-match-model.js';
+import { findAllWeightCandidates, xmlCiiRigidWeightOverrideKey } from '../../../../converters/xml-cii2019-core/weight-match-model.js';
 import { buildPipingClassIndex } from '../../../../converters/xml-cii2019-core/piping-class-resolver.js';
 import { resolveBranchProcessData } from '../../../../converters/xml-cii2019-core/branch-process-resolver.js';
 import { buildStagedDtxrIndex, resolveXmlCiiNodeDtxr } from '../../../../converters/xml-cii2019-core/dtxr-resolver.js';
@@ -141,7 +141,11 @@ export function xmlCiiDryRunPreview(xmlText, config, stagedJsonText) {
       const isSkipType = /^(TEE|TEES|ELBO|ELBOW|OLET|BRANCH|DATUM|BEND|BENDS|GASK|GASKET|REDU|REDUCER)$/i.test(componentType);
       const dtxrRes = resolveXmlCiiNodeDtxr(node, stagedIndex, config);
       const candidates = (boreMm != null && branchRating && lengthMm != null) ? findAllWeightCandidates({ boreMm, rating: branchRating, lengthMm }, config) : [];
-      if (nodeNoNum > 0 && !isSkipType && candidates.length) nodeRows.push({ branchName, nodeNumber, componentType, boreMm, rating: branchRating, resolvedPipingClass: resolved.pipingClass, lengthMm, dtxr: dtxrRes.value || '', dtxrSource: dtxrRes.source || 'none', dtxrMatchedKey: dtxrRes.matchedKey || '', weightMatch: candidates[0] || null, weightCandidates: candidates });
+      const weightKey = xmlCiiRigidWeightOverrideKey(branchName, nodeNumber);
+      const overrideWeight = Number(config?.overrides?.rigidWeight?.[weightKey]);
+      const selectedWeight = Number.isFinite(overrideWeight) && overrideWeight > 0 ? overrideWeight : null;
+      const selectedMatch = selectedWeight != null ? { ...(candidates[0] || {}), weight: selectedWeight, selectedOverride: true } : (candidates[0] || null);
+      if (nodeNoNum > 0 && !isSkipType && candidates.length) nodeRows.push({ key: weightKey, branchName, nodeNumber, componentType, boreMm, rating: branchRating, resolvedPipingClass: resolved.pipingClass, lengthMm, dtxr: dtxrRes.value || '', dtxrSource: dtxrRes.source || 'none', dtxrMatchedKey: dtxrRes.matchedKey || '', weightMatch: selectedMatch, weightCandidates: candidates });
       previousPosition = positionText || previousPosition;
     }
   }
@@ -173,6 +177,13 @@ export async function xmlCiiBuildAndRenderPreview(rootEl, xmlText, config, optio
       const cls = src === 'override' ? 'mc-preview-pd-cell mc-preview-pd-override' : (src === 'linelist' || src.startsWith('linelist-density') ? 'mc-preview-pd-cell mc-preview-pd-linelist' : (src === 'default' ? 'mc-preview-pd-cell mc-preview-pd-default' : 'mc-preview-pd-cell mc-preview-pd-empty'));
       const inputStyle = src === 'default' ? ' style="color:#7f1d1d;font-weight:600;font-style:italic;" title="Config default value"' : '';
       return `<div class="${cls}"><input type="text" class="mc-preview-pd-input" value="${_esc(val)}" placeholder="${fieldKey}" data-mc-pd-field="${_esc(fieldKey)}" data-mc-pd-linekey="${_esc(lineKey)}" data-mc-pd-row="${ri}"${inputStyle}><button type="button" class="mc-preview-filldown-btn mc-pd-filldown" data-mc-fill-field="${_esc(fieldKey)}" data-mc-fill-from="${ri}" title="Group-wise fill down: blanks/auto-filled cells only, stop at next manual value">↓</button></div>`;
+    },
+    onWeightCandidateSelect: ({ key, weight }) => {
+      const numeric = Number(weight);
+      if (!key || !Number.isFinite(numeric) || numeric <= 0) return;
+      const overrides = ensureOverrides(config);
+      overrides.rigidWeight = { ...(overrides.rigidWeight || {}), [key]: numeric };
+      onSaveConfig(config);
     },
     onCellEditClick: ({ editType, derivedKey, currentVal, td }) => openOverridePopup({ editType, derivedKey, currentVal, config, onSave: (newVal) => { const overrides = ensureOverrides(config); if (!overrides[editType] || typeof overrides[editType] !== 'object') overrides[editType] = {}; if (editType === 'pipingClass') overrides.pipingClass = { ...overrides.pipingClass, [derivedKey]: newVal }; else if (editType === 'materialCode') overrides.materialCode = { ...overrides.materialCode, [derivedKey]: newVal }; else if (editType === 'material') overrides.material = { ...overrides.material, [derivedKey]: newVal }; else if (editType === 'rating') overrides.rating = { ...overrides.rating, [derivedKey]: newVal }; else if (editType === 'wallThickness') overrides.wallThickness = { ...overrides.wallThickness, [derivedKey]: newVal }; else if (editType === 'corrosion') overrides.corrosion = { ...overrides.corrosion, [derivedKey]: newVal }; markPreviewOverrideManual({ config, ensureOverrides, field: editType, key: _fieldOverrideKey(editType, derivedKey), value: newVal }); onSaveConfig(config); td.dataset.mcFillState = 'manual'; refreshPreview(); }}),
     onFillDownClick: ({ field, fromRow, currentVal }) => { const filled = applyPreviewOverrideFillDown({ host, config, ensureOverrides, field, fromRow, currentValue: currentVal }); if (filled > 0) { onSaveConfig(config); refreshPreview(); } },
