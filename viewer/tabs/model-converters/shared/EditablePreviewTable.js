@@ -147,11 +147,23 @@ export class EditablePreviewTable {
               <td title="${this._escapeAttr(nr.resolvedPipingClass ? `Piping Class ${nr.resolvedPipingClass}` : '')}">${this._escape(nr.rating)}</td>
               <td>${nr.lengthMm != null ? nr.lengthMm.toFixed(1) + 'mm' : '—'}</td>
               <td class="xml-cii-dtxr-cell" title="${this._escapeAttr(nr.dtxrSource || nr.dtxrMatchedKey || '')}">${this._escape(nr.dtxr || 'Not found')}</td>
-              <td class="mc-preview-weight-value" data-mc-weight-cell="${this._escapeAttr(nr.key || `${nr.branchName}::${nr.nodeNumber}`)}">${nr.weightMatch ? nr.weightMatch.weight + ' kg' : '—'}</td>
+              <td class="mc-preview-weight-value">
+                <input
+                  type="number"
+                  min="0"
+                  step="0.001"
+                  class="mc-preview-weight-input"
+                  data-mc-weight-cell="${this._escapeAttr(nr.key || `${nr.branchName}::${nr.nodeNumber}`)}"
+                  data-mc-weight-key="${this._escapeAttr(nr.key || `${nr.branchName}::${nr.nodeNumber}`)}"
+                  value="${this._escapeAttr(nr.weightMatch ? (nr.weightMatch.selectedWeight ?? nr.weightMatch.suggestedWeight ?? nr.weightMatch.weight ?? '') : '')}"
+                  placeholder="kg"
+                  title="${this._escapeAttr(nr.weightMatch?.weightMethod ? `Weight method: ${nr.weightMatch.weightMethod}` : 'Weight override')}"
+                >
+              </td>
               <td>${nr.weightMatch ? nr.weightMatch.lengthDelta.toFixed(1) + 'mm' : '—'}</td>
               <td class="mc-preview-candidates">
                 ${nr.weightCandidates.map((c, ci) => {
-                  const weight = c.suggestedWeight ?? c.weight;
+                  const weight = c.selectedWeight ?? c.suggestedWeight ?? c.weight;
                   const typeDesc = c.typeDesc || c.valveType || c.type || 'Unknown';
                   const type = c.type || c.valveType || '';
                   const delta = Number(c.lengthDelta);
@@ -183,15 +195,33 @@ export class EditablePreviewTable {
         const key = btn.getAttribute('data-mc-weight-key') || '';
         const weight = btn.getAttribute('data-mc-weight-value') || '';
         const typeDesc = btn.getAttribute('data-mc-weight-valvetype') || '';
-        const weightCell = key ? hostEl.querySelector(`[data-mc-weight-cell="${CSS.escape(key)}"]`) : null;
-        if (weightCell) {
-          weightCell.textContent = `${weight} kg`;
-          weightCell.title = typeDesc ? `Selected TypeDesc: ${typeDesc}` : 'Selected candidate weight';
-          weightCell.classList.add('mc-preview-weight-selected');
+        const weightInput = key ? hostEl.querySelector(`input[data-mc-weight-cell="${CSS.escape(key)}"]`) : null;
+        if (weightInput) {
+          weightInput.value = weight;
+          weightInput.title = typeDesc ? `Selected TypeDesc: ${typeDesc}` : 'Selected candidate weight';
+          weightInput.classList.add('mc-preview-weight-selected');
+          weightInput.dispatchEvent(new Event('input', { bubbles: true }));
+          weightInput.dispatchEvent(new Event('change', { bubbles: true }));
         }
         hostEl.querySelectorAll(`[data-mc-weight-key="${CSS.escape(key)}"]`).forEach((el) => el.classList.remove('selected'));
         btn.classList.add('selected');
         if (typeof this.onWeightCandidateSelect === 'function') this.onWeightCandidateSelect({ key, weight, valveType: typeDesc, typeDesc, button: btn });
+      });
+    });
+
+    hostEl.querySelectorAll('.mc-preview-weight-input[data-mc-weight-key]').forEach(input => {
+      input.addEventListener('change', () => {
+        const key = input.getAttribute('data-mc-weight-key') || '';
+        const weight = input.value || '';
+        if (typeof this.onWeightCandidateSelect === 'function') {
+          this.onWeightCandidateSelect({
+            key,
+            weight,
+            valveType: '',
+            typeDesc: '',
+            input,
+          });
+        }
       });
     });
 
