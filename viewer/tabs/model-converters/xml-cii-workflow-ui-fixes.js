@@ -103,6 +103,8 @@ function injectCss() {
     .xml-cii-support-mapping-table thead th { color: #fff !important; }
     .model-converters-workflow-phase.is-active span,
     .model-converters-workflow-master-tab.is-active span { color: #fff !important; }
+    .model-converters-workflow-popup-actions { display:flex; gap:8px; align-items:center; flex:0 0 auto; }
+    .model-converters-workflow-popup.is-fullscreen { width:calc(100vw - 24px) !important; height:calc(100vh - 24px) !important; border-radius:6px !important; }
   `;
   document.head.appendChild(style);
 }
