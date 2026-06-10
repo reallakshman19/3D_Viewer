@@ -26,15 +26,44 @@ function _conversionEnabled(config) {
   return config?.weight?.convertSmallLengthsInToMm === true;
 }
 
+async function _resolveStagedJsonText(stagedJsonText) {
+  const direct = _toText(stagedJsonText).trim();
+  if (direct) return direct;
+  if (typeof document === 'undefined') return '';
+  const fileInput = document.querySelector('#model-converters-secondary-input');
+  const file = fileInput?.files?.[0];
+  if (!file) return '';
+  try {
+    return await file.text();
+  } catch {
+    return '';
+  }
+}
+
+function _mergeDtxrFromRawRows(enrichedRows, rawRows) {
+  const byKey = new Map((rawRows || []).map((row) => [row.key, row]));
+  return (enrichedRows || []).map((row) => {
+    if (_toText(row.dtxr).trim() && row.dtxr !== 'Not found') return row;
+    const raw = byKey.get(row.key);
+    if (!_toText(raw?.dtxr).trim()) return row;
+    return {
+      ...row,
+      dtxr: raw.dtxr,
+      dtxrSource: raw.dtxrSource || row.dtxrSource,
+      dtxrMatchedKey: raw.dtxrMatchedKey || row.dtxrMatchedKey,
+    };
+  });
+}
+
 export function xmlCiiRenderWeightMatchPhase() {
   const info = 'Shows all XML nodes where ComponentType/NodeName/DTXR indicates RIGID, FLAN*, or VALVE/VLV and ElementLengthMm > 6 mm. Green rows already have XML/override weight; amber rows still need a weight decision. Length conversion is OFF by default; use ⇄ in→mm only for masters that explicitly store small face-to-face lengths in inches.';
   return `
-    <div class="model-converters-workflow-detail-title">4A Weight Match <span title="${_escAttr(info)}" style="cursor:help;color:#8bb7ff;border:1px solid #406089;border-radius:50%;padding:0 5px;font-size:11px;">i</span></div>
+    <div class="model-converters-workflow-detail-title">5 Weight Match <span title="${_escAttr(info)}" style="cursor:help;color:#8bb7ff;border:1px solid #406089;border-radius:50%;padding:0 5px;font-size:11px;">i</span></div>
     <div class="model-converters-workflow-detail-text">
       Approximate component weights matched from the valve weight master by
       <strong>rating</strong> (×3), <strong>bore</strong> (×2), and <strong>length</strong> (×1).
       DTXR is resolved from XML <strong>DTXR_POS</strong> / <strong>DTXR_PS</strong> first, then staged JSON by OWNER/Branchname, ComponentRefNo, PS tag, node and coordinates.
-      Review and adjust, then <strong>Finalize and Run</strong>.
+      Review and adjust; final conversion is launched from <strong>6 Run</strong>.
     </div>
     <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:10px 0;">
       <button type="button" class="model-converters-download-btn" id="mc-wm-refresh">↻ Recompute matches</button>
@@ -44,13 +73,10 @@ export function xmlCiiRenderWeightMatchPhase() {
       <span style="display:inline-flex;align-items:center;gap:4px;color:#fff;font-weight:600;"><span style="width:12px;height:12px;background:#4a2d12;border:1px solid #d08a22;border-radius:3px;"></span>Unresolved</span>
       <span id="mc-wm-status" class="mc-diag-run-status"></span>
     </div>
-    <div id="mc-wm-content"><div class="model-converters-workflow-detail-note">Computing weight matches…</div></div>
-    <div style="margin-top:14px;">
-      <button type="button" class="model-converters-run-btn" id="mc-wm-finalize" style="width:100%;padding:12px;">✓ Finalize and Run</button>
-    </div>`;
+    <div id="mc-wm-content"><div class="model-converters-workflow-detail-note">Computing weight matches…</div></div>`;
 }
 
-export function bindXmlCiiWeightMatchPhase(detailEl, { xmlFile, stagedJsonText, config, enrichXmlForCii2019, onSaveConfig, ensureOverrides, onFinalize }) {
+export function bindXmlCiiWeightMatchPhase(detailEl, { xmlFile, stagedJsonText, config, enrichXmlForCii2019, onSaveConfig, ensureOverrides }) {
   if (!detailEl) return;
   const contentEl = detailEl.querySelector('#mc-wm-content');
   const statusEl = detailEl.querySelector('#mc-wm-status');
@@ -74,7 +100,7 @@ export function bindXmlCiiWeightMatchPhase(detailEl, { xmlFile, stagedJsonText, 
 
   const renderIssues = (issues) => {
     if (!issues.length) {
-      contentEl.innerHTML = '<div class="model-converters-workflow-detail-note">No RIGID / FLAN* / VALVE nodes with ElementLengthMm &gt; 6 mm were found. You can Finalize and Run.</div>';
+      contentEl.innerHTML = '<div class="model-converters-workflow-detail-note">No RIGID / FLAN* / VALVE nodes with ElementLengthMm &gt; 6 mm were found. Use 6 Run to generate the CII.</div>';
       return;
     }
     const rowsHtml = issues.map((issue, index) => {
@@ -153,8 +179,11 @@ export function bindXmlCiiWeightMatchPhase(detailEl, { xmlFile, stagedJsonText, 
     setStatus('Computing…');
     try {
       const xmlText = await xmlFile.text();
-      const enriched = await enrichXmlForCii2019(xmlText, stagedJsonText, { dryRun: true });
-      localIssues = collectXmlCiiWeightMatchRows(enriched.xmlText, stagedJsonText, enriched.config || config);
+      const resolvedStagedJsonText = await _resolveStagedJsonText(stagedJsonText);
+      const enriched = await enrichXmlForCii2019(xmlText, resolvedStagedJsonText, { dryRun: true });
+      const enrichedRows = collectXmlCiiWeightMatchRows(enriched.xmlText, resolvedStagedJsonText, enriched.config || config);
+      const rawRows = collectXmlCiiWeightMatchRows(xmlText, resolvedStagedJsonText, enriched.config || config);
+      localIssues = _mergeDtxrFromRawRows(enrichedRows, rawRows);
       const mapped = localIssues.filter((item) => item.mapped).length;
       const unresolved = localIssues.length - mapped;
       setStatus(`${mapped} mapped · ${unresolved} unresolved · ${localIssues.length} shown`, unresolved ? 'bad' : 'ok');
@@ -180,19 +209,15 @@ export function bindXmlCiiWeightMatchPhase(detailEl, { xmlFile, stagedJsonText, 
       if (best) input.value = best.suggestedWeight ?? best.weight;
     });
   });
-  detailEl.querySelector('#mc-wm-finalize')?.addEventListener('click', () => {
-    const weightsByKey = {};
-    contentEl.querySelectorAll('.mc-rigid-review-input').forEach((input) => {
-      const key = input.getAttribute('data-wm-key') || '';
-      const numeric = Number(input.value);
-      if (key && Number.isFinite(numeric) && numeric > 0) weightsByKey[key] = numeric;
-    });
-    if (Object.keys(weightsByKey).length) {
-      const overrides = ensureOverrides(config);
-      overrides.rigidWeight = { ...(overrides.rigidWeight || {}), ...weightsByKey };
-      onSaveConfig(config);
-    }
-    onFinalize();
+  contentEl.addEventListener('change', (event) => {
+    const input = event.target.closest?.('.mc-rigid-review-input');
+    if (!input) return;
+    const key = input.getAttribute('data-wm-key') || '';
+    const numeric = Number(input.value);
+    if (!key || !Number.isFinite(numeric) || numeric <= 0) return;
+    const overrides = ensureOverrides(config);
+    overrides.rigidWeight = { ...(overrides.rigidWeight || {}), [key]: numeric };
+    onSaveConfig(config);
   });
   syncLengthToggle();
   void compute();
