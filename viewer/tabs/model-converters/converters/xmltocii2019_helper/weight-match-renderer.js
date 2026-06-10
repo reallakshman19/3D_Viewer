@@ -55,10 +55,19 @@ export function bindXmlCiiWeightMatchPhase(detailEl, { xmlFile, stagedJsonText, 
       const best = issue.candidates?.[0] || null;
       const candidates = (issue.candidates || []).map((candidate) => {
         const value = candidate.suggestedWeight ?? candidate.weight;
+        const valveType = candidate.valveType || 'Unknown';
+        const title = [
+          `Valve type: ${valveType}`,
+          candidate.preferred ? 'Preferred: exact bore/rating, length-scaled' : '',
+          `Bore: ${candidate.rowBore}`,
+          `Rating: ${candidate.rowRating || '-'}`,
+          `Master length: ${Number(candidate.rowLength).toFixed(1)}`,
+          `Score: ${Math.round(candidate.score * 100)}%`,
+        ].filter(Boolean).join(' | ');
         return `
           <button type="button" class="mc-rigid-review-candidate${candidate.preferred ? ' best' : ''}"
             data-wm-candidate="${index}" data-wm-weight="${_escAttr(value)}"
-            title="${_escAttr(`${candidate.preferred ? 'Preferred (exact bore+rating, length-scaled) · ' : ''}Bore ${candidate.rowBore} | Rating ${candidate.rowRating || '-'} | Master length ${Number(candidate.rowLength).toFixed(1)} | Score ${Math.round(candidate.score * 100)}%`)}">
+            title="${_escAttr(title)}">
             ${candidate.preferred ? '★ ' : ''}${_esc(value)} kg · ${Math.round(candidate.score * 100)}%
           </button>`;
       }).join('');
