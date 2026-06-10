@@ -1,6 +1,7 @@
 import { EditablePreviewTable } from '../../shared/EditablePreviewTable.js';
 import { deriveLineKeyFromBranchName, tokenAtPosition } from '../../../../converters/xml-cii2019-core/regex-line-key.js';
-import { findAllWeightCandidates, xmlCiiRigidWeightOverrideKey, isXmlCiiWeightReviewNode, xmlCiiNumberText } from '../../../../converters/xml-cii2019-core/weight-match-model.js';
+import { xmlCiiRigidWeightOverrideKey, isXmlCiiWeightReviewNode, xmlCiiNumberText } from '../../../../converters/xml-cii2019-core/weight-match-model.js';
+import { rankXmlCiiWeightCandidates, formatValveHint } from '../../../../converters/xml-cii2019-core/weight-valve-hints.js';
 import { buildPipingClassIndex } from '../../../../converters/xml-cii2019-core/piping-class-resolver.js';
 import { resolveBranchProcessData } from '../../../../converters/xml-cii2019-core/branch-process-resolver.js';
 import { buildStagedDtxrIndex, resolveXmlCiiNodeDtxr } from '../../../../converters/xml-cii2019-core/dtxr-resolver.js';
@@ -33,53 +34,17 @@ function _normalizePoint(point) {
   return values.length >= 3 ? { x: values[0], y: values[1], z: values[2] } : null;
 }
 function _pointDistanceMm(a, b) { const pa = _normalizePoint(a), pb = _normalizePoint(b); return pa && pb ? Math.sqrt(((pa.x - pb.x) ** 2) + ((pa.y - pb.y) ** 2) + ((pa.z - pb.z) ** 2)) : null; }
-function _regexGroup(text, pattern, groupIndex = 1) {
-  const source = _toText(text), patternText = _toText(pattern).trim();
-  if (!source || !patternText) return '';
-  try { const match = new RegExp(patternText, 'i').exec(source); return _toText(match?.[Math.max(0, Number(groupIndex || 0))] || '').trim(); } catch { return ''; }
-}
-function _rowText(row, keys) {
-  if (!row || typeof row !== 'object') return '';
-  for (const k of keys) { const value = row[k] ?? row._raw?.[k]; if (value !== undefined && value !== null && _toText(value).trim()) return _toText(value).trim(); }
-  return '';
-}
+function _regexGroup(text, pattern, groupIndex = 1) { const source = _toText(text), patternText = _toText(pattern).trim(); if (!source || !patternText) return ''; try { const match = new RegExp(patternText, 'i').exec(source); return _toText(match?.[Math.max(0, Number(groupIndex || 0))] || '').trim(); } catch { return ''; } }
+function _rowText(row, keys) { if (!row || typeof row !== 'object') return ''; for (const k of keys) { const value = row[k] ?? row._raw?.[k]; if (value !== undefined && value !== null && _toText(value).trim()) return _toText(value).trim(); } return ''; }
 function _rowNumber(row, keys) { const text = _rowText(row, keys); const match = text.match(/[-+]?\d*\.?\d+/); const num = match ? Number(match[0]) : Number(text); return Number.isFinite(num) ? num : null; }
 function _xmlCiiLineKeyRegexValue(value, pattern, groupIndex) { const text = _toText(value).trim(); const patternText = _toText(pattern).trim(); if (!text || !patternText) return text; return _regexGroup(text, patternText, groupIndex || 1) || text; }
 function _xmlCiiNormalizeLineKey(value) { return _toText(value).trim().toUpperCase().replace(/\s+/g, ''); }
-function _xmlCiiFindLineListRow(branchLineKey, config) {
-  const rows = Array.isArray(config.linelist?.masterRows) ? config.linelist.masterRows : [];
-  const lookupKey = _xmlCiiNormalizeLineKey(branchLineKey);
-  const columnRegex = config.linelist?.linelistColumnRegex || '';
-  const columnGroup = config.linelist?.linelistColumnGroup || 1;
-  for (const row of rows) {
-    const rawKey = _rowText(row, ['lineNoKey', 'lineNo', 'lineKey', 'LineNo', 'Line No', 'Line Number', 'PipelineReference']);
-    const cleanKey = _xmlCiiNormalizeLineKey(_xmlCiiLineKeyRegexValue(rawKey, columnRegex, columnGroup));
-    if (cleanKey && cleanKey === lookupKey) return row;
-  }
-  return null;
-}
-function _processDefaultValue(config, fieldKey) {
-  const defaults = config?.processDefaults && typeof config.processDefaults === 'object' ? config.processDefaults : {};
-  return _toText(defaults[fieldKey]).trim();
-}
-function _xmlCiiProcessValue(pdOverride, row, overrideKey, rowKeys, config) {
-  if (pdOverride && Object.prototype.hasOwnProperty.call(pdOverride, overrideKey)) return _toText(pdOverride[overrideKey]).trim();
-  const rowVal = _rowText(row, rowKeys);
-  if (rowVal) return rowVal;
-  return _processDefaultValue(config, overrideKey);
-}
-function _xmlCiiProcessSource(pdOverride, row, overrideKey, rowKeys, config) {
-  if (pdOverride && Object.prototype.hasOwnProperty.call(pdOverride, overrideKey)) return 'override';
-  if (_rowText(row, rowKeys)) return 'linelist';
-  return _processDefaultValue(config, overrideKey) ? 'default' : 'none';
-}
+function _xmlCiiFindLineListRow(branchLineKey, config) { const rows = Array.isArray(config.linelist?.masterRows) ? config.linelist.masterRows : []; const lookupKey = _xmlCiiNormalizeLineKey(branchLineKey); const columnRegex = config.linelist?.linelistColumnRegex || ''; const columnGroup = config.linelist?.linelistColumnGroup || 1; for (const row of rows) { const rawKey = _rowText(row, ['lineNoKey', 'lineNo', 'lineKey', 'LineNo', 'Line No', 'Line Number', 'PipelineReference']); const cleanKey = _xmlCiiNormalizeLineKey(_xmlCiiLineKeyRegexValue(rawKey, columnRegex, columnGroup)); if (cleanKey && cleanKey === lookupKey) return row; } return null; }
+function _processDefaultValue(config, fieldKey) { const defaults = config?.processDefaults && typeof config.processDefaults === 'object' ? config.processDefaults : {}; return _toText(defaults[fieldKey]).trim(); }
+function _xmlCiiProcessValue(pdOverride, row, overrideKey, rowKeys, config) { if (pdOverride && Object.prototype.hasOwnProperty.call(pdOverride, overrideKey)) return _toText(pdOverride[overrideKey]).trim(); const rowVal = _rowText(row, rowKeys); if (rowVal) return rowVal; return _processDefaultValue(config, overrideKey); }
+function _xmlCiiProcessSource(pdOverride, row, overrideKey, rowKeys, config) { if (pdOverride && Object.prototype.hasOwnProperty.call(pdOverride, overrideKey)) return 'override'; if (_rowText(row, rowKeys)) return 'linelist'; return _processDefaultValue(config, overrideKey) ? 'default' : 'none'; }
 function _derivePipingClassFromBranchName(branchName, config) { return _regexGroup(branchName, config.rating?.pipingClassRegex, config.rating?.pipingClassGroup || 1) || tokenAtPosition(branchName, config.rating?.tokenDelimiter || '-', config.rating?.pipingClassTokenIndex || 5); }
-function _deriveRatingFromPipingClass(pipingClass, config) {
-  const text = _toText(pipingClass).trim().toUpperCase();
-  const sequence = Array.isArray(config.rating?.ratingSequence) ? config.rating.ratingSequence : [];
-  for (const pair of sequence) { if (Array.isArray(pair) && pair.length >= 2 && text.startsWith(_toText(pair[0]).toUpperCase())) return _toText(pair[1]); }
-  return '';
-}
+function _deriveRatingFromPipingClass(pipingClass, config) { const text = _toText(pipingClass).trim().toUpperCase(); const sequence = Array.isArray(config.rating?.ratingSequence) ? config.rating.ratingSequence : []; for (const pair of sequence) { if (Array.isArray(pair) && pair.length >= 2 && text.startsWith(_toText(pair[0]).toUpperCase())) return _toText(pair[1]); } return ''; }
 function _nominalDnFromNps(inches, config) { if (!Number.isFinite(inches)) return null; const map = config.weight?.npsToDn && typeof config.weight.npsToDn === 'object' ? config.weight.npsToDn : {}; const key = String(Number(inches)); const mapped = Number(map[key] ?? map[inches] ?? map[inches.toFixed(3)]); return Number.isFinite(mapped) ? mapped : inches * _toFiniteNumber(config.weight?.inchToMm, 25.4); }
 function _deriveBoreFromBranchName(branchName, config) { const raw = _regexGroup(branchName, config.weight?.boreRegex, config.weight?.boreGroup || 1) || tokenAtPosition(branchName, config.weight?.tokenDelimiter || '-', config.weight?.boreTokenIndex || 3); return _nominalDnFromNps(Number(_toText(raw).replace(/[^0-9.+-]/g, '')), config); }
 function _fieldOverrideKey(editType, derivedKey) { return _toText(derivedKey).trim(); }
@@ -142,12 +107,41 @@ export function xmlCiiDryRunPreview(xmlText, config, stagedJsonText) {
       const nodeNoNum = Number(nodeNumber);
       const weightEligible = isXmlCiiWeightReviewNode(node);
       const dtxrRes = weightEligible ? resolveXmlCiiNodeDtxr(node, stagedIndex, config) : { value: '', source: 'not-weight-eligible', matchedKey: '' };
-      const candidates = (weightEligible && boreMm != null && branchRating && lengthMm != null) ? findAllWeightCandidates({ boreMm, rating: branchRating, lengthMm }, config) : [];
+      const ranking = (weightEligible && boreMm != null && branchRating && lengthMm != null)
+        ? rankXmlCiiWeightCandidates({
+          boreMm,
+          rating: branchRating,
+          lengthMm,
+          nodeName: _xmlText(node, 'NodeName'),
+          componentType,
+          componentRefNo: _xmlText(node, 'ComponentRefNo'),
+          dtxr: dtxrRes.value || '',
+        }, config, { includeRejected: true })
+        : { nodeHint: null, candidates: [], rejectedCandidates: [], best: null };
+      const candidates = ranking.candidates.slice(0, 5);
       const weightKey = xmlCiiRigidWeightOverrideKey(branchName, nodeNumber);
       const overrideWeight = Number(config?.overrides?.rigidWeight?.[weightKey]);
       const selectedWeight = Number.isFinite(overrideWeight) && overrideWeight > 0 ? overrideWeight : null;
-      const selectedMatch = selectedWeight != null ? { ...(candidates[0] || {}), weight: selectedWeight, selectedOverride: true } : (candidates[0] || null);
-      if (nodeNoNum > 0 && weightEligible && candidates.length) nodeRows.push({ key: weightKey, branchName, nodeNumber, componentType, boreMm, rating: branchRating, resolvedPipingClass: resolved.pipingClass, lengthMm, dtxr: dtxrRes.value || '', dtxrSource: dtxrRes.source || 'none', dtxrMatchedKey: dtxrRes.matchedKey || '', weightMatch: selectedMatch, weightCandidates: candidates });
+      const selectedMatch = selectedWeight != null ? { ...(candidates[0] || {}), selectedWeight, suggestedWeight: selectedWeight, weight: selectedWeight, selectedOverride: true } : (ranking.best || null);
+      if (nodeNoNum > 0 && weightEligible && (candidates.length || ranking.rejectedCandidates.length)) {
+        nodeRows.push({
+          key: weightKey,
+          branchName,
+          nodeNumber,
+          componentType,
+          boreMm,
+          rating: branchRating,
+          resolvedPipingClass: resolved.pipingClass,
+          lengthMm,
+          dtxr: dtxrRes.value || '',
+          dtxrSource: dtxrRes.source || 'none',
+          dtxrMatchedKey: dtxrRes.matchedKey || '',
+          valveHint: formatValveHint(ranking.nodeHint),
+          weightMatch: selectedMatch,
+          weightCandidates: candidates,
+          rejectedWeightCandidates: ranking.rejectedCandidates.slice(0, 3),
+        });
+      }
       previousPosition = positionText || previousPosition;
     }
   }
