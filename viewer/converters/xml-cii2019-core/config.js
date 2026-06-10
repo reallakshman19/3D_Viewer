@@ -129,6 +129,15 @@ const DEFAULT_PIPING_CLASS_MATCH = Object.freeze({
   }
 });
 
+const DEFAULT_TEE_SIF_TYPE_MAPPING = Object.freeze([
+  { code: 1, label: 'Reinforced Fabricated Tee', patterns: ['\\bREINFORCED\\b.*\\bFAB(?:RICATED)?\\b.*\\bTEE\\b', '\\bFAB(?:RICATED)?\\b.*\\bREINFORCED\\b.*\\bTEE\\b', '\\bREINF(?:ORCED)?\\b.*\\bTEE\\b'] },
+  { code: 2, label: 'Unreinforced Fabricated Tee', patterns: ['\\bUN[-\\s]?REINFORCED\\b.*\\bFAB(?:RICATED)?\\b.*\\bTEE\\b', '\\bFAB(?:RICATED)?\\b.*\\bUN[-\\s]?REINFORCED\\b.*\\bTEE\\b', '\\bUNREINF(?:ORCED)?\\b.*\\bTEE\\b'] },
+  { code: 3, label: 'Welding Tee', patterns: ['\\bWELD(?:ING)?\\s+TEE\\b', '\\bTEE\\b.*\\bBW\\b', '\\bTEE\\b.*\\bBUTT\\s*WELD\\b', '\\bTEE\\s+(?:EQUAL|REDUC(?:ING|ER)?)\\b', '\\bTEEB?\\b'] },
+  { code: 4, label: 'Sweepolet', patterns: ['\\bSWEEPOLET\\b', '\\bSWEEP\\s*OLET\\b'] },
+  { code: 5, label: 'Weldolet', patterns: ['\\bWELDOLET\\b', '\\bWELD\\s*OLET\\b', '\\bWOLET\\b'] },
+  { code: 6, label: 'Extruded Welding Tee', patterns: ['\\bEXTRUDED\\b.*\\bWELD(?:ING)?\\b.*\\bTEE\\b', '\\bEXTRUDED\\b.*\\bTEE\\b', '\\bEXT(?:RUDED)?\\s+TEE\\b'] },
+]);
+
 export function parseXmlCiiEnrichmentConfig(rawJson) {
   const defaults = {
     useFrictionSentinelForNonYSupports: true,
@@ -145,6 +154,8 @@ export function parseXmlCiiEnrichmentConfig(rawJson) {
     defaultFriction: '0.3',
     defaultWallThickness: 0,
     defaultCorrosionAllowance: 0,
+    teeSifTypeMapping: DEFAULT_TEE_SIF_TYPE_MAPPING.map((entry) => ({ ...entry, patterns: [...entry.patterns] })),
+    defaultTeeSifType: 0,
     processDefaults: { p1: '700', t1: '120', t2: '309', t3: '-5', density: '100' },
     linelist: { sampleBranchName: '/ASIM-1885-10"-S8810101-91261M7-HC/B1', tokenDelimiter: '-', lineKeyTokenPositions: '4', lineKeyJoiner: '', branchNameRegex: '', lineNoGroup: 1, linelistColumnRegex: '^\\s*(.*?)\\s*$', linelistColumnGroup: 1 },
     rating: { sourceFields: ['RATING', 'PRAT', 'PSPE', 'SPRE', 'LSTU'], tokenDelimiter: '-', pipingClassTokenIndex: 5, pipingClassRegex: '', pipingClassGroup: 1, ratingSequence: [['200', '20000'], ['150', '15000'], ['100', '10000'], ['25', '2500'], ['15', '1500'], ['5', '5000'], ['1', '150'], ['3', '300'], ['6', '600'], ['9', '900']] },
@@ -181,6 +192,8 @@ export function parseXmlCiiEnrichmentConfig(rawJson) {
       dtxrPositionOffset: { ...defaults.dtxrPositionOffset, ...(parsed.dtxrPositionOffset || {}) },
       xmlAxisToCiiAxis: { ...defaults.xmlAxisToCiiAxis, ...(parsed.xmlAxisToCiiAxis || {}) },
       supportKindToXmlType,
+      teeSifTypeMapping: Array.isArray(parsed.teeSifTypeMapping) ? parsed.teeSifTypeMapping : defaults.teeSifTypeMapping,
+      defaultTeeSifType: toFiniteNumber(parsed.defaultTeeSifType, defaults.defaultTeeSifType),
       linelist: { ...defaults.linelist, ...(parsed.linelist || {}) },
       rating: { ...defaults.rating, ...(parsed.rating || {}) },
       weight: { ...defaults.weight, ...(parsed.weight || {}), convertSmallLengthsInToMm: parsed.weight?.convertSmallLengthsInToMm === true },
