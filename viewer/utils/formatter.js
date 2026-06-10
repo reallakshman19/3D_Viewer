@@ -1,5 +1,6 @@
 /**
  * formatter.js — Number formatting and unit conversion helpers.
+ * Asset version: 20260610-format-1.
  */
 
 /**
