@@ -84,6 +84,15 @@ export function stagedComponentForXmlNode(node, stagedIndex, config) {
   return { match: null, method: '' };
 }
 
+export function shouldConvertSmallWeightLengthsToMm(config) { return config?.weight?.convertSmallLengthsInToMm === true; }
+function resolveWeightMasterLength(rowLengthRaw, xmlLengthMm, config) {
+  if (rowLengthRaw === null) return null;
+  if (!shouldConvertSmallWeightLengthsToMm(config)) return rowLengthRaw;
+  return rowLengthRaw < 100 && xmlLengthMm > 100 ? rowLengthRaw * toFiniteNumber(config.weight?.inchToMm, 25.4) : rowLengthRaw;
+}
+function weightType(row) { return rowText(row, ['type', 'Type', 'TYPE', 'valveType', 'Valve Type']); }
+function weightTypeDesc(row) { return rowText(row, ['typeDesc', 'TypeDesc', 'Type Desc', 'Type Description', 'Description', 'Valve Type']); }
+
 export function findWeightMasterMatch({ boreMm, rating, lengthMm }, config) { return findAllWeightCandidates({ boreMm, rating, lengthMm }, config)[0] || null; }
 export function findAllWeightCandidates({ boreMm, rating, lengthMm }, config) {
   const rows = Array.isArray(config.weight?.masterRows) ? config.weight.masterRows : [];
@@ -93,24 +102,33 @@ export function findAllWeightCandidates({ boreMm, rating, lengthMm }, config) {
   const candidates = [];
   for (const row of rows) {
     const rowBore = rowNumber(row, ['boreMm', 'convertedBore', 'Converted Bore', 'bore', 'Bore', 'DN', 'NB']);
-    const rowLengthRaw = rowNumber(row, ['lengthMm', 'length', 'Length', 'Length (RF-F/F)', 'RF-F/F', 'LEN', 'faceToFace']);
-    const unit = toText(config.weight?.masterLengthUnit || 'auto').toLowerCase();
-    const rowLength = rowLengthRaw === null ? null : (unit === 'in' || (unit === 'auto' && rowLengthRaw < 100 && lengthMm > 100) ? rowLengthRaw * toFiniteNumber(config.weight?.inchToMm, 25.4) : rowLengthRaw);
+    const rowLengthRaw = rowNumber(row, ['lengthMm', 'length', 'Length (RF-F/F)', 'RF-F/F', 'LEN', 'faceToFace']);
+    const rowLength = resolveWeightMasterLength(rowLengthRaw, lengthMm, config);
     const rowWeight = rowNumber(row, ['valveWeight', 'directWeight', 'weight', 'Weight', 'RF/RTJ KG', 'Valve Weight']);
     const rowRating = rowText(row, ['ratingClass', 'rating', 'Rating', 'RATING', 'Class', 'CLASS', 'Pressure Class']).replace(/#/g, '').toUpperCase();
-    const valveType = rowText(row, ['valveType', 'Type Description', 'Valve Type', 'Type', 'Description']);
+    const valveType = weightType(row);
+    const typeDesc = weightTypeDesc(row);
     if (rowBore === null || rowLength === null || rowWeight === null || !rowRating) continue;
     if (Math.abs(rowBore - boreMm) >= 1) continue;
     if (rowRating !== normalizedRating) continue;
     const lengthDelta = Math.abs(rowLength - lengthMm);
     if (lengthDelta > tolerance) continue;
-    candidates.push({ weight: rowWeight, lengthDelta, valveType, rowData: row });
+    candidates.push({ weight: rowWeight, lengthDelta, valveType, type: valveType, typeDesc, rowLength, rowBore, rowRating, rowData: row });
   }
   return candidates.sort((a, b) => a.lengthDelta - b.lengthDelta);
 }
 
 export function normalizedXmlCiiRating(value) { return toText(value).replace(/#/g, '').trim().toUpperCase(); }
-export function xmlCiiWeightCandidateFromRow(row, config, lengthMm) { const rowBore = rowNumber(row, ['boreMm', 'convertedBore', 'Converted Bore', 'bore', 'Bore', 'DN', 'NB']); const rowLengthRaw = rowNumber(row, ['lengthMm', 'length', 'Length', 'Length (RF-F/F)', 'RF-F/F', 'LEN', 'faceToFace']); const unit = toText(config.weight?.masterLengthUnit || 'auto').toLowerCase(); const rowLength = rowLengthRaw === null ? null : (unit === 'in' || (unit === 'auto' && rowLengthRaw < 100 && lengthMm > 100) ? rowLengthRaw * toFiniteNumber(config.weight?.inchToMm, 25.4) : rowLengthRaw); const rowWeight = rowNumber(row, ['valveWeight', 'directWeight', 'weight', 'Weight', 'RF/RTJ KG', 'Valve Weight']); const rowRating = normalizedXmlCiiRating(rowText(row, ['ratingClass', 'rating', 'Rating', 'RATING', 'Class', 'CLASS', 'Pressure Class'])); const valveType = rowText(row, ['valveType', 'Type Description', 'Valve Type', 'Type', 'Description']); return rowBore === null || rowLength === null || rowWeight === null ? null : { weight: rowWeight, rowBore, rowLength, rowRating, valveType, rowData: row }; }
+export function xmlCiiWeightCandidateFromRow(row, config, lengthMm) {
+  const rowBore = rowNumber(row, ['boreMm', 'convertedBore', 'Converted Bore', 'bore', 'Bore', 'DN', 'NB']);
+  const rowLengthRaw = rowNumber(row, ['lengthMm', 'length', 'Length (RF-F/F)', 'RF-F/F', 'LEN', 'faceToFace']);
+  const rowLength = resolveWeightMasterLength(rowLengthRaw, lengthMm, config);
+  const rowWeight = rowNumber(row, ['valveWeight', 'directWeight', 'weight', 'Weight', 'RF/RTJ KG', 'Valve Weight']);
+  const rowRating = normalizedXmlCiiRating(rowText(row, ['ratingClass', 'rating', 'Rating', 'RATING', 'Class', 'CLASS', 'Pressure Class']));
+  const valveType = weightType(row);
+  const typeDesc = weightTypeDesc(row);
+  return rowBore === null || rowLength === null || rowWeight === null ? null : { weight: rowWeight, rowBore, rowLength, rowRating, valveType, type: valveType, typeDesc, rowData: row };
+}
 const XML_CII_WEIGHT_MATCH_WEIGHTS = Object.freeze({ bore: 2, rating: 3, length: 1 });
 export function scoreXmlCiiWeightCandidates({ boreMm, rating, lengthMm }, config) { const rows = Array.isArray(config.weight?.masterRows) ? config.weight.masterRows : []; if (!rows.length || boreMm === null || lengthMm === null) return []; const normalizedRating = normalizedXmlCiiRating(rating); const lengthScale = Math.max(toFiniteNumber(config.weight?.lengthToleranceMm, 4) * 5, Math.abs(lengthMm) * 0.2, 25); const boreScale = Math.max(Math.abs(boreMm) * 0.25, 25); const { bore: wBore, rating: wRating, length: wLength } = XML_CII_WEIGHT_MATCH_WEIGHTS; const wTotal = wBore + wRating + wLength; const candidates = []; for (const row of rows) { const base = xmlCiiWeightCandidateFromRow(row, config, lengthMm); if (!base) continue; const lengthDelta = Math.abs(base.rowLength - lengthMm); const boreDelta = Math.abs(base.rowBore - boreMm); const lengthScore = 1 - Math.min(lengthDelta / lengthScale, 1); const boreScore = 1 - Math.min(boreDelta / boreScale, 1); let ratingScore = 0; if (base.rowRating && normalizedRating && base.rowRating === normalizedRating) ratingScore = 1; else if (base.rowRating && normalizedRating && (base.rowRating.includes(normalizedRating) || normalizedRating.includes(base.rowRating))) ratingScore = 0.65; const score = (boreScore * wBore + ratingScore * wRating + lengthScore * wLength) / wTotal; if (score <= 0) continue; const preferred = boreDelta < 1 && ratingScore === 1; const suggestedWeight = preferred && base.rowLength > 0 ? base.weight * (lengthMm / base.rowLength) : base.weight; candidates.push({ ...base, lengthDelta, boreDelta, score, preferred, suggestedWeight: Math.round(suggestedWeight * 1000) / 1000 }); } return candidates.sort((a, b) => (Number(b.preferred) - Number(a.preferred)) || (b.score - a.score) || (a.lengthDelta - b.lengthDelta) || (a.boreDelta - b.boreDelta)).slice(0, 5); }
 

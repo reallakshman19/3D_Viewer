@@ -15,6 +15,14 @@ export function toFiniteNumber(value, fallback) {
   return fallback;
 }
 
+function firstRowText(row, keys) {
+  for (const key of keys || []) {
+    const value = row?.[key] ?? row?._raw?.[key];
+    if (toText(value).trim()) return toText(value).trim();
+  }
+  return '';
+}
+
 function withNormalizedLineListDensity(config) {
   const rows = config?.linelist?.masterRows;
   if (!Array.isArray(rows) || !rows.length) return config;
@@ -34,14 +42,22 @@ function withNormalizedLineListDensity(config) {
     ? { ...config.linelist.fieldMap }
     : {};
   if (anyDerivedDensity && !fieldMap.density) fieldMap.density = '__xmlcii_derived_density';
-  return {
-    ...config,
-    linelist: {
-      ...config.linelist,
-      fieldMap,
-      masterRows,
-    },
-  };
+  return { ...config, linelist: { ...config.linelist, fieldMap, masterRows } };
+}
+
+function withNormalizedWeightTypeDesc(config) {
+  const rows = config?.weight?.masterRows;
+  if (!Array.isArray(rows) || !rows.length) return config;
+  let hasTypeDesc = false;
+  const masterRows = rows.map((row) => {
+    const typeDesc = firstRowText(row, ['typeDesc', 'TypeDesc', 'Type Desc', 'Type Description', 'Description', 'Valve Type']);
+    if (!typeDesc) return row;
+    hasTypeDesc = true;
+    return { ...row, typeDesc };
+  });
+  const fieldMap = config.weight?.fieldMap && typeof config.weight.fieldMap === 'object' ? { ...config.weight.fieldMap } : {};
+  if (hasTypeDesc && !fieldMap.typeDesc) fieldMap.typeDesc = 'TypeDesc';
+  return { ...config, weight: { ...config.weight, convertSmallLengthsInToMm: config.weight?.convertSmallLengthsInToMm === true, fieldMap, masterRows } };
 }
 
 function withNormalizedSupportMapping(config) {
@@ -54,7 +70,7 @@ function withNormalizedSupportMapping(config) {
 }
 
 function normalizeFullConfig(config) {
-  return withNormalizedSupportMapping(withNormalizedLineListDensity(config));
+  return withNormalizedSupportMapping(withNormalizedWeightTypeDesc(withNormalizedLineListDensity(config)));
 }
 
 export function migrateXmlCiiSupportConfigJson(rawJson) {
@@ -130,24 +146,8 @@ export function parseXmlCiiEnrichmentConfig(rawJson) {
     defaultWallThickness: 0,
     defaultCorrosionAllowance: 0,
     processDefaults: { p1: '700', t1: '120', t2: '309', t3: '-5', density: '100' },
-    linelist: {
-      sampleBranchName: '/ASIM-1885-10"-S8810101-91261M7-HC/B1',
-      tokenDelimiter: '-',
-      lineKeyTokenPositions: '4',
-      lineKeyJoiner: '',
-      branchNameRegex: '',
-      lineNoGroup: 1,
-      linelistColumnRegex: '^\\s*(.*?)\\s*$',
-      linelistColumnGroup: 1,
-    },
-    rating: {
-      sourceFields: ['RATING', 'PRAT', 'PSPE', 'SPRE', 'LSTU'],
-      tokenDelimiter: '-',
-      pipingClassTokenIndex: 5,
-      pipingClassRegex: '',
-      pipingClassGroup: 1,
-      ratingSequence: [['200', '20000'], ['150', '15000'], ['100', '10000'], ['25', '2500'], ['15', '1500'], ['5', '5000'], ['1', '150'], ['3', '300'], ['6', '600'], ['9', '900']],
-    },
+    linelist: { sampleBranchName: '/ASIM-1885-10"-S8810101-91261M7-HC/B1', tokenDelimiter: '-', lineKeyTokenPositions: '4', lineKeyJoiner: '', branchNameRegex: '', lineNoGroup: 1, linelistColumnRegex: '^\\s*(.*?)\\s*$', linelistColumnGroup: 1 },
+    rating: { sourceFields: ['RATING', 'PRAT', 'PSPE', 'SPRE', 'LSTU'], tokenDelimiter: '-', pipingClassTokenIndex: 5, pipingClassRegex: '', pipingClassGroup: 1, ratingSequence: [['200', '20000'], ['150', '15000'], ['100', '10000'], ['25', '2500'], ['15', '1500'], ['5', '5000'], ['1', '150'], ['3', '300'], ['6', '600'], ['9', '900']] },
     weight: {
       sourceFields: ['WEIGHT', 'PSIWEIGHT', 'CMPWEIGHTDRY'],
       tokenDelimiter: '-',
@@ -157,34 +157,15 @@ export function parseXmlCiiEnrichmentConfig(rawJson) {
       inchToMm: 25.4,
       npsToDn: { '0.25': 8, '0.375': 10, '0.5': 15, '0.75': 20, '1': 25, '1.25': 32, '1.5': 40, '2': 50, '2.5': 65, '3': 80, '4': 100, '6': 150, '8': 200, '10': 250, '12': 300, '14': 350, '16': 400, '18': 450, '20': 500, '24': 600 },
       lengthToleranceMm: 4,
-      masterLengthUnit: 'auto',
+      masterLengthUnit: 'raw',
+      convertSmallLengthsInToMm: false,
       masterUrl: '../docs/Masters/wtValveweights.json',
       masterRows: [],
     },
-    pipingClass: {
-      masterUrl: '../docs/Masters/Piping_class_master.json',
-      masterRows: [],
-      startsWithConfidence: 0.8,
-      fuzzyThreshold: 0.6,
-      reviewBelow: 1.0,
-    },
+    pipingClass: { masterUrl: '../docs/Masters/Piping_class_master.json', masterRows: [], startsWithConfidence: 0.8, fuzzyThreshold: 0.6, reviewBelow: 1.0 },
     pipingClassMatch: DEFAULT_PIPING_CLASS_MATCH,
-    material: {
-      masterUrl: '../docs/Masters/PCF_MAT_MAP.TXT',
-      mapRows: [],
-      containsConfidence: 0.9,
-      tokenJaccardThreshold: 0.35,
-    },
-    overrides: {
-      pipingClass: {},
-      material: {},
-      materialCode: {},
-      rating: {},
-      wallThickness: {},
-      corrosion: {},
-      rigidWeight: {},
-      processData: {},
-    },
+    material: { masterUrl: '../docs/Masters/PCF_MAT_MAP.TXT', mapRows: [], containsConfidence: 0.9, tokenJaccardThreshold: 0.35 },
+    overrides: { pipingClass: {}, material: {}, materialCode: {}, rating: {}, wallThickness: {}, corrosion: {}, rigidWeight: {}, processData: {} },
   };
   const text = toText(rawJson).trim();
   if (!text) return normalizeFullConfig(defaults);
@@ -202,7 +183,7 @@ export function parseXmlCiiEnrichmentConfig(rawJson) {
       supportKindToXmlType,
       linelist: { ...defaults.linelist, ...(parsed.linelist || {}) },
       rating: { ...defaults.rating, ...(parsed.rating || {}) },
-      weight: { ...defaults.weight, ...(parsed.weight || {}) },
+      weight: { ...defaults.weight, ...(parsed.weight || {}), convertSmallLengthsInToMm: parsed.weight?.convertSmallLengthsInToMm === true },
       pipingClass: { ...defaults.pipingClass, ...(parsed.pipingClass || {}) },
       pipingClassMatch: { ...DEFAULT_PIPING_CLASS_MATCH, ...parsedPipingClassMatch, rowScoring: { ...DEFAULT_PIPING_CLASS_MATCH.rowScoring, ...(parsedPipingClassMatch.rowScoring || {}) } },
       material: { ...defaults.material, ...(parsed.material || {}) },
