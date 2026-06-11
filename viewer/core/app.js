@@ -142,6 +142,23 @@ function syncActiveTabButton(tabId) {
   });
 }
 
+function cleanupActiveTab() {
+  if (typeof activeTabDestroy === 'function') {
+    try {
+      activeTabDestroy();
+    } catch (error) {
+      console.warn('[app] previous tab cleanup failed', error);
+    }
+  }
+  activeTabDestroy = null;
+}
+
+function renderTabError(tab, error) {
+  const label = tab?.label || 'tab';
+  const message = String(error?.message || error || 'Unknown error');
+  return `<section class="error-panel"><h2>Unable to load ${label}</h2><p>${message}</p></section>`;
+}
+
 async function renderActiveTab(tabId) {
   const normalized = normalizeTabId(tabId) || getDefaultTabId();
   const tabs = visibleTabs();
@@ -152,10 +169,7 @@ async function renderActiveTab(tabId) {
   syncActiveTabButton(tab.id);
   appShell.main.innerHTML = '<section class="loading-panel">Loading...</section>';
 
-  if (typeof activeTabDestroy === 'function') {
-    try { activeTabDestroy(); } catch (error) { console.warn('[app] previous tab cleanup failed', error); }
-  }
-  activeTabDestroy = null;
+  cleanupActiveTab();
 
   try {
     const renderer = await loadRenderer(tab);
@@ -165,7 +179,7 @@ async function renderActiveTab(tabId) {
     activeTabDestroy = typeof maybeDestroy === 'function' ? maybeDestroy : null;
   } catch (error) {
     console.error(`[app] failed to render tab ${tab.id}`, error);
-    appShell.main.innerHTML = `<section class="error-panel"><h2>Unable to load ${tab.label}</h2><p>${String(error?.message || error)}</p></section>`;
+    appShell.main.innerHTML = renderTabError(tab, error);
   }
 }
 
@@ -193,10 +207,13 @@ export async function init() {
   renderShell();
   unsubscribeTabChange = on(RuntimeEvents.TAB_CHANGED, (tabId) => renderActiveTab(tabId));
   await renderActiveTab(state.activeTab);
-  initDevDebugWindow({ state, emit, setActiveTab });
+  devDebugDestroy = initDevDebugWindow({ state, emit, setActiveTab });
   appDestroy = () => {
-    if (typeof activeTabDestroy === 'function') activeTabDestroy();
+    cleanupActiveTab();
     if (typeof unsubscribeTabChange === 'function') unsubscribeTabChange();
+    unsubscribeTabChange = null;
+    if (typeof devDebugDestroy === 'function') devDebugDestroy();
+    devDebugDestroy = null;
   };
   return appDestroy;
 }
