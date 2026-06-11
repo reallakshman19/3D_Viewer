@@ -1,9 +1,35 @@
-import { installPsMappingUtilityTile as installBasePsMappingUtilityTile } from './ps-mapping-utility-tab.js?v=20260611-psmap-support-audit-dominance-1';
+import { installPsMappingUtilityTile as installBasePsMappingUtilityTile } from './ps-mapping-utility-tab.js?v=20260611-psmap-support-gap-rules-1';
+
+const DEFAULT_SUPPORT_KEYWORD_RULES_TEXT = `Pattern	Canonical
+REST	REST
+PIPE REST	REST
+XRT	REST
+GUIDE	GUIDE
+LINE STOP	LINE_STOP
+LINESTOP	LINE_STOP
+PIPE STOP	LINE_STOP
+STOP	LINE_STOP
+ANCHOR	LINE_STOP
+PIPE ANCHOR	LINE_STOP
+*WEAR PLATE*	REST
+*Directional Anchor*	LINE_STOP
+*PIPE SHOE*	REST`;
 
 const supportOptionState = {
   useBuiltInSupportKeywordLogic: true,
   treatAnchorAsLineStop: true,
+  enableSupportGapComparison: true,
+  supportGapToleranceMm: 0,
+  supportKeywordRulesText: DEFAULT_SUPPORT_KEYWORD_RULES_TEXT,
 };
+
+function h(value) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
 
 function schedulePatch(patch) {
   let queued = false;
@@ -24,19 +50,40 @@ function patchSupportConfigControls() {
 
   const firstGrid = panel.querySelector('.psmap-grid-2');
   const host = document.createElement('div');
-  host.className = 'psmap-grid-2';
+  host.className = 'psmap-card';
   host.setAttribute('data-psmap-support-config', '1');
   host.innerHTML = `
-    <label class="psmap-check">
-      <input type="checkbox" data-psmap-setup="useBuiltInSupportKeywordLogic" ${supportOptionState.useBuiltInSupportKeywordLogic ? 'checked' : ''}>
-      Use built-in support keyword logic
-      <span class="psmap-help" title="Recognizes REST, GUIDE, LINE STOP, LINESTOP, STOP, PIPE STOP, ANCHOR and PIPE ANCHOR in both Table-1C ISONOTE and Table-2 DTXR.">i</span>
-    </label>
-    <label class="psmap-check">
-      <input type="checkbox" data-psmap-setup="treatAnchorAsLineStop" ${supportOptionState.treatAnchorAsLineStop ? 'checked' : ''}>
-      Treat Anchor as Line Stop
-      <span class="psmap-help" title="When ON, DTXR values such as Anchor or Pipe Anchor are normalized to LINE_STOP / STOP for support matching and missing-support audit.">i</span>
-    </label>`;
+    <div class="psmap-card-head"><b>Editable Support Keyword Logic</b></div>
+    <div class="psmap-card-body">
+      <div class="psmap-grid-4">
+        <label class="psmap-check">
+          <input type="checkbox" data-psmap-setup="useBuiltInSupportKeywordLogic" ${supportOptionState.useBuiltInSupportKeywordLogic ? 'checked' : ''}>
+          Use built-in support keyword logic
+          <span class="psmap-help" title="Uses the editable Pattern → Canonical table below for both Table-1C ISONOTE and Table-2 DTXR. Wildcards are supported.">i</span>
+        </label>
+        <label class="psmap-check">
+          <input type="checkbox" data-psmap-setup="treatAnchorAsLineStop" ${supportOptionState.treatAnchorAsLineStop ? 'checked' : ''}>
+          Treat Anchor as Line Stop
+          <span class="psmap-help" title="When ON, Anchor / Pipe Anchor / Directional Anchor can map to LINE_STOP / STOP.">i</span>
+        </label>
+        <label class="psmap-check">
+          <input type="checkbox" data-psmap-setup="enableSupportGapComparison" ${supportOptionState.enableSupportGapComparison ? 'checked' : ''}>
+          Compare Support Gap
+          <span class="psmap-help" title="Compares Table-2 Support Gap against Table-1C [GUIDE GAP=..mm] for GUIDE supports. Conflicts become GAP_CONFLICT review items.">i</span>
+        </label>
+        <div class="psmap-field">
+          <label>Gap tolerance mm</label>
+          <input type="number" min="0" max="25" step="0.1" data-psmap-setup="supportGapToleranceMm" value="${h(supportOptionState.supportGapToleranceMm)}">
+        </div>
+      </div>
+      <div class="psmap-field">
+        <label>Support Keyword Rules: Pattern → Canonical</label>
+        <textarea data-psmap-setup="supportKeywordRulesText" data-psmap-support-rules style="min-height:190px">${h(supportOptionState.supportKeywordRulesText)}</textarea>
+      </div>
+      <div class="psmap-banner">
+        Canonical values: <b>REST</b>, <b>GUIDE</b>, <b>LINE_STOP</b>. Examples included: <b>*WEAR PLATE* → REST</b>, <b>*PIPE SHOE* → REST</b>, <b>*Directional Anchor* → LINE_STOP</b>.
+      </div>
+    </div>`;
 
   if (firstGrid?.nextSibling) firstGrid.parentNode.insertBefore(host, firstGrid.nextSibling);
   else panel.querySelector('.psmap-card-body')?.appendChild(host);
@@ -62,6 +109,29 @@ function setCell(row, labels, label, value) {
   row.children[index].textContent = value == null ? '' : String(value);
 }
 
+function addColumn(info, label, afterLabel, valueFn, groupLabel = '') {
+  if (!info || info.labels.includes(label)) return;
+  const insertAfter = info.labels.indexOf(afterLabel);
+  if (insertAfter < 0) return;
+  const groupRow = info.table.querySelector('thead tr.psmap-group');
+  if (groupLabel) {
+    const group = Array.from(groupRow?.children || []).find((th) => th.textContent.trim() === groupLabel);
+    if (group) group.colSpan = Number(group.colSpan || 1) + 1;
+  }
+  const th = document.createElement('th');
+  th.textContent = label;
+  info.table.querySelector('thead tr.psmap-labels')?.children[insertAfter]?.after(th);
+  const nextLabels = [...info.labels];
+  nextLabels.splice(insertAfter + 1, 0, label);
+  for (const row of info.tbody.querySelectorAll('tr')) {
+    const td = document.createElement('td');
+    td.className = row.children[insertAfter]?.className || 'group-source';
+    td.textContent = valueFn(row, info.labels) || '';
+    row.children[insertAfter]?.after(td);
+  }
+  info.labels.splice(insertAfter + 1, 0, label);
+}
+
 function splitSupportList(value) {
   return String(value || '')
     .split(/[;,|/]+/)
@@ -70,10 +140,94 @@ function splitSupportList(value) {
     .map((item) => item.toUpperCase().replace(/^LINE[_\s-]*STOP$/, 'STOP'));
 }
 
-function auditKey(row) {
-  return [row.node, row.table1PsNo, row.missing].join('|');
+function extractFirstMm(value) {
+  const match = String(value || '').replace(/,/g, '').match(/(-?\d+(?:\.\d+)?)\s*(?:mm)?/i);
+  return match ? Number(match[1]) : null;
 }
 
+function extractGuideGapMm(text) {
+  const source = String(text || '');
+  const explicit = source.match(/GUIDE\s*GAP\s*=?\s*(-?\d+(?:\.\d+)?)\s*MM/i);
+  if (explicit) return Number(explicit[1]);
+  const bracket = source.match(/\[[^\]]*GAP\s*=?\s*(-?\d+(?:\.\d+)?)\s*MM[^\]]*\]/i);
+  return bracket ? Number(bracket[1]) : null;
+}
+
+function computeGapMatch(supportGapRaw, isonote, dtxr = '') {
+  const t2Gap = extractFirstMm(supportGapRaw);
+  const t1Gap = extractGuideGapMm(isonote);
+  const guide = /\bGUIDE\b/i.test(String(dtxr || '')) || t2Gap != null;
+  if (!guide && t2Gap == null) return '';
+  if (t2Gap != null && t1Gap != null) return Math.abs(t2Gap - t1Gap) <= Number(supportOptionState.supportGapToleranceMm || 0) ? 'GAP_EXACT' : 'GAP_CONFLICT';
+  if (guide && t2Gap == null && t1Gap != null) return 'GAP_MISSING_TABLE2';
+  if (t2Gap != null && t1Gap == null) return 'GAP_MISSING_TABLE1';
+  return '';
+}
+
+function parseRawColumns(value) {
+  try { return JSON.parse(String(value || '{}')); } catch { return {}; }
+}
+
+function readCt2ModelMap() {
+  const info = getTableInfo('ct2');
+  const map = new Map();
+  if (!info) return map;
+  for (const row of info.tbody.querySelectorAll('tr')) {
+    const psno = readCell(row, info.labels, 'PSNO_Model');
+    const dtxr = readCell(row, info.labels, 'DTXR');
+    const raw = parseRawColumns(readCell(row, info.labels, 'Raw Columns'));
+    const supportGapRaw = raw['Support Gap'] || raw['support gap'] || raw['Guide Gap'] || raw.Gap || '';
+    if (psno) map.set(psno, { dtxr, supportGapRaw });
+  }
+  return map;
+}
+
+function patchCt2SupportGapColumn() {
+  const info = getTableInfo('ct2');
+  if (!info) return;
+  addColumn(info, 'Support Gap', 'DTXR', (row, labels) => {
+    const raw = parseRawColumns(readCell(row, labels, 'Raw Columns'));
+    return raw['Support Gap'] || raw['support gap'] || raw['Guide Gap'] || raw.Gap || '';
+  }, 'Support');
+}
+
+function patchValidatorGapColumns() {
+  const info = getTableInfo('validator');
+  if (!info) return;
+  const modelMap = readCt2ModelMap();
+  addColumn(info, 'T2 Support Gap', 'T2 DTXR', (row, labels) => modelMap.get(readCell(row, labels, 'PSNO_Model'))?.supportGapRaw || '', 'Table-2 Source');
+  addColumn(info, 'Gap Match', 'Support Match', (row, labels) => {
+    const psno = readCell(row, labels, 'PSNO_Model');
+    const model = modelMap.get(psno) || {};
+    const note = readCoverageIsonote(readCell(row, labels, 'Node'));
+    return computeGapMatch(model.supportGapRaw, note, model.dtxr);
+  }, 'Match Basis');
+}
+
+function readCoverageIsonote(node) {
+  const coverage = getTableInfo('coverage');
+  if (!coverage) return '';
+  for (const row of coverage.tbody.querySelectorAll('tr')) {
+    if (readCell(row, coverage.labels, 'Node') === node) return readCell(row, coverage.labels, 'ISONOTE');
+  }
+  return '';
+}
+
+function patchCandidateGapColumns() {
+  const info = getTableInfo('candidates');
+  if (!info) return;
+  const modelMap = readCt2ModelMap();
+  addColumn(info, 'T2 DTXR', 'T2 Line Family', (row, labels) => modelMap.get(readCell(row, labels, 'PSNO_Model'))?.dtxr || '', 'Table-2 Source');
+  addColumn(info, 'T2 Support Gap', 'T2 DTXR', (row, labels) => modelMap.get(readCell(row, labels, 'PSNO_Model'))?.supportGapRaw || '', 'Table-2 Source');
+  addColumn(info, 'Gap Match', 'Support Match', (row, labels) => {
+    const psno = readCell(row, labels, 'PSNO_Model');
+    const model = modelMap.get(psno) || {};
+    const isonote = readCell(row, labels, 'ISONOTE');
+    return computeGapMatch(model.supportGapRaw, isonote, model.dtxr || readCell(row, labels, 'T2 DTXR'));
+  }, 'Match Basis');
+}
+
+function auditKey(row) { return [row.node, row.table1PsNo, row.missing].join('|'); }
 function makeAuditRowsFromCoverage() {
   const info = getTableInfo('coverage');
   if (!info) return [];
@@ -84,27 +238,7 @@ function makeAuditRowsFromCoverage() {
     const table1PsNo = readCell(tr, info.labels, 'Table-1 PS No');
     const missingMasterKeywords = readCell(tr, info.labels, 'Missing Master Keywords');
     for (const missing of splitSupportList(missingMasterKeywords)) {
-      const row = {
-        node,
-        candidateNode: node,
-        table1PsNo,
-        tag: readCell(tr, info.labels, 'Tag'),
-        source: readCell(tr, info.labels, 'Source'),
-        lineFamily: readCell(tr, info.labels, 'Line Family'),
-        pipeSizeRaw: readCell(tr, info.labels, 'Pipe Size'),
-        derivedDn: readCell(tr, info.labels, 'Derived DN'),
-        isonote: readCell(tr, info.labels, 'ISONOTE'),
-        masterKeywords: readCell(tr, info.labels, 'Master Keywords'),
-        missing,
-        supportMatch: `${missing} missing`,
-        supportBasis: 'SUPPORT_MISSING_MASTER_REQUIRED',
-        finalStatus: 'SUPPORT_MISSING_REQUIRED',
-        confidence: 'AUDIT',
-        confidenceScore: '0',
-        warnings: `SUPPORT_MISSING_REQUIRED: ${missing}`,
-        action: `Add Table-2 DTXR/model support row for ${missing}, or revise Table-1C ISONOTE if ${missing} is not required.`,
-        note: `${missing} missing from mapped Table-2 DTXR for Node ${node || '-'}.`,
-      };
+      const row = { node, candidateNode: node, table1PsNo, tag: readCell(tr, info.labels, 'Tag'), source: readCell(tr, info.labels, 'Source'), lineFamily: readCell(tr, info.labels, 'Line Family'), pipeSizeRaw: readCell(tr, info.labels, 'Pipe Size'), derivedDn: readCell(tr, info.labels, 'Derived DN'), isonote: readCell(tr, info.labels, 'ISONOTE'), masterKeywords: readCell(tr, info.labels, 'Master Keywords'), missing, supportMatch: `${missing} missing`, supportBasis: 'SUPPORT_MISSING_MASTER_REQUIRED', finalStatus: 'SUPPORT_MISSING_REQUIRED', confidence: 'AUDIT', confidenceScore: '0', warnings: `SUPPORT_MISSING_REQUIRED: ${missing}`, action: `Add Table-2 DTXR/model support row for ${missing}, or revise Table-1C ISONOTE if ${missing} is not required.`, note: `${missing} missing from mapped Table-2 DTXR for Node ${node || '-'}.` };
       const key = auditKey(row);
       if (seen.has(key)) continue;
       seen.add(key);
@@ -132,140 +266,36 @@ function appendAuditRow(info, row, fill) {
 function patchValidatorMissingSupportAuditRows(auditRows) {
   const info = getTableInfo('validator');
   if (!info) return;
-  for (const audit of auditRows) {
-    appendAuditRow(info, audit, (tr, labels, row) => {
-      setCell(tr, labels, 'PSNO_Model', '-');
-      setCell(tr, labels, 'Node', row.node);
-      setCell(tr, labels, 'Table-1 PS No', row.table1PsNo);
-      setCell(tr, labels, 'Tag', row.tag);
-      setCell(tr, labels, 'T1 Source', row.source);
-      setCell(tr, labels, 'T1 Line Family', row.lineFamily);
-      setCell(tr, labels, 'T1 Derived DN', row.derivedDn);
-      setCell(tr, labels, 'Support Match', row.supportMatch);
-      setCell(tr, labels, 'Basis', `PS_BASE + BORE_DN_FROM_NPS + ${row.supportBasis}`);
-      setCell(tr, labels, 'Enabled', '');
-      setCell(tr, labels, 'Final Status', row.finalStatus);
-      setCell(tr, labels, 'Confidence', row.confidence);
-      setCell(tr, labels, 'Confidence Score', row.confidenceScore);
-      setCell(tr, labels, 'Review Action', row.action);
-      setCell(tr, labels, 'Warnings', row.warnings);
-      setCell(tr, labels, 'Node Coverage Note', row.note);
-    });
-  }
+  for (const audit of auditRows) appendAuditRow(info, audit, (tr, labels, row) => {
+    setCell(tr, labels, 'PSNO_Model', '-'); setCell(tr, labels, 'Node', row.node); setCell(tr, labels, 'Table-1 PS No', row.table1PsNo); setCell(tr, labels, 'Tag', row.tag); setCell(tr, labels, 'T1 Source', row.source); setCell(tr, labels, 'T1 Line Family', row.lineFamily); setCell(tr, labels, 'T1 Derived DN', row.derivedDn); setCell(tr, labels, 'Support Match', row.supportMatch); setCell(tr, labels, 'Basis', `PS_BASE + BORE_DN_FROM_NPS + ${row.supportBasis}`); setCell(tr, labels, 'Enabled', ''); setCell(tr, labels, 'Final Status', row.finalStatus); setCell(tr, labels, 'Confidence', row.confidence); setCell(tr, labels, 'Confidence Score', row.confidenceScore); setCell(tr, labels, 'Review Action', row.action); setCell(tr, labels, 'Warnings', row.warnings); setCell(tr, labels, 'Node Coverage Note', row.note);
+  });
 }
-
 function patchCandidateMissingSupportAuditRows(auditRows) {
   const info = getTableInfo('candidates');
   if (!info) return;
-  for (const audit of auditRows) {
-    appendAuditRow(info, audit, (tr, labels, row) => {
-      setCell(tr, labels, 'PSNO_Model', '-');
-      setCell(tr, labels, 'Candidate Node', row.candidateNode);
-      setCell(tr, labels, 'Table-1 PS No', row.table1PsNo);
-      setCell(tr, labels, 'Tag', row.tag);
-      setCell(tr, labels, 'Source', row.source);
-      setCell(tr, labels, 'T1 Line Family', row.lineFamily);
-      setCell(tr, labels, 'Pipe Size', row.pipeSizeRaw);
-      setCell(tr, labels, 'Derived DN', row.derivedDn);
-      setCell(tr, labels, 'ISONOTE', row.isonote);
-      setCell(tr, labels, 'PS Basis', 'PS_BASE');
-      setCell(tr, labels, 'Bore Basis', row.derivedDn ? 'BORE_DN_FROM_NPS' : '');
-      setCell(tr, labels, 'Line Basis', '-');
-      setCell(tr, labels, 'Support Basis', row.supportBasis);
-      setCell(tr, labels, 'Support Match', row.supportMatch);
-      setCell(tr, labels, 'Eligible', '');
-      setCell(tr, labels, 'Auto Selectable', '');
-      setCell(tr, labels, 'Review Required', 'YES');
-      setCell(tr, labels, 'Selected', '');
-      setCell(tr, labels, 'Final Status', row.finalStatus);
-      setCell(tr, labels, 'Confidence', row.confidence);
-      setCell(tr, labels, 'Confidence Score', row.confidenceScore);
-      setCell(tr, labels, 'Score', '999999');
-      setCell(tr, labels, 'Warnings', row.warnings);
-      setCell(tr, labels, 'Reason', row.action);
-      setCell(tr, labels, 'Node Coverage Note', row.note);
-    });
-  }
+  for (const audit of auditRows) appendAuditRow(info, audit, (tr, labels, row) => {
+    setCell(tr, labels, 'PSNO_Model', '-'); setCell(tr, labels, 'Candidate Node', row.candidateNode); setCell(tr, labels, 'Table-1 PS No', row.table1PsNo); setCell(tr, labels, 'Tag', row.tag); setCell(tr, labels, 'Source', row.source); setCell(tr, labels, 'T1 Line Family', row.lineFamily); setCell(tr, labels, 'Pipe Size', row.pipeSizeRaw); setCell(tr, labels, 'Derived DN', row.derivedDn); setCell(tr, labels, 'ISONOTE', row.isonote); setCell(tr, labels, 'PS Basis', 'PS_BASE'); setCell(tr, labels, 'Bore Basis', row.derivedDn ? 'BORE_DN_FROM_NPS' : ''); setCell(tr, labels, 'Line Basis', '-'); setCell(tr, labels, 'Support Basis', row.supportBasis); setCell(tr, labels, 'Support Match', row.supportMatch); setCell(tr, labels, 'Eligible', ''); setCell(tr, labels, 'Auto Selectable', ''); setCell(tr, labels, 'Review Required', 'YES'); setCell(tr, labels, 'Selected', ''); setCell(tr, labels, 'Final Status', row.finalStatus); setCell(tr, labels, 'Confidence', row.confidence); setCell(tr, labels, 'Confidence Score', row.confidenceScore); setCell(tr, labels, 'Score', '999999'); setCell(tr, labels, 'Warnings', row.warnings); setCell(tr, labels, 'Reason', row.action); setCell(tr, labels, 'Node Coverage Note', row.note);
+  });
 }
-
-function patchMissingSupportAuditRows() {
-  const auditRows = makeAuditRowsFromCoverage();
-  if (!auditRows.length) return;
-  patchValidatorMissingSupportAuditRows(auditRows);
-  patchCandidateMissingSupportAuditRows(auditRows);
-}
-
-function readValidatorDtxrMap() {
-  const map = new Map();
-  const table = document.querySelector('[data-psmap-panel="validator"] table.psmap-table');
-  if (!table) return map;
-  const labels = Array.from(table.querySelectorAll('thead tr.psmap-labels th')).map((th) => th.textContent.trim());
-  const psIndex = labels.indexOf('PSNO_Model');
-  const dtxrIndex = labels.indexOf('T2 DTXR');
-  if (psIndex < 0 || dtxrIndex < 0) return map;
-  for (const row of table.querySelectorAll('tbody tr')) {
-    const cells = row.children;
-    const psno = cells[psIndex]?.textContent?.trim();
-    const dtxr = cells[dtxrIndex]?.textContent?.trim();
-    if (psno && dtxr && !map.has(psno)) map.set(psno, dtxr);
-  }
-  return map;
-}
-
-function patchCandidateDtxrColumn() {
-  const table = document.querySelector('[data-psmap-panel="candidates"] table.psmap-table');
-  if (!table) return;
-  const labelsRow = table.querySelector('thead tr.psmap-labels');
-  if (!labelsRow) return;
-  const labels = Array.from(labelsRow.children).map((th) => th.textContent.trim());
-  if (labels.includes('T2 DTXR')) return;
-
-  const psIndex = labels.indexOf('PSNO_Model');
-  const insertAfter = labels.indexOf('T2 Line Family');
-  if (psIndex < 0 || insertAfter < 0) return;
-
-  const groupRow = table.querySelector('thead tr.psmap-group');
-  const t2Group = Array.from(groupRow?.children || []).find((th) => th.textContent.trim() === 'Table-2 Source');
-  if (t2Group) t2Group.colSpan = Number(t2Group.colSpan || 1) + 1;
-
-  const th = document.createElement('th');
-  th.textContent = 'T2 DTXR';
-  labelsRow.children[insertAfter].after(th);
-
-  const dtxrByPs = readValidatorDtxrMap();
-  for (const row of table.querySelectorAll('tbody tr')) {
-    const cells = row.children;
-    const psno = cells[psIndex]?.textContent?.trim();
-    const td = document.createElement('td');
-    td.className = cells[insertAfter]?.className || 'group-source';
-    td.textContent = dtxrByPs.get(psno) || '';
-    cells[insertAfter]?.after(td);
-  }
-}
+function patchMissingSupportAuditRows() { const auditRows = makeAuditRowsFromCoverage(); if (!auditRows.length) return; patchValidatorMissingSupportAuditRows(auditRows); patchCandidateMissingSupportAuditRows(auditRows); }
 
 function installPsMappingSupportUiBridge() {
-  const patch = () => {
-    patchSupportConfigControls();
-    patchCandidateDtxrColumn();
-    patchMissingSupportAuditRows();
-  };
+  const patch = () => { patchSupportConfigControls(); patchCt2SupportGapColumn(); patchValidatorGapColumns(); patchCandidateGapColumns(); patchMissingSupportAuditRows(); };
   const runPatch = schedulePatch(patch);
   const observer = new MutationObserver(runPatch);
   observer.observe(document.body, { childList: true, subtree: true });
   document.addEventListener('change', onSupportOptionChange, true);
+  document.addEventListener('input', onSupportOptionChange, true);
   runPatch();
-  return () => {
-    observer.disconnect();
-    document.removeEventListener('change', onSupportOptionChange, true);
-  };
+  return () => { observer.disconnect(); document.removeEventListener('change', onSupportOptionChange, true); document.removeEventListener('input', onSupportOptionChange, true); };
 }
 
 function onSupportOptionChange(event) {
   const target = event.target;
   const key = target?.dataset?.psmapSetup;
-  if (key === 'useBuiltInSupportKeywordLogic' || key === 'treatAnchorAsLineStop') {
-    supportOptionState[key] = target.checked === true;
-  }
+  if (key === 'useBuiltInSupportKeywordLogic' || key === 'treatAnchorAsLineStop' || key === 'enableSupportGapComparison') supportOptionState[key] = target.checked === true;
+  if (key === 'supportGapToleranceMm') supportOptionState[key] = Number(target.value || 0);
+  if (key === 'supportKeywordRulesText') supportOptionState[key] = target.value;
 }
 
 export function installPsMappingUtilityTile(container, ctx = {}) {
