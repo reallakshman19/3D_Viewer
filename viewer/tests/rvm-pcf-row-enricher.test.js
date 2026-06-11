@@ -23,6 +23,16 @@ assert(enricherSource.includes('support-pcf-row-matcher.js'), 'B1: row enricher 
 assert(!enricherSource.includes('RvmPcfEmitter'), 'B1: row enricher must not import the PCF emitter');
 assert(!/Uxml|UXML|uxml/.test(enricherSource), 'B1: row enricher must not import/reference UXML');
 assert(!/runTopology|TopologyGate/.test(enricherSource), 'B1: row enricher must not run topology');
+assert(enricherSource.includes('componentType:'), 'B2: weight ranking receives componentType context');
+assert(enricherSource.includes('componentRefNo:'), 'B2: weight ranking receives componentRefNo context');
+assert(enricherSource.includes('dtxr:'), 'B2: weight ranking receives dtxr/typeDesc context');
+assert(enricherSource.includes("type: 'pcf-row-weight-unselected'"), 'B3: weight-unselected diagnostic is implemented');
+assert(enricherSource.includes("type: 'pcf-row-support-unmatched'"), 'B3: support-unmatched diagnostic is implemented');
+assert(enricherSource.includes("type: 'pcf-row-dtxr-missing'"), 'B3: DTXR-missing diagnostic is implemented');
+
+function hasDiagnostic(result, type) {
+  return (result.diagnostics || []).some((item) => item.type === type);
+}
 
 const config = {
   linelist: { masterRows: [{ lineNoKey: '91261M7', pipingClass: 'A1A', rating: '150', material: 'A106 GR.B' }] },
@@ -31,12 +41,27 @@ const config = {
   weight: { masterRows: [{ boreMm: 100, lengthMm: 200, weight: 50, rating: '150', type: 'VALVE', typeDesc: 'GATE VALVE' }] },
 };
 
+const baseValveRow = {
+  rowNo: 1,
+  seqNo: 'SEQ-1',
+  refNo: 'REF-1',
+  sourceCanonicalId: 'UCI:VALVE-1',
+  type: 'VALVE',
+  nodeName: '88-VGT-20359',
+  pipelineRef: '/ASIM-1885-10-S8810101-91261M7-HC/B1',
+  lineNoKey: '91261M7',
+  convertedBore: 100,
+  rating: '150',
+  ep1: { x: 0, y: 0, z: 1 },
+  ep2: { x: 200, y: 0, z: 1 },
+};
+
 const previousFetch = globalThis.fetch;
 globalThis.fetch = async () => { throw new Error('fetch must not be called when inline masters are supplied'); };
 
 try {
   const valveResult = await enrichRowsForFinalPcf({
-    rows: [{ rowNo: 1, seqNo: 'SEQ-1', refNo: 'REF-1', sourceCanonicalId: 'UCI:VALVE-1', type: 'VALVE', nodeName: '88-VGT-20359', pipelineRef: '/ASIM-1885-10-S8810101-91261M7-HC/B1', lineNoKey: '91261M7', convertedBore: 100, rating: '150', ep1: { x: 0, y: 0, z: 1 }, ep2: { x: 200, y: 0, z: 1 }, ca: { '1': 'EXISTING-CLASS' } }],
+    rows: [{ ...baseValveRow, ca: { '1': 'EXISTING-CLASS' } }],
     config,
     mode: 'preview',
     commit: false,
@@ -62,10 +87,60 @@ try {
   assert.equal(valve.ca['98'], 'SEQ-1', 'CA98 seqNo is populated');
 
   const overwriteResult = await enrichRowsForFinalPcf({
-    rows: [{ rowNo: 2, seqNo: 'SEQ-2', refNo: 'REF-2', type: 'VALVE', nodeName: '88-VGT-20359', pipelineRef: '/ASIM-1885-10-S8810101-91261M7-HC/B1', lineNoKey: '91261M7', convertedBore: 100, rating: '150', ep1: { x: 0, y: 0, z: 1 }, ep2: { x: 200, y: 0, z: 1 }, ca: { '1': 'OLD' } }],
+    rows: [{ ...baseValveRow, rowNo: 2, seqNo: 'SEQ-2', refNo: 'REF-2', ca: { '1': 'OLD' } }],
     config: { ...config, pcf: { overwriteCaFromEnrichment: true } },
   });
   assert.equal(overwriteResult.rows[0].ca['1'], 'A1A', 'CA overwrite is opt-in only');
+
+  const rankingContextConfig = {
+    ...config,
+    weight: {
+      masterRows: [
+        { boreMm: 100, lengthMm: 200, weight: 30, rating: '150', type: 'VALVE', typeDesc: 'BALL VALVE' },
+        { boreMm: 100, lengthMm: 200, weight: 50, rating: '150', type: 'VALVE', typeDesc: 'GATE VALVE' },
+      ],
+    },
+  };
+  const typeDescRankResult = await enrichRowsForFinalPcf({
+    rows: [{ ...baseValveRow, nodeName: '88-XXX-20359', typeDesc: 'VGT GATE VALVE' }],
+    config: rankingContextConfig,
+    mode: 'preview',
+    commit: false,
+  });
+  assert.equal(typeDescRankResult.rows[0].weight, 50, 'DTXR/typeDesc context can drive semantic valve ranking');
+
+  const rejectedConfig = {
+    ...config,
+    weight: { masterRows: [{ boreMm: 100, lengthMm: 200, weight: 50, rating: '150', type: 'VALVE', typeDesc: 'GATE VALVE' }] },
+  };
+  const previewRejected = await enrichRowsForFinalPcf({
+    rows: [{ ...baseValveRow, ep2: { x: 260, y: 0, z: 1 } }],
+    config: rejectedConfig,
+    mode: 'preview',
+    commit: false,
+  });
+  assert(previewRejected.rows[0].weightRejectedCandidates.length > 0, 'preview includes length-rejected semantic candidates');
+
+  const runRejected = await enrichRowsForFinalPcf({
+    rows: [{ ...baseValveRow, ep2: { x: 260, y: 0, z: 1 } }],
+    config: rejectedConfig,
+    mode: 'run',
+  });
+  assert.equal(runRejected.rows[0].weightRejectedCandidates.length, 0, 'run mode hides rejected candidates unless explicitly configured');
+
+  const zeroWeightResult = await enrichRowsForFinalPcf({
+    rows: [{ ...baseValveRow, refNo: 'REF-ZERO-WEIGHT' }],
+    config: { ...config, weight: { masterRows: [{ boreMm: 100, lengthMm: 200, weight: 0, rating: '150', type: 'VALVE', typeDesc: 'GATE VALVE' }] } },
+    mode: 'preview',
+    commit: false,
+  });
+  assert(hasDiagnostic(zeroWeightResult, 'pcf-row-weight-unselected'), 'weight candidates without accepted best emit diagnostic');
+
+  const dtxrMissingResult = await enrichRowsForFinalPcf({
+    rows: [{ ...baseValveRow, refNo: 'REF-MISSING-DTXR', dtxr: '', typeDesc: '' }],
+    config,
+  });
+  assert(hasDiagnostic(dtxrMissingResult, 'pcf-row-dtxr-missing'), 'missing DTXR on important component emits diagnostic');
 
   const supportJson = JSON.stringify([{ type: 'SUPPORT', name: 'PS-12060/DATUM', attributes: { SUPPORT_KIND: 'GUIDE', SUPPORTCOORD: 'E 593473.15 S 1120710 U 100' } }]);
   const supportDiagnostics = [];
@@ -85,6 +160,13 @@ try {
   assert.equal(support.ca['9'], 'GUIDE', 'CA9 support kind is populated');
   assert.equal(support.ca['97'], 'SUP-REF-3', 'support CA97 is populated');
   assert.equal(support.ca['98'], 'SUP-3', 'support CA98 is populated');
+
+  const supportUnmatchedResult = await enrichRowsForFinalPcf({
+    rows: [{ rowNo: 4, seqNo: 'SUP-4', refNo: 'SUP-REF-4', type: 'SUPPORT', nodeName: 'PS-99999/DATUM', supportCoor: { x: 1, y: 2, z: 3 } }],
+    config,
+    stagedJsonText: supportJson,
+  });
+  assert(hasDiagnostic(supportUnmatchedResult, 'pcf-row-support-unmatched'), 'unmatched support row emits diagnostic');
 } finally {
   globalThis.fetch = previousFetch;
 }
