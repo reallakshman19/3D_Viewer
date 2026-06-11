@@ -39,7 +39,10 @@ export const PS_MAPPING_SAMPLE_TABLE1B = `Node	Line No
 export const PS_MAPPING_SAMPLE_TABLE1C = `Node	ISONOTE
 40	/PS-12343 :ISONOTE 'REST(2kN), GUIDE(1kN), [GUIDE GAP=10mm]'
 10	/PS-XXXX :ISONOTE 'REST(2kN), LINE STOP(3kN), [LINE STOP GAP=25mm]'
-30	REST(2kN)`;
+30	REST(2kN), Guide`;
+
+export const PS_MAPPING_SAMPLE_TABLE1D = `Master Keywords
+Rest, Guide, Line stop`;
 
 export const PS_MAPPING_SAMPLE_TABLE2 = `PSNO_Model	Bore	pipe	DTXR
 PS-10.1	250	ASIM-1885-4"-P8810246-31441C4-PP	Pipe Rest XRT01
