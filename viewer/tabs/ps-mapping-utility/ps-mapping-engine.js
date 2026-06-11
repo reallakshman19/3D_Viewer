@@ -23,6 +23,13 @@ const OD_TO_DN = [
   { od: 273.1, dn: 250 }, { od: 323.9, dn: 300 }, { od: 355.6, dn: 350 }, { od: 406.4, dn: 400 },
 ];
 
+const NPS_TO_DN = new Map([
+  [0.5, 15], [0.75, 20], [1, 25], [1.25, 32], [1.5, 40], [2, 50], [2.5, 65],
+  [3, 80], [3.5, 90], [4, 100], [5, 125], [6, 150], [8, 200], [10, 250],
+  [12, 300], [14, 350], [16, 400], [18, 450], [20, 500], [22, 550], [24, 600],
+  [26, 650], [28, 700], [30, 750], [32, 800], [34, 850], [36, 900],
+]);
+
 function hkey(value) {
   return String(value ?? '').toLowerCase().replace(/[_.-]+/g, ' ').replace(/\s+/g, ' ').trim();
 }
@@ -40,6 +47,9 @@ function idx(headers, aliases) {
   const set = new Set(aliases.map(hkey));
   return headers.findIndex((header) => set.has(hkey(header)));
 }
+function cell(cells, index) {
+  return index >= 0 ? String(cells[index] ?? '').trim() : '';
+}
 function number(value) {
   const text = String(value ?? '').replace(/,/g, '').trim();
   const match = text.match(/-?\d+(?:\.\d+)?/);
@@ -50,6 +60,9 @@ function natural(a, b) {
 }
 function uniqueSorted(values) {
   return [...new Set((values || []).filter((value) => value != null && value !== ''))].sort(natural);
+}
+function truthy(value) {
+  return /^(yes|y|true|1|m|mandatory|required|req|must|audit|100%)$/i.test(String(value ?? '').trim());
 }
 function tagLabel(tag) {
   return tag ? ` [Tag: ${tag}]` : '';
@@ -62,6 +75,10 @@ function nodeSubject(node, tag = '') {
 }
 function table1Context(row) {
   return { node: row?.node || '', tag: row?.tag || '', table1PsNo: row?.table1PsNo || row?.rawPsNo || '' };
+}
+function mergeUniqueText(existing, next, sep = ' | ') {
+  const values = uniqueSorted(String(existing || '').split(sep).concat(String(next || '').split(sep)).map((x) => x.trim()).filter(Boolean));
+  return values.join(sep);
 }
 
 export function normalizePsNo(rawValue) {
@@ -167,20 +184,20 @@ function createLogger() {
 
 function parseTable1(text, log) {
   const lines = splitLines(text);
-  if (!lines.length) { log.user('ERROR', 'PARSE', 'Table-1', 'Table-1 is required.'); return []; }
+  if (!lines.length) { log.user('INFO', 'PARSE', 'Table-1', 'Optional Table-1 is blank. Consolidated Table-1 may be synthesized from rich Table-1C.'); return []; }
   const headers = splitCells(lines[0]);
   const psIdx = idx(headers, ['ps no', 'ps name', 'ps']);
   const nodeIdx = idx(headers, ['node', 'node no', 'node number']);
-  if (psIdx < 0 || nodeIdx < 0) { log.user('ERROR', 'PARSE', 'Table-1', 'Required columns PS No and Node were not found.'); return []; }
+  if (psIdx < 0 || nodeIdx < 0) { log.user('WARNING', 'PARSE', 'Table-1', 'Required columns PS No and Node were not found. Rich Table-1C may still supply references.'); return []; }
   const rows = [];
   for (const [offset, line] of lines.slice(1).entries()) {
     const sourceRow = offset + 2;
     const cells = splitCells(line);
-    const rawPsNo = String(cells[psIdx] ?? '').trim();
-    const node = String(cells[nodeIdx] ?? '').trim();
+    const rawPsNo = cell(cells, psIdx);
+    const node = cell(cells, nodeIdx);
     if (!rawPsNo || !node) { log.user('WARNING', 'PARSE', `Table-1 row ${sourceRow}`, 'Blank PS No or Node skipped.'); continue; }
     const norm = normalizePsNo(rawPsNo);
-    const row = { id: `T1#${String(offset + 1).padStart(3, '0')}`, sourceRow, rawPsNo, node, ...norm, tag: norm.tag, used: false };
+    const row = { id: `T1#${String(offset + 1).padStart(3, '0')}`, sourceRow, rawPsNo, table1PsNo: rawPsNo, node, ...norm, tag: norm.tag, source: 'TABLE1', used: false };
     rows.push(row);
     log.debug('DEBUG', 'T1_ROW_PARSED', rawPsNo, row);
     if (norm.tag) log.user('INFO', 'NORMALIZE', rawPsNo, `Extracted tag "${norm.tag}" from Table-1 PS data.`, '', { tag: norm.tag, table1PsNo: rawPsNo, node });
@@ -191,19 +208,19 @@ function parseTable1(text, log) {
 
 function parseTable1A(text, log) {
   const map = new Map();
-  if (!String(text || '').trim()) { log.user('INFO', 'PARSE', 'Table-1A', 'Optional Node/Dia table is blank. Bore check will be limited.'); return map; }
+  if (!String(text || '').trim()) { log.user('INFO', 'PARSE', 'Table-1A', 'Optional Node/Dia table is blank. Bore check may use rich Table-1C pipe size.'); return map; }
   const lines = splitLines(text);
   const headers = splitCells(lines[0]);
   const nodeIdx = idx(headers, ['node', 'node no', 'node number']);
   const diaIdx = idx(headers, ['dia', 'diameter', 'od', 'od mm', 'dia mm', 'dia(mm)']);
-  if (nodeIdx < 0 || diaIdx < 0) { log.user('WARNING', 'PARSE', 'Table-1A', 'Node/Dia columns not found. Bore will not be checked.'); return map; }
+  if (nodeIdx < 0 || diaIdx < 0) { log.user('WARNING', 'PARSE', 'Table-1A', 'Node/Dia columns not found. Bore will not use Table-1A.'); return map; }
   for (const [offset, line] of lines.slice(1).entries()) {
     const sourceRow = offset + 2;
     const cells = splitCells(line);
-    const node = String(cells[nodeIdx] ?? '').trim();
-    const dia = number(cells[diaIdx]);
+    const node = cell(cells, nodeIdx);
+    const dia = number(cell(cells, diaIdx));
     if (!node || !Number.isFinite(dia)) { log.user('WARNING', 'PARSE', `Table-1A row ${sourceRow}`, 'Invalid Node or Dia skipped.'); continue; }
-    map.set(node, { node, dia, sourceRow });
+    map.set(node, { node, dia, sourceRow, source: 'TABLE1A' });
     log.debug('DEBUG', 'T1A_DIA_PARSED', node, { node, dia, sourceRow });
   }
   log.user('INFO', 'PARSE', 'Table-1A', `Parsed ${map.size} Node/Dia rows.`);
@@ -212,19 +229,19 @@ function parseTable1A(text, log) {
 
 function parseTable1B(text, log) {
   const map = new Map();
-  if (!String(text || '').trim()) { log.user('INFO', 'PARSE', 'Table-1B', 'Optional Node/Line No table is blank. Line check disabled.'); return map; }
+  if (!String(text || '').trim()) { log.user('INFO', 'PARSE', 'Table-1B', 'Optional Node/Line No table is blank. Line check may use rich Table-1C Line No.'); return map; }
   const lines = splitLines(text);
   const headers = splitCells(lines[0]);
   const nodeIdx = idx(headers, ['node', 'node no', 'node number']);
   const lineIdx = idx(headers, ['line no', 'line', 'pipe', 'line number']);
-  if (nodeIdx < 0 || lineIdx < 0) { log.user('WARNING', 'PARSE', 'Table-1B', 'Node/Line No columns not found. Line check disabled.'); return map; }
+  if (nodeIdx < 0 || lineIdx < 0) { log.user('WARNING', 'PARSE', 'Table-1B', 'Node/Line No columns not found. Line check may use rich Table-1C Line No.'); return map; }
   for (const [offset, line] of lines.slice(1).entries()) {
     const sourceRow = offset + 2;
     const cells = splitCells(line);
-    const node = String(cells[nodeIdx] ?? '').trim();
-    const lineNo = String(cells[lineIdx] ?? '').trim();
+    const node = cell(cells, nodeIdx);
+    const lineNo = cell(cells, lineIdx);
     if (!node || !lineNo) continue;
-    const row = { node, lineNo, lineKey: normalizeLineKey(lineNo), sourceRow };
+    const row = { node, lineNo, lineKey: normalizeLineKey(lineNo), sourceRow, source: 'TABLE1B' };
     map.set(node, row);
     log.debug('DEBUG', 'T1B_LINE_PARSED', node, row);
   }
@@ -232,28 +249,88 @@ function parseTable1B(text, log) {
   return map;
 }
 
+function parsePipeSize(value) {
+  const raw = String(value ?? '').trim();
+  if (!raw) return { raw: '', nps: null, derivedDn: null };
+  const n = number(raw.replace(/"/g, ''));
+  if (!Number.isFinite(n)) return { raw, nps: null, derivedDn: null };
+  return { raw, nps: n, derivedDn: NPS_TO_DN.get(n) ?? null };
+}
+
 function parseTable1C(text, log, keywordCatalog) {
-  const map = new Map();
-  if (!String(text || '').trim()) { log.user('INFO', 'PARSE', 'Table-1C', 'Optional Node/ISONOTE table is blank. Support check disabled.'); return map; }
+  const supportByNode = new Map();
+  const richRows = [];
+  if (!String(text || '').trim()) {
+    log.user('INFO', 'PARSE', 'Table-1C', 'Optional Support Master / ISONOTE table is blank.');
+    return { supportByNode, richRows, isRich: false };
+  }
   const lines = splitLines(text);
   const headers = splitCells(lines[0]);
+  const lineIdx = idx(headers, ['line no', 'line', 'line number', 'pipe', 'branchname']);
   const nodeIdx = idx(headers, ['node', 'node no', 'node number']);
+  const psIdx = idx(headers, ['ps no', 'ps name', 'ps', 'support ps no']);
+  const pipeSizeIdx = idx(headers, ['pipe size', 'size', 'nps', 'pipe nps']);
   const isoIdx = idx(headers, ['isonote', 'iso note', 'support', 'support note', 'dtxr']);
-  if (nodeIdx < 0 || isoIdx < 0) { log.user('WARNING', 'PARSE', 'Table-1C', 'Node/ISONOTE columns not found. Support check disabled.'); return map; }
+  const mandatoryIdx = idx(headers, ['mandatory', 'required', 'is mandatory', 'must audit', 'audit']);
+  const isRich = nodeIdx >= 0 && (psIdx >= 0 || lineIdx >= 0 || pipeSizeIdx >= 0 || mandatoryIdx >= 0) && isoIdx >= 0;
+  if (nodeIdx < 0 || isoIdx < 0) {
+    log.user('WARNING', 'PARSE', 'Table-1C', 'Node/ISONOTE columns not found. Support check disabled.');
+    return { supportByNode, richRows, isRich: false };
+  }
   for (const [offset, line] of lines.slice(1).entries()) {
     const sourceRow = offset + 2;
     const cells = splitCells(line);
-    const node = String(cells[nodeIdx] ?? '').trim();
-    const isonote = String(cells[isoIdx] ?? '').trim();
-    if (!node || !isonote) continue;
+    const node = cell(cells, nodeIdx);
+    const isonote = cell(cells, isoIdx);
+    const rawPsNo = cell(cells, psIdx);
+    const lineNo = cell(cells, lineIdx);
+    const pipeSize = parsePipeSize(cell(cells, pipeSizeIdx));
+    const mandatory = truthy(cell(cells, mandatoryIdx));
+    if (!node && !rawPsNo && !isonote) continue;
     const supportTypes = normalizeSupportTypes(isonote, keywordCatalog);
-    const row = { node, isonote, supportTypes, sourceRow };
-    map.set(node, row);
-    log.debug('DEBUG', 'T1C_SUPPORT_PARSED', node, row);
-    if (supportTypes.length) log.user('INFO', 'SUPPORT_PARSE', node, `Parsed support type(s): ${supportListText(supportTypes)}.`);
+    if (node) {
+      const existing = supportByNode.get(node);
+      const supportRow = { node, isonote, supportTypes, sourceRow, rawPsNo, lineNo, pipeSizeRaw: pipeSize.raw, nps: pipeSize.nps, derivedDnFromNps: pipeSize.derivedDn, mandatory, source: isRich ? 'TABLE1C_RICH' : 'TABLE1C' };
+      if (existing) {
+        existing.isonote = mergeUniqueText(existing.isonote, isonote);
+        existing.supportTypes = uniqueSorted([...(existing.supportTypes || []), ...supportTypes]);
+        existing.mandatory = existing.mandatory || mandatory;
+        if (!existing.rawPsNo && rawPsNo) existing.rawPsNo = rawPsNo;
+        if (!existing.lineNo && lineNo) existing.lineNo = lineNo;
+        if (!existing.pipeSizeRaw && pipeSize.raw) existing.pipeSizeRaw = pipeSize.raw;
+        if (existing.derivedDnFromNps == null && pipeSize.derivedDn != null) existing.derivedDnFromNps = pipeSize.derivedDn;
+      } else {
+        supportByNode.set(node, supportRow);
+      }
+    }
+    if (isRich) {
+      const norm = normalizePsNo(rawPsNo);
+      richRows.push({
+        id: `T1C#${String(offset + 1).padStart(3, '0')}`,
+        source: 'TABLE1C_RICH',
+        sourceRow,
+        rawPsNo,
+        table1PsNo: rawPsNo,
+        node,
+        ...norm,
+        tag: norm.tag,
+        nodeLine: lineNo,
+        nodeLineKey: normalizeLineKey(lineNo),
+        pipeSizeRaw: pipeSize.raw,
+        nps: pipeSize.nps,
+        derivedDn: pipeSize.derivedDn,
+        nodeIsonote: isonote,
+        supportTypesAvailable: supportTypes,
+        mandatory,
+        used: false,
+      });
+      if (!rawPsNo && mandatory) log.user('WARNING', 'TABLE1C_RICH', nodeSubject(node), 'Mandatory rich Table-1C row has blank PS No. It will be visible in support coverage but cannot be matched by PS name.', 'Add PS No or verify this is a new support.', { node, tag: '', table1PsNo: '' });
+    }
+    log.debug('DEBUG', isRich ? 'T1C_RICH_ROW_PARSED' : 'T1C_SUPPORT_PARSED', node || rawPsNo || `row ${sourceRow}`, { node, rawPsNo, lineNo, pipeSize, isonote, supportTypes, mandatory, sourceRow });
+    if (supportTypes.length && node) log.user('INFO', 'SUPPORT_PARSE', nodeSubject(node), `Parsed support type(s): ${supportListText(supportTypes)}.`);
   }
-  log.user('INFO', 'PARSE', 'Table-1C', `Parsed ${map.size} Node/ISONOTE support rows.`);
-  return map;
+  log.user('INFO', 'PARSE', 'Table-1C', `Parsed ${supportByNode.size} support node row(s)${isRich ? ` and ${richRows.length} rich reference row(s)` : ''}.`);
+  return { supportByNode, richRows, isRich };
 }
 
 function parseTable2(text, log, keywordCatalog) {
@@ -269,12 +346,12 @@ function parseTable2(text, log, keywordCatalog) {
   for (const [offset, line] of lines.slice(1).entries()) {
     const sourceRow = offset + 2;
     const cells = splitCells(line);
-    const rawPsNo = String(cells[psIdx] ?? '').trim();
+    const rawPsNo = cell(cells, psIdx);
     if (!rawPsNo) continue;
     const norm = normalizePsNo(rawPsNo);
-    const bore = boreIdx >= 0 ? number(cells[boreIdx]) : NaN;
-    const pipe = pipeIdx >= 0 ? String(cells[pipeIdx] ?? '').trim() : '';
-    const dtxr = dtxrIdx >= 0 ? String(cells[dtxrIdx] ?? '').trim() : '';
+    const bore = boreIdx >= 0 ? number(cell(cells, boreIdx)) : NaN;
+    const pipe = cell(cells, pipeIdx);
+    const dtxr = cell(cells, dtxrIdx);
     const supportTypesRequested = normalizeSupportTypes(dtxr, keywordCatalog);
     const row = { id: `T2#${String(offset + 1).padStart(3, '0')}`, sourceRow, rawPsNo, psnoModel: rawPsNo, ...norm, modelTag: norm.tag, bore: Number.isFinite(bore) ? bore : null, pipe, pipeKey: normalizeLineKey(pipe), dtxr, supportTypesRequested };
     rows.push(row);
@@ -299,14 +376,20 @@ export function deriveDnFromOd(od) {
   return bestErr <= tolerance ? best.dn : null;
 }
 
-function evaluateBore(modelBore, nodeDia, options) {
-  if (options.boreMode === 'ignore') return { basis: 'BORE_IGNORED', rank: 5, eligible: true, derivedDn: deriveDnFromOd(nodeDia) };
-  if (!Number.isFinite(modelBore) || !Number.isFinite(nodeDia)) return { basis: 'BORE_MISSING', rank: 4, eligible: options.boreMode !== 'strict', derivedDn: deriveDnFromOd(nodeDia) };
+function evaluateBore(modelBore, ref, options) {
+  const nodeDia = ref.nodeDia;
+  const nps = Number(ref.nps);
+  const npsDn = Number(ref.derivedDnFromNps ?? ref.derivedDn);
+  if (options.boreMode === 'ignore') return { basis: 'BORE_IGNORED', rank: 5, eligible: true, derivedDn: Number.isFinite(nodeDia) ? deriveDnFromOd(nodeDia) : Number.isFinite(npsDn) ? npsDn : null };
+  if (!Number.isFinite(modelBore)) return { basis: 'BORE_MISSING', rank: 4, eligible: options.boreMode !== 'strict', derivedDn: Number.isFinite(npsDn) ? npsDn : deriveDnFromOd(nodeDia) };
+  if (Number.isFinite(npsDn) && Math.abs(modelBore - npsDn) <= 1e-6) return { basis: 'BORE_DN_FROM_NPS', rank: 0, eligible: true, derivedDn: npsDn };
+  if (Number.isFinite(nps) && Math.abs(modelBore - nps) <= 1e-6) return { basis: 'BORE_NPS_RAW', rank: 1, eligible: true, derivedDn: Number.isFinite(npsDn) ? npsDn : null };
+  if (!Number.isFinite(nodeDia)) return { basis: 'BORE_MISSING', rank: 4, eligible: options.boreMode !== 'strict', derivedDn: Number.isFinite(npsDn) ? npsDn : null };
   const derivedDn = deriveDnFromOd(nodeDia);
-  if (options.allowDnMatch && derivedDn != null && Math.abs(modelBore - derivedDn) <= 1e-6) return { basis: 'BORE_DN', rank: 0, eligible: true, derivedDn };
+  if (options.allowDnMatch && derivedDn != null && Math.abs(modelBore - derivedDn) <= 1e-6) return { basis: 'BORE_DN_FROM_OD', rank: 0, eligible: true, derivedDn };
   if (options.allowRawDiaMatch && Math.abs(modelBore - nodeDia) <= 1e-6) return { basis: 'BORE_OD', rank: 1, eligible: true, derivedDn };
   if (options.allowRawDiaMatch && Math.abs(modelBore - nodeDia) <= options.odToleranceMm) return { basis: 'BORE_OD_APPROX', rank: 2, eligible: true, derivedDn };
-  return { basis: 'BORE_CONFLICT', rank: 9, eligible: options.boreMode !== 'strict', derivedDn };
+  return { basis: 'BORE_CONFLICT', rank: 9, eligible: options.boreMode !== 'strict', derivedDn: Number.isFinite(npsDn) ? npsDn : derivedDn };
 }
 
 function evaluateLine(modelPipe, nodeLine, options) {
@@ -334,6 +417,7 @@ function evaluateSupport(modelTypes, nodeTypes, options) {
 }
 
 function psBasisFor(model, ref) {
+  if (!ref.basePs) return 'NO_PS_MATCH';
   if (model.exactRawKey === ref.exactRawKey) return 'EXACT_RAW';
   if (model.basePs === ref.basePs) return 'BASE_PS';
   return 'NO_PS_MATCH';
@@ -352,7 +436,7 @@ function compareCandidates(a, b) {
 function buildCandidate(model, ref, options, log) {
   const psBasis = psBasisFor(model, ref);
   if (psBasis === 'NO_PS_MATCH') return null;
-  const boreEval = evaluateBore(model.bore, ref.nodeDia, options);
+  const boreEval = evaluateBore(model.bore, ref, options);
   const supportEval = evaluateSupport(model.supportTypesRequested, ref.supportTypesAvailable, options);
   const lineEval = evaluateLine(model.pipe, ref.nodeLine, options);
   const eligible = boreEval.eligible && supportEval.eligible && lineEval.eligible;
@@ -362,12 +446,12 @@ function buildCandidate(model, ref, options, log) {
   else if (supportEval.basis === 'SUPPORT_CONFLICT' && model.supportTypesRequested?.length) parts.push('SUPPORT_CONFLICT');
   if (['LINE_EXACT', 'LINE_SUBSTRING', 'LINE_FAMILY'].includes(lineEval.basis)) parts.push(lineEval.basis);
   const candidate = {
-    modelId: model.id, refId: ref.id, psnoModel: model.psnoModel, node: ref.node, tag: ref.tag || '',
+    modelId: model.id, refId: ref.id, psnoModel: model.psnoModel, node: ref.node, tag: ref.tag || '', source: ref.source || '', mandatory: ref.mandatory === true,
     table1PsNo: ref.rawPsNo, table1Row: ref.sourceRow, table2Row: model.sourceRow,
     psBasis, boreBasis: boreEval.basis, supportBasis: supportEval.basis, lineBasis: lineEval.basis,
     psBasisRank: psRank(psBasis), boreRank: boreEval.rank, supportRank: supportEval.rank, lineRank: lineEval.rank,
     eligible, basisParts: parts, basis: parts.join(' + '), modelBore: model.bore,
-    nodeDia: ref.nodeDia, derivedDn: boreEval.derivedDn, pipe: model.pipe, nodeLine: ref.nodeLine,
+    nodeDia: ref.nodeDia, pipeSizeRaw: ref.pipeSizeRaw || '', nps: ref.nps ?? null, derivedDn: boreEval.derivedDn, pipe: model.pipe, nodeLine: ref.nodeLine,
     dtxr: model.dtxr || '', modelSupportTypes: model.supportTypesRequested || [],
     nodeIsonote: ref.nodeIsonote || '', nodeIsonoteRaw: ref.nodeIsonote || '', nodeSupportTypes: ref.supportTypesAvailable || [],
     matchedSupportTypes: supportEval.matchedTypes || [], supportMatch: supportEval.matchText || '',
@@ -382,10 +466,10 @@ function buildCandidate(model, ref, options, log) {
 
 function makeResultRow(candidate) {
   return {
-    enabled: true, psnoModel: candidate.psnoModel, node: candidate.node, tag: candidate.tag || '', supportMatch: candidate.supportMatch || '', basis: candidate.basis,
+    enabled: true, psnoModel: candidate.psnoModel, node: candidate.node, tag: candidate.tag || '', source: candidate.source || '', mandatory: candidate.mandatory === true, supportMatch: candidate.supportMatch || '', basis: candidate.basis,
     confidence: candidate.warnings.length ? 'MEDIUM' : 'HIGH', psBasis: candidate.psBasis, boreBasis: candidate.boreBasis,
     supportBasis: candidate.supportBasis, lineBasis: candidate.lineBasis, table1PsNo: candidate.table1PsNo, table1Row: candidate.table1Row, table2Row: candidate.table2Row,
-    modelBore: candidate.modelBore, nodeDia: candidate.nodeDia, derivedDn: candidate.derivedDn, pipe: candidate.pipe,
+    modelBore: candidate.modelBore, nodeDia: candidate.nodeDia, pipeSizeRaw: candidate.pipeSizeRaw, nps: candidate.nps, derivedDn: candidate.derivedDn, pipe: candidate.pipe,
     nodeLine: candidate.nodeLine, dtxr: candidate.dtxr, modelSupportTypes: candidate.modelSupportTypes,
     modelDtxrKeywords: candidate.modelSupportTypes || [], nodeIsonote: candidate.nodeIsonote, nodeIsonoteRaw: candidate.nodeIsonoteRaw,
     nodeSupportTypes: candidate.nodeSupportTypes, nodeMasterKeywords: candidate.nodeSupportTypes || [], matchedSupportTypes: candidate.matchedSupportTypes,
@@ -393,7 +477,7 @@ function makeResultRow(candidate) {
   };
 }
 function makeNoMatch(model, reason) {
-  return { enabled: false, psnoModel: model.psnoModel, node: '', tag: '', supportMatch: '', basis: 'NO_MATCH', confidence: 'NO_MATCH', psBasis: 'NO_MATCH', boreBasis: '', supportBasis: '', lineBasis: '', table1PsNo: '', table1Row: null, table2Row: model.sourceRow, modelDtxrKeywords: model.supportTypesRequested || [], nodeCoverageNote: '', nodeCoverageStatus: '', warnings: [reason], debugId: `${model.id}:NO_MATCH` };
+  return { enabled: false, psnoModel: model.psnoModel, node: '', tag: '', source: '', mandatory: false, supportMatch: '', basis: 'NO_MATCH', confidence: 'NO_MATCH', psBasis: 'NO_MATCH', boreBasis: '', supportBasis: '', lineBasis: '', table1PsNo: '', table1Row: null, table2Row: model.sourceRow, modelDtxrKeywords: model.supportTypesRequested || [], nodeCoverageNote: '', nodeCoverageStatus: '', warnings: [reason], debugId: `${model.id}:NO_MATCH` };
 }
 function groupBy(rows, fn) {
   const map = new Map();
@@ -420,7 +504,7 @@ function coverageAction(status, missing, extra, node, tag = '') {
   return 'No action.';
 }
 function buildSupportCoverageRows({ table1Rows, resultRows, log }) {
-  const refsByNode = groupBy(table1Rows, (ref) => ref.node);
+  const refsByNode = groupBy(table1Rows.filter((ref) => ref.node), (ref) => ref.node);
   const mappedByNode = groupBy(resultRows.filter((row) => row.node && row.confidence !== 'NO_MATCH'), (row) => row.node);
   const allNodes = uniqueSorted([...refsByNode.keys(), ...mappedByNode.keys()]);
   const rows = [];
@@ -440,7 +524,10 @@ function buildSupportCoverageRows({ table1Rows, resultRows, log }) {
       node,
       table1PsNo,
       tag,
+      source: uniqueSorted(refs.map((ref) => ref.source)).join(', '),
+      mandatory: refs.some((ref) => ref.mandatory === true) ? 'YES' : '',
       dia: uniqueSorted(refs.map((ref) => Number.isFinite(ref.nodeDia) ? String(ref.nodeDia) : '')).join(', '),
+      pipeSizeRaw: uniqueSorted(refs.map((ref) => ref.pipeSizeRaw)).join(', '),
       derivedDn: uniqueSorted(refs.map((ref) => Number.isFinite(ref.derivedDn) ? String(ref.derivedDn) : '')).join(', '),
       lineNo: uniqueSorted(refs.map((ref) => ref.nodeLine)).join(', '),
       isonote: uniqueSorted(refs.map((ref) => ref.nodeIsonote)).join(' | '),
@@ -537,27 +624,111 @@ function resolveGroup(models, refs, options, log) {
   return { outputRows, candidateRows };
 }
 
+function refMergeKey(row) {
+  return `${row.basePs || ''}|${row.node || ''}|${row.nodeLineKey || ''}|${row.rawPsNo || ''}`;
+}
+function mergeSupportIntoRef(ref, support) {
+  if (!support) return;
+  if (!ref.nodeIsonote && support.isonote) ref.nodeIsonote = support.isonote;
+  else if (support.isonote) ref.nodeIsonote = mergeUniqueText(ref.nodeIsonote, support.isonote);
+  ref.supportTypesAvailable = uniqueSorted([...(ref.supportTypesAvailable || []), ...(support.supportTypes || [])]);
+  ref.mandatory = ref.mandatory || support.mandatory === true;
+  if (!ref.nodeLine && support.lineNo) { ref.nodeLine = support.lineNo; ref.nodeLineKey = normalizeLineKey(support.lineNo); }
+  if (!ref.pipeSizeRaw && support.pipeSizeRaw) ref.pipeSizeRaw = support.pipeSizeRaw;
+  if (ref.derivedDn == null && support.derivedDnFromNps != null) { ref.derivedDn = support.derivedDnFromNps; ref.derivedDnFromNps = support.derivedDnFromNps; }
+}
+function buildConsolidatedTable1Rows({ table1Rows, diaByNode, lineByNode, supportByNode, richRows, log }) {
+  const consolidated = [];
+  const byMergeKey = new Map();
+  const addRef = (seed, source) => {
+    const id = `CT1#${String(consolidated.length + 1).padStart(3, '0')}`;
+    const norm = seed.raw ? normalizePsNo(seed.raw) : normalizePsNo(seed.rawPsNo || '');
+    const row = {
+      ...seed,
+      id,
+      source,
+      rawPsNo: seed.rawPsNo || seed.raw || '',
+      table1PsNo: seed.table1PsNo || seed.rawPsNo || seed.raw || '',
+      exactRawKey: seed.exactRawKey || norm.exactRawKey,
+      basePs: seed.basePs || norm.basePs,
+      tag: seed.tag || norm.tag || '',
+      node: String(seed.node || '').trim(),
+      sourceRow: seed.sourceRow ?? null,
+      nodeLine: seed.nodeLine || '',
+      nodeLineKey: seed.nodeLineKey || normalizeLineKey(seed.nodeLine || ''),
+      pipeSizeRaw: seed.pipeSizeRaw || '',
+      nps: seed.nps ?? null,
+      derivedDn: seed.derivedDn ?? null,
+      nodeIsonote: seed.nodeIsonote || '',
+      supportTypesAvailable: seed.supportTypesAvailable || [],
+      mandatory: seed.mandatory === true,
+      used: false,
+    };
+    const key = refMergeKey(row);
+    const existing = byMergeKey.get(key);
+    if (existing) {
+      existing.source = uniqueSorted([existing.source, source]).join('+');
+      existing.nodeIsonote = mergeUniqueText(existing.nodeIsonote, row.nodeIsonote);
+      existing.supportTypesAvailable = uniqueSorted([...(existing.supportTypesAvailable || []), ...(row.supportTypesAvailable || [])]);
+      existing.mandatory = existing.mandatory || row.mandatory;
+      if (!existing.pipeSizeRaw && row.pipeSizeRaw) existing.pipeSizeRaw = row.pipeSizeRaw;
+      if (existing.derivedDn == null && row.derivedDn != null) existing.derivedDn = row.derivedDn;
+      return existing;
+    }
+    byMergeKey.set(key, row);
+    consolidated.push(row);
+    return row;
+  };
+
+  for (const row of table1Rows) addRef(row, 'TABLE1');
+  for (const rich of richRows) {
+    if (rich.rawPsNo && rich.node) addRef(rich, 'TABLE1C_RICH');
+    else if (rich.node) addRef(rich, 'TABLE1C_RICH_AUDIT');
+  }
+
+  for (const ref of consolidated) {
+    const dia = diaByNode.get(ref.node);
+    if (dia) {
+      ref.nodeDia = dia.dia;
+      ref.derivedDnFromOd = deriveDnFromOd(dia.dia);
+      if (ref.derivedDn == null) ref.derivedDn = ref.derivedDnFromOd;
+      ref.boreSource = 'TABLE1A_OD';
+    } else if (ref.derivedDn != null) {
+      ref.boreSource = 'TABLE1C_PIPE_SIZE';
+    }
+    const explicitLine = lineByNode.get(ref.node);
+    if (explicitLine) {
+      if (ref.nodeLine && normalizeLineKey(ref.nodeLine) !== explicitLine.lineKey) {
+        log.user('WARNING', 'CONSOLIDATE', nodeSubject(ref.node, ref.tag), `Line conflict: Table-1B has ${explicitLine.lineNo}, rich Table-1C has ${ref.nodeLine}. Explicit Table-1B line is used.`, 'Review Table-1B / Table-1C line source.', { ...table1Context(ref), lineNo: explicitLine.lineNo });
+      }
+      ref.nodeLine = explicitLine.lineNo;
+      ref.nodeLineKey = explicitLine.lineKey;
+      ref.lineSource = 'TABLE1B';
+    } else if (ref.nodeLine) {
+      ref.lineSource = 'TABLE1C_RICH';
+    }
+    mergeSupportIntoRef(ref, supportByNode.get(ref.node));
+    if (!ref.rawPsNo && ref.mandatory) {
+      log.user('WARNING', 'CONSOLIDATE', nodeSubject(ref.node, ref.tag), 'Mandatory consolidated Table-1 row has no PS No; it will be included in support coverage but cannot match Table-2 by PS number.', 'Add PS No in rich Table-1C if this support should map to a model PS row.', { ...table1Context(ref) });
+    }
+    log.debug('DEBUG', 'CONSOLIDATED_T1_ROW_BUILT', `${ref.rawPsNo || '(blank PS)'} -> ${ref.node}${tagLabel(ref.tag)}`, ref);
+  }
+  log.user('INFO', 'CONSOLIDATE', 'Consolidated Table-1', `Built ${consolidated.length} consolidated reference row(s) from Table-1/1A/1B and Table-1C.`);
+  return consolidated;
+}
+
 export function runPsMappingResolver(input = {}) {
   const log = createLogger();
   const options = { ...DEFAULT_OPTIONS, ...(input.options || {}) };
   options.odToleranceMm = Number(options.odToleranceMm ?? 1.5);
   const keywordCatalog = parseTable1DKeywords(input.table1dKeywordText || input.table1DText || DEFAULT_MASTER_KEYWORDS, log);
-  const table1Rows = parseTable1(input.table1PsNodeText, log);
+  const table1SourceRows = parseTable1(input.table1PsNodeText, log);
   const diaByNode = parseTable1A(input.table1aNodeDiaText, log);
   const lineByNode = parseTable1B(input.table1bNodeLineText, log);
-  const supportByNode = parseTable1C(input.table1cNodeIsonoteText, log, keywordCatalog);
+  const table1C = parseTable1C(input.table1cNodeIsonoteText, log, keywordCatalog);
   const modelRows = parseTable2(input.table2ModelText, log, keywordCatalog);
-  for (const ref of table1Rows) {
-    const dia = diaByNode.get(ref.node);
-    if (dia) { ref.nodeDia = dia.dia; ref.derivedDn = deriveDnFromOd(dia.dia); }
-    const line = lineByNode.get(ref.node);
-    if (line) { ref.nodeLine = line.lineNo; ref.nodeLineKey = line.lineKey; }
-    const support = supportByNode.get(ref.node);
-    if (support) { ref.nodeIsonote = support.isonote; ref.supportTypesAvailable = support.supportTypes; }
-    else { ref.nodeIsonote = ''; ref.supportTypesAvailable = []; }
-    log.debug('DEBUG', 'REFERENCE_ENRICHED', `${ref.rawPsNo}${tagLabel(ref.tag)}`, ref);
-  }
-  const refsByBase = groupBy(table1Rows, (r) => r.basePs);
+  const table1Rows = buildConsolidatedTable1Rows({ table1Rows: table1SourceRows, diaByNode, lineByNode, supportByNode: table1C.supportByNode, richRows: table1C.richRows, log });
+  const refsByBase = groupBy(table1Rows.filter((r) => r.basePs), (r) => r.basePs);
   const modelsByBase = groupBy(modelRows, (r) => r.basePs);
   const rows = [];
   const candidates = [];
@@ -566,7 +737,7 @@ export function runPsMappingResolver(input = {}) {
     if (!refs.length) {
       for (const model of models) {
         rows.push(makeNoMatch(model, 'NO_BASE_PS_MATCH'));
-        log.user('WARNING', 'RESOLVE', model.psnoModel, `No Table-1 row found for base PS ${basePs}.`);
+        log.user('WARNING', 'RESOLVE', model.psnoModel, `No consolidated Table-1 row found for base PS ${basePs}.`, 'Check Table-1 or rich Table-1C PS No / Node source.', { psnoModel: model.psnoModel });
       }
       continue;
     }
@@ -577,11 +748,11 @@ export function runPsMappingResolver(input = {}) {
   rows.sort((a, b) => a.table2Row - b.table2Row);
   const supportCoverageRows = buildSupportCoverageRows({ table1Rows, resultRows: rows, log });
   annotateCandidateCoverage(candidates, rows);
-  return { rows, candidates, supportCoverageRows, userLog: log.userLog, debugLog: log.debugLog, summary: buildSummary(rows, table1Rows, modelRows, candidates, log.userLog, supportCoverageRows), options };
+  return { rows, candidates, supportCoverageRows, userLog: log.userLog, debugLog: log.debugLog, summary: buildSummary(rows, table1Rows, modelRows, candidates, log.userLog, supportCoverageRows), options, consolidatedTable1Rows: table1Rows };
 }
 
 export function rowsToCsv(rows) {
-  const headers = ['PSNO_Model', 'Node', 'Table-1 PS No', 'Tag', 'Support match', 'Node Coverage Note', 'Basis'];
+  const headers = ['PSNO_Model', 'Node', 'Table-1 PS No', 'Tag', 'Source', 'Line No', 'Pipe Size', 'Derived DN', 'Support match', 'Node Coverage Note', 'Basis'];
   const esc = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
-  return [headers.join(','), ...rows.map((r) => [r.psnoModel, r.node, r.table1PsNo, r.tag, r.supportMatch, r.nodeCoverageNote, r.basis].map(esc).join(','))].join('\n');
+  return [headers.join(','), ...rows.map((r) => [r.psnoModel, r.node, r.table1PsNo, r.tag, r.source, r.nodeLine, r.pipeSizeRaw, r.derivedDn, r.supportMatch, r.nodeCoverageNote, r.basis].map(esc).join(','))].join('\n');
 }
