@@ -12,14 +12,14 @@ import { renderAdapterMappingTab } from '../tabs/adapter-mapping-tab.js';
 import { mount as mountRvmJsonPcfExtractTab } from '../tabs/rvm-json-pcf-extract-tab-workflow-wired.js';
 import { renderUniversalXmlConverterTab } from '../tabs/universal-xml-converter-tab.js';
 import { renderXmlCompareTab } from '../tabs/xml-compare-tab.js';
-import { renderPSNM_UtilityTab } from '../tabs/psnm-utility-tab.js?v=20260610-psnm-18';
+import { renderPSNM_UtilityTab } from '../tabs/psnm-utility-tab.js?v=20260610-psnm-19-native-audit-1';
 import '../tabs/psnm-utility/psnm-ui-p2-enhancements.js?v=20260609-p2-1';
 import '../tabs/psnm-utility/psnm-phase4c-hardening.js?v=20260609-phase4c-1';
 import '../tabs/psnm-utility/psnm-phase4d-persistence.js?v=20260609-phase4d-1';
 import { emit, on } from './event-bus.js';
 import { initDevDebugWindow, destroyDevDebugWindow } from '../debug/dev-debug-window.js';
 
-const TAB_VISIBILITY_URL = './config/tab-visibility.json';
+const TAB_VISIBILITY_URL = new URL('../config/tab-visibility.json', import.meta.url).href;
 
 const TAB_ID_ALIASES = new Map([
   ['viewer', 'viewer3d'],
@@ -91,7 +91,7 @@ async function loadTabVisibility() {
   if (visibilityLoaded) return;
   visibilityLoaded = true;
   try {
-    const res = await fetch(`${TAB_VISIBILITY_URL}?v=20260610-app-nav-1`, { cache: 'no-store' });
+    const res = await fetch(TAB_VISIBILITY_URL, { cache: 'no-store' });
     if (!res.ok) return;
     const config = await res.json();
     const hidden = new Set((config.hiddenTabs || config.hidden || []).map(normalizeTabId));
@@ -139,13 +139,19 @@ export async function renderActiveTab(tabId = state?.activeTab) {
     activeDestroy = null;
   }
   shellRefs.main.innerHTML = '';
+  let renderDestroy = null;
   try {
-    const destroy = activeTab.render(shellRefs.main, { emit, on, state });
-    activeDestroy = typeof destroy === 'function' ? destroy : null;
-    emit(RuntimeEvents.TAB_RENDERED, { tabId: activeTab.id });
+    renderDestroy = activeTab.render(shellRefs.main, { emit, on, state });
   } catch (error) {
     console.error(`Failed to render tab ${activeTab.id}`, error);
     shellRefs.main.innerHTML = `<div class="error">Failed to render ${h(activeTab.label)}: ${h(error.message || error)}</div>`;
+    return;
+  }
+  activeDestroy = typeof renderDestroy === 'function' ? renderDestroy : null;
+  try {
+    emit(RuntimeEvents.TAB_RENDERED, { tabId: activeTab.id });
+  } catch (error) {
+    console.warn(`Tab render notification failed for ${activeTab.id}`, error);
   }
 }
 

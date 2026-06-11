@@ -133,7 +133,14 @@ function resultTable(rows) {
 }
 function resultTableLike(rows, keys) { if (!rows?.length) return '<div class="psnm-banner">No rows.</div>'; return `<div class="psnm-tablewrap"><table class="psnm-table"><thead><tr>${keys.map((key) => `<th>${h(key)}</th>`).join('')}</tr></thead><tbody>${rows.map((row) => `<tr>${keys.map((key) => `<td>${h(row?.[key] ?? '')}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`; }
 function matchPanel(state) { return `<section class="psnm-card"><div class="psnm-card-head"><b>Match Results</b><button class="psnm-btn psnm-btn-secondary" data-psnm-action="copyMatch">Copy CSV</button></div><div class="psnm-card-body">${resultTable(state.result.rows)}</div></section>`; }
-function coveragePanel(state) { return `<section class="psnm-card"><div class="psnm-card-head"><b>Coverage / Exceptions</b><button class="psnm-btn psnm-btn-secondary" data-psnm-action="copyCoverage">Copy CSV</button></div><div class="psnm-card-body"><h3>Mandatory PS Coverage - from Master PS No</h3>${resultTableLike(state.result.mandatoryPsCoverageRows, ['psName','mandatorySource','matchedNode','occurrenceId','nodeMandatory','status'])}<h3>Mandatory Node Coverage - from Master Node</h3>${resultTableLike(state.result.mandatoryCoverageRows, ['node','occurrenceId','mandatorySource','inMasterNode','matchedPs','status'])}</div></section>`; }
+function coveragePanel(state) {
+  return `<section class="psnm-card"><div class="psnm-card-head"><b>Coverage / Exceptions</b><button class="psnm-btn psnm-btn-secondary" data-psnm-action="copyCoverage">Copy CSV</button></div><div class="psnm-card-body">
+    <h3>Mandatory PS Coverage - from Master PS No</h3>
+    ${resultTableLike(state.result.mandatoryPsCoverageRows, ['psName','mandatorySource','matchedNode','occurrenceId','nodeMandatory','status','severity','action'])}
+    <h3>Mandatory Node Coverage - from Master Node</h3>
+    ${resultTableLike(state.result.mandatoryCoverageRows, ['node','occurrenceId','mandatorySource','inMasterNode','matchedPs','status','severity','action'])}
+  </div></section>`;
+}
 function logPanel(state, debug = false) { const rows = debug ? state.result.debugLog : state.result.userLog; return `<section class="psnm-card"><div class="psnm-card-head"><b>${debug ? 'Debug Console' : 'User Log'}</b><button class="psnm-btn psnm-btn-secondary" data-psnm-action="${debug ? 'copyDebug' : 'copyUser'}">Copy CSV</button></div><div class="psnm-card-body">${resultTableLike(rows, debug ? ['sequence','level','code','message'] : ['level','category','source','item','reason','suggestedAction'])}</div></section>`; }
 
 function getAnchorRows(state) {

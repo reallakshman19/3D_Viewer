@@ -9,6 +9,7 @@ import { PIPE_OD_TO_DN } from '../../pcf-legacy/services/bore-converter.js';
 import {
   PSNM_makeMasterNodeRow,
   PSNM_MASTER_STATUS,
+  PSNM_isAuditStatus,
 } from './psnm-master-types.js';
 import { PSNM_logNodeTableLogic } from './psnm-table-logic-log.js';
 
@@ -222,6 +223,14 @@ export function PSNM_recomputeMasterNodeRow(row, transform = null, coordinateDec
   row.finalNodeBore = PSNM_optionalNumber(row.finalNodeBore);
   row.isTerminal = row.node === '-1';
 
+  if (PSNM_isAuditStatus(row.auditStatus || row.status)) {
+    row.status = row.auditStatus || row.status;
+    row.nodeE = null;
+    row.nodeU = null;
+    row.nodeS = null;
+    return row;
+  }
+
   if (row.enabled === false) row.status = PSNM_MASTER_STATUS.DISABLED;
   else if (!row.node || !Number.isFinite(row.rawX) || !Number.isFinite(row.rawY) || !Number.isFinite(row.rawZ)) row.status = PSNM_MASTER_STATUS.INVALID_COORDINATE;
   else if (row.boreConflict) row.status = PSNM_MASTER_STATUS.BORE_CONFLICT;
@@ -259,10 +268,37 @@ export function PSNM_resolveMasterNodeTable({ table2Text, table3Text, table4BTex
   const masterRows = [];
 
   for (const sourceRow of table2Rows) {
-    const node = String(sourceRow.node);
+    const auditStatus = sourceRow.auditStatus || '';
+    const node = String(sourceRow.node || (auditStatus ? `(missing node row ${sourceRow.rowIndex})` : ''));
     const occurrenceIndex = (occurrenceCounter.get(node) || 0) + 1;
     occurrenceCounter.set(node, occurrenceIndex);
     const occurrenceId = PSNM_occurrenceId(node, occurrenceIndex);
+
+    if (auditStatus) {
+      const master = PSNM_makeMasterNodeRow({
+        node,
+        occurrenceIndex,
+        occurrenceId,
+        rawX: null,
+        rawY: null,
+        rawZ: null,
+        table2Bore: sourceRow.directBoreMm ?? null,
+        finalNodeBore: sourceRow.directBoreMm ?? null,
+        boreSource: sourceRow.directBoreMm != null ? 'TABLE2_BORE' : 'MISSING',
+        isMandatoryNode: true,
+        mandatorySource: sourceRow.rowMandatorySource || 'TABLE2',
+        sourceTable: 'TABLE2',
+        sourceRow: sourceRow.rowIndex,
+        status: auditStatus,
+        auditStatus,
+        auditSeverity: sourceRow.auditSeverity || 'ERROR',
+        auditAction: sourceRow.auditAction || '',
+        remarks: sourceRow.auditAction || '',
+      });
+      masterRows.push(master);
+      continue;
+    }
+
     let coords = { x: NaN, y: NaN, z: NaN };
     try { coords = PSNM_nodeCoordsFromRow(sourceRow); } catch {}
 

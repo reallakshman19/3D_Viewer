@@ -57,6 +57,27 @@ function PSNM_mandatoryFromRow(row) {
   return PSNM_bool(row.mandatory || row.required || row['is mandatory'] || row['must match'] || row.req || row.mand || row.m);
 }
 
+function PSNM_auditAction(status, label) {
+  if (status === 'AUDIT_REQUIRED_PS_NAME_MISSING') return 'Add PS NAME for this mandatory PS audit row.';
+  if (status === 'AUDIT_REQUIRED_PS_POSITION_MISSING') return `Add/verify Position for mandatory PS ${label || 'row'}.`;
+  if (status === 'AUDIT_REQUIRED_PS_BORE_MISSING') return `Add/verify p1bore for mandatory PS ${label || 'row'}.`;
+  if (status === 'AUDIT_REQUIRED_NODE_NAME_MISSING') return 'Add Node number for this mandatory node audit row.';
+  if (status === 'AUDIT_REQUIRED_NODE_COORDINATE_MISSING') return `Add/verify X/Y/Z or Position for mandatory Node ${label || 'row'}.`;
+  return 'Review mandatory audit row.';
+}
+
+function PSNM_logMandatoryAudit(logger, source, item, status, action, row) {
+  logger?.user?.(
+    'ERROR',
+    'Mandatory Audit',
+    source,
+    item || row?.__raw || '',
+    status,
+    action,
+    row || {}
+  );
+}
+
 export function PSNM_roundUp1(value) {
   const n = Number(value);
   return Number.isFinite(n) ? Math.ceil((n - PSNM_EPS) * 10) / 10 : null;
@@ -184,11 +205,50 @@ export function PSNM_parsePsRows(text, logger = null) {
     const position = row.position || '';
     const p1bore = PSNM_number(row.p1bore || row.bore || row.nb || row.dn || row['bore mm'] || row['bore(mm)']);
     const isMandatoryPs = PSNM_mandatoryFromRow(row);
+
     if (!psName || !position) {
+      if (isMandatoryPs) {
+        const status = !psName
+          ? 'AUDIT_REQUIRED_PS_NAME_MISSING'
+          : 'AUDIT_REQUIRED_PS_POSITION_MISSING';
+        const action = PSNM_auditAction(status, psName);
+        PSNM_logMandatoryAudit(logger, 'PS Table', psName || row.__raw, status, action, row);
+        parsed.push({
+          psName: PSNM_safeString(psName),
+          position: PSNM_safeString(position),
+          p1bore,
+          isMandatoryPs: true,
+          mandatorySource: 'PS_TABLE',
+          rowIndex: row.__rowIndex,
+          auditStatus: status,
+          auditSeverity: 'ERROR',
+          auditAction: action,
+          rawAuditRow: row.__raw,
+        });
+        continue;
+      }
       logger?.user?.('ERROR', 'Parse Failed', 'PS Table', row.__raw, 'PS row must contain PS NAME and Position.', 'Paste PS table with columns: PS NAME, Position, p1bore.', { row });
       continue;
     }
-    parsed.push({ psName: PSNM_safeString(psName).replace(/\.$/, ''), position: PSNM_safeString(position), p1bore, isMandatoryPs, mandatorySource: isMandatoryPs ? 'PS_TABLE' : '', rowIndex: row.__rowIndex });
+
+    const auditStatus = isMandatoryPs && !Number.isFinite(p1bore)
+      ? 'AUDIT_REQUIRED_PS_BORE_MISSING'
+      : '';
+    const auditAction = auditStatus ? PSNM_auditAction(auditStatus, psName) : '';
+    if (auditStatus) PSNM_logMandatoryAudit(logger, 'PS Table', psName, auditStatus, auditAction, row);
+
+    parsed.push({
+      psName: PSNM_safeString(psName).replace(/\.$/, ''),
+      position: PSNM_safeString(position),
+      p1bore,
+      isMandatoryPs,
+      mandatorySource: isMandatoryPs ? 'PS_TABLE' : '',
+      rowIndex: row.__rowIndex,
+      auditStatus,
+      auditSeverity: auditStatus ? 'ERROR' : '',
+      auditAction,
+      rawAuditRow: auditStatus ? row.__raw : '',
+    });
   }
   return parsed;
 }
@@ -204,15 +264,45 @@ export function PSNM_parseNodeRows(text, logger = null) {
     const hasDirectBore = Number.isFinite(directBoreMm);
     const isMandatoryNode = PSNM_mandatoryFromRow(row);
     if (!node) {
+      if (isMandatoryNode) {
+        const status = 'AUDIT_REQUIRED_NODE_NAME_MISSING';
+        const action = PSNM_auditAction(status, node);
+        PSNM_logMandatoryAudit(logger, 'Node XYZ Table', row.__raw, status, action, row);
+        parsed.push({
+          node: '',
+          directBoreMm: hasDirectBore ? directBoreMm : null,
+          isMandatoryNode: true,
+          rowMandatorySource: 'NODE_TABLE',
+          rowIndex: row.__rowIndex,
+          auditStatus: status,
+          auditSeverity: 'ERROR',
+          auditAction: action,
+          rawAuditRow: row.__raw,
+        });
+        continue;
+      }
       logger?.user?.('ERROR', 'Parse Failed', 'Node XYZ Table', row.__raw, 'Node row must contain Node.', 'Paste Node table with columns: Node, X, Y, Z.', { row });
       continue;
     }
-    const base = { node: PSNM_safeString(node), directBoreMm: hasDirectBore ? directBoreMm : null, isMandatoryNode, rowMandatorySource: isMandatoryNode ? 'NODE_TABLE' : '', rowIndex: row.__rowIndex };
+    const base = {
+      node: PSNM_safeString(node),
+      directBoreMm: hasDirectBore ? directBoreMm : null,
+      isMandatoryNode,
+      rowMandatorySource: isMandatoryNode ? 'NODE_TABLE' : '',
+      rowIndex: row.__rowIndex,
+    };
     if (Number.isFinite(x) && Number.isFinite(y) && Number.isFinite(z)) {
       parsed.push({ ...base, x, y, z, position: `${x}, ${y}, ${z}` });
     } else if (position) {
       parsed.push({ ...base, position: PSNM_safeString(position) });
     } else {
+      if (isMandatoryNode) {
+        const status = 'AUDIT_REQUIRED_NODE_COORDINATE_MISSING';
+        const action = PSNM_auditAction(status, node);
+        PSNM_logMandatoryAudit(logger, 'Node XYZ Table', node, status, action, row);
+        parsed.push({ ...base, auditStatus: status, auditSeverity: 'ERROR', auditAction: action, rawAuditRow: row.__raw });
+        continue;
+      }
       logger?.user?.('ERROR', 'Parse Failed', 'Node XYZ Table', row.__raw, 'Node row must contain X/Y/Z or Position.', 'Paste Node table as Node, X, Y, Z or legacy Node, Position.', { row });
     }
   }
