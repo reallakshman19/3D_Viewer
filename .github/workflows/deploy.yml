@@ -26,6 +26,13 @@ jobs:
       - name: Verify static viewer entrypoint
         run: node viewer/tests/app-entrypoint-static.test.js
 
+      - name: Verify RVM PCF shared workflow and adapter checks
+        run: |
+          node viewer/tests/rvm-pcf-master-context.test.js
+          node viewer/tests/rvm-pcf-shared-workflow-adapters.test.js
+          node viewer/tests/rvm-pcf-row-enricher.test.js
+          node viewer/tests/rvm-pcf-json-adapter-preview-run.test.js
+
       - name: Configure Pages
         uses: actions/configure-pages@v5
 
