@@ -2,6 +2,7 @@ import { RuntimeEvents } from '../contracts/runtime-events.js';
 import { state, updateRvmPcfExtractState } from '../core/state.js';
 import { on, off, emit } from '../core/event-bus.js';
 import { mountRvmPcfLegacyMasterPanel } from '../rvm-pcf-master-tabs/RvmPcfLegacyMasterPanel.js';
+import { normalizeRvmJsonPcfRequestPayload } from './rvm-json-pcf-trigger-helpers.js';
 
 import {
   DEFAULT_RVM_PCF_TOPOLOGY_MODE,
@@ -1639,32 +1640,31 @@ export function mount(container) {
   });
 
   _offExtractRequested = on(RuntimeEvents.RVM_EXTRACT_PCF_REQUESTED, async (payload = {}) => {
+    const next = normalizeRvmJsonPcfRequestPayload({
+      payload,
+      appState: state,
+    });
+
     updateRvmPcfExtractState({
-      scope: payload.scope || 'ALL',
-      selectedCanonicalIds: payload.selectedCanonicalIds || [],
-    }, 'extract-requested');
+      workflowMode: next.workflowMode,
+      workflowAdapterId: next.workflowAdapterId,
+      sourceKind: next.sourceKind,
+      scope: next.scope,
+      selectedCanonicalIds: next.selectedCanonicalIds,
+      activeWorkflowPhase: next.activeWorkflowPhase,
+      requestedPanel: next.requestedPanel,
+    }, 'json-rvm-pcf-requested');
+
     _updateHeader(container);
-    _showPanel(container, 'scope');
+
+    if (next.openWorkflow) {
+      await _runRebuildCsv(container);
+      _showPanel(container, next.requestedPanel === 'workflow' ? 'table' : next.requestedPanel);
+    }
   });
 
   _offStateChanged = on(RuntimeEvents.RVM_PCF_EXTRACT_STATE_CHANGED, () => { _updateHeader(container); });
   _updateHeader(container); _showPanel(container, 'scope');
-  _offExtractRequested = on(RuntimeEvents.RVM_EXTRACT_PCF_REQUESTED, async (payload = {}) => {
-    const selectedCanonicalIds = Array.isArray(payload.selectedCanonicalIds)
-      ? [...payload.selectedCanonicalIds]
-      : (state.rvmPcfExtract.selectedCanonicalIds || []);
-    const scope = payload.scope === 'selected' || selectedCanonicalIds.length > 0 ? 'selected' : 'full';
-
-    updateRvmPcfExtractState({
-      scope,
-      selectedCanonicalIds,
-    }, 'extract-requested');
-
-    _updateHeader(container);
-    await _runRebuildCsv(container);
-    _showPanel(container, 'table');
-  });
-  _offStateChanged = on(RuntimeEvents.RVM_PCF_EXTRACT_STATE_CHANGED, () => { _updateHeader(container); });
 }
 
 export function dispose() {
