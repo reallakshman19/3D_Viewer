@@ -9,6 +9,8 @@ const repoRoot = path.resolve(__dirname, '../..');
 const viewerRoot = path.join(repoRoot, 'viewer');
 const indexPath = path.join(viewerRoot, 'index.html');
 const runtimeEventsPath = path.join(viewerRoot, 'contracts/runtime-events.js');
+const appPath = path.join(viewerRoot, 'core/app.js');
+const eventBusPath = path.join(viewerRoot, 'core/event-bus.js');
 
 function stripUrlSuffix(value) {
   return String(value || '').split('?')[0].split('#')[0];
@@ -162,6 +164,22 @@ function verifyRuntimeFetchAssets(moduleFiles) {
   assert.deepEqual(missing, [], `runtime fetch assets must exist inside deployed viewer root:\n${missing.join('\n')}`);
 }
 
+function verifyAppTabLifecycleIsolation() {
+  const appSource = fs.readFileSync(appPath, 'utf8');
+  const eventBusSource = fs.readFileSync(eventBusPath, 'utf8');
+
+  assert.ok(appSource.includes('let activeTabDestroy'), 'app.js must keep active tab cleanup separate from app cleanup');
+  assert.ok(appSource.includes('let appDestroy'), 'app.js must keep app cleanup separate from active tab cleanup');
+  assert.ok(appSource.includes('function cleanupActiveTab'), 'app.js must centralize active tab cleanup');
+  assert.ok(!appSource.includes('mountedDestroy = mountApp'), 'app.js must not store app cleanup in the active tab cleanup slot');
+  assert.ok(appSource.includes('renderTabError'), 'app.js must render a tab error boundary instead of killing navigation');
+  assert.ok(appSource.includes('tabRendererCache'), 'app.js must lazy-load/cache tab renderers');
+  assert.ok(!/import\s+\{\s*renderViewer3D\s*\}/.test(appSource), 'app.js must not eagerly import tab renderers at startup');
+
+  assert.ok(eventBusSource.includes('return () => off(event, fn);'), 'event-bus.on() must return an unsubscribe function');
+  assert.ok(eventBusSource.includes('listener failed'), 'event-bus.emit() must isolate listener failures');
+}
+
 const indexHtml = fs.readFileSync(indexPath, 'utf8');
 const moduleScripts = extractHtmlRefs(indexHtml, 'script', 'src', (tag) => /type=["']module["']/i.test(tag));
 const stylesheets = extractHtmlRefs(indexHtml, 'link', 'href', (tag) => /rel=["']stylesheet["']/i.test(tag));
@@ -185,4 +203,5 @@ for (const href of stylesheets) {
 const checkedModules = verifyModuleGraph(entryFiles);
 verifyRuntimeEventReferences(checkedModules);
 verifyRuntimeFetchAssets(checkedModules);
-console.log(`Verified ${moduleScripts.length} viewer module entrypoint(s), ${stylesheets.length} stylesheet(s), ${checkedModules.size} local module file(s), runtime events, and runtime fetch assets.`);
+verifyAppTabLifecycleIsolation();
+console.log(`Verified ${moduleScripts.length} viewer module entrypoint(s), ${stylesheets.length} stylesheet(s), ${checkedModules.size} local module file(s), runtime events, runtime fetch assets, and app tab lifecycle isolation.`);
