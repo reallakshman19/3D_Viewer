@@ -10,7 +10,16 @@ export const PSNM_MASTER_STATUS = Object.freeze({
   DUPLICATE_PS: 'DUPLICATE_PS',
   BORE_CONFLICT: 'BORE_CONFLICT',
   MISSING_BORE: 'MISSING_BORE',
+  AUDIT_REQUIRED_PS_NAME_MISSING: 'AUDIT_REQUIRED_PS_NAME_MISSING',
+  AUDIT_REQUIRED_PS_POSITION_MISSING: 'AUDIT_REQUIRED_PS_POSITION_MISSING',
+  AUDIT_REQUIRED_PS_BORE_MISSING: 'AUDIT_REQUIRED_PS_BORE_MISSING',
+  AUDIT_REQUIRED_NODE_NAME_MISSING: 'AUDIT_REQUIRED_NODE_NAME_MISSING',
+  AUDIT_REQUIRED_NODE_COORDINATE_MISSING: 'AUDIT_REQUIRED_NODE_COORDINATE_MISSING',
 });
+
+export function PSNM_isAuditStatus(value) {
+  return /^AUDIT_REQUIRED_/i.test(String(value || ''));
+}
 
 let PSNM_ROW_SEQUENCE = 0;
 
@@ -45,6 +54,9 @@ export function PSNM_makeMasterPsRow(seed = {}) {
     status: seed.status || PSNM_MASTER_STATUS.OK,
     enabled: seed.enabled !== false,
     userEdited: seed.userEdited === true,
+    auditStatus: seed.auditStatus || '',
+    auditSeverity: seed.auditSeverity || '',
+    auditAction: seed.auditAction || '',
     remarks: seed.remarks || '',
   };
 }
@@ -75,6 +87,9 @@ export function PSNM_makeMasterNodeRow(seed = {}) {
     status: seed.status || PSNM_MASTER_STATUS.OK,
     enabled: seed.enabled !== false,
     userEdited: seed.userEdited === true,
+    auditStatus: seed.auditStatus || '',
+    auditSeverity: seed.auditSeverity || '',
+    auditAction: seed.auditAction || '',
     remarks: seed.remarks || '',
   };
 }

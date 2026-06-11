@@ -5,6 +5,7 @@ import {
 import {
   PSNM_makeMasterPsRow,
   PSNM_MASTER_STATUS,
+  PSNM_isAuditStatus,
   PSNM_normalizePsName,
 } from './psnm-master-types.js';
 import { PSNM_logPsTableLogic } from './psnm-table-logic-log.js';
@@ -195,6 +196,10 @@ function PSNM_parseMasterPsPosition(row, logger = null) {
 export function PSNM_recomputeMasterPsRow(row, logger = null) {
   row.psKey = PSNM_normalizePsName(row.psName);
   if (row.enabled === false) row.status = PSNM_MASTER_STATUS.DISABLED;
+  else if (PSNM_isAuditStatus(row.auditStatus || row.status)) {
+    row.status = row.auditStatus || row.status;
+    return row;
+  }
   if (row.status !== PSNM_MASTER_STATUS.MISSING_FROM_TABLE1 && row.enabled !== false) {
     row.status = PSNM_MASTER_STATUS.OK;
     PSNM_parseMasterPsPosition(row, logger);
@@ -211,8 +216,11 @@ export function PSNM_resolveMasterPsTable({ table1Text, table4AText, logger = nu
   const duplicateKeys = new Set();
 
   for (const row of table1Rows) {
-    const psKey = PSNM_normalizePsName(row.psName);
+    const auditStatus = row.auditStatus || '';
+    const visiblePsName = row.psName || (auditStatus ? `(missing PS name row ${row.rowIndex})` : '');
+    const psKey = PSNM_normalizePsName(visiblePsName);
     if (!psKey) continue;
+
     if (byPs.has(psKey)) {
       duplicateKeys.add(psKey);
       logger?.user?.('WARNING', 'Duplicate PS', 'Table 1', row.psName, 'Duplicate PS name found. First row kept in Master PS No.', 'Review duplicate PS in Table 1 before matching.', { psName: row.psName, rowIndex: row.rowIndex });
@@ -221,14 +229,18 @@ export function PSNM_resolveMasterPsTable({ table1Text, table4AText, logger = nu
 
     const master = PSNM_makeMasterPsRow({
       psKey,
-      psName: row.psName,
+      psName: visiblePsName,
       positionRaw: row.position,
       p1bore: Number.isFinite(row.p1bore) ? row.p1bore : null,
       isMandatoryPs: row.isMandatoryPs === true,
       mandatorySource: row.isMandatoryPs ? 'TABLE1' : '',
       sourceTable: 'TABLE1',
       sourceRow: row.rowIndex,
-      status: PSNM_MASTER_STATUS.OK,
+      status: auditStatus || PSNM_MASTER_STATUS.OK,
+      auditStatus,
+      auditSeverity: row.auditSeverity || '',
+      auditAction: row.auditAction || '',
+      remarks: row.auditAction || '',
     });
     PSNM_parseMasterPsPosition(master, logger);
     byPs.set(psKey, master);

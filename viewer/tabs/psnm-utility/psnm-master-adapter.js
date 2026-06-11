@@ -1,3 +1,5 @@
+import { PSNM_isAuditStatus } from './psnm-master-types.js';
+
 export function PSNM_masterPsToMatchRows(masterPsRows = []) {
   return masterPsRows
     .filter((row) => row && row.enabled !== false)
@@ -53,6 +55,20 @@ export function PSNM_masterPsCoverageRows(masterPsRows = [], matchRows = []) {
     .filter((row) => row && row.enabled !== false && row.isMandatoryPs === true)
     .map((row) => {
       const match = matchRows.find((item) => item.masterPsRowId === row.rowId || item.psName === row.psName);
+      const auditStatus = row.auditStatus || (PSNM_isAuditStatus(row.status) ? row.status : '');
+      if (auditStatus) {
+        return {
+          psName: row.psName,
+          mandatorySource: row.mandatorySource || 'TABLE1',
+          matchedNode: '',
+          occurrenceId: '',
+          nodeMandatory: false,
+          status: auditStatus,
+          severity: row.auditSeverity || 'ERROR',
+          action: row.auditAction || row.remarks || 'Review mandatory PS audit row.',
+          masterRowId: row.rowId,
+        };
+      }
       if (row.status === 'MISSING_FROM_TABLE1') {
         return {
           psName: row.psName,
@@ -102,6 +118,20 @@ export function PSNM_masterNodeCoverageRows(masterNodeRows = [], matchRows = [])
   return masterNodeRows
     .filter((row) => row && row.enabled !== false && row.isMandatoryNode === true)
     .map((row) => {
+      const auditStatus = row.auditStatus || (PSNM_isAuditStatus(row.status) ? row.status : '');
+      if (auditStatus) {
+        return {
+          node: row.node,
+          occurrenceId: row.occurrenceId,
+          mandatorySource: row.mandatorySource || 'TABLE2',
+          inMasterNode: true,
+          matchedPs: '',
+          status: auditStatus,
+          severity: row.auditSeverity || 'ERROR',
+          action: row.auditAction || row.remarks || 'Review mandatory Node audit row.',
+          masterRowId: row.rowId,
+        };
+      }
       if (row.status === 'MISSING_FROM_TABLE2') {
         return {
           node: row.node,
