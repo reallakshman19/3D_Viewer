@@ -51,6 +51,18 @@ function natural(a, b) {
 function uniqueSorted(values) {
   return [...new Set((values || []).filter((value) => value != null && value !== ''))].sort(natural);
 }
+function tagLabel(tag) {
+  return tag ? ` [Tag: ${tag}]` : '';
+}
+function nodeTagLabel(row) {
+  return row?.tag ? ` [Tag: ${row.tag}]` : '';
+}
+function nodeSubject(node, tag = '') {
+  return `Node ${node}${tagLabel(tag)}`;
+}
+function table1Context(row) {
+  return { node: row?.node || '', tag: row?.tag || '', table1PsNo: row?.table1PsNo || row?.rawPsNo || '' };
+}
 
 export function normalizePsNo(rawValue) {
   const raw = String(rawValue ?? '').trim();
@@ -92,10 +104,9 @@ function parseTable1DKeywords(text, log) {
   let rawText = source;
   if (lines.length > 1 && /master\s+keywords/i.test(lines[0])) rawText = lines.slice(1).join(',');
   const parsed = rawText.split(',').map((item) => catalogForKeyword(item)).filter(Boolean);
-  const fallback = DEFAULT_SUPPORT_KEYWORD_CATALOG;
   const unique = [];
   const seen = new Set();
-  for (const item of parsed.length ? parsed : fallback) {
+  for (const item of parsed.length ? parsed : DEFAULT_SUPPORT_KEYWORD_CATALOG) {
     if (!item.canonical || seen.has(item.canonical)) continue;
     seen.add(item.canonical);
     unique.push(item);
@@ -136,7 +147,20 @@ function createLogger() {
   return {
     userLog,
     debugLog,
-    user(level, stage, subject, message, action = '') { userLog.push({ time: new Date().toISOString(), level, stage, subject, message, action }); },
+    user(level, stage, subject, message, action = '', details = {}) {
+      userLog.push({
+        time: new Date().toISOString(),
+        level,
+        stage,
+        subject,
+        message,
+        action,
+        tag: details.tag || '',
+        table1PsNo: details.table1PsNo || '',
+        node: details.node || '',
+        psnoModel: details.psnoModel || '',
+      });
+    },
     debug(level, code, subject, details = {}) { debugLog.push({ time: new Date().toISOString(), level, code, subject, details }); },
   };
 }
@@ -159,7 +183,7 @@ function parseTable1(text, log) {
     const row = { id: `T1#${String(offset + 1).padStart(3, '0')}`, sourceRow, rawPsNo, node, ...norm, tag: norm.tag, used: false };
     rows.push(row);
     log.debug('DEBUG', 'T1_ROW_PARSED', rawPsNo, row);
-    if (norm.tag) log.user('INFO', 'NORMALIZE', rawPsNo, `Extracted tag "${norm.tag}" from Table-1 PS data.`);
+    if (norm.tag) log.user('INFO', 'NORMALIZE', rawPsNo, `Extracted tag "${norm.tag}" from Table-1 PS data.`, '', { tag: norm.tag, table1PsNo: rawPsNo, node });
   }
   log.user('INFO', 'PARSE', 'Table-1', `Parsed ${rows.length} PS→Node rows.`);
   return rows;
@@ -352,7 +376,7 @@ function buildCandidate(model, ref, options, log) {
   if (!eligible) candidate.rejectReason = !boreEval.eligible ? boreEval.basis : !supportEval.eligible ? supportEval.basis : lineEval.basis;
   if (boreEval.basis === 'BORE_CONFLICT') candidate.warnings.push('BORE_CONFLICT');
   if (supportEval.basis === 'SUPPORT_CONFLICT') candidate.warnings.push('SUPPORT_CONFLICT');
-  log.debug('DEBUG', 'CANDIDATE_BUILT', `${model.psnoModel} -> ${ref.node}`, candidate);
+  log.debug('DEBUG', 'CANDIDATE_BUILT', `${model.psnoModel} -> ${ref.node}${tagLabel(ref.tag)}`, candidate);
   return candidate;
 }
 
@@ -389,9 +413,10 @@ function coverageStatus(master, covered, missing, extra) {
   if (extra.length) return 'COVERED_WITH_EXTRA';
   return 'COVERED';
 }
-function coverageAction(status, missing, extra, node) {
-  if (status === 'PARTIAL' || status === 'MISSING_ALL') return `Add/verify mapped Table-2 DTXR containing ${supportListText(missing)} for Node ${node}, or confirm it is not required.`;
-  if (status === 'COVERED_WITH_EXTRA' || status === 'EXTRA_ONLY') return `Review mapped Table-2 DTXR keyword(s) ${supportListText(extra)} or update Table-1C if valid for Node ${node}.`;
+function coverageAction(status, missing, extra, node, tag = '') {
+  const ctx = nodeSubject(node, tag);
+  if (status === 'PARTIAL' || status === 'MISSING_ALL') return `Add/verify mapped Table-2 DTXR containing ${supportListText(missing)} for ${ctx}, or confirm it is not required.`;
+  if (status === 'COVERED_WITH_EXTRA' || status === 'EXTRA_ONLY') return `Review mapped Table-2 DTXR keyword(s) ${supportListText(extra)} or update Table-1C if valid for ${ctx}.`;
   return 'No action.';
 }
 function buildSupportCoverageRows({ table1Rows, resultRows, log }) {
@@ -402,16 +427,19 @@ function buildSupportCoverageRows({ table1Rows, resultRows, log }) {
   for (const node of allNodes) {
     const refs = refsByNode.get(node) || [];
     const mapped = mappedByNode.get(node) || [];
+    const tags = uniqueSorted(refs.map((ref) => ref.tag));
+    const tag = tags.join(', ');
+    const table1PsNo = uniqueSorted(refs.map((ref) => ref.rawPsNo)).join(', ');
     const master = uniqueSorted(refs.flatMap((ref) => ref.supportTypesAvailable || []));
     const covered = uniqueSorted(mapped.flatMap((row) => row.modelDtxrKeywords || []));
     const missing = master.filter((item) => !covered.includes(item));
     const extra = covered.filter((item) => !master.includes(item));
     const status = coverageStatus(master, covered, missing, extra);
-    const action = coverageAction(status, missing, extra, node);
+    const action = coverageAction(status, missing, extra, node, tag);
     const row = {
       node,
-      table1PsNo: uniqueSorted(refs.map((ref) => ref.rawPsNo)).join(', '),
-      tag: uniqueSorted(refs.map((ref) => ref.tag)).join(', '),
+      table1PsNo,
+      tag,
       dia: uniqueSorted(refs.map((ref) => Number.isFinite(ref.nodeDia) ? String(ref.nodeDia) : '')).join(', '),
       derivedDn: uniqueSorted(refs.map((ref) => Number.isFinite(ref.derivedDn) ? String(ref.derivedDn) : '')).join(', '),
       lineNo: uniqueSorted(refs.map((ref) => ref.nodeLine)).join(', '),
@@ -426,20 +454,22 @@ function buildSupportCoverageRows({ table1Rows, resultRows, log }) {
     };
     rows.push(row);
     for (const mappedRow of mapped) {
+      mappedRow.tag = mappedRow.tag || tag;
+      mappedRow.table1PsNo = mappedRow.table1PsNo || table1PsNo;
       mappedRow.nodeCoverageNote = missing.length
-        ? `Node ${node} missing ${supportListText(missing)} in mapped DTXR.`
-        : extra.length ? `Node ${node} has extra DTXR keyword(s): ${supportListText(extra)}.` : '';
+        ? `${nodeSubject(node, tag)} missing ${supportListText(missing)} in mapped DTXR.`
+        : extra.length ? `${nodeSubject(node, tag)} has extra DTXR keyword(s): ${supportListText(extra)}.` : '';
       mappedRow.nodeCoverageStatus = status;
     }
     if (missing.length) {
-      log.user('WARNING', 'SUPPORT_COVERAGE', `Node ${node}`, `Master ISONOTE contains ${supportListText(master)}. Mapped Table-2 DTXR covers ${supportListText(covered) || 'none'}. Missing ${supportListText(missing)}.`, action);
-      log.debug('WARNING', 'SUPPORT_COVERAGE_MISSING', `Node ${node}`, row);
+      log.user('WARNING', 'SUPPORT_COVERAGE', nodeSubject(node, tag), `Master ISONOTE contains ${supportListText(master)}. Mapped Table-2 DTXR covers ${supportListText(covered) || 'none'}. Missing ${supportListText(missing)}.`, action, { node, tag, table1PsNo });
+      log.debug('WARNING', 'SUPPORT_COVERAGE_MISSING', nodeSubject(node, tag), row);
     }
     if (extra.length) {
-      log.user('WARNING', 'SUPPORT_COVERAGE', `Node ${node}`, `Mapped Table-2 DTXR contains ${supportListText(extra)}, but Table-1C master keywords are ${supportListText(master) || 'none'}.`, action);
-      log.debug('WARNING', 'SUPPORT_COVERAGE_EXTRA', `Node ${node}`, row);
+      log.user('WARNING', 'SUPPORT_COVERAGE', nodeSubject(node, tag), `Mapped Table-2 DTXR contains ${supportListText(extra)}, but Table-1C master keywords are ${supportListText(master) || 'none'}.`, action, { node, tag, table1PsNo });
+      log.debug('WARNING', 'SUPPORT_COVERAGE_EXTRA', nodeSubject(node, tag), row);
     }
-    log.debug('INFO', 'SUPPORT_COVERAGE_NODE_BUILT', `Node ${node}`, row);
+    log.debug('INFO', 'SUPPORT_COVERAGE_NODE_BUILT', nodeSubject(node, tag), row);
   }
   return rows;
 }
@@ -450,6 +480,8 @@ function annotateCandidateCoverage(candidateRows, resultRows) {
     if (!row) continue;
     candidate.nodeCoverageNote = row.nodeCoverageNote || '';
     candidate.nodeCoverageStatus = row.nodeCoverageStatus || '';
+    candidate.tag = candidate.tag || row.tag || '';
+    candidate.table1PsNo = candidate.table1PsNo || row.table1PsNo || '';
   }
 }
 function buildSummary(rows, table1Rows, modelRows, candidates, userLog, supportCoverageRows = []) {
@@ -464,7 +496,7 @@ function buildSummary(rows, table1Rows, modelRows, candidates, userLog, supportC
     supportMatches: rows.filter((r) => r.supportMatch).length,
     supportCoverageRows: supportCoverageRows.length,
     supportCoverageWarnings: supportCoverageRows.filter((row) => ['PARTIAL', 'MISSING_ALL', 'COVERED_WITH_EXTRA', 'EXTRA_ONLY'].includes(row.coverageStatus)).length,
-    tags: Array.from(new Set(rows.map((r) => r.tag).filter(Boolean))),
+    tags: Array.from(new Set([...rows.map((r) => r.tag), ...supportCoverageRows.map((r) => r.tag)].filter(Boolean))),
   };
 }
 
@@ -495,12 +527,12 @@ function resolveGroup(models, refs, options, log) {
     if (reused) {
       selected.basis = `${selected.basis} + MULTI_SUPPORT_NODE`;
       selected.warnings.push(selected.supportMatch ? 'NODE_REUSED_FOR_SUPPORT' : 'NODE_REUSED_SUPPORT_REVIEW');
-      log.debug('INFO', 'MULTI_SUPPORT_NODE_REUSE', `${model.psnoModel} -> ${selected.node}`, { psnoModel: model.psnoModel, node: selected.node, supportSlot: supportSlotLabel(selected), selected });
+      log.debug('INFO', 'MULTI_SUPPORT_NODE_REUSE', `${model.psnoModel} -> ${selected.node}${nodeTagLabel(selected)}`, { psnoModel: model.psnoModel, node: selected.node, tag: selected.tag, table1PsNo: selected.table1PsNo, supportSlot: supportSlotLabel(selected), selected });
     }
     outputRows.push(makeResultRow(selected));
     const stage = models.length > 1 || refs.length > 1 ? 'DUPLICATE_ASSIGN' : 'RESOLVE';
     const supportMsg = selected.supportMatch ? ` Support ${selected.supportMatch}.` : selected.modelSupportTypes?.length ? ` Support requested but not matched (${selected.supportBasis}).` : '';
-    log.user('INFO', stage, model.psnoModel, `Mapped to Node ${selected.node} using ${selected.basis}.${supportMsg}`);
+    log.user('INFO', stage, model.psnoModel, `Mapped to Node ${selected.node}${tagLabel(selected.tag)} using ${selected.basis}.${supportMsg}`, '', { ...table1Context(selected), psnoModel: model.psnoModel });
   }
   return { outputRows, candidateRows };
 }
@@ -523,7 +555,7 @@ export function runPsMappingResolver(input = {}) {
     const support = supportByNode.get(ref.node);
     if (support) { ref.nodeIsonote = support.isonote; ref.supportTypesAvailable = support.supportTypes; }
     else { ref.nodeIsonote = ''; ref.supportTypesAvailable = []; }
-    log.debug('DEBUG', 'REFERENCE_ENRICHED', ref.rawPsNo, ref);
+    log.debug('DEBUG', 'REFERENCE_ENRICHED', `${ref.rawPsNo}${tagLabel(ref.tag)}`, ref);
   }
   const refsByBase = groupBy(table1Rows, (r) => r.basePs);
   const modelsByBase = groupBy(modelRows, (r) => r.basePs);
@@ -532,7 +564,10 @@ export function runPsMappingResolver(input = {}) {
   for (const [basePs, models] of modelsByBase.entries()) {
     const refs = refsByBase.get(basePs) || [];
     if (!refs.length) {
-      for (const model of models) { rows.push(makeNoMatch(model, 'NO_BASE_PS_MATCH')); log.user('WARNING', 'RESOLVE', model.psnoModel, `No Table-1 row found for base PS ${basePs}.`); }
+      for (const model of models) {
+        rows.push(makeNoMatch(model, 'NO_BASE_PS_MATCH'));
+        log.user('WARNING', 'RESOLVE', model.psnoModel, `No Table-1 row found for base PS ${basePs}.`);
+      }
       continue;
     }
     const resolved = resolveGroup(models, refs, options, log);
@@ -546,7 +581,7 @@ export function runPsMappingResolver(input = {}) {
 }
 
 export function rowsToCsv(rows) {
-  const headers = ['PSNO_Model', 'Node', 'Tag', 'Support match', 'Node Coverage Note', 'Basis'];
+  const headers = ['PSNO_Model', 'Node', 'Table-1 PS No', 'Tag', 'Support match', 'Node Coverage Note', 'Basis'];
   const esc = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
-  return [headers.join(','), ...rows.map((r) => [r.psnoModel, r.node, r.tag, r.supportMatch, r.nodeCoverageNote, r.basis].map(esc).join(','))].join('\n');
+  return [headers.join(','), ...rows.map((r) => [r.psnoModel, r.node, r.table1PsNo, r.tag, r.supportMatch, r.nodeCoverageNote, r.basis].map(esc).join(','))].join('\n');
 }
