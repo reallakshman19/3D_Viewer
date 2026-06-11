@@ -17,11 +17,54 @@ PIPE ANCHOR	LINE_STOP
 
 const supportOptionState = {
   useBuiltInSupportKeywordLogic: true,
-  treatAnchorAsLineStop: true,
   enableSupportGapComparison: true,
   supportGapToleranceMm: 0,
   supportKeywordRulesText: DEFAULT_SUPPORT_KEYWORD_RULES_TEXT,
 };
+
+const CANONICAL_VALUES = ['REST', 'GUIDE', 'LINE_STOP'];
+
+function installSupportKeywordTableStyle() {
+  if (document.getElementById('psmap-skr-style')) return;
+  const s = document.createElement('style');
+  s.id = 'psmap-skr-style';
+  s.textContent = `.psmap-skr-table{width:100%;border-collapse:collapse;font-size:12px}.psmap-skr-table th{background:#1e293b;color:#9fc9ff;padding:5px 8px;text-align:left;border-bottom:1px solid rgba(143,197,255,.2);font-weight:700}.psmap-skr-table td{border-bottom:1px solid rgba(143,197,255,.08);padding:3px 4px;vertical-align:middle}.psmap-skr-input{box-sizing:border-box;width:100%;border:1px solid rgba(143,197,255,.18);border-radius:6px;background:#0b1220;color:#e5edf7;padding:4px 7px;font:12px ui-monospace,Consolas,monospace}.psmap-skr-input:focus{outline:none;border-color:rgba(143,197,255,.55)}.psmap-skr-del{border:none;background:rgba(239,68,68,.12);color:#fca5a5;border-radius:4px;cursor:pointer;padding:3px 8px;font-size:11px;line-height:1.4}.psmap-skr-del:hover{background:rgba(239,68,68,.28)}.psmap-skr-add-row{margin-top:6px;padding:4px 10px;font-size:11px}`;
+  document.head.appendChild(s);
+}
+
+function parseKeywordRules(text) {
+  return String(text || '').split(/\r?\n/).map((l) => l.trim()).filter((l) => l && !/^pattern\b/i.test(l)).map((l) => {
+    const parts = l.split(/\t/);
+    return { pattern: (parts[0] || '').trim(), canonical: ((parts[1] || '').trim().toUpperCase() || 'REST') };
+  });
+}
+
+function rulesToText(rules) {
+  return ['Pattern\tCanonical', ...rules.map((r) => `${r.pattern}\t${r.canonical}`)].join('\n');
+}
+
+function renderSkrRows(rules) {
+  return rules.map((r, i) => `<tr data-psmap-skr-row="${i}">
+    <td><input class="psmap-skr-input" type="text" value="${h(r.pattern)}" data-psmap-skr-col="pattern"></td>
+    <td><select class="psmap-skr-input" data-psmap-skr-col="canonical">${CANONICAL_VALUES.map((v) => `<option value="${v}"${v === r.canonical ? ' selected' : ''}>${v}</option>`).join('')}</select></td>
+    <td><button type="button" class="psmap-skr-del" data-psmap-skr-action="delete-row">✕</button></td>
+  </tr>`).join('');
+}
+
+function syncSkrTextarea(card) {
+  const tbody = card.querySelector('[data-psmap-skr-body]');
+  const hidden = card.querySelector('[data-psmap-skr-hidden]');
+  if (!tbody || !hidden) return;
+  const rules = [];
+  for (const row of tbody.querySelectorAll('tr[data-psmap-skr-row]')) {
+    const pattern = row.querySelector('[data-psmap-skr-col="pattern"]')?.value?.trim() || '';
+    const canonical = row.querySelector('[data-psmap-skr-col="canonical"]')?.value?.trim() || 'REST';
+    if (pattern) rules.push({ pattern, canonical });
+  }
+  hidden.value = rulesToText(rules);
+  supportOptionState.supportKeywordRulesText = hidden.value;
+  hidden.dispatchEvent(new Event('change', { bubbles: true }));
+}
 
 function h(value) {
   return String(value ?? '')
@@ -48,43 +91,48 @@ function patchSupportConfigControls() {
   if (!panel) return;
   if (panel.querySelector('[data-psmap-support-config]')) return;
 
-  const firstGrid = panel.querySelector('.psmap-grid-2');
+  installSupportKeywordTableStyle();
+  const rules = parseKeywordRules(supportOptionState.supportKeywordRulesText);
+
   const host = document.createElement('div');
   host.className = 'psmap-card';
   host.setAttribute('data-psmap-support-config', '1');
   host.innerHTML = `
-    <div class="psmap-card-head"><b>Editable Support Keyword Logic</b></div>
+    <div class="psmap-card-head"><b>Support Keyword Logic</b></div>
     <div class="psmap-card-body">
-      <div class="psmap-grid-4">
+      <div class="psmap-grid-3">
         <label class="psmap-check">
           <input type="checkbox" data-psmap-setup="useBuiltInSupportKeywordLogic" ${supportOptionState.useBuiltInSupportKeywordLogic ? 'checked' : ''}>
-          Use built-in support keyword logic
-          <span class="psmap-help" title="Uses the editable Pattern → Canonical table below for both Table-1C ISONOTE and Table-2 DTXR. Wildcards are supported.">i</span>
-        </label>
-        <label class="psmap-check">
-          <input type="checkbox" data-psmap-setup="treatAnchorAsLineStop" ${supportOptionState.treatAnchorAsLineStop ? 'checked' : ''}>
-          Treat Anchor as Line Stop
-          <span class="psmap-help" title="When ON, Anchor / Pipe Anchor / Directional Anchor can map to LINE_STOP / STOP.">i</span>
+          Use built-in keyword logic
+          <span class="psmap-help" title="Uses the Pattern → Canonical table below for both Table-1C ISONOTE and Table-2 DTXR. Wildcards (*text*) are supported.">i</span>
         </label>
         <label class="psmap-check">
           <input type="checkbox" data-psmap-setup="enableSupportGapComparison" ${supportOptionState.enableSupportGapComparison ? 'checked' : ''}>
           Compare Support Gap
-          <span class="psmap-help" title="Compares Table-2 Support Gap against Table-1C [GUIDE GAP=..mm] for GUIDE supports. Conflicts become GAP_CONFLICT review items.">i</span>
+          <span class="psmap-help" title="Compares Table-2 Support Gap against Table-1C [GUIDE GAP=..mm] for GUIDE supports.">i</span>
         </label>
         <div class="psmap-field">
           <label>Gap tolerance mm</label>
           <input type="number" min="0" max="25" step="0.1" data-psmap-setup="supportGapToleranceMm" value="${h(supportOptionState.supportGapToleranceMm)}">
         </div>
       </div>
-      <div class="psmap-field">
-        <label>Support Keyword Rules: Pattern → Canonical</label>
-        <textarea data-psmap-setup="supportKeywordRulesText" data-psmap-support-rules style="min-height:190px">${h(supportOptionState.supportKeywordRulesText)}</textarea>
+      <div>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+          <span style="font-size:12px;color:#b7c9dd;font-weight:700">Support Keyword Rules: Pattern → Canonical</span>
+          <button type="button" class="psmap-btn secondary psmap-skr-add-row" data-psmap-skr-action="add-row">+ Add Rule</button>
+        </div>
+        <table class="psmap-skr-table">
+          <thead><tr><th style="width:55%">Pattern (wildcards: *text*)</th><th style="width:30%">Canonical</th><th style="width:15%"></th></tr></thead>
+          <tbody data-psmap-skr-body>${renderSkrRows(rules)}</tbody>
+        </table>
+        <textarea hidden data-psmap-setup="supportKeywordRulesText" data-psmap-skr-hidden data-psmap-support-rules>${h(supportOptionState.supportKeywordRulesText)}</textarea>
       </div>
       <div class="psmap-banner">
-        Canonical values: <b>REST</b>, <b>GUIDE</b>, <b>LINE_STOP</b>. Examples included: <b>*WEAR PLATE* → REST</b>, <b>*PIPE SHOE* → REST</b>, <b>*Directional Anchor* → LINE_STOP</b>.
+        Canonical values: <b>REST</b>, <b>GUIDE</b>, <b>LINE_STOP</b>. Wildcards: <b>*WEAR PLATE* → REST</b>, <b>*PIPE SHOE* → REST</b>, <b>*Directional Anchor* → LINE_STOP</b>. Add/remove rows to customise.
       </div>
     </div>`;
 
+  const firstGrid = panel.querySelector('.psmap-grid-2');
   if (firstGrid?.nextSibling) firstGrid.parentNode.insertBefore(host, firstGrid.nextSibling);
   else panel.querySelector('.psmap-card-body')?.appendChild(host);
 }
@@ -279,21 +327,56 @@ function patchCandidateMissingSupportAuditRows(auditRows) {
 }
 function patchMissingSupportAuditRows() { const auditRows = makeAuditRowsFromCoverage(); if (!auditRows.length) return; patchValidatorMissingSupportAuditRows(auditRows); patchCandidateMissingSupportAuditRows(auditRows); }
 
+function onSkrClick(event) {
+  const action = event.target?.closest?.('[data-psmap-skr-action]')?.dataset?.psmapSkrAction;
+  const card = event.target?.closest?.('[data-psmap-support-config]');
+  if (!card || !action) return;
+  const tbody = card.querySelector('[data-psmap-skr-body]');
+  if (!tbody) return;
+  if (action === 'add-row') {
+    const tr = document.createElement('tr');
+    tr.setAttribute('data-psmap-skr-row', tbody.querySelectorAll('tr').length);
+    tr.innerHTML = `<td><input class="psmap-skr-input" type="text" value="" data-psmap-skr-col="pattern"></td><td><select class="psmap-skr-input" data-psmap-skr-col="canonical">${CANONICAL_VALUES.map((v) => `<option value="${v}">${v}</option>`).join('')}</select></td><td><button type="button" class="psmap-skr-del" data-psmap-skr-action="delete-row">✕</button></td>`;
+    tbody.appendChild(tr);
+    tr.querySelector('input')?.focus();
+    syncSkrTextarea(card);
+  } else if (action === 'delete-row') {
+    event.target.closest('tr')?.remove();
+    syncSkrTextarea(card);
+  }
+}
+
+function onSkrInput(event) {
+  if (!event.target?.dataset?.psmapSkrCol) return;
+  const card = event.target.closest('[data-psmap-support-config]');
+  if (card) syncSkrTextarea(card);
+}
+
 function installPsMappingSupportUiBridge() {
   const patch = () => { patchSupportConfigControls(); patchCt2SupportGapColumn(); patchValidatorGapColumns(); patchCandidateGapColumns(); patchMissingSupportAuditRows(); };
   const runPatch = schedulePatch(patch);
   const observer = new MutationObserver(runPatch);
   observer.observe(document.body, { childList: true, subtree: true });
+  document.addEventListener('click', onSkrClick, true);
+  document.addEventListener('input', onSkrInput, true);
+  document.addEventListener('change', onSkrInput, true);
   document.addEventListener('change', onSupportOptionChange, true);
   document.addEventListener('input', onSupportOptionChange, true);
   runPatch();
-  return () => { observer.disconnect(); document.removeEventListener('change', onSupportOptionChange, true); document.removeEventListener('input', onSupportOptionChange, true); };
+  return () => {
+    observer.disconnect();
+    document.removeEventListener('click', onSkrClick, true);
+    document.removeEventListener('input', onSkrInput, true);
+    document.removeEventListener('change', onSkrInput, true);
+    document.removeEventListener('change', onSupportOptionChange, true);
+    document.removeEventListener('input', onSupportOptionChange, true);
+  };
 }
 
 function onSupportOptionChange(event) {
   const target = event.target;
   const key = target?.dataset?.psmapSetup;
-  if (key === 'useBuiltInSupportKeywordLogic' || key === 'treatAnchorAsLineStop' || key === 'enableSupportGapComparison') supportOptionState[key] = target.checked === true;
+  if (key === 'useBuiltInSupportKeywordLogic' || key === 'enableSupportGapComparison') supportOptionState[key] = target.checked === true;
   if (key === 'supportGapToleranceMm') supportOptionState[key] = Number(target.value || 0);
   if (key === 'supportKeywordRulesText') supportOptionState[key] = target.value;
 }
