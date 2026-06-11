@@ -1,4 +1,4 @@
-import { init } from './core/app.js?v=20260610-main-psmap-consolidated-t2-1';
+import { init } from './core/app.js?v=20260610-main-psmap-line-family-1';
 
 function reportStartupError(error) {
   console.error('3D Viewer failed to start', error);
