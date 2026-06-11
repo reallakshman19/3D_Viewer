@@ -145,6 +145,17 @@ function fixBoreBasis(row) {
   return row;
 }
 
+function fixLineBasis(row) {
+  if (!row || String(row.lineBasis || '').toUpperCase() !== 'LINE_SUBSTRING') return row;
+  const table2Family = String(row.lineFamily || row.modelLineFamily || '').toUpperCase();
+  const table1Family = String(row.nodeLineFamily || '').toUpperCase();
+  if (table2Family && table1Family && table2Family === table1Family) {
+    row.lineBasis = 'LINE_FAMILY';
+    if (row.basis) row.basis = String(row.basis).replace('LINE_SUBSTRING', 'LINE_FAMILY');
+  }
+  return row;
+}
+
 function supportAvailableOnRow(row, options) {
   return unique([
     ...extractSupportKeywords(row.nodeIsonote, options),
@@ -219,7 +230,61 @@ function fixSupportDiagnostics(row, options) {
 
 function normalizeDiagnosticsInRows(rows, options) {
   if (!Array.isArray(rows)) return rows;
-  return rows.map((row) => fixSupportDiagnostics(fixBoreBasis(row), options));
+  return rows.map((row) => fixSupportDiagnostics(fixLineBasis(fixBoreBasis(row)), options));
+}
+
+function isDominantAutoMatch(candidate) {
+  if (!candidate || candidate.selected !== true || candidate.finalStatus !== 'MATCHED') return false;
+  const cleanBore = ['BORE_DN_FROM_NPS', 'BORE_DN_FROM_OD', 'BORE_NPS_RAW', 'BORE_OD', 'BORE_IGNORED'].includes(candidate.boreBasis);
+  const cleanLine = ['LINE_EXACT', 'LINE_FAMILY'].includes(candidate.lineBasis);
+  const cleanSupport = ['SUPPORT_EXACT', 'SUPPORT_PARTIAL', 'SUPPORT_NOT_REQUESTED', 'SUPPORT_IGNORED'].includes(candidate.supportBasis);
+  return cleanBore && cleanLine && cleanSupport;
+}
+
+function assignMatchGroup(candidate) {
+  if (candidate.selected) return '01_SELECTED_MATCH';
+  if (candidate.finalStatus === 'MATCHED' && candidate.autoSelectable) return '02_AUTO_MATCH_NOT_SELECTED';
+  if (candidate.finalStatus === 'USER_REVIEW_REQUIRED') return '03_REVIEW_REQUIRED';
+  if (
+    candidate.finalStatus === 'DOMINATED_CONTEXT_REJECTED'
+    || candidate.finalStatus === 'BASE_PS_FOUND_BUT_CONTEXT_REJECTED'
+    || candidate.finalStatus === 'REJECTED'
+    || String(candidate.warnings || '').includes('BASE_PS_FOUND_BUT_CONTEXT_REJECTED')
+  ) return '04_REJECTED_CONTEXT';
+  if (candidate.finalStatus === 'NO_MATCH') return '05_NO_MATCH';
+  return '99_DIAGNOSTIC';
+}
+
+function applyDominance(candidateRows = []) {
+  if (!Array.isArray(candidateRows)) return candidateRows;
+  const byModel = new Map();
+  for (const candidate of candidateRows) {
+    const key = candidate.psnoModel || candidate.basePs || '__UNKNOWN__';
+    if (!byModel.has(key)) byModel.set(key, []);
+    byModel.get(key).push(candidate);
+  }
+
+  for (const group of byModel.values()) {
+    const dominant = group.find(isDominantAutoMatch);
+    if (!dominant) continue;
+    for (const candidate of group) {
+      if (candidate === dominant || candidate.selected) continue;
+      if (!['PS_BASE', 'PS_EXACT'].includes(candidate.psBasis)) continue;
+      candidate.eligible = false;
+      candidate.autoSelectable = false;
+      candidate.reviewRequired = false;
+      candidate.selected = false;
+      candidate.finalStatus = 'DOMINATED_CONTEXT_REJECTED';
+      candidate.confidence = 'LOW';
+      candidate.confidenceScore = Math.min(Number(candidate.confidenceScore || 20) || 20, 20);
+      candidate.warnings = appendWarning(candidate.warnings, 'DOMINATED_BY_EXACT_CONTEXT_MATCH');
+      candidate.reason = `Rejected as weaker same-base candidate because Node ${dominant.node} has exact resolved line/bore/support context.`;
+      candidate.nodeCoverageNote = candidate.reason;
+    }
+  }
+
+  for (const candidate of candidateRows) candidate.matchGroup = assignMatchGroup(candidate);
+  return candidateRows;
 }
 
 function buildMissingSupportAuditRows(supportCoverageRows = [], options = DEFAULT_OPTIONS) {
@@ -286,6 +351,7 @@ function buildMissingSupportAuditRows(supportCoverageRows = [], options = DEFAUL
         reviewAction: action,
         nodeCoverageStatus: coverage.coverageStatus || '',
         nodeCoverageNote: `${missingDisplay} missing from mapped Table-2 DTXR for Node ${coverage.node || '-'}.`,
+        matchGroup: '03_REVIEW_REQUIRED',
         basis: ['PS_BASE', coverage.derivedDn ? 'BORE_DN_FROM_NPS' : '', 'SUPPORT_MISSING_MASTER_REQUIRED'].filter(Boolean).join(' + '),
       });
     }
@@ -339,14 +405,14 @@ function annotateResult(result, options) {
   const missingSupportAuditRows = buildMissingSupportAuditRows(supportCoverageRows, options);
   const rows = normalizeDiagnosticsInRows(result?.rows, options);
   const outputRows = normalizeDiagnosticsInRows(result?.outputRows, options);
-  const candidateRows = normalizeDiagnosticsInRows(result?.candidateRows, options);
+  const candidateRows = applyDominance(normalizeDiagnosticsInRows(result?.candidateRows, options));
   const validatorRows = normalizeDiagnosticsInRows(result?.validatorRows, options);
 
   const normalized = {
     ...result,
     rows: [...(rows || []), ...missingSupportAuditRows],
     outputRows: [...(outputRows || []), ...missingSupportAuditRows],
-    candidateRows: [...(candidateRows || []), ...missingSupportAuditRows],
+    candidateRows: applyDominance([...(candidateRows || []), ...missingSupportAuditRows]),
     validatorRows: [...(validatorRows || []), ...missingSupportAuditRows],
     supportCoverageRows,
     missingSupportAuditRows,
