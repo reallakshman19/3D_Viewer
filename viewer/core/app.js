@@ -12,7 +12,7 @@ import { renderAdapterMappingTab } from '../tabs/adapter-mapping-tab.js';
 import { mount as mountRvmJsonPcfExtractTab } from '../tabs/rvm-json-pcf-extract-tab.js';
 import { renderUniversalXmlConverterTab } from '../tabs/universal-xml-converter-tab.js';
 import { renderXmlCompareTab } from '../tabs/xml-compare-tab.js';
-import { renderPSNM_UtilityTab } from '../tabs/psnm-utility-tab.js?v=20260610-psnm-15';
+import { renderPSNM_UtilityTab } from '../tabs/psnm-utility-tab.js?v=20260610-psnm-16';
 import '../tabs/psnm-utility/psnm-ui-p2-enhancements.js?v=20260609-p2-1';
 import '../tabs/psnm-utility/psnm-phase4c-hardening.js?v=20260609-phase4c-1';
 import '../tabs/psnm-utility/psnm-phase4d-persistence.js?v=20260609-phase4d-1';
