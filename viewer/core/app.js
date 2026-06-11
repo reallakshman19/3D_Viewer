@@ -38,7 +38,7 @@ async function loadPsnmUtilityRenderer() {
     import('../tabs/psnm-utility/psnm-phase4c-hardening.js?v=20260609-phase4c-1'),
     import('../tabs/psnm-utility/psnm-phase4d-persistence.js?v=20260609-phase4d-1'),
   ]);
-  return import('../tabs/psnm-utility-tab.js?v=20260611-psnm-23-psmap-visible-launcher-1')
+  return import('../tabs/psnm-utility-tab.js?v=20260611-modal-click-fix-1')
     .then((module) => pickRenderer(module, 'renderPSNM_UtilityTab', 'psnm-utility'));
 }
 
@@ -56,6 +56,13 @@ const TABS = [
   { id: 'universal-xml', label: 'Universal XML', load: () => import('../tabs/universal-xml-converter-tab.js').then((module) => pickRenderer(module, 'renderUniversalXmlConverterTab', 'universal-xml')) },
   { id: 'xml-compare', label: 'XML Compare', load: () => import('../tabs/xml-compare-tab.js').then((module) => pickRenderer(module, 'renderXmlCompareTab', 'xml-compare')) },
   { id: 'psnm-utility', label: 'Utilities', load: loadPsnmUtilityRenderer },
+];
+
+const TAB_GROUPS = [
+  { label: 'Viewers',    ids: ['viewer3d', 'viewer3d-rvm'] },
+  { label: 'Converters', ids: ['model-converters', 'basic-glb-pcf', 'pcfx-converter', 'rvm-json-pcf', 'universal-xml', 'xml-compare'] },
+  { label: 'Exchange',   ids: ['model-exchange', 'interchange-config', 'support-mapping-config', 'adapter-mapping'] },
+  { label: 'Utilities',  ids: ['psnm-utility'] },
 ];
 
 const tabRendererCache = new Map();
@@ -113,22 +120,42 @@ async function loadRenderer(tab) {
 
 function renderShell() {
   const tabs = visibleTabs();
+  const tabById = new Map(tabs.map((t) => [t.id, t]));
+  const groupedIds = new Set(TAB_GROUPS.flatMap((g) => g.ids));
+
+  function renderTabGroups() {
+    const parts = [];
+    for (const group of TAB_GROUPS) {
+      const groupTabs = group.ids.map((id) => tabById.get(id)).filter(Boolean);
+      if (!groupTabs.length) continue;
+      if (parts.length) parts.push('<span class="tab-group-sep"></span>');
+      const btns = groupTabs.map((t) => `<button type="button" class="tab-btn" data-tab-id="${t.id}" data-group="${group.label}">${t.label}</button>`).join('');
+      parts.push(`<div class="tab-group" data-group="${group.label}"><span class="tab-group-label">${group.label}</span>${btns}</div>`);
+    }
+    const ungrouped = tabs.filter((t) => !groupedIds.has(t.id));
+    if (ungrouped.length) {
+      if (parts.length) parts.push('<span class="tab-group-sep"></span>');
+      parts.push(`<div class="tab-group">${ungrouped.map((t) => `<button type="button" class="tab-btn" data-tab-id="${t.id}">${t.label}</button>`).join('')}</div>`);
+    }
+    return parts.join('');
+  }
+
   document.body.innerHTML = `
-    <div class="app-shell">
-      <header class="app-header">
-        <div class="brand-block">
-          <div class="brand-title">PCF / GLB Viewer</div>
-          <div class="brand-subtitle">3D review, model converters and support utilities</div>
+    <div id="app-layout">
+      <header id="app-header">
+        <div>
+          <div class="header-title">PCF / GLB Viewer</div>
+          <div class="header-sub">3D review, model converters and support utilities</div>
         </div>
-        <nav class="app-tabs" aria-label="Application tabs">
-          ${tabs.map((tab) => `<button type="button" class="app-tab" data-tab-id="${tab.id}">${tab.label}</button>`).join('')}
-        </nav>
       </header>
-      <main id="app-main" class="app-main" tabindex="-1"></main>
+      <nav id="tab-bar" aria-label="Application tabs">
+        ${renderTabGroups()}
+      </nav>
+      <main id="tab-content" tabindex="-1"></main>
     </div>
   `;
   appShell = {
-    main: document.getElementById('app-main'),
+    main: document.getElementById('tab-content'),
     tabButtons: [...document.querySelectorAll('[data-tab-id]')],
   };
   appShell.tabButtons.forEach((button) => {

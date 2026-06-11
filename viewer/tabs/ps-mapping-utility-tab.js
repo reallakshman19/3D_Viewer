@@ -188,11 +188,11 @@ export function installPsMappingUtilityTile(container, ctx = {}) {
       else state.setup[key] = setup.value;
     }
   }
-  container.addEventListener('click', onClick);
+  document.addEventListener('click', onClick);
   document.addEventListener('input', onInput);
   document.addEventListener('change', onInput);
   return () => {
-    container.removeEventListener('click', onClick);
+    document.removeEventListener('click', onClick);
     document.removeEventListener('input', onInput);
     document.removeEventListener('change', onInput);
     root.remove();
