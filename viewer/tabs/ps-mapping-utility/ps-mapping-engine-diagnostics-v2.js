@@ -222,6 +222,78 @@ function normalizeDiagnosticsInRows(rows, options) {
   return rows.map((row) => fixSupportDiagnostics(fixBoreBasis(row), options));
 }
 
+function buildMissingSupportAuditRows(supportCoverageRows = [], options = DEFAULT_OPTIONS) {
+  const auditRows = [];
+
+  for (const coverage of supportCoverageRows || []) {
+    const missing = splitSupportList(coverage.missingMasterKeywords, options);
+    if (!missing.length) continue;
+
+    for (const missingType of missing) {
+      const missingDisplay = displaySupportKeyword(missingType);
+      const action = `Add Table-2 DTXR/model support row for ${missingDisplay}, or revise Table-1C ISONOTE if ${missingDisplay} is not required.`;
+      auditRows.push({
+        enabled: false,
+        psnoModel: '-',
+        basePs: '',
+        modelTag: '',
+        modelBore: '',
+        pipe: '',
+        pipeKey: '',
+        lineFamily: '',
+        dtxr: '',
+        mandatory: coverage.mandatory === 'YES',
+        supportTypesRequested: '',
+        modelDtxrKeywords: '',
+        table2Row: '',
+
+        candidateNode: coverage.node || '',
+        node: coverage.node || '',
+        table1PsNo: coverage.table1PsNo || '',
+        tag: coverage.tag || '',
+        source: coverage.source || '',
+        sourceRow: coverage.sourceRow || '',
+        nodeLine: coverage.lineNo || '',
+        nodeLineKey: '',
+        nodeLineFamily: coverage.lineFamily || '',
+        pipeSizeRaw: coverage.pipeSizeRaw || '',
+        derivedDn: coverage.derivedDn || '',
+        nodeIsonote: coverage.isonote || '',
+        nodeIsonoteRaw: coverage.isonote || '',
+        nodeMasterKeywords: coverage.masterKeywords || '',
+        supportTypesAvailable: coverage.masterKeywords || '',
+        refMandatory: coverage.mandatory === 'YES',
+
+        psBasis: 'PS_BASE',
+        boreBasis: coverage.derivedDn ? 'BORE_DN_FROM_NPS' : '',
+        lineBasis: '',
+        supportBasis: 'SUPPORT_MISSING_MASTER_REQUIRED',
+        supportMatch: `${missingDisplay} missing`,
+        missingSupportKeywords: missingDisplay,
+        extraSupportKeywords: coverage.extraDtxrKeywords || '',
+        matchedSupportKeywords: coverage.coveredDtxrKeywords || '',
+
+        eligible: false,
+        autoSelectable: false,
+        reviewRequired: true,
+        selected: false,
+        finalStatus: 'SUPPORT_MISSING_REQUIRED',
+        confidence: 'AUDIT',
+        confidenceScore: 0,
+        score: 999999,
+        warnings: `SUPPORT_MISSING_REQUIRED: ${missingDisplay}`,
+        reason: action,
+        reviewAction: action,
+        nodeCoverageStatus: coverage.coverageStatus || '',
+        nodeCoverageNote: `${missingDisplay} missing from mapped Table-2 DTXR for Node ${coverage.node || '-'}.`,
+        basis: ['PS_BASE', coverage.derivedDn ? 'BORE_DN_FROM_NPS' : '', 'SUPPORT_MISSING_MASTER_REQUIRED'].filter(Boolean).join(' + '),
+      });
+    }
+  }
+
+  return auditRows;
+}
+
 export function normalizePsMappingOptions(options = {}) {
   const merged = { ...DEFAULT_OPTIONS, ...(options || {}) };
 
@@ -263,12 +335,21 @@ function annotateResult(result, options) {
     supportKeywordLogic: 'Built-in support logic recognizes REST, GUIDE, LINE STOP/LINESTOP/STOP/PIPE STOP on Table-1C ISONOTE and Table-2 DTXR. When enabled, ANCHOR is classified as LINE_STOP/STOP.',
   };
 
+  const supportCoverageRows = result?.supportCoverageRows || [];
+  const missingSupportAuditRows = buildMissingSupportAuditRows(supportCoverageRows, options);
+  const rows = normalizeDiagnosticsInRows(result?.rows, options);
+  const outputRows = normalizeDiagnosticsInRows(result?.outputRows, options);
+  const candidateRows = normalizeDiagnosticsInRows(result?.candidateRows, options);
+  const validatorRows = normalizeDiagnosticsInRows(result?.validatorRows, options);
+
   const normalized = {
     ...result,
-    rows: normalizeDiagnosticsInRows(result?.rows, options),
-    outputRows: normalizeDiagnosticsInRows(result?.outputRows, options),
-    candidateRows: normalizeDiagnosticsInRows(result?.candidateRows, options),
-    validatorRows: normalizeDiagnosticsInRows(result?.validatorRows, options),
+    rows: [...(rows || []), ...missingSupportAuditRows],
+    outputRows: [...(outputRows || []), ...missingSupportAuditRows],
+    candidateRows: [...(candidateRows || []), ...missingSupportAuditRows],
+    validatorRows: [...(validatorRows || []), ...missingSupportAuditRows],
+    supportCoverageRows,
+    missingSupportAuditRows,
   };
 
   return {
@@ -279,6 +360,7 @@ function annotateResult(result, options) {
       ...(result?.summary || {}),
       approxLineEnabled: options.attemptApproxLineMatch,
       approxBoreEnabled: options.attemptApproxBoreMatch,
+      missingSupportAuditRows: missingSupportAuditRows.length,
     },
   };
 }
