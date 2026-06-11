@@ -333,32 +333,101 @@ function parseTable1C(text, log, keywordCatalog) {
   return { supportByNode, richRows, isRich };
 }
 
+function firstFilled(cells, indexes = []) {
+  for (const index of indexes) {
+    const value = cell(cells, index);
+    if (value) return value;
+  }
+  return '';
+}
+function indexes(headers, aliases) {
+  const set = new Set(aliases.map(hkey));
+  const out = [];
+  headers.forEach((header, index) => { if (set.has(hkey(header))) out.push(index); });
+  return out;
+}
+function rawColumnMap(headers, cells) {
+  const out = {};
+  headers.forEach((header, index) => {
+    const key = String(header || `Column ${index + 1}`).trim() || `Column ${index + 1}`;
+    out[key] = cell(cells, index);
+  });
+  return out;
+}
 function parseTable2(text, log, keywordCatalog) {
   const lines = splitLines(text);
   if (!lines.length) { log.user('ERROR', 'PARSE', 'Table-2', 'Table-2 is required.'); return []; }
   const headers = splitCells(lines[0]);
-  const psIdx = idx(headers, ['psno model', 'psno_model', 'ps model', 'ps no', 'ps']);
-  const boreIdx = idx(headers, ['bore', 'nb', 'dn']);
-  const pipeIdx = idx(headers, ['pipe', 'line no', 'line', 'branchname']);
-  const dtxrIdx = idx(headers, ['dtxr', 'dtxr optional', 'dtxr(optional)', 'support', 'support note']);
-  if (psIdx < 0) { log.user('ERROR', 'PARSE', 'Table-2', 'Required column PSNO_Model was not found.'); return []; }
+  const psIndexes = indexes(headers, ['psno model', 'psno_model', 'ps model', 'ps no', 'ps no.', 'psno', 'ps', 'ps name', 'ps number', 'support ps no']);
+  const boreIndexes = indexes(headers, ['bore', 'nb', 'dn', 'size', 'nominal bore', 'model bore']);
+  const pipeIndexes = indexes(headers, ['pipe', 'line no', 'line', 'branchname', 'branch name', 'line number']);
+  const dtxrIndexes = indexes(headers, ['dtxr', 'dtxr optional', 'dtxr(optional)', 'support', 'support note', 'support description', 'description']);
+  const mandatoryIndexes = indexes(headers, ['mandatory', 'required', 'is mandatory', 'must audit', 'audit', '100% audit']);
+  if (!psIndexes.length) {
+    log.user('ERROR', 'PARSE', 'Table-2', `Required PS column was not found. Headers read: ${headers.join(' | ')}`, 'Use PS NO, PSNO_Model, PS No, or PS Name as the model PS column.');
+    log.debug('ERROR', 'T2_HEADER_PARSE_FAILED', 'Table-2', { headers });
+    return [];
+  }
+  log.debug('INFO', 'T2_HEADER_MAP', 'Table-2', {
+    headers,
+    psIndexes,
+    boreIndexes,
+    pipeIndexes,
+    dtxrIndexes,
+    mandatoryIndexes,
+  });
   const rows = [];
   for (const [offset, line] of lines.slice(1).entries()) {
     const sourceRow = offset + 2;
     const cells = splitCells(line);
-    const rawPsNo = cell(cells, psIdx);
-    if (!rawPsNo) continue;
+    const rawPsNo = firstFilled(cells, psIndexes);
+    const rawColumns = rawColumnMap(headers, cells);
+    if (!rawPsNo) {
+      const hasData = cells.some((value) => String(value || '').trim());
+      if (hasData) log.user('WARNING', 'PARSE', `Table-2 row ${sourceRow}`, 'Row has data but blank PS NO / PSNO_Model; skipped.', 'Fill PS NO or remove this row.', { psnoModel: '', sourceRow });
+      continue;
+    }
     const norm = normalizePsNo(rawPsNo);
-    const bore = boreIdx >= 0 ? number(cell(cells, boreIdx)) : NaN;
-    const pipe = cell(cells, pipeIdx);
-    const dtxr = cell(cells, dtxrIdx);
+    const boreRaw = firstFilled(cells, boreIndexes);
+    const bore = boreRaw ? number(boreRaw) : NaN;
+    const pipe = firstFilled(cells, pipeIndexes);
+    const dtxr = firstFilled(cells, dtxrIndexes);
+    const mandatoryRaw = firstFilled(cells, mandatoryIndexes);
+    const mandatory = truthy(mandatoryRaw);
     const supportTypesRequested = normalizeSupportTypes(dtxr, keywordCatalog);
-    const row = { id: `T2#${String(offset + 1).padStart(3, '0')}`, sourceRow, rawPsNo, psnoModel: rawPsNo, ...norm, modelTag: norm.tag, bore: Number.isFinite(bore) ? bore : null, pipe, pipeKey: normalizeLineKey(pipe), dtxr, supportTypesRequested };
+    const pipeKey = normalizeLineKey(pipe);
+    const row = {
+      id: `CT2#${String(rows.length + 1).padStart(3, '0')}`,
+      source: 'TABLE2',
+      sourceRow,
+      rawPsNo,
+      psnoModel: rawPsNo,
+      ...norm,
+      modelTag: norm.tag,
+      boreRaw,
+      bore: Number.isFinite(bore) ? bore : null,
+      boreStatus: boreRaw ? (Number.isFinite(bore) ? 'PARSED' : 'INVALID') : 'MISSING',
+      pipe,
+      pipeKey,
+      lineFamily: extractLineFamily(pipeKey),
+      dtxr,
+      supportTypesRequested,
+      supportMatchRequested: supportMatchText(supportTypesRequested),
+      mandatory,
+      mandatoryRaw,
+      rawColumns,
+      parseWarnings: [],
+    };
+    if (boreRaw && !Number.isFinite(bore)) row.parseWarnings.push('BORE_INVALID');
+    if (!pipe) row.parseWarnings.push('PIPE_MISSING');
+    if (!dtxr) row.parseWarnings.push('DTXR_BLANK');
     rows.push(row);
-    log.debug('DEBUG', 'T2_ROW_PARSED', rawPsNo, row);
-    if (supportTypesRequested.length) log.debug('DEBUG', 'DTXR_SUPPORT_PARSED', rawPsNo, { dtxr, supportTypesRequested });
+    log.debug('DEBUG', 'CONSOLIDATED_T2_ROW_BUILT', rawPsNo, row);
+    if (row.parseWarnings.length) {
+      log.user('WARNING', 'TABLE2_CONSOLIDATE', rawPsNo, `Resolved Table-2 row with warning(s): ${row.parseWarnings.join(', ')}.`, 'Review the Consolidated Table-2 tab for missed/blank source columns.', { psnoModel: rawPsNo });
+    }
   }
-  log.user('INFO', 'PARSE', 'Table-2', `Parsed ${rows.length} model PS rows.`);
+  log.user('INFO', 'CONSOLIDATE', 'Consolidated Table-2', `Built ${rows.length} consolidated model row(s) from Table-2.`);
   return rows;
 }
 
@@ -477,7 +546,13 @@ function makeResultRow(candidate) {
   };
 }
 function makeNoMatch(model, reason) {
-  return { enabled: false, psnoModel: model.psnoModel, node: '', tag: '', source: '', mandatory: false, supportMatch: '', basis: 'NO_MATCH', confidence: 'NO_MATCH', psBasis: 'NO_MATCH', boreBasis: '', supportBasis: '', lineBasis: '', table1PsNo: '', table1Row: null, table2Row: model.sourceRow, modelDtxrKeywords: model.supportTypesRequested || [], nodeCoverageNote: '', nodeCoverageStatus: '', warnings: [reason], debugId: `${model.id}:NO_MATCH` };
+  return {
+    enabled: false, psnoModel: model.psnoModel, node: '', tag: '', source: '', mandatory: model.mandatory === true,
+    supportMatch: '', basis: 'NO_MATCH', confidence: 'NO_MATCH', psBasis: 'NO_MATCH', boreBasis: '', supportBasis: '', lineBasis: '',
+    table1PsNo: '', table1Row: null, table2Row: model.sourceRow, modelBore: model.bore, modelBoreRaw: model.boreRaw,
+    pipe: model.pipe || '', dtxr: model.dtxr || '', modelDtxrKeywords: model.supportTypesRequested || [],
+    nodeCoverageNote: '', nodeCoverageStatus: '', warnings: [reason, ...(model.parseWarnings || [])], debugId: `${model.id}:NO_MATCH`
+  };
 }
 function groupBy(rows, fn) {
   const map = new Map();
@@ -748,11 +823,21 @@ export function runPsMappingResolver(input = {}) {
   rows.sort((a, b) => a.table2Row - b.table2Row);
   const supportCoverageRows = buildSupportCoverageRows({ table1Rows, resultRows: rows, log });
   annotateCandidateCoverage(candidates, rows);
-  return { rows, candidates, supportCoverageRows, userLog: log.userLog, debugLog: log.debugLog, summary: buildSummary(rows, table1Rows, modelRows, candidates, log.userLog, supportCoverageRows), options, consolidatedTable1Rows: table1Rows };
+  return {
+    rows,
+    candidates,
+    supportCoverageRows,
+    userLog: log.userLog,
+    debugLog: log.debugLog,
+    summary: buildSummary(rows, table1Rows, modelRows, candidates, log.userLog, supportCoverageRows),
+    options,
+    consolidatedTable1Rows: table1Rows,
+    consolidatedTable2Rows: modelRows,
+  };
 }
 
 export function rowsToCsv(rows) {
-  const headers = ['PSNO_Model', 'Node', 'Table-1 PS No', 'Tag', 'Source', 'Line No', 'Pipe Size', 'Derived DN', 'Support match', 'Node Coverage Note', 'Basis'];
+  const headers = ['PSNO_Model', 'Node', 'Table-1 PS No', 'Tag', 'Source', 'Line No', 'Pipe Size', 'Derived DN', 'Table-2 Bore', 'Table-2 Pipe', 'Table-2 DTXR', 'Table-2 Mandatory', 'Support match', 'Node Coverage Note', 'Basis'];
   const esc = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
-  return [headers.join(','), ...rows.map((r) => [r.psnoModel, r.node, r.table1PsNo, r.tag, r.source, r.nodeLine, r.pipeSizeRaw, r.derivedDn, r.supportMatch, r.nodeCoverageNote, r.basis].map(esc).join(','))].join('\n');
+  return [headers.join(','), ...rows.map((r) => [r.psnoModel, r.node, r.table1PsNo, r.tag, r.source, r.nodeLine, r.pipeSizeRaw, r.derivedDn, r.modelBore, r.pipe, r.dtxr, r.mandatory ? 'YES' : '', r.supportMatch, r.nodeCoverageNote, r.basis].map(esc).join(','))].join('\n');
 }
