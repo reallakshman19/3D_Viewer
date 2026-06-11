@@ -42,9 +42,12 @@ export function buildRvmJsonPcfRequestPayload({ appState = {}, overrides = {} } 
 
 export function normalizeRvmJsonPcfRequestPayload({ payload = {}, appState = {} } = {}) {
   const existingExtractState = appState?.rvmPcfExtract || {};
-  const selectedCanonicalIds = Array.isArray(payload.selectedCanonicalIds)
-    ? _arrayCopy(payload.selectedCanonicalIds)
-    : _arrayCopy(existingExtractState.selectedCanonicalIds);
+  const explicitFull = payload.scope === 'full';
+  const selectedCanonicalIds = explicitFull
+    ? []
+    : Array.isArray(payload.selectedCanonicalIds)
+      ? _arrayCopy(payload.selectedCanonicalIds)
+      : _arrayCopy(existingExtractState.selectedCanonicalIds);
 
   const scope = resolveRvmJsonPcfScope({
     scope: payload.scope,

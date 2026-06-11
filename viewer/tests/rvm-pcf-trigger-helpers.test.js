@@ -103,6 +103,43 @@ function testScopeResolver() {
   assert.equal(resolveRvmJsonPcfScope({ scope: 'selected', selectedCanonicalIds: [] }), 'selected');
 }
 
+function testNormalizeFullScopeClearsExistingSelection() {
+  const next = normalizeRvmJsonPcfRequestPayload({
+    payload: { scope: 'full' },
+    appState: {
+      rvmPcfExtract: {
+        selectedCanonicalIds: ['OLD-ID'],
+      },
+    },
+  });
+
+  assert.equal(next.scope, 'full');
+  assert.deepEqual(next.selectedCanonicalIds, []);
+}
+
+function testPayloadModeOverrideSetsWorkflowAdapterId() {
+  const next = normalizeRvmJsonPcfRequestPayload({
+    payload: { mode: 'custom_adapter', workflowAdapterId: 'custom_adapter' },
+    appState: {},
+  });
+
+  assert.equal(next.workflowMode, 'custom_adapter');
+  assert.equal(next.workflowAdapterId, 'custom_adapter');
+}
+
+function testNormalizePreservesRequestedPanelAndPhase() {
+  const next = normalizeRvmJsonPcfRequestPayload({
+    payload: {
+      requestedPanel: 'table',
+      requestedPhase: 'weight_match',
+    },
+    appState: {},
+  });
+
+  assert.equal(next.requestedPanel, 'table');
+  assert.equal(next.activeWorkflowPhase, 'weight_match');
+}
+
 const tests = [
   testBuildPayloadFromCurrentRvmSelection,
   testBuildPayloadFallsBackToFullScope,
@@ -110,6 +147,9 @@ const tests = [
   testNormalizePayloadForExtractState,
   testNormalizePayloadUsesExistingSelectedIdsFallback,
   testScopeResolver,
+  testNormalizeFullScopeClearsExistingSelection,
+  testPayloadModeOverrideSetsWorkflowAdapterId,
+  testNormalizePreservesRequestedPanelAndPhase,
 ];
 
 for (const test of tests) {
