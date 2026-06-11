@@ -93,6 +93,22 @@ function findLineRow(lineRows = [], lineKey = '', row = {}) {
   }) || null;
 }
 
+function pushRowDiagnostic(out, diagnostics, diagnostic) {
+  if (!diagnostic || !diagnostic.type) return;
+  const entry = {
+    severity: 'WARN',
+    refNo: firstText(out?.refNo, out?.componentRefNo, out?.sourceCanonicalId),
+    nodeName: firstText(out?.nodeName, out?.name, out?.supportName),
+    pipelineRef: firstText(out?.pipelineRef, out?.branchName),
+    ...diagnostic,
+  };
+  if (Array.isArray(diagnostics)) diagnostics.push(entry);
+  if (out) {
+    if (!Array.isArray(out.enrichmentDiagnostics)) out.enrichmentDiagnostics = [];
+    out.enrichmentDiagnostics.push(entry);
+  }
+}
+
 function applyTopologyEvidence(out, topologyHandoff) {
   if (!topologyHandoff) return;
   const rowKey = firstText(out.sourceCanonicalId, out.refNo, out.componentRefNo, out.rowNo, out.seqNo);
@@ -174,7 +190,13 @@ function isSupportRow(out) {
   return type === 'SUPPORT' || type === 'ATTA' || /^PS-\d+/.test(text) || /SUPPORT|GUIDE|REST|SHOE|LIMIT|LINESTOP|LINE\s*STOP/.test(text);
 }
 
-function applyDtxr(out, { dtxrContext, config }) {
+function isDtxrImportantRow(out) {
+  const type = upper(out.type || out.componentType);
+  const text = upper(`${type} ${out.nodeName || ''} ${out.name || ''} ${out.typeDesc || ''} ${out.supportName || ''}`);
+  return isSupportRow(out) || ['VALVE', 'FLANGE', 'TEE', 'OLET', 'ATTA', 'SUPPORT'].includes(type) || /VALVE|FLANGE|TEE|OLET|WELDOLET|SWEEPOLET|SUPPORT|PS-\d+/.test(text);
+}
+
+function applyDtxr(out, { dtxrContext, config, diagnostics, rowIndex }) {
   const purpose = isSupportRow(out) ? 'support-restraint' : 'component-description';
   const resolved = resolveDtxrForXmlNode({
     xmlNode: makePseudoXmlNode(out),
@@ -184,16 +206,28 @@ function applyDtxr(out, { dtxrContext, config }) {
     trustExistingXmlDtxr: false,
   });
 
-  if (!resolved || resolved.suppressed) {
-    out.dtxrSuppressed = Boolean(resolved?.suppressed);
-    out.dtxrSuppressionReason = resolved?.suppressionReason || '';
+  if (resolved?.suppressed) {
+    out.dtxrSuppressed = true;
+    out.dtxrSuppressionReason = resolved.suppressionReason || '';
     return;
   }
 
-  const dtxr = firstText(resolved.canonicalText, resolved.value, out.dtxr, out.typeDesc);
-  if (dtxr) out.dtxr = dtxr;
-  out.dtxrSource = resolved.source || out.dtxrSource || '';
-  out.dtxrMatchedBy = resolved.matchedBy || out.dtxrMatchedBy || '';
+  if (resolved) {
+    const dtxr = firstText(resolved.canonicalText, resolved.value, out.dtxr, out.typeDesc);
+    if (dtxr) out.dtxr = dtxr;
+    out.dtxrSource = resolved.source || out.dtxrSource || '';
+    out.dtxrMatchedBy = resolved.matchedBy || out.dtxrMatchedBy || '';
+  }
+
+  if (!clean(out.dtxr) && isDtxrImportantRow(out)) {
+    pushRowDiagnostic(out, diagnostics, {
+      type: 'pcf-row-dtxr-missing',
+      severity: 'WARN',
+      rowIndex,
+      rowType: firstText(out.type, out.componentType),
+      purpose,
+    });
+  }
 }
 
 function shouldRankWeight(out) {
@@ -202,13 +236,26 @@ function shouldRankWeight(out) {
   return type === 'VALVE' || type === 'FLANGE' || /^FLAN/.test(type) || /VGT|VCH|VBL|VCV|VGL|VBF|VBV/i.test(name);
 }
 
-function applyWeightRanking(out, { config }) {
+function applyWeightRanking(out, { config, diagnostics, mode, rowIndex }) {
   if (!shouldRankWeight(out)) return;
   const lengthMm = rowLengthMm(out);
   const boreMm = rowBoreMm(out);
   if (!Number.isFinite(lengthMm) || lengthMm <= 0 || !Number.isFinite(boreMm) || boreMm <= 0) return;
 
-  const ranked = rankXmlCiiWeightCandidates({ boreMm, rating: out.rating, lengthMm, nodeName: firstText(out.nodeName, out.name, out.typeDesc) }, config, { includeRejected: true });
+  const nodeName = [
+    firstText(out.nodeName, out.name),
+    firstText(out.dtxr, out.typeDesc),
+  ].filter(Boolean).join(' ') || firstText(out.nodeName, out.name, out.typeDesc, out.dtxr);
+  const includeRejected = clean(mode).toLowerCase() === 'preview' || config?.weight?.showLengthRejectedSemanticMatches === true;
+  const ranked = rankXmlCiiWeightCandidates({
+    boreMm,
+    rating: out.rating,
+    lengthMm,
+    nodeName,
+    componentType: firstText(out.type, out.componentType),
+    componentRefNo: firstText(out.refNo, out.componentRefNo, out.sourceCanonicalId),
+    dtxr: firstText(out.dtxr, out.typeDesc),
+  }, config, { includeRejected });
   out.weightCandidates = ranked.candidates || [];
   out.weightRejectedCandidates = ranked.rejectedCandidates || [];
   out.weightNodeHint = ranked.nodeHint?.code || '';
@@ -223,13 +270,34 @@ function applyWeightRanking(out, { config }) {
     out.weightLengthDelta = best.lengthDelta;
     out.weightExtrapolationRatio = best.extrapolationRatio;
     out.weightWarning = best.weightWarning || '';
+    return;
+  }
+
+  const candidateCount = (out.weightCandidates?.length || 0) + (out.weightRejectedCandidates?.length || 0);
+  if (candidateCount > 0) {
+    pushRowDiagnostic(out, diagnostics, {
+      type: 'pcf-row-weight-unselected',
+      severity: 'WARN',
+      rowIndex,
+      rowType: firstText(out.type, out.componentType),
+      nodeHint: out.weightNodeHint,
+      candidateCount,
+    });
   }
 }
 
-function applySupportMapping(out, { supportIndex, config }) {
+function applySupportMapping(out, { supportIndex, config, diagnostics, rowIndex }) {
   if (!isSupportRow(out)) return;
   const match = resolveSupportMatchForPcfRow(out, supportIndex, config);
-  if (!match) return;
+  if (!match) {
+    pushRowDiagnostic(out, diagnostics, {
+      type: 'pcf-row-support-unmatched',
+      severity: 'WARN',
+      rowIndex,
+      rowType: firstText(out.type, out.componentType),
+    });
+    return;
+  }
   out.type = 'SUPPORT';
   out.supportCoor = match.point || out.supportCoor || out.cp || out.ep1;
   out.supportName = firstText(match.supportName, match.primaryKind, out.supportName, 'SUPPORT');
@@ -293,9 +361,9 @@ export async function enrichRowsForFinalPcf({
     const out = { ...row, ca: { ...(row?.ca || {}) }, enrichmentDiagnostics: [...(row?.enrichmentDiagnostics || [])] };
     applyTopologyEvidence(out, topologyHandoff);
     applyLineRatingMaterial(out, { context, lineRows: effectiveLineRows, rowIndex, diagnostics });
-    applyDtxr(out, { dtxrContext, config: context.config, diagnostics });
-    applyWeightRanking(out, { config: context.config, diagnostics });
-    applySupportMapping(out, { supportIndex, config: context.config, diagnostics });
+    applyDtxr(out, { dtxrContext, config: context.config, diagnostics, rowIndex });
+    applyWeightRanking(out, { config: context.config, diagnostics, mode, rowIndex });
+    applySupportMapping(out, { supportIndex, config: context.config, diagnostics, rowIndex });
     applyFinalCaMapping(out, context.config);
     if (mode === 'preview' || commit === false) out.previewOnly = true;
     return out;
