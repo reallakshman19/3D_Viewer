@@ -102,6 +102,7 @@ async function _enrichRows(ctx = {}, options = {}) {
   return enrich({
     rows: options.rows || _rowsFrom(ctx),
     topologyHandoff: options.topologyHandoff || null,
+    masterContext,
     config: masterContext.config || _configFrom(ctx),
     stagedJsonText: _stagedJsonTextFrom(ctx),
     lineRows: _lineRowsFrom(ctx, masterContext),
@@ -112,16 +113,42 @@ async function _enrichRows(ctx = {}, options = {}) {
 }
 
 function _topologyAccepted(topology) {
-  return topology?.ok === true ||
-    topology?.readinessGate?.pass === true ||
-    topology?.topologyDecision?.exportAllowed === true;
+  if (topology?.topologyDecision && typeof topology.topologyDecision.exportAllowed === 'boolean') {
+    return topology.topologyDecision.exportAllowed === true;
+  }
+  if (topology?.readinessGate && typeof topology.readinessGate.pass === 'boolean') {
+    return topology.readinessGate.pass === true;
+  }
+  return topology?.ok === true;
+}
+
+function _diagnosticKey(diagnostic = {}) {
+  return [
+    diagnostic.type || '',
+    diagnostic.severity || '',
+    diagnostic.refNo || '',
+    diagnostic.rowNo ?? diagnostic.rowIndex ?? '',
+    diagnostic.message || diagnostic.reason || '',
+  ].map((part) => String(part)).join('|');
+}
+
+function _dedupeDiagnostics(diagnostics = []) {
+  const seen = new Set();
+  const out = [];
+  for (const diagnostic of diagnostics) {
+    if (!diagnostic || typeof diagnostic !== 'object') continue;
+    const key = _diagnosticKey(diagnostic);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(diagnostic);
+  }
+  return out;
 }
 
 function _topologyDiagnostics(topology) {
-  return [
-    ...(Array.isArray(topology?.diagnostics) ? topology.diagnostics : []),
-    ...(Array.isArray(topology?.readinessGate?.diagnostics) ? topology.readinessGate.diagnostics : []),
-  ];
+  const primary = Array.isArray(topology?.diagnostics) ? topology.diagnostics : [];
+  const readiness = Array.isArray(topology?.readinessGate?.diagnostics) ? topology.readinessGate.diagnostics : [];
+  return _dedupeDiagnostics(primary.length ? primary : readiness);
 }
 
 async function _runTopology(ctx = {}, rows = [], config = {}) {
@@ -222,7 +249,7 @@ export const jsonRvmPcfWorkflowAdapter = Object.freeze({
       masterContext,
       mode: 'preview',
       commit: false,
-      diagnostics: _diagnosticsFrom(ctx),
+      diagnostics: [..._diagnosticsFrom(ctx)],
     });
 
     return _baseModel({
@@ -323,18 +350,18 @@ export const jsonRvmPcfWorkflowAdapter = Object.freeze({
       topologyHandoff: topology?.acceptedTopologyHandoff || null,
       mode: 'run',
       commit: true,
-      diagnostics: [...topologyDiagnostics, ..._diagnosticsFrom(ctx)],
+      diagnostics: [..._diagnosticsFrom(ctx)],
     });
 
     const emitted = await _emitPcf(ctx, enrichment.rows || [], config);
-    const errors = emitted?.errors || [];
-    const warnings = emitted?.warnings || [];
-    const diagnostics = [
+    const errors = Array.isArray(emitted?.errors) ? emitted.errors : [];
+    const warnings = Array.isArray(emitted?.warnings) ? emitted.warnings : [];
+    const diagnostics = _dedupeDiagnostics([
       ...topologyDiagnostics,
-      ...(enrichment.diagnostics || []),
+      ...(Array.isArray(enrichment.diagnostics) ? enrichment.diagnostics : []),
       ...warnings,
       ...errors,
-    ];
+    ]);
 
     return _baseModel({
       phase: 'run',
