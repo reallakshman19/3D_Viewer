@@ -18,6 +18,11 @@ export const DEFAULT_OPTIONS = {
   // available. This controls raw/approx bore tolerance matching.
   attemptApproxBoreMatch: false,
 
+  // Built-in support keyword logic is intentionally visible/explicit. It handles
+  // REST, GUIDE, LINE STOP/STOP/PIPE STOP and, when enabled, ANCHOR as LINE_STOP.
+  useBuiltInSupportKeywordLogic: true,
+  treatAnchorAsLineStop: true,
+
   enableNearLineDiagnostic: false,
   allowRawDiaMatch: false,
 };
@@ -68,20 +73,25 @@ function unique(values) {
   return [...new Set(values.filter(Boolean))];
 }
 
-function extractSupportKeywords(text) {
+function extractSupportKeywords(text, options = DEFAULT_OPTIONS) {
+  if (options.useBuiltInSupportKeywordLogic === false) return [];
   const upper = String(text || '').toUpperCase();
   const found = [];
   if (/\bGUIDE\b/.test(upper)) found.push('GUIDE');
   if (/\bREST\b|\bXRT\b/.test(upper)) found.push('REST');
-  if (/\bLINE\s*STOP\b|\bLINESTOP\b|\bPIPE\s*STOP\b|\bSTOP\b|\bANCHOR\b/.test(upper)) found.push('LINE_STOP');
+  const anchorEnabled = options.treatAnchorAsLineStop !== false;
+  const lineStopRegex = anchorEnabled
+    ? /\bLINE\s*STOP\b|\bLINESTOP\b|\bPIPE\s*STOP\b|\bSTOP\b|\bANCHOR\b/
+    : /\bLINE\s*STOP\b|\bLINESTOP\b|\bPIPE\s*STOP\b|\bSTOP\b/;
+  if (lineStopRegex.test(upper)) found.push('LINE_STOP');
   return unique(found);
 }
 
-function splitSupportList(value) {
+function splitSupportList(value, options = DEFAULT_OPTIONS) {
   const raw = String(value || '').trim();
   if (!raw) return [];
 
-  const extracted = extractSupportKeywords(raw);
+  const extracted = extractSupportKeywords(raw, options);
   if (extracted.length) return extracted;
 
   return unique(raw
@@ -135,51 +145,81 @@ function fixBoreBasis(row) {
   return row;
 }
 
-function clarifySupportConflict(row) {
+function supportAvailableOnRow(row, options) {
+  return unique([
+    ...extractSupportKeywords(row.nodeIsonote, options),
+    ...extractSupportKeywords(row.nodeMasterKeywords, options),
+    ...extractSupportKeywords(row.masterKeywords, options),
+  ]);
+}
+
+function supportRequestedOnRow(row, options) {
+  return splitSupportList(row.supportTypesRequested ?? row.supportRequested ?? row.dtxr ?? row.dtxrRaw, options);
+}
+
+function markSupportReview(row, requested, missing) {
+  row.eligible = row.supportBasis === 'SUPPORT_CONFLICT' ? row.eligible : true;
+  row.autoSelectable = false;
+  row.reviewRequired = true;
+  row.selected = false;
+  row.finalStatus = 'USER_REVIEW_REQUIRED';
+  row.confidence = row.confidence === 'HIGH' ? 'REVIEW' : (row.confidence || 'REVIEW');
+  row.confidenceScore = Math.min(Number(row.confidenceScore || 60) || 60, 60);
+  row.warnings = appendWarning(row.warnings, 'SUPPORT_CONFLICT');
+  row.reason = `Review required: Table-2 requests ${supportDisplayList(requested)}, but Table-1 support basis is missing ${supportDisplayList(missing)}.`;
+  row.nodeCoverageNote = row.reason;
+}
+
+function fixSupportDiagnostics(row, options) {
   if (!row) return row;
 
+  const requested = supportRequestedOnRow(row, options);
+  const available = supportAvailableOnRow(row, options);
   const supportBasis = String(row.supportBasis || '').toUpperCase();
-  if (!['SUPPORT_CONFLICT', 'SUPPORT_PARTIAL', 'SUPPORT_MISSING_MASTER'].includes(supportBasis)) {
-    return row;
-  }
 
-  const requested = splitSupportList(row.supportTypesRequested ?? row.supportRequested ?? row.dtxr ?? row.dtxrRaw);
-  const available = unique([
-    ...extractSupportKeywords(row.nodeIsonote),
-    ...extractSupportKeywords(row.nodeMasterKeywords),
-    ...extractSupportKeywords(row.masterKeywords),
-  ]);
+  if (requested.length && !String(row.supportTypesRequested || '').trim()) {
+    row.supportTypesRequested = supportDisplayList(requested);
+  }
 
   if (!requested.length) return row;
 
   const matched = requested.filter((type) => available.includes(type));
   const missing = requested.filter((type) => !available.includes(type));
 
-  if (!missing.length) return row;
+  if (!missing.length) {
+    if (supportBasis === 'SUPPORT_NOT_REQUESTED' || supportBasis === 'SUPPORT_CONFLICT' || supportBasis === 'SUPPORT_MISSING_MASTER') {
+      row.supportBasis = 'SUPPORT_EXACT';
+      row.supportMatch = `${supportDisplayList(matched)} Match`;
+      row.matchedSupportKeywords = supportDisplayList(matched);
+    }
+    return row;
+  }
 
   row.missingSupportKeywords = supportDisplayList(missing);
   if (matched.length) row.matchedSupportKeywords = supportDisplayList(matched);
 
-  row.supportMatch = matched.length
-    ? `${supportDisplayList(matched)} Match; Missing ${supportDisplayList(missing)}`
-    : `Missing ${supportDisplayList(missing)}`;
+  if (supportBasis === 'SUPPORT_PARTIAL' || matched.length) {
+    row.supportBasis = 'SUPPORT_PARTIAL';
+    row.supportMatch = `${supportDisplayList(matched)} Match; Missing ${supportDisplayList(missing)}`;
+  } else {
+    row.supportBasis = available.length ? 'SUPPORT_CONFLICT' : 'SUPPORT_MISSING_MASTER';
+    row.supportMatch = available.length
+      ? `Missing ${supportDisplayList(missing)}`
+      : `Missing master support ${supportDisplayList(missing)}`;
+  }
 
   row.warnings = appendWarning(row.warnings, `SUPPORT_MISSING_${missing.join('_')}`);
 
-  if (!row.reason || /^Review required:\s*SUPPORT_/i.test(String(row.reason))) {
-    row.reason = `Review required: Table-2 requests ${supportDisplayList(requested)}, but Table-1 support basis is missing ${supportDisplayList(missing)}.`;
-  }
-
-  if (!row.nodeCoverageNote || /^Review required:\s*SUPPORT_/i.test(String(row.nodeCoverageNote))) {
-    row.nodeCoverageNote = row.reason;
+  if (['SUPPORT_CONFLICT', 'SUPPORT_PARTIAL', 'SUPPORT_MISSING_MASTER', 'SUPPORT_NOT_REQUESTED'].includes(supportBasis)) {
+    markSupportReview(row, requested, missing);
   }
 
   return row;
 }
 
-function normalizeDiagnosticsInRows(rows) {
+function normalizeDiagnosticsInRows(rows, options) {
   if (!Array.isArray(rows)) return rows;
-  return rows.map((row) => clarifySupportConflict(fixBoreBasis(row)));
+  return rows.map((row) => fixSupportDiagnostics(fixBoreBasis(row), options));
 }
 
 export function normalizePsMappingOptions(options = {}) {
@@ -190,6 +230,8 @@ export function normalizePsMappingOptions(options = {}) {
 
   merged.attemptApproxLineMatch = attemptApproxLineMatch;
   merged.attemptApproxBoreMatch = attemptApproxBoreMatch;
+  merged.useBuiltInSupportKeywordLogic = merged.useBuiltInSupportKeywordLogic !== false;
+  merged.treatAnchorAsLineStop = merged.treatAnchorAsLineStop !== false;
 
   // Approx line override gates only near/typo diagnostics. Normal exact family
   // matching like S-8811951 -> S8811951 remains enabled through regex normalization.
@@ -216,14 +258,17 @@ function annotateResult(result, options) {
     attemptApproxBoreMatch: options.attemptApproxBoreMatch,
     approxLineLogic: 'When enabled, after exact size-free line-family match fails, compare Table-2 and Table-1 line families using edit distance. If distance <= max and min length passes, mark LINE_FAMILY_NEAR_MISMATCH / USER_REVIEW_REQUIRED. Never auto-correct.',
     approxBoreLogic: 'When enabled, allow raw/OD bore tolerance matching using odToleranceMm. Exact DN matching from Table-1C Pipe size or Table-1A Dia-derived DN remains available even when OFF.',
+    useBuiltInSupportKeywordLogic: options.useBuiltInSupportKeywordLogic,
+    treatAnchorAsLineStop: options.treatAnchorAsLineStop,
+    supportKeywordLogic: 'Built-in support logic recognizes REST, GUIDE, LINE STOP/LINESTOP/STOP/PIPE STOP on Table-1C ISONOTE and Table-2 DTXR. When enabled, ANCHOR is classified as LINE_STOP/STOP.',
   };
 
   const normalized = {
     ...result,
-    rows: normalizeDiagnosticsInRows(result?.rows),
-    outputRows: normalizeDiagnosticsInRows(result?.outputRows),
-    candidateRows: normalizeDiagnosticsInRows(result?.candidateRows),
-    validatorRows: normalizeDiagnosticsInRows(result?.validatorRows),
+    rows: normalizeDiagnosticsInRows(result?.rows, options),
+    outputRows: normalizeDiagnosticsInRows(result?.outputRows, options),
+    candidateRows: normalizeDiagnosticsInRows(result?.candidateRows, options),
+    validatorRows: normalizeDiagnosticsInRows(result?.validatorRows, options),
   };
 
   return {
