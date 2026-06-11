@@ -99,8 +99,18 @@ export function normalizeLineKey(value) {
 }
 function extractLineFamily(value) {
   const text = normalizeLineKey(value);
-  const match = text.match(/(\d+["']?-S\d+)/i);
-  return match ? match[1].toUpperCase() : '';
+  if (!text) return '';
+  // Line-family is a deliberately weaker key than full Pipe Key.
+  // It keeps only NPS + service/line-number stem, for example:
+  //   ASIM-1885-4"-P8810246-31441C4-PP -> 4"-P8810246
+  //   ASIM-1885-3"-W8810140-31441C4-PP -> 3"-W8810140
+  //   ASIM-1885-10"-S8810101-91261M7-HC -> 10"-S8810101
+  // Previous logic only handled S-lines, leaving P/W/D families blank.
+  const nps = String.raw`(?:\d+-\d+\/\d+|\d+\/\d+|\d+(?:\.\d+)?)`;
+  const match = text.match(new RegExp(`(${nps}["']?-[A-Z]\\d{4,})`, 'i'));
+  if (match) return match[1].toUpperCase();
+  const stem = text.match(/\b([A-Z]\d{4,})\b/i);
+  return stem ? stem[1].toUpperCase() : '';
 }
 
 function canonicalKeywordName(value) {
@@ -251,10 +261,8 @@ function parseTable1B(text, log) {
 
 function parsePipeSize(value) {
   const raw = String(value ?? '').trim();
-  if (!raw) return { raw: '', nps: null, derivedDn: null };
-  const n = number(raw.replace(/"/g, ''));
-  if (!Number.isFinite(n)) return { raw, nps: null, derivedDn: null };
-  return { raw, nps: n, derivedDn: NPS_TO_DN.get(n) ?? null };
+  const nps = number(raw);
+  return { raw, nps: Number.isFinite(nps) ? nps : null, derivedDn: Number.isFinite(nps) ? (NPS_TO_DN.get(nps) ?? null) : null };
 }
 
 function parseTable1C(text, log, keywordCatalog) {
@@ -476,320 +484,319 @@ function evaluateLine(modelPipe, nodeLine, options) {
 
 function evaluateSupport(modelTypes, nodeTypes, options) {
   if (options.supportMode === 'ignore') return { basis: 'SUPPORT_IGNORED', matchText: '', rank: 5, eligible: true, matchedTypes: [] };
-  const requested = Array.isArray(modelTypes) ? modelTypes : [];
-  const available = Array.isArray(nodeTypes) ? nodeTypes : [];
+  const requested = modelTypes || [];
+  const available = nodeTypes || [];
   if (!requested.length) return { basis: 'SUPPORT_NOT_REQUESTED', matchText: '', rank: 4, eligible: true, matchedTypes: [] };
-  if (!available.length) return { basis: 'SUPPORT_MISSING', matchText: '', rank: 8, eligible: options.supportMode !== 'strict', matchedTypes: [] };
-  const matchedTypes = requested.filter((type) => available.includes(type));
-  if (matchedTypes.length) return { basis: `SUPPORT_${matchedTypes.join('_')}`, matchText: supportMatchText(matchedTypes), rank: 0, eligible: true, matchedTypes };
+  if (!available.length) return { basis: 'SUPPORT_MISSING_MASTER', matchText: '', rank: 8, eligible: options.supportMode !== 'strict', matchedTypes: [] };
+  const matched = requested.filter((type) => available.includes(type));
+  if (matched.length === requested.length) return { basis: 'SUPPORT_EXACT', matchText: supportMatchText(matched), rank: 0, eligible: true, matchedTypes: matched };
+  if (matched.length) return { basis: 'SUPPORT_PARTIAL', matchText: supportMatchText(matched), rank: 2, eligible: options.supportMode !== 'strict', matchedTypes: matched };
   return { basis: 'SUPPORT_CONFLICT', matchText: '', rank: 9, eligible: options.supportMode !== 'strict', matchedTypes: [] };
 }
 
-function psBasisFor(model, ref) {
-  if (!ref.basePs) return 'NO_PS_MATCH';
-  if (model.exactRawKey === ref.exactRawKey) return 'EXACT_RAW';
-  if (model.basePs === ref.basePs) return 'BASE_PS';
-  return 'NO_PS_MATCH';
-}
-function psRank(basis) { return basis === 'EXACT_RAW' ? 0 : basis === 'BASE_PS' ? 1 : 99; }
-function compareCandidates(a, b) {
-  return a.psBasisRank - b.psBasisRank
-    || a.boreRank - b.boreRank
-    || a.supportRank - b.supportRank
-    || a.lineRank - b.lineRank
-    || a.warnings.length - b.warnings.length
-    || a.table1Row - b.table1Row
-    || natural(a.node, b.node);
+function buildConsolidatedTable1Rows({ table1Rows, diaByNode, lineByNode, supportByNode, richRows, log }) {
+  const explicitRows = table1Rows.map((row) => ({ ...row }));
+  const byBaseNodeLine = new Set();
+  const out = [];
+  for (const row of explicitRows) {
+    const dia = diaByNode.get(row.node);
+    const line = lineByNode.get(row.node);
+    const support = supportByNode.get(row.node);
+    const merged = {
+      ...row,
+      source: row.source || 'TABLE1',
+      nodeDia: dia?.dia ?? null,
+      nodeDiaSource: dia ? 'TABLE1A' : '',
+      nodeLine: line?.lineNo || support?.lineNo || '',
+      nodeLineKey: normalizeLineKey(line?.lineNo || support?.lineNo || ''),
+      pipeSizeRaw: support?.pipeSizeRaw || '',
+      nps: support?.nps ?? null,
+      derivedDn: support?.derivedDnFromNps ?? null,
+      derivedDnFromNps: support?.derivedDnFromNps ?? null,
+      boreSource: dia ? 'TABLE1A_OD' : support?.derivedDnFromNps != null ? 'TABLE1C_NPS' : '',
+      nodeIsonote: support?.isonote || '',
+      supportTypesAvailable: support?.supportTypes || [],
+      mandatory: support?.mandatory === true,
+    };
+    out.push(merged);
+    byBaseNodeLine.add(`${merged.basePs}|${merged.node}|${merged.nodeLineKey}`);
+  }
+
+  for (const rich of richRows || []) {
+    if (rich.rawPsNo && rich.node) {
+      const key = `${rich.basePs}|${rich.node}|${rich.nodeLineKey}`;
+      if (byBaseNodeLine.has(key)) {
+        const existing = out.find((row) => `${row.basePs}|${row.node}|${row.nodeLineKey}` === key);
+        if (existing) {
+          existing.source = existing.source.includes('TABLE1C_RICH') ? existing.source : `${existing.source}+TABLE1C_RICH`;
+          existing.nodeIsonote = existing.nodeIsonote || rich.nodeIsonote;
+          existing.supportTypesAvailable = existing.supportTypesAvailable?.length ? existing.supportTypesAvailable : rich.supportTypesAvailable;
+          existing.pipeSizeRaw = existing.pipeSizeRaw || rich.pipeSizeRaw;
+          existing.nps = existing.nps ?? rich.nps;
+          existing.derivedDn = existing.derivedDn ?? rich.derivedDn;
+          existing.derivedDnFromNps = existing.derivedDnFromNps ?? rich.derivedDn;
+          existing.mandatory = existing.mandatory || rich.mandatory;
+        }
+        continue;
+      }
+      out.push({ ...rich, source: 'TABLE1C_RICH', nodeDia: null, nodeDiaSource: '', boreSource: rich.derivedDn != null ? 'TABLE1C_NPS' : '', derivedDnFromNps: rich.derivedDn });
+      byBaseNodeLine.add(key);
+    } else if (rich.node) {
+      out.push({
+        ...rich,
+        id: rich.id || `T1C_AUDIT#${out.length + 1}`,
+        source: 'TABLE1C_RICH_AUDIT',
+        basePs: '',
+        exactRawKey: '',
+        nodeDia: null,
+        nodeDiaSource: '',
+        boreSource: rich.derivedDn != null ? 'TABLE1C_NPS' : '',
+        derivedDnFromNps: rich.derivedDn,
+      });
+    }
+  }
+
+  for (const row of out) {
+    row.lineFamily = extractLineFamily(row.nodeLineKey || row.nodeLine);
+    row.derivedDn = row.derivedDn ?? row.derivedDnFromNps ?? (Number.isFinite(row.nodeDia) ? deriveDnFromOd(row.nodeDia) : null);
+    log.debug('DEBUG', 'CONSOLIDATED_T1_ROW', row.table1PsNo || row.node || row.id, row);
+  }
+  log.user('INFO', 'CONSOLIDATE', 'Consolidated Table-1', `Built ${out.length} consolidated Table-1 reference row(s).`);
+  return out;
 }
 
-function buildCandidate(model, ref, options, log) {
-  const psBasis = psBasisFor(model, ref);
-  if (psBasis === 'NO_PS_MATCH') return null;
-  const boreEval = evaluateBore(model.bore, ref, options);
-  const supportEval = evaluateSupport(model.supportTypesRequested, ref.supportTypesAvailable, options);
-  const lineEval = evaluateLine(model.pipe, ref.nodeLine, options);
-  const eligible = boreEval.eligible && supportEval.eligible && lineEval.eligible;
-  const parts = [psBasis];
-  if (boreEval.basis && boreEval.basis !== 'BORE_IGNORED') parts.push(boreEval.basis);
-  if (supportEval.matchText) parts.push(supportEval.basis);
-  else if (supportEval.basis === 'SUPPORT_CONFLICT' && model.supportTypesRequested?.length) parts.push('SUPPORT_CONFLICT');
-  if (['LINE_EXACT', 'LINE_SUBSTRING', 'LINE_FAMILY'].includes(lineEval.basis)) parts.push(lineEval.basis);
-  const candidate = {
-    modelId: model.id, refId: ref.id, psnoModel: model.psnoModel, node: ref.node, tag: ref.tag || '', source: ref.source || '', mandatory: ref.mandatory === true,
-    table1PsNo: ref.rawPsNo, table1Row: ref.sourceRow, table2Row: model.sourceRow,
-    psBasis, boreBasis: boreEval.basis, supportBasis: supportEval.basis, lineBasis: lineEval.basis,
-    psBasisRank: psRank(psBasis), boreRank: boreEval.rank, supportRank: supportEval.rank, lineRank: lineEval.rank,
-    eligible, basisParts: parts, basis: parts.join(' + '), modelBore: model.bore,
-    nodeDia: ref.nodeDia, pipeSizeRaw: ref.pipeSizeRaw || '', nps: ref.nps ?? null, derivedDn: boreEval.derivedDn, pipe: model.pipe, nodeLine: ref.nodeLine,
-    dtxr: model.dtxr || '', modelSupportTypes: model.supportTypesRequested || [],
-    nodeIsonote: ref.nodeIsonote || '', nodeIsonoteRaw: ref.nodeIsonote || '', nodeSupportTypes: ref.supportTypesAvailable || [],
-    matchedSupportTypes: supportEval.matchedTypes || [], supportMatch: supportEval.matchText || '',
-    nodeCoverageNote: '', nodeCoverageStatus: '', warnings: [], selected: false, rejectReason: '',
-  };
-  if (!eligible) candidate.rejectReason = !boreEval.eligible ? boreEval.basis : !supportEval.eligible ? supportEval.basis : lineEval.basis;
-  if (boreEval.basis === 'BORE_CONFLICT') candidate.warnings.push('BORE_CONFLICT');
-  if (supportEval.basis === 'SUPPORT_CONFLICT') candidate.warnings.push('SUPPORT_CONFLICT');
-  log.debug('DEBUG', 'CANDIDATE_BUILT', `${model.psnoModel} -> ${ref.node}${tagLabel(ref.tag)}`, candidate);
-  return candidate;
-}
-
-function makeResultRow(candidate) {
-  return {
-    enabled: true, psnoModel: candidate.psnoModel, node: candidate.node, tag: candidate.tag || '', source: candidate.source || '', mandatory: candidate.mandatory === true, supportMatch: candidate.supportMatch || '', basis: candidate.basis,
-    confidence: candidate.warnings.length ? 'MEDIUM' : 'HIGH', psBasis: candidate.psBasis, boreBasis: candidate.boreBasis,
-    supportBasis: candidate.supportBasis, lineBasis: candidate.lineBasis, table1PsNo: candidate.table1PsNo, table1Row: candidate.table1Row, table2Row: candidate.table2Row,
-    modelBore: candidate.modelBore, nodeDia: candidate.nodeDia, pipeSizeRaw: candidate.pipeSizeRaw, nps: candidate.nps, derivedDn: candidate.derivedDn, pipe: candidate.pipe,
-    nodeLine: candidate.nodeLine, dtxr: candidate.dtxr, modelSupportTypes: candidate.modelSupportTypes,
-    modelDtxrKeywords: candidate.modelSupportTypes || [], nodeIsonote: candidate.nodeIsonote, nodeIsonoteRaw: candidate.nodeIsonoteRaw,
-    nodeSupportTypes: candidate.nodeSupportTypes, nodeMasterKeywords: candidate.nodeSupportTypes || [], matchedSupportTypes: candidate.matchedSupportTypes,
-    nodeCoverageNote: '', nodeCoverageStatus: '', warnings: candidate.warnings, debugId: `${candidate.modelId}:${candidate.refId}`,
-  };
-}
-function makeNoMatch(model, reason) {
-  return {
-    enabled: false, psnoModel: model.psnoModel, node: '', tag: '', source: '', mandatory: model.mandatory === true,
-    supportMatch: '', basis: 'NO_MATCH', confidence: 'NO_MATCH', psBasis: 'NO_MATCH', boreBasis: '', supportBasis: '', lineBasis: '',
-    table1PsNo: '', table1Row: null, table2Row: model.sourceRow, modelBore: model.bore, modelBoreRaw: model.boreRaw,
-    pipe: model.pipe || '', dtxr: model.dtxr || '', modelDtxrKeywords: model.supportTypesRequested || [],
-    nodeCoverageNote: '', nodeCoverageStatus: '', warnings: [reason, ...(model.parseWarnings || [])], debugId: `${model.id}:NO_MATCH`
-  };
-}
-function groupBy(rows, fn) {
+function groupBy(rows, keyFn) {
   const map = new Map();
-  for (const row of rows) {
-    const key = fn(row);
+  for (const row of rows || []) {
+    const key = keyFn(row);
     if (!map.has(key)) map.set(key, []);
     map.get(key).push(row);
   }
   return map;
 }
 
-function coverageStatus(master, covered, missing, extra) {
-  if (!master.length && !covered.length) return 'NO_MASTER_SUPPORT';
-  if (!master.length && covered.length) return 'EXTRA_ONLY';
-  if (missing.length && covered.length) return 'PARTIAL';
-  if (missing.length) return 'MISSING_ALL';
-  if (extra.length) return 'COVERED_WITH_EXTRA';
-  return 'COVERED';
-}
-function coverageAction(status, missing, extra, node, tag = '') {
-  const ctx = nodeSubject(node, tag);
-  if (status === 'PARTIAL' || status === 'MISSING_ALL') return `Add/verify mapped Table-2 DTXR containing ${supportListText(missing)} for ${ctx}, or confirm it is not required.`;
-  if (status === 'COVERED_WITH_EXTRA' || status === 'EXTRA_ONLY') return `Review mapped Table-2 DTXR keyword(s) ${supportListText(extra)} or update Table-1C if valid for ${ctx}.`;
-  return 'No action.';
-}
-function buildSupportCoverageRows({ table1Rows, resultRows, log }) {
-  const refsByNode = groupBy(table1Rows.filter((ref) => ref.node), (ref) => ref.node);
-  const mappedByNode = groupBy(resultRows.filter((row) => row.node && row.confidence !== 'NO_MATCH'), (row) => row.node);
-  const allNodes = uniqueSorted([...refsByNode.keys(), ...mappedByNode.keys()]);
-  const rows = [];
-  for (const node of allNodes) {
-    const refs = refsByNode.get(node) || [];
-    const mapped = mappedByNode.get(node) || [];
-    const tags = uniqueSorted(refs.map((ref) => ref.tag));
-    const tag = tags.join(', ');
-    const table1PsNo = uniqueSorted(refs.map((ref) => ref.rawPsNo)).join(', ');
-    const master = uniqueSorted(refs.flatMap((ref) => ref.supportTypesAvailable || []));
-    const covered = uniqueSorted(mapped.flatMap((row) => row.modelDtxrKeywords || []));
-    const missing = master.filter((item) => !covered.includes(item));
-    const extra = covered.filter((item) => !master.includes(item));
-    const status = coverageStatus(master, covered, missing, extra);
-    const action = coverageAction(status, missing, extra, node, tag);
-    const row = {
-      node,
-      table1PsNo,
-      tag,
-      source: uniqueSorted(refs.map((ref) => ref.source)).join(', '),
-      mandatory: refs.some((ref) => ref.mandatory === true) ? 'YES' : '',
-      dia: uniqueSorted(refs.map((ref) => Number.isFinite(ref.nodeDia) ? String(ref.nodeDia) : '')).join(', '),
-      pipeSizeRaw: uniqueSorted(refs.map((ref) => ref.pipeSizeRaw)).join(', '),
-      derivedDn: uniqueSorted(refs.map((ref) => Number.isFinite(ref.derivedDn) ? String(ref.derivedDn) : '')).join(', '),
-      lineNo: uniqueSorted(refs.map((ref) => ref.nodeLine)).join(', '),
-      isonote: uniqueSorted(refs.map((ref) => ref.nodeIsonote)).join(' | '),
-      masterKeywords: master,
-      mappedPsnos: mapped.map((item) => item.psnoModel),
-      coveredDtxrKeywords: covered,
-      missingMasterKeywords: missing,
-      extraDtxrKeywords: extra,
-      coverageStatus: status,
-      action,
-    };
-    rows.push(row);
-    for (const mappedRow of mapped) {
-      mappedRow.tag = mappedRow.tag || tag;
-      mappedRow.table1PsNo = mappedRow.table1PsNo || table1PsNo;
-      mappedRow.nodeCoverageNote = missing.length
-        ? `${nodeSubject(node, tag)} missing ${supportListText(missing)} in mapped DTXR.`
-        : extra.length ? `${nodeSubject(node, tag)} has extra DTXR keyword(s): ${supportListText(extra)}.` : '';
-      mappedRow.nodeCoverageStatus = status;
-    }
-    if (missing.length) {
-      log.user('WARNING', 'SUPPORT_COVERAGE', nodeSubject(node, tag), `Master ISONOTE contains ${supportListText(master)}. Mapped Table-2 DTXR covers ${supportListText(covered) || 'none'}. Missing ${supportListText(missing)}.`, action, { node, tag, table1PsNo });
-      log.debug('WARNING', 'SUPPORT_COVERAGE_MISSING', nodeSubject(node, tag), row);
-    }
-    if (extra.length) {
-      log.user('WARNING', 'SUPPORT_COVERAGE', nodeSubject(node, tag), `Mapped Table-2 DTXR contains ${supportListText(extra)}, but Table-1C master keywords are ${supportListText(master) || 'none'}.`, action, { node, tag, table1PsNo });
-      log.debug('WARNING', 'SUPPORT_COVERAGE_EXTRA', nodeSubject(node, tag), row);
-    }
-    log.debug('INFO', 'SUPPORT_COVERAGE_NODE_BUILT', nodeSubject(node, tag), row);
-  }
-  return rows;
-}
-function annotateCandidateCoverage(candidateRows, resultRows) {
-  const selectedByDebugId = new Map(resultRows.filter((row) => row.debugId).map((row) => [row.debugId, row]));
-  for (const candidate of candidateRows) {
-    const row = selectedByDebugId.get(`${candidate.modelId}:${candidate.refId}`);
-    if (!row) continue;
-    candidate.nodeCoverageNote = row.nodeCoverageNote || '';
-    candidate.nodeCoverageStatus = row.nodeCoverageStatus || '';
-    candidate.tag = candidate.tag || row.tag || '';
-    candidate.table1PsNo = candidate.table1PsNo || row.table1PsNo || '';
-  }
-}
-function buildSummary(rows, table1Rows, modelRows, candidates, userLog, supportCoverageRows = []) {
-  const warnings = rows.reduce((sum, row) => sum + (row.warnings?.length || 0), 0) + userLog.filter((e) => e.level === 'WARNING').length;
+function candidateScore(model, ref, options) {
+  const psBasis = ref.exactRawKey === model.exactRawKey ? 'PS_EXACT' : ref.basePs === model.basePs ? 'PS_BASE' : 'PS_NONE';
+  const bore = evaluateBore(Number(model.bore), ref, options);
+  const line = evaluateLine(model.pipe, ref.nodeLine, options);
+  const support = evaluateSupport(model.supportTypesRequested, ref.supportTypesAvailable, options);
+  const warnings = [];
+  if (!bore.eligible) warnings.push('BORE_REJECT');
+  if (!line.eligible) warnings.push('LINE_REJECT');
+  if (!support.eligible) warnings.push('SUPPORT_REJECT');
+  const eligible = psBasis !== 'PS_NONE' && bore.eligible && line.eligible && support.eligible;
   return {
-    table1Rows: table1Rows.length,
-    table2Rows: modelRows.length,
-    candidateRows: candidates.length,
-    mapped: rows.filter((r) => r.enabled).length,
-    noMatch: rows.filter((r) => !r.enabled).length,
+    eligible,
+    psBasis,
+    bore,
+    line,
+    support,
     warnings,
-    supportMatches: rows.filter((r) => r.supportMatch).length,
-    supportCoverageRows: supportCoverageRows.length,
-    supportCoverageWarnings: supportCoverageRows.filter((row) => ['PARTIAL', 'MISSING_ALL', 'COVERED_WITH_EXTRA', 'EXTRA_ONLY'].includes(row.coverageStatus)).length,
-    tags: Array.from(new Set([...rows.map((r) => r.tag), ...supportCoverageRows.map((r) => r.tag)].filter(Boolean))),
+    numeric: (psBasis === 'PS_EXACT' ? 0 : 1) * 1000 + bore.rank * 100 + support.rank * 10 + line.rank + warnings.length * 10000,
   };
 }
 
-function canUseCandidate(candidate, usedRefs) {
-  if (!usedRefs.has(candidate.refId)) return true;
-  return candidate.modelSupportTypes?.length > 0;
+function buildCandidate(model, ref, options) {
+  const score = candidateScore(model, ref, options);
+  return {
+    psnoModel: model.psnoModel,
+    basePs: model.basePs,
+    modelTag: model.modelTag,
+    modelBore: model.bore,
+    pipe: model.pipe,
+    pipeKey: model.pipeKey,
+    lineFamily: model.lineFamily,
+    dtxr: model.dtxr,
+    mandatory: model.mandatory,
+    supportTypesRequested: supportListText(model.supportTypesRequested),
+    modelDtxrKeywords: supportListText(model.supportTypesRequested),
+    table2Row: model.sourceRow,
+    candidateNode: ref.node,
+    node: ref.node,
+    table1PsNo: ref.table1PsNo || ref.rawPsNo || '',
+    tag: ref.tag || '',
+    source: ref.source || '',
+    sourceRow: ref.sourceRow || '',
+    nodeLine: ref.nodeLine || '',
+    nodeLineKey: ref.nodeLineKey || normalizeLineKey(ref.nodeLine),
+    pipeSizeRaw: ref.pipeSizeRaw || '',
+    nps: ref.nps ?? '',
+    derivedDn: score.bore.derivedDn ?? ref.derivedDn ?? '',
+    nodeDia: ref.nodeDia ?? '',
+    nodeIsonote: ref.nodeIsonote || '',
+    nodeIsonoteRaw: ref.nodeIsonote || '',
+    nodeMasterKeywords: supportListText(ref.supportTypesAvailable),
+    supportTypesAvailable: supportListText(ref.supportTypesAvailable),
+    refMandatory: ref.mandatory === true,
+    psBasis: score.psBasis,
+    boreBasis: score.bore.basis,
+    lineBasis: score.line.basis,
+    supportBasis: score.support.basis,
+    supportMatch: score.support.matchText,
+    matchedTypes: supportListText(score.support.matchedTypes),
+    eligible: score.eligible,
+    warnings: score.warnings.join('; '),
+    score: score.numeric,
+    selected: false,
+    reason: score.eligible ? 'Candidate eligible.' : `Rejected: ${score.warnings.join(', ')}`,
+  };
 }
-function supportSlotLabel(candidate) {
-  if (candidate.supportMatch) return candidate.supportMatch;
-  if (candidate.modelSupportTypes?.length) return `requested ${candidate.modelSupportTypes.map(supportDisplay).join('+')}`;
-  return 'no support requested';
-}
+
 function resolveGroup(models, refs, options, log) {
-  const candidateRows = [];
   const outputRows = [];
-  const usedRefs = new Set();
-  const sortedModels = [...models].sort((a, b) => a.sourceRow - b.sourceRow);
-  for (const model of sortedModels) {
-    const candidates = refs.map((ref) => buildCandidate(model, ref, options, log)).filter(Boolean).sort(compareCandidates);
-    candidateRows.push(...candidates);
-    const eligible = candidates.filter((c) => c.eligible);
-    const selected = eligible.find((c) => canUseCandidate(c, usedRefs)) || eligible[0];
-    if (!selected) { outputRows.push(makeNoMatch(model, candidates[0]?.rejectReason || 'NO_ELIGIBLE_CANDIDATE')); continue; }
-    const reused = usedRefs.has(selected.refId);
-    usedRefs.add(selected.refId);
-    selected.selected = true;
-    if (models.length > 1 || refs.length > 1) selected.basis = `${selected.basis} + DUPLICATE_ASSIGN`;
-    if (reused) {
-      selected.basis = `${selected.basis} + MULTI_SUPPORT_NODE`;
-      selected.warnings.push(selected.supportMatch ? 'NODE_REUSED_FOR_SUPPORT' : 'NODE_REUSED_SUPPORT_REVIEW');
-      log.debug('INFO', 'MULTI_SUPPORT_NODE_REUSE', `${model.psnoModel} -> ${selected.node}${nodeTagLabel(selected)}`, { psnoModel: model.psnoModel, node: selected.node, tag: selected.tag, table1PsNo: selected.table1PsNo, supportSlot: supportSlotLabel(selected), selected });
+  const candidateRows = [];
+  const usedNodeSupport = new Set();
+  for (const model of models) {
+    const candidates = refs.map((ref) => buildCandidate(model, ref, options));
+    candidates.sort((a, b) => a.score - b.score || natural(a.candidateNode, b.candidateNode) || natural(a.table1PsNo, b.table1PsNo));
+    let selected = candidates.find((c) => c.eligible && (options.allowDuplicateAssignment || !usedNodeSupport.has(`${c.node}|${c.supportMatch}`)));
+    if (!selected) selected = candidates.find((c) => c.eligible) || null;
+    if (selected) {
+      selected.selected = true;
+      selected.reason = 'Selected best eligible consolidated Table-1 candidate.';
+      usedNodeSupport.add(`${selected.node}|${selected.supportMatch}`);
+      outputRows.push({
+        enabled: true,
+        psnoModel: model.psnoModel,
+        node: selected.node,
+        tag: selected.tag,
+        table1PsNo: selected.table1PsNo,
+        source: selected.source,
+        sourceRow: selected.sourceRow,
+        nodeLine: selected.nodeLine,
+        pipeSizeRaw: selected.pipeSizeRaw,
+        derivedDn: selected.derivedDn,
+        modelBore: model.bore,
+        pipe: model.pipe,
+        dtxr: model.dtxr,
+        mandatory: model.mandatory,
+        supportMatch: selected.supportMatch,
+        basis: [selected.psBasis, selected.boreBasis, selected.lineBasis, selected.supportBasis].join(' + '),
+        confidence: selected.eligible ? 'HIGH' : 'LOW',
+        warnings: selected.warnings,
+        nodeIsonote: selected.nodeIsonote,
+        nodeMasterKeywords: selected.nodeMasterKeywords,
+        modelDtxrKeywords: selected.modelDtxrKeywords,
+        missingSupportKeywords: '',
+        extraSupportKeywords: '',
+        nodeCoverageStatus: '',
+        nodeCoverageNote: '',
+        table2Row: model.sourceRow,
+      });
+      log.user('INFO', 'RESOLVE', model.psnoModel, `Mapped to Node ${selected.node}${nodeTagLabel(selected)} using ${selected.psBasis} + ${selected.boreBasis} + ${selected.lineBasis} + ${selected.supportBasis}.`, '', { ...table1Context(selected), psnoModel: model.psnoModel });
+    } else {
+      outputRows.push(makeNoMatch(model, 'NO_ELIGIBLE_CANDIDATE'));
+      log.user('WARNING', 'RESOLVE', model.psnoModel, 'No eligible consolidated Table-1 candidate found.', 'Review Candidate Matrix for rejected bore/line/support basis.', { psnoModel: model.psnoModel });
     }
-    outputRows.push(makeResultRow(selected));
-    const stage = models.length > 1 || refs.length > 1 ? 'DUPLICATE_ASSIGN' : 'RESOLVE';
-    const supportMsg = selected.supportMatch ? ` Support ${selected.supportMatch}.` : selected.modelSupportTypes?.length ? ` Support requested but not matched (${selected.supportBasis}).` : '';
-    log.user('INFO', stage, model.psnoModel, `Mapped to Node ${selected.node}${tagLabel(selected.tag)} using ${selected.basis}.${supportMsg}`, '', { ...table1Context(selected), psnoModel: model.psnoModel });
+    candidateRows.push(...candidates);
   }
   return { outputRows, candidateRows };
 }
 
-function refMergeKey(row) {
-  return `${row.basePs || ''}|${row.node || ''}|${row.nodeLineKey || ''}|${row.rawPsNo || ''}`;
-}
-function mergeSupportIntoRef(ref, support) {
-  if (!support) return;
-  if (!ref.nodeIsonote && support.isonote) ref.nodeIsonote = support.isonote;
-  else if (support.isonote) ref.nodeIsonote = mergeUniqueText(ref.nodeIsonote, support.isonote);
-  ref.supportTypesAvailable = uniqueSorted([...(ref.supportTypesAvailable || []), ...(support.supportTypes || [])]);
-  ref.mandatory = ref.mandatory || support.mandatory === true;
-  if (!ref.nodeLine && support.lineNo) { ref.nodeLine = support.lineNo; ref.nodeLineKey = normalizeLineKey(support.lineNo); }
-  if (!ref.pipeSizeRaw && support.pipeSizeRaw) ref.pipeSizeRaw = support.pipeSizeRaw;
-  if (ref.derivedDn == null && support.derivedDnFromNps != null) { ref.derivedDn = support.derivedDnFromNps; ref.derivedDnFromNps = support.derivedDnFromNps; }
-}
-function buildConsolidatedTable1Rows({ table1Rows, diaByNode, lineByNode, supportByNode, richRows, log }) {
-  const consolidated = [];
-  const byMergeKey = new Map();
-  const addRef = (seed, source) => {
-    const id = `CT1#${String(consolidated.length + 1).padStart(3, '0')}`;
-    const norm = seed.raw ? normalizePsNo(seed.raw) : normalizePsNo(seed.rawPsNo || '');
-    const row = {
-      ...seed,
-      id,
-      source,
-      rawPsNo: seed.rawPsNo || seed.raw || '',
-      table1PsNo: seed.table1PsNo || seed.rawPsNo || seed.raw || '',
-      exactRawKey: seed.exactRawKey || norm.exactRawKey,
-      basePs: seed.basePs || norm.basePs,
-      tag: seed.tag || norm.tag || '',
-      node: String(seed.node || '').trim(),
-      sourceRow: seed.sourceRow ?? null,
-      nodeLine: seed.nodeLine || '',
-      nodeLineKey: seed.nodeLineKey || normalizeLineKey(seed.nodeLine || ''),
-      pipeSizeRaw: seed.pipeSizeRaw || '',
-      nps: seed.nps ?? null,
-      derivedDn: seed.derivedDn ?? null,
-      nodeIsonote: seed.nodeIsonote || '',
-      supportTypesAvailable: seed.supportTypesAvailable || [],
-      mandatory: seed.mandatory === true,
-      used: false,
-    };
-    const key = refMergeKey(row);
-    const existing = byMergeKey.get(key);
-    if (existing) {
-      existing.source = uniqueSorted([existing.source, source]).join('+');
-      existing.nodeIsonote = mergeUniqueText(existing.nodeIsonote, row.nodeIsonote);
-      existing.supportTypesAvailable = uniqueSorted([...(existing.supportTypesAvailable || []), ...(row.supportTypesAvailable || [])]);
-      existing.mandatory = existing.mandatory || row.mandatory;
-      if (!existing.pipeSizeRaw && row.pipeSizeRaw) existing.pipeSizeRaw = row.pipeSizeRaw;
-      if (existing.derivedDn == null && row.derivedDn != null) existing.derivedDn = row.derivedDn;
-      return existing;
-    }
-    byMergeKey.set(key, row);
-    consolidated.push(row);
-    return row;
+function makeNoMatch(model, warning) {
+  return {
+    enabled: false,
+    psnoModel: model.psnoModel,
+    node: '',
+    tag: '',
+    table1PsNo: '',
+    source: '',
+    sourceRow: '',
+    nodeLine: '',
+    pipeSizeRaw: '',
+    derivedDn: '',
+    modelBore: model.bore,
+    pipe: model.pipe,
+    dtxr: model.dtxr,
+    mandatory: model.mandatory,
+    supportMatch: '',
+    basis: 'NO_MATCH',
+    confidence: 'NONE',
+    warnings: warning,
+    nodeIsonote: '',
+    nodeMasterKeywords: '',
+    modelDtxrKeywords: supportListText(model.supportTypesRequested),
+    missingSupportKeywords: '',
+    extraSupportKeywords: '',
+    nodeCoverageStatus: '',
+    nodeCoverageNote: '',
+    table2Row: model.sourceRow,
   };
+}
 
-  for (const row of table1Rows) addRef(row, 'TABLE1');
-  for (const rich of richRows) {
-    if (rich.rawPsNo && rich.node) addRef(rich, 'TABLE1C_RICH');
-    else if (rich.node) addRef(rich, 'TABLE1C_RICH_AUDIT');
+function buildSupportCoverageRows({ table1Rows, resultRows, log }) {
+  const selectedByNode = new Map();
+  for (const row of resultRows || []) {
+    if (!row.node) continue;
+    const entry = selectedByNode.get(row.node) || { psnoModels: [], coveredTypes: [], dtxr: [] };
+    entry.psnoModels.push(row.psnoModel);
+    entry.coveredTypes.push(...normalizeSupportTypes(row.dtxr || ''));
+    if (row.dtxr) entry.dtxr.push(row.dtxr);
+    selectedByNode.set(row.node, entry);
   }
+  const byNode = groupBy(table1Rows || [], (r) => r.node || `__ROW_${r.id}`);
+  const rows = [];
+  for (const [node, refs] of byNode.entries()) {
+    const masterTypes = uniqueSorted(refs.flatMap((r) => r.supportTypesAvailable || []));
+    const mapped = selectedByNode.get(node) || { psnoModels: [], coveredTypes: [], dtxr: [] };
+    const covered = uniqueSorted(mapped.coveredTypes);
+    const missing = masterTypes.filter((type) => !covered.includes(type));
+    const extra = covered.filter((type) => !masterTypes.includes(type));
+    let status = 'NO_MASTER_SUPPORT';
+    if (masterTypes.length && !mapped.psnoModels.length) status = 'UNMAPPED_NODE';
+    else if (masterTypes.length && !missing.length && !extra.length) status = 'COVERED';
+    else if (masterTypes.length && missing.length && covered.length) status = 'PARTIAL';
+    else if (masterTypes.length && missing.length && !covered.length) status = 'MISSING_ALL';
+    else if (extra.length) status = 'COVERED_WITH_EXTRA';
+    const tags = uniqueSorted(refs.map((r) => r.tag).filter(Boolean));
+    const table1PsNos = uniqueSorted(refs.map((r) => r.table1PsNo || r.rawPsNo).filter(Boolean));
+    const row = {
+      node: node.startsWith('__ROW_') ? '' : node,
+      table1PsNo: table1PsNos.join(', '),
+      tag: tags.join(', '),
+      source: uniqueSorted(refs.map((r) => r.source)).join(', '),
+      sourceRow: uniqueSorted(refs.map((r) => r.sourceRow).filter(Boolean)).join(', '),
+      lineNo: uniqueSorted(refs.map((r) => r.nodeLine).filter(Boolean)).join(', '),
+      pipeSizeRaw: uniqueSorted(refs.map((r) => r.pipeSizeRaw).filter(Boolean)).join(', '),
+      derivedDn: uniqueSorted(refs.map((r) => r.derivedDn).filter((v) => v != null)).join(', '),
+      isonote: mergeUniqueText('', refs.map((r) => r.nodeIsonote).filter(Boolean).join(' | ')),
+      mandatory: refs.some((r) => r.mandatory) ? 'YES' : '',
+      masterKeywords: supportListText(masterTypes),
+      mappedPsnoModel: uniqueSorted(mapped.psnoModels).join(', '),
+      coveredDtxrKeywords: supportListText(covered),
+      missingMasterKeywords: supportListText(missing),
+      extraDtxrKeywords: supportListText(extra),
+      coverageStatus: status,
+      action: missing.length ? `${nodeSubject(node, tags.join(', '))} missing ${supportListText(missing)} in mapped DTXR.` : extra.length ? `${nodeSubject(node, tags.join(', '))} has extra mapped DTXR ${supportListText(extra)}.` : '',
+    };
+    rows.push(row);
+    if (missing.length) log.user('WARNING', 'SUPPORT_COVERAGE', nodeSubject(node, row.tag), `Missing mapped DTXR keyword(s): ${supportListText(missing)}.`, 'Review Table-2 DTXR or Table-1C ISONOTE.', { node, tag: row.tag, table1PsNo: row.table1PsNo });
+  }
+  return rows.sort((a, b) => natural(a.node, b.node));
+}
 
-  for (const ref of consolidated) {
-    const dia = diaByNode.get(ref.node);
-    if (dia) {
-      ref.nodeDia = dia.dia;
-      ref.derivedDnFromOd = deriveDnFromOd(dia.dia);
-      if (ref.derivedDn == null) ref.derivedDn = ref.derivedDnFromOd;
-      ref.boreSource = 'TABLE1A_OD';
-    } else if (ref.derivedDn != null) {
-      ref.boreSource = 'TABLE1C_PIPE_SIZE';
+function annotateCandidateCoverage(candidateRows, resultRows) {
+  const byKey = new Map();
+  for (const row of resultRows || []) byKey.set(`${row.psnoModel}|${row.node}|${row.table1PsNo}`, row);
+  for (const candidate of candidateRows || []) {
+    const selected = byKey.get(`${candidate.psnoModel}|${candidate.node}|${candidate.table1PsNo}`);
+    if (selected) {
+      candidate.nodeCoverageNote = selected.nodeCoverageNote || '';
+      candidate.nodeCoverageStatus = selected.nodeCoverageStatus || '';
     }
-    const explicitLine = lineByNode.get(ref.node);
-    if (explicitLine) {
-      if (ref.nodeLine && normalizeLineKey(ref.nodeLine) !== explicitLine.lineKey) {
-        log.user('WARNING', 'CONSOLIDATE', nodeSubject(ref.node, ref.tag), `Line conflict: Table-1B has ${explicitLine.lineNo}, rich Table-1C has ${ref.nodeLine}. Explicit Table-1B line is used.`, 'Review Table-1B / Table-1C line source.', { ...table1Context(ref), lineNo: explicitLine.lineNo });
-      }
-      ref.nodeLine = explicitLine.lineNo;
-      ref.nodeLineKey = explicitLine.lineKey;
-      ref.lineSource = 'TABLE1B';
-    } else if (ref.nodeLine) {
-      ref.lineSource = 'TABLE1C_RICH';
-    }
-    mergeSupportIntoRef(ref, supportByNode.get(ref.node));
-    if (!ref.rawPsNo && ref.mandatory) {
-      log.user('WARNING', 'CONSOLIDATE', nodeSubject(ref.node, ref.tag), 'Mandatory consolidated Table-1 row has no PS No; it will be included in support coverage but cannot match Table-2 by PS number.', 'Add PS No in rich Table-1C if this support should map to a model PS row.', { ...table1Context(ref) });
-    }
-    log.debug('DEBUG', 'CONSOLIDATED_T1_ROW_BUILT', `${ref.rawPsNo || '(blank PS)'} -> ${ref.node}${tagLabel(ref.tag)}`, ref);
   }
-  log.user('INFO', 'CONSOLIDATE', 'Consolidated Table-1', `Built ${consolidated.length} consolidated reference row(s) from Table-1/1A/1B and Table-1C.`);
-  return consolidated;
+}
+
+function buildSummary(rows, table1Rows, modelRows, candidates, userLog, supportCoverageRows) {
+  return {
+    table1Rows: table1Rows.length,
+    table2Rows: modelRows.length,
+    mapped: rows.filter((r) => r.enabled).length,
+    noMatch: rows.filter((r) => !r.enabled).length,
+    candidateRows: candidates.length,
+    supportCoverageIssues: supportCoverageRows.filter((r) => !['COVERED', 'NO_MASTER_SUPPORT'].includes(r.coverageStatus)).length,
+    warnings: userLog.filter((l) => l.level === 'WARNING' || l.level === 'ERROR').length,
+  };
 }
 
 export function runPsMappingResolver(input = {}) {
