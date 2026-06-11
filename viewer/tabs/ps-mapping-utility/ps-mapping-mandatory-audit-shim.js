@@ -25,6 +25,42 @@ function yes(value) {
 function esc(value) {
   return String(value ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
+function normalizeTable1Ps(rawValue) {
+  const raw = String(rawValue ?? '').trim();
+  const [beforeTag, ...tagParts] = raw.split('|');
+  const tag = tagParts.length ? tagParts.join('|').trim() : '';
+  return { raw, tag };
+}
+function unique(values) {
+  return [...new Set((values || []).filter(Boolean))];
+}
+function parseT1(text) {
+  const byNode = new Map();
+  const lines = splitLines(text);
+  if (!lines.length) return byNode;
+  const headers = splitCells(lines[0]);
+  const psIdx = idx(headers, ['ps no', 'ps name', 'ps']);
+  const nodeIdx = idx(headers, ['node', 'node no', 'node number']);
+  if (psIdx < 0 || nodeIdx < 0) return byNode;
+  for (const line of lines.slice(1)) {
+    const cells = splitCells(line);
+    const node = String(cells[nodeIdx] ?? '').trim();
+    const psNo = String(cells[psIdx] ?? '').trim();
+    if (!node || !psNo) continue;
+    const norm = normalizeTable1Ps(psNo);
+    if (!byNode.has(node)) byNode.set(node, { table1PsNos: [], tags: [] });
+    const item = byNode.get(node);
+    item.table1PsNos.push(norm.raw);
+    if (norm.tag) item.tags.push(norm.tag);
+  }
+  for (const [node, item] of byNode.entries()) {
+    byNode.set(node, {
+      table1PsNo: unique(item.table1PsNos).join(', '),
+      tag: unique(item.tags).join(', '),
+    });
+  }
+  return byNode;
+}
 function supportTypes(value) {
   const text = String(value || '').replace(/\[[^\]]*GAP[^\]]*\]/gi, ' ').toUpperCase();
   const out = new Set();
@@ -155,10 +191,13 @@ function augmentCoverage(modal, sources) {
   if (!table || table.dataset.mandatoryAuditApplied) return;
   const t1c = parseT1C(sources.table1C);
   if (!t1c.size) return;
+  const t1ByNode = parseT1(sources.table1);
   addHeaderAfter(table, 'Node', 'Mandatory');
   addHeaderAfter(table, 'Coverage Status', 'Audit Severity');
   const h = headerIndexes(table);
   const nodeIdx = h.find('Node');
+  const tagIdx = h.find('Tag');
+  const table1PsIdx = h.find('Table-1 PS No');
   const statusIdx = h.find('Coverage Status');
   const missingIdx = h.find('Missing Master Keywords');
   const masterIdx = h.find('Master Keywords');
@@ -170,14 +209,18 @@ function augmentCoverage(modal, sources) {
     const audit = t1c.get(node);
     if (!audit?.mandatory) continue;
     existing.add(node);
+    const ctx = t1ByNode.get(node) || {};
+    if (tagIdx >= 0 && ctx.tag && !cell(tr, tagIdx)?.textContent?.trim()) cell(tr, tagIdx).textContent = ctx.tag;
+    if (table1PsIdx >= 0 && ctx.table1PsNo && !cell(tr, table1PsIdx)?.textContent?.trim()) cell(tr, table1PsIdx).textContent = ctx.table1PsNo;
     const missing = cell(tr, missingIdx)?.textContent?.trim();
     const master = cell(tr, masterIdx)?.textContent?.trim();
     const covered = cell(tr, coveredIdx)?.textContent?.trim();
     let status = cell(tr, statusIdx)?.textContent?.trim() || '';
     let action = cell(tr, actionIdx)?.textContent?.trim() || '';
-    if (!audit.isonote) { status = 'AUDIT_REQUIRED_ISONOTE_MISSING'; action = `Add/verify Table-1C ISONOTE/support data for mandatory Node ${node}.`; }
-    else if (missing) { status = 'AUDIT_REQUIRED_MISSING_SUPPORT'; action = `Add/verify mapped Table-2 DTXR containing ${missing} for mandatory Node ${node}.`; }
-    else if (master && !covered) { status = 'AUDIT_REQUIRED_DTXR_MISSING'; action = `Add/verify mapped Table-2 DTXR row(s) for mandatory Node ${node}.`; }
+    const label = ctx.tag ? `Node ${node} [Tag: ${ctx.tag}]` : `Node ${node}`;
+    if (!audit.isonote) { status = 'AUDIT_REQUIRED_ISONOTE_MISSING'; action = `Add/verify Table-1C ISONOTE/support data for mandatory ${label}.`; }
+    else if (missing) { status = 'AUDIT_REQUIRED_MISSING_SUPPORT'; action = `Add/verify mapped Table-2 DTXR containing ${missing} for mandatory ${label}.`; }
+    else if (master && !covered) { status = 'AUDIT_REQUIRED_DTXR_MISSING'; action = `Add/verify mapped Table-2 DTXR row(s) for mandatory ${label}.`; }
     setInsertedCell(table, tr, 'Mandatory', 'YES');
     setInsertedCell(table, tr, 'Coverage Status', status, statusClass(status));
     setInsertedCell(table, tr, 'Audit Severity', status.startsWith('AUDIT_REQUIRED') ? 'WARNING' : 'OK', status.startsWith('AUDIT_REQUIRED') ? 'psmap-warn' : 'psmap-ok');
@@ -186,8 +229,12 @@ function augmentCoverage(modal, sources) {
   const tbody = table.querySelector('tbody');
   for (const audit of t1c.values()) {
     if (!audit.mandatory || existing.has(audit.node)) continue;
+    const ctx = t1ByNode.get(audit.node) || {};
+    const label = ctx.tag ? `Node ${audit.node} [Tag: ${ctx.tag}]` : `Node ${audit.node}`;
+    const status = audit.isonote ? 'AUDIT_REQUIRED_DTXR_MISSING' : 'AUDIT_REQUIRED_ISONOTE_MISSING';
+    const action = audit.isonote ? `Add/verify mapped Table-2 DTXR row(s) for mandatory ${label}.` : `Add/verify Table-1C ISONOTE/support data for mandatory ${label}.`;
     const tr = document.createElement('tr');
-    tr.innerHTML = `<td>${esc(audit.node)}</td><td>YES</td><td></td><td></td><td></td><td></td><td></td><td>${esc(audit.isonote)}</td><td>${esc(supportText(audit.supportTypes))}</td><td></td><td></td><td>${esc(supportText(audit.supportTypes))}</td><td></td><td class="psmap-error">${audit.isonote ? 'AUDIT_REQUIRED_DTXR_MISSING' : 'AUDIT_REQUIRED_ISONOTE_MISSING'}</td><td class="psmap-warn">WARNING</td><td>${audit.isonote ? `Add/verify mapped Table-2 DTXR row(s) for mandatory Node ${esc(audit.node)}.` : `Add/verify Table-1C ISONOTE/support data for mandatory Node ${esc(audit.node)}.`}</td>`;
+    tr.innerHTML = `<td>${esc(audit.node)}</td><td>YES</td><td>${esc(ctx.table1PsNo || '')}</td><td>${esc(ctx.tag || '')}</td><td></td><td></td><td></td><td>${esc(audit.isonote)}</td><td>${esc(supportText(audit.supportTypes))}</td><td></td><td></td><td>${esc(supportText(audit.supportTypes))}</td><td></td><td class="psmap-error">${status}</td><td class="psmap-warn">WARNING</td><td>${esc(action)}</td>`;
     tbody?.appendChild(tr);
   }
   table.dataset.mandatoryAuditApplied = '1';
