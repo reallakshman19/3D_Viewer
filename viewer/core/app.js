@@ -123,19 +123,22 @@ function renderShell() {
   const tabById = new Map(tabs.map((t) => [t.id, t]));
   const groupedIds = new Set(TAB_GROUPS.flatMap((g) => g.ids));
 
-  function renderTabGroups() {
+  function renderTabs() {
     const parts = [];
     for (const group of TAB_GROUPS) {
       const groupTabs = group.ids.map((id) => tabById.get(id)).filter(Boolean);
       if (!groupTabs.length) continue;
-      if (parts.length) parts.push('<span class="tab-group-sep"></span>');
-      const btns = groupTabs.map((t) => `<button type="button" class="tab-btn" data-tab-id="${t.id}" data-group="${group.label}">${t.label}</button>`).join('');
-      parts.push(`<div class="tab-group" data-group="${group.label}"><span class="tab-group-label">${group.label}</span>${btns}</div>`);
+      if (parts.length) parts.push('<span class="tab-sep" aria-hidden="true"></span>');
+      for (const t of groupTabs) {
+        parts.push(`<button type="button" class="tab-btn" data-tab-id="${t.id}">${t.label}</button>`);
+      }
     }
     const ungrouped = tabs.filter((t) => !groupedIds.has(t.id));
     if (ungrouped.length) {
-      if (parts.length) parts.push('<span class="tab-group-sep"></span>');
-      parts.push(`<div class="tab-group">${ungrouped.map((t) => `<button type="button" class="tab-btn" data-tab-id="${t.id}">${t.label}</button>`).join('')}</div>`);
+      if (parts.length) parts.push('<span class="tab-sep" aria-hidden="true"></span>');
+      for (const t of ungrouped) {
+        parts.push(`<button type="button" class="tab-btn" data-tab-id="${t.id}">${t.label}</button>`);
+      }
     }
     return parts.join('');
   }
@@ -143,14 +146,14 @@ function renderShell() {
   document.body.innerHTML = `
     <div id="app-layout">
       <header id="app-header">
-        <div>
+        <div class="app-brand">
           <div class="header-title">PCF / GLB Viewer</div>
-          <div class="header-sub">3D review, model converters and support utilities</div>
+          <div class="header-sub">3D review, converters &amp; utilities</div>
         </div>
+        <nav id="tab-bar" aria-label="Application tabs">
+          ${renderTabs()}
+        </nav>
       </header>
-      <nav id="tab-bar" aria-label="Application tabs">
-        ${renderTabGroups()}
-      </nav>
       <main id="tab-content" tabindex="-1"></main>
     </div>
   `;
