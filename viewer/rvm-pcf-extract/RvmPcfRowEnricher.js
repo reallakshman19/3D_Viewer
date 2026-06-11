@@ -129,7 +129,7 @@ function applyTopologyEvidence(out, topologyHandoff) {
 }
 
 function applyLineRatingMaterial(out, { context, lineRows, rowIndex, diagnostics }) {
-  const config = context.config;
+  const config = context.config || {};
   const branchName = firstText(out.branchName, out.pipelineRef, out.ownerBranch, out.lineName);
   const derivedLineKey = firstText(out.lineNoKey, out.lineKey, out.finalLineNoKey, deriveLineKeyFromBranchName(branchName, config));
   const lineRow = findLineRow(lineRows, derivedLineKey, out);
@@ -345,6 +345,7 @@ function applyFinalCaMapping(out, config = {}) {
 export async function enrichRowsForFinalPcf({
   rows = [],
   topologyHandoff = null,
+  masterContext = null,
   config = {},
   stagedJsonText = '',
   lineRows = null,
@@ -352,24 +353,25 @@ export async function enrichRowsForFinalPcf({
   mode = 'run',
   commit = true,
 } = {}) {
-  const context = await prepareXmlCiiMasterContext({ rawConfig: config, diagnostics });
+  const context = masterContext || await prepareXmlCiiMasterContext({ rawConfig: config, diagnostics });
+  const effectiveConfig = context.config || config || {};
   const effectiveLineRows = Array.isArray(lineRows) ? lineRows : (context.lineRows || []);
-  const dtxrContext = buildDtxrContext(stagedJsonText, context.config);
-  const supportIndex = buildStagedSupportIndex(stagedJsonText, context.config, diagnostics);
+  const dtxrContext = buildDtxrContext(stagedJsonText, effectiveConfig);
+  const supportIndex = buildStagedSupportIndex(stagedJsonText, effectiveConfig, diagnostics);
 
   const enrichedRows = (Array.isArray(rows) ? rows : []).map((row, rowIndex) => {
     const out = { ...row, ca: { ...(row?.ca || {}) }, enrichmentDiagnostics: [...(row?.enrichmentDiagnostics || [])] };
     applyTopologyEvidence(out, topologyHandoff);
-    applyLineRatingMaterial(out, { context, lineRows: effectiveLineRows, rowIndex, diagnostics });
-    applyDtxr(out, { dtxrContext, config: context.config, diagnostics, rowIndex });
-    applyWeightRanking(out, { config: context.config, diagnostics, mode, rowIndex });
-    applySupportMapping(out, { supportIndex, config: context.config, diagnostics, rowIndex });
-    applyFinalCaMapping(out, context.config);
+    applyLineRatingMaterial(out, { context: { ...context, config: effectiveConfig }, lineRows: effectiveLineRows, rowIndex, diagnostics });
+    applyDtxr(out, { dtxrContext, config: effectiveConfig, diagnostics, rowIndex });
+    applyWeightRanking(out, { config: effectiveConfig, diagnostics, mode, rowIndex });
+    applySupportMapping(out, { supportIndex, config: effectiveConfig, diagnostics, rowIndex });
+    applyFinalCaMapping(out, effectiveConfig);
     if (mode === 'preview' || commit === false) out.previewOnly = true;
     return out;
   });
 
-  return { rows: enrichedRows, diagnostics, context, mode, commit: commit !== false };
+  return { rows: enrichedRows, diagnostics, context: { ...context, config: effectiveConfig }, mode, commit: commit !== false };
 }
 
 export const __RVM_PCF_ROW_ENRICHER_TESTS__ = Object.freeze({
