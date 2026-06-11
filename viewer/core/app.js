@@ -118,6 +118,23 @@ async function loadRenderer(tab) {
   return tabRendererCache.get(tab.id);
 }
 
+function showToast(message, type = 'info') {
+  const container = document.getElementById('app-toast-container') || document.body;
+  const toast = document.createElement('div');
+  toast.className = `app-toast app-toast--${type}`;
+  const msg = document.createElement('span');
+  msg.className = 'app-toast__msg';
+  msg.textContent = message;
+  toast.appendChild(msg);
+  container.appendChild(toast);
+  requestAnimationFrame(() => toast.classList.add('app-toast--in'));
+  setTimeout(() => {
+    toast.classList.remove('app-toast--in');
+    toast.classList.add('app-toast--out');
+    setTimeout(() => toast.remove(), 220);
+  }, 3200);
+}
+
 function renderShell() {
   const tabs = visibleTabs();
   const tabById = new Map(tabs.map((t) => [t.id, t]));
@@ -128,30 +145,59 @@ function renderShell() {
     for (const group of TAB_GROUPS) {
       const groupTabs = group.ids.map((id) => tabById.get(id)).filter(Boolean);
       if (!groupTabs.length) continue;
-      parts.push(`<span class="tab-group-label">${group.label}</span>`);
-      for (const tab of groupTabs) parts.push(`<button data-tab="${tab.id}" class="${state.activeTab === tab.id ? 'active' : ''}">${tab.label}</button>`);
+      if (parts.length) parts.push('<span class="tab-sep" aria-hidden="true"></span>');
+      for (const t of groupTabs) {
+        parts.push(`<button type="button" class="tab-btn" data-tab-id="${t.id}">${t.label}</button>`);
+      }
     }
-    const ungrouped = tabs.filter((tab) => !groupedIds.has(tab.id));
-    for (const tab of ungrouped) parts.push(`<button data-tab="${tab.id}" class="${state.activeTab === tab.id ? 'active' : ''}">${tab.label}</button>`);
+    const ungrouped = tabs.filter((t) => !groupedIds.has(t.id));
+    if (ungrouped.length) {
+      if (parts.length) parts.push('<span class="tab-sep" aria-hidden="true"></span>');
+      for (const t of ungrouped) {
+        parts.push(`<button type="button" class="tab-btn" data-tab-id="${t.id}">${t.label}</button>`);
+      }
+    }
     return parts.join('');
   }
 
-  return `<div class="shell"><header><h1>3D Viewer</h1><nav>${renderTabs()}</nav></header><main id="tab-container"></main></div>`;
+  return `
+    <header id="app-header">
+      <div class="app-brand">
+        <div class="header-title">PCF / GLB Viewer</div>
+        <div class="header-sub">3D review, converters &amp; utilities</div>
+      </div>
+      <nav id="tab-bar" aria-label="Application tabs">
+        ${renderTabs()}
+      </nav>
+    </header>
+    <main id="tab-content" tabindex="-1"></main>
+  `;
+}
+
+function syncActiveTabButton() {
+  document.querySelectorAll('[data-tab-id]').forEach((btn) => {
+    btn.classList.toggle('active', btn.dataset.tabId === state.activeTab);
+  });
+}
+
+function renderAppShell() {
+  const mount = document.getElementById('app-layout') || document.body;
+  mount.innerHTML = renderShell();
+  document.querySelectorAll('[data-tab-id]').forEach((button) => {
+    button.addEventListener('click', () => setActiveTab(button.dataset.tabId));
+  });
+  syncActiveTabButton();
 }
 
 function renderTabError(tab, error) {
-  const container = document.getElementById('tab-container');
+  const container = document.getElementById('tab-content');
   if (!container) return;
   container.innerHTML = `<section class="tab-error"><h2>${tab?.label || 'Tab'} failed to load</h2><pre>${String(error?.stack || error?.message || error)}</pre></section>`;
 }
 
 function cleanupActiveTab() {
   if (!activeTabDestroy) return;
-  try {
-    activeTabDestroy();
-  } catch (error) {
-    console.warn('[app] active tab cleanup failed', error);
-  }
+  try { activeTabDestroy(); } catch (error) { console.warn('[app] active tab cleanup failed', error); }
   activeTabDestroy = null;
 }
 
@@ -161,38 +207,25 @@ async function renderActiveTab() {
   const activeId = normalizeTabId(state.activeTab) || getDefaultTabId();
   const tab = tabs.find((item) => item.id === activeId) || tabs[0];
   if (!tab) return;
-
   if (state.activeTab !== tab.id) state.activeTab = tab.id;
-
-  const container = document.getElementById('tab-container');
+  syncActiveTabButton();
+  const container = document.getElementById('tab-content');
   if (!container) return;
-
   cleanupActiveTab();
   container.innerHTML = '<div class="tab-loading">Loading…</div>';
-
   try {
     const renderer = await loadRenderer(tab);
     if (token !== activeRenderToken) return;
     container.innerHTML = '';
-    const destroy = renderer(container, { state, emit, on, RuntimeEvents });
+    const destroy = renderer(container, { state, emit, on, RuntimeEvents, showToast });
     activeTabDestroy = typeof destroy === 'function' ? destroy : null;
-    emit(RuntimeEvents.TAB_RENDERED, { tabId: tab.id });
+    try { emit(RuntimeEvents.TAB_RENDERED, { tabId: tab.id }); } catch (e) { console.warn('[app] TAB_RENDERED emit failed', e); }
   } catch (error) {
     if (token !== activeRenderToken) return;
     console.error(`[app] failed to render tab ${tab.id}`, error);
     renderTabError(tab, error);
-    emit(RuntimeEvents.RENDER_ERROR, { tabId: tab.id, error });
+    try { emit(RuntimeEvents.RENDER_ERROR, { tabId: tab.id, error }); } catch {}
   }
-}
-
-function renderAppShell() {
-  const mount = document.getElementById('app-shell') || document.getElementById('app') || document.body;
-  mount.innerHTML = renderShell();
-  appShell = mount.querySelector('.shell') || mount;
-
-  mount.querySelectorAll('[data-tab]').forEach((button) => {
-    button.addEventListener('click', () => setActiveTab(button.dataset.tab));
-  });
 }
 
 async function boot() {
@@ -206,7 +239,7 @@ async function boot() {
 export function init() {
   if (appDestroy) appDestroy();
   unsubscribeTabChange = on(RuntimeEvents.TAB_CHANGED, async () => {
-    renderAppShell();
+    syncActiveTabButton();
     await renderActiveTab();
   });
   devDebugDestroy = initDevDebugWindow?.({ state, emit, on, RuntimeEvents });
