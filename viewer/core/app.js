@@ -12,7 +12,7 @@ import { renderAdapterMappingTab } from '../tabs/adapter-mapping-tab.js';
 import { mount as mountRvmJsonPcfExtractTab } from '../tabs/rvm-json-pcf-extract-tab-workflow-wired.js';
 import { renderUniversalXmlConverterTab } from '../tabs/universal-xml-converter-tab.js';
 import { renderXmlCompareTab } from '../tabs/xml-compare-tab.js';
-import { renderPSNM_UtilityTab } from '../tabs/psnm-utility-tab.js?v=20260610-psnm-19-native-audit-1';
+import { renderPSNM_UtilityTab } from '../tabs/psnm-utility-tab.js?v=20260610-psnm-20-psmap-tag-1';
 import '../tabs/psnm-utility/psnm-ui-p2-enhancements.js?v=20260609-p2-1';
 import '../tabs/psnm-utility/psnm-phase4c-hardening.js?v=20260609-phase4c-1';
 import '../tabs/psnm-utility/psnm-phase4d-persistence.js?v=20260609-phase4d-1';
@@ -38,14 +38,13 @@ const TAB_ID_ALIASES = new Map([
   ['universal-xml', 'universal-xml'],
   ['xml-compare', 'xml-compare'],
   ['psnm-utility', 'psnm-utility'],
-  ['utilities', 'psnm-utility'],
 ]);
 
 const TABS = [
   { id: 'viewer3d', label: '3D Viewer', render: renderViewer3D },
   { id: 'viewer3d-rvm', label: '3D RVM Viewer', render: renderViewer3DRvm },
   { id: 'model-converters', label: '3D Model Converters', render: renderModelConvertersTab },
-  { id: 'basic-glb-pcf', label: 'Basic GLB↔PCF', render: renderBasicGlbPcfPanel },
+  { id: 'basic-glb-pcf', label: 'Basic GLB-PCF', render: renderBasicGlbPcfPanel },
   { id: 'pcfx-converter', label: 'PCFX Converter', render: renderPcfxConverterTab },
   { id: 'model-exchange', label: 'Model Exchange', render: renderModelExchangeTab },
   { id: 'interchange-config', label: 'Interchange Config', render: renderInterchangeConfigTab },
@@ -57,22 +56,113 @@ const TABS = [
   { id: 'psnm-utility', label: 'Utilities', render: renderPSNM_UtilityTab },
 ];
 
+let mountedDestroy = null;
+let appShell = null;
+let visibilityRules = null;
+let visibilityRulesPromise = null;
+let unsubscribeTabChange = null;
+let devDebugDestroy = null;
+
 function h(value) {
   return String(value ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
-function resolveShellRefs(shell = {}) {
+function normalizeTabId(tabId) {
+  return TAB_ID_ALIASES.get(String(tabId || '').trim()) || String(tabId || '').trim();
+}
+
+async function loadTabVisibilityRules() {
+  if (visibilityRules) return visibilityRules;
+  if (visibilityRulesPromise) return visibilityRulesPromise;
+  visibilityRulesPromise = fetch(TAB_VISIBILITY_URL, { cache: 'no-store' })
+    .then((res) => res.ok ? res.json() : { tabs: {} })
+    .then((json) => {
+      visibilityRules = json || { tabs: {} };
+      return visibilityRules;
+    })
+    .catch(() => {
+      visibilityRules = { tabs: {} };
+      return visibilityRules;
+    });
+  return visibilityRulesPromise;
+}
+
+function isTabVisible(tab) {
+  const rule = visibilityRules?.tabs?.[tab.id];
+  return rule?.visible !== false;
+}
+
+function visibleTabs() {
+  return TABS.filter(isTabVisible);
+}
+
+function renderTabBar(shellRefs = appShell) {
+  if (!shellRefs?.nav) return;
+  const tabs = visibleTabs();
+  shellRefs.nav.innerHTML = tabs.map((tab) => `<button type="button" class="tab-btn" data-tab="${h(tab.id)}">${h(tab.label)}</button>`).join('');
+}
+
+function syncActiveTabButton(shellRefs = appShell) {
+  if (!shellRefs?.nav) return;
+  const active = normalizeTabId(state.activeTab) || visibleTabs()[0]?.id || TABS[0]?.id;
+  shellRefs.nav.querySelectorAll('[data-tab]').forEach((button) => {
+    button.classList.toggle('active', normalizeTabId(button.dataset.tab) === active);
+  });
+}
+
+export async function renderActiveTab(shellRefs = appShell) {
+  if (!shellRefs?.main) return;
+  await loadTabVisibilityRules();
+  const tabs = visibleTabs();
+  let activeId = normalizeTabId(state.activeTab);
+  if (!tabs.some((tab) => tab.id === activeId)) {
+    activeId = tabs[0]?.id || TABS[0].id;
+    setActiveTab(activeId);
+  }
+  syncActiveTabButton(shellRefs);
+  const tab = tabs.find((item) => item.id === activeId) || tabs[0] || TABS[0];
+  shellRefs.main.innerHTML = '';
+  if (typeof mountedDestroy === 'function') {
+    try { mountedDestroy(); } catch {}
+    mountedDestroy = null;
+  }
+  const maybeDestroy = tab.render(shellRefs.main, { emit, setActiveTab, activeTab: tab.id });
+  if (typeof maybeDestroy === 'function') mountedDestroy = maybeDestroy;
+}
+
+function resolveShellRefs(shell) {
+  if (shell?.main || shell?.nav) return shell;
   return {
-    nav: shell.nav || shell.tabBar || document.getElementById('tab-bar') || document.querySelector('[data-app-tab-bar]'),
-    main: shell.main || shell.content || document.getElementById('tab-content') || document.querySelector('[data-app-tab-content]'),
+    nav: document.getElementById('tab-bar'),
+    main: document.getElementById('tab-content'),
   };
 }
 
-let activeDestroy = null;
-let mountedDestroy = null;
-let visibleTabs = [...TABS];
-let shellRefs = resolveShellRefs();
-let visibilityLoaded = false;
+export function mountApp(shell) {
+  appShell = resolveShellRefs(shell);
+  loadStickyState();
+  if (devDebugDestroy) { try { devDebugDestroy(); } catch {} }
+  devDebugDestroy = initDevDebugWindow({ emit });
+  loadTabVisibilityRules().then(() => {
+    renderTabBar(appShell);
+    renderActiveTab(appShell);
+  });
+  if (unsubscribeTabChange) unsubscribeTabChange();
+  unsubscribeTabChange = on(RuntimeEvents.TAB_CHANGED, () => renderActiveTab(appShell));
+  appShell.nav?.addEventListener('click', onTabClick);
+  return () => {
+    appShell?.nav?.removeEventListener('click', onTabClick);
+    if (unsubscribeTabChange) { unsubscribeTabChange(); unsubscribeTabChange = null; }
+    if (typeof mountedDestroy === 'function') { try { mountedDestroy(); } catch {} mountedDestroy = null; }
+    if (devDebugDestroy) { try { devDebugDestroy(); } catch {} devDebugDestroy = null; }
+  };
+}
+
+function onTabClick(event) {
+  const button = event.target?.closest?.('[data-tab]');
+  if (!button) return;
+  setActiveTab(normalizeTabId(button.dataset.tab));
+}
 
 export async function init(shell) {
   if (mountedDestroy) {
@@ -83,107 +173,7 @@ export async function init(shell) {
   return mountedDestroy;
 }
 
-function normalizeTabId(id) {
-  return TAB_ID_ALIASES.get(String(id || '').trim()) || String(id || '').trim();
-}
-
-async function loadTabVisibility() {
-  if (visibilityLoaded) return;
-  visibilityLoaded = true;
-  try {
-    const res = await fetch(TAB_VISIBILITY_URL, { cache: 'no-store' });
-    if (!res.ok) return;
-    const config = await res.json();
-    const hidden = new Set((config.hiddenTabs || config.hidden || []).map(normalizeTabId));
-    const explicit = config.tabs || config.visibleTabs || null;
-    if (Array.isArray(explicit) && explicit.length) {
-      const allowed = new Set(explicit.map((item) => typeof item === 'string' ? normalizeTabId(item) : normalizeTabId(item.id)));
-      visibleTabs = TABS.filter((tab) => allowed.has(tab.id) && !hidden.has(tab.id));
-    } else {
-      visibleTabs = TABS.filter((tab) => !hidden.has(tab.id));
-    }
-  } catch (error) {
-    console.warn('Tab visibility config not loaded; using defaults', error);
-  }
-}
-
-function buildTabBar() {
-  if (!shellRefs.nav) return;
-  shellRefs.nav.innerHTML = visibleTabs.map((tab) => (
-    `<button type="button" class="tab-btn" data-tab="${h(tab.id)}">${h(tab.label)}</button>`
-  )).join('');
-}
-
-function resolveInitialTabId() {
-  const wanted = normalizeTabId(state?.activeTab || location.hash.replace(/^#/, '') || visibleTabs[0]?.id || 'viewer3d');
-  return visibleTabs.some((tab) => tab.id === wanted) ? wanted : (visibleTabs[0]?.id || 'viewer3d');
-}
-
-function markActive(tabId) {
-  shellRefs.nav?.querySelectorAll('[data-tab]').forEach((btn) => {
-    btn.classList.toggle('active', normalizeTabId(btn.dataset.tab) === tabId);
-  });
-}
-
-export async function renderActiveTab(tabId = state?.activeTab) {
-  shellRefs = resolveShellRefs(shellRefs);
-  if (!shellRefs.main) return;
-  await loadTabVisibility();
-  const resolved = normalizeTabId(tabId || resolveInitialTabId());
-  const activeTab = visibleTabs.find((tab) => tab.id === resolved) || visibleTabs[0];
-  if (!activeTab) return;
-  setActiveTab(activeTab.id);
-  markActive(activeTab.id);
-  if (activeDestroy) {
-    try { activeDestroy(); } catch (error) { console.warn('Tab cleanup failed', error); }
-    activeDestroy = null;
-  }
-  shellRefs.main.innerHTML = '';
-  let renderDestroy = null;
-  try {
-    renderDestroy = activeTab.render(shellRefs.main, { emit, on, state });
-  } catch (error) {
-    console.error(`Failed to render tab ${activeTab.id}`, error);
-    shellRefs.main.innerHTML = `<div class="error">Failed to render ${h(activeTab.label)}: ${h(error.message || error)}</div>`;
-    return;
-  }
-  activeDestroy = typeof renderDestroy === 'function' ? renderDestroy : null;
-  try {
-    emit(RuntimeEvents.TAB_RENDERED, { tabId: activeTab.id });
-  } catch (error) {
-    console.warn(`Tab render notification failed for ${activeTab.id}`, error);
-  }
-}
-
-function bindNavClick() {
-  shellRefs.nav?.addEventListener('click', (event) => {
-    const btn = event.target.closest('[data-tab]');
-    if (!btn) return;
-    event.preventDefault();
-    renderActiveTab(btn.dataset.tab);
-  });
-}
-
-export function mountApp(shell = {}) {
-  shellRefs = resolveShellRefs(shell);
-  loadStickyState();
-  initDevDebugWindow();
-  let cancelled = false;
-  (async () => {
-    await loadTabVisibility();
-    if (cancelled) return;
-    buildTabBar();
-    bindNavClick();
-    renderActiveTab(resolveInitialTabId());
-  })();
-  return () => {
-    cancelled = true;
-    try { activeDestroy?.(); } catch {}
-    activeDestroy = null;
-    destroyDevDebugWindow();
-  };
-}
-
-export function loadRvmSource(payload) {
-  emit(RuntimeEvents.RVM_SOURCE_LOADED, payload);
+export async function loadRvmSource() {
+  // Kept for backward compatibility with older tab bootstrap code.
+  return null;
 }
