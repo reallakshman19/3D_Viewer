@@ -7,8 +7,8 @@ const ADAPTERS = Object.freeze({
   [WORKFLOW_MODES.JSON_RVM_PCF]: assertWorkflowAdapter(jsonRvmPcfWorkflowAdapter),
 });
 
-export function getWorkflowAdapter(id) {
-  return ADAPTERS[id] || ADAPTERS[WORKFLOW_MODES.JSON_RVM_PCF];
+export function getWorkflowAdapter(id, fallbackId = WORKFLOW_MODES.XML_CII_2019) {
+  return ADAPTERS[id] || ADAPTERS[fallbackId] || ADAPTERS[WORKFLOW_MODES.XML_CII_2019];
 }
 
 export function listWorkflowAdapters() {
