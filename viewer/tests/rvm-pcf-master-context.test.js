@@ -36,6 +36,11 @@ const masterContextSource = await fs.readFile(
   'utf8'
 );
 
+const enrichmentCoreSource = await fs.readFile(
+  new URL('../tabs/model-converters/converters/xmltocii2019_helper/enrichment-core.js', import.meta.url),
+  'utf8'
+);
+
 assert(!masterContextSource.includes('tabs/model-converters'), 'B1: master-context does not import tabs/model-converters');
 assert(!masterContextSource.includes('xmltocii2019_helper'), 'B1: master-context does not import xmltocii2019_helper');
 assert(!masterContextSource.includes('RvmPcfEmitter'), 'B1: master-context does not import RvmPcfEmitter');
@@ -43,6 +48,22 @@ assert(!/uxml|Uxml|UXML/.test(masterContextSource), 'B1: master-context does not
 assert(masterContextSource.includes('export async function loadXmlCiiWeightMasterRows'), 'B2: core owns weight master loader implementation');
 assert(masterContextSource.includes('export async function loadXmlCiiMasterRows'), 'B2: core owns generic master loader implementation');
 assert(masterContextSource.includes('export async function loadXmlCiiMaterialMap'), 'B2: core owns material map loader implementation');
+assert(
+  enrichmentCoreSource.includes('xml-cii2019-core/master-context.js'),
+  'B3: enrichment-core imports core master-context'
+);
+assert(
+  !/function\s+loadXmlCiiWeightMasterRows\s*\(/.test(enrichmentCoreSource),
+  'B3: enrichment-core must not own weight loader implementation'
+);
+assert(
+  !/function\s+loadXmlCiiMasterRows\s*\(/.test(enrichmentCoreSource),
+  'B3: enrichment-core must not own generic master loader implementation'
+);
+assert(
+  !/function\s+loadXmlCiiMaterialMap\s*\(/.test(enrichmentCoreSource),
+  'B3: enrichment-core must not own material map loader implementation'
+);
 
 const previousFetch = globalThis.fetch;
 let fetchCalled = false;

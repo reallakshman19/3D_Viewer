@@ -145,6 +145,7 @@ export async function loadXmlCiiMaterialMap(config, diagnostics = []) {
   }
 
   if (typeof fetch !== 'function') {
+    diagnostics.push({ type: 'material-map-source', source: 'fetch-unavailable', rows: 0 });
     material.mapRows = _asRows(material.mapRows);
     return material.mapRows;
   }

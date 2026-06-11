@@ -1,4 +1,11 @@
 import { parseXmlCiiEnrichmentConfig } from '../../../../converters/xml-cii2019-core/config.js';
+import {
+  DEFAULT_PIPING_CLASS_MASTER_URLS,
+  loadXmlCiiMaterialMap,
+  loadXmlCiiMasterRows,
+  loadXmlCiiWeightMasterRows,
+  prepareXmlCiiMasterContext,
+} from '../../../../converters/xml-cii2019-core/master-context.js';
 import { deriveLineKeyFromBranchName } from '../../../../converters/xml-cii2019-core/regex-line-key.js';
 import { buildPipingClassIndex } from '../../../../converters/xml-cii2019-core/piping-class-resolver.js';
 import { resolveBranchProcessData } from '../../../../converters/xml-cii2019-core/branch-process-resolver.js';
@@ -24,6 +31,14 @@ import {
   xmlCiiTypeEntryFromExistingRestraint,
   applyXmlRestraints
 } from '../../../../converters/xml-cii2019-core/support-mapping.js';
+
+export {
+  DEFAULT_PIPING_CLASS_MASTER_URLS,
+  loadXmlCiiMaterialMap,
+  loadXmlCiiMasterRows,
+  loadXmlCiiWeightMasterRows,
+  prepareXmlCiiMasterContext,
+};
 
 function xmlLocalName(node) {
   const name = node?.localName || node?.nodeName || '';
@@ -169,106 +184,6 @@ function xmlEnsureChild(document, parent, localName) {
     : document.createElement(localName);
   parent.appendChild(element);
   return element;
-}
-
-// Master data loading
-export async function loadXmlCiiWeightMasterRows(config, diagnostics = []) {
-  if (Array.isArray(config.weight?.masterRows) && config.weight.masterRows.length) {
-    diagnostics.push({ type: 'weight-master-source', source: 'inline-config', rows: config.weight.masterRows.length });
-    return;
-  }
-  if (typeof fetch !== 'function') {
-    diagnostics.push({ type: 'weight-master-source', source: 'fetch-unavailable', rows: 0 });
-    return;
-  }
-  const configured = toText(config.weight?.masterUrl || '').trim();
-  const candidates = [...new Set([configured, '../docs/Masters/wtValveweights.json', 'docs/Masters/wtValveweights.json'].filter(Boolean))];
-  for (const url of candidates) {
-    try {
-      const response = await fetch(url);
-      if (!response.ok) {
-        diagnostics.push({ type: 'weight-master-fetch-skip', url, status: response.status });
-        continue;
-      }
-      const data = await response.json();
-      if (Array.isArray(data)) {
-        config.weight.masterRows = data;
-        diagnostics.push({ type: 'weight-master-source', source: url, rows: data.length });
-        return;
-      }
-      diagnostics.push({ type: 'weight-master-fetch-skip', url, reason: 'not-array' });
-    } catch (error) {
-      diagnostics.push({ type: 'weight-master-fetch-skip', url, reason: toText(error?.message || error) });
-    }
-  }
-}
-
-export async function loadXmlCiiMasterRows(cfgSection, defaultUrls, label, diagnostics) {
-  if (Array.isArray(cfgSection?.masterRows) && cfgSection.masterRows.length) {
-    diagnostics.push({ type: `${label}-master-source`, source: 'inline-config', rows: cfgSection.masterRows.length });
-    return cfgSection.masterRows;
-  }
-  if (typeof fetch !== 'function') {
-    diagnostics.push({ type: `${label}-master-source`, source: 'fetch-unavailable', rows: 0 });
-    return [];
-  }
-  const configured = toText(cfgSection?.masterUrl || '').trim();
-  for (const url of [...new Set([configured, ...defaultUrls].filter(Boolean))]) {
-    try {
-      const response = await fetch(url);
-      if (!response.ok) {
-        diagnostics.push({ type: `${label}-master-fetch-skip`, url, status: response.status });
-        continue;
-      }
-      const data = await response.json();
-      if (Array.isArray(data)) {
-        cfgSection.masterRows = data;
-        diagnostics.push({ type: `${label}-master-source`, source: url, rows: data.length });
-        return data;
-      }
-      diagnostics.push({ type: `${label}-master-fetch-skip`, url, reason: 'not-array' });
-    } catch (error) {
-      diagnostics.push({ type: `${label}-master-fetch-skip`, url, reason: toText(error?.message || error) });
-    }
-  }
-  return [];
-}
-
-export async function loadXmlCiiMaterialMap(config, diagnostics = []) {
-  const mat = config.material || (config.material = {});
-  if (Array.isArray(mat.mapRows) && mat.mapRows.length) {
-    diagnostics.push({ type: 'material-map-source', source: 'inline-config', rows: mat.mapRows.length });
-    return mat.mapRows;
-  }
-  if (typeof fetch !== 'function') return [];
-  const configured = toText(mat.masterUrl || '').trim();
-  for (const url of [...new Set([configured, '../docs/Masters/PCF_MAT_MAP.TXT', 'docs/Masters/PCF_MAT_MAP.TXT'].filter(Boolean))]) {
-    try {
-      const response = await fetch(url);
-      if (!response.ok) continue;
-      const text = await response.text();
-      let rows;
-      try {
-        const j = JSON.parse(text);
-        rows = Array.isArray(j) ? j.map((r) => ({ code: toText(r.code), material: toText(r.material || r.desc || r.name) })) : null;
-      } catch {
-        rows = null;
-      }
-      if (!rows) {
-        rows = [];
-        for (const line of text.split(/\r?\n/)) {
-          const m = line.match(/^\s*(\d+)\s+(.+?)\s*$/);
-          if (m) rows.push({ code: m[1], material: m[2] });
-        }
-      }
-      mat.mapRows = rows;
-      diagnostics.push({ type: 'material-map-source', source: url, rows: rows.length });
-      return rows;
-    } catch (error) {
-      diagnostics.push({ type: 'material-map-fetch-skip', url, reason: toText(error?.message || error) });
-    }
-  }
-  return [];
 }
 
 // Customization algorithms
