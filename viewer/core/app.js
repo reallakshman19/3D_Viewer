@@ -12,200 +12,172 @@ import { renderAdapterMappingTab } from '../tabs/adapter-mapping-tab.js';
 import { mount as mountRvmJsonPcfExtractTab } from '../tabs/rvm-json-pcf-extract-tab.js';
 import { renderUniversalXmlConverterTab } from '../tabs/universal-xml-converter-tab.js';
 import { renderXmlCompareTab } from '../tabs/xml-compare-tab.js';
-import { renderPSNM_UtilityTab } from '../tabs/psnm-utility-tab.js?v=20260610-psnm-16';
+import { renderPSNM_UtilityTab } from '../tabs/psnm-utility-tab.js?v=20260610-psnm-17';
 import '../tabs/psnm-utility/psnm-ui-p2-enhancements.js?v=20260609-p2-1';
 import '../tabs/psnm-utility/psnm-phase4c-hardening.js?v=20260609-phase4c-1';
 import '../tabs/psnm-utility/psnm-phase4d-persistence.js?v=20260609-phase4d-1';
 import { emit, on } from './event-bus.js';
 import { initDevDebugWindow, destroyDevDebugWindow } from '../debug/dev-debug-window.js';
-import { loadRvmSource } from '../rvm/RvmLoadPipeline.js';
 
-const TAB_CONFIG_URL = './opt/tab-visibility.json';
-const IS_DEV = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+const TAB_VISIBILITY_URL = '../config/tab-visibility.json';
 
-const TABS = [
-  { id: 'viewer3d', configKeys: ['viewer3d', 'geometry'], label: '3D Viewer', render: renderViewer3D },
-  { id: 'viewer3d-rvm', configKeys: ['viewer3d-rvm', 'rvm'], label: '3D RVM Viewer', render: renderViewer3DRvm },
-  { id: 'adv-glb', configKeys: ['adv-glb', 'pcf2glb'], label: 'Basic GLB/PCF Viewer', render: renderBasicGlbPcfPanel, devOnly: true },
-  { id: 'model-converters', configKeys: ['model-converters'], label: '3D Model Converters', render: renderModelConvertersTab },
-  { id: 'model-exchange', configKeys: ['model-exchange', 'modelExchange'], label: 'PCF/PCFX/XML/GLB Converter', render: renderModelExchangeTab },
-  { id: 'interchange-config', configKeys: ['interchange-config', 'interchangeConfig'], label: 'PCF/PCFX/XML/GLB Config', render: renderInterchangeConfigTab },
-  { id: 'support-mapping-config', configKeys: ['support-mapping-config', 'supportMapping'], label: 'PCF/PCFX/XML/GLB Support Config', render: renderSupportMappingConfigTab },
-  { id: 'pcfx-converter', configKeys: ['pcfx-converter', 'pcfx'], label: 'PCF<->PCFX<->GLB', render: renderPcfxConverterTab },
-  { id: 'adapter-mapping', configKeys: ['adapter-mapping', 'adapterMapping'], label: '⚙ 3D RVM Adapter Mapping', render: renderAdapterMappingTab },
-  { id: 'rvm-json-pcf-extract', configKeys: ['rvm-json-pcf-extract', 'rvmJsonPcfExtract'], label: 'RVM JSON → PCF Extract', render: mountRvmJsonPcfExtractTab },
-  { id: 'universal-xml-converter', configKeys: ['universal-xml-converter', 'universalXml'], label: 'Universal XML Converter', render: renderUniversalXmlConverterTab },
-  { id: 'xml-compare', configKeys: ['xml-compare', 'xmlCompare'], label: 'XML Compare', render: renderXmlCompareTab },
-  { id: 'psnm-utility', configKeys: ['psnm-utility', 'psnmUtility', 'utilities'], label: 'Utilities', render: renderPSNM_UtilityTab },
-];
-
-const LEGACY_TAB_ALIASES = new Map([
-  ['rvm', 'viewer3d-rvm'],
-  ['pcf2glb', 'adv-glb'],
-  ['pcfx', 'pcfx-converter'],
-  ['modelExchange', 'model-exchange'],
-  ['interchangeConfig', 'interchange-config'],
-  ['supportMapping', 'support-mapping-config'],
-  ['adapterMapping', 'adapter-mapping'],
-  ['rvmJsonPcfExtract', 'rvm-json-pcf-extract'],
-  ['universalXml', 'universal-xml-converter'],
-  ['xmlCompare', 'xml-compare'],
-  ['psnmUtility', 'psnm-utility'],
-  ['summary', 'viewer3d'],
+const TAB_ID_ALIASES = new Map([
+  ['viewer', 'viewer3d'],
+  ['viewer3d', 'viewer3d'],
+  ['rvm-viewer', 'viewer3d-rvm'],
+  ['viewer3d-rvm', 'viewer3d-rvm'],
+  ['converter', 'model-converters'],
+  ['model-converters', 'model-converters'],
+  ['basic-glb-pcf', 'basic-glb-pcf'],
+  ['pcfx-converter', 'pcfx-converter'],
+  ['model-exchange', 'model-exchange'],
+  ['interchange-config', 'interchange-config'],
+  ['support-mapping-config', 'support-mapping-config'],
+  ['adapter-mapping', 'adapter-mapping'],
+  ['rvm-json-pcf', 'rvm-json-pcf'],
+  ['universal-xml', 'universal-xml'],
+  ['xml-compare', 'xml-compare'],
+  ['psnm-utility', 'psnm-utility'],
+  ['utilities', 'psnm-utility'],
 ]);
 
-let activeDestroy = null;
-let shellRefs = null;
-let mountedDestroy = null;
-let visibleTabs = [];
-let switchHandlerBound = false;
+const TABS = [
+  { id: 'viewer3d', label: '3D Viewer', render: renderViewer3D },
+  { id: 'viewer3d-rvm', label: '3D RVM Viewer', render: renderViewer3DRvm },
+  { id: 'model-converters', label: '3D Model Converters', render: renderModelConvertersTab },
+  { id: 'basic-glb-pcf', label: 'Basic GLB↔PCF', render: renderBasicGlbPcfPanel },
+  { id: 'pcfx-converter', label: 'PCFX Converter', render: renderPcfxConverterTab },
+  { id: 'model-exchange', label: 'Model Exchange', render: renderModelExchangeTab },
+  { id: 'interchange-config', label: 'Interchange Config', render: renderInterchangeConfigTab },
+  { id: 'support-mapping-config', label: 'Support Mapping', render: renderSupportMappingConfigTab },
+  { id: 'adapter-mapping', label: 'Adapter Mapping', render: renderAdapterMappingTab },
+  { id: 'rvm-json-pcf', label: 'RVM JSON→PCF', render: mountRvmJsonPcfExtractTab },
+  { id: 'universal-xml', label: 'Universal XML', render: renderUniversalXmlConverterTab },
+  { id: 'xml-compare', label: 'XML Compare', render: renderXmlCompareTab },
+  { id: 'psnm-utility', label: 'Utilities', render: renderPSNM_UtilityTab },
+];
 
 function h(value) {
-  return String(value ?? '')
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
-}
-
-function setStatus(message) {
-  if (!shellRefs?.status) return;
-  shellRefs.status.textContent = message || '';
-}
-
-function normalizeTabId(tab) {
-  const id = String(tab || '').trim();
-  return LEGACY_TAB_ALIASES.get(id) || id;
-}
-
-function tabVisibleByConfig(tab, config) {
-  if (tab.devOnly && !IS_DEV) return false;
-  for (const key of tab.configKeys || [tab.id]) {
-    if (Object.prototype.hasOwnProperty.call(config || {}, key)) return configFlagEnabled(config[key]);
-  }
-  return true;
-}
-
-function configFlagEnabled(value) {
-  return value === undefined || value === 1 || value === true || value === '1' || value === 'true' || value === 'on';
-}
-
-async function loadVisibleTabs() {
-  try {
-    const response = await fetch(TAB_CONFIG_URL, { cache: 'no-store' });
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
-    const config = await response.json();
-    const tabs = TABS.filter((tab) => tabVisibleByConfig(tab, config));
-    return tabs.length ? tabs : TABS.filter((tab) => !tab.devOnly);
-  } catch (error) {
-    console.warn('[app] Tab visibility config unavailable, using built-in defaults.', error);
-    return TABS.filter((tab) => !tab.devOnly || IS_DEV);
-  }
-}
-
-function resolveInitialTabId() {
-  const requested = normalizeTabId(state.activeTab || 'viewer3d');
-  return visibleTabs.some((tab) => tab.id === requested) ? requested : (visibleTabs[0]?.id || 'viewer3d');
-}
-
-function getTab(tabId) {
-  const normalized = normalizeTabId(tabId);
-  return visibleTabs.find((tab) => tab.id === normalized) || visibleTabs[0] || TABS[0];
-}
-
-function createContext(tab) {
-  return {
-    tab,
-    state,
-    setStatus,
-    emit,
-    on,
-    showToast(message, type = 'info') {
-      emit(RuntimeEvents.ToastShow, { message, type });
-    },
-  };
-}
-
-function buildTabBar() {
-  if (!shellRefs?.nav) return;
-  shellRefs.nav.innerHTML = visibleTabs.map((tab) => (
-    `<button type="button" class="tab-btn" data-tab="${h(tab.id)}">${h(tab.label)}</button>`
-  )).join('');
-}
-
-function updateActiveNav(tab) {
-  if (!shellRefs?.nav) return;
-  const normalized = normalizeTabId(tab);
-  shellRefs.nav.querySelectorAll('[data-tab]').forEach((btn) => {
-    btn.classList.toggle('active', btn.dataset.tab === normalized);
-  });
-}
-
-export function renderActiveTab(tab = state.activeTab) {
-  if (!shellRefs?.main) return;
-  const tabDef = getTab(tab);
-  const tabId = tabDef.id;
-  if (activeDestroy) {
-    try { activeDestroy(); } catch (error) { console.warn('Tab destroy failed', error); }
-    activeDestroy = null;
-  }
-  shellRefs.main.innerHTML = '';
-  updateActiveNav(tabId);
-  setStatus('');
-  setActiveTab(tabId);
-  emit(RuntimeEvents.TAB_CHANGED, { tabId });
-  const result = tabDef.render(shellRefs.main, createContext(tabId));
-  if (typeof result === 'function') activeDestroy = result;
+  return String(value ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
 function resolveShellRefs(shell = {}) {
   return {
-    nav: shell.nav || document.getElementById('tab-bar'),
-    main: shell.main || document.getElementById('tab-content'),
-    status: shell.status || document.getElementById('app-status') || null,
+    nav: shell.nav || shell.tabBar || document.getElementById('tab-bar') || document.querySelector('[data-app-tab-bar]'),
+    main: shell.main || shell.content || document.getElementById('tab-content') || document.querySelector('[data-app-tab-content]'),
   };
 }
 
-function bindNavClick() {
-  if (!shellRefs?.nav) return;
-  shellRefs.nav.addEventListener('click', (event) => {
-    const btn = event.target.closest('[data-tab]');
-    if (!btn) return;
-    renderActiveTab(btn.dataset.tab);
-  });
-}
-
-function bindSwitchEvent() {
-  if (switchHandlerBound) return;
-  window.addEventListener('app:switch-tab', (event) => {
-    const nextId = event?.detail?.tabId;
-    if (nextId) renderActiveTab(nextId);
-  });
-  switchHandlerBound = true;
-}
-
-export async function mountApp(shell) {
-  loadStickyState();
-  shellRefs = resolveShellRefs(shell);
-  visibleTabs = await loadVisibleTabs();
-  buildTabBar();
-  bindNavClick();
-  bindSwitchEvent();
-  initDevDebugWindow();
-  renderActiveTab(resolveInitialTabId());
-  return () => {
-    if (activeDestroy) activeDestroy();
-    destroyDevDebugWindow();
-  };
-}
+let activeDestroy = null;
+let mountedDestroy = null;
+let visibleTabs = [...TABS];
+let shellRefs = resolveShellRefs();
+let visibilityLoaded = false;
 
 export async function init(shell) {
   if (mountedDestroy) {
     try { mountedDestroy(); } catch (error) { console.warn('Previous app mount cleanup failed', error); }
     mountedDestroy = null;
   }
-  mountedDestroy = await mountApp(resolveShellRefs(shell));
+  mountedDestroy = mountApp(resolveShellRefs(shell));
   return mountedDestroy;
 }
 
-export { loadRvmSource };
+function normalizeTabId(id) {
+  return TAB_ID_ALIASES.get(String(id || '').trim()) || String(id || '').trim();
+}
+
+async function loadTabVisibility() {
+  if (visibilityLoaded) return;
+  visibilityLoaded = true;
+  try {
+    const res = await fetch(`${TAB_VISIBILITY_URL}?v=20260610-app-nav-1`, { cache: 'no-store' });
+    if (!res.ok) return;
+    const config = await res.json();
+    const hidden = new Set((config.hiddenTabs || config.hidden || []).map(normalizeTabId));
+    const explicit = config.tabs || config.visibleTabs || null;
+    if (Array.isArray(explicit) && explicit.length) {
+      const allowed = new Set(explicit.map((item) => typeof item === 'string' ? normalizeTabId(item) : normalizeTabId(item.id)));
+      visibleTabs = TABS.filter((tab) => allowed.has(tab.id) && !hidden.has(tab.id));
+    } else {
+      visibleTabs = TABS.filter((tab) => !hidden.has(tab.id));
+    }
+  } catch (error) {
+    console.warn('Tab visibility config not loaded; using defaults', error);
+  }
+}
+
+function buildTabBar() {
+  if (!shellRefs.nav) return;
+  shellRefs.nav.innerHTML = visibleTabs.map((tab) => (
+    `<button type="button" class="tab-btn" data-tab="${h(tab.id)}">${h(tab.label)}</button>`
+  )).join('');
+}
+
+function resolveInitialTabId() {
+  const wanted = normalizeTabId(state?.activeTab || location.hash.replace(/^#/, '') || visibleTabs[0]?.id || 'viewer3d');
+  return visibleTabs.some((tab) => tab.id === wanted) ? wanted : (visibleTabs[0]?.id || 'viewer3d');
+}
+
+function markActive(tabId) {
+  shellRefs.nav?.querySelectorAll('[data-tab]').forEach((btn) => {
+    btn.classList.toggle('active', normalizeTabId(btn.dataset.tab) === tabId);
+  });
+}
+
+export async function renderActiveTab(tabId = state?.activeTab) {
+  shellRefs = resolveShellRefs(shellRefs);
+  if (!shellRefs.main) return;
+  await loadTabVisibility();
+  const resolved = normalizeTabId(tabId || resolveInitialTabId());
+  const activeTab = visibleTabs.find((tab) => tab.id === resolved) || visibleTabs[0];
+  if (!activeTab) return;
+  setActiveTab(activeTab.id);
+  markActive(activeTab.id);
+  if (activeDestroy) {
+    try { activeDestroy(); } catch (error) { console.warn('Tab cleanup failed', error); }
+    activeDestroy = null;
+  }
+  shellRefs.main.innerHTML = '';
+  try {
+    const destroy = activeTab.render(shellRefs.main, { emit, on, state });
+    activeDestroy = typeof destroy === 'function' ? destroy : null;
+    emit(RuntimeEvents.TAB_RENDERED, { tabId: activeTab.id });
+  } catch (error) {
+    console.error(`Failed to render tab ${activeTab.id}`, error);
+    shellRefs.main.innerHTML = `<div class="error">Failed to render ${h(activeTab.label)}: ${h(error.message || error)}</div>`;
+  }
+}
+
+function bindNavClick() {
+  shellRefs.nav?.addEventListener('click', (event) => {
+    const btn = event.target.closest('[data-tab]');
+    if (!btn) return;
+    event.preventDefault();
+    renderActiveTab(btn.dataset.tab);
+  });
+}
+
+export function mountApp(shell = {}) {
+  shellRefs = resolveShellRefs(shell);
+  loadStickyState();
+  initDevDebugWindow();
+  let cancelled = false;
+  (async () => {
+    await loadTabVisibility();
+    if (cancelled) return;
+    buildTabBar();
+    bindNavClick();
+    renderActiveTab(resolveInitialTabId());
+  })();
+  return () => {
+    cancelled = true;
+    try { activeDestroy?.(); } catch {}
+    activeDestroy = null;
+    destroyDevDebugWindow();
+  };
+}
+
+export function loadRvmSource(payload) {
+  emit(RuntimeEvents.RVM_SOURCE_LOADED, payload);
+}
