@@ -138,3 +138,86 @@ function renderShell() {
 
   return `<div class="shell"><header><h1>3D Viewer</h1><nav>${renderTabs()}</nav></header><main id="tab-container"></main></div>`;
 }
+
+function renderTabError(tab, error) {
+  const container = document.getElementById('tab-container');
+  if (!container) return;
+  container.innerHTML = `<section class="tab-error"><h2>${tab?.label || 'Tab'} failed to load</h2><pre>${String(error?.stack || error?.message || error)}</pre></section>`;
+}
+
+function cleanupActiveTab() {
+  if (!activeTabDestroy) return;
+  try {
+    activeTabDestroy();
+  } catch (error) {
+    console.warn('[app] active tab cleanup failed', error);
+  }
+  activeTabDestroy = null;
+}
+
+async function renderActiveTab() {
+  const token = ++activeRenderToken;
+  const tabs = visibleTabs();
+  const activeId = normalizeTabId(state.activeTab) || getDefaultTabId();
+  const tab = tabs.find((item) => item.id === activeId) || tabs[0];
+  if (!tab) return;
+
+  if (state.activeTab !== tab.id) state.activeTab = tab.id;
+
+  const container = document.getElementById('tab-container');
+  if (!container) return;
+
+  cleanupActiveTab();
+  container.innerHTML = '<div class="tab-loading">Loading…</div>';
+
+  try {
+    const renderer = await loadRenderer(tab);
+    if (token !== activeRenderToken) return;
+    container.innerHTML = '';
+    const destroy = renderer(container, { state, emit, on, RuntimeEvents });
+    activeTabDestroy = typeof destroy === 'function' ? destroy : null;
+    emit(RuntimeEvents.TAB_RENDERED, { tabId: tab.id });
+  } catch (error) {
+    if (token !== activeRenderToken) return;
+    console.error(`[app] failed to render tab ${tab.id}`, error);
+    renderTabError(tab, error);
+    emit(RuntimeEvents.RENDER_ERROR, { tabId: tab.id, error });
+  }
+}
+
+function renderAppShell() {
+  const mount = document.getElementById('app-shell') || document.getElementById('app') || document.body;
+  mount.innerHTML = renderShell();
+  appShell = mount.querySelector('.shell') || mount;
+
+  mount.querySelectorAll('[data-tab]').forEach((button) => {
+    button.addEventListener('click', () => setActiveTab(button.dataset.tab));
+  });
+}
+
+async function boot() {
+  loadStickyState?.();
+  await loadVisibilityRules();
+  state.activeTab = normalizeTabId(state.activeTab) || getDefaultTabId();
+  renderAppShell();
+  await renderActiveTab();
+}
+
+export function init() {
+  if (appDestroy) appDestroy();
+  unsubscribeTabChange = on(RuntimeEvents.TAB_CHANGED, async () => {
+    renderAppShell();
+    await renderActiveTab();
+  });
+  devDebugDestroy = initDevDebugWindow?.({ state, emit, on, RuntimeEvents });
+  boot();
+  appDestroy = () => {
+    cleanupActiveTab();
+    try { unsubscribeTabChange?.(); } catch {}
+    try { devDebugDestroy?.(); } catch {}
+    unsubscribeTabChange = null;
+    devDebugDestroy = null;
+    appDestroy = null;
+  };
+  return appDestroy;
+}
