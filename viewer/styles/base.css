@@ -36,27 +36,38 @@ body {
   flex-direction: column;
 }
 
-/* ── App header ─────────────────────────────────────────────── */
+/* ── App header (one-row: brand left, tabs right) ────────────── */
 #app-header {
   background: var(--color-header-bg);
   color: var(--color-header-text);
-  padding: 8px 16px;
+  padding: 0;
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
+  align-items: stretch;
   flex-shrink: 0;
+  height: 46px;
+  border-bottom: 1px solid rgba(0,0,0,0.32);
 }
 
-#app-header .header-title {
-  font-size: 15px;
+.app-brand {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  flex-shrink: 0;
+  padding: 0 14px 0 16px;
+  border-right: 1px solid rgba(255,255,255,0.1);
+}
+
+.header-title {
+  font-size: 13px;
   font-weight: 700;
   letter-spacing: 0.03em;
+  white-space: nowrap;
 }
-#app-header .header-sub {
-  font-size: 11px;
-  color: #a0b8d0;
-  margin-top: 2px;
+.header-sub {
+  font-size: 10px;
+  color: #7a9ab8;
+  margin-top: 1px;
+  white-space: nowrap;
 }
 #app-header .header-meta {
   font-size: 11px;

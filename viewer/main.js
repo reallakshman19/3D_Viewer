@@ -1,4 +1,4 @@
-import { init } from './core/app.js?v=20260611-shell-css-fix-tab-groups-1';
+import { init } from './core/app.js?v=20260611-one-row-header-1';
 
 function reportStartupError(error) {
   console.error('3D Viewer failed to start', error);
