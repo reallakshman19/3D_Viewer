@@ -41,6 +41,59 @@ function appendWarning(existing, warning) {
   return parts.join('; ');
 }
 
+function canonicalSupportKeyword(value) {
+  const upper = String(value || '').toUpperCase().replace(/[\s_-]+/g, ' ').trim();
+  if (!upper) return '';
+  if (upper.includes('GUIDE')) return 'GUIDE';
+  if (upper.includes('REST') || upper === 'XRT') return 'REST';
+  if (
+    upper.includes('LINE STOP')
+    || upper.includes('LINESTOP')
+    || upper === 'STOP'
+    || upper.includes('PIPE STOP')
+    || upper.includes('ANCHOR')
+  ) {
+    return 'LINE_STOP';
+  }
+  return upper.replace(/\s+/g, '_');
+}
+
+function displaySupportKeyword(value) {
+  const canonical = canonicalSupportKeyword(value);
+  if (canonical === 'LINE_STOP') return 'STOP';
+  return canonical.replace(/_/g, ' ');
+}
+
+function unique(values) {
+  return [...new Set(values.filter(Boolean))];
+}
+
+function extractSupportKeywords(text) {
+  const upper = String(text || '').toUpperCase();
+  const found = [];
+  if (/\bGUIDE\b/.test(upper)) found.push('GUIDE');
+  if (/\bREST\b|\bXRT\b/.test(upper)) found.push('REST');
+  if (/\bLINE\s*STOP\b|\bLINESTOP\b|\bPIPE\s*STOP\b|\bSTOP\b|\bANCHOR\b/.test(upper)) found.push('LINE_STOP');
+  return unique(found);
+}
+
+function splitSupportList(value) {
+  const raw = String(value || '').trim();
+  if (!raw) return [];
+
+  const extracted = extractSupportKeywords(raw);
+  if (extracted.length) return extracted;
+
+  return unique(raw
+    .split(/[;,|/]+/)
+    .map((part) => canonicalSupportKeyword(part))
+    .filter(Boolean));
+}
+
+function supportDisplayList(values) {
+  return unique(values || []).map(displaySupportKeyword).join(', ');
+}
+
 function hasLineConflict(row) {
   return String(row?.lineBasis || '').toUpperCase() === 'LINE_CONFLICT';
 }
@@ -82,9 +135,51 @@ function fixBoreBasis(row) {
   return row;
 }
 
-function normalizeBoreDiagnosticsInRows(rows) {
+function clarifySupportConflict(row) {
+  if (!row) return row;
+
+  const supportBasis = String(row.supportBasis || '').toUpperCase();
+  if (!['SUPPORT_CONFLICT', 'SUPPORT_PARTIAL', 'SUPPORT_MISSING_MASTER'].includes(supportBasis)) {
+    return row;
+  }
+
+  const requested = splitSupportList(row.supportTypesRequested ?? row.supportRequested ?? row.dtxr ?? row.dtxrRaw);
+  const available = unique([
+    ...extractSupportKeywords(row.nodeIsonote),
+    ...extractSupportKeywords(row.nodeMasterKeywords),
+    ...extractSupportKeywords(row.masterKeywords),
+  ]);
+
+  if (!requested.length) return row;
+
+  const matched = requested.filter((type) => available.includes(type));
+  const missing = requested.filter((type) => !available.includes(type));
+
+  if (!missing.length) return row;
+
+  row.missingSupportKeywords = supportDisplayList(missing);
+  if (matched.length) row.matchedSupportKeywords = supportDisplayList(matched);
+
+  row.supportMatch = matched.length
+    ? `${supportDisplayList(matched)} Match; Missing ${supportDisplayList(missing)}`
+    : `Missing ${supportDisplayList(missing)}`;
+
+  row.warnings = appendWarning(row.warnings, `SUPPORT_MISSING_${missing.join('_')}`);
+
+  if (!row.reason || /^Review required:\s*SUPPORT_/i.test(String(row.reason))) {
+    row.reason = `Review required: Table-2 requests ${supportDisplayList(requested)}, but Table-1 support basis is missing ${supportDisplayList(missing)}.`;
+  }
+
+  if (!row.nodeCoverageNote || /^Review required:\s*SUPPORT_/i.test(String(row.nodeCoverageNote))) {
+    row.nodeCoverageNote = row.reason;
+  }
+
+  return row;
+}
+
+function normalizeDiagnosticsInRows(rows) {
   if (!Array.isArray(rows)) return rows;
-  return rows.map((row) => fixBoreBasis(row));
+  return rows.map((row) => clarifySupportConflict(fixBoreBasis(row)));
 }
 
 export function normalizePsMappingOptions(options = {}) {
@@ -125,10 +220,10 @@ function annotateResult(result, options) {
 
   const normalized = {
     ...result,
-    rows: normalizeBoreDiagnosticsInRows(result?.rows),
-    outputRows: normalizeBoreDiagnosticsInRows(result?.outputRows),
-    candidateRows: normalizeBoreDiagnosticsInRows(result?.candidateRows),
-    validatorRows: normalizeBoreDiagnosticsInRows(result?.validatorRows),
+    rows: normalizeDiagnosticsInRows(result?.rows),
+    outputRows: normalizeDiagnosticsInRows(result?.outputRows),
+    candidateRows: normalizeDiagnosticsInRows(result?.candidateRows),
+    validatorRows: normalizeDiagnosticsInRows(result?.validatorRows),
   };
 
   return {
