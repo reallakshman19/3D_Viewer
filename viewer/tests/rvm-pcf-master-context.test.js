@@ -6,8 +6,12 @@
  * loader logic. It does not validate final JSON/RVM→PCF execution.
  */
 
+import fs from 'node:fs/promises';
+
 const {
   DEFAULT_PIPING_CLASS_MASTER_URLS,
+  DEFAULT_MATERIAL_MAP_URLS,
+  DEFAULT_WEIGHT_MASTER_URLS,
   loadXmlCiiMaterialMap,
   loadXmlCiiMasterRows,
   loadXmlCiiWeightMasterRows,
@@ -26,6 +30,19 @@ function assert(condition, label) {
     failed++;
   }
 }
+
+const masterContextSource = await fs.readFile(
+  new URL('../converters/xml-cii2019-core/master-context.js', import.meta.url),
+  'utf8'
+);
+
+assert(!masterContextSource.includes('tabs/model-converters'), 'B1: master-context does not import tabs/model-converters');
+assert(!masterContextSource.includes('xmltocii2019_helper'), 'B1: master-context does not import xmltocii2019_helper');
+assert(!masterContextSource.includes('RvmPcfEmitter'), 'B1: master-context does not import RvmPcfEmitter');
+assert(!/uxml|Uxml|UXML/.test(masterContextSource), 'B1: master-context does not import or reference UXML modules');
+assert(masterContextSource.includes('export async function loadXmlCiiWeightMasterRows'), 'B2: core owns weight master loader implementation');
+assert(masterContextSource.includes('export async function loadXmlCiiMasterRows'), 'B2: core owns generic master loader implementation');
+assert(masterContextSource.includes('export async function loadXmlCiiMaterialMap'), 'B2: core owns material map loader implementation');
 
 const previousFetch = globalThis.fetch;
 let fetchCalled = false;
@@ -64,10 +81,12 @@ const context = await prepareXmlCiiMasterContext({
 globalThis.fetch = previousFetch;
 
 assert(typeof prepareXmlCiiMasterContext === 'function', 'T1: prepareXmlCiiMasterContext is exported');
-assert(typeof loadXmlCiiMaterialMap === 'function', 'T1: material-map loader is re-exported');
-assert(typeof loadXmlCiiMasterRows === 'function', 'T1: generic master loader is re-exported');
-assert(typeof loadXmlCiiWeightMasterRows === 'function', 'T1: weight loader is re-exported');
+assert(typeof loadXmlCiiMaterialMap === 'function', 'T1: material-map loader is exported from core');
+assert(typeof loadXmlCiiMasterRows === 'function', 'T1: generic master loader is exported from core');
+assert(typeof loadXmlCiiWeightMasterRows === 'function', 'T1: weight loader is exported from core');
 assert(Array.isArray(DEFAULT_PIPING_CLASS_MASTER_URLS), 'T1: default piping-class URL list is exported');
+assert(Array.isArray(DEFAULT_MATERIAL_MAP_URLS), 'T1: default material-map URL list is exported');
+assert(Array.isArray(DEFAULT_WEIGHT_MASTER_URLS), 'T1: default weight-master URL list is exported');
 
 assert(fetchCalled === false, 'T2: inline masters do not fetch external files');
 assert(context?.config && typeof context.config === 'object', 'T3: context includes normalized config');
