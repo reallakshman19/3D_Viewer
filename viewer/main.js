@@ -1,4 +1,4 @@
-import { init } from './core/app.js?v=20260610-main-psmap-line-family-1';
+import { init } from './core/app.js?v=20260611-main-psmap-line-diagnostics-1';
 
 function reportStartupError(error) {
   console.error('3D Viewer failed to start', error);
@@ -8,25 +8,28 @@ function reportStartupError(error) {
     label.textContent = 'Failed to start viewer. Check the browser console for details.';
   }
 
-  const overlay = document.getElementById('app-loading-overlay');
-  if (overlay) {
-    overlay.classList.add('is-error');
+  const shell = document.getElementById('app-shell');
+  if (shell) {
+    shell.innerHTML = `
+      <div style="padding:24px;color:#fca5a5;background:#111827;min-height:100vh;font-family:system-ui,sans-serif;">
+        <h1 style="margin-top:0;color:#fecaca;">3D Viewer failed to start</h1>
+        <p>Please check the browser console for the full error.</p>
+        <pre style="white-space:pre-wrap;background:#0f172a;border:1px solid #7f1d1d;border-radius:8px;padding:12px;color:#fee2e2;">${String(error?.stack || error?.message || error)}</pre>
+      </div>
+    `;
   }
 }
 
-async function start() {
-  try {
-    await init({
-      nav: document.getElementById('tab-bar'),
-      main: document.getElementById('tab-content'),
-    });
-  } catch (error) {
-    reportStartupError(error);
-  }
-}
+window.addEventListener('error', (event) => {
+  reportStartupError(event.error || event.message || event);
+});
 
-if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', start, { once: true });
-} else {
-  start();
+window.addEventListener('unhandledrejection', (event) => {
+  reportStartupError(event.reason || event);
+});
+
+try {
+  init();
+} catch (error) {
+  reportStartupError(error);
 }
