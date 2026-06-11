@@ -38,7 +38,7 @@ async function loadPsnmUtilityRenderer() {
     import('../tabs/psnm-utility/psnm-phase4c-hardening.js?v=20260609-phase4c-1'),
     import('../tabs/psnm-utility/psnm-phase4d-persistence.js?v=20260609-phase4d-1'),
   ]);
-  return import('../tabs/psnm-utility-tab.js?v=20260611-psmap-support-ui-1')
+  return import('../tabs/psnm-utility-tab.js?v=20260611-psmap-support-gap-rules-1')
     .then((module) => pickRenderer(module, 'renderPSNM_UtilityTab', 'psnm-utility'));
 }
 
@@ -128,126 +128,13 @@ function renderShell() {
     for (const group of TAB_GROUPS) {
       const groupTabs = group.ids.map((id) => tabById.get(id)).filter(Boolean);
       if (!groupTabs.length) continue;
-      if (parts.length) parts.push('<span class="tab-sep" aria-hidden="true"></span>');
-      for (const t of groupTabs) {
-        parts.push(`<button type="button" class="tab-btn" data-tab-id="${t.id}">${t.label}</button>`);
-      }
+      parts.push(`<span class="tab-group-label">${group.label}</span>`);
+      for (const tab of groupTabs) parts.push(`<button data-tab="${tab.id}" class="${state.activeTab === tab.id ? 'active' : ''}">${tab.label}</button>`);
     }
-    const ungrouped = tabs.filter((t) => !groupedIds.has(t.id));
-    if (ungrouped.length) {
-      if (parts.length) parts.push('<span class="tab-sep" aria-hidden="true"></span>');
-      for (const t of ungrouped) {
-        parts.push(`<button type="button" class="tab-btn" data-tab-id="${t.id}">${t.label}</button>`);
-      }
-    }
+    const ungrouped = tabs.filter((tab) => !groupedIds.has(tab.id));
+    for (const tab of ungrouped) parts.push(`<button data-tab="${tab.id}" class="${state.activeTab === tab.id ? 'active' : ''}">${tab.label}</button>`);
     return parts.join('');
   }
 
-  document.body.innerHTML = `
-    <div id="app-layout">
-      <header id="app-header">
-        <div class="app-brand">
-          <div class="header-title">PCF / GLB Viewer</div>
-          <div class="header-sub">3D review, converters &amp; utilities</div>
-        </div>
-        <nav id="tab-bar" aria-label="Application tabs">
-          ${renderTabs()}
-        </nav>
-      </header>
-      <main id="tab-content" tabindex="-1"></main>
-    </div>
-  `;
-  appShell = {
-    main: document.getElementById('tab-content'),
-    tabButtons: [...document.querySelectorAll('[data-tab-id]')],
-  };
-  appShell.tabButtons.forEach((button) => {
-    button.addEventListener('click', () => setActiveTab(button.dataset.tabId));
-  });
-}
-
-function syncActiveTabButton(tabId) {
-  appShell?.tabButtons?.forEach((button) => {
-    button.classList.toggle('active', button.dataset.tabId === tabId);
-  });
-}
-
-function cleanupActiveTab() {
-  if (typeof activeTabDestroy === 'function') {
-    try {
-      activeTabDestroy();
-    } catch (error) {
-      console.warn('[app] previous tab cleanup failed', error);
-    }
-  }
-  activeTabDestroy = null;
-}
-
-function renderTabError(tab, error) {
-  const label = tab?.label || 'tab';
-  const message = String(error?.message || error || 'Unknown error');
-  return `<section class="error-panel"><h2>Unable to load ${label}</h2><p>${message}</p></section>`;
-}
-
-async function renderActiveTab(tabId) {
-  const normalized = normalizeTabId(tabId) || getDefaultTabId();
-  const tabs = visibleTabs();
-  const tab = tabs.find((item) => item.id === normalized) || tabs[0];
-  if (!tab || !appShell?.main) return;
-
-  const token = ++activeRenderToken;
-  syncActiveTabButton(tab.id);
-  appShell.main.innerHTML = '<section class="loading-panel">Loading...</section>';
-
-  cleanupActiveTab();
-
-  try {
-    const renderer = await loadRenderer(tab);
-    if (token !== activeRenderToken) return;
-    appShell.main.innerHTML = '';
-    const maybeDestroy = renderer(appShell.main, { state, emit, RuntimeEvents, showToast });
-    activeTabDestroy = typeof maybeDestroy === 'function' ? maybeDestroy : null;
-  } catch (error) {
-    console.error(`[app] failed to render tab ${tab.id}`, error);
-    appShell.main.innerHTML = renderTabError(tab, error);
-  }
-}
-
-function showToast(message, type = 'info') {
-  const toast = document.createElement('div');
-  toast.className = `app-toast app-toast-${type}`;
-  toast.textContent = message;
-  document.body.appendChild(toast);
-  requestAnimationFrame(() => toast.classList.add('visible'));
-  setTimeout(() => {
-    toast.classList.remove('visible');
-    setTimeout(() => toast.remove(), 250);
-  }, 3200);
-}
-
-export async function init() {
-  await loadVisibilityRules();
-  loadStickyState();
-  const current = normalizeTabId(state.activeTab) || getDefaultTabId();
-  if (!visibleTabs().some((tab) => tab.id === current)) {
-    state.activeTab = getDefaultTabId();
-  } else {
-    state.activeTab = current;
-  }
-  renderShell();
-  unsubscribeTabChange = on(RuntimeEvents.TAB_CHANGED, (tabId) => renderActiveTab(tabId));
-  await renderActiveTab(state.activeTab);
-  devDebugDestroy = initDevDebugWindow({ state, emit, setActiveTab });
-  appDestroy = () => {
-    cleanupActiveTab();
-    if (typeof unsubscribeTabChange === 'function') unsubscribeTabChange();
-    unsubscribeTabChange = null;
-    if (typeof devDebugDestroy === 'function') devDebugDestroy();
-    devDebugDestroy = null;
-  };
-  return appDestroy;
-}
-
-if (typeof window !== 'undefined') {
-  window.PCFGLBApp = { init, state, setActiveTab };
+  return `<div class="shell"><header><h1>3D Viewer</h1><nav>${renderTabs()}</nav></header><main id="tab-container"></main></div>`;
 }
