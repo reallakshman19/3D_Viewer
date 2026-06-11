@@ -8,6 +8,7 @@ const __dirname = path.dirname(__filename);
 const repoRoot = path.resolve(__dirname, '../..');
 const viewerRoot = path.join(repoRoot, 'viewer');
 const indexPath = path.join(viewerRoot, 'index.html');
+const runtimeEventsPath = path.join(viewerRoot, 'contracts/runtime-events.js');
 
 function stripUrlSuffix(value) {
   return String(value || '').split('?')[0].split('#')[0];
@@ -33,6 +34,16 @@ function resolveViewerAsset(fromDir, assetRef) {
   );
 
   return resolved;
+}
+
+function resolveViewerRuntimeFetchAsset(assetRef) {
+  const cleanRef = stripUrlSuffix(assetRef);
+  if (!cleanRef) return null;
+  assert.ok(
+    !cleanRef.startsWith('../'),
+    `runtime fetch asset must not escape deployed viewer root: ${assetRef}`,
+  );
+  return resolveViewerAsset(viewerRoot, cleanRef);
 }
 
 function assertFileExists(resolved, label) {
@@ -95,7 +106,60 @@ function verifyModuleGraph(entryFiles) {
     }
   }
 
-  return visited.size;
+  return visited;
+}
+
+function readRuntimeEventKeys() {
+  const text = fs.readFileSync(runtimeEventsPath, 'utf8');
+  const match = text.match(/RuntimeEvents\s*=\s*Object\.freeze\s*\(\s*\{([\s\S]*?)\}\s*\)/);
+  assert.ok(match, 'RuntimeEvents object must be statically parseable');
+
+  const keys = new Set();
+  for (const keyMatch of match[1].matchAll(/\b([A-Z][A-Z0-9_]*)\s*:/g)) {
+    keys.add(keyMatch[1]);
+  }
+  assert.ok(keys.size > 0, 'RuntimeEvents object must define at least one event');
+  return keys;
+}
+
+function verifyRuntimeEventReferences(moduleFiles) {
+  const validKeys = readRuntimeEventKeys();
+  const missing = [];
+
+  for (const file of moduleFiles) {
+    const text = fs.readFileSync(file, 'utf8');
+    for (const ref of text.matchAll(/RuntimeEvents\.([A-Z][A-Z0-9_]*)/g)) {
+      const key = ref[1];
+      if (!validKeys.has(key)) {
+        missing.push(`${path.relative(viewerRoot, file)} -> RuntimeEvents.${key}`);
+      }
+    }
+  }
+
+  assert.deepEqual(missing, [], `RuntimeEvents references must be registered:\n${missing.join('\n')}`);
+}
+
+function verifyRuntimeFetchAssets(moduleFiles) {
+  const missing = [];
+
+  for (const file of moduleFiles) {
+    const text = fs.readFileSync(file, 'utf8');
+    for (const match of text.matchAll(/const\s+([A-Z0-9_]*URL)\s*=\s*["']([^"']+)["']/g)) {
+      const name = match[1];
+      const assetRef = match[2];
+      if (!assetRef.includes('/')) continue;
+      if (/^https?:\/\//i.test(assetRef)) continue;
+
+      try {
+        const resolved = resolveViewerRuntimeFetchAsset(assetRef);
+        if (resolved) assertFileExists(resolved, `${name} runtime fetch asset`);
+      } catch (error) {
+        missing.push(`${path.relative(viewerRoot, file)} ${name}=${assetRef}: ${error.message}`);
+      }
+    }
+  }
+
+  assert.deepEqual(missing, [], `runtime fetch assets must exist inside deployed viewer root:\n${missing.join('\n')}`);
 }
 
 const indexHtml = fs.readFileSync(indexPath, 'utf8');
@@ -119,4 +183,6 @@ for (const href of stylesheets) {
 }
 
 const checkedModules = verifyModuleGraph(entryFiles);
-console.log(`Verified ${moduleScripts.length} viewer module entrypoint(s), ${stylesheets.length} stylesheet(s), and ${checkedModules} local module file(s).`);
+verifyRuntimeEventReferences(checkedModules);
+verifyRuntimeFetchAssets(checkedModules);
+console.log(`Verified ${moduleScripts.length} viewer module entrypoint(s), ${stylesheets.length} stylesheet(s), ${checkedModules.size} local module file(s), runtime events, and runtime fetch assets.`);
