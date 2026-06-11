@@ -9,6 +9,10 @@ on:
       - 'viewer/converters/xml-cii2019-core/**'
       - 'viewer/tabs/model-converters/workflow/**'
       - 'viewer/tabs/rvm-json-pcf-*.js'
+      - 'viewer/tabs/viewer3d-rvm-tab.js'
+      - 'viewer/contracts/runtime-events.js'
+      - 'viewer/core/event-bus.js'
+      - 'viewer/core/state.js'
       - 'viewer/tests/rvm-pcf-*.test.js'
       - '.github/workflows/rvm-pcf-ci.yml'
   workflow_dispatch:
@@ -22,6 +26,11 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
 
       - name: Verify XML CII master context
         run: node viewer/tests/rvm-pcf-master-context.test.js
