@@ -1,3 +1,8 @@
+/**
+ * Row-level PCF support matching adapter.
+ * Converts PCF row fields into support-mapping-compatible lookup keys.
+ * Support kind/rule semantics remain owned by support-mapping.js.
+ */
 import {
   toFiniteNumber,
   toText,
