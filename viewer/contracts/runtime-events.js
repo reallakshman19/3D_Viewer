@@ -1,5 +1,6 @@
 ﻿export const RuntimeEvents = Object.freeze({
   TAB_CHANGED: 'tab-changed',
+  TAB_RENDERED: 'tab-rendered',
   FILE_LOADED: 'file-loaded',
   PARSE_COMPLETE: 'parse-complete',
   RENDER_COMPLETE: 'render-complete',
@@ -56,4 +57,3 @@ export function assertRuntimeEvent(name) {
     throw new Error(`Unregistered runtime event: ${name}`);
   }
 }
-
