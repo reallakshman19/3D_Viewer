@@ -1,4 +1,4 @@
-﻿export const RuntimeEvents = Object.freeze({
+export const RuntimeEvents = Object.freeze({
   TAB_CHANGED: 'tab-changed',
   TAB_RENDERED: 'tab-rendered',
   FILE_LOADED: 'file-loaded',
@@ -40,6 +40,7 @@
   MODEL_CONVERTER_SUCCESS: 'model-converter-success',
   MODEL_CONVERTER_ERROR: 'model-converter-error',
   MODEL_CONVERTER_STP_READY: 'model-converter-stp-ready',
+  RVM_SOURCE_LOADED: 'rvm-source-loaded',
   RVM_MODEL_LOADED: 'rvm-model-loaded',
   RVM_NODE_SELECTED: 'rvm-node-selected',
   RVM_TAG_CREATED: 'rvm-tag-created',
