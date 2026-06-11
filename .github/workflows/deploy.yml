@@ -23,6 +23,9 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Verify static viewer entrypoint
+        run: node viewer/tests/app-entrypoint-static.test.js
+
       - name: Configure Pages
         uses: actions/configure-pages@v5
 
