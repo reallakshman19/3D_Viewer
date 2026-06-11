@@ -6,7 +6,7 @@ import {
   PS_MAPPING_SAMPLE_TABLE1D,
   PS_MAPPING_SAMPLE_TABLE2,
 } from './ps-mapping-utility/ps-mapping-sample-data.js';
-import { runPsMappingResolver, rowsToCsv } from './ps-mapping-utility/ps-mapping-engine.js';
+import { runPsMappingResolver, rowsToCsv } from './ps-mapping-utility/ps-mapping-engine.js?v=20260610-line-family-1';
 
 const STYLE_ID = 'ps-mapping-utility-style';
 
@@ -42,297 +42,145 @@ function installStyle() {
   const style = document.createElement('style');
   style.id = STYLE_ID;
   style.textContent = `
-.psmap-tile-row{display:flex;gap:14px;flex-wrap:wrap;align-items:stretch}
-.psmap-modal-bg{position:fixed;inset:0;background:rgba(2,6,23,.72);z-index:10020;display:flex;align-items:center;justify-content:center;padding:18px}
-.psmap-modal{width:min(1500px,98vw);height:min(930px,94vh);display:flex;flex-direction:column;border:1px solid rgba(143,197,255,.25);border-radius:16px;background:#0f1724;color:#d9e6f7;overflow:hidden;font-family:system-ui}
-.psmap-head{display:flex;justify-content:space-between;gap:14px;align-items:flex-start;padding:14px 16px;border-bottom:1px solid rgba(143,197,255,.16);background:#162238}
-.psmap-head h2{margin:0;color:#8fc5ff}.psmap-head p{margin:4px 0 0;color:#9fb2c7}
-.psmap-toolbar,.psmap-tabs{display:flex;gap:8px;flex-wrap:wrap;padding:10px 12px;border-bottom:1px solid rgba(143,197,255,.14);background:#101a2b}
-.psmap-btn{border:1px solid rgba(143,197,255,.28);border-radius:8px;background:#1d4ed8;color:#fff;padding:8px 12px;cursor:pointer;font-weight:800}.psmap-btn.secondary{background:#111827}
-.psmap-tab{border:1px solid rgba(143,197,255,.18);border-radius:999px;background:#0b1220;color:#b7c9dd;padding:7px 10px;cursor:pointer;font-size:12px;font-weight:900}.psmap-tab.active{background:#1d4ed8;color:#fff}
-.psmap-body{flex:1;overflow:auto;padding:14px;display:grid;gap:14px}.psmap-panel{display:none}.psmap-panel.active{display:grid;gap:14px}
-.psmap-card{border:1px solid rgba(143,197,255,.2);border-radius:14px;background:#101a2b;overflow:hidden}.psmap-card-head{display:flex;justify-content:space-between;gap:12px;align-items:center;padding:11px 13px;border-bottom:1px solid rgba(143,197,255,.15);background:#162238}.psmap-card-body{padding:12px;display:grid;gap:12px}
-.psmap-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}.psmap-field{display:grid;gap:5px}.psmap-field label{font-size:12px;color:#b7c9dd;font-weight:900}.psmap-field textarea,.psmap-field input,.psmap-field select{box-sizing:border-box;width:100%;border:1px solid rgba(143,197,255,.2);border-radius:8px;background:#0b1220;color:#e5edf7;padding:8px;font:12px ui-monospace,Consolas,monospace}.psmap-field textarea{min-height:170px;resize:vertical}.psmap-field.wide{grid-column:1/-1}
-.psmap-banner{font-size:12px;line-height:1.5;color:#cfe4ff;border:1px solid rgba(143,197,255,.16);background:#0b1220;border-radius:10px;padding:10px}
-.psmap-summary{display:grid;grid-template-columns:repeat(12,minmax(88px,1fr));gap:8px}.psmap-summary div{background:#0b1220;border:1px solid rgba(143,197,255,.15);border-radius:10px;padding:9px}.psmap-summary b{display:block;color:#8fc5ff;font-size:18px}.psmap-summary span{font-size:11px;color:#9fb2c7}
-.psmap-tablewrap{overflow:auto;max-height:560px}.psmap-table{width:100%;border-collapse:collapse;font-size:12px}.psmap-table th,.psmap-table td{border-bottom:1px solid rgba(143,197,255,.12);padding:7px 8px;text-align:left;white-space:nowrap;vertical-align:top}.psmap-table th{position:sticky;top:0;background:#1e293b;color:#9fc9ff}.psmap-table pre{margin:0;max-width:760px;white-space:pre-wrap;font-size:11px;color:#d9e6f7}
-.psmap-ok{color:#86efac;font-weight:900}.psmap-warn{color:#fcd34d;font-weight:900}.psmap-error{color:#fca5a5;font-weight:900}
-@media(max-width:1000px){.psmap-grid,.psmap-summary{grid-template-columns:1fr}.psmap-modal{height:96vh}}
-`;
+.psmap-tile{height:160px;width:220px;border:1px solid rgba(143,197,255,.25);border-radius:18px;background:linear-gradient(145deg,#10213a,#0b1220);color:#e8f2ff;cursor:pointer;box-shadow:0 12px 34px rgba(0,0,0,.28);display:grid;place-items:center;text-align:center;padding:16px;margin-top:18px}.psmap-tile-icon{font-size:42px;margin-bottom:8px}.psmap-backdrop{position:fixed;inset:0;background:rgba(2,6,23,.75);z-index:10050;display:flex;align-items:center;justify-content:center;padding:18px}.psmap-modal{width:min(1480px,98vw);height:min(920px,94vh);display:flex;flex-direction:column;background:#0f1724;color:#d9e6f7;border:1px solid rgba(143,197,255,.25);border-radius:16px;overflow:hidden}.psmap-head{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:14px 16px;border-bottom:1px solid rgba(143,197,255,.16);background:#162238}.psmap-title{margin:0;color:#8fc5ff}.psmap-sub{margin:4px 0 0;color:#9fb2c7}.psmap-btn{border:1px solid rgba(143,197,255,.28);border-radius:8px;background:#1d4ed8;color:#fff;padding:8px 12px;cursor:pointer;font-weight:700}.psmap-btn.secondary{background:#111827}.psmap-tabs{display:flex;gap:6px;flex-wrap:wrap;padding:10px 12px;border-bottom:1px solid rgba(143,197,255,.14);background:#101a2b}.psmap-tab{border:1px solid rgba(143,197,255,.18);border-radius:999px;background:#0b1220;color:#b7c9dd;padding:7px 10px;cursor:pointer;font-size:12px;font-weight:800}.psmap-tab.active{background:#1d4ed8;color:#fff}.psmap-body{flex:1;overflow:auto;padding:14px;display:grid;gap:14px}.psmap-panel{display:none}.psmap-panel.active{display:grid;gap:14px}.psmap-card{border:1px solid rgba(143,197,255,.2);border-radius:14px;background:#101a2b;overflow:hidden}.psmap-card-head{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:11px 13px;border-bottom:1px solid rgba(143,197,255,.15);background:#162238}.psmap-card-body{padding:12px;display:grid;gap:12px}.psmap-grid-2{display:grid;grid-template-columns:1fr 1fr;gap:12px}.psmap-grid-3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px}.psmap-field{display:grid;gap:4px}.psmap-field label{font-size:12px;color:#b7c9dd;font-weight:800}.psmap-field input,.psmap-field textarea,.psmap-field select{box-sizing:border-box;width:100%;border:1px solid rgba(143,197,255,.2);border-radius:8px;background:#0b1220;color:#e5edf7;padding:8px;font:12px ui-monospace,Consolas,monospace}.psmap-field textarea{min-height:150px;resize:vertical}.psmap-summary{display:grid;grid-template-columns:repeat(8,1fr);gap:8px}.psmap-summary div{background:#0b1220;border:1px solid rgba(143,197,255,.15);border-radius:10px;padding:9px}.psmap-summary b{display:block;color:#8fc5ff;font-size:18px}.psmap-summary span{font-size:11px;color:#9fb2c7}.psmap-banner{font-size:12px;line-height:1.5;color:#cfe4ff;border:1px solid rgba(143,197,255,.16);background:#0b1220;border-radius:10px;padding:10px}.psmap-tablewrap{overflow:auto;max-height:560px}.psmap-table{width:100%;border-collapse:collapse;font-size:12px}.psmap-table th,.psmap-table td{border-bottom:1px solid rgba(143,197,255,.12);padding:7px 8px;text-align:left;white-space:nowrap;vertical-align:top}.psmap-table th{position:sticky;top:0;background:#1e293b;color:#9fc9ff}.psmap-badge{border-radius:999px;padding:2px 7px;font-size:11px;font-weight:800;background:rgba(59,130,246,.18);color:#93c5fd}@media(max-width:1100px){.psmap-grid-2,.psmap-grid-3,.psmap-summary{grid-template-columns:1fr}.psmap-modal{height:96vh}}`;
   document.head.appendChild(style);
 }
 
-function defaultState() {
+function tab(id, label, state) {
+  return `<button type="button" class="psmap-tab ${state.activeTab === id ? 'active' : ''}" data-psmap-tab="${h(id)}">${h(label)}</button>`;
+}
+
+function panel(id, state, html) {
+  return `<section class="psmap-panel ${state.activeTab === id ? 'active' : ''}" data-psmap-panel="${h(id)}">${html}</section>`;
+}
+
+function table(rows = [], columns = []) {
+  if (!rows.length) return '<div class="psmap-banner">No rows.</div>';
+  return `<div class="psmap-tablewrap"><table class="psmap-table"><thead><tr>${columns.map((c) => `<th>${h(c.label)}</th>`).join('')}</tr></thead><tbody>${rows.map((row) => `<tr>${columns.map((c) => `<td>${h(displayList(c.value ? c.value(row) : row[c.key]))}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`;
+}
+
+function makeState() {
   return {
     activeTab: 'source',
     source: {
-      table1: PS_MAPPING_SAMPLE_TABLE1,
-      table1A: PS_MAPPING_SAMPLE_TABLE1A,
-      table1B: PS_MAPPING_SAMPLE_TABLE1B,
-      table1C: PS_MAPPING_SAMPLE_TABLE1C,
-      table1D: PS_MAPPING_SAMPLE_TABLE1D,
-      table2: PS_MAPPING_SAMPLE_TABLE2,
+      table1Text: PS_MAPPING_SAMPLE_TABLE1,
+      table1AText: PS_MAPPING_SAMPLE_TABLE1A,
+      table1BText: PS_MAPPING_SAMPLE_TABLE1B,
+      table1CText: PS_MAPPING_SAMPLE_TABLE1C,
+      table1DText: PS_MAPPING_SAMPLE_TABLE1D,
+      table2Text: PS_MAPPING_SAMPLE_TABLE2,
     },
-    options: {
-      boreMode: 'prefer',
-      lineMode: 'prefer',
-      supportMode: 'prefer',
-      odToleranceMm: 1.5,
-      allowRawDiaMatch: true,
-      allowDnMatch: true,
-      allowDuplicateAssignment: true,
-    },
+    setup: { boreMode: 'prefer', lineMode: 'prefer', supportMode: 'prefer' },
     result: null,
   };
 }
 
-let state = defaultState();
-let ctxRef = null;
-
-function toast(message, type = 'info') {
-  try { ctxRef?.showToast?.(message, type); } catch {}
+function summary(state) {
+  const s = state.result?.summary || {};
+  return `<div class="psmap-summary"><div><b>${countRows(state.source.table1Text)}</b><span>Table-1 rows</span></div><div><b>${countRows(state.source.table1CText)}</b><span>Table-1C rows</span></div><div><b>${s.table1Rows ?? 0}</b><span>Consolidated T1</span></div><div><b>${s.table2Rows ?? 0}</b><span>Consolidated T2</span></div><div><b>${s.mapped ?? 0}</b><span>Mapped</span></div><div><b>${s.noMatch ?? 0}</b><span>No Match</span></div><div><b>${s.candidateRows ?? 0}</b><span>Candidates</span></div><div><b>${s.supportCoverageIssues ?? 0}</b><span>Coverage Issues</span></div></div>`;
 }
 
-async function copyText(text) {
-  try {
-    await navigator.clipboard.writeText(String(text || ''));
-    toast('Copied.', 'success');
-  } catch (error) {
-    toast(`Copy failed: ${error.message || error}`, 'error');
-  }
+function sourcePanel(state) {
+  return `<section class="psmap-card"><div class="psmap-card-head"><b>Source Tables</b><div><button class="psmap-btn secondary" data-psmap-action="loadSample">Load Sample</button> <button class="psmap-btn" data-psmap-action="run">Run Mapping</button></div></div><div class="psmap-card-body"><div class="psmap-banner"><b>Table-1C can be simple Node/ISONOTE or rich Line No / Node / PS No / Pipe size / ISONOTE / Mandatory.</b> Rich Table-1C can synthesize Table-1/1A/1B reference data.</div><div class="psmap-grid-2"><div class="psmap-field"><label>Table-1 - PS No / Node Optional</label><textarea data-psmap-source="table1Text">${h(state.source.table1Text)}</textarea></div><div class="psmap-field"><label>Table-2 - Model PS Data</label><textarea data-psmap-source="table2Text">${h(state.source.table2Text)}</textarea></div></div><div class="psmap-grid-3"><div class="psmap-field"><label>Table-1A - Node / Dia Optional</label><textarea data-psmap-source="table1AText">${h(state.source.table1AText)}</textarea></div><div class="psmap-field"><label>Table-1B - Node / Line No Optional</label><textarea data-psmap-source="table1BText">${h(state.source.table1BText)}</textarea></div><div class="psmap-field"><label>Table-1D - Master Keyword Searcher</label><textarea data-psmap-source="table1DText">${h(state.source.table1DText)}</textarea></div></div><div class="psmap-field"><label>Table-1C - Support Master / ISONOTE Master</label><textarea data-psmap-source="table1CText" style="min-height:210px">${h(state.source.table1CText)}</textarea></div></div></section>`;
 }
 
-function statusClass(level) {
-  const text = String(level || '').toUpperCase();
-  if (text === 'ERROR' || text === 'NO_MATCH' || text === 'MISSING_ALL' || text === 'EXTRA_ONLY' || text === 'INVALID') return 'psmap-error';
-  if (text === 'WARNING' || text === 'MEDIUM' || text === 'PARTIAL' || text === 'COVERED_WITH_EXTRA' || text.includes('MISSING')) return 'psmap-warn';
-  return 'psmap-ok';
+function setupPanel(state) {
+  return `<section class="psmap-card"><div class="psmap-card-head"><b>Resolver Setup</b><button class="psmap-btn" data-psmap-action="run">Run Mapping</button></div><div class="psmap-card-body"><div class="psmap-grid-3"><div class="psmap-field"><label>Bore Mode</label><select data-psmap-setup="boreMode"><option value="prefer" ${state.setup.boreMode === 'prefer' ? 'selected' : ''}>Prefer</option><option value="strict" ${state.setup.boreMode === 'strict' ? 'selected' : ''}>Strict</option><option value="ignore" ${state.setup.boreMode === 'ignore' ? 'selected' : ''}>Ignore</option></select></div><div class="psmap-field"><label>Line Mode</label><select data-psmap-setup="lineMode"><option value="prefer" ${state.setup.lineMode === 'prefer' ? 'selected' : ''}>Prefer</option><option value="strict" ${state.setup.lineMode === 'strict' ? 'selected' : ''}>Strict</option><option value="ignore" ${state.setup.lineMode === 'ignore' ? 'selected' : ''}>Ignore</option></select></div><div class="psmap-field"><label>Support Mode</label><select data-psmap-setup="supportMode"><option value="prefer" ${state.setup.supportMode === 'prefer' ? 'selected' : ''}>Prefer</option><option value="strict" ${state.setup.supportMode === 'strict' ? 'selected' : ''}>Strict</option><option value="ignore" ${state.setup.supportMode === 'ignore' ? 'selected' : ''}>Ignore</option></select></div></div></div></section>`;
 }
 
-function summaryHtml(result) {
-  const s = result?.summary || {
-    mapped: 0,
-    noMatch: 0,
-    table1Rows: countRows(state.source.table1),
-    table2Rows: countRows(state.source.table2),
-    supportMatches: 0,
-    supportCoverageWarnings: 0,
-  };
-  return `<div class="psmap-summary">
-    <div><b>${s.table1Rows || 0}</b><span>Consolidated T1</span></div>
-    <div><b>${s.table2Rows || 0}</b><span>Consolidated T2</span></div>
-    <div><b>${countRows(state.source.table1)}</b><span>Source T1</span></div>
-    <div><b>${countRows(state.source.table1A)}</b><span>Table-1A</span></div>
-    <div><b>${countRows(state.source.table1B)}</b><span>Table-1B</span></div>
-    <div><b>${countRows(state.source.table1C)}</b><span>Table-1C</span></div>
-    <div><b>${countRows(state.source.table1D)}</b><span>Table-1D</span></div>
-    <div><b>${countRows(state.source.table2)}</b><span>Source T2</span></div>
-    <div><b>${s.mapped || 0}</b><span>Mapped</span></div>
-    <div><b>${s.supportMatches || 0}</b><span>Support Matches</span></div>
-    <div><b>${s.supportCoverageWarnings || 0}</b><span>Coverage Warnings</span></div>
-    <div><b>${s.noMatch || 0}</b><span>No Match</span></div>
-  </div>`;
+const CONSOLIDATED_T1_COLUMNS = [
+  { key: 'id', label: 'ID' }, { key: 'source', label: 'Source' }, { key: 'sourceRow', label: 'Source Row' }, { key: 'table1PsNo', label: 'Table-1 PS No' }, { key: 'basePs', label: 'Base PS' }, { key: 'tag', label: 'Tag' }, { key: 'node', label: 'Node' }, { key: 'nodeLine', label: 'Line No' }, { key: 'pipeSizeRaw', label: 'Pipe Size' }, { key: 'nps', label: 'NPS' }, { key: 'derivedDn', label: 'Derived DN' }, { key: 'nodeDia', label: 'Dia/OD' }, { key: 'boreSource', label: 'Bore Source' }, { key: 'mandatory', label: 'Mandatory', value: (r) => yn(r.mandatory) }, { key: 'nodeIsonote', label: 'ISONOTE' }, { key: 'supportTypesAvailable', label: 'Master Keywords' },
+];
+const CONSOLIDATED_T2_COLUMNS = [
+  { key: 'id', label: 'ID' }, { key: 'sourceRow', label: 'Source Row' }, { key: 'psnoModel', label: 'PSNO_Model' }, { key: 'basePs', label: 'Base PS' }, { key: 'modelTag', label: 'Model Tag' }, { key: 'isDatum', label: 'Datum', value: (r) => yn(r.isDatum) }, { key: 'boreRaw', label: 'Bore Raw' }, { key: 'bore', label: 'Bore' }, { key: 'boreStatus', label: 'Bore Status' }, { key: 'pipe', label: 'Pipe' }, { key: 'pipeKey', label: 'Pipe Key' }, { key: 'lineFamily', label: 'Line Family' }, { key: 'dtxr', label: 'DTXR' }, { key: 'supportTypesRequested', label: 'DTXR Keywords' }, { key: 'mandatory', label: 'Mandatory', value: (r) => yn(r.mandatory) }, { key: 'parseWarnings', label: 'Parse Warnings' }, { key: 'rawColumns', label: 'Raw Columns', value: (r) => JSON.stringify(r.rawColumns || {}, null, 2) },
+];
+const VALIDATOR_COLUMNS = [
+  { key: 'enabled', label: 'Enabled', value: (r) => yn(r.enabled) }, { key: 'psnoModel', label: 'PSNO_Model' }, { key: 'node', label: 'Node' }, { key: 'table1PsNo', label: 'Table-1 PS No' }, { key: 'tag', label: 'Tag' }, { key: 'source', label: 'T1 Source' }, { key: 'modelBore', label: 'T2 Bore' }, { key: 'dtxr', label: 'T2 DTXR' }, { key: 'mandatory', label: 'T2 Mandatory', value: (r) => yn(r.mandatory) }, { key: 'supportMatch', label: 'Support match' }, { key: 'basis', label: 'Basis' }, { key: 'confidence', label: 'Confidence' }, { key: 'warnings', label: 'Warnings' }, { key: 'nodeCoverageNote', label: 'Node Coverage Note' },
+];
+const CANDIDATE_COLUMNS = [
+  { key: 'psnoModel', label: 'PSNO_Model' }, { key: 'candidateNode', label: 'Candidate Node' }, { key: 'table1PsNo', label: 'Table-1 PS No' }, { key: 'tag', label: 'Tag' }, { key: 'nodeIsonote', label: 'ISONOTE' }, { key: 'source', label: 'Source' }, { key: 'nodeLine', label: 'Line No' }, { key: 'pipeSizeRaw', label: 'Pipe Size' }, { key: 'derivedDn', label: 'Derived DN' }, { key: 'psBasis', label: 'PS Basis' }, { key: 'boreBasis', label: 'Bore Basis' }, { key: 'lineBasis', label: 'Line Basis' }, { key: 'supportBasis', label: 'Support Basis' }, { key: 'supportMatch', label: 'Support match' }, { key: 'eligible', label: 'Eligible', value: (r) => yn(r.eligible) }, { key: 'selected', label: 'Selected', value: (r) => yn(r.selected) }, { key: 'score', label: 'Score' }, { key: 'warnings', label: 'Warnings' }, { key: 'reason', label: 'Reason' }, { key: 'nodeCoverageNote', label: 'Node Coverage Note' },
+];
+const COVERAGE_COLUMNS = [
+  { key: 'node', label: 'Node' }, { key: 'table1PsNo', label: 'Table-1 PS No' }, { key: 'tag', label: 'Tag' }, { key: 'source', label: 'Source' }, { key: 'lineNo', label: 'Line No' }, { key: 'pipeSizeRaw', label: 'Pipe Size' }, { key: 'derivedDn', label: 'Derived DN' }, { key: 'isonote', label: 'ISONOTE' }, { key: 'mandatory', label: 'Mandatory' }, { key: 'masterKeywords', label: 'Master Keywords' }, { key: 'mappedPsnoModel', label: 'Mapped PSNO_Model' }, { key: 'coveredDtxrKeywords', label: 'Covered DTXR Keywords' }, { key: 'missingMasterKeywords', label: 'Missing Master Keywords' }, { key: 'extraDtxrKeywords', label: 'Extra DTXR Keywords' }, { key: 'coverageStatus', label: 'Coverage Status' }, { key: 'action', label: 'Action' },
+];
+const USER_LOG_COLUMNS = [
+  { key: 'level', label: 'Level' }, { key: 'stage', label: 'Stage' }, { key: 'psnoModel', label: 'PSNO_Model' }, { key: 'node', label: 'Node' }, { key: 'table1PsNo', label: 'Table-1 PS No' }, { key: 'tag', label: 'Tag' }, { key: 'subject', label: 'Subject' }, { key: 'message', label: 'Message' }, { key: 'action', label: 'Action' },
+];
+
+function consolidatedTable1Panel(state) {
+  return `<section class="psmap-card"><div class="psmap-card-head"><b>Consolidated Table-1</b><button class="psmap-btn secondary" data-psmap-action="copyT1">Copy Consolidated T1</button></div><div class="psmap-card-body"><div class="psmap-banner">This is the exact Table-1 reference model passed into the resolver, built from Table-1/1A/1B and simple/rich Table-1C.</div>${table(state.result?.consolidatedTable1Rows || [], CONSOLIDATED_T1_COLUMNS)}</div></section>`;
+}
+function consolidatedTable2Panel(state) {
+  return `<section class="psmap-card"><div class="psmap-card-head"><b>Consolidated Table-2</b><button class="psmap-btn secondary" data-psmap-action="copyT2">Copy Consolidated T2</button></div><div class="psmap-card-body"><div class="psmap-banner">This shows exactly how model Table-2 was parsed before matching. Use Parse Warnings and Raw Columns to identify missed pasted columns.</div>${table(state.result?.consolidatedTable2Rows || [], CONSOLIDATED_T2_COLUMNS)}</div></section>`;
+}
+function validatorPanel(state) { return `<section class="psmap-card"><div class="psmap-card-head"><b>Table 2 Validator</b><button class="psmap-btn secondary" data-psmap-action="copyOutput">Copy CSV</button></div><div class="psmap-card-body">${table(state.result?.rows || [], VALIDATOR_COLUMNS)}</div></section>`; }
+function candidatesPanel(state) { return `<section class="psmap-card"><div class="psmap-card-head"><b>Candidate Matrix</b><button class="psmap-btn secondary" data-psmap-action="copyCandidates">Copy Candidates</button></div><div class="psmap-card-body"><div class="psmap-banner">ISONOTE is propagated from Table-1C by candidate node and is shown for review only; it is not used as a ranking signal.</div>${table(state.result?.candidates || [], CANDIDATE_COLUMNS)}</div></section>`; }
+function coveragePanel(state) { return `<section class="psmap-card"><div class="psmap-card-head"><b>Table 1 Support Coverage</b><button class="psmap-btn secondary" data-psmap-action="copyCoverage">Copy Coverage</button></div><div class="psmap-card-body">${table(state.result?.supportCoverageRows || [], COVERAGE_COLUMNS)}</div></section>`; }
+function logPanel(state, debug = false) { return `<section class="psmap-card"><div class="psmap-card-head"><b>${debug ? 'Debug Log' : 'User Log'}</b><button class="psmap-btn secondary" data-psmap-action="${debug ? 'copyDebug' : 'copyUser'}">Copy</button></div><div class="psmap-card-body">${table(debug ? state.result?.debugLog || [] : state.result?.userLog || [], debug ? [{ key: 'time', label: 'Time' }, { key: 'level', label: 'Level' }, { key: 'code', label: 'Code' }, { key: 'subject', label: 'Subject' }, { key: 'details', label: 'Details', value: (r) => JSON.stringify(r.details || {}) }] : USER_LOG_COLUMNS)}</div></section>`; }
+
+function renderModal(state) {
+  return `<div class="psmap-backdrop" data-psmap-modal><div class="psmap-modal"><div class="psmap-head"><div><h2 class="psmap-title">PS Mapping Utility</h2><p class="psmap-sub">Consolidated Table-1 + Consolidated Table-2 → Resolver → Validator</p></div><button class="psmap-btn secondary" data-psmap-action="close">Close</button></div><div class="psmap-tabs">${tab('source', 'Source Tables', state)}${tab('setup', 'Resolver Setup', state)}${tab('ct1', 'Consolidated Table-1', state)}${tab('ct2', 'Consolidated Table-2', state)}${tab('validator', 'Table 2 Validator', state)}${tab('coverage', 'Table 1 Support Coverage', state)}${tab('candidates', 'Candidate Matrix', state)}${tab('user', 'User Log', state)}${tab('debug', 'Debug Log', state)}</div><div class="psmap-body">${summary(state)}${panel('source', state, sourcePanel(state))}${panel('setup', state, setupPanel(state))}${panel('ct1', state, consolidatedTable1Panel(state))}${panel('ct2', state, consolidatedTable2Panel(state))}${panel('validator', state, validatorPanel(state))}${panel('coverage', state, coveragePanel(state))}${panel('candidates', state, candidatesPanel(state))}${panel('user', state, logPanel(state, false))}${panel('debug', state, logPanel(state, true))}</div></div></div>`;
 }
 
-function tab(id, label) {
-  return `<button class="psmap-tab ${state.activeTab === id ? 'active' : ''}" data-psmap-tab="${id}">${h(label)}</button>`;
-}
-
-function panel(id, html) {
-  return `<section class="psmap-panel ${state.activeTab === id ? 'active' : ''}" data-psmap-panel="${id}">${html}</section>`;
-}
-
-function sourcePanel() {
-  return `<section class="psmap-card"><div class="psmap-card-head"><b>Source Tables</b><span>PS Mapping Utility</span></div><div class="psmap-card-body">
-    <div class="psmap-banner"><b>Table-1C can be simple or rich.</b> Table-2 is now also consolidated: headers such as PS NO / Bore / pipe / DTXR / Mandatory are resolved and shown before matching.</div>
-    <div class="psmap-grid">
-      <div class="psmap-field"><label>Table-1 — PS No / Node Optional when rich Table-1C is supplied</label><textarea data-psmap-source="table1">${h(state.source.table1)}</textarea></div>
-      <div class="psmap-field"><label>Table-2 — PS NO / Bore / pipe / DTXR / Mandatory</label><textarea data-psmap-source="table2">${h(state.source.table2)}</textarea></div>
-      <div class="psmap-field"><label>Table-1A — Node / Dia Optional</label><textarea data-psmap-source="table1A">${h(state.source.table1A)}</textarea></div>
-      <div class="psmap-field"><label>Table-1B — Node / Line No Optional</label><textarea data-psmap-source="table1B">${h(state.source.table1B)}</textarea></div>
-      <div class="psmap-field wide"><label>Table-1C — Support Master / ISONOTE Master</label><textarea data-psmap-source="table1C">${h(state.source.table1C)}</textarea></div>
-      <div class="psmap-field wide"><label>Table-1D — Master Keyword Searcher Optional</label><textarea data-psmap-source="table1D">${h(state.source.table1D)}</textarea></div>
-    </div>
-  </div></section>`;
-}
-
-function setupPanel() {
-  return `<section class="psmap-card"><div class="psmap-card-head"><b>Resolver Setup</b></div><div class="psmap-card-body"><div class="psmap-grid">
-    <div class="psmap-field"><label>Bore Mode</label><select data-psmap-option="boreMode"><option value="prefer" ${state.options.boreMode === 'prefer' ? 'selected' : ''}>Prefer</option><option value="strict" ${state.options.boreMode === 'strict' ? 'selected' : ''}>Strict</option><option value="ignore" ${state.options.boreMode === 'ignore' ? 'selected' : ''}>Ignore</option></select></div>
-    <div class="psmap-field"><label>Support Mode</label><select data-psmap-option="supportMode"><option value="prefer" ${state.options.supportMode === 'prefer' ? 'selected' : ''}>Prefer</option><option value="strict" ${state.options.supportMode === 'strict' ? 'selected' : ''}>Strict</option><option value="ignore" ${state.options.supportMode === 'ignore' ? 'selected' : ''}>Ignore</option></select></div>
-    <div class="psmap-field"><label>Line Mode</label><select data-psmap-option="lineMode"><option value="prefer" ${state.options.lineMode === 'prefer' ? 'selected' : ''}>Prefer</option><option value="strict" ${state.options.lineMode === 'strict' ? 'selected' : ''}>Strict</option><option value="ignore" ${state.options.lineMode === 'ignore' ? 'selected' : ''}>Ignore</option></select></div>
-    <div class="psmap-field"><label>OD / raw dia tolerance mm</label><input data-psmap-option="odToleranceMm" value="${h(state.options.odToleranceMm)}"></div>
-    <div class="psmap-banner"><b>Rules:</b> both Consolidated Table-1 and Consolidated Table-2 are built before matching. Tag, ISONOTE, raw DTXR, and raw source columns are diagnostic/audit fields, not ranking signals.</div>
-  </div></div></section>`;
-}
-
-function consolidatedTable1Panel() {
-  const rows = state.result?.consolidatedTable1Rows || [];
-  const body = rows.length
-    ? rows.map((row) => `<tr><td>${h(row.id)}</td><td>${h(row.source)}</td><td>${h(row.sourceRow)}</td><td>${h(row.rawPsNo || row.table1PsNo)}</td><td>${h(row.basePs)}</td><td>${h(row.tag)}</td><td>${h(row.node)}</td><td>${h(row.nodeLine)}</td><td>${h(row.pipeSizeRaw)}</td><td>${h(row.nps)}</td><td>${h(row.derivedDn)}</td><td>${h(row.nodeDia)}</td><td>${h(row.boreSource)}</td><td>${yn(row.mandatory)}</td><td><pre>${h(row.nodeIsonote)}</pre></td><td>${h(displayList(row.supportTypesAvailable))}</td></tr>`).join('')
-    : '<tr><td colspan="16">Run Mapping to build the Consolidated Table-1.</td></tr>';
-  return `<section class="psmap-card"><div class="psmap-card-head"><b>Consolidated Table-1</b><button class="psmap-btn secondary" data-psmap-action="copy-consolidated-t1">Copy Consolidated T1</button></div><div class="psmap-card-body">${summaryHtml(state.result)}<div class="psmap-banner">This is the exact consolidated reference table passed to the resolver.</div><div class="psmap-tablewrap"><table class="psmap-table"><thead><tr><th>ID</th><th>Source</th><th>Source Row</th><th>Table-1 PS No</th><th>Base PS</th><th>Tag</th><th>Node</th><th>Line No</th><th>Pipe Size</th><th>NPS</th><th>Derived DN</th><th>Dia/OD</th><th>Bore Source</th><th>Mandatory</th><th>ISONOTE</th><th>Master Keywords</th></tr></thead><tbody>${body}</tbody></table></div></div></section>`;
-}
-
-function consolidatedTable2Panel() {
-  const rows = state.result?.consolidatedTable2Rows || [];
-  const body = rows.length
-    ? rows.map((row) => `<tr><td>${h(row.id)}</td><td>${h(row.sourceRow)}</td><td>${h(row.psnoModel)}</td><td>${h(row.basePs)}</td><td>${h(row.modelTag)}</td><td>${row.isDatum ? 'YES' : ''}</td><td>${h(row.boreRaw)}</td><td>${h(row.bore)}</td><td class="${statusClass(row.boreStatus)}">${h(row.boreStatus)}</td><td>${h(row.pipe)}</td><td>${h(row.pipeKey)}</td><td>${h(row.lineFamily)}</td><td><pre>${h(row.dtxr)}</pre></td><td>${h(displayList(row.supportTypesRequested))}</td><td>${yn(row.mandatory)}</td><td>${h(displayList(row.parseWarnings))}</td><td><pre>${h(JSON.stringify(row.rawColumns || {}, null, 2))}</pre></td></tr>`).join('')
-    : '<tr><td colspan="17">Run Mapping to build the Consolidated Table-2.</td></tr>';
-  return `<section class="psmap-card"><div class="psmap-card-head"><b>Consolidated Table-2</b><button class="psmap-btn secondary" data-psmap-action="copy-consolidated-t2">Copy Consolidated T2</button></div><div class="psmap-card-body">${summaryHtml(state.result)}<div class="psmap-banner">Resolved model table. This shows exactly how PS NO, Bore, pipe, DTXR, Mandatory, support keywords, and raw pasted columns were read before matching.</div><div class="psmap-tablewrap"><table class="psmap-table"><thead><tr><th>ID</th><th>Source Row</th><th>PSNO_Model</th><th>Base PS</th><th>Model Tag</th><th>Datum</th><th>Bore Raw</th><th>Bore</th><th>Bore Status</th><th>Pipe</th><th>Pipe Key</th><th>Line Family</th><th>DTXR</th><th>DTXR Keywords</th><th>Mandatory</th><th>Parse Warnings</th><th>Raw Columns</th></tr></thead><tbody>${body}</tbody></table></div></div></section>`;
-}
-
-function outputPanel() {
-  const rows = state.result?.rows || [];
-  const body = rows.length
-    ? rows.map((row) => `<tr><td>${row.enabled ? 'YES' : 'NO'}</td><td>${h(row.psnoModel)}</td><td>${h(row.node)}</td><td>${h(row.table1PsNo)}</td><td>${h(row.tag)}</td><td>${h(row.source)}</td><td>${h(row.nodeLine)}</td><td>${h(row.pipeSizeRaw)}</td><td>${h(row.derivedDn)}</td><td>${h(row.modelBore)}</td><td><pre>${h(row.dtxr)}</pre></td><td>${yn(row.mandatory)}</td><td>${h(row.supportMatch)}</td><td>${h(row.nodeCoverageNote)}</td><td>${h(row.basis)}</td><td class="${statusClass(row.confidence)}">${h(row.confidence)}</td><td>${h((row.warnings || []).join('; '))}</td></tr>`).join('')
-    : '<tr><td colspan="17">Run Mapping to populate Table 2 Validator.</td></tr>';
-  return `<section class="psmap-card"><div class="psmap-card-head"><b>Table 2 Validator</b><button class="psmap-btn secondary" data-psmap-action="copy-csv">Copy CSV</button></div><div class="psmap-card-body">${summaryHtml(state.result)}<div class="psmap-tablewrap"><table class="psmap-table"><thead><tr><th>Enabled</th><th>PSNO_Model</th><th>Node</th><th>Table-1 PS No</th><th>Tag</th><th>Source</th><th>Line No</th><th>Pipe Size</th><th>Derived DN</th><th>T2 Bore</th><th>T2 DTXR</th><th>T2 Mandatory</th><th>Support match</th><th>Node Coverage Note</th><th>Basis</th><th>Confidence</th><th>Warnings</th></tr></thead><tbody>${body}</tbody></table></div></div></section>`;
-}
-
-function coveragePanel() {
-  const rows = state.result?.supportCoverageRows || [];
-  const body = rows.length
-    ? rows.map((row) => `<tr><td>${h(row.node)}</td><td>${h(row.table1PsNo)}</td><td>${h(row.tag)}</td><td>${h(row.source)}</td><td>${h(row.mandatory)}</td><td>${h(row.dia)}</td><td>${h(row.pipeSizeRaw)}</td><td>${h(row.derivedDn)}</td><td>${h(row.lineNo)}</td><td><pre>${h(row.isonote)}</pre></td><td>${h(displayList(row.masterKeywords))}</td><td>${h(displayList(row.mappedPsnos))}</td><td>${h(displayList(row.coveredDtxrKeywords))}</td><td>${h(displayList(row.missingMasterKeywords))}</td><td>${h(displayList(row.extraDtxrKeywords))}</td><td class="${statusClass(row.coverageStatus)}">${h(row.coverageStatus)}</td><td>${h(row.action)}</td></tr>`).join('')
-    : '<tr><td colspan="17">Run Mapping to populate Table 1 Support Coverage.</td></tr>';
-  return `<section class="psmap-card"><div class="psmap-card-head"><b>Table 1 Support Coverage</b><span>${rows.length} node(s)</span></div><div class="psmap-card-body"><div class="psmap-banner">Node-level audit: validates whether support keywords found in the consolidated Table-1 / Table-1C ISONOTE are covered by mapped Table-2 DTXR rows.</div><div class="psmap-tablewrap"><table class="psmap-table"><thead><tr><th>Node</th><th>Table-1 PS No</th><th>Tag</th><th>Source</th><th>Mandatory</th><th>Dia</th><th>Pipe Size</th><th>Derived DN</th><th>Line No</th><th>ISONOTE</th><th>Master Keywords</th><th>Mapped PSNO_Model</th><th>Covered DTXR Keywords</th><th>Missing Master Keywords</th><th>Extra DTXR Keywords</th><th>Coverage Status</th><th>Action</th></tr></thead><tbody>${body}</tbody></table></div></div></section>`;
-}
-
-function candidatePanel() {
-  const rows = state.result?.candidates || [];
-  const body = rows.length
-    ? rows.map((row) => `<tr><td>${h(row.psnoModel)}</td><td>${h(row.node)}</td><td>${h(row.table1PsNo)}</td><td>${h(row.tag)}</td><td>${h(row.source)}</td><td>${h(row.nodeLine)}</td><td>${h(row.pipeSizeRaw)}</td><td>${h(row.derivedDn)}</td><td>${yn(row.mandatory)}</td><td><pre>${h(row.nodeIsonote || row.nodeIsonoteRaw || '')}</pre></td><td>${h(row.psBasis)}</td><td>${h(row.boreBasis)}</td><td>${h(row.supportBasis)}</td><td>${h(row.supportMatch)}</td><td>${h(row.lineBasis)}</td><td>${row.eligible ? 'YES' : 'NO'}</td><td>${row.selected ? 'YES' : ''}</td><td>${h(row.nodeCoverageNote || '')}</td><td>${h(row.rejectReason || (row.selected ? 'Selected' : 'Lower ranked'))}</td></tr>`).join('')
-    : '<tr><td colspan="19">Run Mapping to populate candidates.</td></tr>';
-  return `<section class="psmap-card"><div class="psmap-card-head"><b>Candidate Matrix</b><span>${rows.length} candidate(s)</span></div><div class="psmap-card-body"><div class="psmap-banner">Candidates are generated from Consolidated Table-1 × Consolidated Table-2. Tag and ISONOTE are propagated for review only and are not ranking signals.</div><div class="psmap-tablewrap"><table class="psmap-table"><thead><tr><th>PSNO_Model</th><th>Candidate Node</th><th>Table-1 PS No</th><th>Tag</th><th>Source</th><th>Line No</th><th>Pipe Size</th><th>Derived DN</th><th>Mandatory</th><th>ISONOTE</th><th>PS Basis</th><th>Bore Basis</th><th>Support Basis</th><th>Support match</th><th>Line Basis</th><th>Eligible</th><th>Selected</th><th>Node Coverage Note</th><th>Reason</th></tr></thead><tbody>${body}</tbody></table></div></div></section>`;
-}
-
-function userLogPanel() {
-  const rows = state.result?.userLog || [];
-  const body = rows.length
-    ? rows.map((row) => `<tr><td class="${statusClass(row.level)}">${h(row.level)}</td><td>${h(row.stage)}</td><td>${h(row.psnoModel || '')}</td><td>${h(row.node || '')}</td><td>${h(row.table1PsNo || '')}</td><td>${h(row.tag || '')}</td><td>${h(row.subject)}</td><td>${h(row.message)}</td><td>${h(row.action || '')}</td></tr>`).join('')
-    : '<tr><td colspan="9">Run Mapping to populate user log.</td></tr>';
-  return `<section class="psmap-card"><div class="psmap-card-head"><b>User Log</b><button class="psmap-btn secondary" data-psmap-action="copy-user-log">Copy User Log</button></div><div class="psmap-card-body"><div class="psmap-tablewrap"><table class="psmap-table"><thead><tr><th>Level</th><th>Stage</th><th>PSNO_Model</th><th>Node</th><th>Table-1 PS No</th><th>Tag</th><th>Subject</th><th>Message</th><th>Action</th></tr></thead><tbody>${body}</tbody></table></div></div></section>`;
-}
-
-function debugLogPanel() {
-  const rows = state.result?.debugLog || [];
-  const body = rows.length
-    ? rows.slice(0, 500).map((row) => `<tr><td>${h(row.time)}</td><td>${h(row.level)}</td><td>${h(row.code)}</td><td>${h(row.subject)}</td><td><pre>${h(JSON.stringify(row.details, null, 2))}</pre></td></tr>`).join('')
-    : '<tr><td colspan="5">Run Mapping to populate debug log.</td></tr>';
-  return `<section class="psmap-card"><div class="psmap-card-head"><b>Debug Log</b><button class="psmap-btn secondary" data-psmap-action="copy-debug-json">Copy Debug JSON</button></div><div class="psmap-card-body"><div class="psmap-tablewrap"><table class="psmap-table"><thead><tr><th>Time</th><th>Level</th><th>Code</th><th>Subject</th><th>Details</th></tr></thead><tbody>${body}</tbody></table></div></div></section>`;
-}
-
-function renderModal() {
+export function installPsMappingUtilityTile(container, ctx = {}) {
   installStyle();
-  const existing = document.querySelector('[data-psmap-modal-bg]');
-  if (existing) existing.remove();
-  const bg = document.createElement('div');
-  bg.className = 'psmap-modal-bg';
-  bg.dataset.psmapModalBg = '1';
-  bg.innerHTML = `<div class="psmap-modal"><div class="psmap-head"><div><h2>PS Mapping Utility</h2><p>Build consolidated Table-1 and consolidated Table-2 first, then map model PS numbers to nodes with bore, line, support, tag, ISONOTE, and mandatory audit visibility.</p></div><button class="psmap-btn secondary" data-psmap-action="close">Close</button></div><div class="psmap-toolbar"><button class="psmap-btn secondary" data-psmap-action="load-sample">Load Sample</button><button class="psmap-btn secondary" data-psmap-action="clear">Clear</button><button class="psmap-btn" data-psmap-action="run">Run Mapping</button><button class="psmap-btn secondary" data-psmap-action="copy-csv">Copy Validator CSV</button></div><div class="psmap-tabs">${tab('source', 'Source Tables')}${tab('setup', 'Resolver Setup')}${tab('consolidated1', 'Consolidated Table-1')}${tab('consolidated2', 'Consolidated Table-2')}${tab('output', 'Table 2 Validator')}${tab('coverage', 'Table 1 Support Coverage')}${tab('candidates', 'Candidate Matrix')}${tab('userlog', 'User Log')}${tab('debuglog', 'Debug Log')}</div><div class="psmap-body">${panel('source', sourcePanel())}${panel('setup', setupPanel())}${panel('consolidated1', consolidatedTable1Panel())}${panel('consolidated2', consolidatedTable2Panel())}${panel('output', outputPanel())}${panel('coverage', coveragePanel())}${panel('candidates', candidatePanel())}${panel('userlog', userLogPanel())}${panel('debuglog', debugLogPanel())}</div></div>`;
-  document.body.appendChild(bg);
-  bindModal(bg);
-}
+  const root = document.createElement('div');
+  root.innerHTML = `<button type="button" class="psmap-tile" data-psmap-action="open"><div><div class="psmap-tile-icon">🧭</div><div><b>PS Mapping Utility</b></div><div class="psmap-sub">Support PS → Model PS</div></div></button>`;
+  container.appendChild(root);
+  let state = makeState();
 
-function readSources(root) {
-  root.querySelectorAll('[data-psmap-source]').forEach((el) => { state.source[el.dataset.psmapSource] = el.value; });
-  root.querySelectorAll('[data-psmap-option]').forEach((el) => {
-    const key = el.dataset.psmapOption;
-    state.options[key] = key === 'odToleranceMm' ? Number(el.value) : el.value;
-  });
-}
+  function refresh() {
+    const modal = document.querySelector('[data-psmap-modal]');
+    if (modal) modal.outerHTML = renderModal(state);
+  }
+  function run() {
+    state.result = runPsMappingResolver({
+      table1PsNodeText: state.source.table1Text,
+      table1aNodeDiaText: state.source.table1AText,
+      table1bNodeLineText: state.source.table1BText,
+      table1cNodeIsonoteText: state.source.table1CText,
+      table1dKeywordText: state.source.table1DText,
+      table2ModelText: state.source.table2Text,
+      options: state.setup,
+    });
+    state.activeTab = 'ct2';
+    refresh();
+    ctx.showToast?.(`PS Mapping complete: ${state.result.summary.mapped} mapped, ${state.result.summary.noMatch} no match.`, state.result.summary.noMatch ? 'warning' : 'success');
+  }
+  function copy(text) {
+    navigator.clipboard?.writeText(text).then(() => ctx.showToast?.('Copied.', 'success')).catch((error) => ctx.showToast?.(`Copy failed: ${error.message || error}`, 'error'));
+  }
 
-function runMapping(root) {
-  readSources(root);
-  state.result = runPsMappingResolver({
-    table1PsNodeText: state.source.table1,
-    table1aNodeDiaText: state.source.table1A,
-    table1bNodeLineText: state.source.table1B,
-    table1cNodeIsonoteText: state.source.table1C,
-    table1dKeywordText: state.source.table1D,
-    table2ModelText: state.source.table2,
-    options: state.options,
-  });
-  state.activeTab = 'consolidated2';
-  renderModal();
-  toast(
-    `PS Mapping completed: ${state.result.summary.table1Rows} consolidated T1 row(s), ${state.result.summary.table2Rows} consolidated T2 row(s), ${state.result.summary.mapped} mapped, ${state.result.summary.noMatch} no-match.`,
-    state.result.summary.noMatch || state.result.summary.supportCoverageWarnings ? 'warning' : 'success'
-  );
-}
-
-function userLogToTsv(rows = []) {
-  const header = ['Level', 'Stage', 'PSNO_Model', 'Node', 'Table-1 PS No', 'Tag', 'Subject', 'Message', 'Action'];
-  return [header, ...rows.map((r) => [r.level, r.stage, r.psnoModel || '', r.node || '', r.table1PsNo || '', r.tag || '', r.subject, r.message, r.action || ''])]
-    .map((line) => line.map((v) => String(v ?? '').replace(/\t/g, ' ')).join('\t'))
-    .join('\n');
-}
-
-function consolidatedTable1ToTsv(rows = []) {
-  const keys = ['id', 'source', 'sourceRow', 'rawPsNo', 'basePs', 'tag', 'node', 'nodeLine', 'pipeSizeRaw', 'nps', 'derivedDn', 'nodeDia', 'boreSource', 'mandatory', 'nodeIsonote', 'supportTypesAvailable'];
-  return tableToTsv(rows, keys);
-}
-
-function consolidatedTable2ToTsv(rows = []) {
-  const keys = ['id', 'sourceRow', 'psnoModel', 'basePs', 'modelTag', 'isDatum', 'boreRaw', 'bore', 'boreStatus', 'pipe', 'pipeKey', 'lineFamily', 'dtxr', 'supportTypesRequested', 'mandatory', 'mandatoryRaw', 'parseWarnings'];
-  return tableToTsv(rows, keys);
-}
-
-function bindModal(root) {
-  root.addEventListener('click', async (event) => {
-    const tabBtn = event.target.closest('[data-psmap-tab]');
-    if (tabBtn) { readSources(root); state.activeTab = tabBtn.dataset.psmapTab; renderModal(); return; }
-    const action = event.target.closest('[data-psmap-action]')?.dataset.psmapAction;
+  function onClick(event) {
+    const action = event.target?.closest?.('[data-psmap-action]')?.dataset?.psmapAction;
+    const tabBtn = event.target?.closest?.('[data-psmap-tab]');
+    if (tabBtn) { state.activeTab = tabBtn.dataset.psmapTab; refresh(); return; }
     if (!action) return;
-    if (action === 'close') { root.remove(); return; }
-    if (action === 'load-sample') { state.source = defaultState().source; state.options = defaultState().options; state.result = null; state.activeTab = 'source'; renderModal(); return; }
-    if (action === 'clear') { state.source = { table1: '', table1A: '', table1B: '', table1C: '', table1D: PS_MAPPING_SAMPLE_TABLE1D, table2: '' }; state.result = null; state.activeTab = 'source'; renderModal(); return; }
-    if (action === 'run') { runMapping(root); return; }
-    if (action === 'copy-csv') { await copyText(rowsToCsv(state.result?.rows || [])); return; }
-    if (action === 'copy-consolidated-t1') { await copyText(consolidatedTable1ToTsv(state.result?.consolidatedTable1Rows || [])); return; }
-    if (action === 'copy-consolidated-t2') { await copyText(consolidatedTable2ToTsv(state.result?.consolidatedTable2Rows || [])); return; }
-    if (action === 'copy-user-log') { await copyText(userLogToTsv(state.result?.userLog || [])); return; }
-    if (action === 'copy-debug-json') { await copyText(JSON.stringify(state.result?.debugLog || [], null, 2)); }
-  });
-  root.addEventListener('input', (event) => {
-    const source = event.target.closest('[data-psmap-source]');
-    if (source) state.source[source.dataset.psmapSource] = source.value;
-    const option = event.target.closest('[data-psmap-option]');
-    if (option) state.options[option.dataset.psmapOption] = option.dataset.psmapOption === 'odToleranceMm' ? Number(option.value) : option.value;
-  });
-  root.addEventListener('change', (event) => {
-    const option = event.target.closest('[data-psmap-option]');
-    if (option) state.options[option.dataset.psmapOption] = option.dataset.psmapOption === 'odToleranceMm' ? Number(option.value) : option.value;
-  });
-}
-
-export function openPsMappingUtility(ctx = null) {
-  ctxRef = ctx;
-  renderModal();
-}
-
-export function installPsMappingUtilityTile(container, ctx = null) {
-  installStyle();
-  ctxRef = ctx;
-  const root = container.querySelector('.psnm-root') || container;
-  if (root.querySelector('[data-psmap-launch]')) return;
-  const tile = document.createElement('button');
-  tile.type = 'button';
-  tile.className = 'psnm-launch-tile';
-  tile.dataset.psmapLaunch = '1';
-  tile.innerHTML = `<div><div class="psnm-tile-icon">🔗</div><div><b>PS Mapping Utility</b></div><div style="font-size:12px;color:#9fb2c7;margin-top:6px;">Consolidated T1 + T2 → Node validation.</div></div>`;
-  tile.addEventListener('click', () => openPsMappingUtility(ctx));
-  const firstTile = root.querySelector('.psnm-launch-tile');
-  if (firstTile && firstTile.parentElement) {
-    let row = firstTile.parentElement.querySelector(':scope > .psmap-tile-row');
-    if (!row) {
-      row = document.createElement('div');
-      row.className = 'psmap-tile-row';
-      firstTile.parentElement.insertBefore(row, firstTile);
-      row.appendChild(firstTile);
-    }
-    row.appendChild(tile);
-  } else {
-    root.appendChild(tile);
+    if (action === 'open') { document.body.insertAdjacentHTML('beforeend', renderModal(state)); return; }
+    if (action === 'close') { document.querySelector('[data-psmap-modal]')?.remove(); return; }
+    if (action === 'loadSample') { state = makeState(); refresh(); return; }
+    if (action === 'run') { run(); return; }
+    if (action === 'copyOutput') copy(rowsToCsv(state.result?.rows || []));
+    if (action === 'copyT1') copy(tableToTsv(state.result?.consolidatedTable1Rows || [], CONSOLIDATED_T1_COLUMNS.map((c) => c.key)));
+    if (action === 'copyT2') copy(tableToTsv(state.result?.consolidatedTable2Rows || [], CONSOLIDATED_T2_COLUMNS.map((c) => c.key)));
+    if (action === 'copyCandidates') copy(tableToTsv(state.result?.candidates || [], CANDIDATE_COLUMNS.map((c) => c.key)));
+    if (action === 'copyCoverage') copy(tableToTsv(state.result?.supportCoverageRows || [], COVERAGE_COLUMNS.map((c) => c.key)));
+    if (action === 'copyUser') copy(tableToTsv(state.result?.userLog || [], USER_LOG_COLUMNS.map((c) => c.key)));
+    if (action === 'copyDebug') copy(tableToTsv(state.result?.debugLog || [], ['time', 'level', 'code', 'subject', 'details']));
   }
+  function onInput(event) {
+    const source = event.target?.closest?.('[data-psmap-source]');
+    if (source) { state.source[source.dataset.psmapSource] = source.value; return; }
+    const setup = event.target?.closest?.('[data-psmap-setup]');
+    if (setup) state.setup[setup.dataset.psmapSetup] = setup.value;
+  }
+  container.addEventListener('click', onClick);
+  document.addEventListener('input', onInput);
+  document.addEventListener('change', onInput);
+  return () => {
+    container.removeEventListener('click', onClick);
+    document.removeEventListener('input', onInput);
+    document.removeEventListener('change', onInput);
+    root.remove();
+  };
 }
