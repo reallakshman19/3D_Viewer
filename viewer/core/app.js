@@ -38,7 +38,7 @@ async function loadPsnmUtilityRenderer() {
     import('../tabs/psnm-utility/psnm-phase4c-hardening.js?v=20260609-phase4c-1'),
     import('../tabs/psnm-utility/psnm-phase4d-persistence.js?v=20260609-phase4d-1'),
   ]);
-  return import('../tabs/psnm-utility-tab.js?v=20260611-psnm-22-psmap-line-diagnostics-1')
+  return import('../tabs/psnm-utility-tab.js?v=20260611-psnm-23-psmap-visible-launcher-1')
     .then((module) => pickRenderer(module, 'renderPSNM_UtilityTab', 'psnm-utility'));
 }
 
@@ -69,194 +69,138 @@ let devDebugDestroy = null;
 let appDestroy = null;
 let activeRenderToken = 0;
 
-function h(value) {
-  return String(value ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+async function loadVisibilityRules() {
+  if (!visibilityRulesPromise) {
+    visibilityRulesPromise = fetch(TAB_VISIBILITY_URL, { cache: 'no-store' })
+      .then((response) => {
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        return response.json();
+      })
+      .then((json) => {
+        const rules = json && typeof json === 'object' ? json : {};
+        visibilityRules = rules;
+        return rules;
+      })
+      .catch((error) => {
+        console.warn('[app] tab visibility config unavailable; showing all tabs', error);
+        visibilityRules = {};
+        return visibilityRules;
+      });
+  }
+  return visibilityRulesPromise;
 }
 
 function normalizeTabId(tabId) {
   return TAB_ID_ALIASES.get(String(tabId || '').trim()) || String(tabId || '').trim();
 }
 
-async function loadTabVisibilityRules() {
-  if (visibilityRules) return visibilityRules;
-  if (visibilityRulesPromise) return visibilityRulesPromise;
-  visibilityRulesPromise = fetch(TAB_VISIBILITY_URL, { cache: 'no-store' })
-    .then((res) => (res.ok ? res.json() : { tabs: {} }))
-    .then((json) => {
-      visibilityRules = json || { tabs: {} };
-      return visibilityRules;
-    })
-    .catch(() => {
-      visibilityRules = { tabs: {} };
-      return visibilityRules;
-    });
-  return visibilityRulesPromise;
-}
-
-function isTabVisible(tab) {
-  const rule = visibilityRules?.tabs?.[tab.id];
-  return rule?.visible !== false;
-}
-
 function visibleTabs() {
-  return TABS.filter(isTabVisible);
+  const hidden = new Set((visibilityRules?.hiddenTabs || []).map(normalizeTabId));
+  return TABS.filter((tab) => !hidden.has(tab.id));
 }
 
-function loadTabRenderer(tab) {
-  if (!tab?.id || typeof tab.load !== 'function') {
-    return Promise.reject(new Error(`Invalid tab definition: ${tab?.id || '<missing>'}`));
-  }
+function getDefaultTabId() {
+  const tabs = visibleTabs();
+  return tabs[0]?.id || 'viewer3d';
+}
+
+async function loadRenderer(tab) {
   if (!tabRendererCache.has(tab.id)) {
-    tabRendererCache.set(tab.id, Promise.resolve().then(() => tab.load()));
+    tabRendererCache.set(tab.id, tab.load());
   }
   return tabRendererCache.get(tab.id);
 }
 
-function cleanupActiveTab() {
-  if (typeof activeTabDestroy !== 'function') return;
-  try {
-    activeTabDestroy();
-  } catch (error) {
-    console.warn('[app] active tab cleanup failed', error);
-  } finally {
-    activeTabDestroy = null;
-  }
-}
-
-function renderTabLoading(main, tab) {
-  main.innerHTML = `
-    <section class="tab-load-state" role="status" aria-live="polite">
-      <h2>Loading ${h(tab?.label || 'tab')}...</h2>
-      <p>Please wait while this panel is prepared.</p>
-    </section>
-  `;
-}
-
-function renderTabError(main, tab, error) {
-  const message = error?.message || String(error || 'Unknown error');
-  main.innerHTML = `
-    <section class="tab-error-state" role="alert">
-      <h2>${h(tab?.label || 'Tab')} failed to open</h2>
-      <p>The rest of the application is still available. Open another tab or retry this one.</p>
-      <pre>${h(message)}</pre>
-      <div class="tab-error-state__actions">
-        <button type="button" data-tab-error-action="retry">Retry</button>
-        <button type="button" data-tab-error-action="viewer3d">Open 3D Viewer</button>
-      </div>
-    </section>
-  `;
-  main.querySelector('[data-tab-error-action="retry"]')?.addEventListener('click', () => renderActiveTab(appShell));
-  main.querySelector('[data-tab-error-action="viewer3d"]')?.addEventListener('click', () => setActiveTab('viewer3d'));
-}
-
-function renderTabBar(shellRefs = appShell) {
-  if (!shellRefs?.nav) return;
+function renderShell() {
   const tabs = visibleTabs();
-  shellRefs.nav.innerHTML = tabs.map((tab) => `<button type="button" class="tab-btn" data-tab="${h(tab.id)}">${h(tab.label)}</button>`).join('');
-}
-
-function syncActiveTabButton(shellRefs = appShell) {
-  if (!shellRefs?.nav) return;
-  const active = normalizeTabId(state.activeTab) || visibleTabs()[0]?.id || TABS[0]?.id;
-  shellRefs.nav.querySelectorAll('[data-tab]').forEach((button) => {
-    button.classList.toggle('active', normalizeTabId(button.dataset.tab) === active);
+  document.body.innerHTML = `
+    <div class="app-shell">
+      <header class="app-header">
+        <div class="brand-block">
+          <div class="brand-title">PCF / GLB Viewer</div>
+          <div class="brand-subtitle">3D review, model converters and support utilities</div>
+        </div>
+        <nav class="app-tabs" aria-label="Application tabs">
+          ${tabs.map((tab) => `<button type="button" class="app-tab" data-tab-id="${tab.id}">${tab.label}</button>`).join('')}
+        </nav>
+      </header>
+      <main id="app-main" class="app-main" tabindex="-1"></main>
+    </div>
+  `;
+  appShell = {
+    main: document.getElementById('app-main'),
+    tabButtons: [...document.querySelectorAll('[data-tab-id]')],
+  };
+  appShell.tabButtons.forEach((button) => {
+    button.addEventListener('click', () => setActiveTab(button.dataset.tabId));
   });
 }
 
-export async function renderActiveTab(shellRefs = appShell) {
-  if (!shellRefs?.main) return;
-  const renderToken = ++activeRenderToken;
-  await loadTabVisibilityRules();
-  if (renderToken !== activeRenderToken) return;
+function syncActiveTabButton(tabId) {
+  appShell?.tabButtons?.forEach((button) => {
+    button.classList.toggle('active', button.dataset.tabId === tabId);
+  });
+}
 
+async function renderActiveTab(tabId) {
+  const normalized = normalizeTabId(tabId) || getDefaultTabId();
   const tabs = visibleTabs();
-  let activeId = normalizeTabId(state.activeTab);
-  if (!tabs.some((tab) => tab.id === activeId)) {
-    activeId = tabs[0]?.id || TABS[0].id;
-    // Do not call setActiveTab() while already rendering; that would emit
-    // TAB_CHANGED and can re-enter renderActiveTab during initial startup.
-    state.activeTab = activeId;
-  }
+  const tab = tabs.find((item) => item.id === normalized) || tabs[0];
+  if (!tab || !appShell?.main) return;
 
-  const tab = tabs.find((item) => item.id === activeId) || tabs[0] || TABS[0];
-  syncActiveTabButton(shellRefs);
-  cleanupActiveTab();
-  renderTabLoading(shellRefs.main, tab);
+  const token = ++activeRenderToken;
+  syncActiveTabButton(tab.id);
+  appShell.main.innerHTML = '<section class="loading-panel">Loading...</section>';
+
+  if (typeof activeTabDestroy === 'function') {
+    try { activeTabDestroy(); } catch (error) { console.warn('[app] previous tab cleanup failed', error); }
+  }
+  activeTabDestroy = null;
 
   try {
-    const renderer = await loadTabRenderer(tab);
-    if (renderToken !== activeRenderToken) return;
-    shellRefs.main.innerHTML = '';
-    const maybeDestroy = await renderer(shellRefs.main, { emit, setActiveTab, activeTab: tab.id });
-    if (renderToken !== activeRenderToken) {
-      if (typeof maybeDestroy === 'function') {
-        try { maybeDestroy(); } catch (error) { console.warn('[app] stale tab cleanup failed', error); }
-      }
-      return;
-    }
-    if (typeof maybeDestroy === 'function') activeTabDestroy = maybeDestroy;
-    emit(RuntimeEvents.TAB_RENDERED, { tabId: tab.id });
+    const renderer = await loadRenderer(tab);
+    if (token !== activeRenderToken) return;
+    appShell.main.innerHTML = '';
+    const maybeDestroy = renderer(appShell.main, { state, emit, RuntimeEvents, showToast });
+    activeTabDestroy = typeof maybeDestroy === 'function' ? maybeDestroy : null;
   } catch (error) {
-    if (renderToken !== activeRenderToken) return;
-    console.error(`[app] Failed to render tab ${tab.id}`, error);
-    renderTabError(shellRefs.main, tab, error);
-    emit(RuntimeEvents.RENDER_ERROR, { tabId: tab.id, error: error?.message || String(error) });
-  } finally {
-    if (renderToken === activeRenderToken) syncActiveTabButton(shellRefs);
+    console.error(`[app] failed to render tab ${tab.id}`, error);
+    appShell.main.innerHTML = `<section class="error-panel"><h2>Unable to load ${tab.label}</h2><p>${String(error?.message || error)}</p></section>`;
   }
 }
 
-function resolveShellRefs(shell) {
-  if (shell?.main || shell?.nav) return shell;
-  return {
-    nav: document.getElementById('tab-bar'),
-    main: document.getElementById('tab-content'),
-  };
+function showToast(message, type = 'info') {
+  const toast = document.createElement('div');
+  toast.className = `app-toast app-toast-${type}`;
+  toast.textContent = message;
+  document.body.appendChild(toast);
+  requestAnimationFrame(() => toast.classList.add('visible'));
+  setTimeout(() => {
+    toast.classList.remove('visible');
+    setTimeout(() => toast.remove(), 250);
+  }, 3200);
 }
 
-export function mountApp(shell) {
-  appShell = resolveShellRefs(shell);
-  activeRenderToken += 1;
-  cleanupActiveTab();
+export async function init() {
+  await loadVisibilityRules();
   loadStickyState();
-  if (devDebugDestroy) { try { devDebugDestroy(); } catch {} }
-  devDebugDestroy = initDevDebugWindow({ emit });
-  loadTabVisibilityRules().then(() => {
-    renderTabBar(appShell);
-    renderActiveTab(appShell);
-  });
-  if (unsubscribeTabChange) unsubscribeTabChange();
-  unsubscribeTabChange = on(RuntimeEvents.TAB_CHANGED, () => renderActiveTab(appShell));
-  appShell.nav?.removeEventListener('click', onTabClick);
-  appShell.nav?.addEventListener('click', onTabClick);
-  return () => {
-    activeRenderToken += 1;
-    appShell?.nav?.removeEventListener('click', onTabClick);
-    if (unsubscribeTabChange) { unsubscribeTabChange(); unsubscribeTabChange = null; }
-    cleanupActiveTab();
-    if (devDebugDestroy) { try { devDebugDestroy(); } catch {} devDebugDestroy = null; }
-  };
-}
-
-function onTabClick(event) {
-  const button = event.target?.closest?.('[data-tab]');
-  if (!button) return;
-  event.preventDefault();
-  const nextTab = normalizeTabId(button.dataset.tab);
-  if (!nextTab || normalizeTabId(state.activeTab) === nextTab) return;
-  setActiveTab(nextTab);
-}
-
-export async function init(shell) {
-  if (appDestroy) {
-    try { appDestroy(); } catch (error) { console.warn('Previous app mount cleanup failed', error); }
-    appDestroy = null;
+  const current = normalizeTabId(state.activeTab) || getDefaultTabId();
+  if (!visibleTabs().some((tab) => tab.id === current)) {
+    state.activeTab = getDefaultTabId();
+  } else {
+    state.activeTab = current;
   }
-  appDestroy = mountApp(resolveShellRefs(shell));
+  renderShell();
+  unsubscribeTabChange = on(RuntimeEvents.TAB_CHANGED, (tabId) => renderActiveTab(tabId));
+  await renderActiveTab(state.activeTab);
+  initDevDebugWindow({ state, emit, setActiveTab });
+  appDestroy = () => {
+    if (typeof activeTabDestroy === 'function') activeTabDestroy();
+    if (typeof unsubscribeTabChange === 'function') unsubscribeTabChange();
+  };
   return appDestroy;
 }
 
-export async function loadRvmSource() {
-  // Kept for backward compatibility with older tab bootstrap code.
-  return null;
+if (typeof window !== 'undefined') {
+  window.PCFGLBApp = { init, state, setActiveTab };
 }
