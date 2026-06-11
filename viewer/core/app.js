@@ -19,7 +19,7 @@ import '../tabs/psnm-utility/psnm-phase4d-persistence.js?v=20260609-phase4d-1';
 import { emit, on } from './event-bus.js';
 import { initDevDebugWindow, destroyDevDebugWindow } from '../debug/dev-debug-window.js';
 
-const TAB_VISIBILITY_URL = '../config/tab-visibility.json';
+const TAB_VISIBILITY_URL = './config/tab-visibility.json';
 
 const TAB_ID_ALIASES = new Map([
   ['viewer', 'viewer3d'],
