@@ -6,7 +6,7 @@ export async function run(context) {
     throw new Error('Primary PCF input is required for PCF Continuity Check.');
   }
   const pcfText = decodeTextUtf8(primary.bytes);
-  const { analyzePcfTextContinuity } = await import('../../rvm-pcf-extract/RvmPcfContinuityChecker.js');
+  const { analyzePcfTextContinuity } = await import('../../../rvm-pcf-extract/RvmPcfContinuityChecker.js');
   const report = analyzePcfTextContinuity(pcfText, context.options);
   const teeDisconnectCount = (report.teeDisconnections || []).length;
   
