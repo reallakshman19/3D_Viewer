@@ -9,7 +9,7 @@ import { renderInterchangeConfigTab } from '../tabs/interchange-config-tab.js';
 import { renderSupportMappingConfigTab } from '../tabs/support-mapping-config-tab.js';
 import { renderModelConvertersTab } from '../tabs/model-converters-tab.js';
 import { renderAdapterMappingTab } from '../tabs/adapter-mapping-tab.js';
-import { mount as mountRvmJsonPcfExtractTab } from '../tabs/rvm-json-pcf-extract-tab.js';
+import { mount as mountRvmJsonPcfExtractTab } from '../tabs/rvm-json-pcf-extract-tab-workflow-wired.js';
 import { renderUniversalXmlConverterTab } from '../tabs/universal-xml-converter-tab.js';
 import { renderXmlCompareTab } from '../tabs/xml-compare-tab.js';
 import { renderPSNM_UtilityTab } from '../tabs/psnm-utility-tab.js?v=20260610-psnm-15';
