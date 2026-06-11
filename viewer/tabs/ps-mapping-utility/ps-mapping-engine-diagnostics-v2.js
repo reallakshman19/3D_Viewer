@@ -27,6 +27,66 @@ function toFiniteNumber(value, fallback) {
   return Number.isFinite(parsed) ? parsed : fallback;
 }
 
+function numeric(value) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function appendWarning(existing, warning) {
+  const parts = String(existing || '')
+    .split(';')
+    .map((part) => part.trim())
+    .filter(Boolean);
+  if (warning && !parts.includes(warning)) parts.push(warning);
+  return parts.join('; ');
+}
+
+function hasLineConflict(row) {
+  return String(row?.lineBasis || '').toUpperCase() === 'LINE_CONFLICT';
+}
+
+function fixBoreBasis(row) {
+  if (!row || String(row.boreBasis || '').toUpperCase() !== 'BORE_MISSING') return row;
+
+  const modelBore = numeric(row.modelBore ?? row.bore ?? row.t2Bore);
+  const derivedDn = numeric(row.derivedDn ?? row.nodeDerivedDn ?? row.table1DerivedDn);
+
+  if (modelBore == null || derivedDn == null) return row;
+
+  if (Math.abs(modelBore - derivedDn) <= 1e-6) {
+    row.boreBasis = row.pipeSizeRaw ? 'BORE_DN_FROM_NPS' : 'BORE_DN_FROM_OD';
+    row.warnings = String(row.warnings || '')
+      .split(';')
+      .map((part) => part.trim())
+      .filter((part) => part && part !== 'BORE_MISSING')
+      .join('; ');
+    return row;
+  }
+
+  row.boreBasis = 'BORE_CONFLICT';
+  row.warnings = appendWarning(row.warnings, 'BORE_CONFLICT');
+
+  if (hasLineConflict(row)) {
+    row.eligible = false;
+    row.autoSelectable = false;
+    row.reviewRequired = false;
+    row.selected = false;
+    row.finalStatus = 'BASE_PS_FOUND_BUT_CONTEXT_REJECTED';
+    row.confidence = 'LOW';
+    row.confidenceScore = 20;
+    row.warnings = appendWarning(row.warnings, 'BASE_PS_FOUND_BUT_CONTEXT_REJECTED');
+    row.reason = `Rejected: base PS matched, but Table-2 Bore ${modelBore} conflicts with Table-1 derived DN ${derivedDn}, and line family conflicts.`;
+    row.nodeCoverageNote = row.reason;
+  }
+
+  return row;
+}
+
+function normalizeBoreDiagnosticsInRows(rows) {
+  if (!Array.isArray(rows)) return rows;
+  return rows.map((row) => fixBoreBasis(row));
+}
+
 export function normalizePsMappingOptions(options = {}) {
   const merged = { ...DEFAULT_OPTIONS, ...(options || {}) };
 
@@ -63,8 +123,16 @@ function annotateResult(result, options) {
     approxBoreLogic: 'When enabled, allow raw/OD bore tolerance matching using odToleranceMm. Exact DN matching from Table-1C Pipe size or Table-1A Dia-derived DN remains available even when OFF.',
   };
 
-  return {
+  const normalized = {
     ...result,
+    rows: normalizeBoreDiagnosticsInRows(result?.rows),
+    outputRows: normalizeBoreDiagnosticsInRows(result?.outputRows),
+    candidateRows: normalizeBoreDiagnosticsInRows(result?.candidateRows),
+    validatorRows: normalizeBoreDiagnosticsInRows(result?.validatorRows),
+  };
+
+  return {
+    ...normalized,
     optionsUsed: options,
     approxConfig,
     summary: {
