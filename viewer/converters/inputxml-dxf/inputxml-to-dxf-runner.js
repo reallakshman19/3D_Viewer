@@ -20,9 +20,7 @@ function stem(name = 'inputxml') {
 }
 
 function branchLogLine(branch) {
-  const aliases = Array.isArray(branch.aliases) && branch.aliases.length
-    ? ` aliases=${branch.aliases.join('|')}`
-    : '';
+  const aliases = Array.isArray(branch.aliases) && branch.aliases.length ? ` aliases=${branch.aliases.join('|')}` : '';
   return `  - ${branch.id} (${branch.label || branch.id}) components=${branch.componentCount || 0}${aliases}`;
 }
 
@@ -31,9 +29,7 @@ function pushBranchDiscoveryLogs(stdout, branches, selectedBranchIds) {
   if (!branches.length) {
     stdout.push('  - none detected');
   } else {
-    for (const branch of branches) {
-      stdout.push(branchLogLine(branch));
-    }
+    for (const branch of branches) stdout.push(branchLogLine(branch));
   }
 
   if (selectedBranchIds.length) {
@@ -67,9 +63,7 @@ export async function run(ctx = {}) {
     }
 
     setStatus('Projecting selected branches…');
-    const geometry = projectToDxfGeometry(extraction.doc, {
-      selectedBranches: options.selectedBranches || '',
-    });
+    const geometry = projectToDxfGeometry(extraction.doc, { selectedBranches: options.selectedBranches || '' });
 
     setStatus('Writing DXF…');
     const diagnostics = [...(extraction.diagnostics || []), ...(geometry.diagnostics || [])];
@@ -97,6 +91,9 @@ export async function run(ctx = {}) {
     pushBranchDiscoveryLogs(stdout, extraction.branches, geometry.selectedBranchIds || []);
     stdout.push(`Output mode: ${sidecar.outputMode}`);
     stdout.push(`Projection mode: ${sidecar.projectionMode}`);
+    stdout.push(`Pipe body mode: ${sidecar.pipeBodyMode}`);
+    stdout.push(`Pipe bodies: ${sidecar.pipeBodyCount}`);
+    stdout.push(`Support types: ${JSON.stringify(sidecar.supportTypeCounts || {})}`);
     if (sidecar.drawing?.sheet) {
       stdout.push(`Drawing sheet: ${sidecar.drawing.sheet.width} x ${sidecar.drawing.sheet.height}, fitScale=${sidecar.drawing.fitScale}`);
     }
