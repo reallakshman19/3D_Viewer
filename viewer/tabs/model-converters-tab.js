@@ -1,5 +1,6 @@
 import { renderLegacyModelConvertersTab } from './model-converters/legacy-adapter.js';
 import { installInputXmlDxfBranchPicker } from './model-converters/inputxml-dxf-branch-picker.js';
+import { installInputXmlDxfLegacyBridge } from './model-converters/inputxml-dxf-legacy-bridge.js';
 import { installInputXmlDxfSymbolOption } from './model-converters/inputxml-dxf-symbol-option.js';
 import { installXmlCiiPreviewLineKeyRemap } from './model-converters/xml-cii-preview-linekey-remap.js';
 import { installXmlCiiWorkflowUiFixes } from './model-converters/xml-cii-workflow-ui-fixes.js';
@@ -11,6 +12,7 @@ export function renderModelConvertersTab(container, ctx) {
   installXmlCiiRecoveryPatch();
   installXmlCiiPreviewLineKeyRemap();
   installXmlCiiWorkflowUiFixes();
+  installInputXmlDxfLegacyBridge(container);
   installInputXmlDxfBranchPicker(container);
   installInputXmlDxfSymbolOption(container);
   return result;
