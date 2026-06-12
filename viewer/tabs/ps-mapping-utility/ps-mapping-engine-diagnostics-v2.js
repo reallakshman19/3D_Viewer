@@ -4,4 +4,4 @@ export {
   normalizePsMappingOptions,
   runPsMappingResolver,
   rowsToCsv,
-} from './ps-mapping-engine-diagnostics-v8.js?v=20260612-table2-source-id-1';
+} from './ps-mapping-engine-diagnostics-v9.js?v=20260612-tally-rows-1';
