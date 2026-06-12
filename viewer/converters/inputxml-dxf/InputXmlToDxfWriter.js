@@ -33,19 +33,110 @@ function branchSelected(branch, selectedIds) {
   return aliases.some((alias) => selectedIds.includes(alias));
 }
 
+function normType(value) {
+  return String(value || '').toUpperCase();
+}
+
+function vector(a, b) {
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  const dz = b.z - a.z;
+  const length = Math.hypot(dx, dy, dz);
+  if (!Number.isFinite(length) || length <= Number.EPSILON) {
+    return null;
+  }
+  return { dx: dx / length, dy: dy / length, dz: dz / length, length };
+}
+
+function symbolSize(length, textHeight) {
+  const base = Math.max(numberOr(textHeight, 2.5) * 2, 1);
+  const byLength = Number.isFinite(length) && length > 0 ? length * 0.08 : base;
+  return Math.min(Math.max(base, byLength), base * 4);
+}
+
+function offset(point, axis, along, side) {
+  return {
+    x: point.x + axis.dx * along - axis.dy * side,
+    y: point.y + axis.dy * along + axis.dx * side,
+    z: point.z + axis.dz * along,
+  };
+}
+
+function addValveSymbol(entities, id, p1, p2, textHeight) {
+  const axis = vector(p1, p2);
+  if (!axis) return 0;
+  const c = midpoint(p1, p2);
+  const size = symbolSize(axis.length, textHeight);
+  const left = offset(c, axis, -size, 0);
+  const right = offset(c, axis, size, 0);
+  const top = offset(c, axis, 0, size);
+  const bottom = offset(c, axis, 0, -size);
+
+  entities.push(lineEntity(`${id}-valve-a`, left, top, 'VALVES'));
+  entities.push(lineEntity(`${id}-valve-b`, top, right, 'VALVES'));
+  entities.push(lineEntity(`${id}-valve-c`, right, bottom, 'VALVES'));
+  entities.push(lineEntity(`${id}-valve-d`, bottom, left, 'VALVES'));
+  return 4;
+}
+
+function addFlangeSymbol(entities, id, p1, p2, textHeight) {
+  const axis = vector(p1, p2);
+  if (!axis) return 0;
+  const c = midpoint(p1, p2);
+  const size = symbolSize(axis.length, textHeight);
+  const gap = size * 0.35;
+  const points = [offset(c, axis, -gap, 0), offset(c, axis, gap, 0)];
+
+  for (const [index, point] of points.entries()) {
+    entities.push(lineEntity(`${id}-flange-${index}`, offset(point, axis, 0, -size), offset(point, axis, 0, size), 'FLANGES'));
+  }
+  return 2;
+}
+
+function addSupportSymbol(entities, id, point, textHeight) {
+  const size = Math.max(numberOr(textHeight, 2.5) * 2, 1);
+  const top = point;
+  const left = { x: point.x - size, y: point.y - size, z: point.z };
+  const right = { x: point.x + size, y: point.y - size, z: point.z };
+  const baseLeft = { x: point.x - size * 1.4, y: point.y - size * 1.35, z: point.z };
+  const baseRight = { x: point.x + size * 1.4, y: point.y - size * 1.35, z: point.z };
+
+  entities.push(lineEntity(`${id}-support-left`, top, left, 'SUPPORTS'));
+  entities.push(lineEntity(`${id}-support-right`, top, right, 'SUPPORTS'));
+  entities.push(lineEntity(`${id}-support-base`, baseLeft, baseRight, 'SUPPORTS'));
+  return 3;
+}
+
+function addComponentSymbol(entities, segment, p1, p2, textHeight) {
+  const id = segment.id || segment.componentId || 'segment';
+  const type = normType(segment.type || segment.layer);
+  if (segment.layer === 'VALVES' || type.includes('VALVE')) {
+    return addValveSymbol(entities, id, p1, p2, textHeight);
+  }
+  if (segment.layer === 'FLANGES' || type.includes('FLANGE') || type.includes('GASKET')) {
+    return addFlangeSymbol(entities, id, p1, p2, textHeight);
+  }
+  return 0;
+}
+
 export function writeInputXmlDxf({ segments = [], supports = [], branches = [], diagnostics = [] } = {}, options = {}) {
   const scale = Math.max(numberOr(options.dxfScale, 1), Number.EPSILON);
   const textHeight = numberOr(options.textHeight, 2.5);
   const showLabels = options.showLabels !== false;
+  const showSymbols = options.showSymbols !== false;
   const selectedBranchIds = Array.isArray(options.selectedBranchIds) ? options.selectedBranchIds.map((id) => String(id || '').trim()).filter(Boolean) : [];
   const branchManifest = branches.map(normalizeBranch);
   const selectedBranches = branchManifest.filter((branch) => branchSelected(branch, selectedBranchIds));
   const entities = [];
+  let symbolCount = 0;
 
   for (const segment of segments) {
     const p1 = scalePoint(segment.p1, scale);
     const p2 = scalePoint(segment.p2, scale);
     entities.push(lineEntity(segment.id || segment.componentId, p1, p2, segment.layer || 'PIPING'));
+    if (showSymbols) {
+      symbolCount += addComponentSymbol(entities, segment, p1, p2, textHeight);
+    }
     if (showLabels && segment.label) {
       entities.push(textEntity(`${segment.id || segment.componentId}-label`, midpoint(p1, p2), segment.label, 'LABELS', textHeight));
     }
@@ -54,6 +145,9 @@ export function writeInputXmlDxf({ segments = [], supports = [], branches = [], 
   for (const support of supports) {
     const point = scalePoint(support.point, scale);
     entities.push(pointEntity(support.id || support.componentId, point, 'SUPPORTS'));
+    if (showSymbols) {
+      symbolCount += addSupportSymbol(entities, support.id || support.componentId || 'support', point, textHeight);
+    }
     if (showLabels && support.label) {
       entities.push(textEntity(`${support.id || support.componentId}-label`, point, support.label, 'LABELS', textHeight));
     }
@@ -78,6 +172,7 @@ export function writeInputXmlDxf({ segments = [], supports = [], branches = [], 
       selectedBranches,
       segmentCount: segments.length,
       supportCount: supports.length,
+      symbolCount,
       layers,
       diagnostics,
     },

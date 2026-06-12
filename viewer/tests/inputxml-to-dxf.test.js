@@ -7,6 +7,15 @@ import { run } from '../converters/inputxml-dxf/inputxml-to-dxf-runner.js';
 import { lineEntity, pointEntity } from '../vendor/dxf-lines.js';
 import { lineEntity as packageLineEntity, pointEntity as packagePointEntity } from '../../third_party/pipe-component-data/src/dxf/dxfLines.js';
 
+function countEntity(dxf, entityName) {
+  const tokens = String(dxf || '').split(/\r?\n/);
+  let count = 0;
+  for (let i = 0; i < tokens.length - 1; i += 1) {
+    if (tokens[i] === '0' && tokens[i + 1] === entityName) count += 1;
+  }
+  return count;
+}
+
 const fixturePath = new URL('../../Benchmarks/INPUT XML to CII 2019/1001/1001-P - COPY_INPUT.XML', import.meta.url);
 const xmlText = await fs.readFile(fixturePath, 'utf8');
 
@@ -84,6 +93,32 @@ const scaled = writeInputXmlDxf({
   branches: [],
 }, { dxfScale: 2, showLabels: false }).dxf;
 assert.ok(scaled.includes('\n10\n2\n20\n4\n30\n6\n'), 'scale=2 doubles start coordinate once');
+
+const symbolWrite = writeInputXmlDxf({
+  segments: [
+    { id: 'valve-test', layer: 'VALVES', type: 'VALVE', p1: { x: 0, y: 0, z: 0 }, p2: { x: 100, y: 0, z: 0 }, label: '' },
+    { id: 'flange-test', layer: 'FLANGES', type: 'FLANGE', p1: { x: 0, y: 100, z: 0 }, p2: { x: 100, y: 100, z: 0 }, label: '' },
+  ],
+  supports: [{ id: 'support-test', point: { x: 50, y: 50, z: 0 }, label: '' }],
+  branches: [],
+}, { showLabels: false, textHeight: 2.5 });
+assert.equal(symbolWrite.sidecar.symbolCount, 9, 'valve/flange/support primitive symbols are counted');
+assert.ok(countEntity(symbolWrite.dxf, 'LINE') >= 11, 'primitive symbols add LINE entities');
+assert.equal(countEntity(symbolWrite.dxf, 'POINT'), 1, 'support point remains a POINT entity');
+assert.ok(symbolWrite.sidecar.layers.includes('VALVES'), 'symbol sidecar includes VALVES layer');
+assert.ok(symbolWrite.sidecar.layers.includes('FLANGES'), 'symbol sidecar includes FLANGES layer');
+assert.ok(symbolWrite.sidecar.layers.includes('SUPPORTS'), 'symbol sidecar includes SUPPORTS layer');
+
+const noSymbolWrite = writeInputXmlDxf({
+  segments: [
+    { id: 'valve-test', layer: 'VALVES', type: 'VALVE', p1: { x: 0, y: 0, z: 0 }, p2: { x: 100, y: 0, z: 0 }, label: '' },
+    { id: 'flange-test', layer: 'FLANGES', type: 'FLANGE', p1: { x: 0, y: 100, z: 0 }, p2: { x: 100, y: 100, z: 0 }, label: '' },
+  ],
+  supports: [{ id: 'support-test', point: { x: 50, y: 50, z: 0 }, label: '' }],
+  branches: [],
+}, { showLabels: false, showSymbols: false });
+assert.equal(noSymbolWrite.sidecar.symbolCount, 0, 'showSymbols=false disables primitive symbols');
+assert.equal(countEntity(noSymbolWrite.dxf, 'LINE'), 2, 'showSymbols=false keeps only base segment LINE entities');
 
 const sampleStart = { x: 1.2345678, y: 2, z: 3 };
 const sampleEnd = { x: 4, y: 5.4321987, z: 6 };
