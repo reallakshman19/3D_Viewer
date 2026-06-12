@@ -38,7 +38,7 @@ async function loadPsnmUtilityRenderer() {
     import('../tabs/psnm-utility/psnm-phase4c-hardening.js?v=20260609-phase4c-1'),
     import('../tabs/psnm-utility/psnm-phase4d-persistence.js?v=20260609-phase4d-1'),
   ]);
-  return import('../tabs/psnm-utility-tab.js?v=20260612-psmap-tile-restore-1')
+  return import('../tabs/psnm-utility-tab.js?v=20260612-psmap-tally-row-toggle-1')
     .then((module) => pickRenderer(module, 'renderPSNM_UtilityTab', 'psnm-utility'));
 }
 
