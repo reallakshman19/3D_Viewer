@@ -57,6 +57,26 @@ assert.ok(dxf.trim().endsWith('EOF'), 'DXF ends with EOF');
 assert.equal(sidecar.segmentCount, allGeometry.segments.length, 'sidecar segmentCount matches projection');
 assert.equal(sidecar.supportCount, allGeometry.supports.length, 'sidecar supportCount matches projection');
 assert.equal(sidecar.branchCount, extraction.branches.length, 'sidecar branchCount matches extraction');
+assert.ok(Array.isArray(sidecar.branches), 'sidecar exposes branch manifest');
+assert.equal(sidecar.branches.length, extraction.branches.length, 'sidecar branch manifest length matches extraction');
+assert.ok(sidecar.branches[0].id, 'sidecar branch manifest exposes branch id');
+assert.ok(Array.isArray(sidecar.branches[0].aliases), 'sidecar branch manifest exposes aliases');
+assert.equal(sidecar.selectedBranchCount, extraction.branches.length, 'empty selectedBranchIds means all branches selected in sidecar');
+assert.deepEqual(sidecar.selectedBranchIds, [], 'empty selection keeps selectedBranchIds empty');
+assert.equal(sidecar.selectedBranches.length, extraction.branches.length, 'empty selection lists all selectedBranches');
+
+const selectedWrite = writeInputXmlDxf({
+  segments: selectedGeometry.segments,
+  supports: selectedGeometry.supports,
+  branches: extraction.branches,
+  diagnostics: selectedGeometry.diagnostics,
+}, {
+  sourceName: '1001-P - COPY_INPUT.XML',
+  selectedBranchIds: selectedGeometry.selectedBranchIds,
+});
+assert.equal(selectedWrite.sidecar.selectedBranchCount, 1, 'selected sidecar reports one selected branch');
+assert.deepEqual(selectedWrite.sidecar.selectedBranchIds, [firstBranch.id], 'selected sidecar preserves selected branch id');
+assert.equal(selectedWrite.sidecar.selectedBranches.length, 1, 'selected sidecar lists selected branch metadata');
 
 const scaled = writeInputXmlDxf({
   segments: [{ id: 'scale', layer: 'PIPING', p1: { x: 1, y: 2, z: 3 }, p2: { x: 4, y: 5, z: 6 }, label: '' }],
@@ -79,10 +99,26 @@ assert.equal(output.ok, true, 'runner returns ok=true');
 assert.ok(output.outputs.some((item) => item.name === '1001.dxf'), 'runner emits stem.dxf');
 assert.ok(output.outputs.some((item) => item.name === '1001-sidecar.json'), 'runner emits stem-sidecar.json');
 assert.ok(Array.isArray(output.logs.stdout) && output.logs.stdout.length > 0, 'runner logs stdout entries');
+assert.ok(output.logs.stdout.some((line) => line.includes('Available branches')), 'runner logs available branch manifest');
+assert.ok(output.logs.stdout.some((line) => line.includes(firstBranch.id)), 'runner logs a copyable branch id');
+assert.ok(output.logs.stdout.some((line) => line.includes('Selected branch ids: <all branches')), 'runner logs all-branch selection hint');
 
 const sidecarOutput = output.outputs.find((item) => item.name === '1001-sidecar.json');
 const parsedSidecar = JSON.parse(sidecarOutput.text);
 assert.equal(parsedSidecar.segmentCount, allGeometry.segments.length, 'runner sidecar segmentCount is stable');
+assert.ok(Array.isArray(parsedSidecar.branches), 'runner sidecar exposes branches');
+assert.ok(parsedSidecar.branches.some((branch) => branch.id === firstBranch.id), 'runner sidecar includes copyable branch id');
+
+const selectedOutput = await run({
+  inputFiles: [{ role: 'primary', name: '1001.xml', text: xmlText }],
+  options: { selectedBranches: firstBranch.id, includeSidecarJson: true },
+  setStatus: () => {},
+});
+assert.equal(selectedOutput.ok, true, 'selected runner returns ok=true');
+assert.ok(selectedOutput.logs.stdout.some((line) => line.includes(`Selected branch ids: ${firstBranch.id}`)), 'selected runner logs selected branch id');
+const selectedSidecar = JSON.parse(selectedOutput.outputs.find((item) => item.name === '1001-sidecar.json').text);
+assert.deepEqual(selectedSidecar.selectedBranchIds, [firstBranch.id], 'selected runner sidecar preserves selectedBranchIds');
+assert.equal(selectedSidecar.selectedBranches.length, 1, 'selected runner sidecar exposes selected branch metadata');
 
 const empty = await run({
   inputFiles: [{ role: 'primary', name: 'empty.xml', text: '' }],
