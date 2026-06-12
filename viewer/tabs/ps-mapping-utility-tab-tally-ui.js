@@ -2,11 +2,11 @@ import { installPsMappingUtilityTile as installBasePsMappingUtilityTile } from '
 import {
   DEFAULT_OPTIONS,
   runPsMappingResolver,
-} from './ps-mapping-utility/ps-mapping-engine-diagnostics-v2.js?v=20260612-tally-ui-1';
+} from './ps-mapping-utility/ps-mapping-engine-diagnostics-v2.js?v=20260612-tally-ui-split-1';
 
 const STYLE_ID = 'psmap-tally-ui-style';
 
-const TALLY_COLUMNS = [
+const BASE_TALLY_COLUMNS = [
   ['section', 'Section'],
   ['sourceTotal', 'Source'],
   ['matched', 'Matched'],
@@ -38,12 +38,51 @@ function installStyle() {
 }
 
 function display(value) {
-  if (Array.isArray(value)) return value.join(', ');
+  if (Array.isArray(value)) return value.join('|');
   return value ?? '';
 }
 
+function splitKeyLabel(key) {
+  const mandatory = key.match(/^mandatoryUnmatchedRows(\d+)$/);
+  if (mandatory) return `Mandatory Unmatched Rows.${mandatory[1]}`;
+  const optional = key.match(/^optionalUnmatchedRows(\d+)$/);
+  if (optional) return `Optional Unmatched Rows.${optional[1]}`;
+  return key;
+}
+
+function dynamicTallyColumns(rows = []) {
+  const columns = [...BASE_TALLY_COLUMNS];
+  const known = new Set(columns.map(([key]) => key));
+  const extraMandatory = new Set();
+  const extraOptional = new Set();
+
+  for (const row of rows || []) {
+    for (const key of Object.keys(row || {})) {
+      if (/^mandatoryUnmatchedRows\d+$/.test(key)) extraMandatory.add(key);
+      if (/^optionalUnmatchedRows\d+$/.test(key)) extraOptional.add(key);
+    }
+  }
+
+  const numericSort = (a, b) => Number(a.replace(/\D+/g, '')) - Number(b.replace(/\D+/g, ''));
+  const insertAfter = (afterKey, extras) => {
+    let index = columns.findIndex(([key]) => key === afterKey);
+    if (index < 0) index = columns.length - 1;
+    for (const key of [...extras].sort(numericSort)) {
+      if (known.has(key)) continue;
+      index += 1;
+      columns.splice(index, 0, [key, splitKeyLabel(key)]);
+      known.add(key);
+    }
+  };
+
+  insertAfter('mandatoryUnmatchedRows', extraMandatory);
+  insertAfter('optionalUnmatchedRows', extraOptional);
+  return columns;
+}
+
 function rowsToTsv(rows = []) {
-  return [TALLY_COLUMNS.map(([, label]) => label), ...rows.map((row) => TALLY_COLUMNS.map(([key]) => display(row?.[key])))]
+  const columns = dynamicTallyColumns(rows);
+  return [columns.map(([, label]) => label), ...rows.map((row) => columns.map(([key]) => display(row?.[key])))]
     .map((line) => line.map((value) => String(value ?? '').replace(/\t/g, ' ')).join('\t'))
     .join('\n');
 }
@@ -83,11 +122,12 @@ function computeTallyRows() {
 
 function tableHtml(rows = []) {
   if (!rows.length) return '<div class="psmap-banner">No tally rows yet. Paste source data and run mapping, or open this tab to calculate from current source tables.</div>';
-  return `<div class="psmap-tablewrap"><table class="psmap-table"><thead><tr class="psmap-labels">${TALLY_COLUMNS.map(([, label]) => `<th>${h(label)}</th>`).join('')}</tr></thead><tbody>${rows.map((row) => `<tr>${TALLY_COLUMNS.map(([key]) => `<td>${h(display(row?.[key]))}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`;
+  const columns = dynamicTallyColumns(rows);
+  return `<div class="psmap-tablewrap"><table class="psmap-table"><thead><tr class="psmap-labels">${columns.map(([, label]) => `<th>${h(label)}</th>`).join('')}</tr></thead><tbody>${rows.map((row) => `<tr>${columns.map(([key]) => `<td>${h(display(row?.[key]))}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`;
 }
 
 function panelHtml(rows = []) {
-  return `<section class="psmap-panel psmap-tally-panel" data-psmap-panel="tally"><section class="psmap-card"><div class="psmap-card-head"><b>Tally Log</b><div class="psmap-tally-actions"><button class="psmap-btn secondary" type="button" data-psmap-tally-action="refresh">Refresh Tally</button><button class="psmap-btn secondary" type="button" data-psmap-tally-action="copy">Copy Tally</button></div></div><div class="psmap-card-body"><div class="psmap-tally-note"><b>Source ledger tally:</b><span>For each source side, Matched + Mandatory Unmatched + Optional Unmatched = Source. This is calculated from normalized source rows and source IDs, not from Candidate Matrix row count.</span><span class="psmap-tally-formula">Matched + Mandatory Unmatched + Optional Unmatched = Source</span></div>${tableHtml(rows)}</div></section></section>`;
+  return `<section class="psmap-panel psmap-tally-panel" data-psmap-panel="tally"><section class="psmap-card"><div class="psmap-card-head"><b>Tally Log</b><div class="psmap-tally-actions"><button class="psmap-btn secondary" type="button" data-psmap-tally-action="refresh">Refresh Tally</button><button class="psmap-btn secondary" type="button" data-psmap-tally-action="copy">Copy Tally</button></div></div><div class="psmap-card-body"><div class="psmap-tally-note"><b>Source ledger tally:</b><span>For each source side, Matched + Mandatory Unmatched + Optional Unmatched = Source. Mandatory/optional unmatched row columns show compact source IDs only: Table-2 uses PS No.; Table-1 uses Node No.</span><span class="psmap-tally-formula">Matched + Mandatory Unmatched + Optional Unmatched = Source</span></div>${tableHtml(rows)}</div></section></section>`;
 }
 
 function ensureTallyShell() {
