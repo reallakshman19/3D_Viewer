@@ -3,6 +3,7 @@ import {
   toText,
 } from './config.js';
 import { buildPipingClassIndex } from './piping-class-resolver.js';
+import { buildPipeDataWeightRows } from './pipe-component-data-adapter.js';
 
 export const DEFAULT_WEIGHT_MASTER_URLS = Object.freeze([
   '../docs/Masters/wtValveweights.json',
@@ -60,7 +61,24 @@ function _parseMaterialMapText(text) {
   return rows;
 }
 
+function _appendPipeComponentDataWeightRows(config, rows, diagnostics) {
+  if (config?.derivation?.pipeComponentData?.weightSource !== true) return rows;
+  if (rows.some((row) => row?.__source === 'pipe-component-data')) return rows;
+
+  const extraRows = buildPipeDataWeightRows();
+  if (extraRows.length) {
+    rows.push(...extraRows);
+    diagnostics.push({ type: 'weight-master-source', source: 'pipe-component-data', rows: extraRows.length });
+  }
+  return rows;
+}
+
 export async function loadXmlCiiWeightMasterRows(config, diagnostics = []) {
+  const rows = await _loadXmlCiiWeightMasterRowsBase(config, diagnostics);
+  return _appendPipeComponentDataWeightRows(config, rows, diagnostics);
+}
+
+async function _loadXmlCiiWeightMasterRowsBase(config, diagnostics = []) {
   const weight = _ensureSection(config, 'weight');
   if (Array.isArray(weight.masterRows) && weight.masterRows.length) {
     diagnostics.push({ type: 'weight-master-source', source: 'inline-config', rows: weight.masterRows.length });

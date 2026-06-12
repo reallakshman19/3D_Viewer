@@ -6,6 +6,7 @@ import {
   pipeDataDimensionCandidates,
 } from '../converters/xml-cii2019-core/pipe-component-data-adapter.js';
 import { rankXmlCiiWeightCandidates } from '../converters/xml-cii2019-core/weight-valve-hints.js';
+import { loadXmlCiiWeightMasterRows } from '../converters/xml-cii2019-core/master-context.js';
 
 test('buildPipeDataWeightRows yields wtValveweights-shaped gate valve row', () => {
   const rows = buildPipeDataWeightRows();
@@ -67,4 +68,45 @@ test('pipeDataDimensionCandidates misses cleanly without throwing', () => {
 
   const empty = pipeDataDimensionCandidates({});
   assert.equal(empty.ok, false);
+});
+
+test('loadXmlCiiWeightMasterRows preserves existing rows when flag is off', async () => {
+  const inlineRows = [
+    { Type: 'SB', TypeDesc: 'SPECTACLE BLIND', DN: 100, Rating: 150, 'RF-F/F': 10, 'RF/RTJ KG': 3 },
+  ];
+  const diagnostics = [];
+  const config = { weight: { masterRows: inlineRows.slice() } };
+  const rows = await loadXmlCiiWeightMasterRows(config, diagnostics);
+
+  assert.equal(rows.length, inlineRows.length);
+  assert.deepEqual(rows, inlineRows);
+  assert.equal(rows.filter((row) => row?.__source === 'pipe-component-data').length, 0);
+  assert.ok(!diagnostics.some((d) => d.source === 'pipe-component-data'));
+});
+
+test('loadXmlCiiWeightMasterRows appends pipe-component-data rows when flag is on', async () => {
+  const inlineRows = [
+    { Type: 'SB', TypeDesc: 'SPECTACLE BLIND', DN: 100, Rating: 150, 'RF-F/F': 10, 'RF/RTJ KG': 3 },
+  ];
+  const diagnostics = [];
+  const config = {
+    weight: { masterRows: inlineRows.slice() },
+    derivation: { pipeComponentData: { enabled: true, weightSource: true } },
+  };
+  const rows = await loadXmlCiiWeightMasterRows(config, diagnostics);
+
+  assert.ok(rows.length > inlineRows.length, 'expected appended rows');
+  assert.deepEqual(rows[0], inlineRows[0], 'existing rows must remain first');
+  const appended = rows.filter((row) => row?.__source === 'pipe-component-data');
+  assert.ok(appended.length >= 1);
+  const sourceDiag = diagnostics.find((d) => d.type === 'weight-master-source' && d.source === 'pipe-component-data');
+  assert.ok(sourceDiag, 'expected pipe-component-data diagnostic');
+  assert.equal(sourceDiag.rows, appended.length);
+
+  const again = await loadXmlCiiWeightMasterRows(config, []);
+  assert.equal(
+    again.filter((row) => row?.__source === 'pipe-component-data').length,
+    appended.length,
+    'repeat loads must not duplicate appended rows'
+  );
 });
