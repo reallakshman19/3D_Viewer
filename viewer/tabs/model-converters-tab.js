@@ -15,5 +15,6 @@ export function renderModelConvertersTab(container, ctx) {
   installInputXmlDxfLegacyBridge(container);
   installInputXmlDxfBranchPicker(container);
   installInputXmlDxfSymbolOption(container);
+  installInputXmlDxfProjectionOption(container);
   return result;
 }
