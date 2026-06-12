@@ -2,9 +2,10 @@ import { installPsMappingUtilityTile as installBasePsMappingUtilityTile } from '
 import {
   DEFAULT_OPTIONS,
   runPsMappingResolver,
-} from './ps-mapping-utility/ps-mapping-engine-diagnostics-v2.js?v=20260612-tally-ui-split-1';
+} from './ps-mapping-utility/ps-mapping-engine-diagnostics-v2.js?v=20260612-tally-source-ledger-toggle-1';
 
 const STYLE_ID = 'psmap-tally-ui-style';
+const TALLY_ROW_ID_TOGGLE_KEY = 'psmap.tally.showRowIds';
 
 const BASE_TALLY_COLUMNS = [
   ['section', 'Section'],
@@ -15,6 +16,9 @@ const BASE_TALLY_COLUMNS = [
   ['formula', 'Check Formula'],
   ['check', 'Check'],
   ['action', 'Action'],
+];
+
+const ROW_ID_TALLY_COLUMNS = [
   ['matchedRows', 'Matched Rows'],
   ['mandatoryUnmatchedRows', 'Mandatory Unmatched Rows'],
   ['optionalUnmatchedRows', 'Optional Unmatched Rows'],
@@ -28,12 +32,27 @@ function h(value) {
     .replace(/"/g, '&quot;');
 }
 
+function readShowRowIds() {
+  try {
+    const raw = localStorage.getItem(TALLY_ROW_ID_TOGGLE_KEY);
+    return raw === '1' || raw === 'true';
+  } catch {
+    return false;
+  }
+}
+
+function writeShowRowIds(value) {
+  try {
+    localStorage.setItem(TALLY_ROW_ID_TOGGLE_KEY, value ? '1' : '0');
+  } catch {}
+}
+
 function installStyle() {
   if (document.getElementById(STYLE_ID)) return;
   const style = document.createElement('style');
   style.id = STYLE_ID;
   style.textContent = `
-.psmap-tally-note{display:grid;gap:6px;font-size:12px;line-height:1.45;color:#cfe4ff;border:1px solid rgba(56,189,248,.24);background:rgba(8,47,73,.22);border-radius:10px;padding:10px}.psmap-tally-note b{color:#bae6fd}.psmap-tally-actions{display:flex;gap:8px;align-items:center;justify-content:flex-end}.psmap-tally-panel .psmap-table td{white-space:normal;min-width:90px}.psmap-tally-panel .psmap-table td:nth-child(8),.psmap-tally-panel .psmap-table td:nth-child(9),.psmap-tally-panel .psmap-table td:nth-child(10),.psmap-tally-panel .psmap-table td:nth-child(11){min-width:220px}.psmap-tally-formula{font-family:ui-monospace,Consolas,monospace;color:#fde68a}`;
+.psmap-tally-note{display:grid;gap:6px;font-size:12px;line-height:1.45;color:#cfe4ff;border:1px solid rgba(56,189,248,.24);background:rgba(8,47,73,.22);border-radius:10px;padding:10px}.psmap-tally-note b{color:#bae6fd}.psmap-tally-actions{display:flex;gap:8px;align-items:center;justify-content:flex-end;flex-wrap:wrap}.psmap-tally-panel .psmap-table td{white-space:normal;min-width:90px}.psmap-tally-panel .psmap-table td:nth-child(8){min-width:220px}.psmap-tally-formula{font-family:ui-monospace,Consolas,monospace;color:#fde68a}.psmap-tally-toggle{display:flex;gap:6px;align-items:center;font-size:12px;color:#cfe4ff;white-space:nowrap}.psmap-tally-toggle input{accent-color:#38bdf8}`;
   document.head.appendChild(style);
 }
 
@@ -43,6 +62,8 @@ function display(value) {
 }
 
 function splitKeyLabel(key) {
+  const matched = key.match(/^matchedRows(\d+)$/);
+  if (matched) return `Matched Rows.${matched[1]}`;
   const mandatory = key.match(/^mandatoryUnmatchedRows(\d+)$/);
   if (mandatory) return `Mandatory Unmatched Rows.${mandatory[1]}`;
   const optional = key.match(/^optionalUnmatchedRows(\d+)$/);
@@ -50,14 +71,25 @@ function splitKeyLabel(key) {
   return key;
 }
 
-function dynamicTallyColumns(rows = []) {
+function dynamicTallyColumns(rows = [], { showRowIds = false } = {}) {
   const columns = [...BASE_TALLY_COLUMNS];
   const known = new Set(columns.map(([key]) => key));
+  if (!showRowIds) return columns;
+
+  for (const [key, label] of ROW_ID_TALLY_COLUMNS) {
+    if (!known.has(key)) {
+      columns.push([key, label]);
+      known.add(key);
+    }
+  }
+
+  const extraMatched = new Set();
   const extraMandatory = new Set();
   const extraOptional = new Set();
 
   for (const row of rows || []) {
     for (const key of Object.keys(row || {})) {
+      if (/^matchedRows\d+$/.test(key)) extraMatched.add(key);
       if (/^mandatoryUnmatchedRows\d+$/.test(key)) extraMandatory.add(key);
       if (/^optionalUnmatchedRows\d+$/.test(key)) extraOptional.add(key);
     }
@@ -75,13 +107,14 @@ function dynamicTallyColumns(rows = []) {
     }
   };
 
+  insertAfter('matchedRows', extraMatched);
   insertAfter('mandatoryUnmatchedRows', extraMandatory);
   insertAfter('optionalUnmatchedRows', extraOptional);
   return columns;
 }
 
-function rowsToTsv(rows = []) {
-  const columns = dynamicTallyColumns(rows);
+function rowsToTsv(rows = [], { showRowIds = readShowRowIds() } = {}) {
+  const columns = dynamicTallyColumns(rows, { showRowIds });
   return [columns.map(([, label]) => label), ...rows.map((row) => columns.map(([key]) => display(row?.[key])))]
     .map((line) => line.map((value) => String(value ?? '').replace(/\t/g, ' ')).join('\t'))
     .join('\n');
@@ -120,14 +153,15 @@ function computeTallyRows() {
   return Array.isArray(result?.tallyRows) ? result.tallyRows : [];
 }
 
-function tableHtml(rows = []) {
+function tableHtml(rows = [], { showRowIds = readShowRowIds() } = {}) {
   if (!rows.length) return '<div class="psmap-banner">No tally rows yet. Paste source data and run mapping, or open this tab to calculate from current source tables.</div>';
-  const columns = dynamicTallyColumns(rows);
+  const columns = dynamicTallyColumns(rows, { showRowIds });
   return `<div class="psmap-tablewrap"><table class="psmap-table"><thead><tr class="psmap-labels">${columns.map(([, label]) => `<th>${h(label)}</th>`).join('')}</tr></thead><tbody>${rows.map((row) => `<tr>${columns.map(([key]) => `<td>${h(display(row?.[key]))}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`;
 }
 
-function panelHtml(rows = []) {
-  return `<section class="psmap-panel psmap-tally-panel" data-psmap-panel="tally"><section class="psmap-card"><div class="psmap-card-head"><b>Tally Log</b><div class="psmap-tally-actions"><button class="psmap-btn secondary" type="button" data-psmap-tally-action="refresh">Refresh Tally</button><button class="psmap-btn secondary" type="button" data-psmap-tally-action="copy">Copy Tally</button></div></div><div class="psmap-card-body"><div class="psmap-tally-note"><b>Source ledger tally:</b><span>For each source side, Matched + Mandatory Unmatched + Optional Unmatched = Source. Mandatory/optional unmatched row columns show compact source IDs only: Table-2 uses PS No.; Table-1 uses Node No.</span><span class="psmap-tally-formula">Matched + Mandatory Unmatched + Optional Unmatched = Source</span></div>${tableHtml(rows)}</div></section></section>`;
+function panelHtml(rows = [], { showRowIds = readShowRowIds() } = {}) {
+  const checked = showRowIds ? 'checked' : '';
+  return `<section class="psmap-panel psmap-tally-panel" data-psmap-panel="tally"><section class="psmap-card"><div class="psmap-card-head"><b>Tally Log</b><div class="psmap-tally-actions"><label class="psmap-tally-toggle"><input type="checkbox" data-psmap-tally-show-rows="1" ${checked}>Show matched / unmatched row IDs</label><button class="psmap-btn secondary" type="button" data-psmap-tally-action="refresh">Refresh Tally</button><button class="psmap-btn secondary" type="button" data-psmap-tally-action="copy">Copy Tally</button></div></div><div class="psmap-card-body"><div class="psmap-tally-note"><b>Source ledger tally:</b><span>For each source side, Matched + Mandatory Unmatched + Optional Unmatched = Source. Row-ID columns are hidden by default; enable the toggle to show compact source IDs. Table-2 uses PS No.; Table-1 uses Node No.</span><span class="psmap-tally-formula">Matched + Mandatory Unmatched + Optional Unmatched = Source</span></div>${tableHtml(rows, { showRowIds })}</div></section></section>`;
 }
 
 function ensureTallyShell() {
@@ -169,7 +203,8 @@ function renderTally() {
   const panel = modal()?.querySelector('[data-psmap-panel="tally"]');
   if (!panel) return;
   const rows = computeTallyRows();
-  panel.outerHTML = panelHtml(rows).replace('psmap-panel psmap-tally-panel', 'psmap-panel psmap-tally-panel active');
+  const showRowIds = readShowRowIds();
+  panel.outerHTML = panelHtml(rows, { showRowIds }).replace('psmap-panel psmap-tally-panel', 'psmap-panel psmap-tally-panel active');
 }
 
 function scheduleEnsure() {
@@ -191,20 +226,30 @@ function installTallyTabPatch(ctx = {}) {
       event.preventDefault();
       lastRows = computeTallyRows();
       const panel = modal()?.querySelector('[data-psmap-panel="tally"]');
-      if (panel) panel.outerHTML = panelHtml(lastRows).replace('psmap-panel psmap-tally-panel', 'psmap-panel psmap-tally-panel active');
+      if (panel) panel.outerHTML = panelHtml(lastRows, { showRowIds: readShowRowIds() }).replace('psmap-panel psmap-tally-panel', 'psmap-panel psmap-tally-panel active');
       return;
     }
     if (tallyAction === 'copy') {
       event.preventDefault();
       lastRows = computeTallyRows();
-      navigator.clipboard?.writeText(rowsToTsv(lastRows)).then(() => ctx.showToast?.('Tally copied.', 'success')).catch((error) => ctx.showToast?.(`Copy failed: ${error.message || error}`, 'error'));
+      navigator.clipboard?.writeText(rowsToTsv(lastRows, { showRowIds: readShowRowIds() })).then(() => ctx.showToast?.('Tally copied.', 'success')).catch((error) => ctx.showToast?.(`Copy failed: ${error.message || error}`, 'error'));
       return;
     }
     if (event.target?.closest?.('[data-psmap-action], [data-psmap-tab]')) scheduleEnsure();
   };
+  const onChange = (event) => {
+    const toggle = event.target?.closest?.('[data-psmap-tally-show-rows]');
+    if (!toggle) return;
+    writeShowRowIds(toggle.checked === true);
+    renderTally();
+  };
   document.addEventListener('click', onClick, true);
+  document.addEventListener('change', onChange, true);
   scheduleEnsure();
-  return () => document.removeEventListener('click', onClick, true);
+  return () => {
+    document.removeEventListener('click', onClick, true);
+    document.removeEventListener('change', onChange, true);
+  };
 }
 
 export function installPsMappingUtilityTile(container, ctx = {}) {
