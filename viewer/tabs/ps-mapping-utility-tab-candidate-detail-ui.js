@@ -2,6 +2,10 @@ import { installPsMappingUtilityTile as installBasePsMappingUtilityTile } from '
 
 const STYLE_ID = 'psmap-candidate-detail-toggle-style';
 const STORAGE_KEY = 'psmap.showDetailDiagnosticColumns';
+const OPTIONAL_STORAGE_KEYS = {
+  showOptionalUnmatchedPsNo: 'psmap.showOptionalUnmatchedPsNo',
+  showOptionalUnmatchedNodeNo: 'psmap.showOptionalUnmatchedNodeNo',
+};
 
 const DETAIL_LABELS = new Set([
   'boreBasis',
@@ -52,7 +56,7 @@ function installStyle() {
   const style = document.createElement('style');
   style.id = STYLE_ID;
   style.textContent = `
-.psmap-candidate-detail-toggle{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:8px 0 10px;padding:9px 11px;border:1px solid rgba(148,163,184,.25);border-radius:10px;background:rgba(15,23,42,.72);color:#e2e8f0;font-size:12px}.psmap-candidate-detail-toggle label{display:flex;align-items:center;gap:8px;font-weight:800;cursor:pointer}.psmap-candidate-detail-toggle input{accent-color:#38bdf8}.psmap-candidate-detail-help{color:#94a3b8;font-size:11px}.psmap-hide-detail-columns thead tr.psmap-group{display:none}.psmap-detail-hidden{display:none!important}
+.psmap-candidate-detail-toggle{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:8px 0 10px;padding:9px 11px;border:1px solid rgba(148,163,184,.25);border-radius:10px;background:rgba(15,23,42,.72);color:#e2e8f0;font-size:12px}.psmap-candidate-detail-toggle label{display:flex;align-items:center;gap:8px;font-weight:800;cursor:pointer}.psmap-candidate-detail-toggle input{accent-color:#38bdf8}.psmap-candidate-detail-help{color:#94a3b8;font-size:11px}.psmap-hide-detail-columns thead tr.psmap-group{display:none}.psmap-detail-hidden{display:none!important}.psmap-optional-unmatched-card{border:1px solid rgba(56,189,248,.28);border-radius:10px;background:rgba(8,47,73,.22);padding:10px;display:grid;gap:8px}.psmap-optional-unmatched-card b{color:#bae6fd}.psmap-optional-unmatched-card label{display:flex;gap:8px;align-items:flex-start;color:#e2e8f0;font-size:12px;font-weight:800}.psmap-optional-unmatched-card .psmap-mini{line-height:1.4}
 `;
   document.head.appendChild(style);
 }
@@ -63,6 +67,49 @@ function readShowDetails() {
 
 function writeShowDetails(value) {
   try { localStorage.setItem(STORAGE_KEY, value ? '1' : '0'); } catch {}
+}
+
+function readOptionalFlag(key) {
+  try { return localStorage.getItem(OPTIONAL_STORAGE_KEYS[key]) === '1'; } catch { return false; }
+}
+
+function writeOptionalFlag(key, value) {
+  try { localStorage.setItem(OPTIONAL_STORAGE_KEYS[key], value ? '1' : '0'); } catch {}
+}
+
+function dispatchSetupChange(input) {
+  input.dispatchEvent(new Event('input', { bubbles: true }));
+  input.dispatchEvent(new Event('change', { bubbles: true }));
+}
+
+function configBody() {
+  return document.querySelector('[data-psmap-panel="config"] .psmap-card-body');
+}
+
+function ensureOptionalUnmatchedConfig() {
+  const body = configBody();
+  if (!body || body.querySelector('[data-psmap-optional-unmatched-config]')) return;
+  const card = document.createElement('div');
+  card.className = 'psmap-optional-unmatched-card';
+  card.setAttribute('data-psmap-optional-unmatched-config', '1');
+  card.innerHTML = `
+    <div><b>Optional unmatched rows</b></div>
+    <label><input type="checkbox" data-psmap-setup="showOptionalUnmatchedPsNo" data-psmap-optional-flag="showOptionalUnmatchedPsNo"> <span>PS No. optional — show optional unmatched Table-2 PS No. rows</span></label>
+    <label><input type="checkbox" data-psmap-setup="showOptionalUnmatchedNodeNo" data-psmap-optional-flag="showOptionalUnmatchedNodeNo"> <span>Node No. optional — show optional unmatched Table-1 node rows</span></label>
+    <div class="psmap-mini">Default OFF. Mandatory unmatched rows are always shown. These options only expose optional audit rows that would otherwise be hidden.</div>
+  `;
+  const banner = body.querySelector('.psmap-banner');
+  if (banner?.nextSibling) body.insertBefore(card, banner.nextSibling);
+  else body.prepend(card);
+  for (const input of card.querySelectorAll('[data-psmap-optional-flag]')) {
+    const key = input.dataset.psmapOptionalFlag;
+    input.checked = readOptionalFlag(key);
+    if (input.checked) dispatchSetupChange(input);
+    input.addEventListener('change', () => {
+      writeOptionalFlag(key, input.checked);
+      dispatchSetupChange(input);
+    });
+  }
 }
 
 function candidatePanel() {
@@ -119,7 +166,7 @@ function ensureToggle() {
     checkbox.checked = readShowDetails();
     checkbox.addEventListener('change', () => {
       writeShowDetails(checkbox.checked);
-      applyCandidateDetailVisibility();
+      applyPsMapUiPatches();
     });
   }
   if (checkbox) checkbox.checked = readShowDetails();
@@ -127,13 +174,18 @@ function ensureToggle() {
 }
 
 function applyCandidateDetailVisibility() {
-  installStyle();
   ensureToggle();
   const table = candidateTable();
   if (!table) return;
   const show = readShowDetails();
   const indexes = detailColumnIndexes(table);
   setColumnHidden(table, indexes, !show);
+}
+
+function applyPsMapUiPatches() {
+  installStyle();
+  ensureOptionalUnmatchedConfig();
+  applyCandidateDetailVisibility();
 }
 
 function installCandidateDetailPatch() {
@@ -145,7 +197,7 @@ function installCandidateDetailPatch() {
       queued = true;
       requestAnimationFrame(() => {
         queued = false;
-        applyCandidateDetailVisibility();
+        applyPsMapUiPatches();
       });
     };
   })();
