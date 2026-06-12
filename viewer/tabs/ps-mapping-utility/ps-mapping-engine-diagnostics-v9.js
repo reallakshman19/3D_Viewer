@@ -12,6 +12,8 @@ export const DEFAULT_OPTIONS = {
   ...V8_DEFAULT_OPTIONS,
 };
 
+const CSV_CELL_SAFE_CHAR_LIMIT = 30000;
+
 export function normalizePsMappingOptions(options = {}) {
   return normalizeV8Options(options);
 }
@@ -42,11 +44,14 @@ function table2SourceId(row = {}, index = -1) {
 }
 
 function withTable2Ids(rows = []) {
-  return Array.isArray(rows) ? rows.map((row, index) => ({
-    ...row,
-    table2SourceId: table2SourceId(row, index),
-    modelSourceId: row?.modelSourceId || table2SourceId(row, index),
-  })) : [];
+  return Array.isArray(rows) ? rows.map((row, index) => {
+    const table2Id = table2SourceId(row, index);
+    return {
+      ...row,
+      table2SourceId: table2Id,
+      modelSourceId: row?.modelSourceId || table2Id,
+    };
+  }) : [];
 }
 
 function hasNode(row = {}) {
@@ -64,6 +69,84 @@ function uniq(values = []) {
 
 function labelList(rows = [], idKey, labelFn) {
   return uniq(rows.map((row) => `${row[idKey]}:${labelFn(row)}`)).map((x) => x.replace(/^[^:]+:/, '')).join(', ');
+}
+
+function compactIdList(rows = [], idFn) {
+  return uniq(rows.map(idFn).map(clean).filter(Boolean)).join('|');
+}
+
+function compactTable2RowId(row = {}) {
+  return clean(
+    row.psnoModel
+    || row.modelPsNo
+    || row.modelPsNoRaw
+    || row.psNo
+    || row['PS NO']
+    || row.table2SourceId
+    || row.modelSourceId
+  );
+}
+
+function compactTable1RowId(row = {}) {
+  return clean(
+    row.node
+    || row.candidateNode
+    || row.nodeNo
+    || row['Node']
+    || row.table1ContextId
+  );
+}
+
+function compactSupportRowId(row = {}) {
+  return clean(
+    row.node
+    || row.candidateNode
+    || row.table1Node
+    || row.nodeId
+    || row.table1ContextId
+    || row.coverageNode
+    || row.coverageStatus
+    || row.action
+  );
+}
+
+function splitPipeListCell(value, limit = CSV_CELL_SAFE_CHAR_LIMIT) {
+  const raw = String(value ?? '').trim();
+  if (!raw || raw.length <= limit) return raw ? [raw] : [];
+
+  const ids = raw.split('|').map((part) => part.trim()).filter(Boolean);
+  if (!ids.length) return [raw.slice(0, limit)];
+
+  const chunks = [];
+  let current = '';
+  for (const id of ids) {
+    const next = current ? `${current}|${id}` : id;
+    if (next.length > limit && current) {
+      chunks.push(current);
+      current = id;
+    } else if (next.length > limit) {
+      chunks.push(next.slice(0, limit));
+      current = next.slice(limit);
+    } else {
+      current = next;
+    }
+  }
+  if (current) chunks.push(current);
+  return chunks;
+}
+
+function addSplitFields(row = {}, key) {
+  const chunks = splitPipeListCell(row[key]);
+  if (chunks.length <= 1) return row;
+  const next = { ...row, [key]: chunks[0] };
+  for (let index = 1; index < chunks.length; index += 1) {
+    next[`${key}${index}`] = chunks[index];
+  }
+  return next;
+}
+
+function addUnmatchedSplitFields(row = {}) {
+  return addSplitFields(addSplitFields(row, 'mandatoryUnmatchedRows'), 'optionalUnmatchedRows');
 }
 
 function table1ContextKey(row = {}, index = -1) {
@@ -98,7 +181,7 @@ function buildTable2TallyRows(result = {}) {
   const optionalUnmatched = sourceRows.filter((row) => !matchedIds.has(row.table2SourceId) && !truthy(row.mandatory || row.modelMandatory || row.mandatoryRaw || row.isMandatory));
   const total = sourceRows.length;
   const checkOk = matched.length + mandatoryUnmatched.length + optionalUnmatched.length === total;
-  return [{
+  return [addUnmatchedSplitFields({
     section: 'Table-2 PS No',
     sourceTotal: total,
     matched: matched.length,
@@ -108,9 +191,9 @@ function buildTable2TallyRows(result = {}) {
     check: checkOk ? 'OK' : 'CHECK',
     action: checkOk ? 'Tally balanced against Table-2 source rows.' : 'Tally mismatch; inspect source IDs.',
     matchedRows: labelList(matched, 'table2SourceId', t2Label),
-    mandatoryUnmatchedRows: labelList(mandatoryUnmatched, 'table2SourceId', t2Label),
-    optionalUnmatchedRows: labelList(optionalUnmatched, 'table2SourceId', t2Label),
-  }];
+    mandatoryUnmatchedRows: compactIdList(mandatoryUnmatched, compactTable2RowId),
+    optionalUnmatchedRows: compactIdList(optionalUnmatched, compactTable2RowId),
+  })];
 }
 
 function buildTable1TallyRows(result = {}) {
@@ -128,7 +211,7 @@ function buildTable1TallyRows(result = {}) {
   const optionalUnmatched = sourceWithKeys.filter((row) => !matchedKeys.has(row.table1ContextId) && !truthy(row.mandatory || row.table1Mandatory || row.nodeMandatory));
   const total = sourceWithKeys.length;
   const checkOk = matched.length + mandatoryUnmatched.length + optionalUnmatched.length === total;
-  return [{
+  return [addUnmatchedSplitFields({
     section: 'Table-1 Nodes',
     sourceTotal: total,
     matched: matched.length,
@@ -138,9 +221,9 @@ function buildTable1TallyRows(result = {}) {
     check: checkOk ? 'OK' : 'CHECK',
     action: checkOk ? 'Tally balanced against Table-1 node source rows.' : 'Tally mismatch; inspect Table-1 node context keys.',
     matchedRows: labelList(matched, 'table1ContextId', t1Label),
-    mandatoryUnmatchedRows: labelList(mandatoryUnmatched, 'table1ContextId', t1Label),
-    optionalUnmatchedRows: labelList(optionalUnmatched, 'table1ContextId', t1Label),
-  }];
+    mandatoryUnmatchedRows: compactIdList(mandatoryUnmatched, compactTable1RowId),
+    optionalUnmatchedRows: compactIdList(optionalUnmatched, compactTable1RowId),
+  })];
 }
 
 function buildSupportTallyRows(result = {}) {
@@ -150,7 +233,7 @@ function buildSupportTallyRows(result = {}) {
     const status = clean(row.coverageStatus || row.status || '').toUpperCase();
     return status && !/^(OK|MATCHED|COVERED)$/.test(status);
   });
-  return [{
+  return [addUnmatchedSplitFields({
     section: 'Node Support Coverage',
     sourceTotal: coverageRows.length,
     matched: coverageRows.length - issueRows.length,
@@ -160,9 +243,9 @@ function buildSupportTallyRows(result = {}) {
     check: issueRows.length ? 'REVIEW' : 'OK',
     action: issueRows.length ? 'Review node-wise support coverage actions.' : 'Support coverage has no reported issue.',
     matchedRows: '',
-    mandatoryUnmatchedRows: issueRows.map((row) => clean(row.action || row.coverageStatus || row.node)).filter(Boolean).join(' | '),
+    mandatoryUnmatchedRows: compactIdList(issueRows, compactSupportRowId),
     optionalUnmatchedRows: '',
-  }];
+  })];
 }
 
 function withTally(result = {}) {
