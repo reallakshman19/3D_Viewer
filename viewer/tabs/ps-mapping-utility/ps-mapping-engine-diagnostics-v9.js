@@ -4,7 +4,7 @@ import {
   normalizePsMappingOptions as normalizeV8Options,
   runPsMappingResolver as runV8PsMappingResolver,
   rowsToCsv,
-} from './ps-mapping-engine-diagnostics-v8.js?v=20260612-table2-source-id-1';
+} from './ps-mapping-engine-diagnostics-v8.js?v=20260612-source-ledger-unmatched-1';
 
 export { DEFAULT_SUPPORT_KEYWORD_RULES_TEXT, rowsToCsv };
 
@@ -65,10 +65,6 @@ function hasTable2Ps(row = {}) {
 
 function uniq(values = []) {
   return [...new Set(values.filter(Boolean))];
-}
-
-function labelList(rows = [], idKey, labelFn) {
-  return uniq(rows.map((row) => `${row[idKey]}:${labelFn(row)}`)).map((x) => x.replace(/^[^:]+:/, '')).join(', ');
 }
 
 function compactIdList(rows = [], idFn) {
@@ -145,8 +141,9 @@ function addSplitFields(row = {}, key) {
   return next;
 }
 
-function addUnmatchedSplitFields(row = {}) {
-  return addSplitFields(addSplitFields(row, 'mandatoryUnmatchedRows'), 'optionalUnmatchedRows');
+function addRowListSplitFields(row = {}) {
+  return ['matchedRows', 'mandatoryUnmatchedRows', 'optionalUnmatchedRows']
+    .reduce((current, key) => addSplitFields(current, key), row);
 }
 
 function table1ContextKey(row = {}, index = -1) {
@@ -158,21 +155,13 @@ function table1ContextKey(row = {}, index = -1) {
   return `T1:${index + 1}`;
 }
 
-function t2Label(row = {}) {
-  const parts = [row.psnoModel || row.modelPsNo || row.basePs, row.modelBore ?? row.bore, row.lineFamily || row.modelLineFamily, row.supportTypesRequested || row.modelDtxrKeywords].map(clean).filter(Boolean);
-  return parts.join(' / ');
-}
-
-function t1Label(row = {}) {
-  const parts = [row.node || row.candidateNode, row.table1PsNo || row.basePs, row.lineFamily || row.nodeLineFamily, row.derivedDn ?? row.pipeSizeRaw].map(clean).filter(Boolean);
-  return parts.join(' / ');
-}
-
 function buildTable2TallyRows(result = {}) {
   const sourceRows = withTable2Ids(
     Array.isArray(result.consolidatedTable2Rows) && result.consolidatedTable2Rows.length
       ? result.consolidatedTable2Rows
-      : (result.rows || result.outputRows || result.validatorRows || [])
+      : Array.isArray(result.table2SourceRows) && result.table2SourceRows.length
+        ? result.table2SourceRows
+        : (result.rows || result.outputRows || result.validatorRows || [])
   );
   const evidenceRows = withTable2Ids([...(result.rows || []), ...(result.outputRows || []), ...(result.validatorRows || []), ...(result.candidateRows || result.candidates || [])]);
   const matchedIds = new Set(evidenceRows.filter((row) => hasTable2Ps(row) && hasNode(row)).map((row) => row.table2SourceId));
@@ -181,7 +170,7 @@ function buildTable2TallyRows(result = {}) {
   const optionalUnmatched = sourceRows.filter((row) => !matchedIds.has(row.table2SourceId) && !truthy(row.mandatory || row.modelMandatory || row.mandatoryRaw || row.isMandatory));
   const total = sourceRows.length;
   const checkOk = matched.length + mandatoryUnmatched.length + optionalUnmatched.length === total;
-  return [addUnmatchedSplitFields({
+  return [addRowListSplitFields({
     section: 'Table-2 PS No',
     sourceTotal: total,
     matched: matched.length,
@@ -190,7 +179,7 @@ function buildTable2TallyRows(result = {}) {
     formula: `${matched.length} + ${mandatoryUnmatched.length} + ${optionalUnmatched.length} = ${total}`,
     check: checkOk ? 'OK' : 'CHECK',
     action: checkOk ? 'Tally balanced against Table-2 source rows.' : 'Tally mismatch; inspect source IDs.',
-    matchedRows: labelList(matched, 'table2SourceId', t2Label),
+    matchedRows: compactIdList(matched, compactTable2RowId),
     mandatoryUnmatchedRows: compactIdList(mandatoryUnmatched, compactTable2RowId),
     optionalUnmatchedRows: compactIdList(optionalUnmatched, compactTable2RowId),
   })];
@@ -211,7 +200,7 @@ function buildTable1TallyRows(result = {}) {
   const optionalUnmatched = sourceWithKeys.filter((row) => !matchedKeys.has(row.table1ContextId) && !truthy(row.mandatory || row.table1Mandatory || row.nodeMandatory));
   const total = sourceWithKeys.length;
   const checkOk = matched.length + mandatoryUnmatched.length + optionalUnmatched.length === total;
-  return [addUnmatchedSplitFields({
+  return [addRowListSplitFields({
     section: 'Table-1 Nodes',
     sourceTotal: total,
     matched: matched.length,
@@ -220,7 +209,7 @@ function buildTable1TallyRows(result = {}) {
     formula: `${matched.length} + ${mandatoryUnmatched.length} + ${optionalUnmatched.length} = ${total}`,
     check: checkOk ? 'OK' : 'CHECK',
     action: checkOk ? 'Tally balanced against Table-1 node source rows.' : 'Tally mismatch; inspect Table-1 node context keys.',
-    matchedRows: labelList(matched, 'table1ContextId', t1Label),
+    matchedRows: compactIdList(matched, compactTable1RowId),
     mandatoryUnmatchedRows: compactIdList(mandatoryUnmatched, compactTable1RowId),
     optionalUnmatchedRows: compactIdList(optionalUnmatched, compactTable1RowId),
   })];
@@ -233,16 +222,17 @@ function buildSupportTallyRows(result = {}) {
     const status = clean(row.coverageStatus || row.status || '').toUpperCase();
     return status && !/^(OK|MATCHED|COVERED)$/.test(status);
   });
-  return [addUnmatchedSplitFields({
+  const coveredRows = coverageRows.filter((row) => !issueRows.includes(row));
+  return [addRowListSplitFields({
     section: 'Node Support Coverage',
     sourceTotal: coverageRows.length,
-    matched: coverageRows.length - issueRows.length,
+    matched: coveredRows.length,
     mandatoryUnmatched: issueRows.length,
     optionalUnmatched: 0,
-    formula: `${coverageRows.length - issueRows.length} covered + ${issueRows.length} issue = ${coverageRows.length}`,
+    formula: `${coveredRows.length} covered + ${issueRows.length} issue = ${coverageRows.length}`,
     check: issueRows.length ? 'REVIEW' : 'OK',
     action: issueRows.length ? 'Review node-wise support coverage actions.' : 'Support coverage has no reported issue.',
-    matchedRows: '',
+    matchedRows: compactIdList(coveredRows, compactSupportRowId),
     mandatoryUnmatchedRows: compactIdList(issueRows, compactSupportRowId),
     optionalUnmatchedRows: '',
   })];
