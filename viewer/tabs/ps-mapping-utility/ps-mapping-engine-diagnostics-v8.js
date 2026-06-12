@@ -31,8 +31,54 @@ function isTruthy(value) {
   return value === true || /^(yes|y|true|1|mandatory|required|req|must|audit)$/i.test(String(value ?? '').trim());
 }
 
+function cleanIdPart(value) {
+  return String(value ?? '')
+    .trim()
+    .replace(/\s+/g, ' ')
+    .replace(/[|]+/g, '/')
+    || '';
+}
+
+function existingTable2SourceId(row = {}) {
+  return cleanIdPart(row.table2SourceId || row.modelSourceId || row.sourceId || '');
+}
+
+function table2RowOrdinal(row = {}, index = -1) {
+  const raw = cleanIdPart(row.table2Row || row.modelTable2Row || row.sourceRow || row.rowIndex || row.modelRowIndex || '');
+  if (raw) return raw;
+  return Number.isFinite(index) && index >= 0 ? String(index + 1) : '';
+}
+
+function makeTable2SourceId(row = {}, index = -1) {
+  const existing = existingTable2SourceId(row);
+  if (existing) return existing;
+
+  const ordinal = table2RowOrdinal(row, index);
+  if (ordinal) return `T2:${ordinal}`;
+
+  const ps = cleanIdPart(row.psnoModel || row.modelPsNo || row.modelPsNoRaw || row.basePs || 'PS?');
+  const bore = cleanIdPart(row.modelBore ?? row.bore ?? 'BORE?');
+  const line = cleanIdPart(row.lineFamily || row.modelLineFamily || row.pipe || 'LINE?');
+  const support = cleanIdPart(row.supportTypesRequested || row.modelDtxrKeywords || row.dtxr || 'SUPPORT?');
+  return `T2KEY:${ps}|${bore}|${line}|${support}`;
+}
+
+function withTable2SourceId(row = {}, index = -1) {
+  if (!row || typeof row !== 'object') return row;
+  const table2SourceId = makeTable2SourceId(row, index);
+  return {
+    ...row,
+    table2SourceId,
+    modelSourceId: row.modelSourceId || table2SourceId,
+  };
+}
+
+function withTable2SourceIds(rows) {
+  return Array.isArray(rows) ? rows.map((row, index) => withTable2SourceId(row, index)) : rows;
+}
+
 function modelKey(row = {}) {
-  return row.psnoModel || row.modelPsNo || row.basePs || '__UNKNOWN_MODEL__';
+  return row.modelSourceId || row.table2SourceId || row.psnoModel || row.modelPsNo || row.basePs || '__UNKNOWN_MODEL__';
 }
 
 function hasNode(row = {}) {
@@ -57,21 +103,22 @@ function noNodeAction(row = {}, mandatory = false) {
 }
 
 function makeNoNodeCandidate(row = {}, { mandatory = false } = {}) {
-  const action = noNodeAction(row, mandatory);
+  const rowWithId = withTable2SourceId(row);
+  const action = noNodeAction(rowWithId, mandatory);
   return {
-    psnoModel: row.psnoModel || row.modelPsNo || '',
-    basePs: row.basePs || '',
-    modelBore: row.modelBore ?? row.bore ?? '',
-    pipe: row.pipe || '',
-    lineFamily: row.lineFamily || row.modelLineFamily || '',
-    dtxr: row.dtxr || '',
+    psnoModel: rowWithId.psnoModel || rowWithId.modelPsNo || '',
+    basePs: rowWithId.basePs || '',
+    modelBore: rowWithId.modelBore ?? rowWithId.bore ?? '',
+    pipe: rowWithId.pipe || '',
+    lineFamily: rowWithId.lineFamily || rowWithId.modelLineFamily || '',
+    dtxr: rowWithId.dtxr || '',
     mandatory,
-    supportTypesRequested: row.modelDtxrKeywords || row.supportTypesRequested || '',
-    modelDtxrKeywords: row.modelDtxrKeywords || row.supportTypesRequested || '',
+    supportTypesRequested: rowWithId.modelDtxrKeywords || rowWithId.supportTypesRequested || '',
+    modelDtxrKeywords: rowWithId.modelDtxrKeywords || rowWithId.supportTypesRequested || '',
     candidateNode: '',
     node: '',
     table1PsNo: '',
-    psBasis: row.basis || 'NO_MATCH',
+    psBasis: rowWithId.basis || 'NO_MATCH',
     boreBasis: '',
     lineBasis: '',
     supportBasis: '',
@@ -83,20 +130,22 @@ function makeNoNodeCandidate(row = {}, { mandatory = false } = {}) {
     finalStatus: mandatory ? 'USER_REVIEW_REQUIRED' : 'OPTIONAL_PS_NO_UNMAPPED',
     confidence: mandatory ? 'REVIEW' : 'AUDIT',
     confidenceScore: 0,
-    warnings: row.warnings || (mandatory ? 'NO_MATCHING_NODE' : 'OPTIONAL_NO_MATCHING_NODE'),
+    warnings: rowWithId.warnings || (mandatory ? 'NO_MATCHING_NODE' : 'OPTIONAL_NO_MATCHING_NODE'),
     reason: action,
     reviewAction: action,
     consolidatedNodeWiseAction: action,
     nodeCoverageNote: action,
     matchGroup: mandatory ? '04_UNMATCHED_MANDATORY' : '05_UNMATCHED_OPTIONAL_PS_NO',
-    table2Row: row.table2Row || row.sourceRow || '',
+    table2Row: rowWithId.table2Row || rowWithId.sourceRow || '',
+    table2SourceId: rowWithId.table2SourceId,
+    modelSourceId: rowWithId.modelSourceId,
   };
 }
 
 function appendConfiguredNoNodeAuditRows(candidateRows = [], resultRows = [], options = {}) {
-  const rows = Array.isArray(candidateRows) ? [...candidateRows] : [];
+  const rows = Array.isArray(candidateRows) ? withTable2SourceIds(candidateRows) : [];
   const existing = new Set(rows.map((row) => modelKey(row)));
-  for (const row of resultRows || []) {
+  for (const row of withTable2SourceIds(resultRows || []) || []) {
     if (!hasNoNodeTable2Ps(row)) continue;
     const mandatory = isMandatory(row);
     if (!mandatory && options.showOptionalUnmatchedPsNo !== true) continue;
@@ -127,13 +176,17 @@ function filterOptionalRows(rows, options) {
 }
 
 function applyOptionalUnmatchedPolicy(result = {}, options = {}) {
-  const baseRows = result?.rows || result?.outputRows || [];
-  const candidateBase = result?.candidateRows || result?.candidates || [];
-  const candidates = filterOptionalRows(appendConfiguredNoNodeAuditRows(candidateBase, baseRows, options), options);
-  const rows = filterOptionalRows(result?.rows, options);
-  const outputRows = filterOptionalRows(result?.outputRows, options);
-  const validatorRows = filterOptionalRows(result?.validatorRows || rows, options);
-  const supportCoverageRows = filterOptionalRows(result?.supportCoverageRows, options);
+  const rowsWithIds = withTable2SourceIds(result?.rows);
+  const outputRowsWithIds = withTable2SourceIds(result?.outputRows);
+  const validatorRowsWithIds = withTable2SourceIds(result?.validatorRows || rowsWithIds);
+  const supportCoverageRowsWithIds = withTable2SourceIds(result?.supportCoverageRows);
+  const baseRowsForAudit = rowsWithIds || outputRowsWithIds || [];
+  const candidateBase = withTable2SourceIds(result?.candidateRows || result?.candidates || []);
+  const candidates = filterOptionalRows(appendConfiguredNoNodeAuditRows(candidateBase, baseRowsForAudit, options), options);
+  const rows = filterOptionalRows(rowsWithIds, options);
+  const outputRows = filterOptionalRows(outputRowsWithIds, options);
+  const validatorRows = filterOptionalRows(validatorRowsWithIds || rows, options);
+  const supportCoverageRows = filterOptionalRows(supportCoverageRowsWithIds, options);
   return {
     ...result,
     rows,
@@ -145,11 +198,13 @@ function applyOptionalUnmatchedPolicy(result = {}, options = {}) {
     summary: {
       ...(result?.summary || {}),
       candidateRows: candidates.length,
+      table2SourceIds: new Set((baseRowsForAudit || []).map((row) => row?.table2SourceId).filter(Boolean)).size,
       optionalUnmatchedPsNoRows: candidates.filter((row) => visibleAction(row) === 'Optional PS No. not mapped.').length,
       optionalUnmatchedNodeNoRows: candidates.filter((row) => isTable1OnlyUnmappedNode(row) && !isMandatory(row)).length,
     },
     approxConfig: {
       ...(result?.approxConfig || {}),
+      table2SourceId: 'Each normalized Table-2 row receives table2SourceId/modelSourceId. Tally and unmatched-row checks must use this source ID as the denominator key, not PS No or base PS.',
       optionalUnmatchedPolicy: 'Mandatory unmatched rows are always shown. Optional unmatched Table-2 PS rows require showOptionalUnmatchedPsNo=true. Optional Table-1-only node rows require showOptionalUnmatchedNodeNo=true.',
     },
   };
