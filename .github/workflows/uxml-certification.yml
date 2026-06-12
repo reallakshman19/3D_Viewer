@@ -8,12 +8,14 @@ on:
       - "viewer/tabs/model-converters-tab.js"
       - "viewer/tabs/model-converters/inputxml-dxf-branch-picker.js"
       - "viewer/tabs/model-converters/inputxml-dxf-symbol-option.js"
+      - "viewer/tabs/model-converters/inputxml-dxf-projection-option.js"
       - "viewer/vendor/dxf-lines.js"
       - "viewer/tests/uxml-*.test.js"
       - "viewer/tests/rvm-pcf-*.test.js"
       - "viewer/tests/inputxml-to-dxf.test.js"
       - "viewer/tests/inputxml-dxf-branch-picker.test.js"
       - "viewer/tests/inputxml-dxf-symbol-option.test.js"
+      - "viewer/tests/inputxml-dxf-projection-option.test.js"
       - "tools/uxml-certification.mjs"
       - ".github/workflows/uxml-certification.yml"
       - "Benchmarks/RVM JSON to PCF UXML Topology/**"
@@ -26,12 +28,14 @@ on:
       - "viewer/tabs/model-converters-tab.js"
       - "viewer/tabs/model-converters/inputxml-dxf-branch-picker.js"
       - "viewer/tabs/model-converters/inputxml-dxf-symbol-option.js"
+      - "viewer/tabs/model-converters/inputxml-dxf-projection-option.js"
       - "viewer/vendor/dxf-lines.js"
       - "viewer/tests/uxml-*.test.js"
       - "viewer/tests/rvm-pcf-*.test.js"
       - "viewer/tests/inputxml-to-dxf.test.js"
       - "viewer/tests/inputxml-dxf-branch-picker.test.js"
       - "viewer/tests/inputxml-dxf-symbol-option.test.js"
+      - "viewer/tests/inputxml-dxf-projection-option.test.js"
       - "tools/uxml-certification.mjs"
       - ".github/workflows/uxml-certification.yml"
       - "Benchmarks/RVM JSON to PCF UXML Topology/**"
@@ -81,6 +85,9 @@ jobs:
 
       - name: Run InputXML DXF symbol option certification
         run: node viewer/tests/inputxml-dxf-symbol-option.test.js
+
+      - name: Run InputXML DXF projection option certification
+        run: node viewer/tests/inputxml-dxf-projection-option.test.js
 
       - name: Run UXML Vitest certification
         shell: bash
@@ -174,6 +181,7 @@ jobs:
             echo "| InputXML DXF smoke certification | Completed above |"
             echo "| InputXML DXF branch picker certification | Completed above |"
             echo "| InputXML DXF symbol option certification | Completed above |"
+            echo "| InputXML DXF projection option certification | Completed above |"
             echo "| Vitest UXML suite | Completed above |"
             echo ""
             echo "Expected when green:"

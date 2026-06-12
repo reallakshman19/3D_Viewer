@@ -5,8 +5,38 @@ function numberOr(value, fallback) {
   return Number.isFinite(n) ? n : fallback;
 }
 
-function scalePoint(point, scale) {
-  return { x: point.x * scale, y: point.y * scale, z: point.z * scale };
+function normalizeProjectionMode(value) {
+  const mode = String(value || '3d').trim().toLowerCase();
+  if (['top', 'xy', 'plan'].includes(mode)) return 'top';
+  if (['elevation-xz', 'xz', 'front', 'elevation-e'].includes(mode)) return 'elevation-xz';
+  if (['elevation-yz', 'yz', 'side', 'elevation-n'].includes(mode)) return 'elevation-yz';
+  if (['iso', 'iso-2.5d', 'isometric'].includes(mode)) return 'iso-2.5d';
+  return '3d';
+}
+
+function projectPoint(point, projectionMode) {
+  if (projectionMode === 'top') {
+    return { x: point.x, y: point.y, z: 0 };
+  }
+  if (projectionMode === 'elevation-xz') {
+    return { x: point.x, y: point.z, z: 0 };
+  }
+  if (projectionMode === 'elevation-yz') {
+    return { x: point.y, y: point.z, z: 0 };
+  }
+  if (projectionMode === 'iso-2.5d') {
+    return {
+      x: point.x - point.y,
+      y: point.z + 0.5 * (point.x + point.y),
+      z: 0,
+    };
+  }
+  return { x: point.x, y: point.y, z: point.z };
+}
+
+function transformPoint(point, scale, projectionMode) {
+  const projected = projectPoint(point, projectionMode);
+  return { x: projected.x * scale, y: projected.y * scale, z: projected.z * scale };
 }
 
 function midpoint(a, b) {
@@ -124,6 +154,7 @@ export function writeInputXmlDxf({ segments = [], supports = [], branches = [], 
   const textHeight = numberOr(options.textHeight, 2.5);
   const showLabels = options.showLabels !== false;
   const showSymbols = options.showSymbols !== false;
+  const projectionMode = normalizeProjectionMode(options.projectionMode || options.dxfProjectionMode || options.outputProjection);
   const selectedBranchIds = Array.isArray(options.selectedBranchIds) ? options.selectedBranchIds.map((id) => String(id || '').trim()).filter(Boolean) : [];
   const branchManifest = branches.map(normalizeBranch);
   const selectedBranches = branchManifest.filter((branch) => branchSelected(branch, selectedBranchIds));
@@ -131,8 +162,8 @@ export function writeInputXmlDxf({ segments = [], supports = [], branches = [], 
   let symbolCount = 0;
 
   for (const segment of segments) {
-    const p1 = scalePoint(segment.p1, scale);
-    const p2 = scalePoint(segment.p2, scale);
+    const p1 = transformPoint(segment.p1, scale, projectionMode);
+    const p2 = transformPoint(segment.p2, scale, projectionMode);
     entities.push(lineEntity(segment.id || segment.componentId, p1, p2, segment.layer || 'PIPING'));
     if (showSymbols) {
       symbolCount += addComponentSymbol(entities, segment, p1, p2, textHeight);
@@ -143,7 +174,7 @@ export function writeInputXmlDxf({ segments = [], supports = [], branches = [], 
   }
 
   for (const support of supports) {
-    const point = scalePoint(support.point, scale);
+    const point = transformPoint(support.point, scale, projectionMode);
     entities.push(pointEntity(support.id || support.componentId, point, 'SUPPORTS'));
     if (showSymbols) {
       symbolCount += addSupportSymbol(entities, support.id || support.componentId || 'support', point, textHeight);
@@ -165,6 +196,7 @@ export function writeInputXmlDxf({ segments = [], supports = [], branches = [], 
     sidecar: {
       schema: 'inputxml-dxf-sidecar/v1',
       source: options.sourceName || '',
+      projectionMode,
       branchCount: branchManifest.length,
       selectedBranchCount: selectedCount,
       selectedBranchIds,

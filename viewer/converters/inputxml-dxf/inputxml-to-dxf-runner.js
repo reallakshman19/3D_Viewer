@@ -95,6 +95,7 @@ export async function run(ctx = {}) {
     }
 
     pushBranchDiscoveryLogs(stdout, extraction.branches, geometry.selectedBranchIds || []);
+    stdout.push(`Projection mode: ${sidecar.projectionMode}`);
     stdout.push(`${geometry.segments.length} line segments, ${geometry.supports.length} support points, ${extraction.branches.length} branches total.`);
     return { ok: true, outputs, logs: { stdout, stderr }, diagnostics };
   } catch (error) {
