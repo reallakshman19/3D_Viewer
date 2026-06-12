@@ -22,8 +22,8 @@ import {
   normalizeXmlToUxml,
 } from '../uxml/UxmlNormalizer.js';
 
-const BENCHMARK_XML = 'Benchmarks\\INPUT XML to CII 2019\\1001\\1001-P - COPY_INPUT.XML';
-const AUDIT_JSON = 'Benchmarks\\InputXML Schema Audit\\1001-P-COPY-inputxml-audit.json';
+const BENCHMARK_XML = 'Benchmarks/INPUT XML to CII 2019/1001/1001-P - COPY_INPUT.XML';
+const AUDIT_JSON = 'Benchmarks/InputXML Schema Audit/1001-P-COPY-inputxml-audit.json';
 
 function freshDoc() {
   const doc = createUxmlDocument();
