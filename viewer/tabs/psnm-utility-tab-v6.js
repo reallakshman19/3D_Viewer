@@ -46,6 +46,108 @@ function triple(value, fallback) { const p = String(value || '').split(',').map(
 function objectRowsCsv(rows) { if (!rows?.length) return ''; const keys = Array.from(rows.reduce((set, row) => { Object.keys(row || {}).forEach((key) => set.add(key)); return set; }, new Set())); return [keys.map(csv).join(','), ...rows.map((row) => keys.map((key) => csv(row?.[key])).join(','))].join('\n'); }
 async function copyText(text, ctx) { try { await navigator.clipboard.writeText(String(text || '')); ctx.showToast?.('Copied CSV.', 'success'); } catch (error) { ctx.showToast?.(`Copy failed: ${error.message || error}`, 'error'); } }
 
+function readBoolStorage(key, fallback = false) {
+  try {
+    const raw = localStorage.getItem(key);
+    if (raw == null) return fallback;
+    return raw === '1' || raw === 'true';
+  } catch {
+    return fallback;
+  }
+}
+
+function writeBoolStorage(key, value) {
+  try {
+    localStorage.setItem(key, value ? '1' : '0');
+  } catch {}
+}
+
+const PSNM_CANDIDATE_DETAIL_KEY = 'psnm.showCandidateDiagnosticColumns';
+
+const PSNM_CANDIDATE_BASIC_COLUMNS = [
+  ['psName', 'PS Name'],
+  ['matchingNode', 'Candidate Node'],
+  ['node', 'Node'],
+  ['occurrenceId', 'Node Occurrence'],
+  ['coordMatchType', 'Coordinate Match'],
+  ['matchType', 'Match Class'],
+  ['decision', 'Candidate Decision'],
+  ['boreStatus', 'Bore Check'],
+  ['psBore', 'PS Bore'],
+  ['nodeBoreMm', 'Node Bore'],
+  ['nodeBoreSource', 'Node Bore Source'],
+  ['dxMm', 'ΔE mm'],
+  ['dyMm', 'ΔU mm'],
+  ['dzMm', 'ΔS mm'],
+  ['maxAxisDeltaMm', 'Max Axis Δ mm'],
+  ['reason', 'Reason / Action'],
+];
+
+const PSNM_CANDIDATE_DETAIL_COLUMNS = [
+  ['psRowIndex', 'PS Row Index'],
+  ['nodeRowIndex', 'Node Row Index'],
+  ['psE', 'PS E'],
+  ['psU', 'PS U'],
+  ['psS', 'PS S'],
+  ['nodeE', 'Node E'],
+  ['nodeU', 'Node U'],
+  ['nodeS', 'Node S'],
+  ['euclideanDeltaMm', '3D Delta mm'],
+  ['mandatoryPairRank', 'Mandatory Rank'],
+  ['boreRank', 'Bore Rank'],
+  ['terminalRank', 'Terminal Rank'],
+  ['finalStatus', 'Final Status'],
+  ['isMandatoryPs', 'PS Mandatory'],
+  ['isMandatoryNode', 'Node Mandatory'],
+  ['sourceTable', 'Source Table'],
+  ['sourceRow', 'Source Row'],
+];
+
+function formatCandidateValue(key, value) {
+  if (value === true) return 'YES';
+  if (value === false) return 'NO';
+  if (['dxMm', 'dyMm', 'dzMm', 'maxAxisDeltaMm', 'euclideanDeltaMm', 'psE', 'psU', 'psS', 'nodeE', 'nodeU', 'nodeS'].includes(key)) {
+    return n(value);
+  }
+  return value ?? '';
+}
+
+function candidateMatrixTable(state) {
+  const rows = state.result?.candidateRows || [];
+  const showDetail = state.ui?.showCandidateDiagnostics === true;
+  const columns = showDetail
+    ? [...PSNM_CANDIDATE_BASIC_COLUMNS, ...PSNM_CANDIDATE_DETAIL_COLUMNS]
+    : PSNM_CANDIDATE_BASIC_COLUMNS;
+
+  if (!rows.length) {
+    return '<div class="psnm-banner">No candidate rows yet. Run Match after building Master Tables.</div>';
+  }
+
+  return `<div class="psnm-tablewrap"><table class="psnm-table"><thead><tr>${columns.map(([, label]) => `<th>${h(label)}</th>`).join('')}</tr></thead><tbody>${rows.map((row) => `<tr>${columns.map(([key]) => `<td>${h(formatCandidateValue(key, row?.[key]))}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`;
+}
+
+function candidateMatrixPanel(state) {
+  const checked = state.ui?.showCandidateDiagnostics === true ? 'checked' : '';
+  return `<section class="psnm-card">
+    <div class="psnm-card-head">
+      <b>Candidate Matrix</b>
+      <div class="psnm-actions">
+        <label style="display:flex;gap:6px;align-items:center;font-size:12px;color:#cfe4ff">
+          <input type="checkbox" data-psnm-ui="showCandidateDiagnostics" ${checked}>
+          Show detail diagnostic columns
+        </label>
+        <button class="psnm-btn psnm-btn-secondary" data-psnm-action="copyCandidates">Copy CSV</button>
+      </div>
+    </div>
+    <div class="psnm-card-body">
+      <div class="psnm-banner">
+        Candidate Matrix shows candidates produced by the PSNM core engine. Detail diagnostics are hidden by default to keep the table readable.
+      </div>
+      ${candidateMatrixTable(state)}
+    </div>
+  </section>`;
+}
+
 function makeState() {
   return {
     activeTab: 'source',
@@ -74,6 +176,9 @@ function makeState() {
       enableApprox3: true,
     },
     result: { rows: [], candidateRows: [], mandatoryCoverageRows: [], mandatoryPsCoverageRows: [], userLog: [], debugLog: [] },
+    ui: {
+      showCandidateDiagnostics: readBoolStorage(PSNM_CANDIDATE_DETAIL_KEY, false),
+    },
     status: { phase: 'Idle', detail: 'Paste source tables, then Resolve Master Tables.', percent: 0 },
   };
 }
@@ -172,7 +277,7 @@ export function renderPSNM_UtilityTab(container, ctx = {}) {
   let state = makeState();
 
   function renderModal() {
-    return `<div class="psnm-modal-bg" data-psnm="modal"><div class="psnm-modal"><div class="psnm-modal-head"><div><h2 class="psnm-title">PSNM Workbench</h2><p class="psnm-sub">Raw Sources → Master Tables → Match from Masters</p></div><button class="psnm-btn psnm-btn-secondary" data-psnm-action="close">Close</button></div><div class="psnm-tabs">${tab('source','1. Source Tables',state)}${tab('master','2. Master Tables',state)}${tab('setup','3. Anchor & Match Setup',state)}${tab('match','4. Match Results',state)}${tab('coverage','5. Coverage / Exceptions',state)}${tab('user','6. User Log',state)}${tab('debug','7. Debug Console',state)}</div><div class="psnm-body"><div data-summary>${summary(state)}</div>${panel('source',state,sourcePanel(state))}${panel('master',state,masterPanel(state))}${panel('setup',state,setupPanel(state))}${panel('match',state,matchPanel(state))}${panel('coverage',state,coveragePanel(state))}${panel('user',state,logPanel(state,false))}${panel('debug',state,logPanel(state,true))}</div>${statusBar(state)}</div></div>`;
+    return `<div class="psnm-modal-bg" data-psnm="modal"><div class="psnm-modal"><div class="psnm-modal-head"><div><h2 class="psnm-title">PSNM Workbench</h2><p class="psnm-sub">Raw Sources → Master Tables → Match from Masters</p></div><button class="psnm-btn psnm-btn-secondary" data-psnm-action="close">Close</button></div><div class="psnm-tabs">${tab('source','1. Source Tables',state)}${tab('master','2. Master Tables',state)}${tab('setup','3. Anchor & Match Setup',state)}${tab('match','4. Match Results',state)}${tab('candidate','5. Candidate Matrix',state)}${tab('coverage','6. Coverage / Exceptions',state)}${tab('user','7. User Log',state)}${tab('debug','8. Debug Console',state)}</div><div class="psnm-body"><div data-summary>${summary(state)}</div>${panel('source',state,sourcePanel(state))}${panel('master',state,masterPanel(state))}${panel('setup',state,setupPanel(state))}${panel('match',state,matchPanel(state))}${panel('candidate',state,candidateMatrixPanel(state))}${panel('coverage',state,coveragePanel(state))}${panel('user',state,logPanel(state,false))}${panel('debug',state,logPanel(state,true))}</div>${statusBar(state)}</div></div>`;
   }
   function refresh() { const modal = container.querySelector('[data-psnm="modal"]'); if (modal) modal.outerHTML = renderModal(); }
   function updateStatus(next) { state.status = { ...state.status, ...next }; refresh(); }
@@ -266,11 +371,23 @@ export function renderPSNM_UtilityTab(container, ctx = {}) {
     if (action === 'copyMasterPs') copyText(objectRowsCsv(state.master.psRows), ctx);
     else if (action === 'copyMasterNode') copyText(objectRowsCsv(state.master.nodeRows), ctx);
     else if (action === 'copyMatch') copyText(objectRowsCsv(state.result.rows), ctx);
+    else if (action === 'copyCandidates') copyText(objectRowsCsv(state.result.candidateRows), ctx);
     else if (action === 'copyCoverage') copyText(objectRowsCsv(state.result.mandatoryPsCoverageRows || []) + '\n\n' + objectRowsCsv(state.result.mandatoryCoverageRows || []), ctx);
     else if (action === 'copyUser') copyText(objectRowsCsv(state.result.userLog), ctx);
     else if (action === 'copyDebug') copyText(objectRowsCsv(state.result.debugLog), ctx);
   }
   function onInput(event) {
+    const ui = event.target?.closest?.('[data-psnm-ui]');
+    if (ui) {
+      const key = ui.dataset.psnmUi;
+      if (key === 'showCandidateDiagnostics') {
+        state.ui.showCandidateDiagnostics = ui.checked === true;
+        writeBoolStorage(PSNM_CANDIDATE_DETAIL_KEY, state.ui.showCandidateDiagnostics);
+        refresh();
+      }
+      return;
+    }
+
     const source = event.target?.closest?.('[data-source]');
     if (source) {
       state.source[source.dataset.source] = source.value;
