@@ -67,7 +67,14 @@ assert.ok(dxf.includes('TABLES'), 'DXF contains TABLES');
 assert.ok(dxf.includes('ENTITIES'), 'DXF contains ENTITIES');
 assert.ok(dxf.includes('LINE'), 'DXF contains LINE entities');
 assert.ok(dxf.trim().endsWith('EOF'), 'DXF ends with EOF');
-assert.equal(sidecar.projectionMode, '3d', 'default projection remains 3d');
+assert.equal(sidecar.outputMode, 'iso-drawing', 'default output mode is fitted iso drawing');
+assert.equal(sidecar.projectionMode, 'iso-2.5d', 'default projection is isometric for drawing output');
+assert.ok(sidecar.drawing?.sheet, 'iso drawing sidecar records sheet metadata');
+assert.ok(Number.isFinite(sidecar.drawing.fitScale) && sidecar.drawing.fitScale > 0, 'iso drawing sidecar records positive fit scale');
+assert.ok(sidecar.drawing.extentsAfterFit.minX >= sidecar.drawing.sheet.margin - 1e-6, 'fitted drawing respects left margin');
+assert.ok(sidecar.drawing.extentsAfterFit.maxX <= sidecar.drawing.sheet.width - sidecar.drawing.sheet.margin + 1e-6, 'fitted drawing respects right margin');
+assert.ok(sidecar.drawing.extentsAfterFit.minY >= sidecar.drawing.sheet.margin - 1e-6, 'fitted drawing respects bottom margin');
+assert.ok(sidecar.drawing.extentsAfterFit.maxY <= sidecar.drawing.sheet.height - sidecar.drawing.sheet.margin + 1e-6, 'fitted drawing respects top margin');
 assert.equal(sidecar.segmentCount, allGeometry.segments.length, 'sidecar segmentCount matches projection');
 assert.equal(sidecar.supportCount, allGeometry.supports.length, 'sidecar supportCount matches projection');
 assert.equal(sidecar.branchCount, extraction.branches.length, 'sidecar branchCount matches extraction');
@@ -96,24 +103,28 @@ const scaled = writeInputXmlDxf({
   segments: [{ id: 'scale', layer: 'PIPING', p1: { x: 1, y: 2, z: 3 }, p2: { x: 4, y: 5, z: 6 }, label: '' }],
   supports: [],
   branches: [],
-}, { dxfScale: 2, showLabels: false }).dxf;
-assert.ok(scaled.includes('\n10\n2\n20\n4\n30\n6\n'), 'scale=2 doubles start coordinate once');
+}, { outputMode: 'geometry', dxfScale: 2, showLabels: false }).dxf;
+assert.ok(scaled.includes('\n10\n2\n20\n4\n30\n6\n'), 'geometry mode scale=2 doubles start coordinate once');
 
 const projectionInput = {
   segments: [{ id: 'projection', layer: 'PIPING', p1: { x: 1, y: 2, z: 3 }, p2: { x: 4, y: 5, z: 6 }, label: '' }],
   supports: [],
   branches: [],
 };
-const topWrite = writeInputXmlDxf(projectionInput, { projectionMode: 'top', showLabels: false, showSymbols: false });
+const geometryWrite = writeInputXmlDxf(projectionInput, { outputMode: 'geometry', showLabels: false, showSymbols: false });
+assert.equal(geometryWrite.sidecar.outputMode, 'geometry', 'geometry mode remains available for raw model output');
+assert.equal(geometryWrite.sidecar.projectionMode, '3d', 'geometry mode default projection remains 3D');
+assert.ok(hasStartToken(geometryWrite.dxf, 1, 2, 3), 'geometry mode preserves raw 3D start coordinate');
+const topWrite = writeInputXmlDxf(projectionInput, { outputMode: 'geometry', projectionMode: 'top', showLabels: false, showSymbols: false });
 assert.equal(topWrite.sidecar.projectionMode, 'top', 'top projection is recorded in sidecar');
 assert.ok(hasStartToken(topWrite.dxf, 1, 2, 0), 'top projection maps X/Y and zeros Z');
-const xzWrite = writeInputXmlDxf(projectionInput, { projectionMode: 'elevation-xz', showLabels: false, showSymbols: false });
+const xzWrite = writeInputXmlDxf(projectionInput, { outputMode: 'geometry', projectionMode: 'elevation-xz', showLabels: false, showSymbols: false });
 assert.equal(xzWrite.sidecar.projectionMode, 'elevation-xz', 'X/Z elevation is recorded in sidecar');
 assert.ok(hasStartToken(xzWrite.dxf, 1, 3, 0), 'X/Z elevation maps X/Z onto drawing X/Y');
-const yzWrite = writeInputXmlDxf(projectionInput, { projectionMode: 'elevation-yz', showLabels: false, showSymbols: false });
+const yzWrite = writeInputXmlDxf(projectionInput, { outputMode: 'geometry', projectionMode: 'elevation-yz', showLabels: false, showSymbols: false });
 assert.equal(yzWrite.sidecar.projectionMode, 'elevation-yz', 'Y/Z elevation is recorded in sidecar');
 assert.ok(hasStartToken(yzWrite.dxf, 2, 3, 0), 'Y/Z elevation maps Y/Z onto drawing X/Y');
-const isoWrite = writeInputXmlDxf(projectionInput, { projectionMode: 'iso-2.5d', showLabels: false, showSymbols: false });
+const isoWrite = writeInputXmlDxf(projectionInput, { outputMode: 'geometry', projectionMode: 'iso-2.5d', showLabels: false, showSymbols: false });
 assert.equal(isoWrite.sidecar.projectionMode, 'iso-2.5d', 'iso projection is recorded in sidecar');
 assert.ok(hasStartToken(isoWrite.dxf, -1, 4.5, 0), 'iso-2.5d projection maps X/Y/Z deterministically');
 
@@ -124,7 +135,7 @@ const symbolWrite = writeInputXmlDxf({
   ],
   supports: [{ id: 'support-test', point: { x: 50, y: 50, z: 0 }, label: '' }],
   branches: [],
-}, { showLabels: false, textHeight: 2.5 });
+}, { outputMode: 'geometry', showLabels: false, textHeight: 2.5 });
 assert.equal(symbolWrite.sidecar.symbolCount, 9, 'valve/flange/support primitive symbols are counted');
 assert.ok(countEntity(symbolWrite.dxf, 'LINE') >= 11, 'primitive symbols add LINE entities');
 assert.equal(countEntity(symbolWrite.dxf, 'POINT'), 1, 'support point remains a POINT entity');
@@ -139,7 +150,7 @@ const noSymbolWrite = writeInputXmlDxf({
   ],
   supports: [{ id: 'support-test', point: { x: 50, y: 50, z: 0 }, label: '' }],
   branches: [],
-}, { showLabels: false, showSymbols: false });
+}, { outputMode: 'geometry', showLabels: false, showSymbols: false });
 assert.equal(noSymbolWrite.sidecar.symbolCount, 0, 'showSymbols=false disables primitive symbols');
 assert.equal(countEntity(noSymbolWrite.dxf, 'LINE'), 2, 'showSymbols=false keeps only base segment LINE entities');
 
@@ -160,11 +171,14 @@ assert.ok(Array.isArray(output.logs.stdout) && output.logs.stdout.length > 0, 'r
 assert.ok(output.logs.stdout.some((line) => line.includes('Available branches')), 'runner logs available branch manifest');
 assert.ok(output.logs.stdout.some((line) => line.includes(firstBranch.id)), 'runner logs a copyable branch id');
 assert.ok(output.logs.stdout.some((line) => line.includes('Selected branch ids: <all branches')), 'runner logs all-branch selection hint');
+assert.ok(output.logs.stdout.some((line) => line.includes('Output mode: iso-drawing')), 'runner logs output mode');
 assert.ok(output.logs.stdout.some((line) => line.includes('Projection mode: top')), 'runner logs projection mode');
 
 const sidecarOutput = output.outputs.find((item) => item.name === '1001-sidecar.json');
 const parsedSidecar = JSON.parse(sidecarOutput.text);
+assert.equal(parsedSidecar.outputMode, 'iso-drawing', 'runner sidecar records default drawing output mode');
 assert.equal(parsedSidecar.projectionMode, 'top', 'runner sidecar records selected projection mode');
+assert.ok(parsedSidecar.drawing.sheet, 'runner sidecar records fitted drawing sheet');
 assert.equal(parsedSidecar.segmentCount, allGeometry.segments.length, 'runner sidecar segmentCount is stable');
 assert.ok(Array.isArray(parsedSidecar.branches), 'runner sidecar exposes branches');
 assert.ok(parsedSidecar.branches.some((branch) => branch.id === firstBranch.id), 'runner sidecar includes copyable branch id');
@@ -177,6 +191,8 @@ const selectedOutput = await run({
 assert.equal(selectedOutput.ok, true, 'selected runner returns ok=true');
 assert.ok(selectedOutput.logs.stdout.some((line) => line.includes(`Selected branch ids: ${firstBranch.id}`)), 'selected runner logs selected branch id');
 const selectedSidecar = JSON.parse(selectedOutput.outputs.find((item) => item.name === '1001-sidecar.json').text);
+assert.equal(selectedSidecar.outputMode, 'iso-drawing', 'selected runner uses iso drawing output by default');
+assert.equal(selectedSidecar.projectionMode, 'iso-2.5d', 'selected runner defaults to iso projection');
 assert.deepEqual(selectedSidecar.selectedBranchIds, [firstBranch.id], 'selected runner sidecar preserves selectedBranchIds');
 assert.equal(selectedSidecar.selectedBranches.length, 1, 'selected runner sidecar exposes selected branch metadata');
 

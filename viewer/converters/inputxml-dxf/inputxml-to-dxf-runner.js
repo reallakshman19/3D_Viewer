@@ -95,7 +95,11 @@ export async function run(ctx = {}) {
     }
 
     pushBranchDiscoveryLogs(stdout, extraction.branches, geometry.selectedBranchIds || []);
+    stdout.push(`Output mode: ${sidecar.outputMode}`);
     stdout.push(`Projection mode: ${sidecar.projectionMode}`);
+    if (sidecar.drawing?.sheet) {
+      stdout.push(`Drawing sheet: ${sidecar.drawing.sheet.width} x ${sidecar.drawing.sheet.height}, fitScale=${sidecar.drawing.fitScale}`);
+    }
     stdout.push(`${geometry.segments.length} line segments, ${geometry.supports.length} support points, ${extraction.branches.length} branches total.`);
     return { ok: true, outputs, logs: { stdout, stderr }, diagnostics };
   } catch (error) {

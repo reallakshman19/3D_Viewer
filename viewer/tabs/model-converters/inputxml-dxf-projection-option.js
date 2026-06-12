@@ -29,11 +29,11 @@ function mountProjectionOption(root, selectedBranchesInput) {
   label.innerHTML = `
     <span>DXF projection</span>
     <select data-option-key="projectionMode" style="background:#0f172a;color:#d7e6ff;border:1px solid #31436b;border-radius:6px;padding:6px;">
-      <option value="3d" selected>3D model coordinates</option>
+      <option value="iso-2.5d" selected>Isometric 2.5D / fitted drawing</option>
       <option value="top">Top / plan (X-Y)</option>
       <option value="elevation-xz">Elevation X-Z</option>
       <option value="elevation-yz">Elevation Y-Z</option>
-      <option value="iso-2.5d">Isometric 2.5D</option>
+      <option value="3d">3D model coordinates</option>
     </select>
   `;
 
