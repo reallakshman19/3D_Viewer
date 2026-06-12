@@ -27,6 +27,8 @@ import {
   XML_PROFILES,
 } from './UxmlConstants.js';
 
+import { isPackageUxmlDialect, mapPackageUxmlToViewerDoc } from './UxmlPackageProfileMapper.js';
+
 import {
   createUxmlAnchor,
   createUxmlComponent,
@@ -485,6 +487,10 @@ function normalizeInputXml(xmlText, doc, sourceId, options = {}) {
 
 function normalizeUxmlPassthrough(xmlText, doc, sourceId) {
   doc.profile = UXML_PROFILES.TOPOLOGY_FULL;
+
+  if (isPackageUxmlDialect(xmlText)) {
+    return mapPackageUxmlToViewerDoc(xmlText, doc, sourceId);
+  }
 
   pushDiagnostic(doc, {
     severity: 'INFO',

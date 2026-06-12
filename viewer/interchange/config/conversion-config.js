@@ -114,6 +114,11 @@ export const DEFAULT_CONVERSION_CONFIG = Object.freeze({
     computeAxisDirection: true,
     cpStrategy: ['source', 'topology', 'geometric', 'fallback'],
     provenanceVersion: 'v1',
+    pipeComponentData: {
+      enabled: false,
+      weightSource: false,
+      dimensionSource: false,
+    },
   },
   exportPolicy: {
     mode: 'normalized',
