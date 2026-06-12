@@ -4,7 +4,7 @@
  * weight/dimension pipelines without changing any existing master row shape.
  */
 
-import { createPipeDataDb } from '../../../third_party/pipe-component-data/src/index.js';
+import { createPipeDataDb } from '../../vendor/create-pipe-data-db.js';
 
 function _text(value) {
   return value === null || value === undefined ? '' : String(value);

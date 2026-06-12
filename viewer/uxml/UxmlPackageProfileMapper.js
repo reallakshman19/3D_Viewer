@@ -6,7 +6,7 @@
  * object via the factory overrides.
  */
 
-import { fromUxmlXml } from '../../third_party/pipe-component-data/src/index.js';
+import { fromUxmlXml } from '../vendor/from-uxml-xml.js';
 import {
   createUxmlComponent,
   createUxmlAnchor,
