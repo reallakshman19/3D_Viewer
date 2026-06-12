@@ -5,6 +5,12 @@ function numberOr(value, fallback) {
   return Number.isFinite(n) ? n : fallback;
 }
 
+function normalizeOutputMode(value) {
+  const mode = String(value || 'iso-drawing').trim().toLowerCase();
+  if (['geometry', 'raw', 'model', 'model-geometry'].includes(mode)) return 'geometry';
+  return 'iso-drawing';
+}
+
 function normalizeProjectionMode(value) {
   const mode = String(value || '3d').trim().toLowerCase();
   if (['top', 'xy', 'plan'].includes(mode)) return 'top';
@@ -12,6 +18,14 @@ function normalizeProjectionMode(value) {
   if (['elevation-yz', 'yz', 'side', 'elevation-n'].includes(mode)) return 'elevation-yz';
   if (['iso', 'iso-2.5d', 'isometric'].includes(mode)) return 'iso-2.5d';
   return '3d';
+}
+
+function resolveProjectionMode(options, outputMode) {
+  const explicit = options.projectionMode ?? options.dxfProjectionMode ?? options.outputProjection;
+  if (explicit !== undefined && explicit !== null && String(explicit).trim()) {
+    return normalizeProjectionMode(explicit);
+  }
+  return outputMode === 'iso-drawing' ? 'iso-2.5d' : '3d';
 }
 
 function projectPoint(point, projectionMode) {
@@ -34,13 +48,80 @@ function projectPoint(point, projectionMode) {
   return { x: point.x, y: point.y, z: point.z };
 }
 
-function transformPoint(point, scale, projectionMode) {
+function projectScaledPoint(point, scale, projectionMode) {
   const projected = projectPoint(point, projectionMode);
   return { x: projected.x * scale, y: projected.y * scale, z: projected.z * scale };
 }
 
 function midpoint(a, b) {
   return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2, z: (a.z + b.z) / 2 };
+}
+
+function emptyExtents() {
+  return { minX: 0, minY: 0, minZ: 0, maxX: 0, maxY: 0, maxZ: 0, width: 0, height: 0, depth: 0 };
+}
+
+function pointExtents(points) {
+  const finite = (points || []).filter((point) => point && Number.isFinite(point.x) && Number.isFinite(point.y) && Number.isFinite(point.z));
+  if (!finite.length) return emptyExtents();
+  const xs = finite.map((point) => point.x);
+  const ys = finite.map((point) => point.y);
+  const zs = finite.map((point) => point.z);
+  const minX = Math.min(...xs);
+  const minY = Math.min(...ys);
+  const minZ = Math.min(...zs);
+  const maxX = Math.max(...xs);
+  const maxY = Math.max(...ys);
+  const maxZ = Math.max(...zs);
+  return {
+    minX,
+    minY,
+    minZ,
+    maxX,
+    maxY,
+    maxZ,
+    width: maxX - minX,
+    height: maxY - minY,
+    depth: maxZ - minZ,
+  };
+}
+
+function createPaperTransform(points, outputMode, options) {
+  const before = pointExtents(points);
+  if (outputMode !== 'iso-drawing') {
+    return {
+      fitScale: 1,
+      sheet: null,
+      extentsBefore: before,
+      extentsAfter: before,
+      apply: (point) => ({ x: point.x, y: point.y, z: point.z }),
+    };
+  }
+
+  const sheetWidth = Math.max(numberOr(options.sheetWidth || options.dxfSheetWidth, 420), 10);
+  const sheetHeight = Math.max(numberOr(options.sheetHeight || options.dxfSheetHeight, 297), 10);
+  const margin = Math.max(numberOr(options.sheetMargin || options.dxfSheetMargin, 15), 0);
+  const availableWidth = Math.max(sheetWidth - margin * 2, 1);
+  const availableHeight = Math.max(sheetHeight - margin * 2, 1);
+  const sourceWidth = Math.max(before.width, 1);
+  const sourceHeight = Math.max(before.height, 1);
+  const fitScale = Math.min(availableWidth / sourceWidth, availableHeight / sourceHeight);
+  const safeFit = Number.isFinite(fitScale) && fitScale > 0 ? fitScale : 1;
+
+  const apply = (point) => ({
+    x: (point.x - before.minX) * safeFit + margin,
+    y: sheetHeight - margin - (point.y - before.minY) * safeFit,
+    z: 0,
+  });
+  const extentsAfter = pointExtents(points.map(apply));
+
+  return {
+    fitScale: safeFit,
+    sheet: { width: sheetWidth, height: sheetHeight, margin },
+    extentsBefore: before,
+    extentsAfter,
+    apply,
+  };
 }
 
 function normalizeBranch(branch) {
@@ -154,16 +235,23 @@ export function writeInputXmlDxf({ segments = [], supports = [], branches = [], 
   const textHeight = numberOr(options.textHeight, 2.5);
   const showLabels = options.showLabels !== false;
   const showSymbols = options.showSymbols !== false;
-  const projectionMode = normalizeProjectionMode(options.projectionMode || options.dxfProjectionMode || options.outputProjection);
+  const outputMode = normalizeOutputMode(options.outputMode || options.dxfOutputMode);
+  const projectionMode = resolveProjectionMode(options, outputMode);
   const selectedBranchIds = Array.isArray(options.selectedBranchIds) ? options.selectedBranchIds.map((id) => String(id || '').trim()).filter(Boolean) : [];
   const branchManifest = branches.map(normalizeBranch);
   const selectedBranches = branchManifest.filter((branch) => branchSelected(branch, selectedBranchIds));
+  const baseSegmentPoints = segments.flatMap((segment) => [
+    projectScaledPoint(segment.p1, scale, projectionMode),
+    projectScaledPoint(segment.p2, scale, projectionMode),
+  ]);
+  const baseSupportPoints = supports.map((support) => projectScaledPoint(support.point, scale, projectionMode));
+  const paper = createPaperTransform([...baseSegmentPoints, ...baseSupportPoints], outputMode, options);
   const entities = [];
   let symbolCount = 0;
 
   for (const segment of segments) {
-    const p1 = transformPoint(segment.p1, scale, projectionMode);
-    const p2 = transformPoint(segment.p2, scale, projectionMode);
+    const p1 = paper.apply(projectScaledPoint(segment.p1, scale, projectionMode));
+    const p2 = paper.apply(projectScaledPoint(segment.p2, scale, projectionMode));
     entities.push(lineEntity(segment.id || segment.componentId, p1, p2, segment.layer || 'PIPING'));
     if (showSymbols) {
       symbolCount += addComponentSymbol(entities, segment, p1, p2, textHeight);
@@ -174,7 +262,7 @@ export function writeInputXmlDxf({ segments = [], supports = [], branches = [], 
   }
 
   for (const support of supports) {
-    const point = transformPoint(support.point, scale, projectionMode);
+    const point = paper.apply(projectScaledPoint(support.point, scale, projectionMode));
     entities.push(pointEntity(support.id || support.componentId, point, 'SUPPORTS'));
     if (showSymbols) {
       symbolCount += addSupportSymbol(entities, support.id || support.componentId || 'support', point, textHeight);
@@ -196,7 +284,14 @@ export function writeInputXmlDxf({ segments = [], supports = [], branches = [], 
     sidecar: {
       schema: 'inputxml-dxf-sidecar/v1',
       source: options.sourceName || '',
+      outputMode,
       projectionMode,
+      drawing: {
+        sheet: paper.sheet,
+        fitScale: paper.fitScale,
+        extentsBeforeFit: paper.extentsBefore,
+        extentsAfterFit: paper.extentsAfter,
+      },
       branchCount: branchManifest.length,
       selectedBranchCount: selectedCount,
       selectedBranchIds,
