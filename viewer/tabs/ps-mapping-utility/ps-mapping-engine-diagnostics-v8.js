@@ -77,6 +77,21 @@ function withTable2SourceIds(rows) {
   return Array.isArray(rows) ? rows.map((row, index) => withTable2SourceId(row, index)) : rows;
 }
 
+function sourceTable2Rows(result = {}, fallbackRows = []) {
+  const source = Array.isArray(result?.consolidatedTable2Rows) && result.consolidatedTable2Rows.length
+    ? result.consolidatedTable2Rows
+    : Array.isArray(result?.table2SourceRows) && result.table2SourceRows.length
+      ? result.table2SourceRows
+      : Array.isArray(result?.modelRows) && result.modelRows.length
+        ? result.modelRows
+        : Array.isArray(result?.normalizedTable2Rows) && result.normalizedTable2Rows.length
+          ? result.normalizedTable2Rows
+          : Array.isArray(fallbackRows)
+            ? fallbackRows
+            : [];
+  return withTable2SourceIds(source) || [];
+}
+
 function modelKey(row = {}) {
   return row.modelSourceId || row.table2SourceId || row.psnoModel || row.modelPsNo || row.basePs || '__UNKNOWN_MODEL__';
 }
@@ -142,10 +157,10 @@ function makeNoNodeCandidate(row = {}, { mandatory = false } = {}) {
   };
 }
 
-function appendConfiguredNoNodeAuditRows(candidateRows = [], resultRows = [], options = {}) {
+function appendConfiguredNoNodeAuditRows(candidateRows = [], table2SourceRows = [], options = {}) {
   const rows = Array.isArray(candidateRows) ? withTable2SourceIds(candidateRows) : [];
   const existing = new Set(rows.map((row) => modelKey(row)));
-  for (const row of withTable2SourceIds(resultRows || []) || []) {
+  for (const row of withTable2SourceIds(table2SourceRows || []) || []) {
     if (!hasNoNodeTable2Ps(row)) continue;
     const mandatory = isMandatory(row);
     if (!mandatory && options.showOptionalUnmatchedPsNo !== true) continue;
@@ -180,15 +195,17 @@ function applyOptionalUnmatchedPolicy(result = {}, options = {}) {
   const outputRowsWithIds = withTable2SourceIds(result?.outputRows);
   const validatorRowsWithIds = withTable2SourceIds(result?.validatorRows || rowsWithIds);
   const supportCoverageRowsWithIds = withTable2SourceIds(result?.supportCoverageRows);
-  const baseRowsForAudit = rowsWithIds || outputRowsWithIds || [];
+  const table2SourceRowsWithIds = sourceTable2Rows(result, rowsWithIds || outputRowsWithIds || []);
   const candidateBase = withTable2SourceIds(result?.candidateRows || result?.candidates || []);
-  const candidates = filterOptionalRows(appendConfiguredNoNodeAuditRows(candidateBase, baseRowsForAudit, options), options);
+  const candidates = filterOptionalRows(appendConfiguredNoNodeAuditRows(candidateBase, table2SourceRowsWithIds, options), options);
   const rows = filterOptionalRows(rowsWithIds, options);
   const outputRows = filterOptionalRows(outputRowsWithIds, options);
   const validatorRows = filterOptionalRows(validatorRowsWithIds || rows, options);
   const supportCoverageRows = filterOptionalRows(supportCoverageRowsWithIds, options);
   return {
     ...result,
+    consolidatedTable2Rows: table2SourceRowsWithIds,
+    table2SourceRows: table2SourceRowsWithIds,
     rows,
     outputRows,
     validatorRows,
@@ -198,7 +215,7 @@ function applyOptionalUnmatchedPolicy(result = {}, options = {}) {
     summary: {
       ...(result?.summary || {}),
       candidateRows: candidates.length,
-      table2SourceIds: new Set((baseRowsForAudit || []).map((row) => row?.table2SourceId).filter(Boolean)).size,
+      table2SourceIds: new Set((table2SourceRowsWithIds || []).map((row) => row?.table2SourceId).filter(Boolean)).size,
       optionalUnmatchedPsNoRows: candidates.filter((row) => visibleAction(row) === 'Optional PS No. not mapped.').length,
       optionalUnmatchedNodeNoRows: candidates.filter((row) => isTable1OnlyUnmappedNode(row) && !isMandatory(row)).length,
     },
