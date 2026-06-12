@@ -41,7 +41,7 @@ function installStyle() {
   const style = document.createElement('style');
   style.id = STYLE_ID;
   style.textContent = `
-.psmap-source-primary-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px;align-items:stretch}.psmap-source-primary-grid .psmap-field textarea{min-height:280px}.psmap-source-hint{font:11px ui-monospace,Consolas,monospace;color:#bae6fd;background:rgba(14,165,233,.08);border:1px solid rgba(56,189,248,.22);border-radius:8px;padding:5px 7px}.psmap-source-label-main{color:#f8fafc!important}.psmap-legacy-source-toggle{display:flex;align-items:center;gap:8px;border:1px solid rgba(148,163,184,.25);background:rgba(15,23,42,.75);color:#dbeafe;border-radius:10px;padding:8px 10px;font-weight:800;cursor:pointer}.psmap-legacy-source-wrap{border:1px dashed rgba(148,163,184,.28);border-radius:12px;padding:10px;background:rgba(15,23,42,.35)}.psmap-legacy-source-body{display:none;margin-top:10px;gap:10px}.psmap-legacy-source-wrap.open .psmap-legacy-source-body{display:grid;grid-template-columns:repeat(3,minmax(0,1fr))}.psmap-retired-note{font-size:12px;color:#fde68a;border:1px solid rgba(251,191,36,.28);background:rgba(120,53,15,.18);border-radius:10px;padding:8px}.psmap-source-ux-note{font-size:12px;color:#cbd5e1}.psmap-table th.psmap-renamed-header{color:#e0f2fe}.psmap-table th.psmap-debug-header{color:#fbbf24}
+.psmap-source-primary-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px;align-items:stretch}.psmap-source-primary-grid .psmap-field textarea{min-height:280px}.psmap-source-hint{font:11px ui-monospace,Consolas,monospace;color:#bae6fd;background:rgba(14,165,233,.08);border:1px solid rgba(56,189,248,.22);border-radius:8px;padding:5px 7px}.psmap-source-label-main{color:#f8fafc!important}.psmap-legacy-source-toggle{display:flex;align-items:center;gap:8px;border:1px solid rgba(148,163,184,.25);background:rgba(15,23,42,.75);color:#dbeafe;border-radius:10px;padding:8px 10px;font-weight:800;cursor:pointer}.psmap-legacy-source-wrap{border:1px dashed rgba(148,163,184,.28);border-radius:12px;padding:10px;background:rgba(15,23,42,.35)}.psmap-legacy-source-body{display:none;margin-top:10px;gap:10px}.psmap-legacy-source-wrap.open .psmap-legacy-source-body{display:grid;grid-template-columns:repeat(3,minmax(0,1fr))}.psmap-retired-note{font-size:12px;color:#fde68a;border:1px solid rgba(251,191,36,.28);background:rgba(120,53,15,.18);border-radius:10px;padding:8px}.psmap-source-ux-note{font-size:12px;color:#cbd5e1}.psmap-table th.psmap-renamed-header{color:#e0f2fe}.psmap-table th.psmap-debug-header{color:#fbbf24}.psmap-gap-sentinel{display:none!important}
 @media(max-width:1100px){.psmap-source-primary-grid,.psmap-legacy-source-wrap.open .psmap-legacy-source-body{grid-template-columns:1fr}}
 `;
   document.head.appendChild(style);
@@ -152,6 +152,7 @@ function tableInfo(panelName) {
 function renameHeaders(info) {
   if (!info) return;
   for (const th of info.headerRow.children) {
+    if (th.dataset.psmapGapSentinel === '1') continue;
     const old = th.textContent.trim();
     const next = CANDIDATE_HEADER_RENAMES.get(old);
     if (!next) continue;
@@ -161,10 +162,70 @@ function renameHeaders(info) {
   }
 }
 
+function columnIndexes(info, label) {
+  return [...info.headerRow.children]
+    .map((th, index) => ({ th, index, label: th.textContent.trim() }))
+    .filter((entry) => entry.label === label);
+}
+
+function removeColumnAt(info, index) {
+  info.headerRow.children[index]?.remove();
+  for (const row of info.body.querySelectorAll('tr')) row.children[index]?.remove();
+}
+
+function dedupeVisibleColumns(info, label) {
+  if (!info) return;
+  const matches = columnIndexes(info, label).filter((entry) => entry.th.dataset.psmapGapSentinel !== '1');
+  for (let i = matches.length - 1; i >= 1; i -= 1) removeColumnAt(info, matches[i].index);
+}
+
+function visibleColumnIndex(info, label) {
+  return [...info.headerRow.children].findIndex((th) => th.textContent.trim() === label && th.dataset.psmapGapSentinel !== '1');
+}
+
+function legacyGapColumnIndex(info) {
+  return [...info.headerRow.children].findIndex((th) => th.textContent.trim() === 'Gap Match' && th.dataset.psmapGapSentinel === '1');
+}
+
+function ensureLegacyGapSentinel(info) {
+  if (!info) return;
+  const visible = visibleColumnIndex(info, 'Support Gap Match');
+  if (visible < 0) return;
+  let sentinel = legacyGapColumnIndex(info);
+  if (sentinel < 0) {
+    const th = document.createElement('th');
+    th.textContent = 'Gap Match';
+    th.dataset.psmapGapSentinel = '1';
+    th.className = 'psmap-gap-sentinel';
+    info.headerRow.appendChild(th);
+    for (const row of info.body.querySelectorAll('tr')) {
+      const td = document.createElement('td');
+      td.className = 'psmap-gap-sentinel';
+      td.textContent = row.children[visible]?.textContent || '';
+      row.appendChild(td);
+    }
+    sentinel = legacyGapColumnIndex(info);
+  }
+
+  if (sentinel >= 0) {
+    for (const row of info.body.querySelectorAll('tr')) {
+      const visibleCell = row.children[visible];
+      const sentinelCell = row.children[sentinel];
+      if (!visibleCell || !sentinelCell) continue;
+      if (sentinelCell.textContent && sentinelCell.textContent !== visibleCell.textContent) {
+        visibleCell.textContent = sentinelCell.textContent;
+      } else if (visibleCell.textContent && !sentinelCell.textContent) {
+        sentinelCell.textContent = visibleCell.textContent;
+      }
+      sentinelCell.classList.add('psmap-gap-sentinel');
+    }
+  }
+}
+
 function moveColumnAfter(info, columnLabel, afterLabel) {
   if (!info) return;
   const labels = [...info.headerRow.children].map((th) => th.textContent.trim());
-  const from = labels.indexOf(columnLabel);
+  const from = labels.findIndex((label, index) => label === columnLabel && info.headerRow.children[index]?.dataset.psmapGapSentinel !== '1');
   const to = labels.indexOf(afterLabel);
   if (from < 0 || to < 0 || from === to + 1) return;
   const header = info.headerRow.children[from];
@@ -176,13 +237,20 @@ function moveColumnAfter(info, columnLabel, afterLabel) {
   }
 }
 
+function normalizeGapColumns(info) {
+  if (!info) return;
+  dedupeVisibleColumns(info, 'Support Gap Match');
+  moveColumnAfter(info, 'Support Gap Match', 'Support Match');
+  ensureLegacyGapSentinel(info);
+}
+
 function patchCandidateMatrix() {
   const candidate = tableInfo('candidates');
   renameHeaders(candidate);
-  moveColumnAfter(candidate, 'Support Gap Match', 'Support Match');
+  normalizeGapColumns(candidate);
   const validator = tableInfo('validator');
   renameHeaders(validator);
-  moveColumnAfter(validator, 'Support Gap Match', 'Support Match');
+  normalizeGapColumns(validator);
 }
 
 function onClick(event) {
