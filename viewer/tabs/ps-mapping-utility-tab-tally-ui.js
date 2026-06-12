@@ -2,7 +2,7 @@ import { installPsMappingUtilityTile as installBasePsMappingUtilityTile } from '
 import {
   DEFAULT_OPTIONS,
   runPsMappingResolver,
-} from './ps-mapping-utility/ps-mapping-engine-diagnostics-v2.js?v=20260612-tally-source-ledger-toggle-1';
+} from './ps-mapping-utility/ps-mapping-engine-diagnostics-v2.js?v=20260612-table1-source-ledger-audit-1';
 
 const STYLE_ID = 'psmap-tally-ui-style';
 const TALLY_ROW_ID_TOGGLE_KEY = 'psmap.tally.showRowIds';
@@ -18,245 +18,162 @@ const BASE_TALLY_COLUMNS = [
   ['action', 'Action'],
 ];
 
-const ROW_ID_TALLY_COLUMNS = [
+const BASE_ROW_ID_COLUMNS = [
   ['matchedRows', 'Matched Rows'],
   ['mandatoryUnmatchedRows', 'Mandatory Unmatched Rows'],
   ['optionalUnmatchedRows', 'Optional Unmatched Rows'],
 ];
 
-function h(value) {
-  return String(value ?? '')
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
-}
-
-function readShowRowIds() {
-  try {
-    const raw = localStorage.getItem(TALLY_ROW_ID_TOGGLE_KEY);
-    return raw === '1' || raw === 'true';
-  } catch {
-    return false;
-  }
-}
-
-function writeShowRowIds(value) {
-  try {
-    localStorage.setItem(TALLY_ROW_ID_TOGGLE_KEY, value ? '1' : '0');
-  } catch {}
-}
-
-function installStyle() {
+function ensureStyle() {
   if (document.getElementById(STYLE_ID)) return;
   const style = document.createElement('style');
   style.id = STYLE_ID;
   style.textContent = `
-.psmap-tally-note{display:grid;gap:6px;font-size:12px;line-height:1.45;color:#cfe4ff;border:1px solid rgba(56,189,248,.24);background:rgba(8,47,73,.22);border-radius:10px;padding:10px}.psmap-tally-note b{color:#bae6fd}.psmap-tally-actions{display:flex;gap:8px;align-items:center;justify-content:flex-end;flex-wrap:wrap}.psmap-tally-panel .psmap-table td{white-space:normal;min-width:90px}.psmap-tally-panel .psmap-table td:nth-child(8){min-width:220px}.psmap-tally-formula{font-family:ui-monospace,Consolas,monospace;color:#fde68a}.psmap-tally-toggle{display:flex;gap:6px;align-items:center;font-size:12px;color:#cfe4ff;white-space:nowrap}.psmap-tally-toggle input{accent-color:#38bdf8}`;
+    .psmap-tally-panel{padding:12px;display:grid;gap:10px;}
+    .psmap-tally-toolbar{display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap;}
+    .psmap-tally-toggle{display:flex;align-items:center;gap:7px;font-size:12px;color:var(--psmap-muted,#9fb3c8);}
+    .psmap-tally-note{font-size:12px;color:var(--psmap-muted,#9fb3c8);}
+    .psmap-tally-table{width:100%;border-collapse:collapse;font-size:12px;}
+    .psmap-tally-table th,.psmap-tally-table td{border:1px solid rgba(148,163,184,.25);padding:6px 8px;vertical-align:top;text-align:left;}
+    .psmap-tally-table th{background:rgba(15,23,42,.65);color:#dbeafe;position:sticky;top:0;}
+    .psmap-tally-ok{color:#86efac;font-weight:700;}
+    .psmap-tally-review{color:#fde68a;font-weight:700;}
+  `;
   document.head.appendChild(style);
 }
 
-function display(value) {
-  if (Array.isArray(value)) return value.join('|');
-  return value ?? '';
+function boolStorage(key, fallback = false) {
+  try {
+    const raw = localStorage.getItem(key);
+    if (raw == null) return fallback;
+    return raw === '1' || raw === 'true';
+  } catch { return fallback; }
 }
 
-function splitKeyLabel(key) {
-  const matched = key.match(/^matchedRows(\d+)$/);
-  if (matched) return `Matched Rows.${matched[1]}`;
-  const mandatory = key.match(/^mandatoryUnmatchedRows(\d+)$/);
-  if (mandatory) return `Mandatory Unmatched Rows.${mandatory[1]}`;
-  const optional = key.match(/^optionalUnmatchedRows(\d+)$/);
-  if (optional) return `Optional Unmatched Rows.${optional[1]}`;
-  return key;
+function setBoolStorage(key, value) {
+  try { localStorage.setItem(key, value ? '1' : '0'); } catch {}
 }
 
-function dynamicTallyColumns(rows = [], { showRowIds = false } = {}) {
-  const columns = [...BASE_TALLY_COLUMNS];
-  const known = new Set(columns.map(([key]) => key));
-  if (!showRowIds) return columns;
+function html(value) {
+  return String(value ?? '').replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
+}
 
-  for (const [key, label] of ROW_ID_TALLY_COLUMNS) {
-    if (!known.has(key)) {
-      columns.push([key, label]);
-      known.add(key);
-    }
-  }
-
-  const extraMatched = new Set();
-  const extraMandatory = new Set();
-  const extraOptional = new Set();
-
-  for (const row of rows || []) {
+function dynamicRowIdColumns(rows = []) {
+  const discovered = [];
+  const seen = new Set(BASE_ROW_ID_COLUMNS.map(([key]) => key));
+  const prefixes = [
+    ['matchedRows', 'Matched Rows'],
+    ['mandatoryUnmatchedRows', 'Mandatory Unmatched Rows'],
+    ['optionalUnmatchedRows', 'Optional Unmatched Rows'],
+  ];
+  for (const row of rows) {
     for (const key of Object.keys(row || {})) {
-      if (/^matchedRows\d+$/.test(key)) extraMatched.add(key);
-      if (/^mandatoryUnmatchedRows\d+$/.test(key)) extraMandatory.add(key);
-      if (/^optionalUnmatchedRows\d+$/.test(key)) extraOptional.add(key);
+      for (const [prefix, label] of prefixes) {
+        const match = key.match(new RegExp(`^${prefix}(\\d+)$`));
+        if (!match || seen.has(key)) continue;
+        seen.add(key);
+        discovered.push([key, `${label}.${match[1]}`]);
+      }
     }
   }
+  discovered.sort((a, b) => a[0].localeCompare(b[0], undefined, { numeric: true }));
+  return [...BASE_ROW_ID_COLUMNS, ...discovered];
+}
 
-  const numericSort = (a, b) => Number(a.replace(/\D+/g, '')) - Number(b.replace(/\D+/g, ''));
-  const insertAfter = (afterKey, extras) => {
-    let index = columns.findIndex(([key]) => key === afterKey);
-    if (index < 0) index = columns.length - 1;
-    for (const key of [...extras].sort(numericSort)) {
-      if (known.has(key)) continue;
-      index += 1;
-      columns.splice(index, 0, [key, splitKeyLabel(key)]);
-      known.add(key);
-    }
+function tallyColumns(rows = [], showRowIds = false) {
+  if (!showRowIds) return BASE_TALLY_COLUMNS;
+  return [...BASE_TALLY_COLUMNS, ...dynamicRowIdColumns(rows)];
+}
+
+function rowsToCsvLocal(rows = [], columns = []) {
+  const esc = (value) => `"${String(value ?? '').replace(/"/g, '""')}"`;
+  return [columns.map(([, label]) => esc(label)).join(','), ...rows.map((row) => columns.map(([key]) => esc(row?.[key])).join(','))].join('\n');
+}
+
+function renderTally(container, rows = []) {
+  ensureStyle();
+  const showRowIds = boolStorage(TALLY_ROW_ID_TOGGLE_KEY, false);
+  const columns = tallyColumns(rows, showRowIds);
+  const table = rows.length
+    ? `<table class="psmap-tally-table"><thead><tr>${columns.map(([, label]) => `<th>${html(label)}</th>`).join('')}</tr></thead><tbody>${rows.map((row) => `<tr>${columns.map(([key]) => `<td class="${key === 'check' && String(row?.[key]).toUpperCase() === 'OK' ? 'psmap-tally-ok' : key === 'check' ? 'psmap-tally-review' : ''}">${html(row?.[key])}</td>`).join('')}</tr>`).join('')}</tbody></table>`
+    : '<div class="psmap-tally-note">Run Mapping first to generate tally rows.</div>';
+  container.innerHTML = `<div class="psmap-tally-panel">
+    <div class="psmap-tally-toolbar">
+      <div class="psmap-tally-note">Tally equation: Matched + Mandatory Unmatched + Optional Unmatched = Source. Calculated from normalized source rows/source IDs, not Candidate Matrix row count.</div>
+      <label class="psmap-tally-toggle"><input type="checkbox" data-psmap-tally-rowids ${showRowIds ? 'checked' : ''}> Show matched / unmatched row IDs</label>
+      <button type="button" data-psmap-tally-copy>Copy Tally</button>
+    </div>
+    ${table}
+  </div>`;
+  const checkbox = container.querySelector('[data-psmap-tally-rowids]');
+  checkbox?.addEventListener('change', () => {
+    setBoolStorage(TALLY_ROW_ID_TOGGLE_KEY, checkbox.checked === true);
+    renderTally(container, rows);
+  });
+  container.querySelector('[data-psmap-tally-copy]')?.addEventListener('click', async () => {
+    try { await navigator.clipboard.writeText(rowsToCsvLocal(rows, tallyColumns(rows, boolStorage(TALLY_ROW_ID_TOGGLE_KEY, false)))); } catch {}
+  });
+}
+
+function collectInputFromModal(modal) {
+  const byLabel = (labelText) => {
+    const labels = [...modal.querySelectorAll('label')];
+    const label = labels.find((node) => String(node.textContent || '').toLowerCase().includes(labelText.toLowerCase()));
+    return label?.querySelector('textarea')?.value || label?.nextElementSibling?.value || '';
   };
-
-  insertAfter('matchedRows', extraMatched);
-  insertAfter('mandatoryUnmatchedRows', extraMandatory);
-  insertAfter('optionalUnmatchedRows', extraOptional);
-  return columns;
+  return {
+    table1cText: byLabel('Rich Reference') || byLabel('Table 1') || '',
+    table2Text: byLabel('Model PS Data') || byLabel('Table 2') || '',
+  };
 }
 
-function rowsToTsv(rows = [], { showRowIds = readShowRowIds() } = {}) {
-  const columns = dynamicTallyColumns(rows, { showRowIds });
-  return [columns.map(([, label]) => label), ...rows.map((row) => columns.map(([key]) => display(row?.[key])))]
-    .map((line) => line.map((value) => String(value ?? '').replace(/\t/g, ' ')).join('\t'))
-    .join('\n');
-}
-
-function modal() {
-  return document.querySelector('[data-psmap-modal]');
-}
-
-function readSource(name) {
-  return modal()?.querySelector(`[data-psmap-source="${name}"]`)?.value || '';
-}
-
-function readSetup() {
-  const setup = { ...DEFAULT_OPTIONS };
-  for (const input of modal()?.querySelectorAll('[data-psmap-setup]') || []) {
+function parseOptionsFromModal(modal) {
+  const options = { ...DEFAULT_OPTIONS };
+  for (const input of modal.querySelectorAll('[data-psmap-setup]')) {
     const key = input.dataset.psmapSetup;
     if (!key) continue;
-    if (input.type === 'checkbox') setup[key] = input.checked === true;
-    else if (input.type === 'number') setup[key] = Number(input.value);
-    else setup[key] = input.value;
+    options[key] = input.type === 'checkbox' ? input.checked : input.value;
   }
-  return setup;
+  return options;
 }
 
-function computeTallyRows() {
-  const result = runPsMappingResolver({
-    table1PsNodeText: readSource('table1Text'),
-    table1aNodeDiaText: readSource('table1AText'),
-    table1bNodeLineText: readSource('table1BText'),
-    table1cNodeIsonoteText: readSource('table1CText'),
-    table1dKeywordText: readSource('table1DText'),
-    table2ModelText: readSource('table2Text'),
-    options: readSetup(),
+function ensureTallyTab(modal) {
+  if (!modal || modal.querySelector('[data-psmap-tally-tab]')) return;
+  const tabbar = modal.querySelector('[role="tablist"], .psmap-tabs, .tabs, .psmap-tabbar') || modal.querySelector('nav');
+  const panelsParent = modal.querySelector('.psmap-panels, .tab-panels') || tabbar?.parentElement || modal;
+  const tab = document.createElement('button');
+  tab.type = 'button';
+  tab.textContent = 'Tally Log';
+  tab.dataset.psmapTallyTab = '1';
+  tab.className = 'psmap-tab';
+  tabbar?.appendChild(tab);
+  const panel = document.createElement('section');
+  panel.dataset.psmapTallyPanel = '1';
+  panel.style.display = 'none';
+  panelsParent.appendChild(panel);
+  tab.addEventListener('click', () => {
+    for (const p of panelsParent.children) {
+      if (p === panel) p.style.display = '';
+      else if (p.matches?.('[data-psmap-tally-panel], section, .tab-panel, .psmap-panel')) p.style.display = 'none';
+    }
+    const result = runPsMappingResolver({ ...collectInputFromModal(modal), options: parseOptionsFromModal(modal) });
+    renderTally(panel, result.tallyRows || []);
   });
-  return Array.isArray(result?.tallyRows) ? result.tallyRows : [];
-}
-
-function tableHtml(rows = [], { showRowIds = readShowRowIds() } = {}) {
-  if (!rows.length) return '<div class="psmap-banner">No tally rows yet. Paste source data and run mapping, or open this tab to calculate from current source tables.</div>';
-  const columns = dynamicTallyColumns(rows, { showRowIds });
-  return `<div class="psmap-tablewrap"><table class="psmap-table"><thead><tr class="psmap-labels">${columns.map(([, label]) => `<th>${h(label)}</th>`).join('')}</tr></thead><tbody>${rows.map((row) => `<tr>${columns.map(([key]) => `<td>${h(display(row?.[key]))}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`;
-}
-
-function panelHtml(rows = [], { showRowIds = readShowRowIds() } = {}) {
-  const checked = showRowIds ? 'checked' : '';
-  return `<section class="psmap-panel psmap-tally-panel" data-psmap-panel="tally"><section class="psmap-card"><div class="psmap-card-head"><b>Tally Log</b><div class="psmap-tally-actions"><label class="psmap-tally-toggle"><input type="checkbox" data-psmap-tally-show-rows="1" ${checked}>Show matched / unmatched row IDs</label><button class="psmap-btn secondary" type="button" data-psmap-tally-action="refresh">Refresh Tally</button><button class="psmap-btn secondary" type="button" data-psmap-tally-action="copy">Copy Tally</button></div></div><div class="psmap-card-body"><div class="psmap-tally-note"><b>Source ledger tally:</b><span>For each source side, Matched + Mandatory Unmatched + Optional Unmatched = Source. Row-ID columns are hidden by default; enable the toggle to show compact source IDs. Table-2 uses PS No.; Table-1 uses Node No.</span><span class="psmap-tally-formula">Matched + Mandatory Unmatched + Optional Unmatched = Source</span></div>${tableHtml(rows, { showRowIds })}</div></section></section>`;
-}
-
-function ensureTallyShell() {
-  const m = modal();
-  if (!m) return;
-  installStyle();
-  const tabs = m.querySelector('.psmap-tabs');
-  const body = m.querySelector('.psmap-body');
-  if (!tabs || !body) return;
-  if (!tabs.querySelector('[data-psmap-tally-tab]')) {
-    const button = document.createElement('button');
-    button.type = 'button';
-    button.className = 'psmap-tab';
-    button.setAttribute('data-psmap-tally-tab', '1');
-    button.textContent = 'Tally Log';
-    const after = tabs.querySelector('[data-psmap-tab="candidates"]') || tabs.lastElementChild;
-    if (after?.nextSibling) tabs.insertBefore(button, after.nextSibling);
-    else tabs.appendChild(button);
-  }
-  if (!body.querySelector('[data-psmap-panel="tally"]')) {
-    body.insertAdjacentHTML('beforeend', panelHtml([]));
-  }
-}
-
-function activateTally() {
-  ensureTallyShell();
-  const m = modal();
-  if (!m) return;
-  for (const tab of m.querySelectorAll('.psmap-tab')) tab.classList.remove('active');
-  for (const panel of m.querySelectorAll('.psmap-panel')) panel.classList.remove('active');
-  const tallyTab = m.querySelector('[data-psmap-tally-tab]');
-  const tallyPanel = m.querySelector('[data-psmap-panel="tally"]');
-  tallyTab?.classList.add('active');
-  tallyPanel?.classList.add('active');
-  renderTally();
-}
-
-function renderTally() {
-  const panel = modal()?.querySelector('[data-psmap-panel="tally"]');
-  if (!panel) return;
-  const rows = computeTallyRows();
-  const showRowIds = readShowRowIds();
-  panel.outerHTML = panelHtml(rows, { showRowIds }).replace('psmap-panel psmap-tally-panel', 'psmap-panel psmap-tally-panel active');
-}
-
-function scheduleEnsure() {
-  requestAnimationFrame(() => requestAnimationFrame(ensureTallyShell));
-}
-
-function installTallyTabPatch(ctx = {}) {
-  installStyle();
-  let lastRows = [];
-  const onClick = (event) => {
-    if (event.target?.closest?.('[data-psmap-tally-tab]')) {
-      event.preventDefault();
-      event.stopPropagation();
-      activateTally();
-      return;
-    }
-    const tallyAction = event.target?.closest?.('[data-psmap-tally-action]')?.dataset?.psmapTallyAction;
-    if (tallyAction === 'refresh') {
-      event.preventDefault();
-      lastRows = computeTallyRows();
-      const panel = modal()?.querySelector('[data-psmap-panel="tally"]');
-      if (panel) panel.outerHTML = panelHtml(lastRows, { showRowIds: readShowRowIds() }).replace('psmap-panel psmap-tally-panel', 'psmap-panel psmap-tally-panel active');
-      return;
-    }
-    if (tallyAction === 'copy') {
-      event.preventDefault();
-      lastRows = computeTallyRows();
-      navigator.clipboard?.writeText(rowsToTsv(lastRows, { showRowIds: readShowRowIds() })).then(() => ctx.showToast?.('Tally copied.', 'success')).catch((error) => ctx.showToast?.(`Copy failed: ${error.message || error}`, 'error'));
-      return;
-    }
-    if (event.target?.closest?.('[data-psmap-action], [data-psmap-tab]')) scheduleEnsure();
-  };
-  const onChange = (event) => {
-    const toggle = event.target?.closest?.('[data-psmap-tally-show-rows]');
-    if (!toggle) return;
-    writeShowRowIds(toggle.checked === true);
-    renderTally();
-  };
-  document.addEventListener('click', onClick, true);
-  document.addEventListener('change', onChange, true);
-  scheduleEnsure();
-  return () => {
-    document.removeEventListener('click', onClick, true);
-    document.removeEventListener('change', onChange, true);
-  };
 }
 
 export function installPsMappingUtilityTile(container, ctx = {}) {
   const destroyBase = installBasePsMappingUtilityTile(container, ctx);
-  const destroyTally = installTallyTabPatch(ctx);
+  const clickHandler = () => setTimeout(() => {
+    const modal = document.querySelector('[data-psmap-modal], .psmap-modal, dialog[open]');
+    ensureTallyTab(modal);
+  }, 0);
+  container.addEventListener('click', clickHandler);
+  setTimeout(() => {
+    const modal = document.querySelector('[data-psmap-modal], .psmap-modal, dialog[open]');
+    ensureTallyTab(modal);
+  }, 0);
   return () => {
-    try { destroyTally?.(); } catch {}
-    try { destroyBase?.(); } catch {}
+    container.removeEventListener('click', clickHandler);
+    if (typeof destroyBase === 'function') destroyBase();
   };
 }
