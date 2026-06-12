@@ -16,6 +16,10 @@ function countEntity(dxf, entityName) {
   return count;
 }
 
+function hasStartToken(dxf, x, y, z) {
+  return String(dxf).includes(`\n10\n${x}\n20\n${y}\n30\n${z}\n`);
+}
+
 const fixturePath = new URL('../../Benchmarks/INPUT XML to CII 2019/1001/1001-P - COPY_INPUT.XML', import.meta.url);
 const xmlText = await fs.readFile(fixturePath, 'utf8');
 
@@ -63,6 +67,7 @@ assert.ok(dxf.includes('TABLES'), 'DXF contains TABLES');
 assert.ok(dxf.includes('ENTITIES'), 'DXF contains ENTITIES');
 assert.ok(dxf.includes('LINE'), 'DXF contains LINE entities');
 assert.ok(dxf.trim().endsWith('EOF'), 'DXF ends with EOF');
+assert.equal(sidecar.projectionMode, '3d', 'default projection remains 3d');
 assert.equal(sidecar.segmentCount, allGeometry.segments.length, 'sidecar segmentCount matches projection');
 assert.equal(sidecar.supportCount, allGeometry.supports.length, 'sidecar supportCount matches projection');
 assert.equal(sidecar.branchCount, extraction.branches.length, 'sidecar branchCount matches extraction');
@@ -93,6 +98,24 @@ const scaled = writeInputXmlDxf({
   branches: [],
 }, { dxfScale: 2, showLabels: false }).dxf;
 assert.ok(scaled.includes('\n10\n2\n20\n4\n30\n6\n'), 'scale=2 doubles start coordinate once');
+
+const projectionInput = {
+  segments: [{ id: 'projection', layer: 'PIPING', p1: { x: 1, y: 2, z: 3 }, p2: { x: 4, y: 5, z: 6 }, label: '' }],
+  supports: [],
+  branches: [],
+};
+const topWrite = writeInputXmlDxf(projectionInput, { projectionMode: 'top', showLabels: false, showSymbols: false });
+assert.equal(topWrite.sidecar.projectionMode, 'top', 'top projection is recorded in sidecar');
+assert.ok(hasStartToken(topWrite.dxf, 1, 2, 0), 'top projection maps X/Y and zeros Z');
+const xzWrite = writeInputXmlDxf(projectionInput, { projectionMode: 'elevation-xz', showLabels: false, showSymbols: false });
+assert.equal(xzWrite.sidecar.projectionMode, 'elevation-xz', 'X/Z elevation is recorded in sidecar');
+assert.ok(hasStartToken(xzWrite.dxf, 1, 3, 0), 'X/Z elevation maps X/Z onto drawing X/Y');
+const yzWrite = writeInputXmlDxf(projectionInput, { projectionMode: 'elevation-yz', showLabels: false, showSymbols: false });
+assert.equal(yzWrite.sidecar.projectionMode, 'elevation-yz', 'Y/Z elevation is recorded in sidecar');
+assert.ok(hasStartToken(yzWrite.dxf, 2, 3, 0), 'Y/Z elevation maps Y/Z onto drawing X/Y');
+const isoWrite = writeInputXmlDxf(projectionInput, { projectionMode: 'iso-2.5d', showLabels: false, showSymbols: false });
+assert.equal(isoWrite.sidecar.projectionMode, 'iso-2.5d', 'iso projection is recorded in sidecar');
+assert.ok(hasStartToken(isoWrite.dxf, -1, 4.5, 0), 'iso-2.5d projection maps X/Y/Z deterministically');
 
 const symbolWrite = writeInputXmlDxf({
   segments: [
@@ -127,7 +150,7 @@ assert.deepEqual(pointEntity('P1', sampleStart, 'SUPPORTS'), packagePointEntity(
 
 const output = await run({
   inputFiles: [{ role: 'primary', name: '1001.xml', text: xmlText }],
-  options: { selectedBranches: '', includeSidecarJson: true },
+  options: { selectedBranches: '', includeSidecarJson: true, projectionMode: 'top' },
   setStatus: () => {},
 });
 assert.equal(output.ok, true, 'runner returns ok=true');
@@ -137,9 +160,11 @@ assert.ok(Array.isArray(output.logs.stdout) && output.logs.stdout.length > 0, 'r
 assert.ok(output.logs.stdout.some((line) => line.includes('Available branches')), 'runner logs available branch manifest');
 assert.ok(output.logs.stdout.some((line) => line.includes(firstBranch.id)), 'runner logs a copyable branch id');
 assert.ok(output.logs.stdout.some((line) => line.includes('Selected branch ids: <all branches')), 'runner logs all-branch selection hint');
+assert.ok(output.logs.stdout.some((line) => line.includes('Projection mode: top')), 'runner logs projection mode');
 
 const sidecarOutput = output.outputs.find((item) => item.name === '1001-sidecar.json');
 const parsedSidecar = JSON.parse(sidecarOutput.text);
+assert.equal(parsedSidecar.projectionMode, 'top', 'runner sidecar records selected projection mode');
 assert.equal(parsedSidecar.segmentCount, allGeometry.segments.length, 'runner sidecar segmentCount is stable');
 assert.ok(Array.isArray(parsedSidecar.branches), 'runner sidecar exposes branches');
 assert.ok(parsedSidecar.branches.some((branch) => branch.id === firstBranch.id), 'runner sidecar includes copyable branch id');
