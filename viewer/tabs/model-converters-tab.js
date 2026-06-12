@@ -1,4 +1,5 @@
 import { renderLegacyModelConvertersTab } from './model-converters/legacy-adapter.js';
+import { installInputXmlDxfProjectionOption } from './model-converters/inputxml-dxf-projection-option.js';
 import { installXmlCiiPreviewLineKeyRemap } from './model-converters/xml-cii-preview-linekey-remap.js';
 import { installXmlCiiWorkflowUiFixes } from './model-converters/xml-cii-workflow-ui-fixes.js';
 import { installXmlCiiDefaultMasterAutoload, installXmlCiiRecoveryPatch } from './xml-cii-master-autoload-patch.js';
@@ -9,5 +10,6 @@ export function renderModelConvertersTab(container, ctx) {
   installXmlCiiRecoveryPatch();
   installXmlCiiPreviewLineKeyRemap();
   installXmlCiiWorkflowUiFixes();
+  installInputXmlDxfProjectionOption(container);
   return result;
 }
