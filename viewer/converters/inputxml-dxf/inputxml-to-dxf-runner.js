@@ -19,6 +19,30 @@ function stem(name = 'inputxml') {
   return String(name || 'inputxml').replace(/\.[^.]+$/, '') || 'inputxml';
 }
 
+function branchLogLine(branch) {
+  const aliases = Array.isArray(branch.aliases) && branch.aliases.length
+    ? ` aliases=${branch.aliases.join('|')}`
+    : '';
+  return `  - ${branch.id} (${branch.label || branch.id}) components=${branch.componentCount || 0}${aliases}`;
+}
+
+function pushBranchDiscoveryLogs(stdout, branches, selectedBranchIds) {
+  stdout.push(`Available branches (${branches.length}):`);
+  if (!branches.length) {
+    stdout.push('  - none detected');
+  } else {
+    for (const branch of branches) {
+      stdout.push(branchLogLine(branch));
+    }
+  }
+
+  if (selectedBranchIds.length) {
+    stdout.push(`Selected branch ids: ${selectedBranchIds.join(', ')}`);
+  } else {
+    stdout.push('Selected branch ids: <all branches; selectedBranches option is empty>');
+  }
+}
+
 export async function run(ctx = {}) {
   const inputFiles = ctx.inputFiles || [];
   const options = ctx.options || {};
@@ -70,6 +94,7 @@ export async function run(ctx = {}) {
       });
     }
 
+    pushBranchDiscoveryLogs(stdout, extraction.branches, geometry.selectedBranchIds || []);
     stdout.push(`${geometry.segments.length} line segments, ${geometry.supports.length} support points, ${extraction.branches.length} branches total.`);
     return { ok: true, outputs, logs: { stdout, stderr }, diagnostics };
   } catch (error) {
