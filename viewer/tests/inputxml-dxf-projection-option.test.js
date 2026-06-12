@@ -19,7 +19,8 @@ assert.equal(typeof installInputXmlDxfProjectionOption, 'function', 'projection 
 assert.equal(typeof installInputXmlDxfProjectionOption(null), 'function', 'installer is a safe no-op without DOM root');
 assert.ok(optionSource.includes('[data-option-key="selectedBranches"]'), 'projection option only activates for InputXML DXF options');
 assert.ok(optionSource.includes('data-option-key="projectionMode"'), 'projection option injects projectionMode option key');
-assert.ok(optionSource.includes('3D model coordinates'), 'projection option exposes 3D default');
+assert.ok(optionSource.includes('value="iso-2.5d" selected'), 'projection option defaults to fitted isometric drawing');
+assert.ok(optionSource.includes('3D model coordinates'), 'projection option still exposes 3D model coordinates');
 assert.ok(optionSource.includes('Top / plan (X-Y)'), 'projection option exposes top projection');
 assert.ok(optionSource.includes('Elevation X-Z'), 'projection option exposes X/Z elevation');
 assert.ok(optionSource.includes('Elevation Y-Z'), 'projection option exposes Y/Z elevation');
@@ -28,6 +29,8 @@ assert.ok(!optionSource.toLowerCase().includes('three'), 'projection option has 
 assert.ok(tabSource.includes("./model-converters/inputxml-dxf-projection-option.js"), 'Model Converters tab imports the projection option');
 assert.ok(tabSource.includes('installInputXmlDxfProjectionOption(container)'), 'Model Converters tab installs the projection option');
 assert.ok(writerSource.includes('projectionMode'), 'writer supports projectionMode option');
+assert.ok(writerSource.includes('outputMode'), 'writer supports outputMode option');
+assert.ok(writerSource.includes('iso-drawing'), 'writer supports iso drawing output mode');
 assert.ok(writerSource.includes('iso-2.5d'), 'writer supports iso-2.5d projection');
 
 console.log('inputxml-dxf-projection-option tests passed');
