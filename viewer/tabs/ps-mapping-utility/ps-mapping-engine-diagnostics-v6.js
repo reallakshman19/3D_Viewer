@@ -160,6 +160,11 @@ function hasMandatoryNoNode(row = {}) {
   return isTruthy(row.mandatory || row.modelMandatory || row.mandatoryRaw || row.isMandatory) && !hasNode(row);
 }
 
+function hasMappedTable2Ps(row = {}) {
+  const value = String(row.psnoModel || row.modelPsNo || row.modelPsNoRaw || '').trim();
+  return Boolean(value && value !== '-' && value.toUpperCase() !== 'N/A');
+}
+
 function normalizeSupportText(...values) {
   return values
     .map((value) => String(value ?? '').toUpperCase())
@@ -210,6 +215,10 @@ function hasTable2GuideGap(row = {}) {
 function groupNodeAction(group = []) {
   if (!group.some(hasNode)) {
     return group.some(hasMandatoryNoNode) ? 'No matching node, needs review.' : '';
+  }
+
+  if (!group.some(hasMappedTable2Ps)) {
+    return 'PS No. not Mapped';
   }
 
   const required = new Set();
@@ -341,7 +350,7 @@ export function runPsMappingResolver(input = {}) {
     candidates: enrichedCandidates,
     approxConfig: {
       ...(result?.approxConfig || {}),
-      consolidatedNodeWiseAction: 'Node-wise post-anchor action. Mandatory Table-2 rows with no mapped node show: No matching node, needs review.',
+      consolidatedNodeWiseAction: 'Node-wise post-anchor action. Mandatory Table-2 rows with no mapped node show: No matching node, needs review. Table-1-only node contexts with no mapped Table-2 PS No show: PS No. not Mapped.',
       stagedResolver: 'Loop 1 exact PS+line+bore maps Table-2 rows first. Loop 2/3 approximate passes run only for still-unmapped rows and only when enabled. Support and support-gap are post-anchor diagnostics only and never select the mapping anchor.',
     },
     summary: {
@@ -349,6 +358,7 @@ export function runPsMappingResolver(input = {}) {
       candidateRows: enrichedCandidates.length,
       stagedMappedRows: [...stageByModel.values()].filter((entry) => entry.candidate).length,
       mandatoryNoNodeRows: enrichedCandidates.filter((row) => row.consolidatedNodeWiseAction === 'No matching node, needs review.').length,
+      table1OnlyUnmappedPsRows: enrichedCandidates.filter((row) => row.consolidatedNodeWiseAction === 'PS No. not Mapped').length,
     },
   };
 }
