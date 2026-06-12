@@ -1,0 +1,202 @@
+import { classifyComponentLayer, classifySupportType, parseSelectedBranches } from '../inputxml-dxf/InputXmlToDxfProjector.js';
+
+function text(value) {
+  return String(value ?? '').trim();
+}
+
+function upper(value) {
+  return text(value).toUpperCase();
+}
+
+function point3(point, bore = null) {
+  const x = Number(point?.x);
+  const y = Number(point?.y);
+  const z = Number(point?.z);
+  if (![x, y, z].every(Number.isFinite)) return null;
+  const out = { x, y, z };
+  const numericBore = Number(bore);
+  if (Number.isFinite(numericBore) && numericBore > 0) out.bore = numericBore;
+  return out;
+}
+
+function componentAliases(component) {
+  return [
+    component?.pipelineRef,
+    component?.lineKey,
+    component?.rawAttributes?.pipelineRef,
+  ].map(text).filter(Boolean);
+}
+
+function componentSelected(component, selectedIds) {
+  if (!selectedIds.size) return true;
+  return componentAliases(component).some((alias) => selectedIds.has(alias));
+}
+
+function isSupportComponent(component, segment = {}) {
+  const type = upper(component?.normalizedType || component?.type || segment?.type);
+  return type.includes('SUPPORT') || upper(segment?.type) === 'SUPPORT_ASSOCIATION';
+}
+
+function glbTypeForLayer(layer, component = {}) {
+  const rawType = upper(component?.normalizedType || component?.type || '');
+  if (rawType.includes('SUPPORT')) return 'SUPPORT';
+  switch (layer) {
+    case 'VALVES': return 'VALVE';
+    case 'FLANGES': return 'FLANGE';
+    case 'REDUCERS': return rawType.includes('ECC') ? 'REDUCER-ECCENTRIC' : 'REDUCER';
+    case 'TEES': return 'TEE';
+    case 'OLETS': return 'OLET';
+    case 'ELBOWS': return rawType.includes('BEND') ? 'BEND' : 'ELBOW';
+    case 'NOZZLES': return 'CAP';
+    default: return 'PIPE';
+  }
+}
+
+function supportKindForGlb(supportType) {
+  if (supportType === 'guide') return 'GUIDE';
+  if (supportType === 'lineStop') return 'LINESTOP';
+  if (supportType === 'limit') return 'LIMIT';
+  if (supportType === 'anchor') return 'ANCHOR';
+  if (supportType === 'hanger') return 'SPRING';
+  return 'REST';
+}
+
+function makeAttributes(component = {}, extra = {}) {
+  return {
+    ...(component.rawAttributes || {}),
+    ...(component.normalized || {}),
+    pipelineRef: text(component.pipelineRef),
+    lineKey: text(component.lineKey),
+    COMPONENT_IDENTIFIER: text(component.name || component.id),
+    COMPONENT_TYPE: text(component.normalizedType || component.type),
+    SKEY: text(component.skey),
+    ...extra,
+  };
+}
+
+function makeSegmentComponent(segment, component, anchors, diagnostics) {
+  const p1 = point3(anchors.get(segment.startAnchorId)?.point, segment.bore || component?.bore);
+  const p2 = point3(anchors.get(segment.endAnchorId)?.point, segment.bore || component?.bore);
+  if (!p1 || !p2) {
+    diagnostics.push({
+      type: 'inputxml-glb-segment-missing-anchor',
+      severity: 'WARN',
+      componentId: segment.componentId,
+      segmentId: segment.id,
+    });
+    return null;
+  }
+
+  const layer = classifyComponentLayer(component, segment);
+  const type = glbTypeForLayer(layer, component);
+  const bore = Number(component?.bore ?? segment.bore ?? p1.bore ?? p2.bore ?? 20);
+  const id = text(segment.id || component?.id || `segment-${diagnostics.length}`);
+  const attributes = makeAttributes(component, { layer, uxmlSegmentId: text(segment.id) });
+
+  return {
+    id,
+    type,
+    ep1: p1,
+    ep2: p2,
+    centrePoint: p1,
+    branch1Point: p2,
+    bore: Number.isFinite(bore) && bore > 0 ? bore : 20,
+    refNo: text(component?.refNo || component?.seqNo || component?.id || id),
+    attributes,
+    raw: component?.rawAttributes || {},
+    pipelineRef: text(component?.pipelineRef),
+    lineKey: text(component?.lineKey),
+    uxmlComponentId: text(component?.id),
+    uxmlSegmentId: text(segment.id),
+  };
+}
+
+function makeSupportComponent(support, component, anchors, diagnostics) {
+  const point = point3(anchors.get(support.supportAnchorId)?.point, component?.bore);
+  if (!point) {
+    diagnostics.push({
+      type: 'inputxml-glb-support-missing-anchor',
+      severity: 'WARN',
+      supportId: support.id,
+      componentId: support.componentId,
+    });
+    return null;
+  }
+
+  const supportType = classifySupportType(support, component);
+  const supportKind = supportKindForGlb(supportType);
+  const label = text(component?.name || support?.id || component?.id || 'SUPPORT');
+  const attrs = makeAttributes(component, {
+    SUPPORT_TAG: label,
+    SUPPORT_NAME: label,
+    SKEY: text(support.skey || component?.skey || supportKind),
+    CMPSUPTYPE: supportKind,
+    SUPPORT_KIND: supportKind,
+    INPUTXML_SUPPORT_TYPE: supportType,
+    uxmlSupportId: text(support.id),
+  });
+
+  return {
+    id: text(support.id || component?.id || `support-${diagnostics.length}`),
+    type: 'SUPPORT',
+    coOrds: point,
+    ep1: point,
+    bore: Number(component?.bore) > 0 ? Number(component.bore) : 20,
+    refNo: text(component?.refNo || support.id),
+    attributes: attrs,
+    raw: { ...(support.rawAttributes || {}), ...(component?.rawAttributes || {}) },
+    supportType,
+    supportKind,
+    pipelineRef: text(component?.pipelineRef),
+    lineKey: text(component?.lineKey),
+    uxmlComponentId: text(component?.id),
+    uxmlSupportId: text(support.id),
+  };
+}
+
+export function adaptUxmlToGlbModel(doc, options = {}) {
+  const selectedIds = parseSelectedBranches(options.selectedBranches);
+  const componentsById = new Map((doc.components || []).map((component) => [component.id, component]));
+  const anchors = new Map((doc.anchors || []).map((anchor) => [anchor.id, anchor]));
+  const components = [];
+  const diagnostics = [];
+  const typeCounts = {};
+  const supportKindCounts = {};
+
+  for (const segment of doc.segments || []) {
+    const component = componentsById.get(segment.componentId);
+    if (!component || !componentSelected(component, selectedIds)) continue;
+    if (isSupportComponent(component, segment)) continue;
+    const glbComponent = makeSegmentComponent(segment, component, anchors, diagnostics);
+    if (!glbComponent) continue;
+    components.push(glbComponent);
+    typeCounts[glbComponent.type] = (typeCounts[glbComponent.type] || 0) + 1;
+  }
+
+  for (const support of doc.supports || []) {
+    const component = componentsById.get(support.componentId);
+    if (component && !componentSelected(component, selectedIds)) continue;
+    if (!component && selectedIds.size) continue;
+    const glbSupport = makeSupportComponent(support, component, anchors, diagnostics);
+    if (!glbSupport) continue;
+    components.push(glbSupport);
+    typeCounts.SUPPORT = (typeCounts.SUPPORT || 0) + 1;
+    supportKindCounts[glbSupport.supportKind] = (supportKindCounts[glbSupport.supportKind] || 0) + 1;
+  }
+
+  return {
+    model: {
+      schema: 'inputxml-glb-model/v1',
+      source: 'InputXML→UXML→GLB',
+      units: doc.units || {},
+      components,
+    },
+    stats: {
+      componentCount: components.length,
+      typeCounts,
+      supportKindCounts,
+      selectedBranchIds: [...selectedIds],
+    },
+    diagnostics,
+  };
+}
