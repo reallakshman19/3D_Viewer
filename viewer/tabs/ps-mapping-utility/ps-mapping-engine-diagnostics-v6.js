@@ -101,7 +101,7 @@ function markMapped(row, selected, stage) {
 }
 
 function normalizeVisibleCandidates(candidates = [], options = {}) {
-  if (!Array.isArray(candidates)) return candidates;
+  if (!Array.isArray(candidates)) return { visibleCandidates: candidates, stageByModel: new Map() };
   const byModel = new Map();
   const auditRows = [];
 
@@ -148,26 +148,207 @@ function annotateRowsByStage(rows, stageByModel) {
   });
 }
 
+function isTruthy(value) {
+  return value === true || /^(yes|y|true|1|mandatory|required|req|must|audit)$/i.test(String(value ?? '').trim());
+}
+
+function hasNode(row = {}) {
+  return Boolean(String(row.mappedNode || row.candidateNode || row.node || '').trim());
+}
+
+function hasMandatoryNoNode(row = {}) {
+  return isTruthy(row.mandatory || row.modelMandatory || row.mandatoryRaw || row.isMandatory) && !hasNode(row);
+}
+
+function normalizeSupportText(...values) {
+  return values
+    .map((value) => String(value ?? '').toUpperCase())
+    .join(' ')
+    .replace(/[_-]+/g, ' ')
+    .replace(/[\[\](){}:;,|]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function supportSetFromText(...values) {
+  const text = normalizeSupportText(...values);
+  const out = new Set();
+  if (!text) return out;
+  if (/\bGUIDE\b/.test(text)) out.add('GUIDE');
+  if (/\bREST\b/.test(text) || /\bPIPE\s+REST\b/.test(text) || /\bXRT\b/.test(text) || /\bPIPE\s+SHOE\b/.test(text) || /\bWEAR\s+PLATE\b/.test(text)) out.add('REST');
+  if (/\bLINE\s*STOP\b/.test(text) || /\bLINESTOP\b/.test(text) || /\bPIPE\s+STOP\b/.test(text) || /\bDIRECTIONAL\s+ANCHOR\b/.test(text) || /\bANCHOR\b/.test(text) || /\bSTOP\b/.test(text)) out.add('LINE_STOP');
+  return out;
+}
+
+function labelSupport(type) {
+  if (type === 'LINE_STOP') return 'LINE STOP';
+  if (type === 'REST') return 'REST';
+  if (type === 'GUIDE') return 'GUIDE';
+  return String(type || '').replace(/_/g, ' ');
+}
+
+function difference(a, b) {
+  return [...a].filter((value) => !b.has(value)).sort(naturalCompare);
+}
+
+function nodeActionKey(row = {}) {
+  const node = row.mappedNode || row.candidateNode || row.node || '';
+  if (!node) return `__MODEL__|${modelKey(row)}`;
+  return [
+    node,
+    row.mappedTable1PsNo || row.table1PsNo || '',
+    row.nodeLineFamily || row.nodeLineKey || row.lineFamily || '',
+    row.derivedDn || row.modelBore || '',
+  ].map((value) => String(value ?? '').trim()).join('|');
+}
+
+function hasTable2GuideGap(row = {}) {
+  return /GUIDE/i.test(String(row.supportTypesRequested || row.modelDtxrKeywords || row.dtxr || ''))
+    && Boolean(String(row.supportGapRaw || row.supportGap || row.supportGapMm || row.supportGapMatch || row.gapMatch || '').trim());
+}
+
+function groupNodeAction(group = []) {
+  if (!group.some(hasNode)) {
+    return group.some(hasMandatoryNoNode) ? 'No matching node, needs review.' : '';
+  }
+
+  const required = new Set();
+  const provided = new Set();
+  for (const row of group) {
+    for (const type of supportSetFromText(row.supportTypesAvailable, row.nodeMasterKeywords, row.nodeIsonote, row.nodeIsonoteRaw)) required.add(type);
+    for (const type of supportSetFromText(row.supportTypesRequested, row.modelDtxrKeywords, row.dtxr)) provided.add(type);
+  }
+
+  const missing = difference(required, provided);
+  const extra = difference(provided, required);
+  const parts = [];
+
+  for (const type of extra) {
+    parts.push(`Table-1 has no ${labelSupport(type)}, but Table-2 has ${labelSupport(type)}.`);
+    if (type === 'GUIDE' && group.some(hasTable2GuideGap)) {
+      parts.push('Gap cannot be compared because Table-1 has no GUIDE.');
+    }
+  }
+
+  for (const type of missing) {
+    parts.push(`Table-1 requires ${labelSupport(type)}, but Table-2 has no ${labelSupport(type)}.`);
+  }
+
+  if (!parts.length && required.size && provided.size) {
+    return 'No node-wise action required. Table-2 support coverage matches Table-1 ISONOTE.';
+  }
+  return parts.join(' ');
+}
+
+function annotateConsolidatedNodeActions(rows = []) {
+  if (!Array.isArray(rows)) return rows;
+  const groups = new Map();
+  for (const row of rows) {
+    const key = nodeActionKey(row);
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(row);
+  }
+
+  const actionByKey = new Map();
+  for (const [key, group] of groups.entries()) actionByKey.set(key, groupNodeAction(group));
+
+  return rows.map((row) => ({
+    ...row,
+    consolidatedNodeWiseAction: actionByKey.get(nodeActionKey(row)) || row.consolidatedNodeWiseAction || '',
+  }));
+}
+
+function buildActionByModel(rows = []) {
+  const map = new Map();
+  for (const row of rows || []) {
+    const action = row?.consolidatedNodeWiseAction;
+    if (action && !map.has(modelKey(row))) map.set(modelKey(row), action);
+  }
+  return map;
+}
+
+function annotateRowsWithActions(rows, stageByModel, actionByModel) {
+  const staged = annotateRowsByStage(rows, stageByModel);
+  if (!Array.isArray(staged)) return staged;
+  return staged.map((row) => {
+    const action = actionByModel.get(modelKey(row)) || (hasMandatoryNoNode(row) ? 'No matching node, needs review.' : row.consolidatedNodeWiseAction || '');
+    return action ? { ...row, consolidatedNodeWiseAction: action } : row;
+  });
+}
+
+function makeMandatoryNoNodeCandidate(row = {}) {
+  return {
+    psnoModel: row.psnoModel || row.modelPsNo || '',
+    basePs: row.basePs || '',
+    modelBore: row.modelBore ?? row.bore ?? '',
+    pipe: row.pipe || '',
+    lineFamily: row.lineFamily || '',
+    dtxr: row.dtxr || '',
+    mandatory: true,
+    supportTypesRequested: row.modelDtxrKeywords || row.supportTypesRequested || '',
+    modelDtxrKeywords: row.modelDtxrKeywords || row.supportTypesRequested || '',
+    candidateNode: '',
+    node: '',
+    table1PsNo: '',
+    psBasis: row.basis || 'NO_MATCH',
+    boreBasis: '',
+    lineBasis: '',
+    supportBasis: '',
+    supportMatch: '',
+    eligible: false,
+    autoSelectable: false,
+    reviewRequired: true,
+    selected: false,
+    finalStatus: 'USER_REVIEW_REQUIRED',
+    confidence: 'REVIEW',
+    confidenceScore: 0,
+    warnings: row.warnings || 'NO_MATCHING_NODE',
+    reason: 'No matching node, needs review.',
+    reviewAction: 'No matching node, needs review.',
+    consolidatedNodeWiseAction: 'No matching node, needs review.',
+    matchGroup: '04_UNMATCHED_MANDATORY',
+    table2Row: row.table2Row || row.sourceRow || '',
+  };
+}
+
+function appendMandatoryNoNodeAuditRows(candidateRows = [], resultRows = []) {
+  const rows = Array.isArray(candidateRows) ? [...candidateRows] : [];
+  const existing = new Set(rows.map((row) => modelKey(row)));
+  for (const row of resultRows || []) {
+    if (!hasMandatoryNoNode(row)) continue;
+    const key = modelKey(row);
+    if (existing.has(key)) continue;
+    rows.push(makeMandatoryNoNodeCandidate(row));
+    existing.add(key);
+  }
+  return rows;
+}
+
 export function runPsMappingResolver(input = {}) {
   const options = normalizePsMappingOptions(input.options || {});
   const result = runV5PsMappingResolver({ ...input, options });
   const { visibleCandidates, stageByModel } = normalizeVisibleCandidates(result?.candidates || result?.candidateRows || [], options);
+  const candidatesWithMandatoryNoNode = appendMandatoryNoNodeAuditRows(visibleCandidates, result?.rows || result?.outputRows || []);
+  const enrichedCandidates = annotateConsolidatedNodeActions(candidatesWithMandatoryNoNode);
+  const actionByModel = buildActionByModel(enrichedCandidates);
 
   return {
     ...result,
-    rows: annotateRowsByStage(result?.rows, stageByModel),
-    outputRows: annotateRowsByStage(result?.outputRows, stageByModel),
-    validatorRows: annotateRowsByStage(result?.validatorRows, stageByModel),
-    candidateRows: visibleCandidates,
-    candidates: visibleCandidates,
+    rows: annotateRowsWithActions(result?.rows, stageByModel, actionByModel),
+    outputRows: annotateRowsWithActions(result?.outputRows, stageByModel, actionByModel),
+    validatorRows: annotateRowsWithActions(result?.validatorRows, stageByModel, actionByModel),
+    candidateRows: enrichedCandidates,
+    candidates: enrichedCandidates,
     approxConfig: {
       ...(result?.approxConfig || {}),
+      consolidatedNodeWiseAction: 'Node-wise post-anchor action. Mandatory Table-2 rows with no mapped node show: No matching node, needs review.',
       stagedResolver: 'Loop 1 exact PS+line+bore maps Table-2 rows first. Loop 2/3 approximate passes run only for still-unmapped rows and only when enabled. Support and support-gap are post-anchor diagnostics only and never select the mapping anchor.',
     },
     summary: {
       ...(result?.summary || {}),
-      candidateRows: visibleCandidates.length,
+      candidateRows: enrichedCandidates.length,
       stagedMappedRows: [...stageByModel.values()].filter((entry) => entry.candidate).length,
+      mandatoryNoNodeRows: enrichedCandidates.filter((row) => row.consolidatedNodeWiseAction === 'No matching node, needs review.').length,
     },
   };
 }
