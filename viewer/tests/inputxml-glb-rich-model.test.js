@@ -3,6 +3,7 @@ import fs from 'node:fs';
 
 import { extractInputXmlBranches } from '../converters/inputxml-dxf/InputXmlBranchExtractor.js';
 import { adaptUxmlToGlbModel } from '../converters/inputxml-glb/UxmlToGlbModelAdapter.js';
+import { buildComponentObject } from '../js/pcf2glb/glb/buildComponentObject.js';
 
 const fixtureUrl = new URL('../../Benchmarks/INPUT XML to CII 2019/1001/1001-P - COPY_INPUT.XML', import.meta.url);
 const xmlText = fs.readFileSync(fixtureUrl, 'utf8');
@@ -40,6 +41,41 @@ const filtered = adaptUxmlToGlbModel(extracted.doc, {
 });
 assert.ok(filtered.model.components.length <= model.components.length);
 assert.deepEqual(diagnostics.filter((item) => item.severity === 'ERROR'), []);
+
+function sampleComponent(type, id = type) {
+  return {
+    id,
+    type,
+    bore: 20,
+    ep1: { x: 0, y: 0, z: 0, bore: 20 },
+    ep2: { x: 100, y: 0, z: 0, bore: 20 },
+    centrePoint: { x: 50, y: 0, z: 0 },
+    branch1Point: { x: 50, y: 60, z: 0, bore: 15 },
+    refNo: id,
+    attributes: { COMPONENT_IDENTIFIER: id },
+  };
+}
+
+const elbowObject = buildComponentObject(sampleComponent('ELBOW', 'ELBOW-TEST'));
+assert.equal(elbowObject.userData.glbShape, 'rounded-elbow-tube');
+assert.equal(elbowObject.geometry?.type, 'TubeGeometry');
+
+const teeObject = buildComponentObject(sampleComponent('TEE', 'TEE-TEST'));
+assert.equal(teeObject.userData.glbShape, 'tee-branch-collar');
+assert.ok(teeObject.getObjectByName('TEE-TEST-main-run'));
+assert.ok(teeObject.getObjectByName('TEE-TEST-branch'));
+assert.ok(teeObject.getObjectByName('TEE-TEST-tee-collar'));
+
+const flangeObject = buildComponentObject(sampleComponent('FLANGE', 'FLANGE-TEST'));
+assert.equal(flangeObject.userData.glbShape, 'flange-ring-pair');
+assert.ok(flangeObject.getObjectByName('FLANGE-TEST-flange-ring-1'));
+assert.ok(flangeObject.getObjectByName('FLANGE-TEST-flange-ring-2'));
+
+const valveObject = buildComponentObject(sampleComponent('VALVE', 'VALVE-TEST'));
+assert.equal(valveObject.userData.glbShape, 'valve-body-handwheel');
+assert.ok(valveObject.getObjectByName('VALVE-TEST-valve-body'));
+assert.ok(valveObject.getObjectByName('VALVE-TEST-valve-handwheel'));
+assert.match(valveObject.getObjectByName('label:VALVE-TEST')?.name || '', /label:/);
 
 const tabSource = fs.readFileSync(new URL('../tabs/model-converters-tab.js', import.meta.url), 'utf8');
 assert.match(tabSource, /installInputXmlGlbLegacyBridge/);
