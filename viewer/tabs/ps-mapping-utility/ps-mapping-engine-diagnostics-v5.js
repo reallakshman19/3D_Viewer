@@ -28,15 +28,49 @@ export function normalizePsMappingOptions(options = {}) {
   return normalized;
 }
 
+function addSupportGapAlias(row) {
+  if (!row || typeof row !== 'object') return row;
+  const gapValue = row.supportGapMatch || row.gapMatch || row.supportGapBasis || '';
+  return {
+    ...row,
+    supportGapMatch: gapValue,
+    gapMatch: row.gapMatch || gapValue,
+  };
+}
+
+function aliasRows(rows) {
+  return Array.isArray(rows) ? rows.map(addSupportGapAlias) : rows;
+}
+
+function annotateSupportGapAliases(result) {
+  const rows = aliasRows(result?.rows);
+  const outputRows = aliasRows(result?.outputRows);
+  const candidateRows = aliasRows(result?.candidateRows || result?.candidates);
+  const candidates = aliasRows(result?.candidates || candidateRows);
+  const validatorRows = aliasRows(result?.validatorRows || rows);
+  return {
+    ...result,
+    rows,
+    outputRows,
+    candidateRows,
+    candidates,
+    validatorRows,
+    approxConfig: {
+      ...(result?.approxConfig || {}),
+      supportGapMatchField: 'supportGapMatch mirrors gapMatch/supportGapBasis for exports and UI diagnostics.',
+    },
+  };
+}
+
 export function runPsMappingResolver(input = {}) {
   const options = normalizePsMappingOptions(input.options || {});
   const result = baseRun({ ...input, options });
-  return {
+  return annotateSupportGapAliases({
     ...result,
     approxConfig: {
       ...(result?.approxConfig || {}),
       supportKeywordSource: 'Support Keyword Rules: Pattern -> Canonical',
       supportKeywordRulesText: options.supportKeywordRulesText,
     },
-  };
+  });
 }
