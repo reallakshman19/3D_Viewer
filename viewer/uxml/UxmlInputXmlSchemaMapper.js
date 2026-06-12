@@ -659,6 +659,10 @@ function pointByNodeRef(attrs, nodeMap, ...names) {
   return null;
 }
 
+function midpointOf(p1, p2) {
+  return { x: (p1.x + p2.x) / 2, y: (p1.y + p2.y) / 2, z: (p1.z + p2.z) / 2 };
+}
+
 function extractComponentPoints(tag, nodeMap) {
   const attrs = tag.attrs;
   const inner = tag.inner || '';
@@ -720,11 +724,14 @@ function extractComponentPoints(tag, nodeMap) {
     ]) ||
     extractNamedPointFromChildren(inner, ANCHOR_ROLES.SUPPORT_POINT);
 
+  const derivedCp = (cp == null && ep1 && ep2) ? midpointOf(ep1, ep2) : cp;
+  const derivedBp = (bp == null && ep1 && ep2) ? midpointOf(ep1, ep2) : bp;
+
   return {
     ep1,
     ep2,
-    cp,
-    bp,
+    cp: derivedCp,
+    bp: derivedBp,
     supportPoint,
   };
 }

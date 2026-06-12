@@ -23,7 +23,7 @@ export const DEFAULT_RVM_PCF_TOPOLOGY_MODE = (() => {
     if (stored === RVM_PCF_TOPOLOGY_MODES.UXML_TOPOLOGY) return RVM_PCF_TOPOLOGY_MODES.UXML_TOPOLOGY;
     if (stored === RVM_PCF_TOPOLOGY_MODES.LEGACY) return RVM_PCF_TOPOLOGY_MODES.LEGACY;
   } catch {}
-  return RVM_PCF_TOPOLOGY_MODES.UXML_TOPOLOGY;
+  return RVM_PCF_TOPOLOGY_MODES.LEGACY;
 })();
 
 export function normalizeRvmPcfTopologyMode(value) {

@@ -1343,14 +1343,6 @@ async function _ensureReadinessBeforePcfExport(container) {
     state.rvmPcfExtract?.topologyMode || DEFAULT_RVM_PCF_TOPOLOGY_MODE
   );
 
-  // Auto-run UXML topology if mode is active but gate hasn't been computed yet
-  if (isUxmlTopologyMode(_topMode) && !state.rvmPcfExtract?.readinessGate?.report) {
-    const rows = state.rvmPcfExtract?.rows || [];
-    if (rows.length) {
-      await _runUxmlTopologyReadinessGate(container);
-    }
-  }
-
   let readinessGate = state.rvmPcfExtract?.readinessGate;
 
   if (!readinessGate?.report) {
