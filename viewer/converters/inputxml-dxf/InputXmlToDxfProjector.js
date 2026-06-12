@@ -6,6 +6,20 @@ function upper(value) {
   return text(value).toUpperCase();
 }
 
+function flattenRawText(value, depth = 0) {
+  if (value === null || value === undefined || depth > 3) return [];
+  if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') return [String(value)];
+  if (Array.isArray(value)) return value.flatMap((item) => flattenRawText(item, depth + 1));
+  if (typeof value === 'object') {
+    return Object.entries(value).flatMap(([key, item]) => [key, ...flattenRawText(item, depth + 1)]);
+  }
+  return [];
+}
+
+function searchableText(...values) {
+  return values.flatMap((value) => flattenRawText(value)).join(' ').toUpperCase();
+}
+
 export function parseSelectedBranches(value) {
   if (Array.isArray(value)) return new Set(value.map(text).filter(Boolean));
   return new Set(text(value).split(',').map((item) => item.trim()).filter(Boolean));
@@ -24,10 +38,23 @@ function componentSelected(component, selectedIds) {
   return componentAliases(component).some((alias) => selectedIds.has(alias));
 }
 
-function layerForComponent(component) {
-  const type = upper(component?.normalizedType || component?.type);
-  if (type.includes('VALVE')) return 'VALVES';
-  if (type.includes('FLANGE') || type.includes('GASKET')) return 'FLANGES';
+export function classifyComponentLayer(component, segment = {}) {
+  const haystack = searchableText(
+    component?.normalizedType,
+    component?.type,
+    component?.typeDesc,
+    component?.name,
+    component?.refNo,
+    component?.rawAttributes,
+    segment?.type,
+  );
+  if (/VALVE|\bVLV\b|\bVGT\b|\bVG\b/.test(haystack)) return 'VALVES';
+  if (/FLANGE|\bFLG\b|GASKET|\bGSKT\b/.test(haystack)) return 'FLANGES';
+  if (/REDUCER|\bRED\b|CONC\.?\s*RED|ECC\.?\s*RED/.test(haystack)) return 'REDUCERS';
+  if (/\bTEE\b|BRANCH|LATERAL/.test(haystack)) return 'TEES';
+  if (/OLET|WELDOLET|SOCKOLET|THREADOLET|WELDING\s+BOSS|BOSS/.test(haystack)) return 'OLETS';
+  if (/ELBOW|\bEL\b|\bBEND\b|\bBENT\b/.test(haystack)) return 'ELBOWS';
+  if (/NOZZLE|EQUIPMENT|TERMINAL/.test(haystack)) return 'NOZZLES';
   return 'PIPING';
 }
 
@@ -42,6 +69,35 @@ function point3(point) {
 function isSupportComponent(component, segment) {
   const type = upper(component?.normalizedType || component?.type || segment?.type);
   return type.includes('SUPPORT') || upper(segment?.type) === 'SUPPORT_ASSOCIATION';
+}
+
+export function classifySupportType(support = {}, component = {}) {
+  const haystack = searchableText(
+    support?.type,
+    support?.name,
+    support?.id,
+    support?.rawAttributes,
+    component?.normalizedType,
+    component?.type,
+    component?.name,
+    component?.refNo,
+    component?.rawAttributes,
+  );
+  if (/GUIDE|\bGUID\b|\bGUD\b/.test(haystack)) return 'guide';
+  if (/LINE\s*STOP|LINESTOP|\bLSTOP\b|\bLS\b/.test(haystack)) return 'lineStop';
+  if (/LIMIT|\bLIM\b|STOPPER|STOP\b/.test(haystack)) return 'limit';
+  if (/ANCHOR|FIXED|\bANC\b/.test(haystack)) return 'anchor';
+  if (/SPRING|HANGER|\bHANG\b|ROD/.test(haystack)) return 'hanger';
+  if (/SHOE|SADDLE/.test(haystack)) return 'shoe';
+  if (/REST|RESTING|RESTRAINT|SUPPORT|\bPS[-_\s]?\d+/.test(haystack)) return 'rest';
+  return 'unknown';
+}
+
+function supportLabel(support = {}, component = {}, supportType = 'unknown') {
+  const base = text(component?.name || support?.name || support?.id || component?.id || 'SUPPORT');
+  const typeText = supportType === 'lineStop' ? 'LINE STOP' : supportType.toUpperCase();
+  if (!base) return typeText;
+  return base.toUpperCase().includes(typeText) ? base : `${base} ${typeText}`;
 }
 
 export function projectToDxfGeometry(doc, options = {}) {
@@ -70,11 +126,13 @@ export function projectToDxfGeometry(doc, options = {}) {
       continue;
     }
 
+    const layer = classifyComponentLayer(component, segment);
     segments.push({
       id: segment.id,
       componentId: segment.componentId,
-      layer: layerForComponent(component),
+      layer,
       type: text(component.normalizedType || component.type || segment.type),
+      componentType: layer.toLowerCase(),
       label: text(component.name || component.refNo || component.seqNo || component.id),
       p1,
       p2,
@@ -98,12 +156,14 @@ export function projectToDxfGeometry(doc, options = {}) {
       continue;
     }
 
+    const supportType = classifySupportType(support, component);
     supports.push({
       id: support.id,
       componentId: support.componentId,
       layer: 'SUPPORTS',
       type: text(support.type || component?.type || 'SUPPORT'),
-      label: text(component?.name || support.type || support.id),
+      supportType,
+      label: supportLabel(support, component, supportType),
       point,
       branchAliases: component ? componentAliases(component) : [],
     });
