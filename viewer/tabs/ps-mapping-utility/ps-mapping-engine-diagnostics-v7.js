@@ -4,7 +4,7 @@ import {
   normalizePsMappingOptions,
   runPsMappingResolver as runV6PsMappingResolver,
   rowsToCsv,
-} from './ps-mapping-engine-diagnostics-v6.js?v=20260612-node-wise-action-1';
+} from './ps-mapping-engine-diagnostics-v6.js?v=20260612-table1-only-ps-unmapped-1';
 
 export { DEFAULT_OPTIONS, DEFAULT_SUPPORT_KEYWORD_RULES_TEXT, normalizePsMappingOptions, rowsToCsv };
 
@@ -22,6 +22,13 @@ function exposeNodeAction(row = {}) {
     nodeCoverageNote: action,
   };
   if (action === 'No matching node, needs review.') {
+    next.reviewRequired = true;
+    next.autoSelectable = false;
+    next.finalStatus = next.finalStatus || 'USER_REVIEW_REQUIRED';
+    next.reviewAction = next.reviewAction || action;
+    next.reason = next.reason || action;
+  }
+  if (action === 'PS No. not Mapped') {
     next.reviewRequired = true;
     next.autoSelectable = false;
     next.finalStatus = next.finalStatus || 'USER_REVIEW_REQUIRED';
