@@ -1,0 +1,188 @@
+import {
+  DEFAULT_OPTIONS as V8_DEFAULT_OPTIONS,
+  DEFAULT_SUPPORT_KEYWORD_RULES_TEXT,
+  normalizePsMappingOptions as normalizeV8Options,
+  runPsMappingResolver as runV8PsMappingResolver,
+  rowsToCsv,
+} from './ps-mapping-engine-diagnostics-v8.js?v=20260612-table2-source-id-1';
+
+export { DEFAULT_SUPPORT_KEYWORD_RULES_TEXT, rowsToCsv };
+
+export const DEFAULT_OPTIONS = {
+  ...V8_DEFAULT_OPTIONS,
+};
+
+export function normalizePsMappingOptions(options = {}) {
+  return normalizeV8Options(options);
+}
+
+function text(value) {
+  return String(value ?? '').trim();
+}
+
+function truthy(value) {
+  return value === true || /^(yes|y|true|1|mandatory|required|req|must|audit)$/i.test(text(value));
+}
+
+function clean(value) {
+  return text(value).replace(/\s+/g, ' ');
+}
+
+function table2SourceId(row = {}, index = -1) {
+  const existing = clean(row.table2SourceId || row.modelSourceId || row.sourceId || '');
+  if (existing) return existing;
+  const ordinal = clean(row.table2Row || row.modelTable2Row || row.sourceRow || row.rowIndex || row.modelRowIndex || '');
+  if (ordinal) return `T2:${ordinal}`;
+  if (Number.isFinite(index) && index >= 0) return `T2:${index + 1}`;
+  const ps = clean(row.psnoModel || row.modelPsNo || row.modelPsNoRaw || row.basePs || 'PS?');
+  const bore = clean(row.modelBore ?? row.bore ?? 'BORE?');
+  const line = clean(row.lineFamily || row.modelLineFamily || row.pipe || 'LINE?');
+  const support = clean(row.supportTypesRequested || row.modelDtxrKeywords || row.dtxr || 'SUPPORT?');
+  return `T2KEY:${ps}|${bore}|${line}|${support}`;
+}
+
+function withTable2Ids(rows = []) {
+  return Array.isArray(rows) ? rows.map((row, index) => ({
+    ...row,
+    table2SourceId: table2SourceId(row, index),
+    modelSourceId: row?.modelSourceId || table2SourceId(row, index),
+  })) : [];
+}
+
+function hasNode(row = {}) {
+  return Boolean(clean(row.mappedNode || row.candidateNode || row.node || ''));
+}
+
+function hasTable2Ps(row = {}) {
+  const ps = clean(row.psnoModel || row.modelPsNo || row.modelPsNoRaw || '');
+  return Boolean(ps && ps !== '-' && ps.toUpperCase() !== 'N/A');
+}
+
+function uniq(values = []) {
+  return [...new Set(values.filter(Boolean))];
+}
+
+function labelList(rows = [], idKey, labelFn) {
+  return uniq(rows.map((row) => `${row[idKey]}:${labelFn(row)}`)).map((x) => x.replace(/^[^:]+:/, '')).join(', ');
+}
+
+function table1ContextKey(row = {}, index = -1) {
+  const node = clean(row.node || row.candidateNode || '');
+  const ps = clean(row.table1PsNo || row.psNo || row.basePs || '');
+  const line = clean(row.lineFamily || row.nodeLineFamily || '');
+  const dn = clean(row.derivedDn ?? row.pipeSizeRaw ?? row.nps ?? '');
+  if (node || ps || line || dn) return `${node}|${ps}|${line}|${dn}`;
+  return `T1:${index + 1}`;
+}
+
+function t2Label(row = {}) {
+  const parts = [row.psnoModel || row.modelPsNo || row.basePs, row.modelBore ?? row.bore, row.lineFamily || row.modelLineFamily, row.supportTypesRequested || row.modelDtxrKeywords].map(clean).filter(Boolean);
+  return parts.join(' / ');
+}
+
+function t1Label(row = {}) {
+  const parts = [row.node || row.candidateNode, row.table1PsNo || row.basePs, row.lineFamily || row.nodeLineFamily, row.derivedDn ?? row.pipeSizeRaw].map(clean).filter(Boolean);
+  return parts.join(' / ');
+}
+
+function buildTable2TallyRows(result = {}) {
+  const sourceRows = withTable2Ids(
+    Array.isArray(result.consolidatedTable2Rows) && result.consolidatedTable2Rows.length
+      ? result.consolidatedTable2Rows
+      : (result.rows || result.outputRows || result.validatorRows || [])
+  );
+  const evidenceRows = withTable2Ids([...(result.rows || []), ...(result.outputRows || []), ...(result.validatorRows || []), ...(result.candidateRows || result.candidates || [])]);
+  const matchedIds = new Set(evidenceRows.filter((row) => hasTable2Ps(row) && hasNode(row)).map((row) => row.table2SourceId));
+  const matched = sourceRows.filter((row) => matchedIds.has(row.table2SourceId));
+  const mandatoryUnmatched = sourceRows.filter((row) => !matchedIds.has(row.table2SourceId) && truthy(row.mandatory || row.modelMandatory || row.mandatoryRaw || row.isMandatory));
+  const optionalUnmatched = sourceRows.filter((row) => !matchedIds.has(row.table2SourceId) && !truthy(row.mandatory || row.modelMandatory || row.mandatoryRaw || row.isMandatory));
+  const total = sourceRows.length;
+  const checkOk = matched.length + mandatoryUnmatched.length + optionalUnmatched.length === total;
+  return [{
+    section: 'Table-2 PS No',
+    sourceTotal: total,
+    matched: matched.length,
+    mandatoryUnmatched: mandatoryUnmatched.length,
+    optionalUnmatched: optionalUnmatched.length,
+    formula: `${matched.length} + ${mandatoryUnmatched.length} + ${optionalUnmatched.length} = ${total}`,
+    check: checkOk ? 'OK' : 'CHECK',
+    action: checkOk ? 'Tally balanced against Table-2 source rows.' : 'Tally mismatch; inspect source IDs.',
+    matchedRows: labelList(matched, 'table2SourceId', t2Label),
+    mandatoryUnmatchedRows: labelList(mandatoryUnmatched, 'table2SourceId', t2Label),
+    optionalUnmatchedRows: labelList(optionalUnmatched, 'table2SourceId', t2Label),
+  }];
+}
+
+function buildTable1TallyRows(result = {}) {
+  const sourceRows = Array.isArray(result.consolidatedTable1Rows) ? result.consolidatedTable1Rows : [];
+  const sourceWithKeys = sourceRows.map((row, index) => ({ ...row, table1ContextId: table1ContextKey(row, index) }));
+  const evidenceRows = [...(result.rows || []), ...(result.outputRows || []), ...(result.validatorRows || []), ...(result.candidateRows || result.candidates || [])];
+  const matchedKeys = new Set(evidenceRows.filter((row) => hasTable2Ps(row) && hasNode(row)).map((row) => table1ContextKey({
+    node: row.node || row.candidateNode,
+    table1PsNo: row.table1PsNo,
+    lineFamily: row.nodeLineFamily,
+    derivedDn: row.derivedDn,
+  })).filter(Boolean));
+  const matched = sourceWithKeys.filter((row) => matchedKeys.has(row.table1ContextId));
+  const mandatoryUnmatched = sourceWithKeys.filter((row) => !matchedKeys.has(row.table1ContextId) && truthy(row.mandatory || row.table1Mandatory || row.nodeMandatory));
+  const optionalUnmatched = sourceWithKeys.filter((row) => !matchedKeys.has(row.table1ContextId) && !truthy(row.mandatory || row.table1Mandatory || row.nodeMandatory));
+  const total = sourceWithKeys.length;
+  const checkOk = matched.length + mandatoryUnmatched.length + optionalUnmatched.length === total;
+  return [{
+    section: 'Table-1 Nodes',
+    sourceTotal: total,
+    matched: matched.length,
+    mandatoryUnmatched: mandatoryUnmatched.length,
+    optionalUnmatched: optionalUnmatched.length,
+    formula: `${matched.length} + ${mandatoryUnmatched.length} + ${optionalUnmatched.length} = ${total}`,
+    check: checkOk ? 'OK' : 'CHECK',
+    action: checkOk ? 'Tally balanced against Table-1 node source rows.' : 'Tally mismatch; inspect Table-1 node context keys.',
+    matchedRows: labelList(matched, 'table1ContextId', t1Label),
+    mandatoryUnmatchedRows: labelList(mandatoryUnmatched, 'table1ContextId', t1Label),
+    optionalUnmatchedRows: labelList(optionalUnmatched, 'table1ContextId', t1Label),
+  }];
+}
+
+function buildSupportTallyRows(result = {}) {
+  const coverageRows = Array.isArray(result.supportCoverageRows) ? result.supportCoverageRows : [];
+  if (!coverageRows.length) return [];
+  const issueRows = coverageRows.filter((row) => {
+    const status = clean(row.coverageStatus || row.status || '').toUpperCase();
+    return status && !/^(OK|MATCHED|COVERED)$/.test(status);
+  });
+  return [{
+    section: 'Node Support Coverage',
+    sourceTotal: coverageRows.length,
+    matched: coverageRows.length - issueRows.length,
+    mandatoryUnmatched: issueRows.length,
+    optionalUnmatched: 0,
+    formula: `${coverageRows.length - issueRows.length} covered + ${issueRows.length} issue = ${coverageRows.length}`,
+    check: issueRows.length ? 'REVIEW' : 'OK',
+    action: issueRows.length ? 'Review node-wise support coverage actions.' : 'Support coverage has no reported issue.',
+    matchedRows: '',
+    mandatoryUnmatchedRows: issueRows.map((row) => clean(row.action || row.coverageStatus || row.node)).filter(Boolean).join(' | '),
+    optionalUnmatchedRows: '',
+  }];
+}
+
+function withTally(result = {}) {
+  const tallyRows = [
+    ...buildTable2TallyRows(result),
+    ...buildTable1TallyRows(result),
+    ...buildSupportTallyRows(result),
+  ];
+  return {
+    ...result,
+    tallyRows,
+    summary: {
+      ...(result.summary || {}),
+      tallyRows: tallyRows.length,
+    },
+  };
+}
+
+export function runPsMappingResolver(input = {}) {
+  const options = normalizePsMappingOptions(input.options || {});
+  const result = runV8PsMappingResolver({ ...input, options });
+  return withTally(result);
+}
