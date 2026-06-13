@@ -339,6 +339,42 @@ def _has_real_restraint(specs: tuple[base.RestraintSpec, ...]) -> bool:
     return any(not getattr(spec, "is_open_end", False) for spec in specs)
 
 
+def _component_type_to_xml_type(component_type: str, support_config: dict) -> str:
+    comp = base._safe_text(component_type).upper()
+    component_map = support_config.get("componentTypeToXmlType", {})
+    if isinstance(component_map, dict):
+        mapped = base._safe_text(component_map.get(comp) or component_map.get(component_type))
+        if mapped:
+            return mapped.upper()
+    if comp == "ANCI":
+        return "+Y"
+    return ""
+
+
+def _component_type_restraint_specs(document: base.XmlDocument, support_config: dict) -> dict[int, tuple[base.RestraintSpec, ...]]:
+    stiffness = patched._to_float(support_config.get("defaultStiffness"), base.DEFAULT_LINEAR_STIFFNESS)
+    gap = patched._to_float(support_config.get("defaultGap"), 0.0)
+    friction = patched._to_float(support_config.get("defaultFriction"), 0.3)
+    specs: dict[int, tuple[base.RestraintSpec, ...]] = {}
+    for branch in document.branches:
+        for node in branch.nodes:
+            if node.node_number is None or node.node_number <= 0:
+                continue
+            xml_type = _component_type_to_xml_type(node.component_type, support_config)
+            if not xml_type:
+                continue
+            specs[node.node_number] = (
+                base.RestraintSpec(
+                    type_code=base._restraint_type_to_code(xml_type),
+                    stiffness=stiffness,
+                    gap=gap,
+                    friction=friction,
+                    is_open_end=False,
+                ),
+            )
+    return specs
+
+
 def _merge_restraint_specs(left: tuple[base.RestraintSpec, ...], right: tuple[base.RestraintSpec, ...]) -> tuple[base.RestraintSpec, ...]:
     out: list[base.RestraintSpec] = []
     seen: set[tuple[int, float, float, float]] = set()
@@ -351,6 +387,14 @@ def _merge_restraint_specs(left: tuple[base.RestraintSpec, ...], right: tuple[ba
         if len(out) >= base.RESTRAINT_SLOTS_PER_AUX:
             break
     return tuple(out)
+
+
+def _merge_spec_maps(*maps: dict[int, tuple[base.RestraintSpec, ...]]) -> dict[int, tuple[base.RestraintSpec, ...]]:
+    merged: dict[int, tuple[base.RestraintSpec, ...]] = {}
+    for spec_map in maps:
+        for node_number, specs in spec_map.items():
+            merged[node_number] = _merge_restraint_specs(merged.get(node_number, tuple()), specs)
+    return merged
 
 
 def _tolerant_build_restraints(
@@ -477,12 +521,10 @@ def main() -> None:
     insulation_density_map = patched._branch_insulation_density_map(input_xml)
     hydro_pressure_map = patched._branch_hydro_pressure_map(input_xml)
     document = base._parse_xml_document(input_xml)
+    component_specs = _component_type_restraint_specs(document, support_config)
     dtxr_specs, node_number_kind_map = patched._build_keyword_restraint_specs(input_xml, support_config)
     xml_specs = base._build_explicit_restraint_specs(document.branches)
-    explicit_specs = dtxr_specs if args.use_restraint_type_based_on_json else dict(xml_specs)
-    if not args.use_restraint_type_based_on_json:
-        for node_number, specs in dtxr_specs.items():
-            explicit_specs[node_number] = patched._merge_specs(explicit_specs.get(node_number, tuple()), specs)
+    explicit_specs = _merge_spec_maps(component_specs, dtxr_specs) if args.use_restraint_type_based_on_json else _merge_spec_maps(component_specs, xml_specs, dtxr_specs)
     model = patched._build_conversion_model(document, explicit_specs, patched._node_name_kind_map(document, node_number_kind_map))
     temperature_map, pressure_map = patched._branch_case_maps(document)
     base._build_restraint_payload = _direction_enabled_restraint_payload_factory(support_config)
