@@ -49,6 +49,20 @@ function normalizeAppliedType(type) {
   return aliases[upper] || upper;
 }
 
+function xmlTypeAllowsRealFriction(type) {
+  const upper = normalizeAppliedType(type);
+  return upper === '+Y' || upper === 'Y';
+}
+
+function frictionForManualEntry(entry, type, config = {}) {
+  if (text(entry?.friction)) return text(entry.friction);
+  const mode = text(entry?.frictionMode || 'default').toLowerCase();
+  const defaultFriction = text(config.defaultFriction || '0.3') || '0.3';
+  if (mode === 'fixed' && text(entry?.fixedFriction)) return text(entry.fixedFriction);
+  if (mode === 'sentinel' && config.useFrictionSentinelForNonYSupports !== false && !xmlTypeAllowsRealFriction(type)) return '-1.010100';
+  return defaultFriction;
+}
+
 function nodeMapByNumber(document) {
   const map = new Map();
   for (const node of [...document.getElementsByTagName('Node')]) {
@@ -81,10 +95,11 @@ function appendManualRestraint(document, nodeElement, fact, entry, config = {}) 
   restraint.setAttribute('basis', fact.basis || '');
   restraint.setAttribute('resolvedKey', fact.key || '');
 
-  appendText(document, restraint, 'Type', normalizeAppliedType(entry.type));
+  const type = normalizeAppliedType(entry.type);
+  appendText(document, restraint, 'Type', type);
   appendText(document, restraint, 'Stiffness', text(entry.stiffness) || text(config.defaultStiffness) || '1.751270E+12');
   appendText(document, restraint, 'Gap', text(entry.gap) || '0');
-  appendText(document, restraint, 'Friction', text(entry.friction || entry.fixedFriction) || text(config.defaultFriction) || '0.3');
+  appendText(document, restraint, 'Friction', frictionForManualEntry(entry, type, config));
   appendText(document, restraint, 'OriginalText', fact.meta?.rawLine || fact.value || '');
   appendText(document, restraint, 'ResolvedFrom', fact.basis || '');
   appendText(document, restraint, 'ResolvedKey', fact.key || '');
