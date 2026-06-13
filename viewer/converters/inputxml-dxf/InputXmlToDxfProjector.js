@@ -66,6 +66,16 @@ function point3(point) {
   return { x, y, z };
 }
 
+function distance(a, b) {
+  return Math.hypot(b.x - a.x, b.y - a.y, b.z - a.z);
+}
+
+function lengthLabel(length) {
+  const value = Number(length);
+  if (!Number.isFinite(value) || value <= 0) return '';
+  return `${Number(value.toFixed(value >= 100 ? 0 : 1))} mm`;
+}
+
 function isSupportComponent(component, segment) {
   const type = upper(component?.normalizedType || component?.type || segment?.type);
   return type.includes('SUPPORT') || upper(segment?.type) === 'SUPPORT_ASSOCIATION';
@@ -107,6 +117,7 @@ export function projectToDxfGeometry(doc, options = {}) {
   const segments = [];
   const supports = [];
   const diagnostics = [];
+  const exportLengthText = options.exportLengthText === true;
 
   for (const segment of doc.segments || []) {
     const component = components.get(segment.componentId);
@@ -127,13 +138,17 @@ export function projectToDxfGeometry(doc, options = {}) {
     }
 
     const layer = classifyComponentLayer(component, segment);
+    const measuredLength = Number(segment.length) > 0 ? Number(segment.length) : distance(p1, p2);
+    const measuredLengthLabel = lengthLabel(measuredLength);
     segments.push({
       id: segment.id,
       componentId: segment.componentId,
       layer,
       type: text(component.normalizedType || component.type || segment.type),
       componentType: layer.toLowerCase(),
-      label: text(component.name || component.refNo || component.seqNo || component.id),
+      label: exportLengthText && measuredLengthLabel ? measuredLengthLabel : text(component.name || component.refNo || component.seqNo || component.id),
+      length: measuredLength,
+      lengthLabel: measuredLengthLabel,
       p1,
       p2,
       branchAliases: componentAliases(component),
