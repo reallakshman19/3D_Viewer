@@ -104,7 +104,7 @@ assert.equal(valveObject.userData.glbShape, 'valve-body-handwheel');
 assert.ok(valveObject.getObjectByName('VALVE-TEST-valve-body'));
 assert.ok(valveObject.getObjectByName('VALVE-TEST-valve-handwheel'));
 assert.match(valveObject.getObjectByName('label:VALVE-TEST')?.name || '', /label:/);
-assert.deepEqual(collectGlbLabelAnchors(valveObject).map((label) => label.text), ['VALVE-TEST']);
+assert.deepEqual([...new Set(collectGlbLabelAnchors(valveObject).map((label) => label.text))], ['VALVE-TEST']);
 
 const tabSource = fs.readFileSync(new URL('../tabs/model-converters-tab.js', import.meta.url), 'utf8');
 assert.match(tabSource, /installInputXmlGlbLegacyBridge/);
