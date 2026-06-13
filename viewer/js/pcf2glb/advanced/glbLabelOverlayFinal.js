@@ -129,9 +129,14 @@ function isExplicitLabelAnchor(object) {
   );
 }
 
-// Extract a clean node number from raw label text.
-// Handles: "205", "NODE 205", "N205", "IX-A-IX-PE-00001-NODE-205".
-// Rejects: "SUPPORT_POINT" pseudo-labels and strings with no parseable number.
+// Extract a clean display label from a raw node label text.
+// Handles:
+//   "205"                          → "205"
+//   "NODE 205"                     → "205"
+//   "IX-A-IX-PE-00001-NODE-205"    → "205"
+//   "IX-A-IX-PE-00001-EP1"         → "1-EP1"  (pipe endpoint format)
+//   "IX-A-IX-PE-00001-CP"          → "1-CP"   (component/branch point)
+// Rejects: SUPPORT_POINT pseudo-labels, strings with no parseable label.
 function cleanNodeText(rawText) {
   const value = text(rawText);
   if (!value) return '';
@@ -145,16 +150,57 @@ function cleanNodeText(rawText) {
   if (m1) return m1[1].replace(/\.0+$/, '');
 
   // Complex "-NODE-NNN" suffix: "IX-A-IX-PE-00001-NODE-205"
-  const m2 = value.match(/[_-]NODE[_-](\d+)/i);
+  const m2 = value.match(/[_-]NODE[-_\s]*(\d+)/i);
   if (m2) return m2[1];
 
-  // Has "NODE" keyword — extract last short number
+  // IX project pipe-endpoint format: "IX-A-IX-PE-00001-EP1" → "1-EP1"
+  // Covers: EP1/EP2 (endpoints), CP (component point), BP (branch point), TP (tee point), AP
+  const ixPipeEp = value.match(/^IX-[A-Z0-9]+-IX-PE-(\d+)-(EP\d+|CP|BP|TP|AP)$/i);
+  if (ixPipeEp) {
+    return `${parseInt(ixPipeEp[1], 10)}-${ixPipeEp[2].toUpperCase()}`;
+  }
+
+  // NODE keyword with number nearby
   if (/\bNODE\b/i.test(value)) {
-    const nums = value.match(/\b(\d{1,6})\b/g);
-    if (nums?.length) return nums[nums.length - 1];
+    const m = value.match(/NODE[-_\s]*(\d+)/i);
+    if (m) return m[1];
   }
 
   return '';
+}
+
+// Produce a short human-readable label from raw labelText for any component kind.
+// Support labels use userData.supportKind directly.
+// Other IX reference codes are stripped to their meaningful suffix.
+function cleanLabelText(raw, kind, userData) {
+  const value = text(raw);
+  if (!value) return value;
+
+  if (kind === 'node') return cleanNodeText(value);
+
+  // Support: use stored supportKind field directly
+  if (kind === 'support') {
+    const sk = text(userData?.supportKind).toUpperCase();
+    if (sk && sk !== 'UNKNOWN') return sk;
+    // Fallback: extract last space-separated word from "IX-...-N TYPE"
+    const spaceIdx = value.lastIndexOf(' ');
+    if (spaceIdx > 0) return value.slice(spaceIdx + 1).trim();
+  }
+
+  // Generic IX reference: "IX-PE-00001" → "PE-1", "IX-A-IX-PE-00007" → "PE-7"
+  if (/^IX-/i.test(value)) {
+    // Code followed by space: "IX-SUP-... TYPE" → "TYPE"
+    const spaceIdx = value.indexOf(' ');
+    if (spaceIdx > 0) {
+      const after = value.slice(spaceIdx + 1).trim();
+      if (after) return after;
+    }
+    // "IX-PE-NNNNN" → "PE-N"
+    const m = value.match(/IX-PE-(\d+)(?:[^-]|$)/i);
+    if (m) return `PE-${parseInt(m[1], 10)}`;
+  }
+
+  return value;
 }
 
 function isCleanNumericNodeLabel(label) {
@@ -315,12 +361,8 @@ export function collectGlbLabelAnchors(root, options = {}) {
     if (!isExplicitLabelAnchor(object)) return;
 
     const kind = labelClassFor(object);
-    let label = raw;
-
-    if (kind === 'node') {
-      label = normalizeNodeLabel(raw);
-      if (!label || !isCleanNumericNodeLabel(raw)) return;
-    }
+    const label = cleanLabelText(raw, kind, object.userData);
+    if (!label) return; // Could not extract meaningful display text
 
     const key = logicalLabelKey(object, label, kind);
     const priority = candidatePriority(object);
@@ -353,11 +395,8 @@ export function collectGlbLabelAnchors(root, options = {}) {
     const kind = labelClassFor(object);
     if (kind === 'component') return; // Skip unclassified fallbacks
 
-    let label = raw;
-    if (kind === 'node') {
-      label = normalizeNodeLabel(raw);
-      if (!label || !isCleanNumericNodeLabel(raw)) return;
-    }
+    const label = cleanLabelText(raw, kind, object.userData);
+    if (!label) return;
 
     const key = logicalLabelKey(object, label, kind);
     if (explicitKeys.has(key)) return; // Explicit anchor already covers this

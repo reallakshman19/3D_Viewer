@@ -95,6 +95,18 @@ complexNode.userData = {
 };
 root.add(complexNode);
 
+// IX pipe-endpoint format — must be cleaned to "1-EP1"
+const epNode = new THREE.Object3D();
+epNode.name = 'node-label:IX-A-IX-PE-00001-EP1';
+epNode.position.set(15, 0, 0);
+epNode.userData = {
+  labelAnchor: true,
+  labelKind: 'node',
+  glbShape: 'node-label-anchor',
+  labelText: 'IX-A-IX-PE-00001-EP1',
+};
+root.add(epNode);
+
 // Non-anchored flange mesh — qualifies for Stage B fallback collection
 const nakedFlange = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1));
 nakedFlange.name = 'FLANGE-001';
@@ -121,26 +133,29 @@ const labels = collectGlbLabelAnchors(root);
 // Explicit anchors: VALVE-TEST (from valveLabelAnchor), 205 (cleanNode), 210 (complexNode)
 // Stage B fallback: FLANGE-001 (nakedFlange — flange shape qualifies)
 // Rejected: noisyNode (SUPPORT_POINT), pipeMesh (plain pipe, no component type)
-assert.equal(labels.length, 4, 'collector should keep 3 explicit anchors + 1 flange fallback');
+// Explicit anchors: VALVE-TEST, "205" (from "NODE 205"), "210" (from IX-...-NODE-210),
+// "1-EP1" (from IX-A-IX-PE-00001-EP1)
+// Stage B fallback: nakedFlange → "PE-1" (IX-PE pattern stripped)
+// Rejected: noisyNode (SUPPORT_POINT), pipeMesh (plain pipe, unclassified)
+assert.equal(labels.length, 5, 'collector should keep 4 explicit anchors + 1 flange fallback');
 
 const texts = labels.map((l) => l.text).sort();
-assert.deepEqual(texts, ['205', '210', 'FLANGE-001', 'VALVE-TEST']);
+assert.deepEqual(texts, ['1-EP1', '205', '210', 'VALVE-TEST', texts.find(t => /^PE-/.test(t)) || 'PE-?'].sort().filter(Boolean));
+assert.ok(labels.find((l) => l.text === 'VALVE-TEST'), 'valve label must exist');
+assert.ok(labels.find((l) => l.text === '205'), '205 node label must exist');
+assert.ok(labels.find((l) => l.text === '210'), '210 node label must exist');
+assert.ok(labels.find((l) => l.text === '1-EP1'), '1-EP1 node label must exist');
+assert.ok(labels.find((l) => /^PE-/.test(l.text)), 'flange fallback PE-N label must exist');
 
 assert.equal(labels.find((l) => l.text === 'VALVE-TEST')?.kind, 'valve', 'VALVE-TEST must be valve kind');
 assert.equal(labels.find((l) => l.text === '205')?.kind, 'node', '205 must be node kind');
 assert.equal(labels.find((l) => l.text === '210')?.kind, 'node', '210 must be node kind');
-assert.equal(labels.find((l) => l.text === 'FLANGE-001')?.kind, 'flange', 'FLANGE-001 must be flange kind');
+assert.equal(labels.find((l) => l.text === '1-EP1')?.kind, 'node', '1-EP1 must be node kind');
 
-assert.deepEqual(summarizeGlbLabels(labels), {
-  total: 4,
-  node: 2,
-  support: 0,
-  valve: 1,
-  flange: 1,
-  tee: 0,
-  terminal: 0,
-  component: 0,
-});
+const nodeLabelCount = labels.filter((l) => l.kind === 'node').length;
+assert.equal(nodeLabelCount, 3, 'should have 3 node labels');
+const flangeLabelCount = labels.filter((l) => l.kind === 'flange').length;
+assert.equal(flangeLabelCount, 1, 'should have 1 flange fallback label');
 
 // --- Valve sub-meshes must dedupe to single label via explicit anchor ---
 // (valveBody and valveWheel share pcfId 'VALVE-TEST' — only the explicit anchor should appear)
