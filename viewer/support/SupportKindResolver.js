@@ -20,7 +20,7 @@ export const DEFAULT_KIND_MAP = {
 // real RVM data where PG-* guide supports also carry MDSSUPPTYPE=GT5xx.
 export const DEFAULT_RULES = [
   // Custom text patterns for specific support mapping (Higher precedence)
-  { id: 'builtin-user-rest',       field: 'SPRE,SKEY,NAME,DESCRIPTION,DESC,CMPSUPTYPE', pattern: 'REST,SHOE,BP,BEARING PLATE,WP,WEAR PAD', match: 'contains', kind: 'REST', label: 'REST/SHOE/BP/WP -> REST' },
+  { id: 'builtin-user-rest',       field: 'SPRE,SKEY,NAME,DESCRIPTION,DESC,CMPSUPTYPE', pattern: 'REST,SHOE,BP,BEARING PLATE,WP,WEAR PAD,ANCI', match: 'contains', kind: 'REST', label: 'REST/SHOE/BP/WP/ANCI -> REST' },
   { id: 'builtin-user-limit',      field: 'SPRE,SKEY,NAME,DESCRIPTION,DESC,CMPSUPTYPE', pattern: 'LIMIT STOP,AXIAL STOP,LIMIT', match: 'contains', kind: 'LIMIT', label: 'LIMIT STOP/AXIAL STOP -> LIMIT' },
   { id: 'builtin-user-guide',      field: 'SPRE,SKEY,NAME,DESCRIPTION,DESC,CMPSUPTYPE', pattern: 'GUIDE', match: 'contains', kind: 'GUIDE', label: 'GUIDE -> GUIDE' },
 
@@ -117,7 +117,7 @@ export function resolveKindFromText(rawText) {
   if (/\bSPRING\b|\bHANGER\b/.test(t))                           return 'SPRING';
   if (/\bLINE\s*STOP\b|\bLINESTOP\b|\bSTOPPER\b/.test(t))       return 'LINESTOP';
   if (/\bLIMIT\s*STOP\b|\bLIMIT\b/.test(t))                      return 'LIMIT';
-  if (/\bREST(ING)?\b|\bRST\b|\bSHOE\b|\bBASE\s*PLATE\b|\bBP\b|\+Y\b/.test(t)) return 'REST';
+  if (/\bREST(ING)?\b|\bRST\b|\bSHOE\b|\bBASE\s*PLATE\b|\bBEARING\s*PLATE\b|\bWEAR\s*PAD\b|\bBP\b|\bWP\b|\bANCI\b|\+Y\b/.test(t)) return 'REST';
   if (/\bSTOP\b/.test(t))                                         return 'LINESTOP';
   return '';
 }

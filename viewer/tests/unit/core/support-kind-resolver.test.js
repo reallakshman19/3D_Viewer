@@ -40,6 +40,9 @@ function run() {
   assert.equal(resolveKindFromText('ANCHOR REST'),   'ANCHOR',    'ANCHOR wins over REST when both present');
   assert.equal(resolveKindFromText('LATERAL SUPP'),  'GUIDE',     'LATERAL alias → GUIDE');
   assert.equal(resolveKindFromText('LATERAL STOP'),  'GUIDE',     'LATERAL beats STOP');
+  assert.equal(resolveKindFromText('ANCI'),          'REST',      'ANCI alias → REST');
+  assert.equal(resolveKindFromText('WEAR PAD'),      'REST',      'WEAR PAD alias → REST');
+  assert.equal(resolveKindFromText('BEARING PLATE'), 'REST',      'BEARING PLATE alias → REST');
   assert.equal(resolveKindFromText(''),              '',          'empty → empty');
   assert.equal(resolveKindFromText(null),            '',          'null → empty');
 
@@ -86,7 +89,7 @@ function run() {
   assert.equal(resolveKindPure({ MDSSUPPTYPE: 'GT573' }),'REST',     'MDSSUPPTYPE GT5* → REST');
   assert.equal(resolveKindPure({ MDSSUPPTYPE: 'GT3' }),  'GUIDE',    'GT3* → GUIDE (GT prefix, not GT5)');
   assert.equal(resolveKindPure({ CMPSUPTYPE: 'LS-12' }), 'LINESTOP', 'LS-* → LINESTOP');
-  assert.equal(resolveKindPure({ CMPSUPTYPE: 'WP-3' }),  'LINESTOP', 'WP-* → LINESTOP');
+  assert.equal(resolveKindPure({ CMPSUPTYPE: 'WP-3' }),  'REST',     'WP-* → REST');
   assert.equal(resolveKindPure({ CMPSUPTYPE: 'PG-5' }),  'GUIDE',    'PG-* → GUIDE');
   assert.equal(resolveKindPure({ CMPSUPTYPE: 'BP-2' }),  'REST',     'BP-* → REST');
   assert.equal(resolveKindPure({ MDSSUPPTYPE: 'AN-01' }), 'ANCHOR',  'AN* → ANCHOR');
@@ -211,9 +214,9 @@ function run() {
   // DEFAULT_RULES ordering: support intent before subtype, GT5 before GT
   const pgIdx     = DEFAULT_RULES.findIndex(r => r.id === 'builtin-pg');
   const gt5MdsIdx = DEFAULT_RULES.findIndex(r => r.id === 'builtin-gt5-mds');
-  const gtIdx     = DEFAULT_RULES.findIndex(r => r.id === 'builtin-gt');
+  const gtIdx     = DEFAULT_RULES.findIndex(r => r.id === 'builtin-gt-mds');
   assert.ok(pgIdx < gt5MdsIdx, 'builtin-pg must precede builtin-gt5-mds so guide intent wins');
-  assert.ok(gt5MdsIdx < gtIdx, 'builtin-gt5-mds must precede builtin-gt in DEFAULT_RULES');
+  assert.ok(gt5MdsIdx < gtIdx, 'builtin-gt5-mds must precede builtin-gt-mds in DEFAULT_RULES');
 
   // ── DEFAULT_RULES contains CA built-ins ───────────────────────────────────────
   const ids = DEFAULT_RULES.map(r => r.id);
