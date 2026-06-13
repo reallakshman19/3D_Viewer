@@ -464,7 +464,16 @@ async function rescanPipingClassFromXml({ force = false, notifyUser = false } = 
       return false;
     }
     const signature = JSON.stringify({ file: `${xmlFile.name}:${xmlFile.size}:${xmlFile.lastModified}`, branches: branchNames.length, index: paths.pipingClassIndexPath, folder: paths.pipingClassShardFolder });
-    if (!force && config.pipingClass?._rescanSignature === signature && rowCount(MASTER_SECTIONS.pipingClass, config.pipingClass) > 0) return true;
+    if (!force && config.pipingClass?._rescanSignature === signature && rowCount(MASTER_SECTIONS.pipingClass, config.pipingClass) > 0) {
+      // Cached result is valid — restore the last known status so the panel
+      // doesn't stay stuck at the "select XML" default from scheduleAutoload.
+      const cached = config.pipingClass;
+      const cachedMsg = cached._autoloadedRows > 0
+        ? `Piping Class: ${cached._loadedShardCount ?? '?'}/${cached._matchedClassCount ?? '?'} shard(s), ${cached._autoloadedRows} row(s), ${cached._branchNameCount ?? branchNames.length} branchname(s).`
+        : `Piping Class: 0/${cached._matchedClassCount ?? '?'} shard(s), 0 row(s), ${cached._branchNameCount ?? branchNames.length} branchname(s).`;
+      renderMasterPathsPanel(input, cachedMsg);
+      return true;
+    }
 
     renderMasterPathsPanel(input, `Scanning ${branchNames.length} XML branchname(s) against specwise piping class index…`);
     const indexLoad = await fetchTextByPath(paths.pipingClassIndexPath);

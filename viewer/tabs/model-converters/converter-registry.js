@@ -114,6 +114,7 @@ const CONVERTER_DEFS = {
     primaryLabel: 'RVM Input',
     secondaryLabel: 'ATT/TXT Attribute File (optional)',
     secondaryAccept: '.att,.ATT,.txt,.TXT',
+    allowSecondaryOnly: true,
     description: 'Managed native stage to XML; JSON->XML is attempted first, then REV->XML fallback.',
     defaults: {
       coordFactor: 1000,
@@ -707,6 +708,7 @@ export const CONVERTERS = CONVERTER_ORDER.map(id => {
     label: def.label,
     group: id.includes('cii') || id.includes('inputxml') ? 'CAESAR II' : '3D Models',
     disabled: !!def.disabled,
+    allowSecondaryOnly: !!def.allowSecondaryOnly,
     inputs,
     options: def.fields || [],
     defaults: def.defaults || {},

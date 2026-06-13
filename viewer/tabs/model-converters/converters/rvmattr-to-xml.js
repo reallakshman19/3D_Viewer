@@ -5,6 +5,28 @@ import { parseRmssAttributes, parseRmssStructuralMembers } from '../../../conver
 import { _looksLikeStagedHierarchy, _filterStagedHierarchyByScope, _buildPsiXmlFromRmssHierarchy } from './stagedjson-xml-helpers.js';
 import { resolveXmlCiiSupportKind, buildStagedSupportIndex, xmlCiiTypeEntriesFromSupportKind, xmlCiiTypeEntryFromExistingRestraint, applyXmlRestraints } from '../../../converters/xml-cii2019-core/support-mapping.js';
 
+// File-type helpers used by run() to detect RVM vs ATT/TXT by extension and role
+function extOf(name = '') {
+  const match = String(name).toLowerCase().match(/\.([a-z0-9]+)$/);
+  return match ? match[1] : '';
+}
+
+function isRvmFile(file = {}) {
+  return extOf(file.name) === 'rvm';
+}
+
+function isAttFile(file = {}) {
+  const ext = extOf(file.name);
+  return ext === 'att' || ext === 'txt';
+}
+
+// Read text from a file object that may carry either .text (test fixture) or .bytes (UI)
+function fileText(file) {
+  if (typeof file?.text === 'string') return file.text;
+  if (file?.bytes) return decodeTextUtf8(file.bytes);
+  return '';
+}
+
 // Helpers
 function toText(value) {
   if (value === undefined || value === null) return '';
@@ -106,6 +128,22 @@ function buildStpTextFromMembers(rawMembers, outputName) {
   const refs = polylineIds.map((id) => `#${id}`).join(',');
   dataLines.push(`#${entityId}=PRESENTATION_LAYER_ASSIGNMENT('SUPPORT_MEMBERS','',(${refs}));`);
   return [...header, ...dataLines, 'ENDSEC;', 'END-ISO-10303-21;'].join('\n') + '\n';
+}
+
+function normalizePoint(point) {
+  if (point === undefined || point === null || point === '') return null;
+  if (Array.isArray(point) && point.length >= 3) {
+    const x = Number(point[0]), y = Number(point[1]), z = Number(point[2]);
+    return Number.isFinite(x) && Number.isFinite(y) && Number.isFinite(z) ? { x, y, z } : null;
+  }
+  if (typeof point === 'object') {
+    const x = Number(point.x ?? point.X), y = Number(point.y ?? point.Y), z = Number(point.z ?? point.Z);
+    return Number.isFinite(x) && Number.isFinite(y) && Number.isFinite(z) ? { x, y, z } : null;
+  }
+  const tokens = String(point).trim().split(/\s+/);
+  if (tokens.length < 3) return null;
+  const x = Number(tokens[0]), y = Number(tokens[1]), z = Number(tokens[2]);
+  return Number.isFinite(x) && Number.isFinite(y) && Number.isFinite(z) ? { x, y, z } : null;
 }
 
 function buildStpTextFromRmssHierarchy(hierarchy, outputName) {
@@ -249,29 +287,56 @@ function buildRvmAttrResponseFromAttText(attText, inputName, options) {
 }
 
 export async function run(context) {
-  const primary = context.inputFiles.find(f => f.role === 'primary');
-  const secondary = context.inputFiles.find(f => f.role === 'secondary');
-  const secondaryBytes = secondary ? secondary.bytes : null;
+  const inputFiles = Array.isArray(context.inputFiles) ? context.inputFiles : [];
 
-  const stem = baseNameWithoutExtension(primary?.name || secondary?.name || 'conversion');
-  const runValues = { ...context.options };
+  // Detect RVM and ATT/TXT files by extension + role, independent of role ordering
+  const rvmFile =
+    inputFiles.find((f) => f.role === 'primary' && isRvmFile(f)) ||
+    inputFiles.find(isRvmFile) ||
+    null;
 
-  const attOnlyRvmAttrMode = !primary && secondary && secondary.name.toLowerCase().endsWith('.att');
+  const attFile =
+    inputFiles.find((f) => f.role === 'secondary' && isAttFile(f)) ||
+    inputFiles.find(isAttFile) ||
+    null;
 
-  if (!primary && !attOnlyRvmAttrMode) {
-    throw new Error('Select a primary input file first.');
+  if (!rvmFile && !attFile) {
+    return {
+      ok: false,
+      outputs: [],
+      logs: {
+        stdout: [],
+        stderr: ['Select an RVM file or an ATT/TXT attribute file first.'],
+      },
+    };
   }
 
-  if (primary && !primary.name.toLowerCase().endsWith('.rvm')) {
+  const runValues = { ...context.options };
+
+  // ATT/TXT-only mode: produce XML+JSON from attributes; STP skipped (no geometry)
+  if (!rvmFile && attFile) {
+    const attText = fileText(attFile);
+    const attResult = buildRvmAttrResponseFromAttText(attText, attFile.name || 'conversion', runValues);
+    return { ok: true, ...attResult };
+  }
+
+  // RVM mode — map to legacy variable names used by the rest of the function
+  const primary = rvmFile;
+  const secondary = attFile;
+  const secondaryBytes = secondary?.bytes ?? null;
+
+  if (!primary.name.toLowerCase().endsWith('.rvm')) {
     throw new Error(`Selected file "${primary.name}" is not .rvm. Use RVM input for ${context.converterId}.`);
   }
 
-  const primaryBytes = primary ? primary.bytes : null;
+  const stem = baseNameWithoutExtension(primary.name);
+  const primaryBytes = primary.bytes ?? null;
   const stages = [];
   const scope = normalizeRvmScope(runValues?.rvmScope);
 
-  if (scope.enabled && secondary && secondaryBytes) {
-    return buildRvmAttrResponseFromAttText(decodeTextUtf8(secondaryBytes), secondary.name || primary.name, runValues);
+  if (scope.enabled && secondary) {
+    const attText = fileText(secondary) || (secondaryBytes ? decodeTextUtf8(secondaryBytes) : '');
+    return buildRvmAttrResponseFromAttText(attText, secondary.name || primary.name, runValues);
   }
 
   if (runValues.preferJsonToXml !== false) {

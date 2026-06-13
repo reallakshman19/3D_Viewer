@@ -307,6 +307,7 @@ const CONVERTER_DEFS = Object.freeze({
     primaryLabel: 'RVM Input',
     secondaryLabel: 'ATT/TXT Attribute File (optional)',
     secondaryAccept: '.att,.ATT,.txt,.TXT',
+    allowSecondaryOnly: true,
     description: 'Managed native stage to XML; JSON->XML is attempted first, then REV->XML fallback.',
     defaults: {
       coordFactor: 1000,
@@ -7287,19 +7288,16 @@ export function renderModelConvertersTab(container) {
       return;
     }
 
-    const attOnlyRvmAttrMode = selectedConverter === 'rvmattr_to_xml'
-      && !primaryFile
-      && !!secondaryFile
-      && _isAttOrTxtFileName(secondaryFile.name);
+    const allowSecondaryOnly = converter?.allowSecondaryOnly === true;
 
-    if (!primaryFile && !attOnlyRvmAttrMode) {
-      const msg = selectedConverter === 'rvmattr_to_xml' && secondaryFile
-        ? 'RVM input is required for this mode. Keep ATT/TXT as secondary sidecar.'
+    if (!primaryFile && !(allowSecondaryOnly && secondaryFile)) {
+      const requiredMessage = allowSecondaryOnly
+        ? 'Select an RVM file or an ATT/TXT attribute file first.'
         : 'Select a primary input file first.';
-      setStatus(`Failed: ${msg}`, 'bad');
+      setStatus(`Failed: ${requiredMessage}`, 'bad');
       outputEl.innerHTML = '<span class="model-converters-muted">No output generated.</span>';
-      setLogs([msg]);
-      notify({ level: 'warning', title: 'Converter', message: msg });
+      setLogs([requiredMessage]);
+      notify({ level: 'warning', title: 'Converter', message: requiredMessage });
       return;
     }
 
