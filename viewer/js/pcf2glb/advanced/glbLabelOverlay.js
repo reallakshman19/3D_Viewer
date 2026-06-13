@@ -11,6 +11,8 @@ function isLabelCandidate(object) {
   return !!object?.userData?.labelText && (
     object.userData.labelAnchor === true ||
     object.name?.startsWith?.('label:') ||
+    object.name?.startsWith?.('node-label:') ||
+    object.userData.labelKind === 'node' ||
     object.userData.supportKind ||
     object.userData.glbShape
   );
@@ -18,6 +20,7 @@ function isLabelCandidate(object) {
 
 function labelClassFor(object) {
   const data = object?.userData || {};
+  if (data.labelKind === 'node' || data.glbShape === 'node-label-anchor') return 'node';
   if (data.supportKind) return 'support';
   if (data.glbShape?.startsWith?.('valve')) return 'valve';
   if (data.glbShape?.startsWith?.('flange')) return 'flange';
@@ -29,6 +32,7 @@ function makeLabelElement(label, kind) {
   const div = document.createElement('div');
   div.textContent = label;
   const palette = {
+    node: ['#172554', '#bfdbfe', 'rgba(37,99,235,0.94)'],
     support: ['#052e16', '#86efac', 'rgba(34,197,94,0.92)'],
     valve: ['#450a0a', '#fecaca', 'rgba(239,68,68,0.92)'],
     flange: ['#1f2937', '#e5e7eb', 'rgba(107,114,128,0.92)'],

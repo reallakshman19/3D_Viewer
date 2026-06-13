@@ -4,9 +4,11 @@ import fs from 'node:fs';
 import { extractInputXmlBranches } from '../converters/inputxml-dxf/InputXmlBranchExtractor.js';
 import { applyInputXmlBendMetadata } from '../converters/inputxml-glb/InputXmlBendMetadata.js';
 import { applyInputXmlCaesarSupportMetadata } from '../converters/inputxml-glb/InputXmlCaesarSupportMetadata.js';
+import { appendInputXmlGlbNodeLabels } from '../converters/inputxml-glb/InputXmlGlbNodeLabels.js';
 import { adaptUxmlToGlbModel } from '../converters/inputxml-glb/UxmlToGlbModelAdapter.js';
 import { buildComponentObject } from '../js/pcf2glb/glb/buildComponentObject.js';
 import { buildExportScene } from '../js/pcf2glb/glb/buildExportScene.js';
+import { buildNodeLabelObject } from '../js/pcf2glb/glb/buildNodeLabelObject.js';
 import { collectGlbLabelAnchors } from '../js/pcf2glb/advanced/glbLabelOverlay.js';
 
 const fixtureUrl = new URL('../../Benchmarks/INPUT XML to CII 2019/1001/1001-P - COPY_INPUT.XML', import.meta.url);
@@ -24,12 +26,15 @@ assert.ok(extracted.doc.segments.length > 0);
 applyInputXmlBendMetadata(xmlText, extracted.doc);
 const caesarSupportStats = applyInputXmlCaesarSupportMetadata(xmlText, extracted.doc, { sourceId: 'inputxml-glb-test' });
 const { model, stats, diagnostics } = adaptUxmlToGlbModel(extracted.doc);
+const nodeLabelStats = appendInputXmlGlbNodeLabels(model, extracted.doc, stats);
 assert.equal(model.schema, 'inputxml-glb-model/v1');
 assert.ok(model.components.length > 0);
 assert.equal(stats.componentCount, model.components.length);
 assert.ok(stats.typeCounts.PIPE > 0);
 assert.ok(caesarSupportStats.supportTagCount > 0);
 assert.ok(caesarSupportStats.expandedSupportCount > 0);
+assert.ok(nodeLabelStats.nodeLabelCount > 0);
+assert.equal(stats.typeCounts.NODE_LABEL, nodeLabelStats.nodeLabelCount);
 
 const pipe = model.components.find((component) => component.type === 'PIPE');
 assert.ok(pipe);
@@ -43,6 +48,10 @@ assert.ok(supports.length > 0);
 assert.ok(supports.every((support) => support.coOrds));
 assert.ok(supports.every((support) => support.supportKind));
 assert.ok(Object.keys(stats.supportKindCounts).length > 0);
+
+const nodeLabels = model.components.filter((component) => component.type === 'NODE_LABEL');
+assert.ok(nodeLabels.length > 0, 'InputXML GLB model should include node label anchors');
+assert.ok(nodeLabels.every((component) => component.coOrds && component.label));
 
 const filtered = adaptUxmlToGlbModel(extracted.doc, {
   selectedBranches: extracted.branches[0]?.id || '',
@@ -64,6 +73,28 @@ function sampleComponent(type, id = type, extra = {}) {
     ...extra,
   };
 }
+
+const nodeLabelObject = buildNodeLabelObject({
+  id: 'node-label-205',
+  type: 'NODE_LABEL',
+  coOrds: { x: 10, y: 20, z: 30 },
+  label: '205',
+  attributes: { NODE_LABEL: '205' },
+});
+assert.equal(nodeLabelObject.userData.labelText, '205');
+assert.equal(nodeLabelObject.userData.labelKind, 'node');
+assert.equal(nodeLabelObject.userData.glbShape, 'node-label-anchor');
+assert.deepEqual(collectGlbLabelAnchors(nodeLabelObject).map((label) => label.kind), ['node']);
+assert.deepEqual(collectGlbLabelAnchors(nodeLabelObject).map((label) => label.text), ['205']);
+
+const nodeScene = buildExportScene({ components: [{
+  id: 'node-label-210',
+  type: 'NODE_LABEL',
+  coOrds: { x: 1, y: 2, z: 3 },
+  label: '210',
+}] });
+assert.ok(nodeScene.getObjectByName('node-label:210'));
+assert.deepEqual(collectGlbLabelAnchors(nodeScene).map((label) => label.text), ['210']);
 
 const elbowObject = buildComponentObject(sampleComponent('ELBOW', 'ELBOW-TEST'));
 assert.equal(elbowObject.userData.glbShape, 'rounded-elbow-tube');
@@ -148,6 +179,7 @@ assert.match(viewerSource, /installGlbLabelOverlay/);
 const runnerSource = fs.readFileSync(new URL('../converters/inputxml-glb/inputxml-to-glb-runner.js', import.meta.url), 'utf8');
 assert.match(runnerSource, /applyInputXmlBendMetadata/);
 assert.match(runnerSource, /applyInputXmlCaesarSupportMetadata/);
+assert.match(runnerSource, /appendInputXmlGlbNodeLabels/);
 assert.match(runnerSource, /buildExportScene/);
 assert.match(runnerSource, /exportSceneToGLB/);
 
