@@ -1,2 +1,2 @@
-// Public compatibility wrapper. The render-safe implementation lives in glbLabelOverlayCore.js.
-export * from './glbLabelOverlayCore.js';
+// Public compatibility wrapper. The final render-safe implementation lives in glbLabelOverlayFinal.js.
+export * from './glbLabelOverlayFinal.js';
