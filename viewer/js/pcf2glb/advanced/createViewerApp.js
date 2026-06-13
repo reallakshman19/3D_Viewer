@@ -261,8 +261,6 @@ export function createViewerApp(previewContainer, toolbarContainer, propPanel, p
               currentRoot = gltf.scene;
               scene.add(currentRoot);
 
-              sceneIndex = buildSceneIndex(currentRoot);
-
               // Pre-compute metrics before fit to ensure camera far clip handles large scenes
               const box = new THREE.Box3().setFromObject(currentRoot);
               const size = box.getSize(new THREE.Vector3());
@@ -295,6 +293,7 @@ export function createViewerApp(previewContainer, toolbarContainer, propPanel, p
               });
 
               applyGlbSupportSymbols(currentRoot, scene, { scaleMultiplier: 1.0 });
+              sceneIndex = buildSceneIndex(currentRoot);
               const glbLabels = installGlbLabelOverlay(currentRoot, msgSquareGroup, {
                 maxLabels: 300,
                 panelHost: options.labelPanelHost || null,

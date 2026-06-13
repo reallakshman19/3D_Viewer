@@ -431,10 +431,20 @@ export function applyGlbSupportSymbols(root, scene, options = {}) {
       : lateralAxis(pipeAxis);
     const color = SYMBOL_COLOR[kind] || SYMBOL_COLOR.UNKNOWN;
     const wPos = worldPos.clone();
+    const sourceId = data.pcfId || data.componentId || object.name || object.uuid;
 
     const group = new THREE.Group();
     group.name = `glb-support-${kind.toLowerCase()}-${object.name || object.uuid}`;
-    group.userData = { glbSupportSymbolKind: kind, glbSupportSymbol: true };
+    group.userData = {
+      glbSupportSymbolKind: kind,
+      glbSupportSymbol: true,
+      pcfId: sourceId,
+      pcfType: data.pcfType || 'SUPPORT',
+      refNo: data.refNo || data.REF_NO || '',
+      lineNo: data.lineNo || '',
+      bore: data.bore ?? null,
+      supportKind: kind,
+    };
 
     if (kind === 'REST' || kind === 'SHOE') buildRest(group, wPos, pipeAxis, lat, scale, color);
     else if (kind === 'GUIDE') buildGuide(group, wPos, pipeAxis, lat, scale, color);

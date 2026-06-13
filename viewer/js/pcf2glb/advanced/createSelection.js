@@ -3,6 +3,12 @@ import * as THREE from 'three';
 export function resolveInspectableObject(obj) {
   let cur = obj;
   while (cur) {
+    if (cur.userData?.glbSupportSymbolMesh || cur.userData?.glbSupportSymbolRole) {
+      cur = cur.parent;
+      continue;
+    }
+    if (cur.userData?.glbSupportSymbol) return cur;
+    if (String(cur.userData?.glbShape || '').startsWith('support-reference-v2-')) return null;
     if (cur.userData?.pcfId || cur.userData?.REF_NO || cur.userData?.id) return cur;
     if (Object.keys(cur.userData || {}).length > 0) return cur;
     cur = cur.parent;

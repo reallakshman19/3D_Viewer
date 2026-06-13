@@ -106,6 +106,19 @@ assert.ok(
 );
 assert.equal(lineStop.userData.supportKind, 'LINESTOP');
 
+const lineStopX = supportObject(support('LS-X', 'LINESTOP', { x: 1, y: 0, z: 0 }));
+child(lineStopX, 'LS-X-linestop-plate-positive');
+child(lineStopX, 'LS-X-linestop-plate-negative');
+const lineStopXPositiveShaft = child(lineStopX, 'LS-X-linestop-axis-positive-shaft');
+assert.ok(
+  Math.abs(lineStopXPositiveShaft.position.z) > 0.1,
+  'export LINESTOP-X should be offset from the pipe centerline',
+);
+assert.ok(
+  Math.abs(lineStopXPositiveShaft.position.x) > Math.abs(lineStopXPositiveShaft.position.z),
+  'export LINESTOP-X should remain axial in X while offset in Z',
+);
+
 const limit = supportObject(support('LIMIT-X', 'LIMIT', { x: -1, y: 0, z: 0 }));
 referenceBase(limit, 'LIMIT-X');
 child(limit, 'LIMIT-X-reference-post');
@@ -159,10 +172,18 @@ runtimeLineStop.userData = {
   supportAxis: { x: 0, y: 0, z: 1 },
 };
 runtimeRoot.add(runtimeLineStop);
+const runtimeLineStopX = new THREE.Object3D();
+runtimeLineStopX.name = 'RUNTIME-LINESTOP-X';
+runtimeLineStopX.position.set(200, 0, 0);
+runtimeLineStopX.userData = {
+  supportKind: 'LINESTOP',
+  supportAxis: { x: 1, y: 0, z: 0 },
+};
+runtimeRoot.add(runtimeLineStopX);
 const runtimeScene = new THREE.Scene();
 runtimeScene.add(runtimeRoot);
 const runtimeStats = applyGlbSupportSymbols(runtimeRoot, runtimeScene, { scaleMultiplier: 1 });
-assert.equal(runtimeStats.created, 2);
+assert.equal(runtimeStats.created, 3);
 
 const runtimeSymbols = runtimeScene.getObjectByName('__GLB_SUPPORT_SYMBOLS_V3__');
 assert.ok(runtimeSymbols, 'runtime support symbols root should be created');
@@ -172,7 +193,7 @@ runtimeSymbols.traverse((object) => {
 });
 assert.equal(runtimeRoles.filter((role) => role === 'rest-axis').length, 0, 'runtime GUIDE must not emit a REST upward arrow');
 assert.equal(runtimeRoles.filter((role) => role === 'guide-axis').length, 2, 'runtime GUIDE should emit two lateral guide arrows');
-assert.equal(runtimeRoles.filter((role) => role === 'linestop-axis').length, 2, 'runtime LINESTOP should emit two axial line-stop arrows');
+assert.equal(runtimeRoles.filter((role) => role === 'linestop-axis').length, 4, 'runtime LINESTOP should emit two axial line-stop arrows per line stop');
 
 const runtimeGuideMeshes = collectRuntimeRoleMeshes(runtimeSymbols, 'guide-axis');
 assert.ok(
@@ -183,7 +204,11 @@ assert.ok(
 const runtimeLineStopMeshes = collectRuntimeRoleMeshes(runtimeSymbols, 'linestop-axis');
 assert.ok(
   runtimeLineStopMeshes.some((mesh) => Math.abs(mesh.position.x - runtimeLineStop.position.x) > 0.1),
-  'runtime LINESTOP should be offset from the pipe centerline',
+  'runtime LINESTOP-Z should be offset from the pipe centerline',
+);
+assert.ok(
+  runtimeLineStopMeshes.some((mesh) => Math.abs(mesh.position.z - runtimeLineStopX.position.z) > 0.1),
+  'runtime LINESTOP-X should be offset from the pipe centerline',
 );
 
 const fallbackScene = buildExportScene({
