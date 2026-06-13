@@ -89,7 +89,7 @@ for (const exportName of ['makeXmlCiiMatchedFact', 'makeXmlCiiRejectedFact', 'me
 for (const exportName of ['parseXmlCiiManualRestraintRows', 'resolveManualRestraintRows', 'normalizeXmlCiiManualRestraint']) {
   assertContains(restraintsCore, `export function ${exportName}`, `Manual restraints core must export ${exportName}.`);
 }
-assertContains(applyCore, "source', 'MANUAL_SIDELOAD'", 'Manual apply must tag injected XML restraints as MANUAL_SIDELOAD.');
+assertContains(applyCore, "setAttribute('source', 'MANUAL_SIDELOAD')", 'Manual apply must tag injected XML restraints as MANUAL_SIDELOAD.');
 assertContains(applyCore, "fact?.source !== 'MANUAL_SIDELOAD'", 'Manual apply must ignore non-manual facts.');
 assertContains(applyCore, "fact?.itemType !== 'RESTRAINT'", 'Manual apply must only apply restraint facts.');
 assertContains(applyCore, "fact?.status !== 'MATCHED'", 'Manual apply must only apply matched facts.');
