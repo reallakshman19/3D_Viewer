@@ -22,12 +22,41 @@ function withTimeout(promise, stage, timeoutMs = XML_CII_STAGE_TIMEOUT_MS) {
   });
 }
 
-function optionText(options, ...keys) {
+function parseSupportConfig(options = {}) {
+  try {
+    const parsed = JSON.parse(options.supportConfigJson || '{}');
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+function optionText(options, supportConfig, ...keys) {
   for (const key of keys) {
     const value = options?.[key];
     if (value !== undefined && value !== null && String(value).trim()) return String(value);
   }
+  const sideload = supportConfig?.sideload && typeof supportConfig.sideload === 'object' ? supportConfig.sideload : {};
+  for (const key of keys) {
+    const value = sideload?.[key];
+    if (value !== undefined && value !== null && String(value).trim()) return String(value);
+  }
   return '';
+}
+
+function optionNumber(options, supportConfig, fallback, ...keys) {
+  const sideload = supportConfig?.sideload && typeof supportConfig.sideload === 'object' ? supportConfig.sideload : {};
+  for (const source of [options || {}, sideload]) {
+    for (const key of keys) {
+      const numeric = Number(source?.[key]);
+      if (Number.isFinite(numeric)) return numeric;
+    }
+  }
+  return fallback;
+}
+
+function optionPolicy(options, supportConfig) {
+  return options.sideloadPolicy || supportConfig?.sideload?.policy || 'ADD_IF_MISSING';
 }
 
 function sideloadDiagnosticRows(facts = [], type) {
@@ -43,12 +72,13 @@ function sideloadDiagnosticRows(facts = [], type) {
 }
 
 function applyOptionalManualSideload(enriched, runValues) {
-  const sideloadText = optionText(runValues, 'sideloadRestraintsText', 'xmlCiiSideloadRestraintsText');
+  const supportConfig = parseSupportConfig(runValues);
+  const sideloadText = optionText(runValues, supportConfig, 'sideloadRestraintsText', 'xmlCiiSideloadRestraintsText', 'restraintsText');
   if (!sideloadText.trim()) return { applied: false, stdout: [] };
 
-  const exactToleranceMm = Number(runValues.sideloadPosExactToleranceMm ?? runValues.posExactToleranceMm ?? 1);
-  const nearestToleranceMm = Number(runValues.sideloadPosToleranceMm ?? runValues.posToleranceMm ?? 5);
-  const policy = runValues.sideloadPolicy || 'ADD_IF_MISSING';
+  const exactToleranceMm = optionNumber(runValues, supportConfig, 1, 'sideloadPosExactToleranceMm', 'posExactToleranceMm');
+  const nearestToleranceMm = optionNumber(runValues, supportConfig, 5, 'sideloadPosToleranceMm', 'posToleranceMm');
+  const policy = optionPolicy(runValues, supportConfig);
   const resolverIndex = buildXmlCiiNodeResolverIndex(enriched.xmlText, { exactToleranceMm });
   const manual = resolveManualRestraintRows(sideloadText, resolverIndex, { exactToleranceMm, nearestToleranceMm });
   const previewFacts = Array.isArray(enriched.matchedFacts) && enriched.matchedFacts.length
