@@ -3,8 +3,9 @@ import { applyEngineeringPalette } from './applyEngineeringPalette.js';
 import { buildComponentObject } from './buildComponentObject.js';
 import { buildNodeLabelObject } from './buildNodeLabelObject.js';
 import { enhanceLocalizedBendProxy } from './enhanceLocalizedBendProxy.js';
-import { enhanceSupportDirectionProxy } from './enhanceSupportDirectionProxy.js';
+import { enhanceSupportDirectionProxy } from './enhanceSupportDirectionProxyReferenceV2.js';
 import { enhanceTeeBodyProxy } from './enhanceTeeBodyProxy.js';
+import { hideGlbLabelAnchorMarkers } from './hideGlbLabelAnchorMarkers.js';
 
 export function buildExportScene(model, log, options = {}) {
   const scene = new THREE.Scene();
@@ -34,9 +35,11 @@ export function buildExportScene(model, log, options = {}) {
 
   const colorMode = options.colorMode || (model.options && model.options.colorMode) || 'engineering';
   const paletteStats = applyEngineeringPalette(root, { colorMode });
+  const labelAnchorStats = hideGlbLabelAnchorMarkers(root);
   root.userData = {
     ...root.userData,
     engineeringPaletteStats: paletteStats,
+    labelAnchorStats,
   };
 
   return scene;
