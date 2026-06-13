@@ -134,6 +134,14 @@ assert.equal(longCaesarPipe.type, 'PIPE');
 assert.equal(longCaesarPipe.bendAngleDeg, 45);
 assert.equal(longCaesarAdapted.stats.suppressedFullBendCurveCount, 1);
 
+const longCaesarScene = buildExportScene(longCaesarAdapted.model);
+const longCaesarBendObject = longCaesarScene.getObjectByName(longCaesarPipe.id);
+assert.equal(longCaesarBendObject.userData.localizedBendProxy, true);
+assert.ok(longCaesarBendObject.getObjectByName(`${longCaesarPipe.id}-localized-bend-marker`));
+assert.ok(longCaesarBendObject.getObjectByName(`${longCaesarPipe.id}-localized-bend-arc`));
+const longCaesarBendLabels = collectGlbLabelAnchors(longCaesarBendObject).map((label) => label.text);
+assert.ok(longCaesarBendLabels.some((label) => /BEND/.test(label) && /R152/.test(label) && /A45/.test(label)));
+
 const caesarRestraintXml = '<CAESARII><PIPINGMODEL JOBNAME="REST-TEST"><PIPINGELEMENT FROM_NODE="10" TO_NODE="20" DELTA_X="100" DELTA_Y="0" DELTA_Z="0" DIAMETER="20"><RESTRAINT NODE="20" TYPE="17" XCOSINE="0" YCOSINE="1" ZCOSINE="0"/><RESTRAINT NODE="20" TYPE="1" XCOSINE="1" YCOSINE="0" ZCOSINE="0"/></PIPINGELEMENT></PIPINGMODEL></CAESARII>';
 const caesarRestraint = extractInputXmlBranches(caesarRestraintXml, { sourceId: 'restraint-test', fileName: 'rest.xml' });
 const restraintStats = applyInputXmlCaesarSupportMetadata(caesarRestraintXml, caesarRestraint.doc, { sourceId: 'restraint-test' });
