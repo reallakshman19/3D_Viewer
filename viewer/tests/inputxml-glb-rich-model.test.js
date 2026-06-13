@@ -6,6 +6,10 @@ import { applyInputXmlBendMetadata } from '../converters/inputxml-glb/InputXmlBe
 import { applyInputXmlCaesarSupportMetadata } from '../converters/inputxml-glb/InputXmlCaesarSupportMetadata.js';
 import { appendInputXmlGlbNodeLabels } from '../converters/inputxml-glb/InputXmlGlbNodeLabels.js';
 import { adaptUxmlToGlbModel } from '../converters/inputxml-glb/UxmlToGlbModelAdapter.js';
+import {
+  CAESAR_SUPPORT_MAPPING_TABLE,
+  classifyCaesarRestraint,
+} from '../converters/inputxml-glb/CaesarRestraintClassifier.js';
 import { summarizeGlbLabels, collectGlbLabelAnchors } from '../js/pcf2glb/advanced/glbLabelOverlay.js';
 import { applyEngineeringPalette } from '../js/pcf2glb/glb/applyEngineeringPalette.js';
 import { buildComponentObject } from '../js/pcf2glb/glb/buildComponentObject.js';
@@ -166,6 +170,36 @@ const restraintKinds = restraintAdapted.model.components.filter((component) => c
 assert.equal(restraintStats.supportTagCount, 2);
 assert.equal(restraintStats.expandedSupportCount, 2);
 assert.deepEqual(restraintKinds, ['GUIDE', 'REST']);
+
+assert.deepEqual(CAESAR_SUPPORT_MAPPING_TABLE.REST, [
+  'REST',
+  'SHOE',
+  'BP',
+  'BEARING PLATE',
+  'WP',
+  'WEAR PAD',
+  'ANCI',
+]);
+
+for (const label of ['REST', 'SHOE', 'BP', 'BEARING PLATE', 'WP', 'WEAR PAD', 'ANCI']) {
+  assert.equal(
+    classifyCaesarRestraint({ DESCRIPTION: label }),
+    'REST',
+    `${label} should classify as REST`,
+  );
+}
+
+assert.equal(
+  classifyCaesarRestraint({ DESCRIPTION: 'ANCI' }),
+  'REST',
+  'ANCI must be treated as REST',
+);
+
+assert.equal(
+  classifyCaesarRestraint({ DESCRIPTION: 'ANCHOR' }),
+  'ANCHOR',
+  'ANCHOR must remain ANCHOR',
+);
 
 const teeObject = buildComponentObject(sampleComponent('TEE', 'TEE-TEST'));
 assert.equal(teeObject.userData.glbShape, 'tee-branch-collar');
