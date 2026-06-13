@@ -7,6 +7,8 @@ import { applyManualMatchedFactsToEnrichedXml } from '../../../converters/xml-ci
 import { enrichXmlForCii2019 } from './xmltocii2019_helper/enrichment-core.js';
 
 const XML_CII_STAGE_TIMEOUT_MS = 120000;
+const MATCHED_PREVIEW_STORAGE_KEY = 'xmlCii2019.matchedPreview.lastDiagnostics.v1';
+const MATCHED_PREVIEW_EVENT = 'xml-cii-matched-preview:diagnostics';
 
 function timeoutMessage(stage, timeoutMs) {
   return `XML->CII(2019) timed out during ${stage} after ${Math.round(timeoutMs / 1000)}s. Check network access to Pyodide/CDN and converter script loading.`;
@@ -20,6 +22,27 @@ function withTimeout(promise, stage, timeoutMs = XML_CII_STAGE_TIMEOUT_MS) {
   return Promise.race([promise, timeout]).finally(() => {
     if (timeoutId) clearTimeout(timeoutId);
   });
+}
+
+function publishMatchedPreviewDiagnostics(payload) {
+  if (typeof window === 'undefined' || !payload || typeof payload !== 'object') return;
+
+  const eventPayload = {
+    ...payload,
+    source: payload.source || 'latest-run',
+  };
+
+  try {
+    window.localStorage?.setItem(MATCHED_PREVIEW_STORAGE_KEY, JSON.stringify(eventPayload));
+  } catch {
+    // Storage can be blocked in private modes; event dispatch is still useful.
+  }
+
+  try {
+    window.dispatchEvent(new CustomEvent(MATCHED_PREVIEW_EVENT, { detail: eventPayload }));
+  } catch {
+    // Keep conversion success independent of UI preview publishing.
+  }
 }
 
 function parseSupportConfig(options = {}) {
@@ -227,7 +250,19 @@ export async function run(context) {
   const ciiOutputs = Array.isArray(ciiResponse.outputs) ? ciiResponse.outputs : [];
   const stats = enriched.stats;
   const diagnostics = enriched.diagnostics;
-  const diagnosticText = JSON.stringify({ generatedAt: new Date().toISOString(), stats, diagnostics, matchedFacts: enriched.matchedFacts || [], rejectedFacts: enriched.rejectedFacts || [] }, null, 2);
+  const diagnosticPayload = {
+    generatedAt: new Date().toISOString(),
+    source: 'latest-run',
+    inputName: primary.name,
+    enrichedName,
+    diagnosticsName: `${stem}_enrichment_diagnostics.json`,
+    stats,
+    diagnostics,
+    matchedFacts: enriched.matchedFacts || [],
+    rejectedFacts: enriched.rejectedFacts || [],
+  };
+  const diagnosticText = JSON.stringify(diagnosticPayload, null, 2);
+  publishMatchedPreviewDiagnostics(diagnosticPayload);
   const diagnosticRows = (Array.isArray(diagnostics) ? diagnostics : []).map((item) => ({
     type: item?.type || '',
     nodeNumber: item?.nodeNumber || item?.keptNode || item?.removedNode || '',
