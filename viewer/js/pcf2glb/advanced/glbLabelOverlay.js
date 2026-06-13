@@ -27,6 +27,7 @@ function isLabelCandidate(object) {
 function labelClassFor(object) {
   const data = object?.userData || {};
   if (data.labelKind === 'node' || data.glbShape === 'node-label-anchor') return 'node';
+  if (data.labelKind === 'terminal' || data.glbShape?.includes?.('terminal')) return 'terminal';
   if (data.supportKind) return 'support';
   if (data.glbShape?.startsWith?.('valve')) return 'valve';
   if (data.glbShape?.startsWith?.('flange')) return 'flange';
@@ -38,27 +39,31 @@ function makeLabelElement(label, kind) {
   const div = document.createElement('div');
   div.textContent = label;
   const palette = {
-    node: ['#172554', '#bfdbfe', 'rgba(37,99,235,0.94)'],
-    support: ['#052e16', '#86efac', 'rgba(34,197,94,0.92)'],
-    valve: ['#450a0a', '#fecaca', 'rgba(239,68,68,0.92)'],
-    flange: ['#1f2937', '#e5e7eb', 'rgba(107,114,128,0.92)'],
-    tee: ['#052e2b', '#99f6e4', 'rgba(20,184,166,0.92)'],
+    node: ['#172554', '#dbeafe', 'rgba(37,99,235,0.96)'],
+    support: ['#052e16', '#bbf7d0', 'rgba(22,163,74,0.94)'],
+    valve: ['#052e16', '#bbf7d0', 'rgba(22,163,74,0.94)'],
+    flange: ['#052e16', '#dcfce7', 'rgba(21,128,61,0.94)'],
+    tee: ['#052e2b', '#ccfbf1', 'rgba(20,184,166,0.94)'],
+    terminal: ['#431407', '#fed7aa', 'rgba(249,115,22,0.95)'],
     component: ['#172554', '#bfdbfe', 'rgba(37,99,235,0.92)'],
   }[kind] || ['#172554', '#bfdbfe', 'rgba(37,99,235,0.92)'];
+  const fontSize = kind === 'node' ? 12 : 11;
   div.style.cssText = `
-    font: 700 10px/1.15 "Inter", "Segoe UI", Arial, sans-serif;
+    font: 800 ${fontSize}px/1.15 "Inter", "Segoe UI", Arial, sans-serif;
     color: ${palette[1]};
     background: ${palette[2]};
-    padding: 3px 6px;
+    padding: 3px 7px;
     border: 1px solid ${palette[1]};
     border-radius: 5px;
     pointer-events: none;
     white-space: nowrap;
-    box-shadow: 0 2px 7px rgba(0,0,0,0.36);
+    box-shadow: 0 2px 8px rgba(0,0,0,0.48);
     letter-spacing: 0.02em;
-    max-width: 220px;
+    max-width: 240px;
     overflow: hidden;
     text-overflow: ellipsis;
+    text-shadow: 0 1px 2px rgba(0,0,0,0.65);
+    z-index: 20;
   `;
   return div;
 }
@@ -109,6 +114,26 @@ export function collectGlbLabelAnchors(root, options = {}) {
   return labels;
 }
 
+export function summarizeGlbLabels(labels = []) {
+  const summary = {
+    total: labels.length,
+    node: 0,
+    support: 0,
+    valve: 0,
+    flange: 0,
+    tee: 0,
+    terminal: 0,
+    component: 0,
+  };
+
+  for (const label of labels) {
+    const kind = label?.kind || 'component';
+    summary[kind] = (summary[kind] || 0) + 1;
+  }
+
+  return summary;
+}
+
 export function installGlbLabelOverlay(root, labelGroup, options = {}) {
   clearGlbLabels(labelGroup);
   if (!labelGroup) return [];
@@ -129,6 +154,16 @@ export function installGlbLabelOverlay(root, labelGroup, options = {}) {
     };
     labelGroup.add(obj);
   }
+
+  const summary = summarizeGlbLabels(labels);
+  labelGroup.userData = {
+    ...(labelGroup.userData || {}),
+    glbLabelSummary: summary,
+  };
+  root.userData = {
+    ...(root.userData || {}),
+    glbLabelSummary: summary,
+  };
 
   return labels;
 }

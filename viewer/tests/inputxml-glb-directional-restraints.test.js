@@ -3,10 +3,11 @@ import assert from 'node:assert/strict';
 import { buildExportScene } from '../js/pcf2glb/glb/buildExportScene.js';
 
 function support(id, kind, axis = { x: 1, y: 0, z: 0 }, extra = {}) {
+  const { component = {}, attributes = {} } = extra;
   return {
     id,
     type: 'SUPPORT',
-    bore: 20,
+    bore: component.bore ?? 20,
     coOrds: { x: 0, y: 0, z: 0 },
     ep1: { x: 0, y: 0, z: 0 },
     refNo: id,
@@ -19,7 +20,7 @@ function support(id, kind, axis = { x: 1, y: 0, z: 0 }, extra = {}) {
       caesarXCosine: String(axis.x),
       caesarYCosine: String(axis.y),
       caesarZCosine: String(axis.z),
-      ...extra,
+      ...attributes,
     },
     raw: {
       caesarSupportKind: kind,
@@ -27,6 +28,7 @@ function support(id, kind, axis = { x: 1, y: 0, z: 0 }, extra = {}) {
       caesarYCosine: String(axis.y),
       caesarZCosine: String(axis.z),
     },
+    ...component,
   };
 }
 
@@ -36,6 +38,7 @@ function supportObject(component) {
   assert.ok(object, `${component.id} should be present in GLB scene`);
   assert.equal(object.userData.directionalSupportEnhanced, true);
   assert.ok(object.userData.directionalSupportSymbolCount > 0);
+  assert.ok(object.userData.supportSymbolScale >= 18, `${component.id} should use visible engineering scale`);
   return object;
 }
 
@@ -86,5 +89,8 @@ const rest = supportObject(support('REST-Y', 'REST', { x: 0, y: 1, z: 0 }));
 child(rest, 'REST-Y-rest-base');
 child(rest, 'REST-Y-rest-axis');
 assert.equal(rest.userData.supportKind, 'REST');
+
+const largeGuide = supportObject(support('GUIDE-LARGE', 'GUIDE', { x: 1, y: 0, z: 0 }, { component: { bore: 300 } }));
+assert.ok(largeGuide.userData.supportSymbolScale > guide.userData.supportSymbolScale);
 
 console.log('inputxml-glb-directional-restraints.test.js passed');
