@@ -146,7 +146,7 @@ export function parseXmlCiiEnrichmentConfig(rawJson) {
     duplicateSupportPolicy: 'prefer_datum',
     coordinateTolerance: 1,
     dtxrPositionOffset: { enabled: true, xOffset: 150500, yOffset: 43000, zOffset: 100000, tolerance: 0.5 },
-    xmlAxisToCiiAxis: { Z: 'Y' },
+    xmlAxisToCiiAxis: { Z: 'Y', ANCI: '+Y' },
     supportKindToXmlType: { REST: '+Y', GUIDE: 'GUI', LINESTOP: 'LIM', LIMIT: 'LIM', ANCHOR: 'A', SPRING: 'Y' },
     supportMapping: null,
     defaultXmlSupportType: 'Y',
