@@ -1,4 +1,4 @@
-import './psnm-utility/psnm-context-actions.js?v=20260610-context-actions-2';
+import './psnm-utility/psnm-context-actions.js?v=20260613-context-actions-no-blocker-1';
 import './psnm-utility/psnm-lite-persistence-transform-preview.js?v=20260609-lite-persist-preview-2';
 import { renderPSNM_UtilityTab as renderPSNMCoreUtilityTab } from './psnm-utility-tab-v6.js?v=20260612-psnm-axis-engine-1';
 import { installPsnmAxisAutoAnchorAddon } from './psnm-utility/psnm-axis-auto-anchor-addon.js?v=20260612-axis-auto-anchor-addon-1';
