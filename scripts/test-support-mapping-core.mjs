@@ -11,6 +11,7 @@ const support = await import(new URL(`file://${path.join(coreDir, 'support-mappi
 
 const {
   buildStagedSupportIndex,
+  normalizeExistingXmlCiiRestraintType,
   resolveXmlCiiSupportDescriptor,
   resolveXmlCiiSupportKind,
   restraintEntriesFromSupportKind,
@@ -24,6 +25,12 @@ const config = parseXmlCiiEnrichmentConfig('');
 assert.strictEqual(resolveXmlCiiSupportKind({ CMPSUPTYPE: 'BP-100' }, config), 'REST');
 assert.strictEqual(resolveXmlCiiSupportKind({ CMPSUPTYPE: 'PG-200' }, config), 'GUIDE');
 assert.strictEqual(resolveXmlCiiSupportKind({ CMPSUPTYPE: 'LS-300' }, config), 'LINESTOP');
+
+// Existing enriched XML may carry AVEVA/PSI support shorthand as restraint Type.
+// XML→CII must normalize ANCI as a vertical rest (+Y), not pass ANCI into CII.
+assert.strictEqual(normalizeExistingXmlCiiRestraintType('ANCI', config), '+Y');
+assert.strictEqual(normalizeExistingXmlCiiRestraintType('anci', config), '+Y');
+assert.strictEqual(normalizeExistingXmlCiiRestraintType('Z', config), 'LIM');
 
 const descriptor = resolveXmlCiiSupportDescriptor({ SKEY: 'CA100', CMPSUPTYPE: 'PG-200' }, config);
 assert.strictEqual(descriptor.primaryKind, 'REST');
