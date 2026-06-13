@@ -4,10 +4,10 @@ import path from 'node:path';
 
 const repoRoot = process.cwd();
 const tabPath = path.join(repoRoot, 'viewer/tabs/model-converters-tab.js');
-const polishPath = path.join(repoRoot, 'viewer/tabs/model-converters/xml-cii-conversion-workflow-polish.js');
+const popupPath = path.join(repoRoot, 'viewer/tabs/model-converters/xml-cii-conversion-workflow-popup.js');
 
 const tabSource = fs.readFileSync(tabPath, 'utf8');
-const polishSource = fs.readFileSync(polishPath, 'utf8');
+const popupSource = fs.readFileSync(popupPath, 'utf8');
 
 function assert(condition, message) {
   if (!condition) {
@@ -21,12 +21,13 @@ assert(/scheduleInstaller\(/.test(tabSource), 'optional installers must be sched
 assert(/installSafely\(/.test(tabSource), 'optional installers must be guarded');
 assert(/catch \(error\)/.test(tabSource), 'installer failures must be caught and logged');
 assert(/Optional installer failed/.test(tabSource), 'installer failure log must identify optional installer errors');
-assert(!/installXmlCiiConversionWorkflowPolish\(container\);/.test(tabSource), 'workflow polish must not run as an unguarded synchronous call');
-assert(/requestIdleCallback/.test(tabSource) || /setTimeout\(run, 0\)/.test(tabSource), 'deferred installer scheduler must use idle callback or timeout');
+assert(!/installXmlCiiSideloadUi/.test(tabSource), 'heavy XML CII sideload observer installer must not auto-run from Model Converter tab');
+assert(!/installXmlCiiMatchedPreviewUi/.test(tabSource), 'heavy XML CII matched-preview observer installer must not auto-run from Model Converter tab');
+assert(!/installXmlCiiConversionWorkflowPolish/.test(tabSource), 'workflow polish observer must not auto-run from Model Converter tab');
+assert(/setTimeout\(run, 0\)/.test(tabSource), 'deferred installer scheduler must use timeout to keep legacy render responsive');
 
-assert(/if \(!document\.querySelector\('\.model-converters-workflow-popup'\)\) return;/.test(polishSource), 'workflow polish must be inactive when popup is closed');
-assert(/let scheduled = false/.test(polishSource), 'workflow polish observer must be throttled');
-assert(/new MutationObserver\(schedule\)/.test(polishSource), 'workflow polish observer must use the throttled scheduler');
-assert(!/characterData:\s*true/.test(polishSource), 'workflow polish observer must not watch characterData on the full app tree');
+assert(!/new MutationObserver/.test(popupSource), 'lean popup launcher must not install MutationObserver');
+assert(!/mountExistingPanel/.test(popupSource), 'lean popup launcher must not move live panels by DOM portal');
+assert(/document\.addEventListener\('click', interceptRun, true\)/.test(popupSource), 'lean popup must intercept XML→CII run click through a single capture listener');
 
-console.log('✅ model converters tab responsiveness static test passed');
+console.log('✅ model converters tab lean responsiveness static test passed');
