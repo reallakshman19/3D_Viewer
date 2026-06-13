@@ -1,3 +1,4 @@
+import { PIPE_OD_TO_DN } from '../../pcf-legacy/services/bore-converter.js';
 import {
   psnmAxisPermutations,
   psnmDelta,
@@ -65,6 +66,24 @@ function parseNodeRows(text) {
     dia: psnmNumber(first(row, ['Dia(mm)', 'Dia mm', 'Dia', 'OD', 'OD mm'])),
   })).filter((row) => row.node && Number.isFinite(row.x) && Number.isFinite(row.y) && Number.isFinite(row.z));
 }
+function odToDn(odMm) {
+  const od = Number(odMm);
+  if (!Number.isFinite(od)) return NaN;
+  let best = null;
+  let bestErr = Infinity;
+  for (const row of PIPE_OD_TO_DN) {
+    const err = Math.abs(Number(row.od) - od);
+    if (err < bestErr) { bestErr = err; best = row; }
+  }
+  if (!best) return NaN;
+  const tolerance = Math.max(2, Math.abs(Number(best.od)) * 0.008);
+  return bestErr <= tolerance ? Number(best.dn) : NaN;
+}
+function nodeBore(row) {
+  const direct = Number(row?.bore);
+  if (Number.isFinite(direct)) return direct;
+  return odToDn(row?.dia);
+}
 function classify(d, tol) {
   if (Math.abs(d.de) <= 0.01 && Math.abs(d.du) <= 0.01 && Math.abs(d.ds) <= 0.01) return 'EXACT';
   if (Math.abs(d.de) <= tol.a1.e && Math.abs(d.du) <= tol.a1.u && Math.abs(d.ds) <= tol.a1.s) return 'APPROX_1';
@@ -99,7 +118,7 @@ function scoreTransform(anchorPs, anchorNode, transform, psRows, nodeRows, tol) 
     else if (best.type === 'APPROX_2') approx2 += 1;
     else approx3 += 1;
     const pb = Number(ps.bore);
-    const nb = Number(best.node.bore);
+    const nb = nodeBore(best.node);
     if (!Number.isFinite(pb) || !Number.isFinite(nb)) boreMissing += 1;
     else if (Math.abs(pb - nb) <= 1e-6) borePass += 1;
     else boreConflict += 1;
