@@ -3,6 +3,7 @@ import { buildExportScene } from '../../js/pcf2glb/glb/buildExportScene.js';
 import { exportSceneToGLB } from '../../js/pcf2glb/glb/exportSceneToGLB.js';
 import { applyInputXmlBendMetadata } from './InputXmlBendMetadata.js';
 import { applyInputXmlCaesarSupportMetadata } from './InputXmlCaesarSupportMetadata.js';
+import { appendInputXmlGlbNodeLabels } from './InputXmlGlbNodeLabels.js';
 import { adaptUxmlToGlbModel } from './UxmlToGlbModelAdapter.js';
 
 function text(value) {
@@ -84,10 +85,14 @@ export async function run(ctx = {}) {
     }
 
     const { model, stats, diagnostics } = adaptUxmlToGlbModel(extracted.doc, ctx.options || {});
+    const nodeLabelStats = appendInputXmlGlbNodeLabels(model, extracted.doc, stats);
     if (!model.components.length) throw new Error('No drawable Input XML components were found for GLB export.');
 
     stdout.push(`InputXML→GLB components: ${stats.componentCount}`);
     stdout.push(`Component types: ${JSON.stringify(stats.typeCounts)}`);
+    if (nodeLabelStats.nodeLabelCount) {
+      stdout.push(`Node labels added: ${nodeLabelStats.nodeLabelCount}`);
+    }
     if (stats.bendRadiusCount) {
       stdout.push(`Bend radius metadata applied: ${stats.bendRadiusCount}`);
     }
@@ -121,6 +126,7 @@ export async function run(ctx = {}) {
             ...stats,
             bendMetadata,
             caesarSupportMetadata,
+            nodeLabelStats,
           },
           diagnostics: [...(extracted.diagnostics || []), ...(diagnostics || [])],
         }, null, 2),
