@@ -5,6 +5,7 @@ import { extractInputXmlBranches } from '../converters/inputxml-dxf/InputXmlBran
 import { applyInputXmlBendMetadata } from '../converters/inputxml-glb/InputXmlBendMetadata.js';
 import { adaptUxmlToGlbModel } from '../converters/inputxml-glb/UxmlToGlbModelAdapter.js';
 import { buildComponentObject } from '../js/pcf2glb/glb/buildComponentObject.js';
+import { buildExportScene } from '../js/pcf2glb/glb/buildExportScene.js';
 import { collectGlbLabelAnchors } from '../js/pcf2glb/advanced/glbLabelOverlay.js';
 
 const fixtureUrl = new URL('../../Benchmarks/INPUT XML to CII 2019/1001/1001-P - COPY_INPUT.XML', import.meta.url);
@@ -93,6 +94,14 @@ assert.ok(teeObject.getObjectByName('TEE-TEST-main-run'));
 assert.ok(teeObject.getObjectByName('TEE-TEST-branch'));
 assert.ok(teeObject.getObjectByName('TEE-TEST-tee-collar'));
 assert.ok(collectGlbLabelAnchors(teeObject).some((label) => label.text === 'TEE-TEST'));
+
+const teeScene = buildExportScene({ components: [sampleComponent('TEE', 'TEE-SCENE')] });
+const teeSceneObject = teeScene.getObjectByName('TEE-SCENE');
+assert.equal(teeSceneObject.userData.glbShape, 'tee-body-union-proxy');
+assert.equal(teeSceneObject.userData.teeProxy, true);
+assert.ok(teeSceneObject.getObjectByName('TEE-SCENE-tee-body-hub'));
+assert.ok(teeSceneObject.getObjectByName('TEE-SCENE-tee-main-saddle'));
+assert.ok(teeSceneObject.getObjectByName('TEE-SCENE-tee-branch-saddle'));
 
 const flangeObject = buildComponentObject(sampleComponent('FLANGE', 'FLANGE-TEST'));
 assert.equal(flangeObject.userData.glbShape, 'flange-ring-pair');
