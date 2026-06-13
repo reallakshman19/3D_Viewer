@@ -29,7 +29,7 @@ function arrayBufferToBase64(buffer) {
   if (typeof Buffer !== 'undefined') return Buffer.from(bytes).toString('base64');
   let binary = '';
   const chunk = 0x8000;
-  for (let i = 0; i < bytes.length; i += 1) {
+  for (let i = 0; i < bytes.length; i += chunk) {
     binary += String.fromCharCode(...bytes.subarray(i, i + chunk));
   }
   return btoa(binary);
