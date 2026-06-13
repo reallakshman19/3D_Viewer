@@ -5,7 +5,9 @@ on:
     paths:
       - 'viewer/converters/inputxml-glb/**'
       - 'viewer/js/pcf2glb/**'
+      - 'viewer/validators/**'
       - 'viewer/tests/inputxml-glb-rich-model.test.js'
+      - 'viewer/tests/glb-validation-report.test.js'
       - 'tools/gltf-validator/**'
       - '.github/workflows/glb-validation.yml'
   push:
@@ -13,6 +15,7 @@ on:
     paths:
       - 'viewer/converters/inputxml-glb/**'
       - 'viewer/js/pcf2glb/**'
+      - 'viewer/validators/**'
       - 'tools/gltf-validator/**'
       - '.github/workflows/glb-validation.yml'
 
@@ -28,6 +31,8 @@ jobs:
         run: npm install --no-save three gltf-validator
       - name: Run GLB model tests
         run: node viewer/tests/inputxml-glb-rich-model.test.js
+      - name: Run GLB validation report tests
+        run: node viewer/tests/glb-validation-report.test.js
       - name: Generate sample InputXML GLB
         run: node tools/gltf-validator/generate-inputxml-glb-sample.mjs
       - name: Validate generated GLB
