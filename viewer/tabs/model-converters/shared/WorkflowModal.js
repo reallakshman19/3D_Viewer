@@ -24,6 +24,8 @@ export class WorkflowModal {
     this.popupEl = null;
     this.bodyEl = null;
     this.fullscreen = false;
+    this.workflowHealthObserver = null;
+    this.workflowHealthScheduled = false;
   }
 
   /**
@@ -87,7 +89,87 @@ export class WorkflowModal {
       });
     }
 
+    this.installWorkflowHealthDetector();
     return this.bodyEl;
+  }
+
+  installWorkflowHealthDetector() {
+    if (!this.bodyEl || typeof MutationObserver === 'undefined') return;
+
+    const schedule = () => {
+      if (this.workflowHealthScheduled) return;
+      this.workflowHealthScheduled = true;
+      const run = () => {
+        this.workflowHealthScheduled = false;
+        this.renderWorkflowHealthNotice();
+      };
+      if (typeof requestAnimationFrame === 'function') requestAnimationFrame(run);
+      else setTimeout(run, 0);
+    };
+
+    this.workflowHealthObserver = new MutationObserver(schedule);
+    this.workflowHealthObserver.observe(this.bodyEl, {
+      childList: true,
+      subtree: true,
+      characterData: true,
+    });
+    setTimeout(() => this.renderWorkflowHealthNotice(), 0);
+  }
+
+  renderWorkflowHealthNotice() {
+    if (!this.bodyEl) return;
+
+    const existing = this.bodyEl.querySelector('[data-workflow-line-regex-warning]');
+    const text = String(this.bodyEl.innerText || this.bodyEl.textContent || '');
+    const normalized = text.replace(/\s+/g, ' ').trim();
+    const looksLikeXmlCiiPreview = /Branch Name/i.test(normalized) &&
+      /Line Key/i.test(normalized) &&
+      /Piping Class/i.test(normalized);
+
+    if (!looksLikeXmlCiiPreview) {
+      existing?.remove();
+      return;
+    }
+
+    const issues = [];
+    if (/\breview\s+0\s*%\b/i.test(normalized)) issues.push('0% master/line-list confidence');
+    if (/\b0\s*mm\b/i.test(normalized)) issues.push('0 mm size/line-key result');
+    if (/Line Key\s+Size\s+Piping Class/i.test(normalized) && /—|--|No match/i.test(normalized)) {
+      issues.push('missing key line properties');
+    }
+
+    if (!issues.length) {
+      existing?.remove();
+      return;
+    }
+
+    const message = `Line Regex check: some key line items look unresolved (${Array.from(new Set(issues)).join(', ')}). Check the Line Regex tab before running XML → CII(2019).`;
+
+    if (existing) {
+      existing.querySelector('[data-workflow-warning-text]').textContent = message;
+      return;
+    }
+
+    const notice = document.createElement('div');
+    notice.dataset.workflowLineRegexWarning = 'true';
+    notice.setAttribute('role', 'status');
+    notice.style.cssText = [
+      'position:sticky',
+      'top:0',
+      'z-index:5',
+      'margin:0 0 10px 0',
+      'padding:9px 12px',
+      'border:1px solid rgba(255,176,32,0.45)',
+      'border-radius:8px',
+      'background:rgba(255,176,32,0.12)',
+      'color:#ffd18a',
+      'font-size:12px',
+      'line-height:1.35',
+      'box-shadow:0 6px 14px rgba(0,0,0,0.18)',
+    ].join(';');
+    notice.innerHTML = `<strong>Info:</strong> <span data-workflow-warning-text></span>`;
+    notice.querySelector('[data-workflow-warning-text]').textContent = message;
+    this.bodyEl.prepend(notice);
   }
 
   /**
@@ -119,6 +201,10 @@ export class WorkflowModal {
    */
   close() {
     if (!this.overlayEl) return;
+
+    this.workflowHealthObserver?.disconnect?.();
+    this.workflowHealthObserver = null;
+    this.workflowHealthScheduled = false;
 
     // Restore scroll
     document.body.style.overflow = '';
