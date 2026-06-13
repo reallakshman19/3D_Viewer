@@ -6,6 +6,8 @@ on:
       - "viewer/uxml/**"
       - "viewer/converters/inputxml-dxf/**"
       - "viewer/converters/inputxml-glb/**"
+      - "viewer/js/pcf2glb/glb/enhanceSupportDirectionProxy.js"
+      - "viewer/js/pcf2glb/glb/buildExportScene.js"
       - "viewer/tabs/model-converters-tab.js"
       - "viewer/tabs/model-converters/inputxml-dxf-branch-picker.js"
       - "viewer/tabs/model-converters/inputxml-dxf-symbol-option.js"
@@ -21,6 +23,7 @@ on:
       - "viewer/tests/inputxml-dxf-projection-option.test.js"
       - "viewer/tests/inputxml-dxf-pipe-symbol-renderer.test.js"
       - "viewer/tests/inputxml-glb-rich-model.test.js"
+      - "viewer/tests/inputxml-glb-directional-restraints.test.js"
       - "tools/uxml-certification.mjs"
       - ".github/workflows/uxml-certification.yml"
       - "Benchmarks/RVM JSON to PCF UXML Topology/**"
@@ -32,6 +35,8 @@ on:
       - "viewer/uxml/**"
       - "viewer/converters/inputxml-dxf/**"
       - "viewer/converters/inputxml-glb/**"
+      - "viewer/js/pcf2glb/glb/enhanceSupportDirectionProxy.js"
+      - "viewer/js/pcf2glb/glb/buildExportScene.js"
       - "viewer/tabs/model-converters-tab.js"
       - "viewer/tabs/model-converters/inputxml-dxf-branch-picker.js"
       - "viewer/tabs/model-converters/inputxml-dxf-symbol-option.js"
@@ -47,6 +52,7 @@ on:
       - "viewer/tests/inputxml-dxf-projection-option.test.js"
       - "viewer/tests/inputxml-dxf-pipe-symbol-renderer.test.js"
       - "viewer/tests/inputxml-glb-rich-model.test.js"
+      - "viewer/tests/inputxml-glb-directional-restraints.test.js"
       - "tools/uxml-certification.mjs"
       - ".github/workflows/uxml-certification.yml"
       - "Benchmarks/RVM JSON to PCF UXML Topology/**"
@@ -106,6 +112,9 @@ jobs:
 
       - name: Run InputXML GLB rich model certification
         run: node viewer/tests/inputxml-glb-rich-model.test.js
+
+      - name: Run InputXML GLB directional restraint certification
+        run: node viewer/tests/inputxml-glb-directional-restraints.test.js
 
       - name: Run UXML Vitest certification
         shell: bash
