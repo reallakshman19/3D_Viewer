@@ -54,14 +54,43 @@ valveLabelAnchor.userData = { ...valve.userData, labelAnchor: true };
 valve.add(valveBody, valveWheel, valveLabelAnchor);
 root.add(valve);
 
+const noisyNode = new THREE.Object3D();
+noisyNode.name = 'node-label:IX-A-IX-PE-00001-SUP-1-SUPPORT_POINT';
+noisyNode.userData = {
+  labelAnchor: true,
+  labelKind: 'node',
+  glbShape: 'node-label-anchor',
+  labelText: 'IX-A-IX-PE-00001-SUP-1-SUPPORT_POINT',
+};
+root.add(noisyNode);
+
+const cleanNode = new THREE.Object3D();
+cleanNode.name = 'node-label:205';
+cleanNode.position.set(3, 0, 0);
+cleanNode.userData = {
+  labelAnchor: true,
+  labelKind: 'node',
+  glbShape: 'node-label-anchor',
+  labelText: 'NODE 205',
+};
+root.add(cleanNode);
+
+const nakedComponentLabel = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1));
+nakedComponentLabel.name = 'NO-ANCHOR-LABEL';
+nakedComponentLabel.userData = {
+  glbShape: 'flange-ring-pair',
+  labelText: 'NO-ANCHOR-LABEL',
+};
+root.add(nakedComponentLabel);
+
 const labels = collectGlbLabelAnchors(root);
-assert.equal(labels.length, 1, 'mesh-part labels should dedupe into one logical valve label');
-assert.equal(labels[0].text, 'VALVE-TEST');
-assert.equal(labels[0].kind, 'valve');
-assert.equal(labels[0].sourceName, 'label:VALVE-TEST');
+assert.equal(labels.length, 2, 'collector should keep explicit anchors only and skip pseudo node labels');
+assert.deepEqual(labels.map((label) => label.text).sort(), ['205', 'VALVE-TEST']);
+assert.equal(labels.find((label) => label.text === 'VALVE-TEST')?.kind, 'valve');
+assert.equal(labels.find((label) => label.text === '205')?.kind, 'node');
 assert.deepEqual(summarizeGlbLabels(labels), {
-  total: 1,
-  node: 0,
+  total: 2,
+  node: 1,
   support: 0,
   valve: 1,
   flange: 0,
