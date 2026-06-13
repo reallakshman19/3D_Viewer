@@ -11,6 +11,7 @@ import { installXmlCiiSideloadJsonConfigTools } from './model-converters/xml-cii
 import { installXmlCiiMatchedPreviewUi } from './model-converters/xml-cii-matched-preview-ui.js';
 import { installXmlCiiConversionWorkflowPopup } from './model-converters/xml-cii-conversion-workflow-popup.js';
 import { installXmlCiiConversionWorkflowModelDataNesting } from './model-converters/xml-cii-conversion-workflow-model-data-nesting.js';
+import { installXmlCiiConversionWorkflowProcessNesting } from './model-converters/xml-cii-conversion-workflow-process-nesting.js';
 import { installXmlCiiDefaultMasterAutoload, installXmlCiiRecoveryPatch } from './xml-cii-master-autoload-patch.js';
 
 export function renderModelConvertersTab(container, ctx) {
@@ -24,6 +25,7 @@ export function renderModelConvertersTab(container, ctx) {
   installXmlCiiMatchedPreviewUi(container);
   installXmlCiiConversionWorkflowPopup(container);
   installXmlCiiConversionWorkflowModelDataNesting(container);
+  installXmlCiiConversionWorkflowProcessNesting(container);
   installInputXmlDxfLegacyBridge(container);
   installInputXmlDxfBranchPicker(container);
   installInputXmlDxfSymbolOption(container);
