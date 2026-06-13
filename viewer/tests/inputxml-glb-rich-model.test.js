@@ -3,6 +3,7 @@ import fs from 'node:fs';
 
 import { extractInputXmlBranches } from '../converters/inputxml-dxf/InputXmlBranchExtractor.js';
 import { applyInputXmlBendMetadata } from '../converters/inputxml-glb/InputXmlBendMetadata.js';
+import { applyInputXmlCaesarSupportMetadata } from '../converters/inputxml-glb/InputXmlCaesarSupportMetadata.js';
 import { adaptUxmlToGlbModel } from '../converters/inputxml-glb/UxmlToGlbModelAdapter.js';
 import { buildComponentObject } from '../js/pcf2glb/glb/buildComponentObject.js';
 import { buildExportScene } from '../js/pcf2glb/glb/buildExportScene.js';
@@ -21,11 +22,14 @@ assert.ok(extracted.doc.components.length > 0);
 assert.ok(extracted.doc.segments.length > 0);
 
 applyInputXmlBendMetadata(xmlText, extracted.doc);
+const caesarSupportStats = applyInputXmlCaesarSupportMetadata(xmlText, extracted.doc, { sourceId: 'inputxml-glb-test' });
 const { model, stats, diagnostics } = adaptUxmlToGlbModel(extracted.doc);
 assert.equal(model.schema, 'inputxml-glb-model/v1');
 assert.ok(model.components.length > 0);
 assert.equal(stats.componentCount, model.components.length);
 assert.ok(stats.typeCounts.PIPE > 0);
+assert.ok(caesarSupportStats.supportTagCount > 0);
+assert.ok(caesarSupportStats.expandedSupportCount > 0);
 
 const pipe = model.components.find((component) => component.type === 'PIPE');
 assert.ok(pipe);
@@ -88,6 +92,26 @@ assert.equal(syntheticElbow.bendRadius, 300);
 assert.equal(syntheticElbow.bendAngleDeg, 90);
 assert.equal(syntheticAdapted.stats.bendRadiusCount, 1);
 
+const longCaesarBendXml = '<CAESARII><PIPINGMODEL JOBNAME="LONG-BEND-TEST"><PIPINGELEMENT FROM_NODE="150" TO_NODE="160" DELTA_X="783" DELTA_Y="0" DELTA_Z="0" DIAMETER="152.4"><BEND RADIUS="152.399994" ANGLE1="45.000000" NODE1="160"/></PIPINGELEMENT></PIPINGMODEL></CAESARII>';
+const longCaesar = extractInputXmlBranches(longCaesarBendXml, { sourceId: 'long-caesar-bend', fileName: 'long.xml' });
+const longCaesarBendStats = applyInputXmlBendMetadata(longCaesarBendXml, longCaesar.doc);
+const longCaesarAdapted = adaptUxmlToGlbModel(longCaesar.doc);
+const longCaesarPipe = longCaesarAdapted.model.components.find((component) => component.attributes?.CAESAR_BEND_SUPPRESSED_FULL_CURVE === 'true');
+assert.equal(longCaesarBendStats.angleCount, 1);
+assert.ok(longCaesarPipe);
+assert.equal(longCaesarPipe.type, 'PIPE');
+assert.equal(longCaesarPipe.bendAngleDeg, 45);
+assert.equal(longCaesarAdapted.stats.suppressedFullBendCurveCount, 1);
+
+const caesarRestraintXml = '<CAESARII><PIPINGMODEL JOBNAME="REST-TEST"><PIPINGELEMENT FROM_NODE="10" TO_NODE="20" DELTA_X="100" DELTA_Y="0" DELTA_Z="0" DIAMETER="20"><RESTRAINT NODE="20" TYPE="17" XCOSINE="0" YCOSINE="1" ZCOSINE="0"/><RESTRAINT NODE="20" TYPE="1" XCOSINE="1" YCOSINE="0" ZCOSINE="0"/></PIPINGELEMENT></PIPINGMODEL></CAESARII>';
+const caesarRestraint = extractInputXmlBranches(caesarRestraintXml, { sourceId: 'restraint-test', fileName: 'rest.xml' });
+const restraintStats = applyInputXmlCaesarSupportMetadata(caesarRestraintXml, caesarRestraint.doc, { sourceId: 'restraint-test' });
+const restraintAdapted = adaptUxmlToGlbModel(caesarRestraint.doc);
+const restraintKinds = restraintAdapted.model.components.filter((component) => component.type === 'SUPPORT').map((component) => component.supportKind).sort();
+assert.equal(restraintStats.supportTagCount, 2);
+assert.equal(restraintStats.expandedSupportCount, 2);
+assert.deepEqual(restraintKinds, ['GUIDE', 'REST']);
+
 const teeObject = buildComponentObject(sampleComponent('TEE', 'TEE-TEST'));
 assert.equal(teeObject.userData.glbShape, 'tee-branch-collar');
 assert.ok(teeObject.getObjectByName('TEE-TEST-main-run'));
@@ -123,6 +147,7 @@ assert.match(viewerSource, /installGlbLabelOverlay/);
 
 const runnerSource = fs.readFileSync(new URL('../converters/inputxml-glb/inputxml-to-glb-runner.js', import.meta.url), 'utf8');
 assert.match(runnerSource, /applyInputXmlBendMetadata/);
+assert.match(runnerSource, /applyInputXmlCaesarSupportMetadata/);
 assert.match(runnerSource, /buildExportScene/);
 assert.match(runnerSource, /exportSceneToGLB/);
 
