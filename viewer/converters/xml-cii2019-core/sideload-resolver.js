@@ -60,6 +60,7 @@ export function normalizePsKey(value, options = {}) {
   text = text.replace(/^\/+/, '').replace(/\s+/g, '');
   text = text.replace(/\(REF\)$/i, '');
   text = text.replace(/\/DATUM$/i, '').replace(/\/SREF$/i, '');
+  text = text.replace(/^PS-/, 'PS');
   if (options.stripDotSuffix === true) text = text.replace(/\.\d+$/, '');
   return text;
 }
@@ -67,7 +68,7 @@ export function normalizePsKey(value, options = {}) {
 export function psCandidateKeys(value) {
   const exact = normalizePsKey(value);
   const base = normalizePsKey(value, { stripDotSuffix: true });
-  return [...new Set([exact, base].filter(Boolean))];
+  return exact && base && exact !== base ? [exact, base] : [exact].filter(Boolean);
 }
 
 export function parseXmlCiiPosition(value) {
@@ -90,22 +91,14 @@ function addMulti(map, key, row) {
 
 export function buildXmlCiiNodeResolverIndex(xmlInput, options = {}) {
   const exactToleranceMm = Number(options.exactToleranceMm ?? options.toleranceMm ?? 1);
-  const rows = rowsFromXmlInput(xmlInput).map((row) => ({
-    ...row,
-    position: parseXmlCiiPosition(row.positionText),
-  }));
+  const rows = rowsFromXmlInput(xmlInput).map((row) => ({ ...row, position: parseXmlCiiPosition(row.positionText) }));
 
   const index = {
     rows,
     byNodeNumber: new Map(),
     byPs: new Map(),
     byPosition: new Map(),
-    stats: {
-      nodeCount: rows.length,
-      nodeNumberKeys: 0,
-      psKeys: 0,
-      positionKeys: 0,
-    },
+    stats: { nodeCount: rows.length, nodeNumberKeys: 0, psKeys: 0, positionKeys: 0 },
   };
 
   for (const row of rows) {
@@ -116,9 +109,9 @@ export function buildXmlCiiNodeResolverIndex(xmlInput, options = {}) {
 
     const psSources = [row.nodeName, row.componentRefNo];
     for (const source of psSources) {
-      const text = asText(source);
-      for (const match of text.matchAll(/\/?PS[-]?\d+(?:\.\d+)?(?:\/DATUM|\/SREF)?/ig)) {
-        for (const key of psCandidateKeys(match[0])) addMulti(index.byPs, key, row);
+      const sourceText = asText(source);
+      for (const match of sourceText.matchAll(/\/?PS[-]?\d+(?:\.\d+)?(?:\/DATUM|\/SREF)?/ig)) {
+        addMulti(index.byPs, normalizePsKey(match[0]), row);
       }
     }
 
@@ -146,12 +139,8 @@ export function resolveXmlCiiPsToNode(index, psKey) {
   for (const key of keys) {
     const hits = index?.byPs?.get(key) || [];
     const unique = uniqueRowsByNode(hits);
-    if (unique.length === 1) {
-      return { status: 'OK', basis: 'PS', key: psKey, normalizedKey: key, resolvedNodeNumber: unique[0].nodeNumber, resolvedNodeName: unique[0].nodeName, matchBy: 'PS_NODE_NAME_OR_COMPONENT_REF' };
-    }
-    if (unique.length > 1) {
-      return { status: 'AMBIGUOUS', basis: 'PS', key: psKey, normalizedKey: key, resolvedNodeNumber: '', candidates: unique.map((row) => row.nodeNumber) };
-    }
+    if (unique.length === 1) return { status: 'OK', basis: 'PS', key: psKey, normalizedKey: key, resolvedNodeNumber: unique[0].nodeNumber, resolvedNodeName: unique[0].nodeName, matchBy: 'PS_NODE_NAME_OR_COMPONENT_REF' };
+    if (unique.length > 1) return { status: 'AMBIGUOUS', basis: 'PS', key: psKey, normalizedKey: key, resolvedNodeNumber: '', candidates: unique.map((row) => row.nodeNumber) };
   }
 
   return { status: 'NOT_FOUND', basis: 'PS', key: psKey, normalizedKey: keys[0], resolvedNodeNumber: '' };
@@ -178,12 +167,8 @@ export function resolveXmlCiiPositionToNode(index, position, options = {}) {
 
   const exactKey = formatPositionKey(target, exactToleranceMm);
   const exactHits = uniqueRowsByNode(index?.byPosition?.get(exactKey) || []);
-  if (exactHits.length === 1) {
-    return { status: 'OK_EXACT', basis: 'POS', key: position, resolvedNodeNumber: exactHits[0].nodeNumber, resolvedNodeName: exactHits[0].nodeName, distanceMm: 0, matchBy: 'POSITION_EXACT' };
-  }
-  if (exactHits.length > 1) {
-    return { status: 'AMBIGUOUS', basis: 'POS', key: position, resolvedNodeNumber: '', candidates: exactHits.map((row) => row.nodeNumber), matchBy: 'POSITION_EXACT' };
-  }
+  if (exactHits.length === 1) return { status: 'OK_EXACT', basis: 'POS', key: position, resolvedNodeNumber: exactHits[0].nodeNumber, resolvedNodeName: exactHits[0].nodeName, distanceMm: 0, matchBy: 'POSITION_EXACT' };
+  if (exactHits.length > 1) return { status: 'AMBIGUOUS', basis: 'POS', key: position, resolvedNodeNumber: '', candidates: exactHits.map((row) => row.nodeNumber), matchBy: 'POSITION_EXACT' };
 
   let best = null;
   for (const row of index?.rows || []) {
@@ -191,8 +176,6 @@ export function resolveXmlCiiPositionToNode(index, position, options = {}) {
     const d = distanceMm(target, row.position);
     if (!best || d < best.distanceMm) best = { row, distanceMm: d };
   }
-  if (best && best.distanceMm <= nearestToleranceMm) {
-    return { status: 'OK_NEAREST', basis: 'POS', key: position, resolvedNodeNumber: best.row.nodeNumber, resolvedNodeName: best.row.nodeName, distanceMm: best.distanceMm, matchBy: 'POSITION_NEAREST' };
-  }
+  if (best && best.distanceMm <= nearestToleranceMm) return { status: 'OK_NEAREST', basis: 'POS', key: position, resolvedNodeNumber: best.row.nodeNumber, resolvedNodeName: best.row.nodeName, distanceMm: best.distanceMm, matchBy: 'POSITION_NEAREST' };
   return { status: 'NO_NODE_WITHIN_TOLERANCE', basis: 'POS', key: position, resolvedNodeNumber: '', nearestNodeNumber: best?.row?.nodeNumber || '', nearestDistanceMm: best?.distanceMm ?? null };
 }
