@@ -7,7 +7,13 @@ function text(value) {
   return String(value ?? '').trim();
 }
 
+function isLabelSuppressed(object) {
+  const data = object?.userData || {};
+  return data.EXPORT_LABEL === false || data.exportLabel === false || data.hideLabel === true;
+}
+
 function isLabelCandidate(object) {
+  if (isLabelSuppressed(object)) return false;
   return !!object?.userData?.labelText && (
     object.userData.labelAnchor === true ||
     object.name?.startsWith?.('label:') ||
