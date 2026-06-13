@@ -1,4 +1,5 @@
 import { classifyComponentLayer, classifySupportType, parseSelectedBranches } from '../inputxml-dxf/InputXmlToDxfProjector.js';
+import { classifyCaesarRestraint } from './CaesarRestraintClassifier.js';
 import { bendMetadataFromComponentRaw } from './InputXmlBendMetadata.js';
 
 function text(value) {
@@ -18,6 +19,27 @@ function point3(point, bore = null) {
   const numericBore = Number(bore);
   if (Number.isFinite(numericBore) && numericBore > 0) out.bore = numericBore;
   return out;
+}
+
+function distance(a, b) {
+  if (!a || !b) return 0;
+  return Math.sqrt((a.x - b.x) ** 2 + (a.y - b.y) ** 2 + (a.z - b.z) ** 2);
+}
+
+function expectedBendChord(radius, angleDeg) {
+  const r = Number(radius);
+  const a = Number(angleDeg);
+  if (!Number.isFinite(r) || r <= 0 || !Number.isFinite(a) || a <= 0) return null;
+  return 2 * r * Math.sin((Math.min(Math.abs(a), 180) * Math.PI / 180) / 2);
+}
+
+function shouldRenderBendAsStraightPipe({ p1, p2, bendMetadata, bore }) {
+  const chord = distance(p1, p2);
+  const expected = expectedBendChord(bendMetadata?.radius, bendMetadata?.angleDeg);
+  if (expected != null) return chord > Math.max(expected * 2.25, expected + Math.max(Number(bore) || 0, 50));
+  const r = Number(bendMetadata?.radius);
+  if (Number.isFinite(r) && r > 0) return chord > r * 3;
+  return false;
 }
 
 function componentAliases(component) {
@@ -53,12 +75,16 @@ function glbTypeForLayer(layer, component = {}) {
   }
 }
 
-function supportKindForGlb(supportType) {
-  if (supportType === 'guide') return 'GUIDE';
-  if (supportType === 'lineStop') return 'LINESTOP';
-  if (supportType === 'limit') return 'LIMIT';
-  if (supportType === 'anchor') return 'ANCHOR';
-  if (supportType === 'hanger') return 'SPRING';
+function supportKindForGlb(supportType, component = {}, support = {}) {
+  const raw = { ...(support.rawAttributes || {}), ...(component.rawAttributes || {}) };
+  const caesarKind = upper(raw.caesarSupportKind || raw.CAESAR_SUPPORT_KIND || raw.INPUTXML_SUPPORT_KIND);
+  const resolved = caesarKind || upper(classifyCaesarRestraint(raw, { tagName: raw.sourceTagName }));
+  const kind = resolved || upper(supportType);
+  if (kind === 'GUIDE') return 'GUIDE';
+  if (kind === 'LINESTOP' || kind === 'LINE_STOP') return 'LINESTOP';
+  if (kind === 'LIMIT') return 'LIMIT';
+  if (kind === 'ANCHOR') return 'ANCHOR';
+  if (kind === 'HANGER' || kind === 'SPRING') return 'SPRING';
   return 'REST';
 }
 
@@ -80,6 +106,7 @@ function bendExtraForComponent(component = {}) {
   const extra = {};
   if (metadata.radius != null) extra.BEND_RADIUS = String(metadata.radius);
   if (metadata.angleDeg != null) extra.BEND_ANGLE_DEG = String(metadata.angleDeg);
+  if (metadata.node) extra.BEND_NODE = metadata.node;
   if (metadata.source) extra.BEND_METADATA_SOURCE = metadata.source;
   return { metadata, extra };
 }
@@ -98,11 +125,27 @@ function makeSegmentComponent(segment, component, anchors, diagnostics) {
   }
 
   const layer = classifyComponentLayer(component, segment);
-  const type = glbTypeForLayer(layer, component);
+  const originalType = glbTypeForLayer(layer, component);
   const bore = Number(component?.bore ?? segment.bore ?? p1.bore ?? p2.bore ?? 20);
   const id = text(segment.id || component?.id || `segment-${diagnostics.length}`);
   const { metadata: bendMetadata, extra: bendExtra } = bendExtraForComponent(component);
-  const attributes = makeAttributes(component, { layer, uxmlSegmentId: text(segment.id), ...bendExtra });
+  const suppressFullCurve = ['BEND', 'ELBOW'].includes(originalType) && shouldRenderBendAsStraightPipe({
+    p1,
+    p2,
+    bendMetadata,
+    bore,
+  });
+  const type = suppressFullCurve ? 'PIPE' : originalType;
+  const attributes = makeAttributes(component, {
+    layer,
+    uxmlSegmentId: text(segment.id),
+    ...bendExtra,
+    ...(suppressFullCurve ? {
+      CAESAR_BEND_DISPLAY_MODE: 'STRAIGHT_PIPE_WITH_LOCAL_BEND_METADATA',
+      CAESAR_BEND_SUPPRESSED_FULL_CURVE: 'true',
+      CAESAR_BEND_ORIGINAL_GLB_TYPE: originalType,
+    } : {}),
+  });
 
   return {
     id,
@@ -118,6 +161,8 @@ function makeSegmentComponent(segment, component, anchors, diagnostics) {
     bendRadius: bendMetadata.radius,
     bendAngleDeg: bendMetadata.angleDeg,
     bendMetadataSource: bendMetadata.source,
+    bendNode: bendMetadata.node,
+    bendDisplayMode: suppressFullCurve ? 'straight-pipe-with-local-bend-metadata' : '',
     pipelineRef: text(component?.pipelineRef),
     lineKey: text(component?.lineKey),
     uxmlComponentId: text(component?.id),
@@ -138,8 +183,9 @@ function makeSupportComponent(support, component, anchors, diagnostics) {
   }
 
   const supportType = classifySupportType(support, component);
-  const supportKind = supportKindForGlb(supportType);
-  const label = text(component?.name || support?.id || component?.id || 'SUPPORT');
+  const supportKind = supportKindForGlb(supportType, component, support);
+  const raw = { ...(support.rawAttributes || {}), ...(component?.rawAttributes || {}) };
+  const label = text(raw.caesarSupportLabel || component?.name || support?.id || component?.id || 'SUPPORT');
   const attrs = makeAttributes(component, {
     SUPPORT_TAG: label,
     SUPPORT_NAME: label,
@@ -147,6 +193,8 @@ function makeSupportComponent(support, component, anchors, diagnostics) {
     CMPSUPTYPE: supportKind,
     SUPPORT_KIND: supportKind,
     INPUTXML_SUPPORT_TYPE: supportType,
+    CAESAR_SUPPORT_KIND: text(raw.caesarSupportKind || ''),
+    CAESAR_SUPPORT_LABEL: label,
     uxmlSupportId: text(support.id),
   });
 
@@ -158,7 +206,7 @@ function makeSupportComponent(support, component, anchors, diagnostics) {
     bore: Number(component?.bore) > 0 ? Number(component.bore) : 20,
     refNo: text(component?.refNo || support.id),
     attributes: attrs,
-    raw: { ...(support.rawAttributes || {}), ...(component?.rawAttributes || {}) },
+    raw,
     supportType,
     supportKind,
     pipelineRef: text(component?.pipelineRef),
@@ -177,6 +225,7 @@ export function adaptUxmlToGlbModel(doc, options = {}) {
   const typeCounts = {};
   const supportKindCounts = {};
   let bendRadiusCount = 0;
+  let suppressedFullBendCurveCount = 0;
 
   for (const segment of doc.segments || []) {
     const component = componentsById.get(segment.componentId);
@@ -185,6 +234,7 @@ export function adaptUxmlToGlbModel(doc, options = {}) {
     const glbComponent = makeSegmentComponent(segment, component, anchors, diagnostics);
     if (!glbComponent) continue;
     if (glbComponent.bendRadius != null) bendRadiusCount += 1;
+    if (glbComponent.bendDisplayMode === 'straight-pipe-with-local-bend-metadata') suppressedFullBendCurveCount += 1;
     components.push(glbComponent);
     typeCounts[glbComponent.type] = (typeCounts[glbComponent.type] || 0) + 1;
   }
@@ -213,6 +263,7 @@ export function adaptUxmlToGlbModel(doc, options = {}) {
       supportKindCounts,
       selectedBranchIds: [...selectedIds],
       bendRadiusCount,
+      suppressedFullBendCurveCount,
     },
     diagnostics,
   };
