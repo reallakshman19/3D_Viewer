@@ -59,4 +59,47 @@ const pipeObject = scene.getObjectByName(pipe.id);
 assert.ok(pipeObject);
 assert.equal(pipeObject.userData.lineNo, 'L-200-A');
 
+const caesarJobPathXml = [
+  '<CAESARII>',
+  '<PIPINGMODEL JOBNAME="C:\\PROGRAMDATA\\INTERGRAPH CAS\\CAESAR II\\11.00\\EXAMPLES\\BM_CII._A">',
+  '<PIPINGELEMENT FROM_NODE="200" TO_NODE="205" DELTA_X="100" DELTA_Y="0" DELTA_Z="0" DIAMETER="20"/>',
+  '</PIPINGMODEL>',
+  '</CAESARII>',
+].join('');
+
+const jobPathExtracted = extractInputXmlBranches(caesarJobPathXml, {
+  sourceId: 'job-path-line-no-test',
+  fileName: 'BM_CII.xml',
+});
+assert.equal(jobPathExtracted.ok, true);
+assert.equal(jobPathExtracted.branches[0]?.lineNo, '');
+
+const jobPathAdapted = adaptUxmlToGlbModel(jobPathExtracted.doc);
+assert.equal(jobPathAdapted.model.lineNo, '');
+assert.deepEqual(jobPathAdapted.model.lineNos, []);
+const jobPathPipe = jobPathAdapted.model.components.find((component) => component.type === 'PIPE');
+assert.ok(jobPathPipe);
+assert.equal(jobPathPipe.lineNo, '');
+assert.equal(jobPathPipe.attributes.lineNo, '');
+
+const jobPathScene = buildExportScene(jobPathAdapted.model);
+const jobPathRoot = jobPathScene.getObjectByName('PCF_EXPORT_ROOT');
+assert.equal(jobPathRoot.userData.lineNo, '');
+assert.deepEqual(jobPathRoot.userData.lineNos, []);
+
+const branchNameXml = [
+  '<CAESARII>',
+  '<PIPINGMODEL JOBNAME="C:\\TEMP\\IGNORED_JOB" BranchName="/ASIM-1885-10-S8810101-91261M7-HC/B1">',
+  '<PIPINGELEMENT FROM_NODE="300" TO_NODE="305" DELTA_X="100" DELTA_Y="0" DELTA_Z="0" DIAMETER="20"/>',
+  '</PIPINGMODEL>',
+  '</CAESARII>',
+].join('');
+const branchNameExtracted = extractInputXmlBranches(branchNameXml, {
+  sourceId: 'branch-name-line-no-test',
+  fileName: 'branch.xml',
+});
+assert.equal(branchNameExtracted.branches[0]?.lineNo, '/ASIM-1885-10-S8810101-91261M7-HC/B1');
+const branchNameAdapted = adaptUxmlToGlbModel(branchNameExtracted.doc);
+assert.equal(branchNameAdapted.model.lineNo, '/ASIM-1885-10-S8810101-91261M7-HC/B1');
+
 console.log('inputxml-glb-line-no-metadata.test.js passed');

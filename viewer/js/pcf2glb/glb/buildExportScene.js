@@ -6,6 +6,7 @@ import { enhanceLocalizedBendProxy } from './enhanceLocalizedBendProxy.js';
 import { enhanceSupportDirectionProxy } from './enhanceSupportDirectionProxyReferenceV2.js';
 import { enhanceTeeBodyProxy } from './enhanceTeeBodyProxy.js';
 import { hideGlbLabelAnchorMarkers } from './hideGlbLabelAnchorMarkers.js';
+import { normalizeLineNoValue } from '../../../utils/line-no-metadata.js';
 
 function text(value) {
   return String(value ?? '').trim();
@@ -16,7 +17,7 @@ function collectLineNos(model = {}) {
     text(model.lineNo),
     ...((model.lineNos || []).map(text)),
     ...((model.components || []).map((component) => text(component.lineNo || component.attributes?.lineNo || component.raw?.lineNo))),
-  ].filter(Boolean))).sort();
+  ].map(normalizeLineNoValue).filter(Boolean))).sort();
 }
 
 export function buildExportScene(model, log, options = {}) {

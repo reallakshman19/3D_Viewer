@@ -1,5 +1,10 @@
 import * as THREE from 'three';
 import { CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
+import {
+  LINE_NO_METADATA_KEYS,
+  firstLineNoValue,
+  lineNoFromMetadata,
+} from '../../../utils/line-no-metadata.js';
 
 const DEFAULT_MAX_LABELS = 250;
 const LABEL_TOGGLE_PANEL_ID = 'glb-label-toggle-panel';
@@ -29,6 +34,29 @@ const LABEL_TOGGLE_DEFS = Object.freeze([
 
 function text(value) {
   return String(value ?? '').trim();
+}
+
+function modelLineNoFromRoot(root) {
+  const direct = firstLineNoValue(
+    lineNoFromMetadata(root?.userData || {}, LINE_NO_METADATA_KEYS),
+    ...((root?.userData?.lineNos || []).map((value) => value))
+  );
+  if (direct) return direct;
+
+  const seen = new Set();
+  root?.traverse?.((object) => {
+    if (seen.size) return;
+    const data = object?.userData || {};
+    const lineNo = firstLineNoValue(
+      lineNoFromMetadata(data, LINE_NO_METADATA_KEYS),
+      data.lineNo,
+      data.lineKey,
+      data.pipelineRef
+    );
+    if (lineNo) seen.add(lineNo);
+  });
+
+  return Array.from(seen).sort()[0] || '';
 }
 
 function safeStorage() {
@@ -601,7 +629,7 @@ function ensureGlbLabelTogglePanel(labelGroup, labels, visibility, options = {})
   if (panel.parentElement !== parent) parent.appendChild(panel);
 
   const summary = summarizeGlbLabels(labels);
-  const modelLineNo = text(options.modelLineNo);
+  const modelLineNo = firstLineNoValue(options.modelLineNo);
   panel.style.cssText = defaultPanelStyle(Boolean(host));
   panel.style.display = '';
   panel.innerHTML = `
@@ -707,7 +735,7 @@ export function installGlbLabelOverlay(root, labelGroup, options = {}) {
   const visibilityStats = applyGlbLabelVisibility(labelGroup, visibility);
   ensureGlbLabelTogglePanel(labelGroup, labels, visibilityStats.visibility, {
     ...options,
-    modelLineNo: root?.userData?.lineNo || '',
+    modelLineNo: firstLineNoValue(options.modelLineNo, modelLineNoFromRoot(root)),
   });
   ensureCss2dDomLayer(css2dObjects);
 

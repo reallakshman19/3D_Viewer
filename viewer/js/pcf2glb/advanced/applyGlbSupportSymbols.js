@@ -304,13 +304,41 @@ function disposeGroup(root) {
 
 /**
  * Hide baked support-reference-v2-* marker groups that were baked into the
- * GLB during export. They are replaced by fresh runtime symbols.
+ * GLB during export. Runtime symbols replace most kinds, but GUIDE and
+ * LINESTOP keep their baked compact glyphs as a visual fallback because those
+ * baked proxies do not contain the stale REST upward-arrow geometry.
  */
+function isBakedSupportReference(object) {
+  return String(object?.userData?.glbShape || '').startsWith('support-reference-v2-');
+}
+
+function isInsideBakedSupportReference(object) {
+  let current = object;
+  while (current) {
+    if (isBakedSupportReference(current)) return true;
+    current = current.parent;
+  }
+  return false;
+}
+
+function hasSupportKindAncestor(object) {
+  let current = object?.parent || null;
+  while (current) {
+    const kind = String(current.userData?.supportKind || '').toUpperCase();
+    if (kind && kind !== 'UNKNOWN') return true;
+    current = current.parent;
+  }
+  return false;
+}
+
 function hideBakedSupportMarkers(root) {
   root.traverse((obj) => {
     const shape = String(obj.userData?.glbShape || '');
-    if (shape.startsWith('support-reference-v2-')) {
-      obj.visible = false;
+    if (isBakedSupportReference(obj)) {
+      const supportShape = shape.replace('support-reference-v2-', '').toUpperCase();
+      const keepBakedFallback = supportShape === 'GUIDE' || supportShape === 'LINESTOP';
+      obj.visible = keepBakedFallback;
+      obj.userData.glbSupportBakedFallback = keepBakedFallback;
     }
   });
 }
@@ -353,12 +381,12 @@ export function applyGlbSupportSymbols(root, scene, options = {}) {
   let scanned = 0;
 
   root.traverse((object) => {
+    if (isInsideBakedSupportReference(object)) return;
+    if (hasSupportKindAncestor(object)) return;
+
     const data = object?.userData || {};
     const kind = String(data.supportKind || '').toUpperCase();
     if (!kind || kind === 'UNKNOWN') return;
-
-    // Skip baked markerGroups. Their parent is the real support object.
-    if (String(data.glbShape || '').startsWith('support-reference-v2-')) return;
 
     // Skip children of support objects that are not the root support node
     if (data.glbSupportSymbolMesh) return;

@@ -1,6 +1,12 @@
 import { classifyComponentLayer, classifySupportType, parseSelectedBranches } from '../inputxml-dxf/InputXmlToDxfProjector.js';
 import { classifyCaesarRestraint } from './CaesarRestraintClassifier.js';
 import { bendMetadataFromComponentRaw } from './InputXmlBendMetadata.js';
+import {
+  LINE_NO_METADATA_KEYS,
+  firstLineNoValue,
+  metadataValueFromKeys,
+  normalizeLineNoValue,
+} from '../../utils/line-no-metadata.js';
 
 function text(value) {
   return String(value ?? '').trim();
@@ -50,38 +56,7 @@ function componentAliases(component) {
   ].map(text).filter(Boolean);
 }
 
-function firstText(...values) {
-  return values.map(text).find(Boolean) || '';
-}
-
-function valueFromKeys(source = {}, keys = []) {
-  if (!source || typeof source !== 'object') return '';
-  for (const key of keys) {
-    if (source[key] != null && text(source[key])) return text(source[key]);
-    const found = Object.keys(source).find((candidate) => candidate.toLowerCase() === String(key).toLowerCase());
-    if (found && text(source[found])) return text(source[found]);
-  }
-  return '';
-}
-
-const LINE_NO_KEYS = Object.freeze([
-  'lineNo',
-  'LineNo',
-  'Line No',
-  'LineNumber',
-  'Line Number',
-  'LINE_NO',
-  'LINE_NUMBER',
-  'PipeLine',
-  'Pipeline',
-  'pipelineRef',
-  'PipelineRef',
-  'BranchName',
-  'Branch Name',
-  'LineName',
-  'Line Name',
-  'lineKey',
-]);
+const LINE_NO_KEYS = LINE_NO_METADATA_KEYS;
 
 function lineNoForComponent(component = {}, context = {}) {
   const raw = component.rawAttributes || {};
@@ -90,11 +65,11 @@ function lineNoForComponent(component = {}, context = {}) {
   const pipelineByRef = context.pipelineByRef || new Map();
   const pipeline = pipelineById.get(component.pipelineId) || pipelineByRef.get(component.pipelineRef) || null;
 
-  return firstText(
-    valueFromKeys(component, LINE_NO_KEYS),
-    valueFromKeys(raw, LINE_NO_KEYS),
-    valueFromKeys(normalized, LINE_NO_KEYS),
-    valueFromKeys(pipeline || {}, LINE_NO_KEYS),
+  return firstLineNoValue(
+    metadataValueFromKeys(component, LINE_NO_KEYS),
+    metadataValueFromKeys(raw, LINE_NO_KEYS),
+    metadataValueFromKeys(normalized, LINE_NO_KEYS),
+    metadataValueFromKeys(pipeline || {}, LINE_NO_KEYS),
     component.lineKey,
     component.pipelineRef
   );
@@ -310,13 +285,13 @@ export function adaptUxmlToGlbModel(doc, options = {}) {
 
   const lineNos = Array.from(new Set([
     ...components.map((component) => text(component.lineNo)),
-    ...(doc.pipelines || []).map((pipeline) => firstText(
-      valueFromKeys(pipeline, LINE_NO_KEYS),
+    ...(doc.pipelines || []).map((pipeline) => firstLineNoValue(
+      metadataValueFromKeys(pipeline, LINE_NO_KEYS),
       pipeline.lineNo,
       pipeline.lineKey,
       pipeline.pipelineRef,
     )),
-  ].filter(Boolean))).sort();
+  ].map(normalizeLineNoValue).filter(Boolean))).sort();
 
   return {
     model: {

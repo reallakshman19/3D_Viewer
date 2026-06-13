@@ -42,6 +42,11 @@ import {
   createUxmlSupport,
 } from './UxmlTypes.js';
 
+import {
+  LINE_NO_METADATA_KEYS,
+  lineNoFromMetadata,
+} from '../utils/line-no-metadata.js';
+
 export const UXML_INPUTXML_SCHEMA_MAPPER_SCHEMA =
   'uxml-inputxml-schema-mapper/v1';
 
@@ -197,25 +202,7 @@ function attrValue(attrs, ...names) {
 }
 
 function lineNoFromAttributes(attrs) {
-  return attrValue(
-    attrs,
-    'LineNo',
-    'LINE_NO',
-    'LINENO',
-    'LineNumber',
-    'LINE_NUMBER',
-    'Pipeline',
-    'PipeLine',
-    'PipelineRef',
-    'PIPELINE_REF',
-    'BranchName',
-    'BRANCH_NAME',
-    'LineName',
-    'LINE_NAME',
-    'JOBNAME',
-    'NAME',
-    'ID'
-  );
+  return lineNoFromMetadata(attrs, LINE_NO_METADATA_KEYS);
 }
 
 function parseAttrs(attrText = '') {
@@ -1214,7 +1201,7 @@ function mapCaesarPipingElements(doc, text, sourceId, options = {}) {
   const pipingModelAttrs = firstElementAttrs(text, 'PIPINGMODEL');
   const lineNo = lineNoFromAttributes(pipingModelAttrs);
   const pipelineRef = lineNo || 'CAESAR-INPUTXML';
-  const pipelineId = ensurePipeline(doc, pipelineRef, lineNo || pipelineRef, pipingModelAttrs);
+  const pipelineId = ensurePipeline(doc, pipelineRef, lineNo, pipingModelAttrs);
   const tags = findElements(text, 'PIPINGELEMENT');
   let inheritedDiameter = null;
   let inheritedDiameterCount = 0;
@@ -1266,7 +1253,7 @@ function mapCaesarPipingElements(doc, text, sourceId, options = {}) {
       z: from.z + edge.dz,
     };
 
-    const component = caesarPipingElementComponent(tag, index, sourceId, pipelineId, pipelineRef, lineNo || pipelineRef, bore, {
+    const component = caesarPipingElementComponent(tag, index, sourceId, pipelineId, pipelineRef, lineNo, bore, {
       schema1001Detected,
     });
 

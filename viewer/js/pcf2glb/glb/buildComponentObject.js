@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { buildPipeMesh } from './buildPipeMesh.js';
 import { getSupportKindMap } from '../../../core/settings.js';
 import { resolveKindPure, DEFAULT_RULES } from '../../../support/SupportKindResolver.js';
+import { firstLineNoValue } from '../../../utils/line-no-metadata.js';
 
 const UP = new THREE.Vector3(0, 1, 0);
 const Z_AXIS = new THREE.Vector3(0, 0, 1);
@@ -28,12 +29,8 @@ function numberOrNull(value) {
   return Number.isFinite(n) && n > 0 ? n : null;
 }
 
-function firstText(...values) {
-  return values.map((value) => String(value ?? '').trim()).find(Boolean) || '';
-}
-
 function lineNoForComponent(comp = {}, attrs = {}) {
-  return firstText(
+  return firstLineNoValue(
     comp.lineNo,
     attrs.lineNo,
     attrs.LineNo,

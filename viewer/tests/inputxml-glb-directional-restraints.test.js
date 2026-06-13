@@ -141,4 +141,28 @@ runtimeSymbols.traverse((object) => {
 assert.equal(runtimeRoles.filter((role) => role === 'rest-axis').length, 0, 'runtime GUIDE must not emit a REST upward arrow');
 assert.equal(runtimeRoles.filter((role) => role === 'guide-axis').length, 2, 'runtime GUIDE should emit two lateral guide arrows');
 
+const fallbackScene = buildExportScene({
+  components: [
+    support('GUIDE-FALLBACK', 'GUIDE', { x: 1, y: 0, z: 0 }),
+    support('LINESTOP-FALLBACK', 'LINESTOP', { x: 0, y: 0, z: 1 }),
+    support('REST-FALLBACK', 'REST', { x: 0, y: 1, z: 0 }),
+  ],
+});
+const fallbackRoot = fallbackScene.getObjectByName('PCF_EXPORT_ROOT');
+const fallbackStats = applyGlbSupportSymbols(fallbackRoot, fallbackScene, { scaleMultiplier: 1 });
+assert.equal(fallbackStats.created, 3);
+
+const bakedByKind = new Map();
+fallbackRoot.traverse((object) => {
+  const shape = String(object.userData?.glbShape || '');
+  if (!shape.startsWith('support-reference-v2-')) return;
+  bakedByKind.set(shape.replace('support-reference-v2-', '').toUpperCase(), object);
+});
+
+assert.equal(bakedByKind.get('GUIDE')?.visible, true, 'GUIDE baked compact glyph should remain visible as fallback');
+assert.equal(bakedByKind.get('GUIDE')?.userData.glbSupportBakedFallback, true);
+assert.equal(bakedByKind.get('LINESTOP')?.visible, true, 'LINESTOP baked compact glyph should remain visible as fallback');
+assert.equal(bakedByKind.get('LINESTOP')?.userData.glbSupportBakedFallback, true);
+assert.equal(bakedByKind.get('REST')?.visible, false, 'REST baked glyph should stay hidden after runtime replacement');
+
 console.log('inputxml-glb-directional-restraints.test.js passed');

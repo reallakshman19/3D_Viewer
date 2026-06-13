@@ -1,11 +1,17 @@
-export function createPropertyPanel(propPanel, propContent) {
-  function text(value) {
-    return String(value ?? '').trim();
-  }
+import {
+  LINE_NO_METADATA_KEYS,
+  firstLineNoValue,
+  lineNoFromMetadata,
+} from '../../../utils/line-no-metadata.js';
 
+export function createPropertyPanel(propPanel, propContent) {
   function lineNoForItem(item) {
     const meta = item?.rawMeta || {};
-    return text(meta.lineNo || meta.LineNo || meta.LINE_NO || meta.LineNumber || meta.LINE_NUMBER || item?.lineNo);
+    return firstLineNoValue(
+      lineNoFromMetadata(meta, LINE_NO_METADATA_KEYS),
+      item?.lineNo,
+      item?.object3D?.userData?.lineNo
+    );
   }
 
   return {
