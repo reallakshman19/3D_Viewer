@@ -69,6 +69,11 @@ function esc(value) {
     .replace(/'/g, '&#39;');
 }
 
+function cssString(value) {
+  if (typeof CSS !== 'undefined' && typeof CSS.escape === 'function') return CSS.escape(String(value));
+  return String(value).replace(/[^A-Za-z0-9_-]/g, '\\$&');
+}
+
 function readStored(key, fallback = '') {
   try { return window.localStorage.getItem(key) ?? fallback; } catch { return fallback; }
 }
@@ -123,7 +128,7 @@ function scrollToMainTarget(selector) {
 }
 
 function openSideloadSubtab(tabId) {
-  const button = document.querySelector(`#model-converters-xml-cii-sideload [data-sideload-tab="${CSS.escape(tabId)}"]`);
+  const button = document.querySelector(`#model-converters-xml-cii-sideload [data-sideload-tab="${cssString(tabId)}"]`);
   writeStored(SIDELOAD_TAB_KEY, tabId);
   if (!button) return false;
   button.click();
