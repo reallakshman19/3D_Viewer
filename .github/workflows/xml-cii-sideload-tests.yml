@@ -8,7 +8,7 @@ on:
       - 'viewer/tabs/model-converters-tab.js'
       - 'Benchmarks/XML-CII-2019/sideload/**'
       - 'scripts/test-xml-cii-*.mjs'
-      - 'scripts/test-xml-cii-workflow-*.mjs'
+      - 'scripts/test-model-converters-tab-responsive.mjs'
       - '.github/workflows/xml-cii-sideload-tests.yml'
   push:
     branches:
@@ -19,7 +19,7 @@ on:
       - 'viewer/tabs/model-converters-tab.js'
       - 'Benchmarks/XML-CII-2019/sideload/**'
       - 'scripts/test-xml-cii-*.mjs'
-      - 'scripts/test-xml-cii-workflow-*.mjs'
+      - 'scripts/test-model-converters-tab-responsive.mjs'
       - '.github/workflows/xml-cii-sideload-tests.yml'
   workflow_dispatch:
 
@@ -50,20 +50,11 @@ jobs:
       - name: Sideload preview chain
         run: node scripts/test-xml-cii-sideload-preview-chain.mjs
 
-      - name: Workflow popup shell
+      - name: Lean workflow popup shell
         run: node scripts/test-xml-cii-conversion-workflow-popup.mjs
 
-      - name: Workflow model-data nesting
-        run: node scripts/test-xml-cii-workflow-model-data-nesting.mjs
-
-      - name: Workflow process nesting
-        run: node scripts/test-xml-cii-workflow-process-nesting.mjs
-
-      - name: Workflow audit/output nesting
-        run: node scripts/test-xml-cii-workflow-audit-output-nesting.mjs
-
-      - name: Workflow polish
-        run: node scripts/test-xml-cii-workflow-polish.mjs
+      - name: Model Converter responsiveness
+        run: node scripts/test-model-converters-tab-responsive.mjs
 
       - name: Aggregate runner sanity
         run: node scripts/test-xml-cii-all.mjs
