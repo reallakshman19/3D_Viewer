@@ -1,12 +1,14 @@
 import * as THREE from 'three';
 
 const UP = new THREE.Vector3(0, 1, 0);
+const X_AXIS = new THREE.Vector3(1, 0, 0);
+const Y_AXIS = new THREE.Vector3(0, 1, 0);
 const Z_AXIS = new THREE.Vector3(0, 0, 1);
 
 const KIND_COLORS = {
   REST: 0x22c55e,
   GUIDE: 0x22c55e,
-  LINESTOP: 0x84cc16,
+  LINESTOP: 0x16a34a,
   LIMIT: 0x84cc16,
   ANCHOR: 0xef4444,
   SPRING: 0xa855f7,
@@ -61,9 +63,9 @@ function textAxis(attrs = {}) {
     attrs.SUPPORT_TAG,
     attrs.labelText,
   ].join(' '));
-  if (/\bX\b|\bEAST\b|\bWEST\b/.test(src)) return new THREE.Vector3(1, 0, 0);
-  if (/\bY\b|\bUP\b|\bDOWN\b|\bVERTICAL\b/.test(src)) return new THREE.Vector3(0, 1, 0);
-  if (/\bZ\b|\bNORTH\b|\bSOUTH\b/.test(src)) return new THREE.Vector3(0, 0, 1);
+  if (/\bX\b|\bEAST\b|\bWEST\b/.test(src)) return X_AXIS.clone();
+  if (/\bY\b|\bUP\b|\bDOWN\b|\bVERTICAL\b/.test(src)) return Y_AXIS.clone();
+  if (/\bZ\b|\bNORTH\b|\bSOUTH\b/.test(src)) return Z_AXIS.clone();
   return null;
 }
 
@@ -73,14 +75,19 @@ function supportAxis(attrs = {}) {
 
 function supportScaleFor(comp = {}, attrs = {}, options = {}) {
   const bore = number(comp.bore ?? attrs.bore ?? attrs.BORE ?? attrs.DIAMETER) || 100;
-  const multiplier = number(options.supportSymbolScale) || 0.75;
-  return Math.max(18, Math.min(120, bore * multiplier));
+  const multiplier = number(options.supportSymbolScale) || 0.85;
+  return Math.max(22, Math.min(150, bore * multiplier));
 }
 
 function perpendicular(axis) {
-  const basis = Math.abs(axis.dot(UP)) > 0.9 ? new THREE.Vector3(1, 0, 0) : UP;
+  const basis = Math.abs(axis.dot(UP)) > 0.9 ? X_AXIS : UP;
   const side = new THREE.Vector3().crossVectors(axis, basis);
-  return side.length() < 0.01 ? new THREE.Vector3(1, 0, 0) : side.normalize();
+  return side.length() < 0.01 ? X_AXIS.clone() : side.normalize();
+}
+
+function secondPerpendicular(axis, side) {
+  const normal = new THREE.Vector3().crossVectors(axis, side);
+  return normal.length() < 0.01 ? UP.clone() : normal.normalize();
 }
 
 function orientFromY(object, direction) {
@@ -92,7 +99,13 @@ function orientFromZ(object, direction) {
 }
 
 function supportMaterial(color) {
-  return new THREE.MeshStandardMaterial({ color, roughness: 0.48, metalness: 0.08 });
+  return new THREE.MeshStandardMaterial({
+    color,
+    emissive: color,
+    emissiveIntensity: 0.08,
+    roughness: 0.38,
+    metalness: 0.12,
+  });
 }
 
 function addBox(group, name, size, position, color) {
@@ -108,7 +121,7 @@ function addBox(group, name, size, position, color) {
 
 function addCylinder(group, name, radius, length, axis, position, color) {
   const mesh = new THREE.Mesh(
-    new THREE.CylinderGeometry(radius, radius, length, 18),
+    new THREE.CylinderGeometry(radius, radius, length, 20),
     supportMaterial(color),
   );
   mesh.name = name;
@@ -118,88 +131,140 @@ function addCylinder(group, name, radius, length, axis, position, color) {
   return mesh;
 }
 
-function addPlate(group, name, axis, radius, color) {
-  const side = perpendicular(axis);
-  const vertical = new THREE.Vector3().crossVectors(axis, side).normalize();
+function addCone(group, name, coneRadius, height, axis, position, color) {
+  const cone = new THREE.Mesh(
+    new THREE.ConeGeometry(coneRadius, height, 24),
+    supportMaterial(color),
+  );
+  cone.name = name;
+  cone.position.copy(position);
+  orientFromY(cone, axis);
+  group.add(cone);
+  return cone;
+}
+
+function addBasePad(group, id, radius, color, options = {}) {
+  const y = options.y ?? -radius * 2.15;
+  addBox(
+    group,
+    `${id}-reference-base-pad`,
+    new THREE.Vector3(radius * 2.75, radius * 0.28, radius * 2.75),
+    new THREE.Vector3(0, y, 0),
+    color,
+  );
+}
+
+function addReferencePost(group, id, radius, color, options = {}) {
+  const y0 = options.y0 ?? -radius * 1.35;
+  const length = options.length ?? radius * 2.35;
+  addCylinder(
+    group,
+    `${id}-reference-post`,
+    Math.max(radius * 0.10, 0.9),
+    length,
+    UP,
+    new THREE.Vector3(0, y0 + length / 2, 0),
+    color,
+  );
+}
+
+function addPlate(group, name, axis, radius, color, offsetScale = 1.15) {
+  const a = axis.clone().normalize();
+  const side = perpendicular(a);
+  const vertical = secondPerpendicular(a, side);
   const plate = addBox(
     group,
     name,
-    new THREE.Vector3(radius * 0.35, radius * 2.9, radius * 2.9),
-    axis.clone().multiplyScalar(radius * 2.55),
+    new THREE.Vector3(radius * 0.16, radius * 1.25, radius * 1.25),
+    a.clone().multiplyScalar(radius * offsetScale),
     color,
   );
-  plate.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(axis, vertical, side));
+  plate.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(a, vertical, side));
   return plate;
 }
 
 function addArrow(group, name, axis, radius, dist, color) {
-  const arrow = new THREE.Mesh(
-    new THREE.ConeGeometry(radius * 0.48, radius * 1.9, 20),
-    supportMaterial(color),
-  );
-  arrow.name = name;
-  arrow.position.copy(axis.clone().normalize().multiplyScalar(dist));
-  orientFromY(arrow, axis);
-  group.add(arrow);
-  return arrow;
+  const a = axis.clone().normalize();
+  const shaftLength = radius * 1.35;
+  const headLength = radius * 0.82;
+  const shaftCenter = a.clone().multiplyScalar(Math.max(0, dist - headLength - shaftLength / 2));
+  const headCenter = a.clone().multiplyScalar(dist - headLength / 2);
+  addCylinder(group, `${name}-shaft`, Math.max(radius * 0.055, 0.55), shaftLength, a, shaftCenter, color);
+  const head = addCone(group, name, radius * 0.28, headLength, a, headCenter, color);
+  return head;
+}
+
+function addAxisArrowPair(group, id, axis, radius, color, label) {
+  const a = axis.clone().normalize();
+  addArrow(group, `${id}-${label}-positive`, a, radius, radius * 2.25, color);
+  addArrow(group, `${id}-${label}-negative`, a.clone().negate(), radius, radius * 2.25, color);
 }
 
 function addGuideBars(group, id, axis, radius, color) {
-  const side = axis.clone().normalize();
-  const barSize = new THREE.Vector3(radius * 0.35, radius * 3.9, radius * 0.62);
-  const pos = side.clone().multiplyScalar(radius * 2.35);
-  const neg = side.clone().multiplyScalar(-radius * 2.35);
+  const a = axis.clone().normalize();
+  const side = perpendicular(a);
+  addBasePad(group, id, radius, color);
+  addReferencePost(group, id, radius, color);
+  const barSize = new THREE.Vector3(radius * 0.18, radius * 1.65, radius * 0.28);
+  const pos = a.clone().multiplyScalar(radius * 0.9).add(side.clone().multiplyScalar(radius * 0.18));
+  const neg = a.clone().multiplyScalar(-radius * 0.9).add(side.clone().multiplyScalar(radius * 0.18));
   addBox(group, `${id}-guide-bar-positive`, barSize, pos, color);
   addBox(group, `${id}-guide-bar-negative`, barSize, neg, color);
-  addArrow(group, `${id}-guide-axis-positive`, side, radius, radius * 3.65, color);
-  addArrow(group, `${id}-guide-axis-negative`, side.clone().negate(), radius, radius * 3.65, color);
+  addAxisArrowPair(group, id, a, radius, color, 'guide-axis');
 }
 
 function addRestBase(group, id, axis, radius, color) {
-  const supportAxis = axis.length() > 0.01 ? axis.clone().normalize() : UP.clone();
-  addBox(group, `${id}-rest-base`, new THREE.Vector3(radius * 3.6, radius * 0.42, radius * 2.7), supportAxis.clone().multiplyScalar(-radius * 2.4), color);
-  addArrow(group, `${id}-rest-axis`, supportAxis.clone().negate(), radius, radius * 3.55, color);
+  const a = axis.length() > 0.01 ? axis.clone().normalize() : UP.clone();
+  addBasePad(group, id, radius, color);
+  addReferencePost(group, id, radius, color, { y0: -radius * 1.85, length: radius * 2.15 });
+  addBox(group, `${id}-rest-base`, new THREE.Vector3(radius * 2.45, radius * 0.32, radius * 1.75), new THREE.Vector3(0, -radius * 2.05, 0), color);
+  addArrow(group, `${id}-rest-axis`, a.y > 0.3 ? a : UP, radius, radius * 1.95, color);
 }
 
 function addLineStop(group, id, axis, radius, color) {
   const a = axis.clone().normalize();
-  addPlate(group, `${id}-linestop-plate-positive`, a, radius, color);
-  addPlate(group, `${id}-linestop-plate-negative`, a.clone().negate(), radius, color);
-  addArrow(group, `${id}-linestop-axis-positive`, a, radius, radius * 3.85, color);
-  addArrow(group, `${id}-linestop-axis-negative`, a.clone().negate(), radius, radius * 3.85, color);
+  addBasePad(group, id, radius, color);
+  addReferencePost(group, id, radius, color);
+  addPlate(group, `${id}-linestop-plate-positive`, a, radius, color, 0.92);
+  addPlate(group, `${id}-linestop-plate-negative`, a.clone().negate(), radius, color, 0.92);
+  addAxisArrowPair(group, id, a, radius, color, 'linestop-axis');
 }
 
 function addLimit(group, id, axis, radius, color) {
   const a = axis.clone().normalize();
-  addPlate(group, `${id}-limit-stop-plate`, a, radius, color);
-  addArrow(group, `${id}-limit-axis`, a, radius, radius * 3.75, color);
+  addBasePad(group, id, radius, color);
+  addReferencePost(group, id, radius, color);
+  addPlate(group, `${id}-limit-stop-plate`, a, radius, color, 0.98);
+  addArrow(group, `${id}-limit-axis`, a, radius, radius * 2.35, color);
 }
 
 function addAnchor(group, id, radius, color) {
-  addBox(group, `${id}-anchor-block`, new THREE.Vector3(radius * 2.55, radius * 2.55, radius * 2.55), new THREE.Vector3(), color);
+  addBasePad(group, id, radius, color);
+  addBox(group, `${id}-anchor-block`, new THREE.Vector3(radius * 1.0, radius * 1.0, radius * 1.0), new THREE.Vector3(), color);
   [
-    new THREE.Vector3(1, 0, 0), new THREE.Vector3(-1, 0, 0),
-    new THREE.Vector3(0, 1, 0), new THREE.Vector3(0, -1, 0),
-    new THREE.Vector3(0, 0, 1), new THREE.Vector3(0, 0, -1),
-  ].forEach((axis, index) => addArrow(group, `${id}-anchor-axis-${index + 1}`, axis, radius * 0.75, radius * 3.7, color));
+    X_AXIS, X_AXIS.clone().negate(),
+    Y_AXIS, Y_AXIS.clone().negate(),
+    Z_AXIS, Z_AXIS.clone().negate(),
+  ].forEach((axis, index) => addArrow(group, `${id}-anchor-axis-${index + 1}`, axis, radius * 0.75, radius * 2.25, color));
 }
 
 function addHanger(group, id, radius, color) {
-  const rodAxis = UP.clone();
-  addCylinder(group, `${id}-hanger-rod`, Math.max(radius * 0.12, 0.8), radius * 6.1, rodAxis, new THREE.Vector3(0, radius * 3.55, 0), color);
+  addCylinder(group, `${id}-hanger-rod`, Math.max(radius * 0.065, 0.65), radius * 3.9, UP, new THREE.Vector3(0, radius * 1.95, 0), color);
   const ring = new THREE.Mesh(
-    new THREE.TorusGeometry(radius * 1.0, Math.max(radius * 0.07, 0.5), 10, 28),
+    new THREE.TorusGeometry(radius * 0.72, Math.max(radius * 0.045, 0.5), 10, 28),
     supportMaterial(color),
   );
   ring.name = `${id}-hanger-ring`;
-  ring.position.set(0, radius * 6.55, 0);
+  ring.position.set(0, radius * 4.05, 0);
   orientFromZ(ring, UP);
   group.add(ring);
+  addArrow(group, `${id}-hanger-load-axis`, UP.clone().negate(), radius * 0.8, radius * 1.1, color);
 }
 
 function addShoe(group, id, radius, color) {
-  addBox(group, `${id}-shoe-base`, new THREE.Vector3(radius * 3.5, radius * 0.45, radius * 2.4), new THREE.Vector3(0, -radius * 2.35, 0), color);
-  addCylinder(group, `${id}-shoe-post`, radius * 0.2, radius * 2.5, UP, new THREE.Vector3(0, -radius * 1.2, 0), color);
+  addBasePad(group, id, radius, color);
+  addBox(group, `${id}-shoe-base`, new THREE.Vector3(radius * 2.4, radius * 0.32, radius * 1.55), new THREE.Vector3(0, -radius * 1.52, 0), color);
+  addCylinder(group, `${id}-shoe-post`, radius * 0.14, radius * 1.7, UP, new THREE.Vector3(0, -radius * 0.75, 0), color);
 }
 
 export function enhanceSupportDirectionProxy(object, comp = {}, options = {}) {
@@ -219,7 +284,7 @@ export function enhanceSupportDirectionProxy(object, comp = {}, options = {}) {
     supportKind: kind,
     supportAxis: { x: axis.x, y: axis.y, z: axis.z },
     supportSymbolScale: radius,
-    glbShape: `support-directional-${kind.toLowerCase()}`,
+    glbShape: `support-reference-${kind.toLowerCase()}`,
   };
 
   if (kind === 'GUIDE') addGuideBars(markerGroup, id, axis, radius, color);
@@ -238,6 +303,7 @@ export function enhanceSupportDirectionProxy(object, comp = {}, options = {}) {
     supportSymbolScale: radius,
     directionalSupportEnhanced: true,
     directionalSupportSymbolCount: markerGroup.children.length,
+    supportReferenceStyle: true,
   };
   return object;
 }
