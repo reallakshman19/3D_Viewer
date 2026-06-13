@@ -3,8 +3,96 @@ import { buildPipeMesh } from './buildPipeMesh.js';
 import { getSupportKindMap } from '../../../core/settings.js';
 import { resolveKindPure, DEFAULT_RULES } from '../../../support/SupportKindResolver.js';
 
+const UP = new THREE.Vector3(0, 1, 0);
+const Z_AXIS = new THREE.Vector3(0, 0, 1);
+
+function vectorFromPoint(point) {
+  const x = Number(point?.x);
+  const y = Number(point?.y);
+  const z = Number(point?.z);
+  return [x, y, z].every(Number.isFinite) ? new THREE.Vector3(x, y, z) : null;
+}
+
+function endpointPair(comp) {
+  const p1 = vectorFromPoint(comp.ep1 || comp.centrePoint || comp.coOrds);
+  const p2 = vectorFromPoint(comp.ep2 || comp.branch1Point || comp.centrePoint || comp.coOrds);
+  return { p1, p2 };
+}
+
+function boreRadius(comp, scale = 1) {
+  return Math.max((Number(comp.bore) || Number(comp.ep1?.bore) || Number(comp.ep2?.bore) || 20) / 2 * scale, 0.5);
+}
+
+function componentUserData(comp, extra = {}) {
+  const attrs = { ...(comp.raw || {}), ...(comp.attributes || {}) };
+  return {
+    pcfType: comp.type,
+    pcfId: comp.id,
+    bore: comp.bore || null,
+    refNo: comp.refNo || attrs['COMPONENT-ATTRIBUTE97'] || '',
+    labelText: comp.label || comp.name || comp.refNo || attrs.SUPPORT_TAG || attrs.COMPONENT_IDENTIFIER || comp.id,
+    ...attrs,
+    ...extra,
+  };
+}
+
+function applyUserData(object, userData) {
+  if (!object) return object;
+  object.userData = userData;
+  if (object.children) object.traverse((child) => { child.userData = userData; });
+  return object;
+}
+
+function midpoint(a, b) {
+  return new THREE.Vector3().addVectors(a, b).multiplyScalar(0.5);
+}
+
+function safeAxis(a, b, fallback = Z_AXIS) {
+  const dir = new THREE.Vector3().subVectors(b, a);
+  return dir.length() < 0.01 ? fallback.clone() : dir.normalize();
+}
+
+function perpendicularAxis(axis) {
+  const basis = Math.abs(axis.dot(UP)) > 0.9 ? new THREE.Vector3(1, 0, 0) : UP;
+  const side = new THREE.Vector3().crossVectors(axis, basis);
+  return side.length() < 0.01 ? new THREE.Vector3(1, 0, 0) : side.normalize();
+}
+
+function orientFromY(object, direction) {
+  if (!object || !direction || direction.length() < 0.01) return;
+  object.quaternion.setFromUnitVectors(UP, direction.clone().normalize());
+}
+
+function orientFromZ(object, direction) {
+  if (!object || !direction || direction.length() < 0.01) return;
+  object.quaternion.setFromUnitVectors(Z_AXIS, direction.clone().normalize());
+}
+
+function cylinderBetween(start, end, radius, color, name = '') {
+  const dir = new THREE.Vector3().subVectors(end, start);
+  const length = dir.length();
+  if (length < 0.01) return null;
+  const geom = new THREE.CylinderGeometry(radius, radius, length, 24);
+  const mat = new THREE.MeshStandardMaterial({ color, roughness: 0.65, metalness: 0.05 });
+  const mesh = new THREE.Mesh(geom, mat);
+  mesh.position.copy(midpoint(start, end));
+  orientFromY(mesh, dir.normalize());
+  mesh.name = name;
+  return mesh;
+}
+
+function makeLabelAnchor(position, text, color = 0xffffff) {
+  const marker = new THREE.Mesh(
+    new THREE.SphereGeometry(1.8, 8, 8),
+    new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: 0.15 }),
+  );
+  marker.position.copy(position);
+  marker.name = `label:${text}`;
+  marker.userData = { labelText: text, labelAnchor: true };
+  return marker;
+}
+
 export function buildReducerMesh(comp) {
-  // Simplified reducer proxy
   if (!comp.ep1 || !comp.ep2) throw new Error(`Invalid reducer geometry for ${comp.id}`);
 
   const p1 = new THREE.Vector3(comp.ep1.x, comp.ep1.y, comp.ep1.z);
@@ -12,126 +100,206 @@ export function buildReducerMesh(comp) {
   const dir = new THREE.Vector3().subVectors(p2, p1);
   const length = dir.length();
 
-  const r1 = Math.max((comp.ep1.bore || 10) / 2, 0.5);
-  const r2 = Math.max((comp.ep2.bore || 10) / 2, 0.5);
+  const r1 = Math.max((comp.ep1.bore || comp.bore || 10) / 2, 0.5);
+  const r2 = Math.max((comp.ep2.bore || comp.bore || 10) / 2, 0.5);
 
-  const geom = new THREE.CylinderGeometry(r2, r1, length, 16);
-  const mat = new THREE.MeshStandardMaterial({ color: 0x5555aa });
+  const geom = new THREE.CylinderGeometry(r2, r1, length, 24);
+  const mat = new THREE.MeshStandardMaterial({ color: 0x5555aa, roughness: 0.65, metalness: 0.05 });
   const mesh = new THREE.Mesh(geom, mat);
 
-  const mid = new THREE.Vector3().addVectors(p1, p2).multiplyScalar(0.5);
-  mesh.position.copy(mid);
+  mesh.position.copy(midpoint(p1, p2));
+  orientFromY(mesh, dir.clone().normalize());
 
-  mesh.quaternion.setFromUnitVectors(
-    new THREE.Vector3(0, 1, 0),
-    dir.clone().normalize()
-  );
-
-  const rattrs = comp.attributes || {};
   mesh.name = comp.id;
-  mesh.userData = {
-    pcfType: comp.type,
-    pcfId: comp.id,
-    bore: comp.bore || null,
-    refNo: comp.refNo || rattrs['COMPONENT-ATTRIBUTE97'] || '',
-    ...rattrs,
-  };
-  return mesh;
+  return applyUserData(mesh, componentUserData(comp, { glbShape: 'reducer-taper' }));
 }
 
-export function buildGenericProxy(comp, color=0xcc5555) {
-  // Simplified generic box proxy at the strongest available anchor point.
+export function buildGenericProxy(comp, color = 0xcc5555) {
   const ptSrc = comp.centrePoint || comp.ep1 || comp.coOrds || comp.branch1Point || comp.ep2;
   const pt = ptSrc ? new THREE.Vector3(ptSrc.x, ptSrc.y, ptSrc.z) : new THREE.Vector3();
   const radius = Math.max((comp.bore || 20) / 2, 5);
 
   const geom = new THREE.BoxGeometry(radius * 3, radius * 3, radius * 3);
-  const mat = new THREE.MeshStandardMaterial({ color });
+  const mat = new THREE.MeshStandardMaterial({ color, roughness: 0.7 });
   const mesh = new THREE.Mesh(geom, mat);
 
   mesh.position.copy(pt);
   mesh.name = comp.id;
-  const gattrs = comp.attributes || {};
-  mesh.userData = {
-    pcfType: comp.type,
-    pcfId: comp.id,
-    bore: comp.bore || null,
-    refNo: comp.refNo || gattrs['COMPONENT-ATTRIBUTE97'] || '',
-    ...gattrs,
-  };
-  return mesh;
+  return applyUserData(mesh, componentUserData(comp, { glbShape: 'generic-proxy' }));
+}
+
+function buildElbowMesh(comp, color = 0xaa55aa) {
+  const { p1, p2 } = endpointPair(comp);
+  if (!p1 || !p2 || p1.distanceTo(p2) < 0.1) return buildGenericProxy(comp, color);
+
+  const radius = boreRadius(comp);
+  const axis = safeAxis(p1, p2);
+  const side = perpendicularAxis(axis);
+  const lift = Math.max(radius * 2.5, p1.distanceTo(p2) * 0.22);
+  const control = midpoint(p1, p2).add(side.multiplyScalar(lift));
+  const curve = new THREE.CatmullRomCurve3([p1, control, p2]);
+
+  const geom = new THREE.TubeGeometry(curve, 24, radius, 16, false);
+  const mat = new THREE.MeshStandardMaterial({ color, roughness: 0.62, metalness: 0.05 });
+  const mesh = new THREE.Mesh(geom, mat);
+  mesh.name = comp.id;
+  return applyUserData(mesh, componentUserData(comp, { glbShape: 'rounded-elbow-tube' }));
+}
+
+function buildTeeMesh(comp, color = 0x55aa55) {
+  const { p1, p2 } = endpointPair(comp);
+  if (!p1 || !p2 || p1.distanceTo(p2) < 0.1) return buildGenericProxy(comp, color);
+
+  const radius = boreRadius(comp);
+  const axis = safeAxis(p1, p2);
+  const center = midpoint(p1, p2);
+  const branchDir = vectorFromPoint(comp.branch1Point)
+    ? safeAxis(center, vectorFromPoint(comp.branch1Point), perpendicularAxis(axis))
+    : perpendicularAxis(axis);
+
+  const group = new THREE.Group();
+  group.name = comp.id;
+  const main = cylinderBetween(p1, p2, radius, color, `${comp.id}-main-run`);
+  const branchEnd = center.clone().add(branchDir.clone().multiplyScalar(Math.max(radius * 5, 20)));
+  const branch = cylinderBetween(center, branchEnd, radius * 0.75, color, `${comp.id}-branch`);
+  if (main) group.add(main);
+  if (branch) group.add(branch);
+
+  const collar = new THREE.Mesh(
+    new THREE.TorusGeometry(radius * 1.1, radius * 0.16, 8, 28),
+    new THREE.MeshStandardMaterial({ color: 0x338844, roughness: 0.65 }),
+  );
+  collar.position.copy(center);
+  orientFromZ(collar, branchDir);
+  collar.name = `${comp.id}-tee-collar`;
+  group.add(collar);
+
+  group.add(makeLabelAnchor(center.clone().add(branchDir.clone().multiplyScalar(radius * 2.4)), comp.id, 0x55aa55));
+  return applyUserData(group, componentUserData(comp, { glbShape: 'tee-branch-collar' }));
+}
+
+function buildFlangeMesh(comp, color = 0x888888) {
+  const { p1, p2 } = endpointPair(comp);
+  const radius = boreRadius(comp);
+  const center = p1 && p2 ? midpoint(p1, p2) : (p1 || p2 || new THREE.Vector3());
+  const axis = p1 && p2 ? safeAxis(p1, p2) : Z_AXIS.clone();
+  const thickness = Math.max(radius * 0.28, 2);
+  const spacing = Math.max(radius * 0.9, 6);
+
+  const group = new THREE.Group();
+  group.name = comp.id;
+
+  [-spacing, spacing].forEach((offset, idx) => {
+    const disc = new THREE.Mesh(
+      new THREE.CylinderGeometry(radius * 1.65, radius * 1.65, thickness, 32),
+      new THREE.MeshStandardMaterial({ color, roughness: 0.6, metalness: 0.2 }),
+    );
+    disc.position.copy(center.clone().add(axis.clone().multiplyScalar(offset)));
+    orientFromY(disc, axis);
+    disc.name = `${comp.id}-flange-ring-${idx + 1}`;
+    group.add(disc);
+  });
+
+  const neck = cylinderBetween(
+    center.clone().add(axis.clone().multiplyScalar(-spacing)),
+    center.clone().add(axis.clone().multiplyScalar(spacing)),
+    radius * 0.82,
+    0x777777,
+    `${comp.id}-flange-neck`,
+  );
+  if (neck) group.add(neck);
+  group.add(makeLabelAnchor(center.clone().add(UP.clone().multiplyScalar(radius * 2.2)), comp.id, 0xcccccc));
+  return applyUserData(group, componentUserData(comp, { glbShape: 'flange-ring-pair' }));
+}
+
+function buildValveMesh(comp, color = 0xcc2222) {
+  const { p1, p2 } = endpointPair(comp);
+  const radius = boreRadius(comp);
+  const center = p1 && p2 ? midpoint(p1, p2) : (p1 || p2 || new THREE.Vector3());
+  const axis = p1 && p2 ? safeAxis(p1, p2) : Z_AXIS.clone();
+  const length = p1 && p2 ? Math.max(p1.distanceTo(p2) * 0.55, radius * 4) : radius * 5;
+
+  const group = new THREE.Group();
+  group.name = comp.id;
+
+  const body = cylinderBetween(
+    center.clone().add(axis.clone().multiplyScalar(-length / 2)),
+    center.clone().add(axis.clone().multiplyScalar(length / 2)),
+    radius * 1.25,
+    color,
+    `${comp.id}-valve-body`,
+  );
+  if (body) group.add(body);
+
+  const bonnet = new THREE.Mesh(
+    new THREE.BoxGeometry(radius * 2.5, radius * 2.2, radius * 2.5),
+    new THREE.MeshStandardMaterial({ color: 0xaa2222, roughness: 0.65, metalness: 0.08 }),
+  );
+  bonnet.position.copy(center.clone().add(UP.clone().multiplyScalar(radius * 1.2)));
+  bonnet.name = `${comp.id}-valve-bonnet`;
+  group.add(bonnet);
+
+  const stem = cylinderBetween(
+    center.clone().add(UP.clone().multiplyScalar(radius * 2.1)),
+    center.clone().add(UP.clone().multiplyScalar(radius * 4.0)),
+    Math.max(radius * 0.13, 0.8),
+    0x444444,
+    `${comp.id}-valve-stem`,
+  );
+  if (stem) group.add(stem);
+
+  const wheel = new THREE.Mesh(
+    new THREE.TorusGeometry(radius * 0.95, Math.max(radius * 0.08, 0.6), 8, 32),
+    new THREE.MeshStandardMaterial({ color: 0x333333, roughness: 0.5, metalness: 0.25 }),
+  );
+  wheel.position.copy(center.clone().add(UP.clone().multiplyScalar(radius * 4.15)));
+  orientFromZ(wheel, UP);
+  wheel.name = `${comp.id}-valve-handwheel`;
+  group.add(wheel);
+
+  group.add(makeLabelAnchor(center.clone().add(UP.clone().multiplyScalar(radius * 5.1)), comp.id, 0xff5555));
+  return applyUserData(group, componentUserData(comp, { glbShape: 'valve-body-handwheel' }));
 }
 
 function buildOletProxy(comp, color = 0x55aa55) {
-  // Base is strictly centrePoint
-  const centre = comp.centrePoint || null;
-  const branch = comp.branch1Point || null;
+  const centre = comp.centrePoint || comp.ep1 || null;
+  const branch = comp.branch1Point || comp.ep2 || null;
 
-  if (!centre) {
-    return buildGenericProxy(comp, color);
-  }
+  if (!centre) return buildGenericProxy(comp, color);
 
   const c = new THREE.Vector3(centre.x, centre.y, centre.z);
+  const radius = boreRadius(comp);
 
   if (!branch) {
-    // Unresolved branch. Flag as unresolved using a distinct marker color.
-    const radius = Math.max((comp.bore || 20) / 2, 5);
     const cap = new THREE.Mesh(
-      new THREE.SphereGeometry(radius * 0.9, 12, 12),
-      new THREE.MeshStandardMaterial({ color: 0xff0000 })
+      new THREE.SphereGeometry(radius * 0.9, 16, 12),
+      new THREE.MeshStandardMaterial({ color: 0xff0000, roughness: 0.7 }),
     );
     cap.position.copy(c);
     cap.name = comp.id;
-    const gattrs = comp.attributes || {};
-    cap.userData = {
-      pcfType: comp.type,
-      pcfId: comp.id,
-      bore: comp.bore || null,
-      refNo: comp.refNo || gattrs['COMPONENT-ATTRIBUTE97'] || '',
-      ...gattrs,
-    };
-    return cap;
+    return applyUserData(cap, componentUserData(comp, { glbShape: 'olet-unresolved' }));
   }
-
 
   const b = new THREE.Vector3(branch.x, branch.y, branch.z);
   const dir = new THREE.Vector3().subVectors(b, c);
   const length = dir.length();
   if (length < 0.1) return buildGenericProxy(comp, color);
 
-  const radius = Math.max((comp.bore || 20) / 2, 5);
-  const leg = new THREE.Mesh(
-    new THREE.CylinderGeometry(radius * 0.45, radius * 0.45, length, 12),
-    new THREE.MeshStandardMaterial({ color })
-  );
-  leg.position.copy(new THREE.Vector3().addVectors(c, b).multiplyScalar(0.5));
-  leg.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir.clone().normalize());
-  leg.name = comp.id;
+  const group = new THREE.Group();
+  group.name = comp.id;
+  const leg = cylinderBetween(c, b, radius * 0.45, color, `${comp.id}-olet-branch`);
+  if (leg) group.add(leg);
 
   const cap = new THREE.Mesh(
-    new THREE.SphereGeometry(radius * 0.5, 12, 12),
-    new THREE.MeshStandardMaterial({ color })
+    new THREE.SphereGeometry(radius * 0.55, 16, 12),
+    new THREE.MeshStandardMaterial({ color, roughness: 0.65 }),
   );
   cap.position.copy(c);
-  cap.name = `${comp.id}-centre`;
-
-  const gattrs = comp.attributes || {};
-  const userData = {
-    pcfType: comp.type,
-    pcfId: comp.id,
-    bore: comp.bore || null,
-    refNo: comp.refNo || gattrs['COMPONENT-ATTRIBUTE97'] || '',
-    ...gattrs,
-  };
-  leg.userData = userData;
-  cap.userData = userData;
-
-  const group = new THREE.Group();
-  group.add(leg);
+  cap.name = `${comp.id}-olet-pad`;
   group.add(cap);
-  group.name = comp.id;
-  group.userData = userData;
-  return group;
+  group.add(makeLabelAnchor(c.clone().add(dir.clone().normalize().multiplyScalar(radius * 1.8)), comp.id, 0x55aa55));
+
+  return applyUserData(group, componentUserData(comp, { glbShape: 'olet-branch-pad' }));
 }
 
 // ─── Support Kind System ──────────────────────────────────────────────────────
@@ -141,17 +309,15 @@ function buildOletProxy(comp, color = 0x55aa55) {
 //
 // Colours:  REST=green  GUIDE=blue  LINESTOP/LIMIT=amber  ANCHOR=red  SPRING=orange
 
-// Per-kind hex colours
 const _KIND_COLOR = {
-  REST:     0x22c55e,   // green
-  GUIDE:    0x3b82f6,   // blue
-  LINESTOP: 0xf59e0b,   // amber
-  LIMIT:    0xf59e0b,   // amber (same — partial axial stop)
-  ANCHOR:   0xef4444,   // red
-  SPRING:   0xf97316,   // orange
+  REST:     0x22c55e,
+  GUIDE:    0x3b82f6,
+  LINESTOP: 0xf59e0b,
+  LIMIT:    0xf59e0b,
+  ANCHOR:   0xef4444,
+  SPRING:   0xf97316,
 };
 
-/** Collect all text fields from support attributes into one uppercase string */
 function _supportTextFromAttributes(attrs) {
   const src = attrs && typeof attrs === 'object' ? attrs : {};
   return [
@@ -164,12 +330,12 @@ function _supportTextFromAttributes(attrs) {
     src['SUPPORT-NAME'],
     src['<SUPPORT_NAME>'],
     src['COMPONENT-IDENTIFIER'],
+    src.COMPONENT_IDENTIFIER,
     src['COMPONENT-ATTRIBUTE1'],
     src['COMPONENT-ATTRIBUTE2'],
   ].map(v => String(v || '').toUpperCase()).join(' ');
 }
 
-/** Extract a cardinal/ordinal direction keyword from any text blob */
 function _supportDirectionFromText(text = '') {
   const t = String(text || '').toUpperCase();
   if (/\bNORTHEAST\b|\bNORTH-EAST\b|\bNE\b/.test(t)) return 'NORTHEAST';
@@ -196,7 +362,7 @@ function _axisFromSupportDirection(direction) {
   if (d === 'NORTHEAST') return new THREE.Vector3(1, 0, -1).normalize();
   if (d === 'NORTHWEST') return new THREE.Vector3(-1, 0, -1).normalize();
   if (d === 'SOUTHEAST') return new THREE.Vector3(1, 0, 1).normalize();
-  if (d === 'SOUTHWEST') return new THREE.Vector3(-1, 0, 1).normalize();
+  if (d === 'SOUTHWEST') return new THREE.Vector3(1, 0, 1).negate().normalize();
   return null;
 }
 
@@ -208,21 +374,18 @@ function _axisFromCosinesText(text = '') {
 }
 
 function _orientObjectFromY(object, direction) {
-  if (!object || !direction || direction.length() < 0.01) return;
-  object.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), direction.clone().normalize());
+  orientFromY(object, direction);
 }
 
 const _VALID_KINDS = new Set(['REST', 'GUIDE', 'LINESTOP', 'LIMIT', 'ANCHOR', 'SPRING']);
 
-/** Make one arrow cone mesh pointing along +Y (caller rotates it) */
 function _makeArrow(radius, color) {
   const h = radius * 3;
   const geo = new THREE.CylinderGeometry(0, radius, h, 16);
-  const mat = new THREE.MeshStandardMaterial({ color });
+  const mat = new THREE.MeshStandardMaterial({ color, roughness: 0.6 });
   return new THREE.Mesh(geo, mat);
 }
 
-/** Add an arrow along `axis` at offset `dist` from group centre */
 function _addArrow(group, axis, dist, radius, color) {
   const arrow = _makeArrow(radius, color);
   arrow.position.copy(axis).multiplyScalar(dist);
@@ -232,72 +395,60 @@ function _addArrow(group, axis, dist, radius, color) {
 }
 
 export function buildSupportProxy(comp) {
-  // Position: prefer CO-ORDS (support placement point), fall back to ep1
   const ptSrc = comp.coOrds || comp.ep1;
-  const pt    = ptSrc ? new THREE.Vector3(ptSrc.x, ptSrc.y, ptSrc.z) : new THREE.Vector3();
+  const pt = ptSrc ? new THREE.Vector3(ptSrc.x, ptSrc.y, ptSrc.z) : new THREE.Vector3();
   const radius = Math.max((comp.bore || 20) / 2, 5);
   const group = new THREE.Group();
   group.position.copy(pt);
 
-  // Merge raw + normalized attributes (raw first so normalized wins on conflict)
   const attrs = { ...(comp.raw || {}), ...(comp.attributes || {}) };
 
-  // ── Resolve kind via pure resolver (Config Tab kindMap + DEFAULT_RULES) ──
   const rawKind = resolveKindPure(attrs, {
-    userRules:    [],
-    kindMap:      getSupportKindMap(),
+    userRules: [],
+    kindMap: getSupportKindMap(),
     defaultRules: DEFAULT_RULES,
-    defaultKind:  'REST',
+    defaultKind: 'REST',
   });
-  const kind  = _VALID_KINDS.has(rawKind) ? rawKind : 'REST';
+  const kind = _VALID_KINDS.has(rawKind) ? rawKind : 'REST';
   const color = _KIND_COLOR[kind] ?? _KIND_COLOR.REST;
 
-  // ── Axis for arrow orientation (direction string needed for geometry) ─
   const supportText = _supportTextFromAttributes(attrs);
-  const direction   = _supportDirectionFromText(supportText);
+  const direction = _supportDirectionFromText(supportText);
   const supportAxis =
     _axisFromCosinesText(attrs.AXIS_COSINES || attrs['AXIS-COSINES'] || '') ||
     _axisFromSupportDirection(direction);
 
-  const arrowDist = radius + (radius * 3) / 2;   // half-height offset
+  const arrowDist = radius + (radius * 3) / 2;
 
   if (kind === 'REST') {
-    // ── REST: single arrow pointing from below (↓ toward pipe) ──────
     const axis = supportAxis || new THREE.Vector3(0, 1, 0);
     _addArrow(group, axis, -arrowDist, radius, color);
-
   } else if (kind === 'GUIDE') {
-    // ── GUIDE: vertical + 2 lateral arrows (↑ + ← →) ───────────────
     const vertAxis = new THREE.Vector3(0, 1, 0);
     _addArrow(group, vertAxis, -arrowDist, radius, color);
-
     const latAxis = (supportAxis && Math.abs(supportAxis.y) < 0.95)
       ? supportAxis.clone().normalize()
       : new THREE.Vector3(1, 0, 0);
-    _addArrow(group, latAxis,               -arrowDist, radius, color);
+    _addArrow(group, latAxis, -arrowDist, radius, color);
     _addArrow(group, latAxis.clone().negate(), -arrowDist, radius, color);
-
   } else if (kind === 'ANCHOR') {
-    // ── ANCHOR: 6 arrows pointing inward along ±X ±Y ±Z (all-fixed) ─
     const axes = [
-      new THREE.Vector3( 1,  0,  0),
-      new THREE.Vector3(-1,  0,  0),
-      new THREE.Vector3( 0,  1,  0),
-      new THREE.Vector3( 0, -1,  0),
-      new THREE.Vector3( 0,  0,  1),
-      new THREE.Vector3( 0,  0, -1),
+      new THREE.Vector3(1, 0, 0),
+      new THREE.Vector3(-1, 0, 0),
+      new THREE.Vector3(0, 1, 0),
+      new THREE.Vector3(0, -1, 0),
+      new THREE.Vector3(0, 0, 1),
+      new THREE.Vector3(0, 0, -1),
     ];
     axes.forEach(axis => _addArrow(group, axis, -arrowDist, radius, color));
-
   } else if (kind === 'SPRING') {
-    // ── SPRING: helix coil below the pipe ────────────────────────────
-    const coilTurns   = 4;
-    const coilHeight  = radius * 6;
-    const coilRadius  = radius * 0.7;
-    const segments    = 64;
-    const points      = [];
+    const coilTurns = 4;
+    const coilHeight = radius * 6;
+    const coilRadius = radius * 0.7;
+    const segments = 64;
+    const points = [];
     for (let i = 0; i <= segments; i++) {
-      const t     = i / segments;
+      const t = i / segments;
       const angle = t * Math.PI * 2 * coilTurns;
       points.push(new THREE.Vector3(
         Math.cos(angle) * coilRadius,
@@ -311,41 +462,29 @@ export function buildSupportProxy(comp) {
       radius * 0.12,
       8,
     );
-    const coilMat  = new THREE.MeshStandardMaterial({ color });
+    const coilMat = new THREE.MeshStandardMaterial({ color, roughness: 0.6 });
     group.add(new THREE.Mesh(coilGeo, coilMat));
-
   } else if (kind === 'LINESTOP' || kind === 'LIMIT') {
-    // ── LINESTOP / LIMIT: two opposing arrows along pipe-run axis ────
-    // Pipe axis: prefer explicit AXIS-COSINES, then support direction, default Z.
-    // Z is the most common horizontal pipe-run direction in PCF world-space.
     const pipeAxis = (supportAxis && Math.abs(supportAxis.y) < 0.95)
       ? supportAxis.clone().normalize()
       : new THREE.Vector3(0, 0, 1);
-    _addArrow(group, pipeAxis,               arrowDist, radius, color);
+    _addArrow(group, pipeAxis, arrowDist, radius, color);
     _addArrow(group, pipeAxis.clone().negate(), arrowDist, radius, color);
-
-    // LIMIT additionally shows a vertical rest arrow (partial axial + vertical load)
     if (kind === 'LIMIT') {
-      const restColor = _KIND_COLOR.REST;
-      _addArrow(group, new THREE.Vector3(0, 1, 0), -arrowDist, radius * 0.7, restColor);
+      _addArrow(group, new THREE.Vector3(0, 1, 0), -arrowDist, radius * 0.7, _KIND_COLOR.REST);
     }
   }
 
-  // ── Metadata ──────────────────────────────────────────────────────
-  group.name = comp.id;
-  const userData = {
-    pcfType: comp.type,
-    pcfId:   comp.id,
-    bore:    comp.bore || null,
-    refNo:   comp.refNo || attrs['COMPONENT-ATTRIBUTE97'] || '',
-    supportKind: kind,
-    ...attrs,
-  };
-  group.userData = userData;
-  // Propagate to children so raycasting returns full metadata
-  group.children.forEach(child => { child.userData = userData; });
+  const labelText = `${comp.refNo || attrs.SUPPORT_TAG || comp.id} ${kind}`.trim();
+  group.add(makeLabelAnchor(new THREE.Vector3(0, radius * 3.5, 0), labelText, color));
 
-  return group;
+  group.name = comp.id;
+  const userData = componentUserData(comp, {
+    supportKind: kind,
+    labelText,
+    glbShape: `support-${kind.toLowerCase()}`,
+  });
+  return applyUserData(group, userData);
 }
 
 export function buildComponentObject(comp, log) {
@@ -358,17 +497,17 @@ export function buildComponentObject(comp, log) {
       return buildReducerMesh(comp);
     case 'BEND':
     case 'ELBOW':
-      return buildGenericProxy(comp, 0xaa55aa);
+      return buildElbowMesh(comp, 0xaa55aa);
     case 'TEE':
+      return buildTeeMesh(comp, 0x55aa55);
     case 'OLET':
-      return comp.type === 'OLET' ? buildOletProxy(comp, 0x55aa55) : buildGenericProxy(comp, 0x55aa55);
+      return buildOletProxy(comp, 0x55aa55);
     case 'VALVE':
-      return buildGenericProxy(comp, 0xcc2222);
+      return buildValveMesh(comp, 0xcc2222);
     case 'FLANGE':
-      return buildGenericProxy(comp, 0x888888);
+      return buildFlangeMesh(comp, 0x888888);
     case 'SUPPORT':
       return buildSupportProxy(comp);
-    // Fittings / hardware — rendered as colour-coded generic proxies
     case 'CAP':
       return buildGenericProxy(comp, 0x777777);
     case 'COUPLING':
@@ -389,7 +528,6 @@ export function buildComponentObject(comp, log) {
       return buildGenericProxy(comp, 0xcc8833);
     case 'INSTRUMENT':
       return buildGenericProxy(comp, 0xddaa00);
-    // Annotation-only types — no geometry needed in GLB export
     case 'MESSAGE-SQUARE':
     case 'MESSAGE-CIRCLE':
       return null;

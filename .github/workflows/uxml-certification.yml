@@ -5,10 +5,13 @@ on:
     paths:
       - "viewer/uxml/**"
       - "viewer/converters/inputxml-dxf/**"
+      - "viewer/converters/inputxml-glb/**"
       - "viewer/tabs/model-converters-tab.js"
       - "viewer/tabs/model-converters/inputxml-dxf-branch-picker.js"
       - "viewer/tabs/model-converters/inputxml-dxf-symbol-option.js"
       - "viewer/tabs/model-converters/inputxml-dxf-projection-option.js"
+      - "viewer/tabs/model-converters/inputxml-glb-legacy-bridge.js"
+      - "viewer/tabs/model-converters/converters/inputxml-to-glb.js"
       - "viewer/vendor/dxf-lines.js"
       - "viewer/tests/uxml-*.test.js"
       - "viewer/tests/rvm-pcf-*.test.js"
@@ -17,19 +20,24 @@ on:
       - "viewer/tests/inputxml-dxf-symbol-option.test.js"
       - "viewer/tests/inputxml-dxf-projection-option.test.js"
       - "viewer/tests/inputxml-dxf-pipe-symbol-renderer.test.js"
+      - "viewer/tests/inputxml-glb-rich-model.test.js"
       - "tools/uxml-certification.mjs"
       - ".github/workflows/uxml-certification.yml"
       - "Benchmarks/RVM JSON to PCF UXML Topology/**"
+      - "Benchmarks/INPUT XML to CII 2019/**"
   push:
     branches:
       - main
     paths:
       - "viewer/uxml/**"
       - "viewer/converters/inputxml-dxf/**"
+      - "viewer/converters/inputxml-glb/**"
       - "viewer/tabs/model-converters-tab.js"
       - "viewer/tabs/model-converters/inputxml-dxf-branch-picker.js"
       - "viewer/tabs/model-converters/inputxml-dxf-symbol-option.js"
       - "viewer/tabs/model-converters/inputxml-dxf-projection-option.js"
+      - "viewer/tabs/model-converters/inputxml-glb-legacy-bridge.js"
+      - "viewer/tabs/model-converters/converters/inputxml-to-glb.js"
       - "viewer/vendor/dxf-lines.js"
       - "viewer/tests/uxml-*.test.js"
       - "viewer/tests/rvm-pcf-*.test.js"
@@ -38,9 +46,11 @@ on:
       - "viewer/tests/inputxml-dxf-symbol-option.test.js"
       - "viewer/tests/inputxml-dxf-projection-option.test.js"
       - "viewer/tests/inputxml-dxf-pipe-symbol-renderer.test.js"
+      - "viewer/tests/inputxml-glb-rich-model.test.js"
       - "tools/uxml-certification.mjs"
       - ".github/workflows/uxml-certification.yml"
       - "Benchmarks/RVM JSON to PCF UXML Topology/**"
+      - "Benchmarks/INPUT XML to CII 2019/**"
   workflow_dispatch:
 
 jobs:
@@ -93,6 +103,9 @@ jobs:
 
       - name: Run InputXML DXF pipe renderer certification
         run: node viewer/tests/inputxml-dxf-pipe-symbol-renderer.test.js
+
+      - name: Run InputXML GLB rich model certification
+        run: node viewer/tests/inputxml-glb-rich-model.test.js
 
       - name: Run UXML Vitest certification
         shell: bash
@@ -188,6 +201,7 @@ jobs:
             echo "| InputXML DXF symbol option certification | Completed above |"
             echo "| InputXML DXF projection option certification | Completed above |"
             echo "| InputXML DXF pipe renderer certification | Completed above |"
+            echo "| InputXML GLB rich model certification | Completed above |"
             echo "| Vitest UXML suite | Completed above |"
             echo ""
             echo "Expected when green:"

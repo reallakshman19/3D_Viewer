@@ -14,6 +14,7 @@ import { disposeScene } from './disposeRuntime.js';
 import { createAxisHelper } from './createAxisHelper.js';
 import { createDebugPanel } from './createDebugPanel.js';
 import { computeBoundingMeasurement } from '../pro-editor/core/measureUtils.js';
+import { installGlbLabelOverlay } from './glbLabelOverlay.js';
 
 export function createViewerApp(previewContainer, toolbarContainer, propPanel, propContent, debugLogsContainer) {
 
@@ -49,7 +50,7 @@ export function createViewerApp(previewContainer, toolbarContainer, propPanel, p
     domElement = renderData.domElement;
     disposeRenderer = renderData.dispose;
 
-    // CSS2D overlay for MESSAGE-CIRCLE labels
+    // CSS2D overlay for MESSAGE-CIRCLE labels and GLB metadata labels.
     css2dRenderer = new CSS2DRenderer();
     css2dRenderer.setSize(previewContainer.clientWidth, previewContainer.clientHeight);
     css2dRenderer.domElement.style.cssText = 'position:absolute;top:0;left:0;pointer-events:none;overflow:hidden;';
@@ -272,7 +273,9 @@ export function createViewerApp(previewContainer, toolbarContainer, propPanel, p
                 });
               });
 
+              const glbLabels = installGlbLabelOverlay(currentRoot, msgSquareGroup, { maxLabels: 300 });
               debugPanel.log('system', 'info', `Loaded scene with ${sceneIndex.items.length} indexed objects`);
+              if (glbLabels.length) debugPanel.log('system', 'info', `Loaded ${glbLabels.length} GLB labels from userData`);
 
               // Inform toolbar of available properties
               const propSet = new Set();
