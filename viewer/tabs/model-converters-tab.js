@@ -6,6 +6,7 @@ import { installInputXmlDxfSymbolOption } from './model-converters/inputxml-dxf-
 import { installInputXmlGlbLegacyBridge } from './model-converters/inputxml-glb-legacy-bridge.js';
 import { installXmlCiiPreviewLineKeyRemap } from './model-converters/xml-cii-preview-linekey-remap.js';
 import { installXmlCiiWorkflowUiFixes } from './model-converters/xml-cii-workflow-ui-fixes.js';
+import { installXmlCiiSideloadUi } from './model-converters/xml-cii-sideload-ui.js';
 import { installXmlCiiDefaultMasterAutoload, installXmlCiiRecoveryPatch } from './xml-cii-master-autoload-patch.js';
 
 export function renderModelConvertersTab(container, ctx) {
@@ -14,6 +15,7 @@ export function renderModelConvertersTab(container, ctx) {
   installXmlCiiRecoveryPatch();
   installXmlCiiPreviewLineKeyRemap();
   installXmlCiiWorkflowUiFixes();
+  installXmlCiiSideloadUi(container);
   installInputXmlDxfLegacyBridge(container);
   installInputXmlDxfBranchPicker(container);
   installInputXmlDxfSymbolOption(container);
