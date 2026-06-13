@@ -2,6 +2,7 @@ import { extractInputXmlBranches } from '../inputxml-dxf/InputXmlBranchExtractor
 import { buildExportScene } from '../../js/pcf2glb/glb/buildExportScene.js';
 import { exportSceneToGLB } from '../../js/pcf2glb/glb/exportSceneToGLB.js';
 import { applyInputXmlBendMetadata } from './InputXmlBendMetadata.js';
+import { applyInputXmlCaesarSupportMetadata } from './InputXmlCaesarSupportMetadata.js';
 import { adaptUxmlToGlbModel } from './UxmlToGlbModelAdapter.js';
 
 function text(value) {
@@ -71,7 +72,15 @@ export async function run(ctx = {}) {
 
     const bendMetadata = applyInputXmlBendMetadata(xmlText, extracted.doc);
     if (bendMetadata.bendTagCount) {
-      stdout.push(`InputXML bend tags: ${bendMetadata.bendTagCount}; radius values: ${bendMetadata.radiusCount}`);
+      stdout.push(`InputXML bend tags: ${bendMetadata.bendTagCount}; radius values: ${bendMetadata.radiusCount}; angle values: ${bendMetadata.angleCount}`);
+    }
+
+    const caesarSupportMetadata = applyInputXmlCaesarSupportMetadata(xmlText, extracted.doc, {
+      sourceId: 'inputxml-glb',
+    });
+    if (caesarSupportMetadata.supportTagCount) {
+      stdout.push(`InputXML CAESAR support/restraint tags: ${caesarSupportMetadata.supportTagCount}; expanded: ${caesarSupportMetadata.expandedSupportCount}`);
+      stdout.push(`InputXML CAESAR support kinds: ${JSON.stringify(caesarSupportMetadata.kindCounts)}`);
     }
 
     const { model, stats, diagnostics } = adaptUxmlToGlbModel(extracted.doc, ctx.options || {});
@@ -81,6 +90,9 @@ export async function run(ctx = {}) {
     stdout.push(`Component types: ${JSON.stringify(stats.typeCounts)}`);
     if (stats.bendRadiusCount) {
       stdout.push(`Bend radius metadata applied: ${stats.bendRadiusCount}`);
+    }
+    if (stats.suppressedFullBendCurveCount) {
+      stdout.push(`Suppressed oversized CAESAR bend curves: ${stats.suppressedFullBendCurveCount}`);
     }
     if (Object.keys(stats.supportKindCounts || {}).length) {
       stdout.push(`Support kinds: ${JSON.stringify(stats.supportKindCounts)}`);
@@ -108,6 +120,7 @@ export async function run(ctx = {}) {
           stats: {
             ...stats,
             bendMetadata,
+            caesarSupportMetadata,
           },
           diagnostics: [...(extracted.diagnostics || []), ...(diagnostics || [])],
         }, null, 2),
