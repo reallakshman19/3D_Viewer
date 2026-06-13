@@ -29,6 +29,17 @@ const REQUIRED_REST_PATTERN_TERMS = Object.freeze([
   'ANCI',
 ]);
 
+const REQUIRED_REST_FIELDS = Object.freeze([
+  'SPRE',
+  'SKEY',
+  'NAME',
+  'DESCRIPTION',
+  'DESC',
+  'CMPSUPTYPE',
+  'ComponentType',
+  'COMPONENTTYPE',
+]);
+
 const FIELD_SUGGESTIONS = [
   'CMPSUPTYPE',
   'MDSSUPPTYPE',
@@ -125,6 +136,7 @@ function _applyRequiredBuiltinGuards(candidate, baseRule) {
 
   return {
     ...candidate,
+    field: _mergeCommaTerms(candidate.field || baseRule.field, REQUIRED_REST_FIELDS),
     pattern: _mergeCommaTerms(candidate.pattern || baseRule.pattern, REQUIRED_REST_PATTERN_TERMS),
     match: 'contains',
     kind: 'REST',
@@ -177,6 +189,7 @@ export function updateBuiltinRule(id, patch) {
   const guardedPatch = baseRule.id === 'builtin-user-rest'
     ? {
         ...patch,
+        field: _mergeCommaTerms(patch?.field ?? baseRule.field, REQUIRED_REST_FIELDS),
         pattern: _mergeCommaTerms(patch?.pattern ?? baseRule.pattern, REQUIRED_REST_PATTERN_TERMS),
         match: 'contains',
         kind: 'REST',
