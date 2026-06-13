@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { buildComponentObject } from './buildComponentObject.js';
 import { buildNodeLabelObject } from './buildNodeLabelObject.js';
+import { enhanceLocalizedBendProxy } from './enhanceLocalizedBendProxy.js';
 import { enhanceSupportDirectionProxy } from './enhanceSupportDirectionProxy.js';
 import { enhanceTeeBodyProxy } from './enhanceTeeBodyProxy.js';
 
@@ -17,6 +18,7 @@ export function buildExportScene(model, log) {
         : buildComponentObject(comp, log);
       if (obj && comp.type === 'TEE') obj = enhanceTeeBodyProxy(obj, comp);
       if (obj && comp.type === 'SUPPORT') obj = enhanceSupportDirectionProxy(obj, comp);
+      if (obj) obj = enhanceLocalizedBendProxy(obj, comp);
       if (obj) root.add(obj);
     } catch (err) {
       if (log) {
