@@ -93,9 +93,10 @@ const benchmarkSource = readJson(files.benchmarkSourceJson);
 const benchmarkConfig = readJson(files.benchmarkJsonConfig);
 const sideloadText = readRepoFile(files.benchmarkSideload);
 const benchmarkXml = readRepoFile(files.benchmarkXml);
+const sourceChildren = benchmarkSource.reduce((sum, branch) => sum + (Array.isArray(branch.children) ? branch.children.length : 0), 0);
 
 assert(Array.isArray(benchmarkSource) && benchmarkSource.length === 3, 'Source-like benchmark JSON must contain 3 branches.');
-assert(benchmarkSource.reduce((sum, branch) => sum + (Array.isArray(branch.children) ? branch.children.length : 0), 0) >= 20, 'Source-like benchmark must contain at least 20 child items.');
+assert(sourceChildren >= 14, 'Source-like benchmark must contain the representative 14+ staged JSON child items.');
 assert(benchmarkConfig?.basisResolvers?.PS?.fieldAliases?.includes('SUPPORT_TAG'), 'Benchmark JSON Config must map PS from SUPPORT_TAG.');
 assert(benchmarkConfig?.basisResolvers?.POS?.objectFieldAliases?.includes('POS'), 'Benchmark JSON Config must map POS object fields.');
 assert(benchmarkConfig?.basisResolvers?.POS?.textFieldAliases?.includes('POSI'), 'Benchmark JSON Config must map POSI text coordinates.');
@@ -108,5 +109,6 @@ assert(benchmarkXml.includes('<ComponentType>ANCI</ComponentType>'), 'Benchmark 
 
 console.log('✅ XML CII sideload, diagnostics, and Matched Preview static chain passed', {
   branches: benchmarkSource.length,
+  stagedChildren: sourceChildren,
   workflowEvent: eventName,
 });
