@@ -1,0 +1,69 @@
+name: XML CII Sideload Tests
+
+on:
+  pull_request:
+    paths:
+      - 'viewer/converters/xml-cii2019-core/**'
+      - 'viewer/tabs/model-converters/**'
+      - 'viewer/tabs/model-converters-tab.js'
+      - 'Benchmarks/XML-CII-2019/sideload/**'
+      - 'scripts/test-xml-cii-*.mjs'
+      - 'scripts/test-xml-cii-workflow-*.mjs'
+      - '.github/workflows/xml-cii-sideload-tests.yml'
+  push:
+    branches:
+      - main
+    paths:
+      - 'viewer/converters/xml-cii2019-core/**'
+      - 'viewer/tabs/model-converters/**'
+      - 'viewer/tabs/model-converters-tab.js'
+      - 'Benchmarks/XML-CII-2019/sideload/**'
+      - 'scripts/test-xml-cii-*.mjs'
+      - 'scripts/test-xml-cii-workflow-*.mjs'
+      - '.github/workflows/xml-cii-sideload-tests.yml'
+  workflow_dispatch:
+
+jobs:
+  xml-cii-sideload-tests:
+    name: XML CII sideload/workflow regression
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: JSON config aliases
+        run: node scripts/test-xml-cii-json-config.mjs
+
+      - name: Sideload benchmark
+        run: node scripts/test-xml-cii-sideload-benchmark.mjs
+
+      - name: Matched preview publish contract
+        run: node scripts/test-xml-cii-matched-preview-publish.mjs
+
+      - name: Sideload preview chain
+        run: node scripts/test-xml-cii-sideload-preview-chain.mjs
+
+      - name: Workflow popup shell
+        run: node scripts/test-xml-cii-conversion-workflow-popup.mjs
+
+      - name: Workflow model-data nesting
+        run: node scripts/test-xml-cii-workflow-model-data-nesting.mjs
+
+      - name: Workflow process nesting
+        run: node scripts/test-xml-cii-workflow-process-nesting.mjs
+
+      - name: Workflow audit/output nesting
+        run: node scripts/test-xml-cii-workflow-audit-output-nesting.mjs
+
+      - name: Workflow polish
+        run: node scripts/test-xml-cii-workflow-polish.mjs
+
+      - name: Aggregate runner sanity
+        run: node scripts/test-xml-cii-all.mjs
