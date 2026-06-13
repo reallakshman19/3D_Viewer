@@ -99,10 +99,6 @@ function orientFromY(object, direction) {
   object.quaternion.setFromUnitVectors(UP, direction.clone().normalize());
 }
 
-function orientFromZ(object, direction) {
-  object.quaternion.setFromUnitVectors(Z_AXIS, direction.clone().normalize());
-}
-
 function supportMaterial(color) {
   return new THREE.MeshStandardMaterial({
     color,
@@ -139,25 +135,27 @@ function addCone(group, name, coneRadius, height, axis, position, color) {
   return cone;
 }
 
+function addRing(group, name, radius, tubeRadius, position, color) {
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(radius, tubeRadius, 12, 36), supportMaterial(color));
+  ring.name = name;
+  ring.position.copy(position);
+  ring.rotation.x = Math.PI / 2;
+  group.add(ring);
+  return ring;
+}
+
 function addArrowBetween(group, name, start, end, radius, color) {
   const dir = new THREE.Vector3().subVectors(end, start);
   const length = dir.length();
   if (length < 0.01) return null;
   const axis = dir.normalize();
   const headLength = Math.min(radius * 0.72, length * 0.42);
-  const shaftLength = Math.max(length - headLength, radius * 0.2);
   const shaftStart = start.clone();
   const shaftEnd = end.clone().add(axis.clone().multiplyScalar(-headLength));
   const shaftCenter = new THREE.Vector3().addVectors(shaftStart, shaftEnd).multiplyScalar(0.5);
   addCylinder(group, `${name}-shaft`, Math.max(radius * 0.055, 0.65), Math.max(shaftStart.distanceTo(shaftEnd), 0.01), axis, shaftCenter, color);
   const headCenter = end.clone().add(axis.clone().multiplyScalar(-headLength / 2));
   return addCone(group, name, radius * 0.28, headLength, axis, headCenter, color);
-}
-
-function addAxisArrowPair(group, id, axis, radius, color, label) {
-  const a = axis.clone().normalize();
-  addArrowBetween(group, `${id}-${label}-positive`, a.clone().multiplyScalar(radius * 2.35), a.clone().multiplyScalar(radius * 0.35), radius, color);
-  addArrowBetween(group, `${id}-${label}-negative`, a.clone().multiplyScalar(-radius * 2.35), a.clone().multiplyScalar(-radius * 0.35), radius, color);
 }
 
 function addBasePadAt(group, id, radius, color, y) {
@@ -206,51 +204,48 @@ function hideExistingProxyMeshes(object, markerGroupName) {
   return hidden;
 }
 
-// REST: single upward arrow from base pad to exactly the pipe bottom.
-// The arrow tip touches the pipe bottom surface; the base pad sits below.
 function addRestBase(group, id, axis, radius, color, pipeRadius) {
   const pipeBottomY = -pipeRadius;
   const baseY = pipeBottomY - radius * 1.65;
   addBasePadAt(group, id, radius, color, baseY);
-  addArrowBetween(group, `${id}-rest-arrow`,
+  addBox(group, `${id}-rest-base`, new THREE.Vector3(radius * 1.7, radius * 0.22, radius * 1.7), new THREE.Vector3(0, baseY + radius * 0.22, 0), color);
+  addPostBetween(group, id, radius, color, baseY + radius * 0.34, pipeBottomY - radius * 0.1);
+  addArrowBetween(group, `${id}-rest-axis`,
     new THREE.Vector3(0, baseY + radius * 0.14, 0),
     new THREE.Vector3(0, pipeBottomY, 0),
     radius, color);
 }
 
-// GUIDE: same vertical arrow as REST + two inward lateral arrows showing
-// the constrained-lateral-movement direction (perpendicular to pipe axis).
 function addGuideBars(group, id, axis, radius, color, pipeRadius) {
   const a = axis.clone().normalize();
-  // Vertical REST arrow (same as REST)
   addRestBase(group, id, a, radius, color, pipeRadius);
 
-  // Lateral guide arrows: perpendicular to pipe axis, pointing inward
-  // These represent the guide bars clamping the pipe from sideways motion.
   const side = perpendicular(a);
   const outerDist = pipeRadius + radius * 2.1;
   const innerDist = pipeRadius + radius * 0.28;
-  addArrowBetween(group, `${id}-guide-lateral-pos`,
+  addBox(group, `${id}-guide-bar-positive`, new THREE.Vector3(radius * 0.22, radius * 1.25, radius * 0.22), side.clone().multiplyScalar(innerDist), color);
+  addBox(group, `${id}-guide-bar-negative`, new THREE.Vector3(radius * 0.22, radius * 1.25, radius * 0.22), side.clone().multiplyScalar(-innerDist), color);
+  addArrowBetween(group, `${id}-guide-axis-positive`,
     side.clone().multiplyScalar(outerDist),
     side.clone().multiplyScalar(innerDist),
     radius * 0.60, color);
-  addArrowBetween(group, `${id}-guide-lateral-neg`,
+  addArrowBetween(group, `${id}-guide-axis-negative`,
     side.clone().multiplyScalar(-outerDist),
     side.clone().multiplyScalar(-innerDist),
     radius * 0.60, color);
 }
 
-// LINESTOP: two opposing arrows along the pipe axis pointing toward the pipe
-// centre — no vertical base, represents axial movement restraint only.
 function addLineStop(group, id, axis, radius, color, pipeRadius) {
   const a = axis.clone().normalize();
   const outerDist = pipeRadius + radius * 2.1;
   const innerDist = pipeRadius + radius * 0.2;
-  addArrowBetween(group, `${id}-linestop-pos`,
+  addPlate(group, `${id}-linestop-plate-positive`, a, radius, color, innerDist / radius);
+  addPlate(group, `${id}-linestop-plate-negative`, a.clone().negate(), radius, color, innerDist / radius);
+  addArrowBetween(group, `${id}-linestop-axis-positive`,
     a.clone().multiplyScalar(outerDist),
     a.clone().multiplyScalar(innerDist),
     radius, color);
-  addArrowBetween(group, `${id}-linestop-neg`,
+  addArrowBetween(group, `${id}-linestop-axis-negative`,
     a.clone().multiplyScalar(-outerDist),
     a.clone().multiplyScalar(-innerDist),
     radius, color);
@@ -273,18 +268,16 @@ function addAnchor(group, id, radius, color, pipeRadius) {
   ].forEach((axis, index) => addArrowBetween(group, `${id}-anchor-axis-${index + 1}`, new THREE.Vector3(), axis.clone().multiplyScalar(radius * 2.15), radius * 0.75, color));
 }
 
-// HANGER: rod from an attachment platform above, running vertically down to
-// the top surface of the pipe.  Arrow shows downward load direction.
 function addHanger(group, id, radius, color, pipeRadius) {
-  const pipeTopY = pipeRadius;             // Top of pipe
-  const topY = pipeTopY + radius * 3.2;   // Attachment point above
+  const pipeTopY = pipeRadius;
+  const topY = pipeTopY + radius * 3.2;
 
-  // Horizontal attachment plate at top
   addBox(group, `${id}-hanger-top-plate`,
     new THREE.Vector3(radius * 2.6, radius * 0.22, radius * 2.6),
     new THREE.Vector3(0, topY, 0), color);
 
-  // Thin vertical rod from plate down to pipe top
+  addRing(group, `${id}-hanger-ring`, radius * 0.42, Math.max(radius * 0.045, 0.5), new THREE.Vector3(0, topY - radius * 0.55, 0), color);
+
   addCylinder(group, `${id}-hanger-rod`,
     Math.max(radius * 0.065, 0.85),
     topY - pipeTopY,
@@ -292,8 +285,7 @@ function addHanger(group, id, radius, color, pipeRadius) {
     new THREE.Vector3(0, (topY + pipeTopY) / 2, 0),
     color);
 
-  // Downward arrow from just below plate to pipe top surface
-  addArrowBetween(group, `${id}-hanger-load`,
+  addArrowBetween(group, `${id}-hanger-load-axis`,
     new THREE.Vector3(0, topY - radius * 0.18, 0),
     new THREE.Vector3(0, pipeTopY, 0),
     radius * 0.78, color);
@@ -337,7 +329,7 @@ export function enhanceSupportDirectionProxy(object, comp = {}, options = {}) {
   else if (kind === 'ANCHOR') addAnchor(markerGroup, id, radius, color, pipeRadius);
   else if (kind === 'SPRING' || kind === 'HANGER') addHanger(markerGroup, id, radius, color, pipeRadius);
   else if (kind === 'SHOE') addShoe(markerGroup, id, radius, color, pipeRadius);
-  else addRestBase(markerGroup, id, UP, radius, color, pipeRadius); // REST always uses vertical UP arrow
+  else addRestBase(markerGroup, id, UP, radius, color, pipeRadius);
 
   object.add(markerGroup);
   object.userData = {
