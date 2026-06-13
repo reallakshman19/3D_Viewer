@@ -85,7 +85,17 @@ function recolorMesh(object) {
 }
 
 export function applyEngineeringPalette(root, options = {}) {
-  if (!root || options.colorMode === 'debug') return { recolored: 0, colorMode: 'debug' };
+  if (!root) return { recolored: 0, colorMode: 'none' };
+
+  if (options.colorMode === 'debug') {
+    root.userData = {
+      ...(root.userData || {}),
+      colorMode: 'debug',
+      engineeringPaletteApplied: false,
+      engineeringPaletteMeshCount: 0,
+    };
+    return { recolored: 0, colorMode: 'debug' };
+  }
 
   let recolored = 0;
   root.traverse?.((object) => {
