@@ -1,6 +1,7 @@
 import { extractInputXmlBranches } from '../inputxml-dxf/InputXmlBranchExtractor.js';
 import { buildExportScene } from '../../js/pcf2glb/glb/buildExportScene.js';
 import { exportSceneToGLB } from '../../js/pcf2glb/glb/exportSceneToGLB.js';
+import { applyInputXmlBendMetadata } from './InputXmlBendMetadata.js';
 import { adaptUxmlToGlbModel } from './UxmlToGlbModelAdapter.js';
 
 function text(value) {
@@ -68,11 +69,19 @@ export async function run(ctx = {}) {
     });
     if (!extracted.ok) throw new Error('Input XML could not be mapped to UXML geometry.');
 
+    const bendMetadata = applyInputXmlBendMetadata(xmlText, extracted.doc);
+    if (bendMetadata.bendTagCount) {
+      stdout.push(`InputXML bend tags: ${bendMetadata.bendTagCount}; radius values: ${bendMetadata.radiusCount}`);
+    }
+
     const { model, stats, diagnostics } = adaptUxmlToGlbModel(extracted.doc, ctx.options || {});
     if (!model.components.length) throw new Error('No drawable Input XML components were found for GLB export.');
 
     stdout.push(`InputXML→GLB components: ${stats.componentCount}`);
     stdout.push(`Component types: ${JSON.stringify(stats.typeCounts)}`);
+    if (stats.bendRadiusCount) {
+      stdout.push(`Bend radius metadata applied: ${stats.bendRadiusCount}`);
+    }
     if (Object.keys(stats.supportKindCounts || {}).length) {
       stdout.push(`Support kinds: ${JSON.stringify(stats.supportKindCounts)}`);
     }
@@ -96,7 +105,10 @@ export async function run(ctx = {}) {
           schema: 'inputxml-glb-sidecar/v1',
           source: sourceName,
           branches: extracted.branches,
-          stats,
+          stats: {
+            ...stats,
+            bendMetadata,
+          },
           diagnostics: [...(extracted.diagnostics || []), ...(diagnostics || [])],
         }, null, 2),
         mime: 'application/json',
