@@ -49,6 +49,11 @@ function child(object, name) {
   return found;
 }
 
+function noChild(object, name) {
+  const found = object.getObjectByName(name);
+  assert.equal(found, undefined, `${object.name} should not contain ${name}`);
+}
+
 function referenceBase(object, id) {
   child(object, `${id}-directional-symbols`);
   child(object, `${id}-reference-base-pad`);
@@ -56,18 +61,19 @@ function referenceBase(object, id) {
 
 const guide = supportObject(support('GUIDE-X', 'GUIDE', { x: 1, y: 0, z: 0 }));
 referenceBase(guide, 'GUIDE-X');
-child(guide, 'GUIDE-X-reference-post');
+child(guide, 'GUIDE-X-guide-base');
+child(guide, 'GUIDE-X-guide-reference-post');
 child(guide, 'GUIDE-X-guide-bar-positive');
 child(guide, 'GUIDE-X-guide-bar-negative');
 child(guide, 'GUIDE-X-guide-axis-positive');
 child(guide, 'GUIDE-X-guide-axis-positive-shaft');
 child(guide, 'GUIDE-X-guide-axis-negative');
+noChild(guide, 'GUIDE-X-rest-axis');
+noChild(guide, 'GUIDE-X-guide-rest-axis');
 assert.equal(guide.userData.supportKind, 'GUIDE');
 assert.deepEqual(guide.userData.supportAxis, { x: 1, y: 0, z: 0 });
 
 const lineStop = supportObject(support('LS-Z', 'LINESTOP', { x: 0, y: 0, z: 1 }));
-referenceBase(lineStop, 'LS-Z');
-child(lineStop, 'LS-Z-reference-post');
 child(lineStop, 'LS-Z-linestop-plate-positive');
 child(lineStop, 'LS-Z-linestop-plate-negative');
 child(lineStop, 'LS-Z-linestop-axis-positive');
@@ -109,5 +115,6 @@ assert.equal(rest.userData.supportKind, 'REST');
 const largeGuide = supportObject(support('GUIDE-LARGE', 'GUIDE', { x: 1, y: 0, z: 0 }, { component: { bore: 300 } }));
 assert.ok(largeGuide.userData.supportSymbolScale > guide.userData.supportSymbolScale);
 child(largeGuide, 'GUIDE-LARGE-reference-base-pad');
+noChild(largeGuide, 'GUIDE-LARGE-rest-axis');
 
 console.log('inputxml-glb-directional-restraints.test.js passed');
