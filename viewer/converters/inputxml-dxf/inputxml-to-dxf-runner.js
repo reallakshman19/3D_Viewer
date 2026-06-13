@@ -63,20 +63,25 @@ export async function run(ctx = {}) {
     }
 
     setStatus('Projecting selected branches…');
-    const geometry = projectToDxfGeometry(extraction.doc, { selectedBranches: options.selectedBranches || '' });
+    const geometry = projectToDxfGeometry(extraction.doc, {
+      ...options,
+      selectedBranches: options.selectedBranches || '',
+    });
 
     setStatus('Writing DXF…');
     const diagnostics = [...(extraction.diagnostics || []), ...(geometry.diagnostics || [])];
+    const writerOptions = {
+      ...options,
+      showSegmentLabels: options.showSegmentLabels === true || options.exportLengthText === true,
+      sourceName: primary?.name || '',
+      selectedBranchIds: geometry.selectedBranchIds,
+    };
     const { dxf, sidecar } = writeInputXmlDxf({
       segments: geometry.segments,
       supports: geometry.supports,
       branches: extraction.branches,
       diagnostics,
-    }, {
-      ...options,
-      sourceName: primary?.name || '',
-      selectedBranchIds: geometry.selectedBranchIds,
-    });
+    }, writerOptions);
 
     const base = stem(primary?.name);
     const outputs = [{ name: `${base}.dxf`, text: dxf, mime: 'application/dxf;charset=utf-8' }];
@@ -94,6 +99,7 @@ export async function run(ctx = {}) {
     stdout.push(`Pipe body mode: ${sidecar.pipeBodyMode}`);
     stdout.push(`Pipe bodies: ${sidecar.pipeBodyCount}`);
     stdout.push(`Support types: ${JSON.stringify(sidecar.supportTypeCounts || {})}`);
+    if (options.exportLengthText === true) stdout.push('Length text: enabled');
     if (sidecar.drawing?.sheet) {
       stdout.push(`Drawing sheet: ${sidecar.drawing.sheet.width} x ${sidecar.drawing.sheet.height}, fitScale=${sidecar.drawing.fitScale}`);
     }
