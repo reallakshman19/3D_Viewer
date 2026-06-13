@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
+import * as THREE from 'three';
 
+import { applyGlbSupportSymbols } from '../js/pcf2glb/advanced/applyGlbSupportSymbols.js';
 import { buildExportScene } from '../js/pcf2glb/glb/buildExportScene.js';
 
 function support(id, kind, axis = { x: 1, y: 0, z: 0 }, extra = {}) {
@@ -116,5 +118,27 @@ const largeGuide = supportObject(support('GUIDE-LARGE', 'GUIDE', { x: 1, y: 0, z
 assert.ok(largeGuide.userData.supportSymbolScale > guide.userData.supportSymbolScale);
 child(largeGuide, 'GUIDE-LARGE-reference-base-pad');
 noChild(largeGuide, 'GUIDE-LARGE-rest-axis');
+
+const runtimeRoot = new THREE.Group();
+const runtimeGuide = new THREE.Object3D();
+runtimeGuide.name = 'RUNTIME-GUIDE';
+runtimeGuide.userData = {
+  supportKind: 'GUIDE',
+  supportAxis: { x: 1, y: 0, z: 0 },
+};
+runtimeRoot.add(runtimeGuide);
+const runtimeScene = new THREE.Scene();
+runtimeScene.add(runtimeRoot);
+const runtimeStats = applyGlbSupportSymbols(runtimeRoot, runtimeScene, { scaleMultiplier: 1 });
+assert.equal(runtimeStats.created, 1);
+
+const runtimeSymbols = runtimeScene.getObjectByName('__GLB_SUPPORT_SYMBOLS_V3__');
+assert.ok(runtimeSymbols, 'runtime support symbols root should be created');
+const runtimeRoles = [];
+runtimeSymbols.traverse((object) => {
+  if (object.userData?.glbSupportSymbolRole) runtimeRoles.push(object.userData.glbSupportSymbolRole);
+});
+assert.equal(runtimeRoles.filter((role) => role === 'rest-axis').length, 0, 'runtime GUIDE must not emit a REST upward arrow');
+assert.equal(runtimeRoles.filter((role) => role === 'guide-axis').length, 2, 'runtime GUIDE should emit two lateral guide arrows');
 
 console.log('inputxml-glb-directional-restraints.test.js passed');

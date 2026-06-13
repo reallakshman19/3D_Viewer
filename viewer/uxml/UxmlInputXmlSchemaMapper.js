@@ -196,6 +196,28 @@ function attrValue(attrs, ...names) {
   return '';
 }
 
+function lineNoFromAttributes(attrs) {
+  return attrValue(
+    attrs,
+    'LineNo',
+    'LINE_NO',
+    'LINENO',
+    'LineNumber',
+    'LINE_NUMBER',
+    'Pipeline',
+    'PipeLine',
+    'PipelineRef',
+    'PIPELINE_REF',
+    'BranchName',
+    'BRANCH_NAME',
+    'LineName',
+    'LINE_NAME',
+    'JOBNAME',
+    'NAME',
+    'ID'
+  );
+}
+
 function parseAttrs(attrText = '') {
   const attrs = {};
   const re = /([A-Za-z_:][\w:.-]*)\s*=\s*("([^"]*)"|'([^']*)')/g;
@@ -736,7 +758,7 @@ function extractComponentPoints(tag, nodeMap) {
   };
 }
 
-function addAnchorPort(doc, component, role, point, sourceField, connectsTo = 'ENDPOINT') {
+function addAnchorPort(doc, component, role, point, sourceField, connectsTo = 'ENDPOINT', metadata = {}) {
   if (!point) return null;
 
   const anchorId = `IX-A-${component.id}-${role}`;
@@ -752,6 +774,8 @@ function addAnchorPort(doc, component, role, point, sourceField, connectsTo = 'E
     componentId: component.id,
     role,
     point,
+    nodeNumber: clean(metadata.nodeNumber),
+    nodeLabel: clean(metadata.nodeLabel || metadata.nodeNumber),
     sourceField,
     confidence: CONFIDENCE_LEVELS.ALIASED_SOURCE,
   });
@@ -912,7 +936,7 @@ function componentTypeFromCaesarSifs(tag) {
   return '';
 }
 
-function caesarPipingElementComponent(tag, index, sourceId, pipelineId, pipelineRef, bore, options = {}) {
+function caesarPipingElementComponent(tag, index, sourceId, pipelineId, pipelineRef, lineNo, bore, options = {}) {
   const attrs = tag.attrs || {};
   const normalizedType = componentTypeFromPipingElement(tag, options);
   const sifTypes = findChildElements(tag.inner || '', CAESAR_SIF_TAGS)
@@ -924,6 +948,7 @@ function caesarPipingElementComponent(tag, index, sourceId, pipelineId, pipeline
     sourceTagName: 'PIPINGELEMENT',
     sourceIndex: String(index + 1),
     pipelineRef,
+    lineNo,
     resolvedDiameter: bore == null ? '' : String(bore),
     hasBend: String(findElements(tag.inner || '', 'BEND').length > 0),
     hasRigid: String(findElements(tag.inner || '', 'RIGID').length > 0),
@@ -937,7 +962,8 @@ function caesarPipingElementComponent(tag, index, sourceId, pipelineId, pipeline
     type: normalizedType,
     normalizedType,
     pipelineRef,
-    lineKey: pipelineRef,
+    lineKey: lineNo || pipelineRef,
+    lineNo,
     pipelineId,
     refNo: attrValue(attrs, 'REF_NO', 'REFNO', 'refNo', 'ref'),
     seqNo: attrValue(attrs, 'SEQ_NO', 'SEQNO', 'seqNo', 'number'),
@@ -1186,10 +1212,9 @@ function solveCaesarNodeCoordinates(edges) {
 
 function mapCaesarPipingElements(doc, text, sourceId, options = {}) {
   const pipingModelAttrs = firstElementAttrs(text, 'PIPINGMODEL');
-  const pipelineRef =
-    attrValue(pipingModelAttrs, 'LINE_NO', 'LINENO', 'JOBNAME', 'NAME', 'ID') ||
-    'CAESAR-INPUTXML';
-  const pipelineId = ensurePipeline(doc, pipelineRef, pipelineRef, pipingModelAttrs);
+  const lineNo = lineNoFromAttributes(pipingModelAttrs);
+  const pipelineRef = lineNo || 'CAESAR-INPUTXML';
+  const pipelineId = ensurePipeline(doc, pipelineRef, lineNo || pipelineRef, pipingModelAttrs);
   const tags = findElements(text, 'PIPINGELEMENT');
   let inheritedDiameter = null;
   let inheritedDiameterCount = 0;
@@ -1241,17 +1266,17 @@ function mapCaesarPipingElements(doc, text, sourceId, options = {}) {
       z: from.z + edge.dz,
     };
 
-    const component = caesarPipingElementComponent(tag, index, sourceId, pipelineId, pipelineRef, bore, {
+    const component = caesarPipingElementComponent(tag, index, sourceId, pipelineId, pipelineRef, lineNo || pipelineRef, bore, {
       schema1001Detected,
     });
 
     if ([COMPONENT_TYPES.OLET, COMPONENT_TYPES.WELDOLET, COMPONENT_TYPES.SOCKOLET].includes(component.normalizedType)) {
-      addAnchorPort(doc, component, ANCHOR_ROLES.CP, from, 'PIPINGELEMENT:FROM_NODE');
-      addAnchorPort(doc, component, ANCHOR_ROLES.BP, to, 'PIPINGELEMENT:TO_NODE');
+      addAnchorPort(doc, component, ANCHOR_ROLES.CP, from, 'PIPINGELEMENT:FROM_NODE', 'ENDPOINT', { nodeNumber: fromNode });
+      addAnchorPort(doc, component, ANCHOR_ROLES.BP, to, 'PIPINGELEMENT:TO_NODE', 'ENDPOINT', { nodeNumber: toNode });
       addSegmentIfPossible(doc, component, ANCHOR_ROLES.CP, ANCHOR_ROLES.BP);
     } else {
-      addAnchorPort(doc, component, ANCHOR_ROLES.EP1, from, 'PIPINGELEMENT:FROM_NODE');
-      addAnchorPort(doc, component, ANCHOR_ROLES.EP2, to, 'PIPINGELEMENT:TO_NODE');
+      addAnchorPort(doc, component, ANCHOR_ROLES.EP1, from, 'PIPINGELEMENT:FROM_NODE', 'ENDPOINT', { nodeNumber: fromNode });
+      addAnchorPort(doc, component, ANCHOR_ROLES.EP2, to, 'PIPINGELEMENT:TO_NODE', 'ENDPOINT', { nodeNumber: toNode });
       addSegmentIfPossible(doc, component);
     }
     doc.components.push(component);
@@ -1373,6 +1398,7 @@ function makeComponent(tag, index, sourceId) {
     'line-no',
     'line'
   );
+  const lineNo = lineNoFromAttributes(attrs) || lineKey || pipelineRef;
 
   return createUxmlComponent({
     id: componentIdFromTag(tag, index),
@@ -1381,6 +1407,7 @@ function makeComponent(tag, index, sourceId) {
     normalizedType,
     pipelineRef,
     lineKey,
+    lineNo,
     refNo: attrValue(attrs, 'refNo', 'ref-no', 'CA97', 'ca97', 'ref'),
     seqNo: attrValue(attrs, 'seqNo', 'seq-no', 'CA98', 'ca98', 'sequence', 'number'),
     name: attrValue(attrs, 'name', 'tag', 'label'),

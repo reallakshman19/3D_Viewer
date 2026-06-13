@@ -48,11 +48,12 @@ function orientAlongY(mesh, dir) {
 }
 
 /**
- * Arrow from world start → end with given shaft radius.
+ * Arrow from world start to end with given shaft radius.
  * Returns a Group containing shaft cylinder + cone head.
  */
-function makeArrow(start, end, color, r) {
+function makeArrow(start, end, color, r, role = '') {
   const group = new THREE.Group();
+  if (role) group.userData.glbSupportSymbolRole = role;
   const v = new THREE.Vector3().subVectors(end, start);
   const len = v.length();
   if (len < 0.5) return group;
@@ -133,12 +134,12 @@ function derivePipeAxis(userData) {
     let y = Number(d.y) || 0;
     let z = Number(d.z) || 0;
 
-    // Remap CAESAR II Z-up cosines → Three.js Y-up world space
+    // Remap CAESAR II Z-up cosines to Three.js Y-up world space
     if (userData.supportAxisSpace === 'caesar-zup') {
       const cx = x, cy = y, cz = z;
-      x = cx;   // East  → Three.js X
-      y = cz;   // Up    → Three.js Y
-      z = -cy;  // North → Three.js -Z
+      x = cx;   // East to Three.js X
+      y = cz;   // Up to Three.js Y
+      z = -cy;  // North to Three.js -Z
     }
 
     const v = new THREE.Vector3(x, y, z);
@@ -160,7 +161,7 @@ function lateralAxis(pipeAxis) {
 }
 
 // ---------------------------------------------------------------------------
-// Symbol builders — all coordinates are world-space
+// Symbol builders: all coordinates are world-space
 // ---------------------------------------------------------------------------
 
 function buildRest(group, pos, pipeAxis, lateral, scale, color) {
@@ -173,23 +174,37 @@ function buildRest(group, pos, pipeAxis, lateral, scale, color) {
   group.add(makeArrow(
     baseCenter.clone().add(UP.clone().multiplyScalar(scale * 0.08)),
     pipeBase,
-    color, r,
+    color, r, 'rest-axis',
   ));
 }
 
 function buildGuide(group, pos, pipeAxis, lateral, scale, color) {
-  // REST base below pipe
-  buildRest(group, pos, pipeAxis, lateral, scale, color);
+  const belowY = pos.y - scale * 0.72;
+  const baseCenter = new THREE.Vector3(pos.x, belowY, pos.z);
+  group.add(makePlate(baseCenter, pipeAxis, lateral, scale, color));
+
+  const leftBar = new THREE.Mesh(
+    new THREE.BoxGeometry(scale * 0.10, scale * 0.72, scale * 0.10),
+    supportMat(color),
+  );
+  leftBar.userData.glbSupportSymbolMesh = true;
+  leftBar.position.copy(pos.clone().add(lateral.clone().multiplyScalar(scale * 0.18)));
+  group.add(leftBar);
+
+  const rightBar = leftBar.clone();
+  rightBar.material = leftBar.material;
+  rightBar.position.copy(pos.clone().add(lateral.clone().multiplyScalar(-scale * 0.18)));
+  group.add(rightBar);
 
   // Two lateral (inward) arrows at pipe midline height
   const r = scale * 0.022;
   const outer = pos.clone().add(lateral.clone().multiplyScalar(scale * 0.82));
   const inner = pos.clone().add(lateral.clone().multiplyScalar(scale * 0.14));
-  group.add(makeArrow(outer, inner, color, r));
+  group.add(makeArrow(outer, inner, color, r, 'guide-axis'));
   group.add(makeArrow(
     pos.clone().add(lateral.clone().multiplyScalar(-scale * 0.82)),
     pos.clone().add(lateral.clone().multiplyScalar(-scale * 0.14)),
-    color, r,
+    color, r, 'guide-axis',
   ));
 }
 
@@ -289,7 +304,7 @@ function disposeGroup(root) {
 
 /**
  * Hide baked support-reference-v2-* marker groups that were baked into the
- * GLB during export — they are replaced by fresh runtime symbols.
+ * GLB during export. They are replaced by fresh runtime symbols.
  */
 function hideBakedSupportMarkers(root) {
   root.traverse((obj) => {
@@ -342,7 +357,7 @@ export function applyGlbSupportSymbols(root, scene, options = {}) {
     const kind = String(data.supportKind || '').toUpperCase();
     if (!kind || kind === 'UNKNOWN') return;
 
-    // Skip baked markerGroups — their parent is the real support object
+    // Skip baked markerGroups. Their parent is the real support object.
     if (String(data.glbShape || '').startsWith('support-reference-v2-')) return;
 
     // Skip children of support objects that are not the root support node

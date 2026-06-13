@@ -48,6 +48,7 @@ export function createMarqueeZoom(getCamera, scene, domElement, controller) {
 
   const onPointerDown = (event) => {
     if (!enabled || event.button !== 0) return;
+    event.stopImmediatePropagation();
     startPoint = toNdc(event);
     startPx = toPx(event);
     // Disable orbit so it doesn't steal the drag
@@ -62,6 +63,7 @@ export function createMarqueeZoom(getCamera, scene, domElement, controller) {
   };
 
   const onPointerUp = (event) => {
+    if (enabled) event.stopImmediatePropagation();
     // Always re-enable orbit
     if (controller?.controls) controller.controls.enabled = true;
     hideOverlay();
@@ -74,7 +76,7 @@ export function createMarqueeZoom(getCamera, scene, domElement, controller) {
     const sp = startPoint;
     startPoint = null; startPx = null;
 
-    if (dx < 0.02 && dy < 0.02) return; // too small — treat as click, not drag
+    if (dx < 0.02 && dy < 0.02) return; // Too small: treat as click, not drag.
 
     const selected = selectionBox
       .select(sp, endPoint)
@@ -89,7 +91,7 @@ export function createMarqueeZoom(getCamera, scene, domElement, controller) {
         box.expandByObject(target, false);
       }
     });
-    if (!box.isEmpty()) controller.fitObject(box);
+    if (!box.isEmpty()) controller.fitBox?.(box);
 
     // Auto-disable marquee after one zoom so left-click orbit works again
     enabled = false;

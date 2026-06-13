@@ -7,6 +7,18 @@ import { enhanceSupportDirectionProxy } from './enhanceSupportDirectionProxyRefe
 import { enhanceTeeBodyProxy } from './enhanceTeeBodyProxy.js';
 import { hideGlbLabelAnchorMarkers } from './hideGlbLabelAnchorMarkers.js';
 
+function text(value) {
+  return String(value ?? '').trim();
+}
+
+function collectLineNos(model = {}) {
+  return Array.from(new Set([
+    text(model.lineNo),
+    ...((model.lineNos || []).map(text)),
+    ...((model.components || []).map((component) => text(component.lineNo || component.attributes?.lineNo || component.raw?.lineNo))),
+  ].filter(Boolean))).sort();
+}
+
 export function buildExportScene(model, log, options = {}) {
   const scene = new THREE.Scene();
   const root = new THREE.Group();
@@ -36,8 +48,11 @@ export function buildExportScene(model, log, options = {}) {
   const colorMode = options.colorMode || (model.options && model.options.colorMode) || 'engineering';
   const paletteStats = applyEngineeringPalette(root, { colorMode });
   const labelAnchorStats = hideGlbLabelAnchorMarkers(root);
+  const lineNos = collectLineNos(model);
   root.userData = {
     ...root.userData,
+    lineNo: lineNos[0] || '',
+    lineNos,
     engineeringPaletteStats: paletteStats,
     labelAnchorStats,
   };

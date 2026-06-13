@@ -50,6 +50,56 @@ function componentAliases(component) {
   ].map(text).filter(Boolean);
 }
 
+function firstText(...values) {
+  return values.map(text).find(Boolean) || '';
+}
+
+function valueFromKeys(source = {}, keys = []) {
+  if (!source || typeof source !== 'object') return '';
+  for (const key of keys) {
+    if (source[key] != null && text(source[key])) return text(source[key]);
+    const found = Object.keys(source).find((candidate) => candidate.toLowerCase() === String(key).toLowerCase());
+    if (found && text(source[found])) return text(source[found]);
+  }
+  return '';
+}
+
+const LINE_NO_KEYS = Object.freeze([
+  'lineNo',
+  'LineNo',
+  'Line No',
+  'LineNumber',
+  'Line Number',
+  'LINE_NO',
+  'LINE_NUMBER',
+  'PipeLine',
+  'Pipeline',
+  'pipelineRef',
+  'PipelineRef',
+  'BranchName',
+  'Branch Name',
+  'LineName',
+  'Line Name',
+  'lineKey',
+]);
+
+function lineNoForComponent(component = {}, context = {}) {
+  const raw = component.rawAttributes || {};
+  const normalized = component.normalized || {};
+  const pipelineById = context.pipelineById || new Map();
+  const pipelineByRef = context.pipelineByRef || new Map();
+  const pipeline = pipelineById.get(component.pipelineId) || pipelineByRef.get(component.pipelineRef) || null;
+
+  return firstText(
+    valueFromKeys(component, LINE_NO_KEYS),
+    valueFromKeys(raw, LINE_NO_KEYS),
+    valueFromKeys(normalized, LINE_NO_KEYS),
+    valueFromKeys(pipeline || {}, LINE_NO_KEYS),
+    component.lineKey,
+    component.pipelineRef
+  );
+}
+
 function componentSelected(component, selectedIds) {
   if (!selectedIds.size) return true;
   return componentAliases(component).some((alias) => selectedIds.has(alias));
@@ -88,12 +138,13 @@ function supportKindForGlb(supportType, component = {}, support = {}) {
   return 'REST';
 }
 
-function makeAttributes(component = {}, extra = {}) {
+function makeAttributes(component = {}, extra = {}, context = {}) {
   return {
     ...(component.rawAttributes || {}),
     ...(component.normalized || {}),
     pipelineRef: text(component.pipelineRef),
     lineKey: text(component.lineKey),
+    lineNo: lineNoForComponent(component, context),
     COMPONENT_IDENTIFIER: text(component.name || component.id),
     COMPONENT_TYPE: text(component.normalizedType || component.type),
     SKEY: text(component.skey),
@@ -111,7 +162,7 @@ function bendExtraForComponent(component = {}) {
   return { metadata, extra };
 }
 
-function makeSegmentComponent(segment, component, anchors, diagnostics) {
+function makeSegmentComponent(segment, component, anchors, diagnostics, context = {}) {
   const p1 = point3(anchors.get(segment.startAnchorId)?.point, segment.bore || component?.bore);
   const p2 = point3(anchors.get(segment.endAnchorId)?.point, segment.bore || component?.bore);
   if (!p1 || !p2) {
@@ -145,7 +196,8 @@ function makeSegmentComponent(segment, component, anchors, diagnostics) {
       CAESAR_BEND_SUPPRESSED_FULL_CURVE: 'true',
       CAESAR_BEND_ORIGINAL_GLB_TYPE: originalType,
     } : {}),
-  });
+  }, context);
+  const lineNo = lineNoForComponent(component, context);
 
   return {
     id,
@@ -165,12 +217,13 @@ function makeSegmentComponent(segment, component, anchors, diagnostics) {
     bendDisplayMode: suppressFullCurve ? 'straight-pipe-with-local-bend-metadata' : '',
     pipelineRef: text(component?.pipelineRef),
     lineKey: text(component?.lineKey),
+    lineNo,
     uxmlComponentId: text(component?.id),
     uxmlSegmentId: text(segment.id),
   };
 }
 
-function makeSupportComponent(support, component, anchors, diagnostics) {
+function makeSupportComponent(support, component, anchors, diagnostics, context = {}) {
   const point = point3(anchors.get(support.supportAnchorId)?.point, component?.bore);
   if (!point) {
     diagnostics.push({
@@ -196,7 +249,8 @@ function makeSupportComponent(support, component, anchors, diagnostics) {
     CAESAR_SUPPORT_KIND: text(raw.caesarSupportKind || ''),
     CAESAR_SUPPORT_LABEL: label,
     uxmlSupportId: text(support.id),
-  });
+  }, context);
+  const lineNo = lineNoForComponent(component, context);
 
   return {
     id: text(support.id || component?.id || `support-${diagnostics.length}`),
@@ -211,6 +265,7 @@ function makeSupportComponent(support, component, anchors, diagnostics) {
     supportKind,
     pipelineRef: text(component?.pipelineRef),
     lineKey: text(component?.lineKey),
+    lineNo,
     uxmlComponentId: text(component?.id),
     uxmlSupportId: text(support.id),
   };
@@ -220,6 +275,9 @@ export function adaptUxmlToGlbModel(doc, options = {}) {
   const selectedIds = parseSelectedBranches(options.selectedBranches);
   const componentsById = new Map((doc.components || []).map((component) => [component.id, component]));
   const anchors = new Map((doc.anchors || []).map((anchor) => [anchor.id, anchor]));
+  const pipelineById = new Map((doc.pipelines || []).map((pipeline) => [pipeline.id, pipeline]));
+  const pipelineByRef = new Map((doc.pipelines || []).map((pipeline) => [pipeline.pipelineRef, pipeline]));
+  const context = { pipelineById, pipelineByRef };
   const components = [];
   const diagnostics = [];
   const typeCounts = {};
@@ -231,7 +289,7 @@ export function adaptUxmlToGlbModel(doc, options = {}) {
     const component = componentsById.get(segment.componentId);
     if (!component || !componentSelected(component, selectedIds)) continue;
     if (isSupportComponent(component, segment)) continue;
-    const glbComponent = makeSegmentComponent(segment, component, anchors, diagnostics);
+    const glbComponent = makeSegmentComponent(segment, component, anchors, diagnostics, context);
     if (!glbComponent) continue;
     if (glbComponent.bendRadius != null) bendRadiusCount += 1;
     if (glbComponent.bendDisplayMode === 'straight-pipe-with-local-bend-metadata') suppressedFullBendCurveCount += 1;
@@ -243,18 +301,30 @@ export function adaptUxmlToGlbModel(doc, options = {}) {
     const component = componentsById.get(support.componentId);
     if (component && !componentSelected(component, selectedIds)) continue;
     if (!component && selectedIds.size) continue;
-    const glbSupport = makeSupportComponent(support, component, anchors, diagnostics);
+    const glbSupport = makeSupportComponent(support, component, anchors, diagnostics, context);
     if (!glbSupport) continue;
     components.push(glbSupport);
     typeCounts.SUPPORT = (typeCounts.SUPPORT || 0) + 1;
     supportKindCounts[glbSupport.supportKind] = (supportKindCounts[glbSupport.supportKind] || 0) + 1;
   }
 
+  const lineNos = Array.from(new Set([
+    ...components.map((component) => text(component.lineNo)),
+    ...(doc.pipelines || []).map((pipeline) => firstText(
+      valueFromKeys(pipeline, LINE_NO_KEYS),
+      pipeline.lineNo,
+      pipeline.lineKey,
+      pipeline.pipelineRef,
+    )),
+  ].filter(Boolean))).sort();
+
   return {
     model: {
       schema: 'inputxml-glb-model/v1',
-      source: 'InputXML→UXML→GLB',
+      source: 'InputXML->UXML->GLB',
       units: doc.units || {},
+      lineNo: lineNos[0] || '',
+      lineNos,
       components,
     },
     stats: {
@@ -262,6 +332,8 @@ export function adaptUxmlToGlbModel(doc, options = {}) {
       typeCounts,
       supportKindCounts,
       selectedBranchIds: [...selectedIds],
+      lineNo: lineNos[0] || '',
+      lineNos,
       bendRadiusCount,
       suppressedFullBendCurveCount,
     },

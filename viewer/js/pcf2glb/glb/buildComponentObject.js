@@ -28,6 +28,29 @@ function numberOrNull(value) {
   return Number.isFinite(n) && n > 0 ? n : null;
 }
 
+function firstText(...values) {
+  return values.map((value) => String(value ?? '').trim()).find(Boolean) || '';
+}
+
+function lineNoForComponent(comp = {}, attrs = {}) {
+  return firstText(
+    comp.lineNo,
+    attrs.lineNo,
+    attrs.LineNo,
+    attrs.LINE_NO,
+    attrs.LineNumber,
+    attrs.LINE_NUMBER,
+    attrs.Pipeline,
+    attrs.PipeLine,
+    attrs.pipelineRef,
+    attrs.PipelineRef,
+    attrs.BranchName,
+    attrs.LineName,
+    comp.lineKey,
+    comp.pipelineRef
+  );
+}
+
 function bendRadiusFromComponent(comp = {}) {
   return numberOrNull(comp.bendRadius)
     ?? numberOrNull(comp.attributes?.BEND_RADIUS)
@@ -47,11 +70,13 @@ function bendAngleDegFromComponent(comp = {}) {
 
 function componentUserData(comp, extra = {}) {
   const attrs = { ...(comp.raw || {}), ...(comp.attributes || {}) };
+  const lineNo = lineNoForComponent(comp, attrs);
   return {
     pcfType: comp.type,
     pcfId: comp.id,
     bore: comp.bore || null,
     refNo: comp.refNo || attrs['COMPONENT-ATTRIBUTE97'] || '',
+    lineNo,
     labelText: comp.label || comp.name || comp.refNo || attrs.SUPPORT_TAG || attrs.COMPONENT_IDENTIFIER || comp.id,
     ...attrs,
     ...extra,
@@ -349,10 +374,10 @@ function buildOletProxy(comp, color = 0x55aa55) {
   return applyUserData(group, componentUserData(comp, { glbShape: 'olet-branch-pad' }));
 }
 
-// ─── Support Kind System ──────────────────────────────────────────────────────
+// Support Kind System
 //
 // Kind resolution delegates to resolveKindPure (SupportKindResolver.js).
-// Precedence: explicit attr → kindMap (Config Tab) → DEFAULT_RULES → direction → text → 'REST'
+// Precedence: explicit attr, kindMap (Config Tab), DEFAULT_RULES, direction, text, then 'REST'.
 //
 // Colours:  REST=green  GUIDE=blue  LINESTOP/LIMIT=amber  ANCHOR=red  SPRING=orange
 
@@ -471,8 +496,6 @@ export function buildSupportProxy(comp) {
     const axis = supportAxis || new THREE.Vector3(0, 1, 0);
     _addArrow(group, axis, -arrowDist, radius, color);
   } else if (kind === 'GUIDE') {
-    const vertAxis = new THREE.Vector3(0, 1, 0);
-    _addArrow(group, vertAxis, -arrowDist, radius, color);
     const latAxis = (supportAxis && Math.abs(supportAxis.y) < 0.95)
       ? supportAxis.clone().normalize()
       : new THREE.Vector3(1, 0, 0);
