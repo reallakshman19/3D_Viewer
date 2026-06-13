@@ -106,6 +106,26 @@ function perpendicular(axis) {
   return side.length() < 0.01 ? X_AXIS.clone() : side.normalize();
 }
 
+/**
+ * Keep GUIDE and LINESTOP indicator arrows out of the vertical axis. When the
+ * source restraint direction is vertical, fall back to the same horizontal
+ * convention used by buildSupportProxy: GUIDE => X, LINESTOP => Z.
+ */
+function horizontalAxisOrFallback(axis, fallback) {
+  const source = axis?.lengthSq?.() > 1e-8 ? axis.clone().normalize() : fallback.clone();
+  const horizontal = source.sub(UP.clone().multiplyScalar(source.dot(UP)));
+  if (horizontal.lengthSq() > 1e-8) return horizontal.normalize();
+  return fallback.clone().normalize();
+}
+
+function guideSideAxis(axis) {
+  return horizontalAxisOrFallback(axis, X_AXIS);
+}
+
+function lineStopAxis(axis) {
+  return horizontalAxisOrFallback(axis, Z_AXIS);
+}
+
 function secondPerpendicular(axis, side) {
   const normal = new THREE.Vector3().crossVectors(axis, side);
   return normal.length() < 0.01 ? UP.clone() : normal.normalize();
@@ -191,7 +211,7 @@ function addPostBetween(group, id, radius, color, yStart, yEnd) {
   addCylinder(group, `${id}-reference-post`, Math.max(radius * 0.09, 0.85), length, UP, new THREE.Vector3(0, (yStart + yEnd) / 2, 0), color);
 }
 
-function addPlate(group, name, axis, radius, color, offsetScale = 1.1) {
+function addPlate(group, name, axis, radius, color, offsetScale = 1.1, centerOffset = null) {
   const a = axis.clone().normalize();
   const side = perpendicular(a);
   const vertical = secondPerpendicular(a, side);
@@ -199,7 +219,7 @@ function addPlate(group, name, axis, radius, color, offsetScale = 1.1) {
     group,
     name,
     new THREE.Vector3(radius * 0.18, radius * 1.32, radius * 1.32),
-    a.clone().multiplyScalar(radius * offsetScale),
+    (centerOffset || new THREE.Vector3()).clone().add(a.clone().multiplyScalar(radius * offsetScale)),
     color,
   );
   plate.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(a, vertical, side));
@@ -241,10 +261,9 @@ function addGuideBaseWithoutVerticalArrow(group, id, radius, color, pipeRadius) 
 }
 
 function addGuideBars(group, id, axis, radius, color, pipeRadius) {
-  const a = axis.clone().normalize();
   addGuideBaseWithoutVerticalArrow(group, id, radius, color, pipeRadius);
 
-  const side = perpendicular(a);
+  const side = guideSideAxis(axis);
   const outerDist = pipeRadius + radius * 2.1;
   const innerDist = pipeRadius + radius * 0.28;
   addBox(group, `${id}-guide-bar-positive`, new THREE.Vector3(radius * 0.22, radius * 1.25, radius * 0.22), side.clone().multiplyScalar(innerDist), color);
@@ -260,18 +279,19 @@ function addGuideBars(group, id, axis, radius, color, pipeRadius) {
 }
 
 function addLineStop(group, id, axis, radius, color, pipeRadius) {
-  const a = axis.clone().normalize();
+  const a = lineStopAxis(axis);
+  const sideOffset = perpendicular(a).multiplyScalar(radius * 0.45);
   const outerDist = pipeRadius + radius * 2.1;
   const innerDist = pipeRadius + radius * 0.2;
-  addPlate(group, `${id}-linestop-plate-positive`, a, radius, color, innerDist / radius);
-  addPlate(group, `${id}-linestop-plate-negative`, a.clone().negate(), radius, color, innerDist / radius);
+  addPlate(group, `${id}-linestop-plate-positive`, a, radius, color, innerDist / radius, sideOffset);
+  addPlate(group, `${id}-linestop-plate-negative`, a.clone().negate(), radius, color, innerDist / radius, sideOffset);
   addArrowBetween(group, `${id}-linestop-axis-positive`,
-    a.clone().multiplyScalar(outerDist),
-    a.clone().multiplyScalar(innerDist),
+    sideOffset.clone().add(a.clone().multiplyScalar(outerDist)),
+    sideOffset.clone().add(a.clone().multiplyScalar(innerDist)),
     radius, color);
   addArrowBetween(group, `${id}-linestop-axis-negative`,
-    a.clone().multiplyScalar(-outerDist),
-    a.clone().multiplyScalar(-innerDist),
+    sideOffset.clone().add(a.clone().multiplyScalar(-outerDist)),
+    sideOffset.clone().add(a.clone().multiplyScalar(-innerDist)),
     radius, color);
 }
 

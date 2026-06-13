@@ -140,6 +140,8 @@ export function createUxmlAnchor(overrides = {}) {
     componentId: '',
     role: '',
     point: null,
+    nodeNumber: '',
+    nodeLabel: '',
 
     sourceRef: null,
     sourceField: '',

@@ -66,6 +66,11 @@ export function createCameraController(camera, domElement) {
       fitBox(box);
     },
 
+    fitBox(box) {
+      if (!box || typeof box.isEmpty !== 'function' || box.isEmpty()) return;
+      fitBox(box);
+    },
+
     resetTarget() {
       controls.target.copy(currentCenter);
       controls.update();

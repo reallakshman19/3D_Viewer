@@ -3,6 +3,12 @@ import * as THREE from 'three';
 export function resolveInspectableObject(obj) {
   let cur = obj;
   while (cur) {
+    if (cur.userData?.glbSupportSymbolMesh || cur.userData?.glbSupportSymbolRole) {
+      cur = cur.parent;
+      continue;
+    }
+    if (cur.userData?.glbSupportSymbol) return cur;
+    if (String(cur.userData?.glbShape || '').startsWith('support-reference-v2-')) return null;
     if (cur.userData?.pcfId || cur.userData?.REF_NO || cur.userData?.id) return cur;
     if (Object.keys(cur.userData || {}).length > 0) return cur;
     cur = cur.parent;
@@ -16,8 +22,9 @@ export function createSelection(getCamera, scene, domElement) {
 
   let selectionCallback = null;
   let activeHighlightObject = null;
+  let pointerStart = null;
 
-  const onClick = (e) => {
+  const selectAt = (e) => {
     const rect = domElement.getBoundingClientRect();
     mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
     mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
@@ -63,17 +70,35 @@ export function createSelection(getCamera, scene, domElement) {
     }
     
     activeHighlightObject = clickedObject;
-if (selectionCallback) {
-        selectionCallback(clickedObject);
+    if (selectionCallback) {
+      selectionCallback(clickedObject);
     }
   };
 
-  domElement.addEventListener('pointerdown', onClick);
+  const onPointerDown = (event) => {
+    if (event.button !== 0) return;
+    pointerStart = { x: event.clientX, y: event.clientY, pointerId: event.pointerId };
+  };
+
+  const onPointerUp = (event) => {
+    if (!pointerStart || pointerStart.pointerId !== event.pointerId) {
+      pointerStart = null;
+      return;
+    }
+    const distance = Math.hypot(event.clientX - pointerStart.x, event.clientY - pointerStart.y);
+    pointerStart = null;
+    if (distance > 4) return;
+    selectAt(event);
+  };
+
+  domElement.addEventListener('pointerdown', onPointerDown);
+  domElement.addEventListener('pointerup', onPointerUp);
 
   return {
     onSelect: (fn) => { selectionCallback = fn; },
     dispose: () => {
-        domElement.removeEventListener('pointerdown', onClick);
+      domElement.removeEventListener('pointerdown', onPointerDown);
+      domElement.removeEventListener('pointerup', onPointerUp);
     }
   };
 }

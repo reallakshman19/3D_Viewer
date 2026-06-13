@@ -6,6 +6,34 @@ import { enhanceLocalizedBendProxy } from './enhanceLocalizedBendProxy.js';
 import { enhanceSupportDirectionProxy } from './enhanceSupportDirectionProxyReferenceV2.js';
 import { enhanceTeeBodyProxy } from './enhanceTeeBodyProxy.js';
 import { hideGlbLabelAnchorMarkers } from './hideGlbLabelAnchorMarkers.js';
+import {
+  LINE_NO_METADATA_KEYS,
+  firstLineNoValue,
+  lineNoFromMetadata,
+  normalizeLineNoValue,
+} from '../../../utils/line-no-metadata.js';
+
+function text(value) {
+  return String(value ?? '').trim();
+}
+
+function componentLineNo(component = {}) {
+  const attrs = { ...(component.raw || {}), ...(component.attributes || {}) };
+  return firstLineNoValue(
+    component.lineNo,
+    lineNoFromMetadata(attrs, LINE_NO_METADATA_KEYS),
+    component.lineKey,
+    component.pipelineRef,
+  );
+}
+
+function collectLineNos(model = {}) {
+  return Array.from(new Set([
+    firstLineNoValue(model.lineNo, lineNoFromMetadata(model, LINE_NO_METADATA_KEYS)),
+    ...((model.lineNos || []).map(text)),
+    ...((model.components || []).map(componentLineNo)),
+  ].map(normalizeLineNoValue).filter(Boolean))).sort();
+}
 
 export function buildExportScene(model, log, options = {}) {
   const scene = new THREE.Scene();
@@ -36,8 +64,11 @@ export function buildExportScene(model, log, options = {}) {
   const colorMode = options.colorMode || (model.options && model.options.colorMode) || 'engineering';
   const paletteStats = applyEngineeringPalette(root, { colorMode });
   const labelAnchorStats = hideGlbLabelAnchorMarkers(root);
+  const lineNos = collectLineNos(model);
   root.userData = {
     ...root.userData,
+    lineNo: lineNos[0] || '',
+    lineNos,
     engineeringPaletteStats: paletteStats,
     labelAnchorStats,
   };

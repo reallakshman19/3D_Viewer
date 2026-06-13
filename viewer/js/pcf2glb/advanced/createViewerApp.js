@@ -17,14 +17,16 @@ import { computeBoundingMeasurement } from '../pro-editor/core/measureUtils.js';
 import { installGlbLabelOverlay } from './glbLabelOverlay.js';
 import { applyGlbSupportSymbols } from './applyGlbSupportSymbols.js';
 
-export function createViewerApp(previewContainer, toolbarContainer, propPanel, propContent, debugLogsContainer) {
+export function createViewerApp(previewContainer, toolbarContainer, propPanel, propContent, debugLogsContainer, options = {}) {
 
   const scene = new THREE.Scene();
-  scene.background = new THREE.Color(0x3a3a45); // Brighter mid-grey — geometry visible
+  scene.background = new THREE.Color(0x3a3a45); // Brighter mid-grey; geometry visible.
 
   // Defer initialization to first frame to ensure container has size
   let initialized = false;
   let renderer, domElement, disposeRenderer, camera, controller, axesHelper, dirLight, pointLight, toolbar;
+  let resizeObserver = null;
+  let windowResizeHandler = null;
   let currentRoot = null;
   let animationId;
   let sceneIndex = null;
@@ -33,6 +35,7 @@ export function createViewerApp(previewContainer, toolbarContainer, propPanel, p
   let sectionBox = null;
   let debugPanel = null;
   let selection = null;
+  let selectedItem = null;
   let marqueeZoom = null;
   let css2dRenderer = null;
   let msgCircleGroup = new THREE.Group();
@@ -41,6 +44,19 @@ export function createViewerApp(previewContainer, toolbarContainer, propPanel, p
   let measurementListener = null;
   let measureStateListener = null;
   let sectionEnabled = false;
+
+  const resizeViewport = () => {
+    const width = previewContainer.clientWidth;
+    const height = previewContainer.clientHeight;
+    if (!renderer || !controller || !width || !height) return;
+    renderer.setSize(width, height);
+    if (domElement) {
+      domElement.style.width = `${width}px`;
+      domElement.style.height = `${height}px`;
+    }
+    css2dRenderer?.setSize?.(width, height);
+    controller.onResize(width, height);
+  };
 
   const init = () => {
     if (initialized || !previewContainer.clientWidth) return;
@@ -60,13 +76,16 @@ export function createViewerApp(previewContainer, toolbarContainer, propPanel, p
     scene.add(msgCircleGroup);
     scene.add(msgSquareGroup);
 
-    window.addEventListener('resize', () => {
-      if (css2dRenderer) css2dRenderer.setSize(previewContainer.clientWidth, previewContainer.clientHeight);
-    });
-
     camera = new THREE.PerspectiveCamera(60, previewContainer.clientWidth / previewContainer.clientHeight, 0.1, 10000000);
 
     controller = createCameraController(camera, domElement);
+    windowResizeHandler = () => resizeViewport();
+    window.addEventListener('resize', windowResizeHandler);
+    if (typeof ResizeObserver !== 'undefined') {
+      resizeObserver = new ResizeObserver(() => resizeViewport());
+      resizeObserver.observe(previewContainer);
+    }
+    resizeViewport();
 
     axesHelper = createAxisHelper(camera, domElement);
     // ViewHelper automatically attaches to camera, no need to add to scene
@@ -118,6 +137,7 @@ export function createViewerApp(previewContainer, toolbarContainer, propPanel, p
     selection = createSelection(getActiveCamera, scene, domElement);
     selection.onSelect((clickedObj) => {
         if (!clickedObj || !sceneIndex) {
+            selectedItem = null;
             propertyPanel.hide();
             if (measurementListener) measurementListener(null);
             return;
@@ -127,14 +147,8 @@ export function createViewerApp(previewContainer, toolbarContainer, propPanel, p
         const item = sceneIndex.byId.get(id);
 
         if (item) {
-            // Re-center orbit target on the clicked object to make rotation natural
-            const box = new THREE.Box3().setFromObject(item.object3D);
-            if (!box.isEmpty()) {
-              const center = box.getCenter(new THREE.Vector3());
-              controller.setTarget(center);
-            }
-
-            // No auto-fit on selection — user must click FIT manually
+            selectedItem = item;
+            // Selection does not move the camera. Use FIT ALL or Zoom Selected explicitly.
             propertyPanel.show(item);
             if (measureEnabled && measurementListener) {
               const measurement = computeBoundingMeasurement(item.object3D);
@@ -199,6 +213,12 @@ export function createViewerApp(previewContainer, toolbarContainer, propPanel, p
     fitAll: () => {
       if (currentRoot && controller) controller.fitScene(currentRoot);
     },
+    zoomSelected: () => {
+      if (selectedItem?.object3D && controller) controller.fitObject(selectedItem.object3D);
+    },
+    resize: () => {
+      resizeViewport();
+    },
     setTarget: (targetVec) => {
       controller?.setTarget?.(targetVec);
     },
@@ -241,8 +261,6 @@ export function createViewerApp(previewContainer, toolbarContainer, propPanel, p
               currentRoot = gltf.scene;
               scene.add(currentRoot);
 
-              sceneIndex = buildSceneIndex(currentRoot);
-
               // Pre-compute metrics before fit to ensure camera far clip handles large scenes
               const box = new THREE.Box3().setFromObject(currentRoot);
               const size = box.getSize(new THREE.Vector3());
@@ -253,7 +271,7 @@ export function createViewerApp(previewContainer, toolbarContainer, propPanel, p
               controller.fitScene(currentRoot);
               dirLight.position.copy(controller.getActiveCamera().position);
 
-              // Force visible materials — brighten any mesh that is near-black
+              // Force visible materials; brighten any mesh that is near-black.
               currentRoot.traverse(child => {
                 if (!child.isMesh) return;
                 const mats = Array.isArray(child.material) ? child.material : [child.material];
@@ -267,7 +285,7 @@ export function createViewerApp(previewContainer, toolbarContainer, propPanel, p
                     const lum = 0.299 * c.r + 0.587 * c.g + 0.114 * c.b;
                     if (lum < 0.15) { c.setHex(0x6eb5e0); mat.userData.__baseColor = c.clone(); }
                   }
-                  // Ensure metalness doesn’t kill visibility
+                  // Ensure metalness does not kill visibility.
                   if (mat.metalness !== undefined) mat.metalness = Math.min(mat.metalness, 0.3);
                   if (mat.roughness !== undefined) mat.roughness = Math.max(mat.roughness, 0.45);
                   mat.needsUpdate = true;
@@ -275,7 +293,11 @@ export function createViewerApp(previewContainer, toolbarContainer, propPanel, p
               });
 
               applyGlbSupportSymbols(currentRoot, scene, { scaleMultiplier: 1.0 });
-              const glbLabels = installGlbLabelOverlay(currentRoot, msgSquareGroup, { maxLabels: 300 });
+              sceneIndex = buildSceneIndex(currentRoot);
+              const glbLabels = installGlbLabelOverlay(currentRoot, msgSquareGroup, {
+                maxLabels: 300,
+                panelHost: options.labelPanelHost || null,
+              });
               debugPanel.log('system', 'info', `Loaded scene with ${sceneIndex.items.length} indexed objects`);
               if (glbLabels.length) debugPanel.log('system', 'info', `Loaded ${glbLabels.length} GLB labels from userData`);
 
@@ -398,7 +420,7 @@ export function createViewerApp(previewContainer, toolbarContainer, propPanel, p
           letter-spacing: 0.03em;
         `;
         const obj = new CSS2DObject(div);
-        // PCF coords: X=East, Y=North, Z=Up → Three.js (Z-up default): X=-Y, Y=Z, Z=-X
+        // PCF coords: X=East, Y=North, Z=Up to Three.js: X=-Y, Y=Z, Z=-X.
         obj.position.set(-pos.y, pos.z, -pos.x);
         obj.position.y += 8;
         obj.userData.type = 'msg-circle-label';
@@ -407,6 +429,8 @@ export function createViewerApp(previewContainer, toolbarContainer, propPanel, p
     },
     dispose: () => {
       if (animationId) cancelAnimationFrame(animationId);
+      if (windowResizeHandler) window.removeEventListener('resize', windowResizeHandler);
+      resizeObserver?.disconnect?.();
       if (disposeRenderer) disposeRenderer();
       if (controller) controller.dispose();
       if (selection) selection.dispose();

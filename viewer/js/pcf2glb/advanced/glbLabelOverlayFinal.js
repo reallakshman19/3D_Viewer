@@ -1,5 +1,10 @@
 import * as THREE from 'three';
 import { CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
+import {
+  LINE_NO_METADATA_KEYS,
+  firstLineNoValue,
+  lineNoFromMetadata,
+} from '../../../utils/line-no-metadata.js';
 
 const DEFAULT_MAX_LABELS = 250;
 const LABEL_TOGGLE_PANEL_ID = 'glb-label-toggle-panel';
@@ -29,6 +34,29 @@ const LABEL_TOGGLE_DEFS = Object.freeze([
 
 function text(value) {
   return String(value ?? '').trim();
+}
+
+function modelLineNoFromRoot(root) {
+  const direct = firstLineNoValue(
+    lineNoFromMetadata(root?.userData || {}, LINE_NO_METADATA_KEYS),
+    ...((root?.userData?.lineNos || []).map((value) => value))
+  );
+  if (direct) return direct;
+
+  const seen = new Set();
+  root?.traverse?.((object) => {
+    if (seen.size) return;
+    const data = object?.userData || {};
+    const lineNo = firstLineNoValue(
+      lineNoFromMetadata(data, LINE_NO_METADATA_KEYS),
+      data.lineNo,
+      data.lineKey,
+      data.pipelineRef
+    );
+    if (lineNo) seen.add(lineNo);
+  });
+
+  return Array.from(seen).sort()[0] || '';
 }
 
 function safeStorage() {
@@ -131,40 +159,42 @@ function isExplicitLabelAnchor(object) {
 
 // Extract a clean display label from a raw node label text.
 // Handles:
-//   "205"                          → "205"
-//   "NODE 205"                     → "205"
-//   "IX-A-IX-PE-00001-NODE-205"    → "205"
-//   "IX-A-IX-PE-00001-EP1"         → "1-EP1"  (pipe endpoint format)
-//   "IX-A-IX-PE-00001-CP"          → "1-CP"   (component/branch point)
+//   "205"                          -> "205"
+//   "NODE 205"                     -> "205"
+//   "IX-A-IX-PE-00001-NODE-205"    -> "205"
+//   "IX-A-IX-PE-00001-EP1"         -> "1"     (pipe endpoint format)
+//   "IX-A-IX-PE-00001-CP"          -> "1"     (component/branch point)
 // Rejects: SUPPORT_POINT pseudo-labels, strings with no parseable label.
 function cleanNodeText(rawText) {
   const value = text(rawText);
   if (!value) return '';
   if (/SUPPORT_POINT/i.test(value)) return '';
+  const withoutEndpoint = value.replace(/[-_\s]*EP[12]\b/ig, '').trim();
 
   // Direct number
-  if (/^\d+(?:\.\d+)?$/.test(value)) return value.replace(/\.0+$/, '');
+  if (/^\d+(?:\.\d+)?$/.test(withoutEndpoint)) return withoutEndpoint.replace(/\.0+$/, '');
 
   // Simple prefix: "N205", "NODE 205", "node-205", "node:205"
-  const m1 = value.match(/^(?:N|NODE)\s*[-_:.]?\s*(\d+(?:\.\d+)?)$/i);
+  const m1 = withoutEndpoint.match(/^(?:N|NODE)\s*[-_:.]?\s*(\d+(?:\.\d+)?)$/i);
   if (m1) return m1[1].replace(/\.0+$/, '');
 
   // Complex "-NODE-NNN" suffix: "IX-A-IX-PE-00001-NODE-205"
-  const m2 = value.match(/[_-]NODE[-_\s]*(\d+)/i);
+  const m2 = withoutEndpoint.match(/[_-]NODE[-_\s]*(\d+)/i);
   if (m2) return m2[1];
 
-  // IX project pipe-endpoint format: "IX-A-IX-PE-00001-EP1" → "1-EP1"
+  // IX project pipe-endpoint format: "IX-A-IX-PE-00001-EP1" -> "1"
   // Covers: EP1/EP2 (endpoints), CP (component point), BP (branch point), TP (tee point), AP
-  const ixPipeEp = value.match(/^IX-[A-Z0-9]+-IX-PE-(\d+)-(EP\d+|CP|BP|TP|AP)$/i);
-  if (ixPipeEp) {
-    return `${parseInt(ixPipeEp[1], 10)}-${ixPipeEp[2].toUpperCase()}`;
-  }
+  const ixPipeEp = withoutEndpoint.match(/^IX-[A-Z0-9]+-IX-PE-(\d+)(?:-(CP|BP|TP|AP))?$/i);
+  if (ixPipeEp) return String(parseInt(ixPipeEp[1], 10));
 
   // NODE keyword with number nearby
-  if (/\bNODE\b/i.test(value)) {
-    const m = value.match(/NODE[-_\s]*(\d+)/i);
+  if (/\bNODE\b/i.test(withoutEndpoint)) {
+    const m = withoutEndpoint.match(/NODE[-_\s]*(\d+)/i);
     if (m) return m[1];
   }
+
+  const nums = withoutEndpoint.match(/\b\d{1,6}(?:\.\d+)?\b/g);
+  if (nums?.length) return nums[nums.length - 1].replace(/\.0+$/, '');
 
   return '';
 }
@@ -187,15 +217,15 @@ function cleanLabelText(raw, kind, userData) {
     if (spaceIdx > 0) return value.slice(spaceIdx + 1).trim();
   }
 
-  // Generic IX reference: "IX-PE-00001" → "PE-1", "IX-A-IX-PE-00007" → "PE-7"
+  // Generic IX reference: "IX-PE-00001" -> "PE-1", "IX-A-IX-PE-00007" -> "PE-7"
   if (/^IX-/i.test(value)) {
-    // Code followed by space: "IX-SUP-... TYPE" → "TYPE"
+    // Code followed by space: "IX-SUP-... TYPE" -> "TYPE"
     const spaceIdx = value.indexOf(' ');
     if (spaceIdx > 0) {
       const after = value.slice(spaceIdx + 1).trim();
       if (after) return after;
     }
-    // "IX-PE-NNNNN" → "PE-N"
+    // "IX-PE-NNNNN" -> "PE-N"
     const m = value.match(/IX-PE-(\d+)(?:[^-]|$)/i);
     if (m) return `PE-${parseInt(m[1], 10)}`;
   }
@@ -310,7 +340,18 @@ function candidatePriority(object) {
   return isExplicitLabelAnchor(object) ? 4 : 9;
 }
 
-function logicalLabelKey(object, label, kind) {
+function positionClusterKey(position) {
+  if (!position || !position.isVector3) return 'no-position';
+  const step = 5;
+  return [
+    Math.round(position.x / step),
+    Math.round(position.y / step),
+    Math.round(position.z / step),
+  ].join(':');
+}
+
+function logicalLabelKey(object, label, kind, position = null) {
+  if (kind === 'node') return `${kind}|${label}|${positionClusterKey(position)}`;
   const data = object?.userData || {};
   const id = text(data.pcfId)
     || text(data.componentId)
@@ -364,9 +405,9 @@ export function collectGlbLabelAnchors(root, options = {}) {
     const label = cleanLabelText(raw, kind, object.userData);
     if (!label) return; // Could not extract meaningful display text
 
-    const key = logicalLabelKey(object, label, kind);
     const priority = candidatePriority(object);
     object.getWorldPosition(position);
+    const key = logicalLabelKey(object, label, kind, position);
 
     const candidate = {
       text: label,
@@ -384,7 +425,7 @@ export function collectGlbLabelAnchors(root, options = {}) {
     }
   });
 
-  // Stage B: fallback — one label per logical component when no explicit anchor exists
+  // Stage B: fallback - one label per logical component when no explicit anchor exists
   root.traverse((object) => {
     if (isLabelSuppressed(object)) return;
     if (isExplicitLabelAnchor(object)) return;
@@ -398,11 +439,10 @@ export function collectGlbLabelAnchors(root, options = {}) {
     const label = cleanLabelText(raw, kind, object.userData);
     if (!label) return;
 
-    const key = logicalLabelKey(object, label, kind);
-    if (explicitKeys.has(key)) return; // Explicit anchor already covers this
-
     const priority = 5;
     object.getWorldPosition(position);
+    const key = logicalLabelKey(object, label, kind, position);
+    if (explicitKeys.has(key)) return; // Explicit anchor already covers this
 
     const candidate = {
       text: label,
@@ -486,7 +526,26 @@ function ensureCss2dDomLayer(css2dObjects) {
   });
 }
 
-function defaultPanelStyle() {
+function defaultPanelStyle(docked = false) {
+  if (docked) {
+    return `
+    position: static;
+    z-index: auto;
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+    border-radius: 14px;
+    border: 1px solid rgba(147,197,253,0.24);
+    background: rgba(15, 28, 45, 0.92);
+    color: #e5f2ff;
+    box-shadow: 0 10px 28px rgba(0,0,0,0.30);
+    padding: 8px 10px;
+    font: 12px/1.35 "Inter", "Segoe UI", Arial, sans-serif;
+    backdrop-filter: blur(5px);
+    user-select: none;
+  `;
+  }
+
   const saved = readPanelPosition();
   const pos = saved
     ? `left:${saved.left}px;top:${saved.top}px;right:auto;bottom:auto;`
@@ -552,8 +611,9 @@ function makePanelDraggable(panel) {
   });
 }
 
-function ensureGlbLabelTogglePanel(labelGroup, labels, visibility) {
+function ensureGlbLabelTogglePanel(labelGroup, labels, visibility, options = {}) {
   if (typeof document === 'undefined') return null;
+  const host = options.panelHost?.nodeType === 1 ? options.panelHost : null;
   if (!labels.length) {
     const existing = document.getElementById(LABEL_TOGGLE_PANEL_ID);
     if (existing) existing.style.display = 'none';
@@ -564,19 +624,22 @@ function ensureGlbLabelTogglePanel(labelGroup, labels, visibility) {
   if (!panel) {
     panel = document.createElement('div');
     panel.id = LABEL_TOGGLE_PANEL_ID;
-    document.body.appendChild(panel);
   }
+  const parent = host || document.body;
+  if (panel.parentElement !== parent) parent.appendChild(panel);
 
   const summary = summarizeGlbLabels(labels);
-  panel.style.cssText = defaultPanelStyle();
+  const modelLineNo = firstLineNoValue(options.modelLineNo);
+  panel.style.cssText = defaultPanelStyle(Boolean(host));
   panel.style.display = '';
   panel.innerHTML = `
-    <div data-glb-label-panel-drag style="display:flex;align-items:center;justify-content:space-between;gap:8px;cursor:move;touch-action:none;">
+    <div data-glb-label-panel-drag style="display:flex;align-items:center;justify-content:space-between;gap:8px;cursor:${host ? 'default' : 'move'};touch-action:none;">
       <strong style="font-size:12px;letter-spacing:0.08em;text-transform:uppercase;color:#bfdbfe;">Labels</strong>
       <span style="margin-left:auto;font-size:11px;color:#93c5fd;" title="collected labels">${summary.total}</span>
       <button type="button" data-glb-label-panel-toggle style="border:1px solid rgba(147,197,253,0.28);border-radius:8px;background:#1e293b;color:#dbeafe;padding:3px 7px;cursor:pointer;font-size:11px;">Show</button>
     </div>
     <div data-glb-label-panel-body style="display:grid;gap:8px;margin-top:9px;">
+      ${modelLineNo ? `<div style="display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:8px;background:rgba(96,165,250,0.12);border:1px solid rgba(147,197,253,0.18);"><span style="color:#93c5fd;">Line No.</span><strong style="margin-left:auto;color:#dbeafe;">${modelLineNo}</strong></div>` : ''}
       <div style="display:grid;gap:5px;">
         ${LABEL_TOGGLE_DEFS.map(([key, label]) => `
           <label style="display:flex;align-items:center;gap:7px;cursor:pointer;user-select:none;">
@@ -637,7 +700,7 @@ function ensureGlbLabelTogglePanel(labelGroup, labels, visibility) {
     setPanelCollapsed(panel, collapsed);
   });
 
-  makePanelDraggable(panel);
+  if (!host) makePanelDraggable(panel);
   setPanelCollapsed(panel, readPanelCollapsed());
   updateDiagnostic();
   return panel;
@@ -670,7 +733,10 @@ export function installGlbLabelOverlay(root, labelGroup, options = {}) {
 
   const summary = summarizeGlbLabels(labels);
   const visibilityStats = applyGlbLabelVisibility(labelGroup, visibility);
-  ensureGlbLabelTogglePanel(labelGroup, labels, visibilityStats.visibility);
+  ensureGlbLabelTogglePanel(labelGroup, labels, visibilityStats.visibility, {
+    ...options,
+    modelLineNo: firstLineNoValue(options.modelLineNo, modelLineNoFromRoot(root)),
+  });
   ensureCss2dDomLayer(css2dObjects);
 
   console.info('[glb-labels] installed', {

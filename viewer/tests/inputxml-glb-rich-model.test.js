@@ -57,6 +57,7 @@ assert.ok(Object.keys(stats.supportKindCounts).length > 0);
 const nodeLabels = model.components.filter((component) => component.type === 'NODE_LABEL');
 assert.ok(nodeLabels.length > 0, 'InputXML GLB model should include node label anchors');
 assert.ok(nodeLabels.every((component) => component.coOrds && component.label));
+assert.ok(nodeLabels.every((component) => !/EP[12]|SUPPORT_POINT|IX-A/i.test(component.label)), 'node labels should use clean real node numbers');
 
 const filtered = adaptUxmlToGlbModel(extracted.doc, {
   selectedBranches: extracted.branches[0]?.id || '',

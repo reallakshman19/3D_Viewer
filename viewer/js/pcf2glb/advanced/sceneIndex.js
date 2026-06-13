@@ -11,6 +11,48 @@ export function normalizeMeta(obj) {
   };
 }
 
+function isEffectivelyVisible(obj) {
+  let current = obj;
+  while (current) {
+    if (!current.visible) return false;
+    current = current.parent;
+  }
+  return true;
+}
+
+function isInsideBakedSupportReference(obj) {
+  let current = obj;
+  while (current) {
+    if (String(current.userData?.glbShape || '').startsWith('support-reference-v2-')) return true;
+    current = current.parent;
+  }
+  return false;
+}
+
+function isSyntheticSupportPart(obj) {
+  const data = obj?.userData || {};
+  return Boolean(
+    data.glbSupportSymbolRoot
+    || data.glbSupportSymbol
+    || data.glbSupportSymbolMesh
+    || data.glbSupportSymbolRole
+    || isInsideBakedSupportReference(obj),
+  );
+}
+
+function hasSemanticMetadata(obj) {
+  const data = obj?.userData || {};
+  return Boolean(
+    data.pcfId
+    || data.REF_NO
+    || data.id
+    || data.pcfType
+    || data.COMPONENT_TYPE
+    || data.supportKind
+    || data.SUPPORT_KIND
+  );
+}
+
 export function buildSceneIndex(root) {
   const byId = new Map();
   const byUuid = new Map();
@@ -20,8 +62,9 @@ export function buildSceneIndex(root) {
   root.updateWorldMatrix(true, true);
 
   root.traverse((obj) => {
-    if (!obj.visible) return;
-    if (!obj.isMesh && !obj.isGroup) return;
+    if (!isEffectivelyVisible(obj)) return;
+    if (isSyntheticSupportPart(obj)) return;
+    if (!obj.isMesh && !obj.isGroup && !hasSemanticMetadata(obj)) return;
 
     // Generic GLB support: Filter out non-semantic nodes (like raw geometries without userdata or semantic names)
     if (!obj.userData || Object.keys(obj.userData).length === 0) {

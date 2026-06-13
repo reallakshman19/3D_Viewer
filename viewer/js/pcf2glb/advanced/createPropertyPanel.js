@@ -1,4 +1,18 @@
+import {
+  LINE_NO_METADATA_KEYS,
+  firstLineNoValue,
+  lineNoFromMetadata,
+} from '../../../utils/line-no-metadata.js';
+
 export function createPropertyPanel(propPanel, propContent) {
+  function lineNoForItem(item) {
+    const meta = item?.rawMeta || {};
+    return firstLineNoValue(
+      lineNoFromMetadata(meta, LINE_NO_METADATA_KEYS),
+      item?.lineNo,
+      item?.object3D?.userData?.lineNo
+    );
+  }
 
   return {
     show: (item) => {
@@ -7,10 +21,12 @@ export function createPropertyPanel(propPanel, propContent) {
             return;
         }
 
+        const lineNo = lineNoForItem(item);
         let html = `<div style="font-family: monospace; font-size: 12px; margin-bottom: 10px;">
           <strong>ID:</strong> ${item.id || 'N/A'}<br/>
           <strong>Type:</strong> ${item.type || 'N/A'}<br/>
           <strong>Ref No:</strong> ${item.refNo || 'N/A'}<br/>
+          <strong>Line No.:</strong> ${lineNo || 'N/A'}<br/>
           <strong>Bore:</strong> ${item.bore || 'N/A'}<br/>
         </div>`;
 
