@@ -192,3 +192,63 @@ export function filterMatchedPreviewFacts(facts = []) {
 export function filterDiagnosticsFacts(facts = []) {
   return facts.filter((fact) => fact.status !== 'MATCHED');
 }
+
+export function matchedFactsFromEnrichmentDiagnostics(diagnostics = []) {
+  const facts = [];
+  for (const item of Array.isArray(diagnostics) ? diagnostics : []) {
+    const nodeNumber = text(item.nodeNumber || item.keptNode);
+    if (!nodeNumber) continue;
+    if (item.type === 'dtxr-ps') {
+      facts.push(makeXmlCiiMatchedFact({
+        source: 'PREVIEW_JSON',
+        itemType: 'DTXR_PS',
+        basis: 'PS',
+        key: text(item.tags),
+        resolvedNodeNumber: nodeNumber,
+        resolvedNodeName: text(item.nodeName),
+        value: text(item.count),
+        action: 'EXISTING',
+        meta: item,
+      }));
+    } else if (item.type === 'dtxr-pos') {
+      facts.push(makeXmlCiiMatchedFact({
+        source: 'PREVIEW_JSON',
+        itemType: 'DTXR_POS',
+        basis: 'POS',
+        key: text(item.position),
+        resolvedNodeNumber: nodeNumber,
+        resolvedNodeName: text(item.nodeName),
+        value: text(item.count),
+        action: 'EXISTING',
+        meta: item,
+      }));
+    } else if (item.type === 'support-match') {
+      const values = text(item.restraintTypes || item.kind).split('+').map(text).filter(Boolean);
+      for (const value of values.length ? values : ['']) {
+        facts.push(makeXmlCiiMatchedFact({
+          source: 'PREVIEW_JSON',
+          itemType: 'RESTRAINT',
+          basis: item.method === 'ps-tag' ? 'PS' : 'POS',
+          key: item.method === 'ps-tag' ? text(item.tags) : text(item.stagedName),
+          resolvedNodeNumber: nodeNumber,
+          resolvedNodeName: text(item.nodeName),
+          value,
+          action: 'EXISTING',
+          meta: item,
+        }));
+      }
+    } else if (item.type === 'weight-master-match' || item.type === 'rigid-weight-manual-override') {
+      facts.push(makeXmlCiiMatchedFact({
+        source: item.type === 'weight-master-match' ? 'PREVIEW_MASTER' : 'MANUAL_WEIGHT_REVIEW',
+        itemType: 'WEIGHT',
+        basis: 'NODE',
+        key: nodeNumber,
+        resolvedNodeNumber: nodeNumber,
+        value: item.weight,
+        action: 'EXISTING',
+        meta: item,
+      }));
+    }
+  }
+  return facts;
+}
