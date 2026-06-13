@@ -19,6 +19,16 @@ export { SUPPORT_KINDS, MATCH_TYPES, splitRuleTerms, normalizeMapperFieldName, c
 const STORAGE_KEY = 'pcf-rvm-support-mapper-rules';
 const BUILTIN_OVERRIDES_STORAGE_KEY = 'pcf-rvm-support-mapper-builtin-overrides';
 
+const REQUIRED_REST_PATTERN_TERMS = Object.freeze([
+  'REST',
+  'SHOE',
+  'BP',
+  'BEARING PLATE',
+  'WP',
+  'WEAR PAD',
+  'ANCI',
+]);
+
 const FIELD_SUGGESTIONS = [
   'CMPSUPTYPE',
   'MDSSUPPTYPE',
@@ -91,9 +101,43 @@ function saveUserRules(rules) {
   notifySupportRulesChanged();
 }
 
+function _canonicalTerm(value) {
+  return String(value || '').trim().toUpperCase().replace(/\s+/g, ' ');
+}
+
+function _mergeCommaTerms(value, requiredTerms = []) {
+  const seen = new Set();
+  const out = [];
+  const pushTerm = (term) => {
+    const normalized = _canonicalTerm(term);
+    if (!normalized || seen.has(normalized)) return;
+    seen.add(normalized);
+    out.push(normalized);
+  };
+
+  splitRuleTerms(value).forEach(pushTerm);
+  requiredTerms.forEach(pushTerm);
+  return out.join(',');
+}
+
+function _applyRequiredBuiltinGuards(candidate, baseRule) {
+  if (baseRule?.id !== 'builtin-user-rest') return candidate;
+
+  return {
+    ...candidate,
+    pattern: _mergeCommaTerms(candidate.pattern || baseRule.pattern, REQUIRED_REST_PATTERN_TERMS),
+    match: 'contains',
+    kind: 'REST',
+    label: 'REST/SHOE/BP/WP/ANCI -> REST',
+  };
+}
+
 export function getBuiltinRules() {
   const overrides = loadBuiltinRuleOverrides();
-  return BUILTIN_RULES.map(rule => _normalizeRuleForUse({ ...rule, ...(overrides[rule.id] || {}) }));
+  return BUILTIN_RULES.map(rule => {
+    const merged = { ...rule, ...(overrides[rule.id] || {}) };
+    return _normalizeRuleForUse(_applyRequiredBuiltinGuards(merged, rule));
+  });
 }
 
 export function getAllRules() {
@@ -130,7 +174,15 @@ export function updateBuiltinRule(id, patch) {
   const baseRule = BUILTIN_RULES.find(rule => rule.id === id);
   if (!baseRule) throw new Error(`Unknown built-in support mapper rule: ${id}`);
 
-  const nextRule = _normalizeRuleForStorage({ ...baseRule, ...patch, id });
+  const guardedPatch = baseRule.id === 'builtin-user-rest'
+    ? {
+        ...patch,
+        pattern: _mergeCommaTerms(patch?.pattern ?? baseRule.pattern, REQUIRED_REST_PATTERN_TERMS),
+        match: 'contains',
+        kind: 'REST',
+      }
+    : patch;
+  const nextRule = _normalizeRuleForStorage({ ...baseRule, ...guardedPatch, id });
   const overrides = { ...loadBuiltinRuleOverrides() };
   overrides[id] = {
     field: nextRule.field,
