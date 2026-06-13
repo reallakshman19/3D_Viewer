@@ -86,15 +86,22 @@ function bendMetadataFromAttrs(attrs = {}, source = '') {
   ]);
   const angleDeg = numericAttr(attrs, [
     'ANGLE',
+    'ANGLE1',
+    'ANGLE_1',
     'BEND_ANGLE',
     'BENDANGLE',
+    'BEND_ANGLE1',
+    'BENDANGLE1',
     'ANG',
+    'ANG1',
     'DEG',
     'DEGREES',
   ]);
+  const node = attrValue(attrs, 'NODE', 'NODE1', 'BEND_NODE', 'BENDNODE', 'AT_NODE');
   return {
     radius,
     angleDeg,
+    node,
     source,
     rawAttrs: attrs,
   };
@@ -124,6 +131,7 @@ export function applyInputXmlBendMetadata(xmlText, doc) {
     };
     if (metadata.radius != null) component.rawAttributes.inputXmlBendRadius = String(metadata.radius);
     if (metadata.angleDeg != null) component.rawAttributes.inputXmlBendAngleDeg = String(metadata.angleDeg);
+    if (metadata.node) component.rawAttributes.inputXmlBendNode = metadata.node;
     enrichedComponentCount += 1;
   }
 
@@ -140,6 +148,7 @@ export function bendMetadataFromComponentRaw(rawAttributes = {}) {
   return {
     radius: numberOrNull(rawAttributes.inputXmlBendRadius) ?? direct.radius,
     angleDeg: numberOrNull(rawAttributes.inputXmlBendAngleDeg) ?? direct.angleDeg,
+    node: text(rawAttributes.inputXmlBendNode || direct.node),
     source: text(rawAttributes.inputXmlBendMetadataSource || direct.source),
     rawAttrs: rawAttributes.inputXmlBendRawAttrs || '',
   };
