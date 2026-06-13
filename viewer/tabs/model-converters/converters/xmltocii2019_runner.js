@@ -71,9 +71,28 @@ function sideloadDiagnosticRows(facts = [], type) {
   }));
 }
 
+function ensureEnrichedPreviewLedger(enriched) {
+  if (!enriched || typeof enriched !== 'object') return { matchedFacts: [], rejectedFacts: [] };
+
+  if (!Array.isArray(enriched.matchedFacts) || !enriched.matchedFacts.length) {
+    enriched.matchedFacts = matchedFactsFromEnrichmentDiagnostics(enriched.diagnostics || []);
+  }
+  if (!Array.isArray(enriched.rejectedFacts)) enriched.rejectedFacts = [];
+  if (!enriched.stats || typeof enriched.stats !== 'object') enriched.stats = {};
+
+  enriched.stats.previewMatchedFacts = enriched.matchedFacts.length;
+  enriched.stats.previewRejectedFacts = enriched.rejectedFacts.length;
+
+  return {
+    matchedFacts: enriched.matchedFacts,
+    rejectedFacts: enriched.rejectedFacts,
+  };
+}
+
 function applyOptionalManualSideload(enriched, runValues) {
   const supportConfig = parseSupportConfig(runValues);
   const sideloadText = optionText(runValues, supportConfig, 'sideloadRestraintsText', 'xmlCiiSideloadRestraintsText', 'restraintsText');
+  ensureEnrichedPreviewLedger(enriched);
   if (!sideloadText.trim()) return { applied: false, stdout: [] };
 
   const exactToleranceMm = optionNumber(runValues, supportConfig, 1, 'sideloadPosExactToleranceMm', 'posExactToleranceMm');
@@ -81,9 +100,7 @@ function applyOptionalManualSideload(enriched, runValues) {
   const policy = optionPolicy(runValues, supportConfig);
   const resolverIndex = buildXmlCiiNodeResolverIndex(enriched.xmlText, { exactToleranceMm });
   const manual = resolveManualRestraintRows(sideloadText, resolverIndex, { exactToleranceMm, nearestToleranceMm });
-  const previewFacts = Array.isArray(enriched.matchedFacts) && enriched.matchedFacts.length
-    ? enriched.matchedFacts
-    : matchedFactsFromEnrichmentDiagnostics(enriched.diagnostics || []);
+  const previewFacts = enriched.matchedFacts || [];
   const merged = mergeXmlCiiMatchedFacts(previewFacts, manual.matchedFacts, { policy });
   const applied = applyManualMatchedFactsToEnrichedXml(enriched.xmlText, merged.matchedFacts, enriched.config, { policy });
 
@@ -100,6 +117,8 @@ function applyOptionalManualSideload(enriched, runValues) {
   enriched.stats.manualSideloadRejected = manual.rejectedFacts.length + merged.rejectedFacts.length + applied.rejectedFacts.length;
   enriched.stats.manualSideloadApplied = applied.stats.appliedManualRestraints;
   enriched.stats.normalizedRestraints = (enriched.stats.normalizedRestraints || 0) + applied.stats.appliedManualRestraints;
+  enriched.stats.previewMatchedFacts = enriched.matchedFacts.length;
+  enriched.stats.previewRejectedFacts = enriched.rejectedFacts.length;
 
   enriched.diagnostics.push({
     type: 'sideload-restraint-summary',
@@ -189,6 +208,7 @@ export async function run(context) {
     }
   }
 
+  ensureEnrichedPreviewLedger(enriched);
   const sideloadLogLines = applyOptionalManualSideload(enriched, runValues).stdout;
 
   const enrichedName = `${stem}_enriched.xml`;
@@ -238,6 +258,8 @@ export async function run(context) {
         `DTXR_POS annotations: ${stats.dtxrPosAnnotations || 0}.`,
         `Branch line keys annotated from Branchname: ${stats.branchLineKeys}.`,
         `Rating annotations: ${stats.ratingAnnotations}; weight annotations: ${stats.weightAnnotations}.`,
+        `Matched enrichment preview facts: ${stats.previewMatchedFacts || 0}.`,
+        `Rejected enrichment preview facts: ${stats.previewRejectedFacts || 0}.`,
         ...rigidReviewLogLines,
         ...sideloadLogLines,
         `Enrichment diagnostics written: ${stem}_enrichment_diagnostics.json`,
