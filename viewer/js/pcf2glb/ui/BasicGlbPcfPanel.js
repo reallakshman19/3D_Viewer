@@ -65,18 +65,27 @@ export function renderBasicGlbPcfPanel(container) {
         </div>
 
         <div id="adv-preview-container" style="flex:1; background:radial-gradient(circle at center, #3a3a45 0%, #2a2a32 40%, #1c1c22 100%); position:relative; overflow:hidden;"></div>
-        <div id="adv-nav-strip" style="position:absolute; right:334px; top:112px; z-index:12; display:flex; flex-direction:column; gap:10px;">
-          <button data-adv-nav="ISO"     title="ISO View"         style="${_navButtonStyle()}">ISO</button>
-          <button data-adv-nav="TOP"     title="Top View"         style="${_navButtonStyle()}">TOP</button>
-          <button data-adv-nav="FRONT"   title="Front View"       style="${_navButtonStyle()}">FRT</button>
-          <button data-adv-nav="SIDE"    title="Side View"        style="${_navButtonStyle()}">SIDE</button>
-          <button data-adv-nav="FIT"     title="Fit All"          style="${_navButtonStyle()}">FIT</button>
-          <button data-adv-nav="ZOOM_SELECTED" title="Zoom Selected" style="${_navButtonStyle()}">ZOOM</button>
-          <button data-adv-nav="MARQUEE" title="Marquee Zoom: drag a rectangle on the viewport to zoom into it" id="btn-marquee-nav" style="${_navButtonStyle()}">MZoom</button>
-          <button data-adv-nav="CLIP"    title="Toggle Section Clip Box + open adjustment panel" style="${_navButtonStyle()}">CLIP</button>
-          <button data-adv-nav="MEASURE" title="Measure Selection" style="${_navButtonStyle()}">MSR</button>
+        <div id="adv-right-dock" style="position:absolute; right:18px; top:112px; bottom:92px; width:296px; z-index:13; display:flex; flex-direction:column; gap:12px; pointer-events:none;">
+          <div id="adv-label-panel-host" style="width:100%; max-height:min(220px, 34vh); overflow:auto; pointer-events:auto;"></div>
+          <div id="adv-nav-strip" style="display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:8px; pointer-events:auto;">
+            <button data-adv-nav="ISO"     title="ISO View"         style="${_navButtonStyle()}">ISO</button>
+            <button data-adv-nav="TOP"     title="Top View"         style="${_navButtonStyle()}">TOP</button>
+            <button data-adv-nav="FRONT"   title="Front View"       style="${_navButtonStyle()}">FRT</button>
+            <button data-adv-nav="SIDE"    title="Side View"        style="${_navButtonStyle()}">SIDE</button>
+            <button data-adv-nav="FIT"     title="Fit All"          style="${_navButtonStyle()}">FIT</button>
+            <button data-adv-nav="ZOOM_SELECTED" title="Zoom Selected" style="${_navButtonStyle()}">ZOOM</button>
+            <button data-adv-nav="MARQUEE" title="Marquee Zoom: drag a rectangle on the viewport to zoom into it" id="btn-marquee-nav" style="${_navButtonStyle()}">MZoom</button>
+            <button data-adv-nav="CLIP"    title="Toggle Section Clip Box + open adjustment panel" style="${_navButtonStyle()}">CLIP</button>
+            <button data-adv-nav="MEASURE" title="Measure Selection" style="${_navButtonStyle()}">MSR</button>
+          </div>
+          <div id="adv-property-panel" style="width:100%; box-sizing:border-box; background:rgba(19,34,53,0.94); color:white; padding:15px; border-radius:14px; box-shadow:0 14px 40px rgba(0,0,0,0.35); display:none; z-index:12; border:1px solid rgba(255,255,255,0.08); pointer-events:auto; min-height:0;">
+            <div style="display:flex; justify-content:space-between; border-bottom:1px solid rgba(255,255,255,0.14); padding-bottom:8px; margin-bottom:10px;">
+              <strong style="font-size:14px;">Component Properties</strong>
+              <button id="btn-adv-close-props" style="background:none; border:none; color:white; cursor:pointer; font-weight:bold;">X</button>
+            </div>
+            <div id="adv-property-content" style="max-height:min(220px, 28vh); overflow-y:auto; font-size:12px; font-family:monospace;"></div>
+          </div>
         </div>
-        <div id="adv-label-panel-host" style="position:absolute; right:18px; top:112px; width:296px; max-height:220px; overflow:auto; z-index:13;"></div>
         <div id="adv-measure-chip" style="position:absolute; right:18px; bottom:80px; z-index:11; min-width:220px; max-width:280px; padding:12px 14px; border-radius:14px; border:1px solid rgba(131,191,255,0.18); background:rgba(16,30,47,0.88); color:#e8f3ff; font-size:12px; line-height:1.45; box-shadow:0 12px 28px rgba(0,0,0,0.28);">Measure tool is off.</div>
 
         <button id="btn-adv-debug-toggle" style="position:absolute; right:18px; bottom:18px; z-index:10; padding:10px 14px; border-radius:12px; border:1px solid rgba(119,196,255,0.25); background:rgba(20,36,56,0.92); color:#d8ecff; cursor:pointer; box-shadow:0 12px 24px rgba(4,10,18,0.28);">Debug</button>
@@ -89,14 +98,6 @@ export function renderBasicGlbPcfPanel(container) {
             Active Logs:<br>
             <div id="adv-debug-logs"></div>
           </div>
-        </div>
-
-        <div id="adv-property-panel" style="position:absolute; top:348px; right:18px; width:296px; box-sizing:border-box; background:rgba(19,34,53,0.94); color:white; padding:15px; border-radius:14px; box-shadow:0 14px 40px rgba(0,0,0,0.35); display:none; z-index:12; border:1px solid rgba(255,255,255,0.08);">
-          <div style="display:flex; justify-content:space-between; border-bottom:1px solid rgba(255,255,255,0.14); padding-bottom:8px; margin-bottom:10px;">
-            <strong style="font-size:14px;">Component Properties</strong>
-            <button id="btn-adv-close-props" style="background:none; border:none; color:white; cursor:pointer; font-weight:bold;">X</button>
-          </div>
-          <div id="adv-property-content" style="max-height:220px; overflow-y:auto; font-size:12px; font-family:monospace;"></div>
         </div>
 
         <!-- Section Box Adjustment Panel -->
@@ -370,5 +371,5 @@ function _renderMeasureText(info, enabled) {
 }
 
 function _navButtonStyle() {
-  return 'width:56px; padding:10px 0; border-radius:14px; border:1px solid rgba(175,214,255,0.18); background:rgba(19,36,57,0.42); backdrop-filter:blur(12px); color:#e4f0ff; font-size:11px; font-weight:700; letter-spacing:0.08em; cursor:pointer; box-shadow:0 10px 22px rgba(0,0,0,0.2);';
+  return 'width:100%; min-width:0; height:42px; padding:0 6px; border-radius:14px; border:1px solid rgba(175,214,255,0.18); background:rgba(19,36,57,0.42); backdrop-filter:blur(12px); color:#e4f0ff; font-size:11px; font-weight:700; letter-spacing:0.08em; text-align:center; white-space:nowrap; cursor:pointer; box-shadow:0 10px 22px rgba(0,0,0,0.2);';
 }

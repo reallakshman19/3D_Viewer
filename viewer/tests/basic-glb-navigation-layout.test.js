@@ -32,12 +32,15 @@ assert.match(basicPanelSource, /id="basic-glb-sidebar-toggle"/);
 assert.match(basicPanelSource, /window\.localStorage\.setItem\(BASIC_GLB_SIDEBAR_COLLAPSED_KEY/);
 assert.match(basicPanelSource, /viewerApp\.resize\?\.\(\)/);
 assert.match(basicPanelSource, /window\.setTimeout\(resizeViewer, 220\)/);
+assert.match(basicPanelSource, /id="adv-right-dock"/);
 assert.match(basicPanelSource, /id="adv-label-panel-host"/);
 assert.match(basicPanelSource, /labelPanelHost/);
+assert.match(basicPanelSource, /id="adv-nav-strip"/);
+assert.match(basicPanelSource, /grid-template-columns:repeat\(3, minmax\(0, 1fr\)\)/);
 assert.match(basicPanelSource, /data-adv-nav="ZOOM_SELECTED"/);
 assert.match(basicPanelSource, /viewerApp\.zoomSelected\(\)/);
-assert.match(basicPanelSource, /right:334px/);
-assert.match(basicPanelSource, /top:348px/);
+assert.doesNotMatch(basicPanelSource, /right:334px/);
+assert.doesNotMatch(basicPanelSource, /top:348px/);
 
 assert.match(viewerAppSource, /zoomSelected:\s*\(\)\s*=>/);
 assert.match(viewerAppSource, /selectedItem\s*=\s*item/);
