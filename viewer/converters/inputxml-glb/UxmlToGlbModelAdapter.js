@@ -1,4 +1,5 @@
 import { classifyComponentLayer, classifySupportType, parseSelectedBranches } from '../inputxml-dxf/InputXmlToDxfProjector.js';
+import { bendMetadataFromComponentRaw } from './InputXmlBendMetadata.js';
 
 function text(value) {
   return String(value ?? '').trim();
@@ -74,6 +75,15 @@ function makeAttributes(component = {}, extra = {}) {
   };
 }
 
+function bendExtraForComponent(component = {}) {
+  const metadata = bendMetadataFromComponentRaw(component.rawAttributes || {});
+  const extra = {};
+  if (metadata.radius != null) extra.BEND_RADIUS = String(metadata.radius);
+  if (metadata.angleDeg != null) extra.BEND_ANGLE_DEG = String(metadata.angleDeg);
+  if (metadata.source) extra.BEND_METADATA_SOURCE = metadata.source;
+  return { metadata, extra };
+}
+
 function makeSegmentComponent(segment, component, anchors, diagnostics) {
   const p1 = point3(anchors.get(segment.startAnchorId)?.point, segment.bore || component?.bore);
   const p2 = point3(anchors.get(segment.endAnchorId)?.point, segment.bore || component?.bore);
@@ -91,7 +101,8 @@ function makeSegmentComponent(segment, component, anchors, diagnostics) {
   const type = glbTypeForLayer(layer, component);
   const bore = Number(component?.bore ?? segment.bore ?? p1.bore ?? p2.bore ?? 20);
   const id = text(segment.id || component?.id || `segment-${diagnostics.length}`);
-  const attributes = makeAttributes(component, { layer, uxmlSegmentId: text(segment.id) });
+  const { metadata: bendMetadata, extra: bendExtra } = bendExtraForComponent(component);
+  const attributes = makeAttributes(component, { layer, uxmlSegmentId: text(segment.id), ...bendExtra });
 
   return {
     id,
@@ -104,6 +115,9 @@ function makeSegmentComponent(segment, component, anchors, diagnostics) {
     refNo: text(component?.refNo || component?.seqNo || component?.id || id),
     attributes,
     raw: component?.rawAttributes || {},
+    bendRadius: bendMetadata.radius,
+    bendAngleDeg: bendMetadata.angleDeg,
+    bendMetadataSource: bendMetadata.source,
     pipelineRef: text(component?.pipelineRef),
     lineKey: text(component?.lineKey),
     uxmlComponentId: text(component?.id),
@@ -162,6 +176,7 @@ export function adaptUxmlToGlbModel(doc, options = {}) {
   const diagnostics = [];
   const typeCounts = {};
   const supportKindCounts = {};
+  let bendRadiusCount = 0;
 
   for (const segment of doc.segments || []) {
     const component = componentsById.get(segment.componentId);
@@ -169,6 +184,7 @@ export function adaptUxmlToGlbModel(doc, options = {}) {
     if (isSupportComponent(component, segment)) continue;
     const glbComponent = makeSegmentComponent(segment, component, anchors, diagnostics);
     if (!glbComponent) continue;
+    if (glbComponent.bendRadius != null) bendRadiusCount += 1;
     components.push(glbComponent);
     typeCounts[glbComponent.type] = (typeCounts[glbComponent.type] || 0) + 1;
   }
@@ -196,6 +212,7 @@ export function adaptUxmlToGlbModel(doc, options = {}) {
       typeCounts,
       supportKindCounts,
       selectedBranchIds: [...selectedIds],
+      bendRadiusCount,
     },
     diagnostics,
   };
