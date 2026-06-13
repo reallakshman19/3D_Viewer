@@ -1,5 +1,9 @@
 import { decodeTextUtf8, encodeTextUtf8, baseNameWithoutExtension } from '../core/output-utils.js';
 import { collectXmlCiiZeroRigidWeightIssues, applyXmlCiiRigidWeightOverrides } from '../../../converters/xml-cii2019-core/weight-match-model.js';
+import { buildXmlCiiNodeResolverIndex } from '../../../converters/xml-cii2019-core/sideload-resolver.js';
+import { resolveManualRestraintRows } from '../../../converters/xml-cii2019-core/sideload-restraints.js';
+import { mergeXmlCiiMatchedFacts, matchedFactsFromEnrichmentDiagnostics } from '../../../converters/xml-cii2019-core/sideload-ledger.js';
+import { applyManualMatchedFactsToEnrichedXml } from '../../../converters/xml-cii2019-core/sideload-apply.js';
 import { enrichXmlForCii2019 } from './xmltocii2019_helper/enrichment-core.js';
 
 const XML_CII_STAGE_TIMEOUT_MS = 120000;
@@ -16,6 +20,111 @@ function withTimeout(promise, stage, timeoutMs = XML_CII_STAGE_TIMEOUT_MS) {
   return Promise.race([promise, timeout]).finally(() => {
     if (timeoutId) clearTimeout(timeoutId);
   });
+}
+
+function parseSupportConfig(options = {}) {
+  try {
+    const parsed = JSON.parse(options.supportConfigJson || '{}');
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+function optionText(options, supportConfig, ...keys) {
+  for (const key of keys) {
+    const value = options?.[key];
+    if (value !== undefined && value !== null && String(value).trim()) return String(value);
+  }
+  const sideload = supportConfig?.sideload && typeof supportConfig.sideload === 'object' ? supportConfig.sideload : {};
+  for (const key of keys) {
+    const value = sideload?.[key];
+    if (value !== undefined && value !== null && String(value).trim()) return String(value);
+  }
+  return '';
+}
+
+function optionNumber(options, supportConfig, fallback, ...keys) {
+  const sideload = supportConfig?.sideload && typeof supportConfig.sideload === 'object' ? supportConfig.sideload : {};
+  for (const source of [options || {}, sideload]) {
+    for (const key of keys) {
+      const numeric = Number(source?.[key]);
+      if (Number.isFinite(numeric)) return numeric;
+    }
+  }
+  return fallback;
+}
+
+function optionPolicy(options, supportConfig) {
+  return options.sideloadPolicy || supportConfig?.sideload?.policy || 'ADD_IF_MISSING';
+}
+
+function sideloadDiagnosticRows(facts = [], type) {
+  return facts.map((fact) => ({
+    type,
+    nodeNumber: fact.resolvedNodeNumber || '',
+    method: fact.basis || '',
+    kind: fact.value || '',
+    message: fact.meta?.rawLine || fact.key || fact.status || '',
+    source: fact.source || '',
+    status: fact.status || '',
+  }));
+}
+
+function applyOptionalManualSideload(enriched, runValues) {
+  const supportConfig = parseSupportConfig(runValues);
+  const sideloadText = optionText(runValues, supportConfig, 'sideloadRestraintsText', 'xmlCiiSideloadRestraintsText', 'restraintsText');
+  if (!sideloadText.trim()) return { applied: false, stdout: [] };
+
+  const exactToleranceMm = optionNumber(runValues, supportConfig, 1, 'sideloadPosExactToleranceMm', 'posExactToleranceMm');
+  const nearestToleranceMm = optionNumber(runValues, supportConfig, 5, 'sideloadPosToleranceMm', 'posToleranceMm');
+  const policy = optionPolicy(runValues, supportConfig);
+  const resolverIndex = buildXmlCiiNodeResolverIndex(enriched.xmlText, { exactToleranceMm });
+  const manual = resolveManualRestraintRows(sideloadText, resolverIndex, { exactToleranceMm, nearestToleranceMm });
+  const previewFacts = Array.isArray(enriched.matchedFacts) && enriched.matchedFacts.length
+    ? enriched.matchedFacts
+    : matchedFactsFromEnrichmentDiagnostics(enriched.diagnostics || []);
+  const merged = mergeXmlCiiMatchedFacts(previewFacts, manual.matchedFacts, { policy });
+  const applied = applyManualMatchedFactsToEnrichedXml(enriched.xmlText, merged.matchedFacts, enriched.config, { policy });
+
+  enriched.xmlText = applied.xmlText;
+  enriched.matchedFacts = merged.matchedFacts;
+  enriched.rejectedFacts = [
+    ...(enriched.rejectedFacts || []),
+    ...manual.rejectedFacts,
+    ...merged.rejectedFacts,
+    ...applied.rejectedFacts,
+  ];
+  enriched.stats.manualSideloadRows = manual.rows.length;
+  enriched.stats.manualSideloadMatched = manual.matchedFacts.length;
+  enriched.stats.manualSideloadRejected = manual.rejectedFacts.length + merged.rejectedFacts.length + applied.rejectedFacts.length;
+  enriched.stats.manualSideloadApplied = applied.stats.appliedManualRestraints;
+  enriched.stats.normalizedRestraints = (enriched.stats.normalizedRestraints || 0) + applied.stats.appliedManualRestraints;
+
+  enriched.diagnostics.push({
+    type: 'sideload-restraint-summary',
+    rows: manual.rows.length,
+    matched: manual.matchedFacts.length,
+    applied: applied.stats.appliedManualRestraints,
+    rejected: enriched.stats.manualSideloadRejected,
+    policy,
+    exactToleranceMm,
+    nearestToleranceMm,
+  });
+  enriched.diagnostics.push(...sideloadDiagnosticRows(manual.rejectedFacts, 'sideload-restraint-rejected'));
+  enriched.diagnostics.push(...sideloadDiagnosticRows(merged.rejectedFacts, 'sideload-restraint-skipped'));
+  enriched.diagnostics.push(...sideloadDiagnosticRows(applied.appliedFacts, 'sideload-restraint-applied'));
+  enriched.diagnostics.push(...sideloadDiagnosticRows(applied.rejectedFacts, 'sideload-restraint-apply-skipped'));
+
+  return {
+    applied: true,
+    stdout: [
+      `Manual side-load restraints parsed: ${manual.rows.length}.`,
+      `Manual side-load restraints matched: ${manual.matchedFacts.length}.`,
+      `Manual side-load restraints applied: ${applied.stats.appliedManualRestraints}.`,
+      `Manual side-load restraints rejected/skipped: ${enriched.stats.manualSideloadRejected}.`,
+    ],
+  };
 }
 
 export async function run(context) {
@@ -80,6 +189,8 @@ export async function run(context) {
     }
   }
 
+  const sideloadLogLines = applyOptionalManualSideload(enriched, runValues).stdout;
+
   const enrichedName = `${stem}_enriched.xml`;
   if (!context.workerRunner) throw new Error('Python worker runtime is not available.');
   const serializableOptions = Object.fromEntries(Object.entries({ ...runValues, createEnrichedXml: false }).filter(([, v]) => typeof v !== 'function'));
@@ -96,7 +207,7 @@ export async function run(context) {
   const ciiOutputs = Array.isArray(ciiResponse.outputs) ? ciiResponse.outputs : [];
   const stats = enriched.stats;
   const diagnostics = enriched.diagnostics;
-  const diagnosticText = JSON.stringify({ generatedAt: new Date().toISOString(), stats, diagnostics }, null, 2);
+  const diagnosticText = JSON.stringify({ generatedAt: new Date().toISOString(), stats, diagnostics, matchedFacts: enriched.matchedFacts || [], rejectedFacts: enriched.rejectedFacts || [] }, null, 2);
   const diagnosticRows = (Array.isArray(diagnostics) ? diagnostics : []).map((item) => ({
     type: item?.type || '',
     nodeNumber: item?.nodeNumber || item?.keptNode || item?.removedNode || '',
@@ -106,7 +217,7 @@ export async function run(context) {
     boreMm: item?.boreMm == null ? '' : Number(item.boreMm).toFixed ? Number(item.boreMm).toFixed(3) : item.boreMm,
     lengthMm: item?.lengthMm == null ? '' : Number(item.lengthMm).toFixed ? Number(item.lengthMm).toFixed(3) : item.lengthMm,
     weight: item?.weight ?? '',
-    method: item?.method || item?.reason || item?.source || '',
+    method: item?.method || item?.reason || item?.source || item?.status || '',
     kind: item?.kind || '',
     message: item?.message || item?.stagedName || item?.url || item?.reason || '',
   }));
@@ -128,6 +239,7 @@ export async function run(context) {
         `Branch line keys annotated from Branchname: ${stats.branchLineKeys}.`,
         `Rating annotations: ${stats.ratingAnnotations}; weight annotations: ${stats.weightAnnotations}.`,
         ...rigidReviewLogLines,
+        ...sideloadLogLines,
         `Enrichment diagnostics written: ${stem}_enrichment_diagnostics.json`,
         ...(ciiResponse.logs?.stdout || []),
       ],
