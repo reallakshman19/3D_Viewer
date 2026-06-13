@@ -274,7 +274,8 @@ function openConversionWorkflow(root = document, state) {
 function ensureWorkflowButton(root, state) {
   const runButton = root.querySelector?.('#model-converters-run');
   if (!runButton) return;
-  if (isXmlCiiActive(root)) {
+  const xmlActive = isXmlCiiActive(root);
+  if (xmlActive) {
     if (!runButton.dataset.xmlCiiOriginalText) runButton.dataset.xmlCiiOriginalText = runButton.textContent || 'Run Conversion';
     runButton.textContent = 'Open XML→CII Workflow';
     runButton.title = 'Open the XML→CII conversion workflow popup. Final conversion is available inside Output / Run Conversion.';
@@ -283,15 +284,19 @@ function ensureWorkflowButton(root, state) {
     runButton.title = '';
   }
 
-  if (root.querySelector('[data-xml-cii-open-conversion-workflow]')) return;
-  const quickButton = document.createElement('button');
-  quickButton.type = 'button';
-  quickButton.className = 'model-converters-download-btn';
-  quickButton.dataset.xmlCiiOpenConversionWorkflow = 'true';
-  quickButton.textContent = 'Open XML→CII Workflow';
-  quickButton.style.cssText = 'width:100%;padding:10px;margin-top:-4px;';
-  quickButton.addEventListener('click', () => openConversionWorkflow(root, state));
-  runButton.parentElement?.insertBefore(quickButton, runButton);
+  let quickButton = root.querySelector('[data-xml-cii-open-conversion-workflow]');
+  if (!quickButton) {
+    quickButton = document.createElement('button');
+    quickButton.type = 'button';
+    quickButton.className = 'model-converters-download-btn';
+    quickButton.dataset.xmlCiiOpenConversionWorkflow = 'true';
+    quickButton.textContent = 'Open XML→CII Workflow';
+    quickButton.style.cssText = 'width:100%;padding:10px;margin-top:-4px;';
+    quickButton.addEventListener('click', () => openConversionWorkflow(root, state));
+    runButton.parentElement?.insertBefore(quickButton, runButton);
+  }
+  quickButton.hidden = !xmlActive;
+  quickButton.disabled = !xmlActive;
 }
 
 export function installXmlCiiConversionWorkflowPopup(container = document) {
@@ -313,6 +318,7 @@ export function installXmlCiiConversionWorkflowPopup(container = document) {
 
   const patch = () => ensureWorkflowButton(root, state);
   patch();
+  root.querySelector?.('#model-converters-select')?.addEventListener('change', patch);
   const observer = new MutationObserver(patch);
   observer.observe(root === document ? document.body : root, { childList: true, subtree: true });
 }
