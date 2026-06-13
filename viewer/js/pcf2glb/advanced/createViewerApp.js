@@ -53,7 +53,7 @@ export function createViewerApp(previewContainer, toolbarContainer, propPanel, p
     // CSS2D overlay for MESSAGE-CIRCLE labels and GLB metadata labels.
     css2dRenderer = new CSS2DRenderer();
     css2dRenderer.setSize(previewContainer.clientWidth, previewContainer.clientHeight);
-    css2dRenderer.domElement.style.cssText = 'position:absolute;top:0;left:0;pointer-events:none;overflow:hidden;';
+    css2dRenderer.domElement.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;overflow:visible;z-index:2147483000;';
     previewContainer.style.position = 'relative';
     previewContainer.appendChild(css2dRenderer.domElement);
     scene.add(msgCircleGroup);

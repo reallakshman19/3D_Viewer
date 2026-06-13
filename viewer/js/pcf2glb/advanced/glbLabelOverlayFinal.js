@@ -129,36 +129,75 @@ function isExplicitLabelAnchor(object) {
   );
 }
 
+// Extract a clean node number from raw label text.
+// Handles: "205", "NODE 205", "N205", "IX-A-IX-PE-00001-NODE-205".
+// Rejects: "SUPPORT_POINT" pseudo-labels and strings with no parseable number.
+function cleanNodeText(rawText) {
+  const value = text(rawText);
+  if (!value) return '';
+  if (/SUPPORT_POINT/i.test(value)) return '';
+
+  // Direct number
+  if (/^\d+(?:\.\d+)?$/.test(value)) return value.replace(/\.0+$/, '');
+
+  // Simple prefix: "N205", "NODE 205", "node-205", "node:205"
+  const m1 = value.match(/^(?:N|NODE)\s*[-_:.]?\s*(\d+(?:\.\d+)?)$/i);
+  if (m1) return m1[1].replace(/\.0+$/, '');
+
+  // Complex "-NODE-NNN" suffix: "IX-A-IX-PE-00001-NODE-205"
+  const m2 = value.match(/[_-]NODE[_-](\d+)/i);
+  if (m2) return m2[1];
+
+  // Has "NODE" keyword — extract last short number
+  if (/\bNODE\b/i.test(value)) {
+    const nums = value.match(/\b(\d{1,6})\b/g);
+    if (nums?.length) return nums[nums.length - 1];
+  }
+
+  return '';
+}
+
 function isCleanNumericNodeLabel(label) {
-  const value = text(label);
-  if (!value) return false;
-  if (/SUPPORT_POINT|IX-[A-Z0-9_-]+|PIPINGELEMENT|COMPONENT|ANCHOR/i.test(value)) return false;
-  return /^(?:N|NODE)?\s*[-_:]?\s*\d+(?:\.\d+)?$/i.test(value);
+  return !!cleanNodeText(label);
 }
 
 function normalizeNodeLabel(label) {
-  const value = text(label);
-  const match = value.match(/^(?:N|NODE)?\s*[-_:]?\s*(\d+(?:\.\d+)?)$/i);
-  return match ? match[1] : value;
+  return cleanNodeText(label) || text(label);
 }
 
 function labelClassFor(object) {
   const data = object?.userData || {};
   const shape = text(data.glbShape).toLowerCase();
   const name = text(object?.name);
+  const type = String(data.componentType || data.type || '').toUpperCase();
+
   if (data.labelKind === 'node' || shape === 'node-label-anchor' || name.startsWith('node-label:')) return 'node';
-  if (data.labelKind === 'terminal' || shape.includes('terminal') || data.TERMINAL_NODE) return 'terminal';
-  if (data.supportKind || shape.startsWith('support-') || data.labelKind === 'support') return 'support';
-  if (shape.startsWith('valve')) return 'valve';
-  if (shape.startsWith('flange')) return 'flange';
-  if (shape.startsWith('tee')) return 'tee';
+  if (data.labelKind === 'terminal' || shape.includes('terminal') || data.TERMINAL_NODE || type.includes('NOZZLE')) return 'terminal';
+  if (data.supportKind || shape.includes('support') || data.labelKind === 'support' || type.includes('SUPPORT')) return 'support';
+  if (shape.includes('valve') || data.labelKind === 'valve' || type.includes('VALVE')) return 'valve';
+  if (shape.includes('flange') || data.labelKind === 'flange' || type.includes('FLANGE')) return 'flange';
+  if (shape.includes('tee') || shape.includes('olet') || data.labelKind === 'tee' || type.includes('TEE') || type.includes('OLET')) return 'tee';
   return 'component';
 }
 
-function isLabelCandidate(object) {
-  if (isLabelSuppressed(object)) return false;
-  if (!text(object?.userData?.labelText)) return false;
-  return isExplicitLabelAnchor(object);
+// Determines whether a non-anchor object qualifies for fallback label collection.
+function isAllowedFallback(object) {
+  const data = object?.userData || {};
+  const type = String(data.componentType || data.type || '').toUpperCase();
+  const shape = String(data.glbShape || '').toLowerCase();
+  const kind = String(data.labelKind || '').toLowerCase();
+
+  return !!(
+    data.supportKind ||
+    kind === 'node' || kind === 'support' || kind === 'terminal' ||
+    kind === 'valve' || kind === 'flange' || kind === 'tee' ||
+    type.includes('SUPPORT') || type.includes('VALVE') || type.includes('FLANGE') ||
+    type.includes('TEE') || type.includes('OLET') || type.includes('BEND') ||
+    type.includes('NODE') || type.includes('NOZZLE') || type.includes('NODE_LABEL') ||
+    shape.includes('support') || shape.includes('valve') || shape.includes('flange') ||
+    shape.includes('tee') || shape.includes('olet') || shape.includes('bend') ||
+    shape.includes('node') || shape.includes('nozzle') || shape.includes('terminal')
+  );
 }
 
 export function shouldShowGlbLabelKind(kind, visibility = {}) {
@@ -237,23 +276,50 @@ function logicalLabelKey(object, label, kind) {
   return `${kind}|${id}|${label}`;
 }
 
+// Scan all objects with labelText in the scene tree for diagnostics and collection.
+export function scanRawGlbLabelObjects(root) {
+  const rows = [];
+  root?.traverse?.((object) => {
+    const raw = text(object?.userData?.labelText);
+    if (!raw) return;
+    const data = object?.userData || {};
+    rows.push({
+      object,
+      name: object.name || '',
+      text: raw,
+      labelKind: data.labelKind || '',
+      glbShape: data.glbShape || '',
+      supportKind: data.supportKind || '',
+      componentType: data.componentType || data.type || '',
+      componentId: data.componentId || data.pcfId || '',
+      labelAnchor: data.labelAnchor === true,
+    });
+  });
+  return rows;
+}
+
 export function collectGlbLabelAnchors(root, options = {}) {
   const maxLabels = Number.isFinite(Number(options.maxLabels)) ? Math.max(0, Number(options.maxLabels)) : DEFAULT_MAX_LABELS;
   if (!root?.traverse || maxLabels <= 0) return [];
 
   root.updateMatrixWorld?.(true);
   const candidatesByKey = new Map();
+  const explicitKeys = new Set();
   const position = new THREE.Vector3();
 
+  // Stage A: explicit label anchors
   root.traverse((object) => {
-    if (!isLabelCandidate(object)) return;
-    let label = text(object.userData.labelText);
-    if (!label) return;
+    if (isLabelSuppressed(object)) return;
+    const raw = text(object?.userData?.labelText);
+    if (!raw) return;
+    if (!isExplicitLabelAnchor(object)) return;
 
     const kind = labelClassFor(object);
+    let label = raw;
+
     if (kind === 'node') {
-      if (!isCleanNumericNodeLabel(label)) return;
-      label = normalizeNodeLabel(label);
+      label = normalizeNodeLabel(raw);
+      if (!label || !isCleanNumericNodeLabel(raw)) return;
     }
 
     const key = logicalLabelKey(object, label, kind);
@@ -270,7 +336,57 @@ export function collectGlbLabelAnchors(root, options = {}) {
     };
 
     const existing = candidatesByKey.get(key);
-    if (!existing || priority < existing.priority) candidatesByKey.set(key, candidate);
+    if (!existing || priority < existing.priority) {
+      candidatesByKey.set(key, candidate);
+      explicitKeys.add(key);
+    }
+  });
+
+  // Stage B: fallback — one label per logical component when no explicit anchor exists
+  root.traverse((object) => {
+    if (isLabelSuppressed(object)) return;
+    if (isExplicitLabelAnchor(object)) return;
+    const raw = text(object?.userData?.labelText);
+    if (!raw) return;
+    if (!isAllowedFallback(object)) return;
+
+    const kind = labelClassFor(object);
+    if (kind === 'component') return; // Skip unclassified fallbacks
+
+    let label = raw;
+    if (kind === 'node') {
+      label = normalizeNodeLabel(raw);
+      if (!label || !isCleanNumericNodeLabel(raw)) return;
+    }
+
+    const key = logicalLabelKey(object, label, kind);
+    if (explicitKeys.has(key)) return; // Explicit anchor already covers this
+
+    const priority = 5;
+    object.getWorldPosition(position);
+
+    const candidate = {
+      text: label,
+      kind,
+      position: position.clone(),
+      sourceName: object.name || object.userData.pcfId || '',
+      sourceId: object.userData.pcfId || object.userData.componentId || object.name || '',
+      priority,
+    };
+
+    const existing = candidatesByKey.get(key);
+    if (!existing || priority < existing.priority) {
+      candidatesByKey.set(key, candidate);
+    }
+  });
+
+  const explicitCount = explicitKeys.size;
+  const fallbackCount = candidatesByKey.size - explicitCount;
+  console.info('[glb-labels]', {
+    rawLabelTextCount: (() => { let n = 0; root.traverse((o) => { if (text(o?.userData?.labelText)) n++; }); return n; })(),
+    explicitAnchorCount: explicitCount,
+    fallbackCandidateCount: fallbackCount,
+    collectedCount: Math.min(candidatesByKey.size, maxLabels),
   });
 
   return Array.from(candidatesByKey.values())
@@ -311,16 +427,22 @@ export function applyGlbLabelVisibility(labelGroup, visibility = {}) {
   return { visible, hidden, visibility: normalized };
 }
 
-function ensureCss2dDomLayer(labels) {
+function ensureCss2dDomLayer(css2dObjects) {
   if (typeof window === 'undefined') return;
   window.requestAnimationFrame?.(() => {
-    for (const label of labels || []) {
-      const parent = label.element?.parentElement;
-      if (!parent) continue;
-      parent.style.zIndex = '2147482000';
-      parent.style.position = parent.style.position || 'absolute';
-      parent.style.pointerEvents = 'none';
-      parent.style.overflow = 'visible';
+    for (const obj of css2dObjects || []) {
+      const el = obj.element;
+      if (!el) continue;
+      // Ensure the label div itself is visible
+      el.style.zIndex = '2147483000';
+      // Ensure the renderer container doesn't clip labels
+      const parent = el.parentElement;
+      if (parent) {
+        parent.style.overflow = 'visible';
+        parent.style.zIndex = String(Math.max(Number(parent.style.zIndex || 0), 2147482000));
+        parent.style.position = parent.style.position || 'absolute';
+        parent.style.pointerEvents = 'none';
+      }
     }
   });
 }
@@ -511,6 +633,19 @@ export function installGlbLabelOverlay(root, labelGroup, options = {}) {
   const visibilityStats = applyGlbLabelVisibility(labelGroup, visibility);
   ensureGlbLabelTogglePanel(labelGroup, labels, visibilityStats.visibility);
   ensureCss2dDomLayer(css2dObjects);
+
+  console.info('[glb-labels] installed', {
+    total: summary.total,
+    node: summary.node,
+    support: summary.support,
+    tee: summary.tee,
+    terminal: summary.terminal,
+    valve: summary.valve,
+    flange: summary.flange,
+    component: summary.component,
+    visible: visibilityStats.visible,
+    hidden: visibilityStats.hidden,
+  });
 
   labelGroup.userData = {
     ...(labelGroup.userData || {}),
