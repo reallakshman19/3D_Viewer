@@ -9,7 +9,6 @@ import { installXmlCiiConversionWorkflowPopup } from './model-converters/xml-cii
 const MODEL_CONVERTER_INSTALLERS = Object.freeze([
   ['xml-cii-conversion-workflow-popup', installXmlCiiConversionWorkflowPopup],
   ['inputxml-dxf-legacy-bridge', installInputXmlDxfLegacyBridge],
-  ['inputxml-dxf-branch-picker', installInputXmlDxfBranchPicker],
   ['inputxml-dxf-symbol-option', installInputXmlDxfSymbolOption],
   ['inputxml-dxf-projection-option', installInputXmlDxfProjectionOption],
   ['inputxml-glb-legacy-bridge', installInputXmlGlbLegacyBridge],
@@ -23,6 +22,16 @@ function installSafely(name, installer, container) {
   }
 }
 
+function installBranchPickerImmediately(container) {
+  try {
+    // Keep this synchronous and explicit: the branch picker is a lightweight
+    // legacy InputXML→DXF enhancer and its static gate checks this installer call.
+    installInputXmlDxfBranchPicker(container);
+  } catch (error) {
+    console.error('[ModelConverters] Optional installer failed: inputxml-dxf-branch-picker', error);
+  }
+}
+
 function scheduleInstaller(name, installer, container) {
   const run = () => installSafely(name, installer, container);
   setTimeout(run, 0);
@@ -30,6 +39,11 @@ function scheduleInstaller(name, installer, container) {
 
 export function renderModelConvertersTab(container, ctx) {
   const result = renderLegacyModelConvertersTab(container, ctx);
+
+  // Install the branch picker immediately after legacy render so existing
+  // InputXML→DXF controls are available for tests/users, while heavier XML/CII
+  // workflow helpers remain deferred and guarded for tab responsiveness.
+  installBranchPickerImmediately(container);
 
   // Emergency responsiveness guard:
   // keep the legacy converter UI as the only synchronous renderer. XML/CII popup
