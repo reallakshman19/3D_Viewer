@@ -101,5 +101,23 @@ const branchNameExtracted = extractInputXmlBranches(branchNameXml, {
 assert.equal(branchNameExtracted.branches[0]?.lineNo, '/ASIM-1885-10-S8810101-91261M7-HC/B1');
 const branchNameAdapted = adaptUxmlToGlbModel(branchNameExtracted.doc);
 assert.equal(branchNameAdapted.model.lineNo, '/ASIM-1885-10-S8810101-91261M7-HC/B1');
+const branchNameScene = buildExportScene(branchNameAdapted.model);
+const branchNameRoot = branchNameScene.getObjectByName('PCF_EXPORT_ROOT');
+assert.equal(branchNameRoot.userData.lineNo, '/ASIM-1885-10-S8810101-91261M7-HC/B1');
+assert.deepEqual(branchNameRoot.userData.lineNos, ['/ASIM-1885-10-S8810101-91261M7-HC/B1']);
+
+const branchOnlyScene = buildExportScene({
+  components: [{
+    id: 'BRANCH-ONLY-PIPE',
+    type: 'PIPE',
+    bore: 20,
+    ep1: { x: 0, y: 0, z: 0 },
+    ep2: { x: 100, y: 0, z: 0 },
+    attributes: { BranchName: '/ASIM-1885-10-S8810101-91261M7-HC/B2' },
+  }],
+});
+const branchOnlyRoot = branchOnlyScene.getObjectByName('PCF_EXPORT_ROOT');
+assert.equal(branchOnlyRoot.userData.lineNo, '/ASIM-1885-10-S8810101-91261M7-HC/B2');
+assert.deepEqual(branchOnlyRoot.userData.lineNos, ['/ASIM-1885-10-S8810101-91261M7-HC/B2']);
 
 console.log('inputxml-glb-line-no-metadata.test.js passed');

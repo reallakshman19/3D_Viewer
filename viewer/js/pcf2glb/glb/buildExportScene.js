@@ -6,17 +6,32 @@ import { enhanceLocalizedBendProxy } from './enhanceLocalizedBendProxy.js';
 import { enhanceSupportDirectionProxy } from './enhanceSupportDirectionProxyReferenceV2.js';
 import { enhanceTeeBodyProxy } from './enhanceTeeBodyProxy.js';
 import { hideGlbLabelAnchorMarkers } from './hideGlbLabelAnchorMarkers.js';
-import { normalizeLineNoValue } from '../../../utils/line-no-metadata.js';
+import {
+  LINE_NO_METADATA_KEYS,
+  firstLineNoValue,
+  lineNoFromMetadata,
+  normalizeLineNoValue,
+} from '../../../utils/line-no-metadata.js';
 
 function text(value) {
   return String(value ?? '').trim();
 }
 
+function componentLineNo(component = {}) {
+  const attrs = { ...(component.raw || {}), ...(component.attributes || {}) };
+  return firstLineNoValue(
+    component.lineNo,
+    lineNoFromMetadata(attrs, LINE_NO_METADATA_KEYS),
+    component.lineKey,
+    component.pipelineRef,
+  );
+}
+
 function collectLineNos(model = {}) {
   return Array.from(new Set([
-    text(model.lineNo),
+    firstLineNoValue(model.lineNo, lineNoFromMetadata(model, LINE_NO_METADATA_KEYS)),
     ...((model.lineNos || []).map(text)),
-    ...((model.components || []).map((component) => text(component.lineNo || component.attributes?.lineNo || component.raw?.lineNo))),
+    ...((model.components || []).map(componentLineNo)),
   ].map(normalizeLineNoValue).filter(Boolean))).sort();
 }
 

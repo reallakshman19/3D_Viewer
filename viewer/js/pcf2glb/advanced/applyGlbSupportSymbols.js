@@ -28,6 +28,8 @@ const SYMBOL_COLOR = {
 };
 
 const UP = new THREE.Vector3(0, 1, 0);
+const X_AXIS = new THREE.Vector3(1, 0, 0);
+const Z_AXIS = new THREE.Vector3(0, 0, 1);
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -156,8 +158,28 @@ function lateralAxis(pipeAxis) {
   const cross = new THREE.Vector3().crossVectors(pipeAxis, UP);
   if (cross.lengthSq() > 1e-8) return cross.normalize();
   // Vertical pipe: pick any horizontal direction
-  const crossX = new THREE.Vector3().crossVectors(pipeAxis, new THREE.Vector3(1, 0, 0));
-  return crossX.lengthSq() > 1e-8 ? crossX.normalize() : new THREE.Vector3(0, 0, 1);
+  const crossX = new THREE.Vector3().crossVectors(pipeAxis, X_AXIS);
+  return crossX.lengthSq() > 1e-8 ? crossX.normalize() : Z_AXIS.clone();
+}
+
+/**
+ * Return a horizontal restraint axis. GUIDE and LINESTOP symbols should not
+ * display vertical arrows; when source metadata is vertical, use the supplied
+ * horizontal fallback from the legacy support proxy convention.
+ */
+function horizontalAxisOrFallback(axis, fallback) {
+  const source = axis?.lengthSq?.() > 1e-8 ? axis.clone().normalize() : fallback.clone();
+  const horizontal = source.sub(UP.clone().multiplyScalar(source.dot(UP)));
+  if (horizontal.lengthSq() > 1e-8) return horizontal.normalize();
+  return fallback.clone().normalize();
+}
+
+function guideLateralAxis(restraintAxis) {
+  return horizontalAxisOrFallback(restraintAxis, X_AXIS);
+}
+
+function lineStopPipeAxis(restraintAxis) {
+  return horizontalAxisOrFallback(restraintAxis, Z_AXIS);
 }
 
 // ---------------------------------------------------------------------------
@@ -209,21 +231,25 @@ function buildGuide(group, pos, pipeAxis, lateral, scale, color) {
 }
 
 function buildLineStop(group, pos, pipeAxis, lateral, scale, color) {
+  const sideOffset = lateral.clone().multiplyScalar(scale * 0.20);
+  const center = pos.clone().add(sideOffset);
+
   // Base plate below pipe for visual grounding
   const belowY = pos.y - scale * 0.72;
-  group.add(makePlate(new THREE.Vector3(pos.x, belowY, pos.z), pipeAxis, lateral, scale, color));
+  group.add(makePlate(new THREE.Vector3(pos.x, belowY, pos.z).add(sideOffset), pipeAxis, lateral, scale, color));
 
-  // Two opposing arrows along pipe axis at pipe midline height
+  // Two opposing arrows along pipe axis, offset from the pipe centerline so
+  // they read as line-stop restraint arrows instead of hidden pipe geometry.
   const r = scale * 0.028;
   group.add(makeArrow(
-    pos.clone().add(pipeAxis.clone().multiplyScalar(scale * 0.82)),
-    pos.clone().add(pipeAxis.clone().multiplyScalar(scale * 0.14)),
-    color, r,
+    center.clone().add(pipeAxis.clone().multiplyScalar(scale * 0.82)),
+    center.clone().add(pipeAxis.clone().multiplyScalar(scale * 0.14)),
+    color, r, 'linestop-axis',
   ));
   group.add(makeArrow(
-    pos.clone().add(pipeAxis.clone().multiplyScalar(-scale * 0.82)),
-    pos.clone().add(pipeAxis.clone().multiplyScalar(-scale * 0.14)),
-    color, r,
+    center.clone().add(pipeAxis.clone().multiplyScalar(-scale * 0.82)),
+    center.clone().add(pipeAxis.clone().multiplyScalar(-scale * 0.14)),
+    color, r, 'linestop-axis',
   ));
 }
 
@@ -303,10 +329,9 @@ function disposeGroup(root) {
 }
 
 /**
- * Hide baked support-reference-v2-* marker groups that were baked into the
- * GLB during export. Runtime symbols replace most kinds, but GUIDE and
- * LINESTOP keep their baked compact glyphs as a visual fallback because those
- * baked proxies do not contain the stale REST upward-arrow geometry.
+ * Hide baked support-reference-v2-* marker groups that were baked into the GLB
+ * during export. Runtime symbols replace them so old GLBs cannot keep stale
+ * GUIDE/LINESTOP axis geometry or legacy REST upward arrows.
  */
 function isBakedSupportReference(object) {
   return String(object?.userData?.glbShape || '').startsWith('support-reference-v2-');
@@ -335,10 +360,8 @@ function hideBakedSupportMarkers(root) {
   root.traverse((obj) => {
     const shape = String(obj.userData?.glbShape || '');
     if (isBakedSupportReference(obj)) {
-      const supportShape = shape.replace('support-reference-v2-', '').toUpperCase();
-      const keepBakedFallback = supportShape === 'GUIDE' || supportShape === 'LINESTOP';
-      obj.visible = keepBakedFallback;
-      obj.userData.glbSupportBakedFallback = keepBakedFallback;
+      obj.visible = false;
+      obj.userData.glbSupportBakedFallback = false;
     }
   });
 }
@@ -399,8 +422,13 @@ export function applyGlbSupportSymbols(root, scene, options = {}) {
     if (seen.has(key)) return;
     seen.add(key);
 
-    const pipeAxis = derivePipeAxis(data);
-    const lat = lateralAxis(pipeAxis);
+    const restraintAxis = derivePipeAxis(data);
+    const pipeAxis = (kind === 'LINESTOP' || kind === 'LIMIT')
+      ? lineStopPipeAxis(restraintAxis)
+      : restraintAxis;
+    const lat = kind === 'GUIDE'
+      ? guideLateralAxis(restraintAxis)
+      : lateralAxis(pipeAxis);
     const color = SYMBOL_COLOR[kind] || SYMBOL_COLOR.UNKNOWN;
     const wPos = worldPos.clone();
 

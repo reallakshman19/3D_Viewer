@@ -56,6 +56,17 @@ function noChild(object, name) {
   assert.equal(found, undefined, `${object.name} should not contain ${name}`);
 }
 
+function collectRuntimeRoleMeshes(root, role) {
+  const meshes = [];
+  root.traverse((object) => {
+    if (object.userData?.glbSupportSymbolRole !== role) return;
+    object.traverse((childObject) => {
+      if (childObject.isMesh) meshes.push(childObject);
+    });
+  });
+  return meshes;
+}
+
 function referenceBase(object, id) {
   child(object, `${id}-directional-symbols`);
   child(object, `${id}-reference-base-pad`);
@@ -75,11 +86,24 @@ noChild(guide, 'GUIDE-X-guide-rest-axis');
 assert.equal(guide.userData.supportKind, 'GUIDE');
 assert.deepEqual(guide.userData.supportAxis, { x: 1, y: 0, z: 0 });
 
+const guideY = supportObject(support('GUIDE-Y', 'GUIDE', { x: 0, y: 1, z: 0 }));
+const guideYPositiveShaft = child(guideY, 'GUIDE-Y-guide-axis-positive-shaft');
+assert.ok(
+  Math.abs(guideYPositiveShaft.position.x) > Math.abs(guideYPositiveShaft.position.z),
+  'export GUIDE with vertical source axis should fall back to lateral X, not axial Z',
+);
+noChild(guideY, 'GUIDE-Y-rest-axis');
+
 const lineStop = supportObject(support('LS-Z', 'LINESTOP', { x: 0, y: 0, z: 1 }));
 child(lineStop, 'LS-Z-linestop-plate-positive');
 child(lineStop, 'LS-Z-linestop-plate-negative');
 child(lineStop, 'LS-Z-linestop-axis-positive');
 child(lineStop, 'LS-Z-linestop-axis-negative');
+const lineStopPositiveShaft = child(lineStop, 'LS-Z-linestop-axis-positive-shaft');
+assert.ok(
+  Math.abs(lineStopPositiveShaft.position.x) > 0.1,
+  'export LINESTOP should be offset from the pipe centerline',
+);
 assert.equal(lineStop.userData.supportKind, 'LINESTOP');
 
 const limit = supportObject(support('LIMIT-X', 'LIMIT', { x: -1, y: 0, z: 0 }));
@@ -124,13 +148,21 @@ const runtimeGuide = new THREE.Object3D();
 runtimeGuide.name = 'RUNTIME-GUIDE';
 runtimeGuide.userData = {
   supportKind: 'GUIDE',
-  supportAxis: { x: 1, y: 0, z: 0 },
+  supportAxis: { x: 0, y: 1, z: 0 },
 };
 runtimeRoot.add(runtimeGuide);
+const runtimeLineStop = new THREE.Object3D();
+runtimeLineStop.name = 'RUNTIME-LINESTOP';
+runtimeLineStop.position.set(100, 0, 0);
+runtimeLineStop.userData = {
+  supportKind: 'LINESTOP',
+  supportAxis: { x: 0, y: 0, z: 1 },
+};
+runtimeRoot.add(runtimeLineStop);
 const runtimeScene = new THREE.Scene();
 runtimeScene.add(runtimeRoot);
 const runtimeStats = applyGlbSupportSymbols(runtimeRoot, runtimeScene, { scaleMultiplier: 1 });
-assert.equal(runtimeStats.created, 1);
+assert.equal(runtimeStats.created, 2);
 
 const runtimeSymbols = runtimeScene.getObjectByName('__GLB_SUPPORT_SYMBOLS_V3__');
 assert.ok(runtimeSymbols, 'runtime support symbols root should be created');
@@ -140,6 +172,19 @@ runtimeSymbols.traverse((object) => {
 });
 assert.equal(runtimeRoles.filter((role) => role === 'rest-axis').length, 0, 'runtime GUIDE must not emit a REST upward arrow');
 assert.equal(runtimeRoles.filter((role) => role === 'guide-axis').length, 2, 'runtime GUIDE should emit two lateral guide arrows');
+assert.equal(runtimeRoles.filter((role) => role === 'linestop-axis').length, 2, 'runtime LINESTOP should emit two axial line-stop arrows');
+
+const runtimeGuideMeshes = collectRuntimeRoleMeshes(runtimeSymbols, 'guide-axis');
+assert.ok(
+  runtimeGuideMeshes.some((mesh) => Math.abs(mesh.position.x) > Math.abs(mesh.position.z)),
+  'runtime GUIDE with vertical source axis should draw laterally instead of axially',
+);
+
+const runtimeLineStopMeshes = collectRuntimeRoleMeshes(runtimeSymbols, 'linestop-axis');
+assert.ok(
+  runtimeLineStopMeshes.some((mesh) => Math.abs(mesh.position.x - runtimeLineStop.position.x) > 0.1),
+  'runtime LINESTOP should be offset from the pipe centerline',
+);
 
 const fallbackScene = buildExportScene({
   components: [
@@ -159,10 +204,10 @@ fallbackRoot.traverse((object) => {
   bakedByKind.set(shape.replace('support-reference-v2-', '').toUpperCase(), object);
 });
 
-assert.equal(bakedByKind.get('GUIDE')?.visible, true, 'GUIDE baked compact glyph should remain visible as fallback');
-assert.equal(bakedByKind.get('GUIDE')?.userData.glbSupportBakedFallback, true);
-assert.equal(bakedByKind.get('LINESTOP')?.visible, true, 'LINESTOP baked compact glyph should remain visible as fallback');
-assert.equal(bakedByKind.get('LINESTOP')?.userData.glbSupportBakedFallback, true);
+assert.equal(bakedByKind.get('GUIDE')?.visible, false, 'GUIDE baked glyph should stay hidden after runtime replacement');
+assert.equal(bakedByKind.get('GUIDE')?.userData.glbSupportBakedFallback, false);
+assert.equal(bakedByKind.get('LINESTOP')?.visible, false, 'LINESTOP baked glyph should stay hidden after runtime replacement');
+assert.equal(bakedByKind.get('LINESTOP')?.userData.glbSupportBakedFallback, false);
 assert.equal(bakedByKind.get('REST')?.visible, false, 'REST baked glyph should stay hidden after runtime replacement');
 
 console.log('inputxml-glb-directional-restraints.test.js passed');
