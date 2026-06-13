@@ -15,6 +15,7 @@ import { createAxisHelper } from './createAxisHelper.js';
 import { createDebugPanel } from './createDebugPanel.js';
 import { computeBoundingMeasurement } from '../pro-editor/core/measureUtils.js';
 import { installGlbLabelOverlay } from './glbLabelOverlay.js';
+import { applyGlbSupportSymbols } from './applyGlbSupportSymbols.js';
 
 export function createViewerApp(previewContainer, toolbarContainer, propPanel, propContent, debugLogsContainer) {
 
@@ -273,6 +274,7 @@ export function createViewerApp(previewContainer, toolbarContainer, propPanel, p
                 });
               });
 
+              applyGlbSupportSymbols(currentRoot, scene, { scaleMultiplier: 1.0 });
               const glbLabels = installGlbLabelOverlay(currentRoot, msgSquareGroup, { maxLabels: 300 });
               debugPanel.log('system', 'info', `Loaded scene with ${sceneIndex.items.length} indexed objects`);
               if (glbLabels.length) debugPanel.log('system', 'info', `Loaded ${glbLabels.length} GLB labels from userData`);
