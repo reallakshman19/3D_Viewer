@@ -17,6 +17,7 @@ const scripts = [
   'scripts/test-xml-cii-workflow-process-nesting.mjs',
   'scripts/test-xml-cii-workflow-audit-output-nesting.mjs',
   'scripts/test-xml-cii-workflow-polish.mjs',
+  'scripts/test-model-converters-tab-responsive.mjs',
 ];
 
 const missing = scripts.filter((script) => !fs.existsSync(path.join(repoRoot, script)));
