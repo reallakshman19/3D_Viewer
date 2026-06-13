@@ -23,6 +23,28 @@ function boreRadius(comp, scale = 1) {
   return Math.max((Number(comp.bore) || Number(comp.ep1?.bore) || Number(comp.ep2?.bore) || 20) / 2 * scale, 0.5);
 }
 
+function numberOrNull(value) {
+  const n = Number(value);
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+
+function bendRadiusFromComponent(comp = {}) {
+  return numberOrNull(comp.bendRadius)
+    ?? numberOrNull(comp.attributes?.BEND_RADIUS)
+    ?? numberOrNull(comp.raw?.inputXmlBendRadius)
+    ?? numberOrNull(comp.raw?.BEND_RADIUS)
+    ?? numberOrNull(comp.raw?.RADIUS)
+    ?? numberOrNull(comp.raw?.CURVE_RADIUS);
+}
+
+function bendAngleDegFromComponent(comp = {}) {
+  return numberOrNull(comp.bendAngleDeg)
+    ?? numberOrNull(comp.attributes?.BEND_ANGLE_DEG)
+    ?? numberOrNull(comp.raw?.inputXmlBendAngleDeg)
+    ?? numberOrNull(comp.raw?.BEND_ANGLE)
+    ?? numberOrNull(comp.raw?.ANGLE);
+}
+
 function componentUserData(comp, extra = {}) {
   const attrs = { ...(comp.raw || {}), ...(comp.attributes || {}) };
   return {
@@ -128,22 +150,47 @@ export function buildGenericProxy(comp, color = 0xcc5555) {
   return applyUserData(mesh, componentUserData(comp, { glbShape: 'generic-proxy' }));
 }
 
+function elbowLiftFromRadius(chordLength, bendRadius, pipeRadius, bendAngleDeg) {
+  if (!bendRadius || bendRadius <= 0) return null;
+  const angleRad = bendAngleDeg && bendAngleDeg > 0 && bendAngleDeg < 180
+    ? THREE.MathUtils.degToRad(bendAngleDeg)
+    : null;
+  let sagitta = null;
+  if (angleRad) {
+    sagitta = bendRadius * (1 - Math.cos(angleRad / 2));
+  } else if (chordLength < bendRadius * 2) {
+    sagitta = bendRadius - Math.sqrt(Math.max((bendRadius ** 2) - ((chordLength / 2) ** 2), 0));
+  }
+  if (!Number.isFinite(sagitta) || sagitta <= 0) return null;
+  return Math.max(sagitta, pipeRadius * 1.5);
+}
+
 function buildElbowMesh(comp, color = 0xaa55aa) {
   const { p1, p2 } = endpointPair(comp);
   if (!p1 || !p2 || p1.distanceTo(p2) < 0.1) return buildGenericProxy(comp, color);
 
   const radius = boreRadius(comp);
+  const bendRadius = bendRadiusFromComponent(comp);
+  const bendAngleDeg = bendAngleDegFromComponent(comp);
   const axis = safeAxis(p1, p2);
   const side = perpendicularAxis(axis);
-  const lift = Math.max(radius * 2.5, p1.distanceTo(p2) * 0.22);
+  const chordLength = p1.distanceTo(p2);
+  const radiusDrivenLift = elbowLiftFromRadius(chordLength, bendRadius, radius, bendAngleDeg);
+  const lift = radiusDrivenLift ?? Math.max(radius * 2.5, chordLength * 0.22);
   const control = midpoint(p1, p2).add(side.multiplyScalar(lift));
   const curve = new THREE.CatmullRomCurve3([p1, control, p2]);
 
-  const geom = new THREE.TubeGeometry(curve, 24, radius, 16, false);
+  const geom = new THREE.TubeGeometry(curve, bendRadius ? 36 : 24, radius, 16, false);
   const mat = new THREE.MeshStandardMaterial({ color, roughness: 0.62, metalness: 0.05 });
   const mesh = new THREE.Mesh(geom, mat);
   mesh.name = comp.id;
-  return applyUserData(mesh, componentUserData(comp, { glbShape: 'rounded-elbow-tube' }));
+  return applyUserData(mesh, componentUserData(comp, {
+    glbShape: bendRadius ? 'rounded-elbow-tube-radius' : 'rounded-elbow-tube',
+    bendRadius: bendRadius || null,
+    bendAngleDeg: bendAngleDeg || null,
+    bendMetadataSource: comp.bendMetadataSource || comp.attributes?.BEND_METADATA_SOURCE || '',
+    bendLift: lift,
+  }));
 }
 
 function buildTeeMesh(comp, color = 0x55aa55) {
