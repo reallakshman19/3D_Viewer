@@ -6,6 +6,67 @@ function upper(value) {
   return text(value).toUpperCase();
 }
 
+function normalizeSupportLabel(value) {
+  return upper(value)
+    .replace(/[_\-./]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function escapeRegex(value) {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+export const CAESAR_SUPPORT_MAPPING_TABLE = Object.freeze({
+  REST: Object.freeze([
+    'REST',
+    'SHOE',
+    'BP',
+    'BEARING PLATE',
+    'WP',
+    'WEAR PAD',
+    'ANCI',
+  ]),
+  GUIDE: Object.freeze([
+    'GUIDE',
+  ]),
+  LINESTOP: Object.freeze([
+    'LINE STOP',
+    'LINESTOP',
+    'STOPPER',
+  ]),
+  LIMIT: Object.freeze([
+    'LIMIT',
+    'LIMIT STOP',
+    'LIM',
+  ]),
+  ANCHOR: Object.freeze([
+    'ANCHOR',
+    'ANC',
+  ]),
+  HANGER: Object.freeze([
+    'HANGER',
+    'SPRING',
+  ]),
+});
+
+function hasSupportAlias(label, kind) {
+  const normalized = normalizeSupportLabel(label);
+  const aliases = CAESAR_SUPPORT_MAPPING_TABLE[kind] || [];
+
+  return aliases.some((alias) => {
+    const normalizedAlias = normalizeSupportLabel(alias);
+    if (!normalizedAlias) return false;
+
+    if (normalizedAlias.length <= 4) {
+      const tokenPattern = new RegExp(`(^|\\s)${escapeRegex(normalizedAlias)}(\\s|$)`);
+      return tokenPattern.test(normalized);
+    }
+
+    return normalized.includes(normalizedAlias);
+  });
+}
+
 export function caesarNumberOrNull(value) {
   const raw = text(value);
   if (!raw) return null;
@@ -36,12 +97,17 @@ export function classifyCaesarRestraint(attrs = {}, context = {}) {
     attrs.TYPE_DESCRIPTION,
   ].filter(Boolean).join(' '));
 
-  if (label.includes('LINE') && label.includes('STOP')) return 'LINESTOP';
-  if (label.includes('GUIDE')) return 'GUIDE';
-  if (label.includes('LIMIT')) return 'LIMIT';
-  if (label.includes('ANCHOR')) return 'ANCHOR';
-  if (label.includes('SHOE')) return 'SHOE';
-  if (label.includes('REST')) return 'REST';
+  if (hasSupportAlias(label, 'LINESTOP')) return 'LINESTOP';
+  if (hasSupportAlias(label, 'GUIDE')) return 'GUIDE';
+  if (hasSupportAlias(label, 'LIMIT')) return 'LIMIT';
+
+  // Project support descriptions such as ANCI / SHOE / BP / WP denote a resting
+  // support family. Check this before ANCHOR so ANCI does not get confused with
+  // ANC/ANCHOR shorthand.
+  if (hasSupportAlias(label, 'REST')) return 'REST';
+
+  if (hasSupportAlias(label, 'ANCHOR')) return 'ANCHOR';
+  if (hasSupportAlias(label, 'HANGER')) return 'HANGER';
 
   const code = caesarNumberOrNull(attrs.TYPE ?? attrs.RESTRAINT_TYPE ?? attrs.CAESAR_TYPE);
   const gap = caesarNumberOrNull(attrs.GAP ?? attrs.GAP1 ?? attrs.GAP2);
