@@ -108,10 +108,10 @@ const REQUIRED_SUPPORT_RULES = Object.freeze([
     priority: 10,
     source: 'all',
     field: SUPPORT_INTENT_FIELDS,
-    pattern: 'REST,SHOE,BP,BEARING PLATE,WP,WEAR PAD',
+    pattern: 'REST,SHOE,BP,BEARING PLATE,WP,WEAR PAD,ANCI',
     match: 'contains',
     kind: 'REST',
-    label: 'REST/SHOE/BP/WP -> REST',
+    label: 'REST/SHOE/BP/WP/ANCI -> REST',
   }),
   Object.freeze({
     id: 'builtin-user-limit',
