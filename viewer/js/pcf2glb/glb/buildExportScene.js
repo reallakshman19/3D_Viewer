@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { buildComponentObject } from './buildComponentObject.js';
+import { buildNodeLabelObject } from './buildNodeLabelObject.js';
 import { enhanceTeeBodyProxy } from './enhanceTeeBodyProxy.js';
 
 export function buildExportScene(model, log) {
@@ -10,7 +11,9 @@ export function buildExportScene(model, log) {
 
   for (const comp of model.components) {
     try {
-      let obj = buildComponentObject(comp, log);
+      let obj = comp.type === 'NODE_LABEL'
+        ? buildNodeLabelObject(comp)
+        : buildComponentObject(comp, log);
       if (obj && comp.type === 'TEE') obj = enhanceTeeBodyProxy(obj, comp);
       if (obj) root.add(obj);
     } catch (err) {
