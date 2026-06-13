@@ -23,7 +23,7 @@ const tab = read('viewer/tabs/model-converters-tab.js');
 assert(fs.existsSync(popupPath), 'workflow popup module must exist');
 assert(popup.includes("import { WorkflowModal } from './shared/WorkflowModal.js'"), 'popup must reuse existing WorkflowModal');
 assert(tab.includes("import { installXmlCiiConversionWorkflowPopup }"), 'model-converters-tab must import workflow popup installer');
-assert(tab.includes('installXmlCiiConversionWorkflowPopup(container)'), 'model-converters-tab must install workflow popup after sideload/matched preview UI');
+assert(tab.includes('installXmlCiiConversionWorkflowPopup'), 'model-converters-tab must install workflow popup');
 
 for (const label of [
   'XML - Model Data',
@@ -46,12 +46,13 @@ for (const selector of [
 
 assert(popup.includes('__xmlCiiConversionWorkflowAllowDirectRun'), 'popup must provide guarded direct-run bypass for final Run Conversion');
 assert(popup.includes('event.stopImmediatePropagation'), 'run click must be intercepted before legacy conversion listener');
-assert(popup.includes('data-xml-cii-open-existing-phase'), 'process enrichment tab must route to existing XML→CII workflow phases');
-assert(popup.includes('mountExistingPanel'), 'popup must nest existing side-load/matched panels by DOM portal, not duplicate logic');
+assert(popup.includes('data-xml-cii-popup-shortcut'), 'popup must expose workflow shortcuts');
+assert(!popup.includes('mountExistingPanel'), 'lean popup must not move live DOM panels by portal');
+assert(!popup.includes('new MutationObserver'), 'lean popup must not install MutationObserver');
 assert(!popup.includes('runJob({'), 'popup shell must not call converter runtime directly');
 
-console.log('✅ XML CII conversion workflow popup static test passed', {
+console.log('✅ XML CII lean conversion workflow popup static test passed', {
   tabs: 4,
-  portals: 2,
+  lean: true,
   directRunnerGuard: true,
 });

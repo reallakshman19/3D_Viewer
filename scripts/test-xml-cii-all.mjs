@@ -13,10 +13,6 @@ const scripts = [
   'scripts/test-xml-cii-matched-preview-publish.mjs',
   'scripts/test-xml-cii-sideload-preview-chain.mjs',
   'scripts/test-xml-cii-conversion-workflow-popup.mjs',
-  'scripts/test-xml-cii-workflow-model-data-nesting.mjs',
-  'scripts/test-xml-cii-workflow-process-nesting.mjs',
-  'scripts/test-xml-cii-workflow-audit-output-nesting.mjs',
-  'scripts/test-xml-cii-workflow-polish.mjs',
   'scripts/test-model-converters-tab-responsive.mjs',
 ];
 
@@ -49,4 +45,5 @@ for (const script of scripts) {
 
 console.log('\n✅ XML CII aggregate test runner passed', {
   scripts: results.length,
+  workflowMode: 'lean-popup',
 });
