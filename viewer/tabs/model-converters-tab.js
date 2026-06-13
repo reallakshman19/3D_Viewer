@@ -8,6 +8,7 @@ import { installXmlCiiPreviewLineKeyRemap } from './model-converters/xml-cii-pre
 import { installXmlCiiWorkflowUiFixes } from './model-converters/xml-cii-workflow-ui-fixes.js';
 import { installXmlCiiSideloadUi } from './model-converters/xml-cii-sideload-ui.js';
 import { installXmlCiiSideloadJsonConfigTools } from './model-converters/xml-cii-sideload-json-config-tools.js';
+import { installXmlCiiMatchedPreviewUi } from './model-converters/xml-cii-matched-preview-ui.js';
 import { installXmlCiiDefaultMasterAutoload, installXmlCiiRecoveryPatch } from './xml-cii-master-autoload-patch.js';
 
 export function renderModelConvertersTab(container, ctx) {
@@ -18,6 +19,7 @@ export function renderModelConvertersTab(container, ctx) {
   installXmlCiiWorkflowUiFixes();
   installXmlCiiSideloadUi(container);
   installXmlCiiSideloadJsonConfigTools(container);
+  installXmlCiiMatchedPreviewUi(container);
   installInputXmlDxfLegacyBridge(container);
   installInputXmlDxfBranchPicker(container);
   installInputXmlDxfSymbolOption(container);
