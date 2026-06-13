@@ -1,4 +1,12 @@
 import { PIPE_OD_TO_DN } from '../../pcf-legacy/services/bore-converter.js';
+import {
+  psnmMakeAxisTransform,
+  psnmNumber,
+  psnmParsePsPositionAny,
+  psnmText,
+  psnmTransformNodeToPs,
+  psnmTransformPsToNode,
+} from './psnm-axis-transform-core.js';
 
 const PSNM_DEFAULT_COORD_DECIMALS = 2;
 const PSNM_EXACT_EPS_MM = 0.01;
@@ -7,11 +15,7 @@ const PSNM_TIE_EPS_MM = 1e-6;
 const PSNM_TRUE_VALUES = new Set(['yes', 'y', 'true', '1', 'm', 'mandatory', 'required', 'req', 'must']);
 
 function PSNM_safeString(value) { return String(value ?? '').trim(); }
-function PSNM_number(value) {
-  const text = PSNM_safeString(value).replace(/,/g, '');
-  const match = text.match(/-?\d+(?:\.\d+)?/);
-  return match ? Number(match[0]) : NaN;
-}
+function PSNM_number(value) { return psnmNumber(value); }
 function PSNM_roundCoord(value, decimals = PSNM_DEFAULT_COORD_DECIMALS) {
   const factor = 10 ** Number(decimals || PSNM_DEFAULT_COORD_DECIMALS);
   return Math.round((Number(value) + Number.EPSILON) * factor) / factor;
@@ -19,24 +23,7 @@ function PSNM_roundCoord(value, decimals = PSNM_DEFAULT_COORD_DECIMALS) {
 function PSNM_assertFinite(value, label) {
   if (!Number.isFinite(value)) throw new Error(`[PSNM] Invalid numeric value for ${label}: ${value}`);
 }
-function PSNM_psKey(psCoord, decimals = PSNM_DEFAULT_COORD_DECIMALS) {
-  return [
-    PSNM_roundCoord(psCoord.e, decimals).toFixed(decimals),
-    PSNM_roundCoord(psCoord.u, decimals).toFixed(decimals),
-    PSNM_roundCoord(psCoord.s, decimals).toFixed(decimals),
-  ].join('|');
-}
-function PSNM_nodeKey(nodeCoord, decimals = PSNM_DEFAULT_COORD_DECIMALS) {
-  return [
-    PSNM_roundCoord(nodeCoord.x, decimals).toFixed(decimals),
-    PSNM_roundCoord(nodeCoord.y, decimals).toFixed(decimals),
-    PSNM_roundCoord(nodeCoord.z, decimals).toFixed(decimals),
-  ].join('|');
-}
-function PSNM_bool(value) {
-  const text = PSNM_safeString(value).toLowerCase();
-  return PSNM_TRUE_VALUES.has(text);
-}
+function PSNM_bool(value) { return PSNM_TRUE_VALUES.has(PSNM_safeString(value).toLowerCase()); }
 function PSNM_normalizeBoreMode(value) {
   const mode = PSNM_safeString(value).toLowerCase().replace(/[\s_-]+/g, '_');
   if (mode === 'strict' || mode === 'strict_bore') return 'strict';
@@ -56,127 +43,6 @@ function PSNM_directBoreFromRow(row) {
 function PSNM_mandatoryFromRow(row) {
   return PSNM_bool(row.mandatory || row.required || row['is mandatory'] || row['must match'] || row.req || row.mand || row.m);
 }
-
-function PSNM_auditAction(status, label) {
-  if (status === 'AUDIT_REQUIRED_PS_NAME_MISSING') return 'Add PS NAME for this mandatory PS audit row.';
-  if (status === 'AUDIT_REQUIRED_PS_POSITION_MISSING') return `Add/verify Position for mandatory PS ${label || 'row'}.`;
-  if (status === 'AUDIT_REQUIRED_PS_BORE_MISSING') return `Add/verify p1bore for mandatory PS ${label || 'row'}.`;
-  if (status === 'AUDIT_REQUIRED_NODE_NAME_MISSING') return 'Add Node number for this mandatory node audit row.';
-  if (status === 'AUDIT_REQUIRED_NODE_COORDINATE_MISSING') return `Add/verify X/Y/Z or Position for mandatory Node ${label || 'row'}.`;
-  return 'Review mandatory audit row.';
-}
-
-function PSNM_logMandatoryAudit(logger, source, item, status, action, row) {
-  logger?.user?.(
-    'ERROR',
-    'Mandatory Audit',
-    source,
-    item || row?.__raw || '',
-    status,
-    action,
-    row || {}
-  );
-}
-
-export function PSNM_roundUp1(value) {
-  const n = Number(value);
-  return Number.isFinite(n) ? Math.ceil((n - PSNM_EPS) * 10) / 10 : null;
-}
-const PSNM_OD_TO_BORE = new Map(PIPE_OD_TO_DN.map((row) => [PSNM_roundUp1(row.od).toFixed(1), row.dn]));
-export function PSNM_boreFromOdMm(odMm) {
-  const rounded = PSNM_roundUp1(odMm);
-  return rounded == null ? null : (PSNM_OD_TO_BORE.get(rounded.toFixed(1)) ?? null);
-}
-
-export function PSNM_createRunLogger() {
-  const userLog = [];
-  const debugLog = [];
-  let sequence = 0;
-  function debug(level, code, message, data = {}) {
-    debugLog.push({
-      sequence: ++sequence,
-      timestamp: new Date().toISOString(),
-      level: String(level || 'INFO').toUpperCase(),
-      code: String(code || 'TRACE'),
-      message: String(message || ''),
-      data,
-    });
-  }
-  function user(level, category, source, item, reason, suggestedAction, data = {}) {
-    const entry = {
-      level: String(level || 'INFO').toUpperCase(),
-      category: String(category || ''),
-      source: String(source || ''),
-      item: String(item || ''),
-      reason: String(reason || ''),
-      suggestedAction: String(suggestedAction || ''),
-      data,
-    };
-    userLog.push(entry);
-    debug(entry.level, `USER_${entry.category.toUpperCase().replace(/\s+/g, '_')}`, entry.reason, {
-      source: entry.source,
-      item: entry.item,
-      suggestedAction: entry.suggestedAction,
-      ...data,
-    });
-  }
-  return { userLog, debugLog, debug, user };
-}
-
-export function PSNM_parsePsPosition(positionText) {
-  const text = String(positionText || '');
-  const result = { e: null, s: null, u: null };
-  for (const match of text.matchAll(/\b([EWSNUD])\s*(-?\d+(?:\.\d+)?)\s*mm\b/gi)) {
-    const axis = match[1].toUpperCase();
-    const value = Number(match[2]);
-    if (axis === 'E') result.e = value;
-    else if (axis === 'W') result.e = -value;
-    else if (axis === 'S') result.s = value;
-    else if (axis === 'N') result.s = -value;
-    else if (axis === 'U') result.u = value;
-    else if (axis === 'D') result.u = -value;
-  }
-  PSNM_assertFinite(result.e, 'PS position E/W');
-  PSNM_assertFinite(result.s, 'PS position S/N');
-  PSNM_assertFinite(result.u, 'PS position U/D');
-  return result;
-}
-export function PSNM_parseNodePosition(positionText) {
-  const parts = String(positionText || '').split(',').map((value) => PSNM_number(value));
-  if (parts.length !== 3 || parts.some((value) => !Number.isFinite(value))) {
-    throw new Error(`[PSNM] Invalid transformed node position: ${positionText}`);
-  }
-  return { x: parts[0], y: parts[1], z: parts[2] };
-}
-export function PSNM_deriveTransformFromAnchor(anchor) {
-  const ps = PSNM_parsePsPosition(anchor.psPosition);
-  const node = PSNM_parseNodePosition(anchor.nodePosition);
-  return {
-    datumE: ps.e - node.x,
-    datumU: ps.u - node.y,
-    datumS: ps.s - node.z,
-    formula: {
-      nodeToPs: 'E=X+datumE, U=Y+datumU, S=Z+datumS',
-      psToNode: 'X=E-datumE, Y=U-datumU, Z=S-datumS',
-    },
-  };
-}
-export function PSNM_transformPsPosition(positionText, transform, decimals = PSNM_DEFAULT_COORD_DECIMALS) {
-  const ps = PSNM_parsePsPosition(positionText);
-  return {
-    x: PSNM_roundCoord(ps.e - transform.datumE, decimals),
-    y: PSNM_roundCoord(ps.u - transform.datumU, decimals),
-    z: PSNM_roundCoord(ps.s - transform.datumS, decimals),
-  };
-}
-export function PSNM_transformNodeToPsPosition(nodeCoord, transform, decimals = PSNM_DEFAULT_COORD_DECIMALS) {
-  return {
-    e: PSNM_roundCoord(nodeCoord.x + transform.datumE, decimals),
-    u: PSNM_roundCoord(nodeCoord.y + transform.datumU, decimals),
-    s: PSNM_roundCoord(nodeCoord.z + transform.datumS, decimals),
-  };
-}
-
 function PSNM_normalizeHeader(header) {
   return PSNM_safeString(header).toLowerCase().replace(/\s+/g, ' ').replace(/[_.-]+/g, ' ').trim();
 }
@@ -198,64 +64,127 @@ function PSNM_parseTableRows(text) {
   });
 }
 
+export function PSNM_roundUp1(value) {
+  const n = Number(value);
+  return Number.isFinite(n) ? Math.ceil((n - PSNM_EPS) * 10) / 10 : null;
+}
+const PSNM_OD_TO_BORE = new Map(PIPE_OD_TO_DN.map((row) => [PSNM_roundUp1(row.od).toFixed(1), row.dn]));
+export function PSNM_boreFromOdMm(odMm) {
+  const rounded = PSNM_roundUp1(odMm);
+  if (rounded == null) return null;
+  const strict = PSNM_OD_TO_BORE.get(rounded.toFixed(1));
+  if (strict != null) return strict;
+  let best = null;
+  let bestErr = Infinity;
+  for (const row of PIPE_OD_TO_DN) {
+    const err = Math.abs(Number(row.od) - Number(odMm));
+    if (err < bestErr) { bestErr = err; best = row; }
+  }
+  return best && bestErr <= Math.max(2, Math.abs(Number(best.od)) * 0.008) ? best.dn : null;
+}
+
+export function PSNM_createRunLogger() {
+  const userLog = [];
+  const debugLog = [];
+  let sequence = 0;
+  function debug(level, code, message, data = {}) {
+    debugLog.push({ sequence: ++sequence, timestamp: new Date().toISOString(), level: String(level || 'INFO').toUpperCase(), code: String(code || 'TRACE'), message: String(message || ''), data });
+  }
+  function user(level, category, source, item, reason, suggestedAction, data = {}) {
+    const entry = { level: String(level || 'INFO').toUpperCase(), category: String(category || ''), source: String(source || ''), item: String(item || ''), reason: String(reason || ''), suggestedAction: String(suggestedAction || ''), data };
+    userLog.push(entry);
+    debug(entry.level, `USER_${entry.category.toUpperCase().replace(/\s+/g, '_')}`, entry.reason, { source: entry.source, item: entry.item, suggestedAction: entry.suggestedAction, ...data });
+  }
+  return { userLog, debugLog, debug, user };
+}
+
+function PSNM_auditAction(status, label) {
+  if (status === 'AUDIT_REQUIRED_PS_NAME_MISSING') return 'Add PS NAME for this mandatory PS audit row.';
+  if (status === 'AUDIT_REQUIRED_PS_POSITION_MISSING') return `Add/verify Position or E/N/U for mandatory PS ${label || 'row'}.`;
+  if (status === 'AUDIT_REQUIRED_PS_BORE_MISSING') return `Add/verify p1bore for mandatory PS ${label || 'row'}.`;
+  if (status === 'AUDIT_REQUIRED_NODE_NAME_MISSING') return 'Add Node number for this mandatory node audit row.';
+  if (status === 'AUDIT_REQUIRED_NODE_COORDINATE_MISSING') return `Add/verify X/Y/Z or Position for mandatory Node ${label || 'row'}.`;
+  return 'Review mandatory audit row.';
+}
+function PSNM_logMandatoryAudit(logger, source, item, status, action, row) {
+  logger?.user?.('ERROR', 'Mandatory Audit', source, item || row?.__raw || '', status, action, row || {});
+}
+
+export function PSNM_parsePsPosition(positionText) {
+  const result = psnmParsePsPositionAny(positionText);
+  PSNM_assertFinite(result.e, 'PS position E/W');
+  PSNM_assertFinite(result.s, 'PS position S/N');
+  PSNM_assertFinite(result.u, 'PS position U/D');
+  return result;
+}
+export function PSNM_parseNodePosition(positionText) {
+  const parts = String(positionText || '').split(',').map((value) => PSNM_number(value));
+  if (parts.length !== 3 || parts.some((value) => !Number.isFinite(value))) throw new Error(`[PSNM] Invalid transformed node position: ${positionText}`);
+  return { x: parts[0], y: parts[1], z: parts[2] };
+}
+function PSNM_globalAxisTransform(anchor) {
+  const t = typeof window !== 'undefined' ? window.__PSNM_AXIS_TRANSFORM : null;
+  if (!t?.axisMode) return null;
+  const anchorNode = PSNM_safeString(anchor?.node);
+  const anchorPsName = PSNM_safeString(anchor?.psName);
+  if (t.anchorNode && anchorNode && String(t.anchorNode) !== anchorNode) return null;
+  if (t.anchorPsName && anchorPsName && String(t.anchorPsName) !== anchorPsName) return null;
+  return t;
+}
+export function PSNM_deriveTransformFromAnchor(anchor) {
+  const globalTransform = PSNM_globalAxisTransform(anchor);
+  if (globalTransform) return globalTransform;
+  const ps = PSNM_parsePsPosition(anchor.psPosition);
+  const node = PSNM_parseNodePosition(anchor.nodePosition);
+  return psnmMakeAxisTransform(ps, node, ['x', 'y', 'z'], { e: 1, u: 1, s: 1 });
+}
+export function PSNM_transformPsPosition(positionText, transform, decimals = PSNM_DEFAULT_COORD_DECIMALS) {
+  const node = psnmTransformPsToNode(PSNM_parsePsPosition(positionText), transform);
+  return { x: PSNM_roundCoord(node.x, decimals), y: PSNM_roundCoord(node.y, decimals), z: PSNM_roundCoord(node.z, decimals) };
+}
+export function PSNM_transformNodeToPsPosition(nodeCoord, transform, decimals = PSNM_DEFAULT_COORD_DECIMALS) {
+  const ps = psnmTransformNodeToPs(nodeCoord, transform);
+  return { e: PSNM_roundCoord(ps.e, decimals), u: PSNM_roundCoord(ps.u, decimals), s: PSNM_roundCoord(ps.s, decimals) };
+}
+function PSNM_psKey(psCoord, decimals = PSNM_DEFAULT_COORD_DECIMALS) {
+  return [PSNM_roundCoord(psCoord.e, decimals).toFixed(decimals), PSNM_roundCoord(psCoord.u, decimals).toFixed(decimals), PSNM_roundCoord(psCoord.s, decimals).toFixed(decimals)].join('|');
+}
+function PSNM_nodeKey(nodeCoord, decimals = PSNM_DEFAULT_COORD_DECIMALS) {
+  return [PSNM_roundCoord(nodeCoord.x, decimals).toFixed(decimals), PSNM_roundCoord(nodeCoord.y, decimals).toFixed(decimals), PSNM_roundCoord(nodeCoord.z, decimals).toFixed(decimals)].join('|');
+}
+
 export function PSNM_parsePsRows(text, logger = null) {
   const parsed = [];
   for (const row of PSNM_parseTableRows(text)) {
-    const psName = row['ps name'] || row.psname || row.name || '';
-    const position = row.position || '';
-    const p1bore = PSNM_number(row.p1bore || row.bore || row.nb || row.dn || row['bore mm'] || row['bore(mm)']);
+    const psName = row['ps name'] || row.psname || row['ps no'] || row['ps number'] || row.ps || row.name || '';
+    const positionDirect = row.position || row['ps position'] || row['position raw'] || row.coordinates || row.coord || row.coordinate || '';
+    let position = PSNM_safeString(positionDirect);
+    const e = PSNM_firstFiniteNumber(row.e, row['ps e'], row.east, row.easting);
+    const nOrS = PSNM_firstFiniteNumber(row.s, row['ps s'], row.south, row.southing, row.n, row['ps n'], row.north, row.northing);
+    const u = PSNM_firstFiniteNumber(row.u, row['ps u'], row.up, row.elevation, row.el, row.z);
+    if (!position && [e, nOrS, u].every(Number.isFinite)) position = `E ${e}mm S ${nOrS}mm U ${u}mm`;
+    const p1bore = PSNM_number(row.p1bore || row['p1 bore'] || row.bore || row.nb || row.dn || row['bore mm'] || row['bore(mm)']);
     const isMandatoryPs = PSNM_mandatoryFromRow(row);
-
     if (!psName || !position) {
       if (isMandatoryPs) {
-        const status = !psName
-          ? 'AUDIT_REQUIRED_PS_NAME_MISSING'
-          : 'AUDIT_REQUIRED_PS_POSITION_MISSING';
+        const status = !psName ? 'AUDIT_REQUIRED_PS_NAME_MISSING' : 'AUDIT_REQUIRED_PS_POSITION_MISSING';
         const action = PSNM_auditAction(status, psName);
         PSNM_logMandatoryAudit(logger, 'PS Table', psName || row.__raw, status, action, row);
-        parsed.push({
-          psName: PSNM_safeString(psName),
-          position: PSNM_safeString(position),
-          p1bore,
-          isMandatoryPs: true,
-          mandatorySource: 'PS_TABLE',
-          rowIndex: row.__rowIndex,
-          auditStatus: status,
-          auditSeverity: 'ERROR',
-          auditAction: action,
-          rawAuditRow: row.__raw,
-        });
-        continue;
-      }
-      logger?.user?.('ERROR', 'Parse Failed', 'PS Table', row.__raw, 'PS row must contain PS NAME and Position.', 'Paste PS table with columns: PS NAME, Position, p1bore.', { row });
+        parsed.push({ psName: PSNM_safeString(psName), position: PSNM_safeString(position), p1bore, isMandatoryPs: true, mandatorySource: 'PS_TABLE', rowIndex: row.__rowIndex, auditStatus: status, auditSeverity: 'ERROR', auditAction: action, rawAuditRow: row.__raw });
+      } else logger?.user?.('ERROR', 'Parse Failed', 'PS Table', row.__raw, 'PS row must contain PS NAME and Position or separate E/N/U columns.', 'Paste PS table with columns: PS NAME, Position, p1bore or PS NAME, E, N, U, p1bore.', { row });
       continue;
     }
-
-    const auditStatus = isMandatoryPs && !Number.isFinite(p1bore)
-      ? 'AUDIT_REQUIRED_PS_BORE_MISSING'
-      : '';
+    const auditStatus = isMandatoryPs && !Number.isFinite(p1bore) ? 'AUDIT_REQUIRED_PS_BORE_MISSING' : '';
     const auditAction = auditStatus ? PSNM_auditAction(auditStatus, psName) : '';
     if (auditStatus) PSNM_logMandatoryAudit(logger, 'PS Table', psName, auditStatus, auditAction, row);
-
-    parsed.push({
-      psName: PSNM_safeString(psName).replace(/\.$/, ''),
-      position: PSNM_safeString(position),
-      p1bore,
-      isMandatoryPs,
-      mandatorySource: isMandatoryPs ? 'PS_TABLE' : '',
-      rowIndex: row.__rowIndex,
-      auditStatus,
-      auditSeverity: auditStatus ? 'ERROR' : '',
-      auditAction,
-      rawAuditRow: auditStatus ? row.__raw : '',
-    });
+    parsed.push({ psName: PSNM_safeString(psName).replace(/\.$/, ''), position, p1bore, isMandatoryPs, mandatorySource: isMandatoryPs ? 'PS_TABLE' : '', rowIndex: row.__rowIndex, auditStatus, auditSeverity: auditStatus ? 'ERROR' : '', auditAction, rawAuditRow: auditStatus ? row.__raw : '' });
   }
   return parsed;
 }
 export function PSNM_parseNodeRows(text, logger = null) {
   const parsed = [];
   for (const row of PSNM_parseTableRows(text)) {
-    const node = row.node || '';
+    const node = row.node || row['node no'] || row['node number'] || '';
     const position = row['position(x,y,z) transformed'] || row['position(x,y,z)'] || row.position || row['transformed position'] || '';
     const x = PSNM_number(row.x);
     const y = PSNM_number(row.y);
@@ -268,51 +197,27 @@ export function PSNM_parseNodeRows(text, logger = null) {
         const status = 'AUDIT_REQUIRED_NODE_NAME_MISSING';
         const action = PSNM_auditAction(status, node);
         PSNM_logMandatoryAudit(logger, 'Node XYZ Table', row.__raw, status, action, row);
-        parsed.push({
-          node: '',
-          directBoreMm: hasDirectBore ? directBoreMm : null,
-          isMandatoryNode: true,
-          rowMandatorySource: 'NODE_TABLE',
-          rowIndex: row.__rowIndex,
-          auditStatus: status,
-          auditSeverity: 'ERROR',
-          auditAction: action,
-          rawAuditRow: row.__raw,
-        });
-        continue;
-      }
-      logger?.user?.('ERROR', 'Parse Failed', 'Node XYZ Table', row.__raw, 'Node row must contain Node.', 'Paste Node table with columns: Node, X, Y, Z.', { row });
+        parsed.push({ node: '', directBoreMm: hasDirectBore ? directBoreMm : null, isMandatoryNode: true, rowMandatorySource: 'NODE_TABLE', rowIndex: row.__rowIndex, auditStatus: status, auditSeverity: 'ERROR', auditAction: action, rawAuditRow: row.__raw });
+      } else logger?.user?.('ERROR', 'Parse Failed', 'Node XYZ Table', row.__raw, 'Node row must contain Node.', 'Paste Node table with columns: Node, X, Y, Z.', { row });
       continue;
     }
-    const base = {
-      node: PSNM_safeString(node),
-      directBoreMm: hasDirectBore ? directBoreMm : null,
-      isMandatoryNode,
-      rowMandatorySource: isMandatoryNode ? 'NODE_TABLE' : '',
-      rowIndex: row.__rowIndex,
-    };
-    if (Number.isFinite(x) && Number.isFinite(y) && Number.isFinite(z)) {
-      parsed.push({ ...base, x, y, z, position: `${x}, ${y}, ${z}` });
-    } else if (position) {
-      parsed.push({ ...base, position: PSNM_safeString(position) });
-    } else {
-      if (isMandatoryNode) {
-        const status = 'AUDIT_REQUIRED_NODE_COORDINATE_MISSING';
-        const action = PSNM_auditAction(status, node);
-        PSNM_logMandatoryAudit(logger, 'Node XYZ Table', node, status, action, row);
-        parsed.push({ ...base, auditStatus: status, auditSeverity: 'ERROR', auditAction: action, rawAuditRow: row.__raw });
-        continue;
-      }
-      logger?.user?.('ERROR', 'Parse Failed', 'Node XYZ Table', row.__raw, 'Node row must contain X/Y/Z or Position.', 'Paste Node table as Node, X, Y, Z or legacy Node, Position.', { row });
-    }
+    const base = { node: PSNM_safeString(node), directBoreMm: hasDirectBore ? directBoreMm : null, isMandatoryNode, rowMandatorySource: isMandatoryNode ? 'NODE_TABLE' : '', rowIndex: row.__rowIndex };
+    if (Number.isFinite(x) && Number.isFinite(y) && Number.isFinite(z)) parsed.push({ ...base, x, y, z, position: `${x}, ${y}, ${z}` });
+    else if (position) parsed.push({ ...base, position: PSNM_safeString(position) });
+    else if (isMandatoryNode) {
+      const status = 'AUDIT_REQUIRED_NODE_COORDINATE_MISSING';
+      const action = PSNM_auditAction(status, node);
+      PSNM_logMandatoryAudit(logger, 'Node XYZ Table', node, status, action, row);
+      parsed.push({ ...base, auditStatus: status, auditSeverity: 'ERROR', auditAction: action, rawAuditRow: row.__raw });
+    } else logger?.user?.('ERROR', 'Parse Failed', 'Node XYZ Table', row.__raw, 'Node row must contain X/Y/Z or Position.', 'Paste Node table as Node, X, Y, Z or legacy Node, Position.', { row });
   }
   return parsed;
 }
 export function PSNM_parseNodeDiaRows(text, logger = null) {
   const parsed = [];
   for (const row of PSNM_parseTableRows(text)) {
-    const node = row.node || '';
-    const odMm = PSNM_number(row['dia(mm)'] || row['dia mm'] || row.dia || row.odmm || row['od mm']);
+    const node = row.node || row['node no'] || row['node number'] || '';
+    const odMm = PSNM_number(row['dia(mm)'] || row['dia mm'] || row.dia || row.odmm || row['od mm'] || row.od);
     if (!node || !Number.isFinite(odMm)) {
       logger?.user?.('ERROR', 'Parse Failed', 'Node Dia Table', row.__raw, 'Node dia row must contain Node and Dia(mm).', 'Paste Node Dia table with columns: Node, Dia(mm).', { row });
       continue;
@@ -354,9 +259,7 @@ function PSNM_classifyCoordinate({ psKey, nodePsKey, delta, cfg }) {
   if (cfg.enableApprox3 && PSNM_within(delta, cfg.approx3)) return 'APPROX_3';
   return 'NO_MATCH';
 }
-function PSNM_coordMatchType(type) {
-  return type === 'NO_MATCH' ? 'NO_MATCH' : `COORD_${type}`;
-}
+function PSNM_coordMatchType(type) { return type === 'NO_MATCH' ? 'NO_MATCH' : `COORD_${type}`; }
 function PSNM_boreStatus({ boreMode, boreMatch, psBore, nodeBoreMm, boreConflict }) {
   const missing = !Number.isFinite(psBore) || nodeBoreMm == null;
   if (boreMode === 'ignore') {
@@ -407,12 +310,7 @@ function PSNM_candidateCompare(a, b) {
 }
 function PSNM_isAmbiguousTie(a, b) {
   if (!a || !b) return false;
-  return a.matchType === b.matchType
-    && PSNM_mandatoryPairRank(a) === PSNM_mandatoryPairRank(b)
-    && a.boreStatus === b.boreStatus
-    && a.isTerminal === b.isTerminal
-    && Math.abs(a.maxAxisDeltaMm - b.maxAxisDeltaMm) <= PSNM_TIE_EPS_MM
-    && Math.abs(a.euclideanDeltaMm - b.euclideanDeltaMm) <= PSNM_TIE_EPS_MM;
+  return a.matchType === b.matchType && PSNM_mandatoryPairRank(a) === PSNM_mandatoryPairRank(b) && a.boreStatus === b.boreStatus && a.isTerminal === b.isTerminal && Math.abs(a.maxAxisDeltaMm - b.maxAxisDeltaMm) <= PSNM_TIE_EPS_MM && Math.abs(a.euclideanDeltaMm - b.euclideanDeltaMm) <= PSNM_TIE_EPS_MM;
 }
 function PSNM_makeOccurrenceId(node, count) { return `${node}#${String(count).padStart(3, '0')}`; }
 function PSNM_finalStatus(selected, boreMode) {
@@ -427,15 +325,9 @@ function PSNM_nodeBoreModel({ row, node, odMm, roundedOdMm, odDerivedBoreMm, log
   const conflict = hasDirect && hasDerived && Math.abs(directBoreMm - odDerivedBoreMm) > 1e-6;
   let nodeBoreMm = null;
   let nodeBoreSource = 'MISSING';
-  if (hasDirect) {
-    nodeBoreMm = directBoreMm;
-    nodeBoreSource = conflict ? 'TABLE2_BORE_CONFLICT_PRIMARY' : 'TABLE2_BORE';
-    logger.debug('INFO', 'DIRECT_BORE_USED', `Node ${node} direct Table 2 bore used.`, { node, directBoreMm, odMm, roundedOdMm, odDerivedBoreMm, conflict });
-    if (conflict) logger.user('WARNING', 'Bore Conflict', 'Node XYZ + Node Dia', node, `Table 2 bore ${directBoreMm} differs from OD-derived bore ${odDerivedBoreMm}.`, 'Table 2 direct bore is used as primary; verify Node Dia table.', { node, directBoreMm, odMm, odDerivedBoreMm });
-  } else if (hasDerived) {
-    nodeBoreMm = odDerivedBoreMm;
-    nodeBoreSource = 'NODE_DIA_OD_MAP';
-  }
+  if (hasDirect) { nodeBoreMm = directBoreMm; nodeBoreSource = conflict ? 'TABLE2_BORE_CONFLICT_PRIMARY' : 'TABLE2_BORE'; }
+  else if (hasDerived) { nodeBoreMm = odDerivedBoreMm; nodeBoreSource = 'NODE_DIA_OD_MAP'; }
+  if (conflict) logger.user('WARNING', 'Bore Conflict', 'Node XYZ + Node Dia', node, `Table 2 bore ${directBoreMm} differs from OD-derived bore ${odDerivedBoreMm}.`, 'Table 2 direct bore is used as primary; verify Node Dia table.', { node, directBoreMm, odMm, odDerivedBoreMm });
   return { directBoreMm, odDerivedBoreMm, nodeBoreMm, nodeBoreSource, boreConflict: conflict };
 }
 
@@ -443,37 +335,22 @@ export function PSNM_buildMatchTable(options) {
   const logger = options.logger || PSNM_createRunLogger();
   const coordinateDecimals = Number(options.coordinateDecimals ?? PSNM_DEFAULT_COORD_DECIMALS);
   const boreMode = PSNM_normalizeBoreMode(options.boreMode);
-  const cfg = {
-    enableApprox1: options.enableApprox1 !== false,
-    enableApprox2: options.enableApprox2 !== false,
-    enableApprox3: options.enableApprox3 !== false,
-    approx1: options.approx1 || { xMm: 25, yMm: 25, zMm: 25 },
-    approx2: options.approx2 || { xMm: 50, yMm: 25, zMm: 50 },
-    approx3: options.approx3 || options.approx2 || { xMm: 50, yMm: 25, zMm: 50 },
-  };
+  const cfg = { enableApprox1: options.enableApprox1 !== false, enableApprox2: options.enableApprox2 !== false, enableApprox3: options.enableApprox3 !== false, approx1: options.approx1 || { xMm: 25, yMm: 25, zMm: 25 }, approx2: options.approx2 || { xMm: 50, yMm: 25, zMm: 50 }, approx3: options.approx3 || options.approx2 || { xMm: 50, yMm: 25, zMm: 50 } };
   const psRows = options.psRows || [];
   const nodeRows = options.nodeRows || [];
   const nodeDiaRows = options.nodeDiaRows || [];
   const mandatoryNodeRows = options.mandatoryNodeRows || [];
   const mandatorySet = new Set(mandatoryNodeRows.map((row) => PSNM_safeString(row.node)).filter(Boolean));
   logger.debug('INFO', 'INIT', 'PSNM run started.', { psRows: psRows.length, nodeRows: nodeRows.length, nodeDiaRows: nodeDiaRows.length, mandatoryNodes: mandatorySet.size, coordinateDecimals, boreMode, cfg });
-
   const transform = PSNM_deriveTransformFromAnchor(options.anchor);
-  logger.debug('INFO', 'BASE_TRANSFORM', 'Derived base transform. Every Table 2 Node XYZ row is transformed to PS E/U/S before matching.', { anchor: options.anchor, transform });
-
+  logger.debug('INFO', 'BASE_TRANSFORM', 'Derived base transform. Node XYZ rows are transformed to PS E/U/S before matching.', { anchor: options.anchor, transform });
   const diaByNode = new Map();
   for (const row of nodeDiaRows) {
     const node = PSNM_safeString(row.node);
     const od = Number(row.odMm);
     if (!node || !Number.isFinite(od)) continue;
-    const previous = diaByNode.get(node);
-    if (previous != null && Math.abs(previous - od) > 1e-6) {
-      logger.user('ERROR', 'Duplicate Node Dia', 'Node Dia Table', node, `Same node has conflicting OD values: ${previous} and ${od}.`, 'Clean duplicate node diameter table before matching.', { previousOdMm: previous, newOdMm: od });
-      continue;
-    }
-    diaByNode.set(node, od);
+    if (!diaByNode.has(node)) diaByNode.set(node, od);
   }
-
   const nodeCandidates = [];
   const occurrenceCounter = new Map();
   const occurrencesByNode = new Map();
@@ -492,40 +369,14 @@ export function PSNM_buildMatchTable(options) {
       if (row.isMandatoryNode) nodeMandatorySources.push('NODE_TABLE');
       if (mandatorySet.has(node)) nodeMandatorySources.push('MANDATORY_NODE_LIST');
       const isMandatoryNode = nodeMandatorySources.length > 0;
-      const nodeEntry = {
-        node,
-        occurrenceId: PSNM_makeOccurrenceId(node, count),
-        rowIndex: row.rowIndex ?? count,
-        coord: nodeXyz,
-        nodePs,
-        nodeKey: PSNM_nodeKey(nodeXyz, coordinateDecimals),
-        nodePsKey: PSNM_psKey(nodePs, coordinateDecimals),
-        odMm,
-        roundedOdMm,
-        boreMm: boreModel.nodeBoreMm,
-        nodeBoreMm: boreModel.nodeBoreMm,
-        directBoreMm: boreModel.directBoreMm,
-        odDerivedBoreMm: boreModel.odDerivedBoreMm,
-        nodeBoreSource: boreModel.nodeBoreSource,
-        boreConflict: boreModel.boreConflict,
-        isMandatory: isMandatoryNode,
-        isMandatoryNode,
-        mandatorySource: nodeMandatorySources.join(';'),
-        isTerminal: node === '-1',
-        selected: false,
-      };
+      const nodeEntry = { node, occurrenceId: PSNM_makeOccurrenceId(node, count), rowIndex: row.rowIndex ?? count, coord: nodeXyz, nodePs, nodeKey: PSNM_nodeKey(nodeXyz, coordinateDecimals), nodePsKey: PSNM_psKey(nodePs, coordinateDecimals), odMm, roundedOdMm, boreMm: boreModel.nodeBoreMm, nodeBoreMm: boreModel.nodeBoreMm, directBoreMm: boreModel.directBoreMm, odDerivedBoreMm: boreModel.odDerivedBoreMm, nodeBoreSource: boreModel.nodeBoreSource, boreConflict: boreModel.boreConflict, isMandatory: isMandatoryNode, isMandatoryNode, mandatorySource: nodeMandatorySources.join(';'), isTerminal: node === '-1', selected: false };
       nodeCandidates.push(nodeEntry);
       if (!occurrencesByNode.has(node)) occurrencesByNode.set(node, []);
       occurrencesByNode.get(node).push(nodeEntry);
-      logger.debug('INFO', 'NODE_BASE_TRANSFORMED', `Node ${nodeEntry.occurrenceId} transformed from XYZ to PS E/U/S.`, nodeEntry);
-      if (count > 1) logger.user('INFO', 'Duplicate Node Occurrence', 'Node XYZ Table', node, 'Same node number appears multiple times and was kept as separate occurrences.', 'Review occurrence in Candidate Resolver if this node is selected.', { node, occurrenceId: nodeEntry.occurrenceId });
-      if (boreModel.nodeBoreMm == null) logger.user('WARNING', 'Missing Node Bore', 'Node XYZ / Node Dia Table', node, 'Node has no direct bore and no OD-derived bore.', 'Use Prefer/Ignore Bore mode if coordinate-only recovery is acceptable.', { node, occurrenceId: nodeEntry.occurrenceId });
-      else logger.debug('INFO', 'NODE_BORE_MODEL', `Node ${nodeEntry.occurrenceId} bore normalized.`, { node, occurrenceId: nodeEntry.occurrenceId, ...boreModel });
     } catch (error) {
       logger.user('ERROR', 'Parse Failed', 'Node XYZ Table', row.node || row.position, error.message || String(error), 'Correct node coordinate format: Node, X, Y, Z.', { row });
     }
   }
-
   const rows = [];
   const candidateRows = [];
   for (const psRow of psRows) {
@@ -538,66 +389,19 @@ export function PSNM_buildMatchTable(options) {
       const psBore = Number(psRow.p1bore);
       const isMandatoryPs = psRow.isMandatoryPs === true;
       const candidates = [];
-      logger.debug('INFO', 'PS_PARSED', `${psName} parsed. Matching will compare PS E/U/S against every base-transformed Node E/U/S.`, { psName, sourcePosition: psRow.position, psCoord: psRounded, psNodeSpace, psKey, psBore, isMandatoryPs, boreMode });
-
       for (const nodeRow of nodeCandidates) {
         const delta = PSNM_distancePs(psRounded, nodeRow.nodePs);
         const coordType = PSNM_classifyCoordinate({ psKey, nodePsKey: nodeRow.nodePsKey, delta, cfg });
         const boreMatch = Number.isFinite(psBore) && nodeRow.nodeBoreMm != null && Math.abs(psBore - nodeRow.nodeBoreMm) <= 1e-6;
         const boreStatus = PSNM_boreStatus({ boreMode, boreMatch, psBore, nodeBoreMm: nodeRow.nodeBoreMm, boreConflict: nodeRow.boreConflict });
         const matchType = PSNM_effectiveMatchType(coordType, boreStatus, boreMode);
-        const candidate = {
-          psName,
-          position: psRow.position,
-          isMandatoryPs,
-          psMandatorySource: isMandatoryPs ? (psRow.mandatorySource || 'PS_TABLE') : '',
-          psE: psRounded.e,
-          psU: psRounded.u,
-          psS: psRounded.s,
-          transformedX: psNodeSpace.x,
-          transformedY: psNodeSpace.y,
-          transformedZ: psNodeSpace.z,
-          matchingNode: nodeRow.node,
-          occurrenceId: nodeRow.occurrenceId,
-          isMandatory: nodeRow.isMandatoryNode,
-          isMandatoryNode: nodeRow.isMandatoryNode,
-          nodeMandatorySource: nodeRow.mandatorySource,
-          mandatoryPairRank: null,
-          isTerminal: nodeRow.isTerminal,
-          rowIndex: nodeRow.rowIndex,
-          nodeX: nodeRow.coord.x,
-          nodeY: nodeRow.coord.y,
-          nodeZ: nodeRow.coord.z,
-          nodeE: nodeRow.nodePs.e,
-          nodeU: nodeRow.nodePs.u,
-          nodeS: nodeRow.nodePs.s,
-          coordMatchType: coordType,
-          matchType,
-          boreMode,
-          psBore: Number.isFinite(psBore) ? psBore : null,
-          nodeOdMm: nodeRow.odMm,
-          nodeRoundedOdMm: nodeRow.roundedOdMm,
-          nodeBoreMm: nodeRow.nodeBoreMm,
-          directBoreMm: nodeRow.directBoreMm,
-          odDerivedBoreMm: nodeRow.odDerivedBoreMm,
-          nodeBoreSource: nodeRow.nodeBoreSource,
-          boreConflict: nodeRow.boreConflict,
-          boreStatus,
-          dxMm: delta.dx,
-          dyMm: delta.dy,
-          dzMm: delta.dz,
-          maxAxisDeltaMm: delta.maxAxisDeltaMm,
-          euclideanDeltaMm: delta.euclideanDeltaMm,
-          decision: 'REJECTED_NO_MATCH',
-          reason: coordType === 'NO_MATCH' ? 'Outside enabled coordinate tolerance.' : 'Rejected by bore policy or ranking.',
-        };
+        const candidate = { psName, position: psRow.position, isMandatoryPs, psMandatorySource: isMandatoryPs ? (psRow.mandatorySource || 'PS_TABLE') : '', psE: psRounded.e, psU: psRounded.u, psS: psRounded.s, transformedX: psNodeSpace.x, transformedY: psNodeSpace.y, transformedZ: psNodeSpace.z, matchingNode: nodeRow.node, occurrenceId: nodeRow.occurrenceId, isMandatory: nodeRow.isMandatoryNode, isMandatoryNode: nodeRow.isMandatoryNode, nodeMandatorySource: nodeRow.mandatorySource, mandatoryPairRank: null, isTerminal: nodeRow.isTerminal, rowIndex: nodeRow.rowIndex, nodeX: nodeRow.coord.x, nodeY: nodeRow.coord.y, nodeZ: nodeRow.coord.z, nodeE: nodeRow.nodePs.e, nodeU: nodeRow.nodePs.u, nodeS: nodeRow.nodePs.s, coordMatchType: coordType, matchType, boreMode, psBore: Number.isFinite(psBore) ? psBore : null, nodeOdMm: nodeRow.odMm, nodeRoundedOdMm: nodeRow.roundedOdMm, nodeBoreMm: nodeRow.nodeBoreMm, directBoreMm: nodeRow.directBoreMm, odDerivedBoreMm: nodeRow.odDerivedBoreMm, nodeBoreSource: nodeRow.nodeBoreSource, boreConflict: nodeRow.boreConflict, boreStatus, dxMm: delta.dx, dyMm: delta.dy, dzMm: delta.dz, maxAxisDeltaMm: delta.maxAxisDeltaMm, euclideanDeltaMm: delta.euclideanDeltaMm, decision: 'REJECTED_NO_MATCH', reason: coordType === 'NO_MATCH' ? 'Outside enabled coordinate tolerance.' : 'Rejected by bore policy or ranking.' };
         candidate.mandatoryPairRank = PSNM_mandatoryPairRank(candidate);
-        logger.debug(matchType === 'NO_MATCH' ? 'DEBUG' : 'INFO', matchType === 'NO_MATCH' ? 'CANDIDATE_REJECTED' : 'CANDIDATE_ACCEPTED', `Candidate ${nodeRow.occurrenceId} evaluated for ${psName} after node base transform.`, candidate);
         if (matchType !== 'NO_MATCH') candidates.push(candidate);
       }
       candidates.sort(PSNM_candidateCompare);
       if (!candidates.length) {
-        logger.user(isMandatoryPs ? 'WARNING' : 'INFO', isMandatoryPs ? 'Mandatory PS Unmapped' : 'Optional PS Unmapped', 'PS Table', psName, 'No base-transformed Node XYZ row found within enabled tolerance and bore policy.', 'Check base anchor, bore mode, load full Node XYZ table, or increase Approx tolerance.', { psName, psCoord: psRounded, psBore, isMandatoryPs, boreMode });
+        logger.user(isMandatoryPs ? 'WARNING' : 'INFO', isMandatoryPs ? 'Mandatory PS Unmapped' : 'Optional PS Unmapped', 'PS Table', psName, 'No transformed Node XYZ row found within enabled tolerance and bore policy.', 'Check auto-anchor axis transform, bore mode, node table, or tolerance.', { psName, psCoord: psRounded, psBore, isMandatoryPs, boreMode, transform });
         rows.push({ psName, position: psRow.position, isMandatoryPs, psMandatorySource: psRow.mandatorySource || '', psE: psRounded.e, psU: psRounded.u, psS: psRounded.s, transformedX: psNodeSpace.x, transformedY: psNodeSpace.y, transformedZ: psNodeSpace.z, matchingNode: '', occurrenceId: '', isMandatory: false, isMandatoryNode: false, matchType: 'NO_MATCH', coordMatchType: 'NO_MATCH', finalStatus: 'UNMAPPED', boreMode, psBore: Number.isFinite(psBore) ? psBore : null, nodeOdMm: null, nodeRoundedOdMm: null, nodeBoreMm: null, nodeBoreSource: 'MISSING', boreConflict: false, boreStatus: 'N/A', dxMm: null, dyMm: null, dzMm: null, maxAxisDeltaMm: null, euclideanDeltaMm: null });
         continue;
       }
@@ -607,7 +411,6 @@ export function PSNM_buildMatchTable(options) {
         const tied = candidates.filter((candidate) => PSNM_isAmbiguousTie(top, candidate));
         tied.forEach((candidate) => { candidate.decision = 'AMBIGUOUS'; candidate.reason = 'Equivalent top-ranked candidate. Manual review required.'; candidateRows.push(candidate); });
         candidates.filter((candidate) => !tied.includes(candidate)).forEach((candidate) => { candidate.decision = 'REJECTED_BY_RANK'; candidate.reason = 'Lower ranked than ambiguous top candidate set.'; candidateRows.push(candidate); });
-        logger.user('WARNING', 'Ambiguous Match', 'PS Table', psName, 'Multiple equivalent base-transformed candidate nodes found for the same PS coordinate.', 'Use Candidate Resolver and add a manual override if needed.', { psName, tiedCandidates: tied.map((c) => ({ node: c.matchingNode, occurrenceId: c.occurrenceId })), boreMode });
         rows.push({ ...top, matchingNode: '', occurrenceId: '', matchType: 'AMBIGUOUS', finalStatus: 'USER_REVIEW_REQUIRED', candidateCount: tied.length });
         continue;
       }
@@ -620,15 +423,10 @@ export function PSNM_buildMatchTable(options) {
       if (selectedNode) selectedNode.selected = true;
       const finalStatus = PSNM_finalStatus(selected, boreMode);
       rows.push({ ...selected, finalStatus });
-      if (boreMode === 'ignore') logger.user('WARNING', 'Coordinate Only Match', 'Match Result', `${psName} → ${selected.matchingNode}`, 'Bore was ignored by user-selected mode.', 'Use Strict Bore for engineering-certified output.', selected);
-      else if (selected.boreStatus !== 'PASS') logger.user('WARNING', 'Bore Not Verified', 'Match Result', `${psName} → ${selected.matchingNode}`, `Coordinate match accepted with bore status ${selected.boreStatus}.`, 'Review bore source/conflict before final export.', selected);
-      else logger.user('INFO', 'Match Accepted', 'Match Result', `${psName} → ${selected.matchingNode}`, `${selected.matchType} selected with max axis delta ${selected.maxAxisDeltaMm.toFixed(3)} mm.`, 'No action required.', selected);
-      logger.debug('INFO', 'MATCH_SELECTED', `${psName} matched ${selected.occurrenceId} as ${selected.matchType}.`, selected);
     } catch (error) {
-      logger.user('ERROR', 'Parse Failed', 'PS Table', psName || psRow.position, error.message || String(error), 'Correct PS position format: E ...mm S ...mm U/D ...mm.', { psRow });
+      logger.user('ERROR', 'Parse Failed', 'PS Table', psName || psRow.position, error.message || String(error), 'Correct PS position format: E ...mm S/N ...mm U/D ...mm.', { psRow });
     }
   }
-
   const mandatoryCoverageRows = [];
   for (const mandatory of mandatoryNodeRows) {
     const node = PSNM_safeString(mandatory.node);
@@ -636,28 +434,17 @@ export function PSNM_buildMatchTable(options) {
     const occurrences = occurrencesByNode.get(node) || [];
     const coveredOccurrences = occurrences.filter((occurrence) => occurrence.selected);
     const status = occurrences.length === 0 ? 'MISSING_FROM_NODE_TABLE' : coveredOccurrences.length > 0 ? 'COVERED' : 'UNCOVERED';
-    const row = { node, mandatorySource: 'MANDATORY_NODE_LIST', inNodeTable: occurrences.length > 0, occurrences: occurrences.length, coveredOccurrences: coveredOccurrences.length, status, occurrenceIds: occurrences.map((item) => item.occurrenceId), matchedPsNames: rows.filter((match) => match.matchingNode === node && match.finalStatus?.startsWith('MATCHED')).map((match) => match.psName) };
-    mandatoryCoverageRows.push(row);
-    if (status === 'MISSING_FROM_NODE_TABLE') logger.user('ERROR', 'Mandatory Node Missing', 'Mandatory Node List', node, 'Node is mandatory but absent from Node XYZ table.', 'Verify exported Node XYZ table or mandatory list.', row);
-    else if (status === 'UNCOVERED') logger.user('WARNING', 'Mandatory Node Uncovered', 'Mandatory Node List', node, 'Node exists in Node XYZ table but no PS matched to it after base transform.', 'Check whether PS Name is missing, base anchor is wrong, or tolerance is too small.', row);
+    mandatoryCoverageRows.push({ node, mandatorySource: 'MANDATORY_NODE_LIST', inNodeTable: occurrences.length > 0, occurrences: occurrences.length, coveredOccurrences: coveredOccurrences.length, status, occurrenceIds: occurrences.map((item) => item.occurrenceId), matchedPsNames: rows.filter((match) => match.matchingNode === node && match.finalStatus?.startsWith('MATCHED')).map((match) => match.psName) });
   }
   for (const nodeRow of nodeCandidates) {
     if (!nodeRow.selected && nodeRow.isMandatoryNode === true && !mandatorySet.has(nodeRow.node)) {
       mandatoryCoverageRows.push({ node: nodeRow.node, mandatorySource: nodeRow.mandatorySource || 'NODE_TABLE', inNodeTable: true, occurrences: 1, coveredOccurrences: 0, status: 'UNCOVERED', occurrenceIds: [nodeRow.occurrenceId], matchedPsNames: [] });
-      logger.user('WARNING', 'Mandatory Node Uncovered', 'Node XYZ Table', nodeRow.node, 'Node row is mandatory but no PS matched to this occurrence.', 'Check PS table, base anchor, tolerance, or bore mode.', { node: nodeRow.node, occurrenceId: nodeRow.occurrenceId });
-    } else if (!nodeRow.selected && nodeRow.isMandatoryNode !== true) {
-      logger.debug('DEBUG', 'UNUSED_NODE', `Node ${nodeRow.occurrenceId} was not selected.`, { node: nodeRow.node, occurrenceId: nodeRow.occurrenceId, nodePs: nodeRow.nodePs });
     }
   }
-
   const mandatoryPsCoverageRows = psRows.filter((psRow) => psRow.isMandatoryPs === true).map((psRow) => {
     const match = rows.find((row) => row.psName === psRow.psName);
     const status = !match || match.finalStatus === 'UNMAPPED' ? 'UNMAPPED' : match.finalStatus === 'USER_REVIEW_REQUIRED' ? 'AMBIGUOUS' : 'COVERED';
-    const row = { psName: psRow.psName, mandatorySource: psRow.mandatorySource || 'PS_TABLE', matchedNode: match?.matchingNode || '', occurrenceId: match?.occurrenceId || '', nodeMandatory: match?.isMandatoryNode === true, status };
-    if (status === 'UNMAPPED') logger.user('WARNING', 'Mandatory PS Unmapped', 'PS Table', psRow.psName, 'Mandatory PS did not map to any node.', 'Check coordinates, bore mode, and node table coverage.', row);
-    else if (status === 'AMBIGUOUS') logger.user('WARNING', 'Mandatory PS Ambiguous', 'PS Table', psRow.psName, 'Mandatory PS has ambiguous candidate nodes.', 'Resolve manually in Candidate Resolver.', row);
-    return row;
+    return { psName: psRow.psName, mandatorySource: psRow.mandatorySource || 'PS_TABLE', matchedNode: match?.matchingNode || '', occurrenceId: match?.occurrenceId || '', nodeMandatory: match?.isMandatoryNode === true, status };
   });
-
   return { transform, boreMode, rows, candidateRows, mandatoryCoverageRows, mandatoryPsCoverageRows, userLog: logger.userLog, debugLog: logger.debugLog };
 }
