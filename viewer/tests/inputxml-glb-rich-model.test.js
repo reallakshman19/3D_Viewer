@@ -6,10 +6,11 @@ import { applyInputXmlBendMetadata } from '../converters/inputxml-glb/InputXmlBe
 import { applyInputXmlCaesarSupportMetadata } from '../converters/inputxml-glb/InputXmlCaesarSupportMetadata.js';
 import { appendInputXmlGlbNodeLabels } from '../converters/inputxml-glb/InputXmlGlbNodeLabels.js';
 import { adaptUxmlToGlbModel } from '../converters/inputxml-glb/UxmlToGlbModelAdapter.js';
+import { summarizeGlbLabels, collectGlbLabelAnchors } from '../js/pcf2glb/advanced/glbLabelOverlay.js';
+import { applyEngineeringPalette } from '../js/pcf2glb/glb/applyEngineeringPalette.js';
 import { buildComponentObject } from '../js/pcf2glb/glb/buildComponentObject.js';
 import { buildExportScene } from '../js/pcf2glb/glb/buildExportScene.js';
 import { buildNodeLabelObject } from '../js/pcf2glb/glb/buildNodeLabelObject.js';
-import { collectGlbLabelAnchors } from '../js/pcf2glb/advanced/glbLabelOverlay.js';
 
 const fixtureUrl = new URL('../../Benchmarks/INPUT XML to CII 2019/1001/1001-P - COPY_INPUT.XML', import.meta.url);
 const xmlText = fs.readFileSync(fixtureUrl, 'utf8');
@@ -86,6 +87,16 @@ assert.equal(nodeLabelObject.userData.labelKind, 'node');
 assert.equal(nodeLabelObject.userData.glbShape, 'node-label-anchor');
 assert.deepEqual(collectGlbLabelAnchors(nodeLabelObject).map((label) => label.kind), ['node']);
 assert.deepEqual(collectGlbLabelAnchors(nodeLabelObject).map((label) => label.text), ['205']);
+assert.deepEqual(summarizeGlbLabels(collectGlbLabelAnchors(nodeLabelObject)), {
+  total: 1,
+  node: 1,
+  support: 0,
+  valve: 0,
+  flange: 0,
+  tee: 0,
+  terminal: 0,
+  component: 0,
+});
 
 const nodeScene = buildExportScene({ components: [{
   id: 'node-label-210',
@@ -95,6 +106,11 @@ const nodeScene = buildExportScene({ components: [{
 }] });
 assert.ok(nodeScene.getObjectByName('node-label:210'));
 assert.deepEqual(collectGlbLabelAnchors(nodeScene).map((label) => label.text), ['210']);
+assert.equal(nodeScene.getObjectByName('PCF_EXPORT_ROOT').userData.engineeringPaletteApplied, true);
+assert.ok(nodeScene.getObjectByName('PCF_EXPORT_ROOT').userData.engineeringPaletteMeshCount > 0);
+
+const debugScene = buildExportScene({ components: [sampleComponent('PIPE', 'PIPE-DEBUG')] }, null, { colorMode: 'debug' });
+assert.equal(debugScene.getObjectByName('PCF_EXPORT_ROOT').userData.colorMode, 'debug');
 
 const elbowObject = buildComponentObject(sampleComponent('ELBOW', 'ELBOW-TEST'));
 assert.equal(elbowObject.userData.glbShape, 'rounded-elbow-tube');
