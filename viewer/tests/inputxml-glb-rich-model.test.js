@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 
 import { extractInputXmlBranches } from '../converters/inputxml-dxf/InputXmlBranchExtractor.js';
+import { applyInputXmlBendMetadata } from '../converters/inputxml-glb/InputXmlBendMetadata.js';
 import { adaptUxmlToGlbModel } from '../converters/inputxml-glb/UxmlToGlbModelAdapter.js';
 import { buildComponentObject } from '../js/pcf2glb/glb/buildComponentObject.js';
 import { collectGlbLabelAnchors } from '../js/pcf2glb/advanced/glbLabelOverlay.js';
@@ -18,6 +19,7 @@ assert.equal(extracted.ok, true);
 assert.ok(extracted.doc.components.length > 0);
 assert.ok(extracted.doc.segments.length > 0);
 
+applyInputXmlBendMetadata(xmlText, extracted.doc);
 const { model, stats, diagnostics } = adaptUxmlToGlbModel(extracted.doc);
 assert.equal(model.schema, 'inputxml-glb-model/v1');
 assert.ok(model.components.length > 0);
@@ -43,7 +45,7 @@ const filtered = adaptUxmlToGlbModel(extracted.doc, {
 assert.ok(filtered.model.components.length <= model.components.length);
 assert.deepEqual(diagnostics.filter((item) => item.severity === 'ERROR'), []);
 
-function sampleComponent(type, id = type) {
+function sampleComponent(type, id = type, extra = {}) {
   return {
     id,
     type,
@@ -54,12 +56,36 @@ function sampleComponent(type, id = type) {
     branch1Point: { x: 50, y: 60, z: 0, bore: 15 },
     refNo: id,
     attributes: { COMPONENT_IDENTIFIER: id },
+    ...extra,
   };
 }
 
 const elbowObject = buildComponentObject(sampleComponent('ELBOW', 'ELBOW-TEST'));
 assert.equal(elbowObject.userData.glbShape, 'rounded-elbow-tube');
 assert.equal(elbowObject.geometry?.type, 'TubeGeometry');
+
+const radiusElbowObject = buildComponentObject(sampleComponent('ELBOW', 'ELBOW-RADIUS-TEST', {
+  bendRadius: 150,
+  bendAngleDeg: 90,
+  bendMetadataSource: 'PIPINGELEMENT.BEND',
+}));
+assert.equal(radiusElbowObject.userData.glbShape, 'rounded-elbow-tube-radius');
+assert.equal(radiusElbowObject.userData.bendRadius, 150);
+assert.equal(radiusElbowObject.userData.bendAngleDeg, 90);
+assert.equal(radiusElbowObject.userData.bendMetadataSource, 'PIPINGELEMENT.BEND');
+assert.ok(radiusElbowObject.userData.bendLift > 0);
+
+const syntheticBendXml = '<CAESARII><PIPINGMODEL JOBNAME="BEND-TEST"><PIPINGELEMENT FROM_NODE="10" TO_NODE="20" DELTA_X="100" DELTA_Y="0" DELTA_Z="0" DIAMETER="20"><BEND RADIUS="300" ANGLE="90"/></PIPINGELEMENT></PIPINGMODEL></CAESARII>';
+const synthetic = extractInputXmlBranches(syntheticBendXml, { sourceId: 'synthetic-bend', fileName: 'synthetic.xml' });
+const syntheticBendStats = applyInputXmlBendMetadata(syntheticBendXml, synthetic.doc);
+const syntheticAdapted = adaptUxmlToGlbModel(synthetic.doc);
+const syntheticElbow = syntheticAdapted.model.components.find((component) => component.type === 'BEND' || component.type === 'ELBOW');
+assert.equal(syntheticBendStats.bendTagCount, 1);
+assert.equal(syntheticBendStats.radiusCount, 1);
+assert.ok(syntheticElbow);
+assert.equal(syntheticElbow.bendRadius, 300);
+assert.equal(syntheticElbow.bendAngleDeg, 90);
+assert.equal(syntheticAdapted.stats.bendRadiusCount, 1);
 
 const teeObject = buildComponentObject(sampleComponent('TEE', 'TEE-TEST'));
 assert.equal(teeObject.userData.glbShape, 'tee-branch-collar');
@@ -87,6 +113,7 @@ const viewerSource = fs.readFileSync(new URL('../js/pcf2glb/advanced/createViewe
 assert.match(viewerSource, /installGlbLabelOverlay/);
 
 const runnerSource = fs.readFileSync(new URL('../converters/inputxml-glb/inputxml-to-glb-runner.js', import.meta.url), 'utf8');
+assert.match(runnerSource, /applyInputXmlBendMetadata/);
 assert.match(runnerSource, /buildExportScene/);
 assert.match(runnerSource, /exportSceneToGLB/);
 
