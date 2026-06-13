@@ -29,7 +29,7 @@ function arrayBufferToBase64(buffer) {
   if (typeof Buffer !== 'undefined') return Buffer.from(bytes).toString('base64');
   let binary = '';
   const chunk = 0x8000;
-  for (let i = 0; i < bytes.length; i += chunk) {
+  for (let i = 0; i < bytes.length; i += 1) {
     binary += String.fromCharCode(...bytes.subarray(i, i + chunk));
   }
   return btoa(binary);
@@ -55,11 +55,41 @@ function createSceneLog(stdout, stderr) {
   };
 }
 
+function suppressComponentLabel(component) {
+  component.label = '';
+  component.name = '';
+  component.attributes = { ...(component.attributes || {}), EXPORT_LABEL: false };
+  component.raw = { ...(component.raw || {}), EXPORT_LABEL: false };
+}
+
+function applyLabelExportOptions(model, options = {}) {
+  const stats = { nodeLabelsSuppressed: 0, supportLabelsSuppressed: 0, componentLabelsSuppressed: 0 };
+  const showSupportLabels = options.showSupportLabels !== false && options.exportRestraintText !== false;
+  const showComponentLabels = options.showComponentLabels !== false && options.exportComponentText !== false;
+
+  for (const component of model.components || []) {
+    const type = text(component.type).toUpperCase();
+    if (type === 'NODE_LABEL' && options.exportNodeLabels === false) {
+      suppressComponentLabel(component);
+      stats.nodeLabelsSuppressed += 1;
+    } else if (type === 'SUPPORT' && !showSupportLabels) {
+      suppressComponentLabel(component);
+      stats.supportLabelsSuppressed += 1;
+    } else if (!['PIPE', 'SUPPORT', 'NODE_LABEL'].includes(type) && !showComponentLabels) {
+      suppressComponentLabel(component);
+      stats.componentLabelsSuppressed += 1;
+    }
+  }
+
+  return stats;
+}
+
 export async function run(ctx = {}) {
   const stdout = [];
   const stderr = [];
   const file = (ctx.inputFiles || []).find((entry) => entry?.role === 'primary') || ctx.inputFiles?.[0];
   const sourceName = file?.name || 'input.xml';
+  const options = ctx.options || {};
 
   try {
     if (!file) throw new Error('Select a primary Input XML file first.');
@@ -84,14 +114,22 @@ export async function run(ctx = {}) {
       stdout.push(`InputXML CAESAR support kinds: ${JSON.stringify(caesarSupportMetadata.kindCounts)}`);
     }
 
-    const { model, stats, diagnostics } = adaptUxmlToGlbModel(extracted.doc, ctx.options || {});
-    const nodeLabelStats = appendInputXmlGlbNodeLabels(model, extracted.doc, stats);
+    const { model, stats, diagnostics } = adaptUxmlToGlbModel(extracted.doc, options);
+    const nodeLabelStats = options.exportNodeLabels === false
+      ? { nodeLabelCount: 0, skipped: true }
+      : appendInputXmlGlbNodeLabels(model, extracted.doc, stats);
+    const labelOptionStats = applyLabelExportOptions(model, options);
     if (!model.components.length) throw new Error('No drawable Input XML components were found for GLB export.');
 
     stdout.push(`InputXML→GLB components: ${stats.componentCount}`);
     stdout.push(`Component types: ${JSON.stringify(stats.typeCounts)}`);
     if (nodeLabelStats.nodeLabelCount) {
       stdout.push(`Node labels added: ${nodeLabelStats.nodeLabelCount}`);
+    } else if (nodeLabelStats.skipped) {
+      stdout.push('Node labels skipped by exportNodeLabels=false.');
+    }
+    if (Object.values(labelOptionStats).some((count) => count > 0)) {
+      stdout.push(`GLB label export options: ${JSON.stringify(labelOptionStats)}`);
     }
     if (stats.bendRadiusCount) {
       stdout.push(`Bend radius metadata applied: ${stats.bendRadiusCount}`);
@@ -115,18 +153,24 @@ export async function run(ctx = {}) {
       mime: 'model/gltf-binary',
     }];
 
-    if ((ctx.options || {}).includeSidecarJson !== false) {
+    if (options.includeSidecarJson !== false) {
       outputs.push({
         name: `${stem}-glb-sidecar.json`,
         text: JSON.stringify({
           schema: 'inputxml-glb-sidecar/v1',
           source: sourceName,
           branches: extracted.branches,
+          exportOptions: {
+            exportNodeLabels: options.exportNodeLabels !== false,
+            exportRestraintText: options.exportRestraintText !== false && options.showSupportLabels !== false,
+            exportComponentText: options.exportComponentText !== false && options.showComponentLabels !== false,
+          },
           stats: {
             ...stats,
             bendMetadata,
             caesarSupportMetadata,
             nodeLabelStats,
+            labelOptionStats,
           },
           diagnostics: [...(extracted.diagnostics || []), ...(diagnostics || [])],
         }, null, 2),
