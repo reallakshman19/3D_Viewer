@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { buildComponentObject } from './buildComponentObject.js';
 import { buildNodeLabelObject } from './buildNodeLabelObject.js';
+import { enhanceSupportDirectionProxy } from './enhanceSupportDirectionProxy.js';
 import { enhanceTeeBodyProxy } from './enhanceTeeBodyProxy.js';
 
 export function buildExportScene(model, log) {
@@ -15,6 +16,7 @@ export function buildExportScene(model, log) {
         ? buildNodeLabelObject(comp)
         : buildComponentObject(comp, log);
       if (obj && comp.type === 'TEE') obj = enhanceTeeBodyProxy(obj, comp);
+      if (obj && comp.type === 'SUPPORT') obj = enhanceSupportDirectionProxy(obj, comp);
       if (obj) root.add(obj);
     } catch (err) {
       if (log) {
