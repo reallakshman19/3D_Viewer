@@ -191,17 +191,29 @@ function refreshExportPanel() {
 }
 
 function updatePolishPanels() {
+  if (!document.querySelector('.model-converters-workflow-popup')) return;
   updateTabBadges();
-  ensureExportPanel();
-  refreshExportPanel();
+  if (document.querySelector('[data-xml-cii-workflow-polish-exports]')) refreshExportPanel();
+  else ensureExportPanel();
 }
 
 export function installXmlCiiConversionWorkflowPolish(container = document) {
   if (!browserReady() || window[FLAG]) return;
   window[FLAG] = true;
   const root = container || document;
-  const observer = new MutationObserver(updatePolishPanels);
-  observer.observe(root === document ? document.body : root, { childList: true, subtree: true, characterData: true });
+  let scheduled = false;
+  const schedule = () => {
+    if (scheduled) return;
+    scheduled = true;
+    const run = () => {
+      scheduled = false;
+      updatePolishPanels();
+    };
+    if (typeof requestAnimationFrame === 'function') requestAnimationFrame(run);
+    else setTimeout(run, 0);
+  };
+  const observer = new MutationObserver(schedule);
+  observer.observe(root === document ? document.body : root, { childList: true, subtree: true });
   window.addEventListener(PREVIEW_EVENT, () => setTimeout(updatePolishPanels, 0));
   setTimeout(updatePolishPanels, 0);
 }
