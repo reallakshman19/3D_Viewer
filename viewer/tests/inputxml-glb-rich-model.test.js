@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import { extractInputXmlBranches } from '../converters/inputxml-dxf/InputXmlBranchExtractor.js';
 import { adaptUxmlToGlbModel } from '../converters/inputxml-glb/UxmlToGlbModelAdapter.js';
 import { buildComponentObject } from '../js/pcf2glb/glb/buildComponentObject.js';
+import { collectGlbLabelAnchors } from '../js/pcf2glb/advanced/glbLabelOverlay.js';
 
 const fixtureUrl = new URL('../../Benchmarks/INPUT XML to CII 2019/1001/1001-P - COPY_INPUT.XML', import.meta.url);
 const xmlText = fs.readFileSync(fixtureUrl, 'utf8');
@@ -65,6 +66,7 @@ assert.equal(teeObject.userData.glbShape, 'tee-branch-collar');
 assert.ok(teeObject.getObjectByName('TEE-TEST-main-run'));
 assert.ok(teeObject.getObjectByName('TEE-TEST-branch'));
 assert.ok(teeObject.getObjectByName('TEE-TEST-tee-collar'));
+assert.ok(collectGlbLabelAnchors(teeObject).some((label) => label.text === 'TEE-TEST'));
 
 const flangeObject = buildComponentObject(sampleComponent('FLANGE', 'FLANGE-TEST'));
 assert.equal(flangeObject.userData.glbShape, 'flange-ring-pair');
@@ -76,9 +78,13 @@ assert.equal(valveObject.userData.glbShape, 'valve-body-handwheel');
 assert.ok(valveObject.getObjectByName('VALVE-TEST-valve-body'));
 assert.ok(valveObject.getObjectByName('VALVE-TEST-valve-handwheel'));
 assert.match(valveObject.getObjectByName('label:VALVE-TEST')?.name || '', /label:/);
+assert.deepEqual(collectGlbLabelAnchors(valveObject).map((label) => label.text), ['VALVE-TEST']);
 
 const tabSource = fs.readFileSync(new URL('../tabs/model-converters-tab.js', import.meta.url), 'utf8');
 assert.match(tabSource, /installInputXmlGlbLegacyBridge/);
+
+const viewerSource = fs.readFileSync(new URL('../js/pcf2glb/advanced/createViewerApp.js', import.meta.url), 'utf8');
+assert.match(viewerSource, /installGlbLabelOverlay/);
 
 const runnerSource = fs.readFileSync(new URL('../converters/inputxml-glb/inputxml-to-glb-runner.js', import.meta.url), 'utf8');
 assert.match(runnerSource, /buildExportScene/);
