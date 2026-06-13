@@ -46,6 +46,22 @@ function supportKind(attrs = {}, comp = {}) {
   return 'UNKNOWN';
 }
 
+function vectorFromObject(value) {
+  if (!value || typeof value !== 'object') return null;
+  const x = number(value.x ?? value.X);
+  const y = number(value.y ?? value.Y);
+  const z = number(value.z ?? value.Z);
+  if ([x, y, z].some((v) => v == null)) return null;
+  const axis = new THREE.Vector3(x, y, z);
+  return axis.length() < 0.01 ? null : axis.normalize();
+}
+
+function storedSupportAxis(attrs = {}) {
+  return vectorFromObject(attrs.supportAxis)
+    || vectorFromObject(attrs.SUPPORT_AXIS)
+    || vectorFromObject(attrs.caesarSupportAxis);
+}
+
 function cosineAxis(attrs = {}) {
   const x = number(attrs.caesarXCosine ?? attrs.XCOSINE ?? attrs.X_COSINE ?? attrs.XCOS ?? attrs.X);
   const y = number(attrs.caesarYCosine ?? attrs.YCOSINE ?? attrs.Y_COSINE ?? attrs.YCOS ?? attrs.Y);
@@ -70,7 +86,7 @@ function textAxis(attrs = {}) {
 }
 
 function supportAxis(attrs = {}) {
-  return cosineAxis(attrs) || textAxis(attrs) || Z_AXIS.clone();
+  return storedSupportAxis(attrs) || cosineAxis(attrs) || textAxis(attrs) || Z_AXIS.clone();
 }
 
 function pipeRadiusFor(comp = {}, attrs = {}) {
@@ -216,9 +232,17 @@ function addRestBase(group, id, axis, radius, color, pipeRadius) {
     radius, color);
 }
 
+function addGuideBaseWithoutVerticalArrow(group, id, radius, color, pipeRadius) {
+  const pipeBottomY = -pipeRadius;
+  const baseY = pipeBottomY - radius * 1.65;
+  addBasePadAt(group, id, radius, color, baseY);
+  addBox(group, `${id}-guide-base`, new THREE.Vector3(radius * 1.7, radius * 0.22, radius * 1.7), new THREE.Vector3(0, baseY + radius * 0.22, 0), color);
+  addPostBetween(group, `${id}-guide`, radius, color, baseY + radius * 0.34, pipeBottomY - radius * 0.1);
+}
+
 function addGuideBars(group, id, axis, radius, color, pipeRadius) {
   const a = axis.clone().normalize();
-  addRestBase(group, id, a, radius, color, pipeRadius);
+  addGuideBaseWithoutVerticalArrow(group, id, radius, color, pipeRadius);
 
   const side = perpendicular(a);
   const outerDist = pipeRadius + radius * 2.1;
