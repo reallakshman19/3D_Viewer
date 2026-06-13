@@ -1,0 +1,50 @@
+[
+  {
+    "name": "/ASIM-1885-6\"-S8811951-91261M7-HC/B2",
+    "type": "BRANCH",
+    "bore": "150mm",
+    "_boreValue": 150,
+    "attributes": {
+      "HBOR": "150mm",
+      "TBOR": "150mm",
+      "HPOS": { "x": 421773.221, "y": -1141354, "z": 1184.15 },
+      "TPOS": { "x": 438023.221, "y": -1140825, "z": 1184.15 },
+      "NAME": "/ASIM-1885-6\"-S8811951-91261M7-HC/B2",
+      "OWNER": "/ASIM-1885-6\"-S8811951-91261M7-HC"
+    },
+    "children": [
+      { "name": "SUPPORT PS-12244", "type": "SUPPORT", "attributes": { "NAME": "/PS-12244/DATUM", "TYPE": "ATTA", "POS": { "x": 423170.971, "y": -1141125, "z": 1184.15 }, "POSI": "E 423170.971mm S 1141125mm U 1184.15mm", "DTXR": "Pipe Rest XRT01", "SUPPORT_TAG": "PS-12244", "SUPPORT_TYPE": "REST", "SUPPORT_KIND": "REST", "SUPPORT_MAPPER_KIND": "REST", "NODEGAP": "0", "NODEFRICTION": "0.3", "WEIGHT": "0", "RATING": "900" } },
+      { "name": "SUPPORT PS-12244.1", "type": "SUPPORT", "attributes": { "NAME": "/PS-12244.1", "TYPE": "ATTA", "POS": { "x": 423170.971, "y": -1141125, "z": 1184.15 }, "POSI": "E 423170.971mm S 1141125mm U 1184.15mm", "DTXR": "PIPE SHOE FOR HORIZ LINES 6-PDO-TYPE-416A/B", "SUPPORT_TAG": "PS-12244.1", "SUPPORT_TYPE": "REST", "SUPPORT_KIND": "REST", "SUPPORT_MAPPER_KIND": "REST", "CMPSUPTYPE": "SH-150", "WEIGHT": "0" } },
+      { "name": "SUPPORT PS-12246", "type": "SUPPORT", "attributes": { "NAME": "/PS-12246/DATUM", "TYPE": "ATTA", "POS": { "x": 425680.971, "y": -1141125, "z": 1184.15 }, "POSI": "E 425680.971mm S 1141125mm U 1184.15mm", "DTXR": "Pipe Rest XRT01", "SUPPORT_TAG": "PS-12246", "SUPPORT_TYPE": "REST", "SUPPORT_KIND": "REST", "SUPPORT_MAPPER_KIND": "REST", "NODEGAP": "0", "NODEFRICTION": "0.3" } },
+      { "name": "SUPPORT PS-12246.2", "type": "SUPPORT", "attributes": { "NAME": "/PS-12246.2", "TYPE": "ATTA", "POS": { "x": 425680.971, "y": -1141125, "z": 1184.15 }, "POSI": "E 425680.971mm S 1141125mm U 1184.15mm", "DTXR": "GUIDE PDO-TYPE-603", "SUPPORT_TAG": "PS-12246.2", "SUPPORT_TYPE": "GUIDE", "SUPPORT_KIND": "GUIDE", "SUPPORT_MAPPER_KIND": "GUIDE", "CMPSUPTYPE": "PG-150" } },
+      { "name": "VALV /88-VGT-25050", "type": "VALV", "attributes": { "NAME": "/88-VGT-25050", "TYPE": "VALV", "POS": { "x": 424426.192, "y": -1141125, "z": 1184.15 }, "DTXR": "GATE VALVE FLGD 900#", "WEIGHT": "250", "RATING": "900" } },
+      { "name": "SUPPORT PS-12248.5", "type": "SUPPORT", "attributes": { "NAME": "/PS-12248.5", "TYPE": "ATTA", "POS": { "x": 430800.766, "y": -1141125, "z": 1184.15 }, "POSI": "E 430800.766mm S 1141125mm U 1184.15mm", "DTXR": "Directional Anchor On Shoe for Hot Insulated Pipe", "SUPPORT_TAG": "PS-12248.5", "SUPPORT_TYPE": "LINESTOP", "SUPPORT_KIND": "LINESTOP", "SUPPORT_MAPPER_KIND": "LINESTOP", "NODEGAP": "2", "NODEFRICTION": "0.3", "CMPSUPTYPE": "LS-150" } }
+    ]
+  },
+  {
+    "name": "/ASIM-1885-6\"-S8811951-91261M7-HC/B3",
+    "type": "BRANCH",
+    "bore": "50mm",
+    "_boreValue": 50,
+    "attributes": { "HBOR": "50mm", "TBOR": "50mm", "HPOS": { "x": 423170.992, "y": -1141125, "z": 1306.4 }, "TPOS": { "x": 425681.392, "y": -1141125, "z": 1306.4 }, "NAME": "/ASIM-1885-6\"-S8811951-91261M7-HC/B3" },
+    "children": [
+      { "name": "SUPPORT PS-12244.2", "type": "SUPPORT", "attributes": { "NAME": "/PS-12244.2", "TYPE": "ATTA", "POS": { "x": 423170.992, "y": -1141125, "z": 1306.4 }, "POSI": "E 423170.992mm S 1141125mm U 1306.4mm", "DTXR": "---", "SUPPORT_TAG": "PS-12244.2", "SUPPORT_TYPE": "", "WEIGHT": "0" } },
+      { "name": "SUPPORT PS-12245", "type": "SUPPORT", "attributes": { "NAME": "/PS-12245/DATUM", "TYPE": "ATTA", "POS": { "x": 424045.97, "y": -1141725, "z": 2178 }, "POSI": "E 424045.97mm S 1141725mm U 2178mm", "DTXR": "Pipe Rest XRT01", "SUPPORT_TAG": "PS-12245", "SUPPORT_TYPE": "REST", "SUPPORT_KIND": "REST", "SUPPORT_MAPPER_KIND": "REST" } },
+      { "name": "SUPPORT PS-12245.2", "type": "SUPPORT", "attributes": { "NAME": "/PS-12245.2", "TYPE": "ATTA", "POS": { "x": 424045.97, "y": -1141725, "z": 2178 }, "POSI": "E 424045.97mm S 1141725mm U 2178mm", "DTXR": "GUIDE PDO-TYPE-603", "SUPPORT_TAG": "PS-12245.2", "SUPPORT_TYPE": "GUIDE", "SUPPORT_KIND": "GUIDE", "SUPPORT_MAPPER_KIND": "GUIDE" } },
+      { "name": "VALV =1006649732/71020", "type": "VALV", "attributes": { "NAME": "=1006649732/71020", "TYPE": "VALV", "POS": { "x": 423170.992, "y": -1141125, "z": 1702.6 }, "DTXR": "GATE VALVE FLGD 900#", "WEIGHT": "90", "RATING": "900" } }
+    ]
+  },
+  {
+    "name": "/ASIM-1885-2\"-D8810271-91261M7-PP/B1",
+    "type": "BRANCH",
+    "bore": "80mm",
+    "_boreValue": 80,
+    "attributes": { "HBOR": "50mm", "TBOR": "80mm", "HPOS": { "x": 426511.66, "y": -1141125, "z": 1184.15 }, "TPOS": { "x": 436573.021, "y": -1141125, "z": 1144.45 }, "NAME": "/ASIM-1885-2\"-D8810271-91261M7-PP/B1" },
+    "children": [
+      { "name": "SUPPORT PS-12248", "type": "SUPPORT", "attributes": { "NAME": "/PS-12248/DATUM", "TYPE": "ATTA", "POS": { "x": 430800.971, "y": -1141125, "z": 1184.15 }, "POSI": "E 430800.971mm S 1141125mm U 1184.15mm", "DTXR": "Pipe Rest XRT01", "SUPPORT_TAG": "PS-12248", "SUPPORT_TYPE": "REST", "SUPPORT_KIND": "REST", "SUPPORT_MAPPER_KIND": "REST" } },
+      { "name": "SUPPORT PS-12248.8", "type": "SUPPORT", "attributes": { "NAME": "/PS-12248.8", "TYPE": "ATTA", "POS": { "x": 430800.971, "y": -1141125, "z": 1184.15 }, "POSI": "E 430800.971mm S 1141125mm U 1184.15mm", "DTXR": "GUIDE PDO-TYPE-603", "SUPPORT_TAG": "PS-12248.8", "SUPPORT_TYPE": "GUIDE", "SUPPORT_KIND": "GUIDE", "SUPPORT_MAPPER_KIND": "GUIDE" } },
+      { "name": "SUPPORT PS-12249", "type": "SUPPORT", "attributes": { "NAME": "/PS-12249/DATUM", "TYPE": "ATTA", "POS": { "x": 432932.594, "y": -1141125, "z": 1144.45 }, "POSI": "E 432932.594mm S 1141125mm U 1144.45mm", "DTXR": "Pipe Rest XRT01", "SUPPORT_TAG": "PS-12249", "SUPPORT_TYPE": "REST", "SUPPORT_KIND": "REST", "SUPPORT_MAPPER_KIND": "REST" } },
+      { "name": "SUPPORT PS-12250", "type": "SUPPORT", "attributes": { "NAME": "/PS-12250/DATUM", "TYPE": "ATTA", "POS": { "x": 436573.021, "y": -1141125, "z": 1144.45 }, "POSI": "E 436573.021mm S 1141125mm U 1144.45mm", "DTXR": "Pipe Rest XRT01", "SUPPORT_TAG": "PS-12250", "SUPPORT_TYPE": "REST", "SUPPORT_KIND": "REST", "SUPPORT_MAPPER_KIND": "REST" } }
+    ]
+  }
+]
