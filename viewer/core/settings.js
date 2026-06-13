@@ -32,24 +32,54 @@ const DEFAULT_PCF_MAPPING = {
   'REFRDENS': ''
 };
 
-export function getPcfMapping() {
-  const saved = localStorage.getItem('pcfMapping');
-  if (saved) {
-    try { return JSON.parse(saved); } catch (e) {}
+function getStorage() {
+  try {
+    return typeof localStorage === 'undefined' ? null : localStorage;
+  } catch {
+    return null;
   }
-  return { ...DEFAULT_PCF_MAPPING };
+}
+
+function readJsonSetting(key, fallback) {
+  const storage = getStorage();
+  const saved = storage?.getItem?.(key);
+  if (saved) {
+    try { return JSON.parse(saved); } catch {}
+  }
+  return { ...fallback };
+}
+
+function writeJsonSetting(key, value) {
+  const storage = getStorage();
+  if (!storage?.setItem) return;
+  storage.setItem(key, JSON.stringify(value));
+}
+
+function readTextSetting(key, fallback = '') {
+  const storage = getStorage();
+  return storage?.getItem?.(key) || fallback;
+}
+
+function writeTextSetting(key, value) {
+  const storage = getStorage();
+  if (!storage?.setItem) return;
+  storage.setItem(key, value);
+}
+
+export function getPcfMapping() {
+  return readJsonSetting('pcfMapping', DEFAULT_PCF_MAPPING);
 }
 
 export function savePcfMapping(mapping) {
-  localStorage.setItem('pcfMapping', JSON.stringify(mapping));
+  writeJsonSetting('pcfMapping', mapping);
 }
 
 export function getCaesarMatchAttribute() {
-  return localStorage.getItem('caesarMatchAttribute') || 'lineNo';
+  return readTextSetting('caesarMatchAttribute', 'lineNo');
 }
 
 export function saveCaesarMatchAttribute(attr) {
-  localStorage.setItem('caesarMatchAttribute', attr);
+  writeTextSetting('caesarMatchAttribute', attr);
 }
 
 // ─── Support Kind Map ─────────────────────────────────────────────────────────
@@ -62,13 +92,9 @@ const DEFAULT_SUPPORT_KIND_MAP = {
 };
 
 export function getSupportKindMap() {
-  const saved = localStorage.getItem('supportKindMap');
-  if (saved) {
-    try { return JSON.parse(saved); } catch {}
-  }
-  return { ...DEFAULT_SUPPORT_KIND_MAP };
+  return readJsonSetting('supportKindMap', DEFAULT_SUPPORT_KIND_MAP);
 }
 
 export function saveSupportKindMap(map) {
-  localStorage.setItem('supportKindMap', JSON.stringify(map));
+  writeJsonSetting('supportKindMap', map);
 }
