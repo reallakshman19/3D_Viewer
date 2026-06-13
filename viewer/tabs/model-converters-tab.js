@@ -9,6 +9,7 @@ import { installXmlCiiWorkflowUiFixes } from './model-converters/xml-cii-workflo
 import { installXmlCiiSideloadUi } from './model-converters/xml-cii-sideload-ui.js';
 import { installXmlCiiSideloadJsonConfigTools } from './model-converters/xml-cii-sideload-json-config-tools.js';
 import { installXmlCiiMatchedPreviewUi } from './model-converters/xml-cii-matched-preview-ui.js';
+import { installXmlCiiConversionWorkflowPopup } from './model-converters/xml-cii-conversion-workflow-popup.js';
 import { installXmlCiiDefaultMasterAutoload, installXmlCiiRecoveryPatch } from './xml-cii-master-autoload-patch.js';
 
 export function renderModelConvertersTab(container, ctx) {
@@ -20,6 +21,7 @@ export function renderModelConvertersTab(container, ctx) {
   installXmlCiiSideloadUi(container);
   installXmlCiiSideloadJsonConfigTools(container);
   installXmlCiiMatchedPreviewUi(container);
+  installXmlCiiConversionWorkflowPopup(container);
   installInputXmlDxfLegacyBridge(container);
   installInputXmlDxfBranchPicker(container);
   installInputXmlDxfSymbolOption(container);
