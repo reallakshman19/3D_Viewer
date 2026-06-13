@@ -71,6 +71,50 @@ def _inputxml_friction_value(restraint: base.RestraintSpec, support_config: dict
     return restraint.friction
 
 
+def _component_type_to_xml_type(component_type: str, support_config: dict[str, Any]) -> str:
+    comp = _safe_text(component_type).upper()
+    component_map = support_config.get("componentTypeToXmlType", {})
+    if isinstance(component_map, dict):
+        mapped = _safe_text(component_map.get(comp) or component_map.get(component_type))
+        if mapped:
+            return mapped.upper()
+    if comp == "ANCI":
+        return "+Y"
+    return ""
+
+
+def _component_type_restraint_specs(document: base.XmlDocument, support_config: dict[str, Any]) -> dict[int, tuple[base.RestraintSpec, ...]]:
+    stiffness = patched._to_float(support_config.get("defaultStiffness"), base.DEFAULT_LINEAR_STIFFNESS)
+    gap = patched._to_float(support_config.get("defaultGap"), 0.0)
+    friction = patched._to_float(support_config.get("defaultFriction"), 0.3)
+    specs: dict[int, tuple[base.RestraintSpec, ...]] = {}
+    for branch in document.branches:
+        for node in branch.nodes:
+            if node.node_number is None or node.node_number <= 0:
+                continue
+            xml_type = _component_type_to_xml_type(node.component_type, support_config)
+            if not xml_type:
+                continue
+            specs[node.node_number] = (
+                base.RestraintSpec(
+                    type_code=base._restraint_type_to_code(xml_type),
+                    stiffness=stiffness,
+                    gap=gap,
+                    friction=friction,
+                    is_open_end=False,
+                ),
+            )
+    return specs
+
+
+def _merge_spec_maps(*maps: dict[int, tuple[base.RestraintSpec, ...]]) -> dict[int, tuple[base.RestraintSpec, ...]]:
+    merged: dict[int, tuple[base.RestraintSpec, ...]] = {}
+    for spec_map in maps:
+        for node_number, specs in spec_map.items():
+            merged[node_number] = patched._merge_specs(merged.get(node_number, tuple()), specs)
+    return merged
+
+
 def _add_restraint(parent: ET.Element, restraint: base.RestraintSpec, node_number: int, support_config: dict[str, Any]) -> None:
     fric = _inputxml_friction_value(restraint, support_config)
     ET.SubElement(parent, "RESTRAINT", {
@@ -84,7 +128,7 @@ def _add_restraint(parent: ET.Element, restraint: base.RestraintSpec, node_numbe
         "XCOSINE": "-1.0101",
         "YCOSINE": "-1.0101",
         "ZCOSINE": "-1.0101",
-        "TAG": "DTXR-derived",
+        "TAG": "ANCI/DTXR-derived",
         "GUID": "",
     })
 
@@ -145,10 +189,8 @@ def _inputxml_from_final_xml(final_xml: Path, support_config: dict[str, Any], us
     insulation_density_map = patched._branch_insulation_density_map(final_xml)
     dtxr_specs, node_number_kind_map = patched._build_keyword_restraint_specs(final_xml, support_config)
     xml_specs = base._build_explicit_restraint_specs(document.branches)
-    explicit_specs: dict[int, tuple[base.RestraintSpec, ...]] = dtxr_specs if use_json_restraints else dict(xml_specs)
-    if not use_json_restraints:
-        for node_number, specs in dtxr_specs.items():
-            explicit_specs[node_number] = patched._merge_specs(explicit_specs.get(node_number, tuple()), specs)
+    component_specs = _component_type_restraint_specs(document, support_config)
+    explicit_specs = _merge_spec_maps(component_specs, dtxr_specs) if use_json_restraints else _merge_spec_maps(component_specs, xml_specs, dtxr_specs)
     root = ET.Element("CAESARII", {"XML_TYPE": "Input", "VERSION": "2019", "SOURCE": "XML->CII enriched InputXML debug export"})
     model = ET.SubElement(root, "PIPINGMODEL", {"JOBNAME": document.metadata.project_name or Path(final_xml).stem, "TIME": document.metadata.date_time, "NORTH_Y": "1", "NORTH_Z": "0", "NUMELEMENTS": "0", "NUMREST": "0"})
     element_count = 0
