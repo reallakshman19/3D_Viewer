@@ -36,6 +36,7 @@ function supportObject(component) {
   assert.ok(object, `${component.id} should be present in GLB scene`);
   assert.equal(object.userData.directionalSupportEnhanced, true);
   assert.ok(object.userData.directionalSupportSymbolCount > 0);
+  assert.ok(object.userData.supportSymbolScale >= 18, `${component.id} should use visible engineering scale`);
   return object;
 }
 
@@ -86,5 +87,8 @@ const rest = supportObject(support('REST-Y', 'REST', { x: 0, y: 1, z: 0 }));
 child(rest, 'REST-Y-rest-base');
 child(rest, 'REST-Y-rest-axis');
 assert.equal(rest.userData.supportKind, 'REST');
+
+const largeGuide = supportObject(support('GUIDE-LARGE', 'GUIDE', { x: 1, y: 0, z: 0 }, { bore: '300' }));
+assert.ok(largeGuide.userData.supportSymbolScale > guide.userData.supportSymbolScale);
 
 console.log('inputxml-glb-directional-restraints.test.js passed');
