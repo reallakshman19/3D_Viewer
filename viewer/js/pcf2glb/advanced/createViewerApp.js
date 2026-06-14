@@ -16,6 +16,27 @@ import { createDebugPanel } from './createDebugPanel.js';
 import { computeBoundingMeasurement } from '../pro-editor/core/measureUtils.js';
 import { installGlbLabelOverlay } from './glbLabelOverlay.js';
 import { applyGlbSupportSymbols } from './applyGlbSupportSymbols.js';
+import { layerManifestOf, mountLayerPanel } from '../ui/GlbLayerRegistry.js';
+
+function ensureLayerPanelHost(previewContainer) {
+  let host = previewContainer.querySelector(':scope > .bm-cii-viewer-layer-host');
+  if (host) return host;
+  host = document.createElement('div');
+  host.className = 'bm-cii-viewer-layer-host';
+  host.style.cssText = [
+    'position:absolute',
+    'left:16px',
+    'top:16px',
+    'z-index:14',
+    'width:280px',
+    'max-height:min(420px,58vh)',
+    'overflow:auto',
+    'pointer-events:auto',
+    'display:none',
+  ].join(';');
+  previewContainer.appendChild(host);
+  return host;
+}
 
 export function createViewerApp(previewContainer, toolbarContainer, propPanel, propContent, debugLogsContainer, options = {}) {
 
@@ -44,6 +65,8 @@ export function createViewerApp(previewContainer, toolbarContainer, propPanel, p
   let measurementListener = null;
   let measureStateListener = null;
   let sectionEnabled = false;
+  let layerPanelHost = null;
+  let layerPanel = null;
 
   const resizeViewport = () => {
     const width = previewContainer.clientWidth;
@@ -56,6 +79,21 @@ export function createViewerApp(previewContainer, toolbarContainer, propPanel, p
     }
     css2dRenderer?.setSize?.(width, height);
     controller.onResize(width, height);
+  };
+
+  const mountLayersForCurrentRoot = () => {
+    if (!currentRoot) return null;
+    layerPanelHost = options.layerPanelHost || layerPanelHost || ensureLayerPanelHost(previewContainer);
+    const manifest = layerManifestOf(currentRoot);
+    layerPanel = mountLayerPanel(layerPanelHost, currentRoot, manifest, {
+      onChange: ({ layerId, checked }) => {
+        debugPanel?.log?.('layers', 'info', `Layer ${layerId} ${checked ? 'on' : 'off'}`);
+      },
+    });
+    const count = manifest?.layers?.length || 0;
+    layerPanelHost.style.display = count ? 'block' : 'none';
+    if (count) debugPanel?.log?.('layers', 'info', `Loaded ${count} GLB layers`);
+    return layerPanel;
   };
 
   const init = () => {
@@ -198,6 +236,9 @@ export function createViewerApp(previewContainer, toolbarContainer, propPanel, p
     set camera(cam) { camera = cam; },
     get orthographicCamera() { return controller?.getActiveCamera?.(); },
     get perspectiveCamera() { return camera; },
+    getCurrentRoot: () => currentRoot,
+    getScene: () => scene,
+    getLayerPanel: () => layerPanel,
     setMeasureEnabled: (enabled) => {
       measureEnabled = !!enabled;
       toolbar?.setMeasureState?.(measureEnabled);
@@ -300,6 +341,7 @@ export function createViewerApp(previewContainer, toolbarContainer, propPanel, p
               });
               debugPanel.log('system', 'info', `Loaded scene with ${sceneIndex.items.length} indexed objects`);
               if (glbLabels.length) debugPanel.log('system', 'info', `Loaded ${glbLabels.length} GLB labels from userData`);
+              mountLayersForCurrentRoot();
 
               // Inform toolbar of available properties
               const propSet = new Set();
@@ -365,7 +407,8 @@ export function createViewerApp(previewContainer, toolbarContainer, propPanel, p
                   toolbar.updateLegend(html);
               });
 
-              resolve();
+              options.onSceneLoaded?.({ root: currentRoot, scene, gltf, sceneIndex, layerPanel });
+              resolve({ root: currentRoot, scene, gltf, sceneIndex, layerPanel });
           }, undefined, reject);
       });
     },
@@ -436,6 +479,9 @@ export function createViewerApp(previewContainer, toolbarContainer, propPanel, p
       if (selection) selection.dispose();
       if (css2dRenderer?.domElement?.parentNode === previewContainer) {
         previewContainer.removeChild(css2dRenderer.domElement);
+      }
+      if (layerPanelHost?.parentNode === previewContainer) {
+        previewContainer.removeChild(layerPanelHost);
       }
     }
   };
