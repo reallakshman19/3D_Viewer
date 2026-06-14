@@ -1,40 +1,9 @@
 import { installPsMappingUtilityTile as installBasePsMappingUtilityTile } from './ps-mapping-utility-tab-support-ui.js?v=20260611-psmap-support-gap-rules-1';
-
-const GAP_NUMBER = '(-?\\d+(?:\\.\\d+)?)';
-const MM_UNIT = '(?:m\\s*m|millimet(?:er|re)s?)';
-const GAP_WORD = '(?:guide\\s*)?gap';
-const GAP_SEP = '(?:=|:|-|\\bis\\b)?';
-const GAP_BEFORE_VALUE = new RegExp(`\\b${GAP_WORD}\\b\\s*${GAP_SEP}\\s*${GAP_NUMBER}\\s*(?:${MM_UNIT})?\\b`, 'i');
-const VALUE_BEFORE_GAP = new RegExp(`\\b${GAP_NUMBER}\\s*(?:${MM_UNIT})?\\s*${GAP_WORD}\\b`, 'i');
-const FIELD_FALLBACK_VALUE = new RegExp(`\\b${GAP_NUMBER}\\s*(?:${MM_UNIT})?\\b`, 'i');
-
-function normalizeGapSource(value) {
-  return String(value ?? '')
-    .replace(/[\u2010-\u2015]/g, '-')
-    .replace(/[\[\](){}]/g, ' ')
-    .replace(/,/g, '')
-    .replace(/\s+/g, ' ')
-    .trim();
-}
-
-function numeric(value) {
-  const parsed = Number(String(value ?? '').replace(/,/g, '').trim());
-  return Number.isFinite(parsed) ? parsed : null;
-}
-
-function extractGapMm(value, { fieldFallback = false } = {}) {
-  const source = normalizeGapSource(value);
-  if (!source) return null;
-  const before = source.match(GAP_BEFORE_VALUE);
-  if (before) return numeric(before[1]);
-  const after = source.match(VALUE_BEFORE_GAP);
-  if (after) return numeric(after[1]);
-  if (fieldFallback) {
-    const fallback = source.match(FIELD_FALLBACK_VALUE);
-    if (fallback) return numeric(fallback[1]);
-  }
-  return null;
-}
+import {
+  evaluateSupportGapComparison,
+  extractTypedSupportGaps,
+  supportTypesFromText,
+} from './ps-mapping-utility/ps-mapping-support-gap-logic.js?v=20260614-support-parent-gap-1';
 
 function getTableInfo(panelName) {
   const table = document.querySelector(`[data-psmap-panel="${panelName}"] table.psmap-table`);
@@ -53,7 +22,8 @@ function readCell(row, labels, label) {
 function setCell(row, labels, label, value) {
   const index = labels.indexOf(label);
   if (index < 0) return;
-  row.children[index].textContent = value == null ? '' : String(value);
+  const next = value == null ? '' : String(value);
+  if (row.children[index].textContent !== next) row.children[index].textContent = next;
 }
 
 function parseRawColumns(value) {
@@ -64,9 +34,14 @@ function readSupportGapRawFromRawColumns(raw) {
   const cols = raw || {};
   for (const [key, value] of Object.entries(cols)) {
     const normalized = String(key).toLowerCase().replace(/[\s_-]+/g, ' ').trim();
-    if (normalized === 'support gap' || normalized === 'guide gap' || normalized === 'gap') return value;
+    if (normalized === 'support gap' || normalized === 'guide gap' || normalized === 'line stop gap' || normalized === 'stop gap' || normalized === 'gap') return value;
   }
   return '';
+}
+
+function firstGapValue(supportGapRaw, dtxr) {
+  const gaps = extractTypedSupportGaps(supportGapRaw, supportTypesFromText(dtxr), { fieldFallback: true });
+  return gaps.GUIDE ?? gaps.LINE_STOP ?? '';
 }
 
 function readCt2ModelMap() {
@@ -79,7 +54,14 @@ function readCt2ModelMap() {
     const supportGapVisible = readCell(row, info.labels, 'Support Gap');
     const raw = parseRawColumns(readCell(row, info.labels, 'Raw Columns'));
     const supportGapRaw = supportGapVisible || readSupportGapRawFromRawColumns(raw);
-    if (psno) map.set(psno, { dtxr, supportGapRaw, supportGapMm: extractGapMm(supportGapRaw, { fieldFallback: true }) });
+    if (!psno) continue;
+    if (!map.has(psno)) map.set(psno, []);
+    map.get(psno).push({
+      psno,
+      dtxr,
+      supportGapRaw,
+      supportGapMm: firstGapValue(supportGapRaw, dtxr),
+    });
   }
   return map;
 }
@@ -93,20 +75,51 @@ function readCoverageIsonote(node) {
   return '';
 }
 
-function computeGapMatch(supportGapRaw, isonote, dtxr = '', tolerance = 0) {
-  const t2Gap = extractGapMm(supportGapRaw, { fieldFallback: true });
-  const t1Gap = extractGapMm(isonote, { fieldFallback: false });
-  const guide = /\bGUIDE\b/i.test(String(dtxr || '')) || t2Gap != null || t1Gap != null;
-  if (!guide && t2Gap == null) return '';
-  if (t2Gap != null && t1Gap != null) return Math.abs(t2Gap - t1Gap) <= Number(tolerance || 0) ? 'GAP_EXACT' : 'GAP_CONFLICT';
-  if (guide && t2Gap == null && t1Gap != null) return 'GAP_MISSING_TABLE2';
-  if (t2Gap != null && t1Gap == null) return 'GAP_MISSING_TABLE1';
-  return '';
-}
-
 function currentGapTolerance() {
   const input = document.querySelector('[data-psmap-setup="supportGapToleranceMm"]');
   return Number(input?.value || 0);
+}
+
+function currentGapEnabled() {
+  const input = document.querySelector('[data-psmap-setup="enableSupportGapComparison"]');
+  return input ? input.checked !== false : true;
+}
+
+function rowSupportContext(row, labels, fallbackIsonote = '') {
+  return [
+    readCell(row, labels, 'T2 DTXR'),
+    readCell(row, labels, 'T2 Keywords'),
+    readCell(row, labels, 'T2 Support Types'),
+    readCell(row, labels, 'Support Match'),
+    fallbackIsonote,
+  ].filter(Boolean).join(' ');
+}
+
+function modelScore(model, rowContext) {
+  const modelTypes = supportTypesFromText(model?.dtxr || '');
+  const rowTypes = supportTypesFromText(rowContext || '');
+  let score = 0;
+  for (const type of modelTypes) if (rowTypes.has(type)) score += 10;
+  if (model?.dtxr && String(rowContext || '').toUpperCase().includes(String(model.dtxr).toUpperCase())) score += 100;
+  return score;
+}
+
+function resolveModel(psno, row, labels, modelMap, isonote = '') {
+  const models = modelMap.get(psno) || [];
+  if (!models.length) return {};
+  if (models.length === 1) return models[0];
+  const context = rowSupportContext(row, labels, isonote);
+  return [...models].sort((a, b) => modelScore(b, context) - modelScore(a, context))[0] || models[0];
+}
+
+function computeGapMatch(supportGapRaw, isonote, dtxr = '', tolerance = 0, enabled = true) {
+  return evaluateSupportGapComparison({
+    table1Text: isonote,
+    table2Text: dtxr,
+    table2GapRaw: supportGapRaw,
+    tolerance,
+    enabled,
+  }).status;
 }
 
 function patchCt2SupportGapValues(modelMap) {
@@ -114,7 +127,9 @@ function patchCt2SupportGapValues(modelMap) {
   if (!info || !info.labels.includes('Support Gap')) return;
   for (const row of info.tbody.querySelectorAll('tr')) {
     const psno = readCell(row, info.labels, 'PSNO_Model');
-    const model = modelMap.get(psno);
+    const dtxr = readCell(row, info.labels, 'DTXR');
+    const models = modelMap.get(psno) || [];
+    const model = models.find((item) => item.dtxr === dtxr) || models[0] || {};
     if (model?.supportGapRaw) setCell(row, info.labels, 'Support Gap', model.supportGapRaw);
   }
 }
@@ -123,13 +138,14 @@ function patchValidatorGapValues(modelMap) {
   const info = getTableInfo('validator');
   if (!info || !info.labels.includes('Gap Match')) return;
   const tolerance = currentGapTolerance();
+  const enabled = currentGapEnabled();
   for (const row of info.tbody.querySelectorAll('tr')) {
     const psno = readCell(row, info.labels, 'PSNO_Model');
-    const model = modelMap.get(psno) || {};
     const node = readCell(row, info.labels, 'Node');
     const isonote = readCoverageIsonote(node);
+    const model = resolveModel(psno, row, info.labels, modelMap, isonote);
     if (info.labels.includes('T2 Support Gap')) setCell(row, info.labels, 'T2 Support Gap', model.supportGapRaw || '');
-    setCell(row, info.labels, 'Gap Match', computeGapMatch(model.supportGapRaw, isonote, model.dtxr, tolerance));
+    setCell(row, info.labels, 'Gap Match', computeGapMatch(model.supportGapRaw, isonote, model.dtxr, tolerance, enabled));
   }
 }
 
@@ -137,13 +153,15 @@ function patchCandidateGapValues(modelMap) {
   const info = getTableInfo('candidates');
   if (!info || !info.labels.includes('Gap Match')) return;
   const tolerance = currentGapTolerance();
+  const enabled = currentGapEnabled();
   for (const row of info.tbody.querySelectorAll('tr')) {
     const psno = readCell(row, info.labels, 'PSNO_Model');
-    const model = modelMap.get(psno) || {};
     const isonote = readCell(row, info.labels, 'ISONOTE');
+    const model = resolveModel(psno, row, info.labels, modelMap, isonote);
+    const dtxr = model.dtxr || readCell(row, info.labels, 'T2 DTXR');
     if (info.labels.includes('T2 Support Gap')) setCell(row, info.labels, 'T2 Support Gap', model.supportGapRaw || '');
-    if (info.labels.includes('T2 DTXR')) setCell(row, info.labels, 'T2 DTXR', model.dtxr || readCell(row, info.labels, 'T2 DTXR'));
-    setCell(row, info.labels, 'Gap Match', computeGapMatch(model.supportGapRaw, isonote, model.dtxr || readCell(row, info.labels, 'T2 DTXR'), tolerance));
+    if (info.labels.includes('T2 DTXR')) setCell(row, info.labels, 'T2 DTXR', dtxr);
+    setCell(row, info.labels, 'Gap Match', computeGapMatch(model.supportGapRaw, isonote, dtxr, tolerance, enabled));
   }
 }
 
