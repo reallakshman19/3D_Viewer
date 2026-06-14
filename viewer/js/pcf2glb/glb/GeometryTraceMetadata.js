@@ -3,6 +3,7 @@ import { withGeometryLayer } from './GeometryLayerMetadata.js';
 export const BM_CII_GEOMETRY_TRACE_SCHEMA = 'bm-cii-geometry-trace/v1';
 
 function text(value) {
+  String(value ?? '').trim();
   return String(value ?? '').trim();
 }
 
@@ -16,6 +17,14 @@ function firstNonEmpty(...values) {
     if (out) return out;
   }
   return '';
+}
+
+function firstFiniteNumber(...values) {
+  for (const value of values) {
+    const n = Number(value);
+    if (Number.isFinite(n)) return n;
+  }
+  return undefined;
 }
 
 function attrsOf(component = {}) {
@@ -73,6 +82,39 @@ function gapValue(component = {}, attrs = {}, extra = {}) {
     attrs.GAP_MM,
     attrs['GAP-MM'],
     attrs.RESTRAINT_GAP,
+  );
+}
+
+function renderGlyphValue(component = {}, attrs = {}, extra = {}) {
+  return firstNonEmpty(
+    extra.renderGlyph,
+    extra.bmCiiTrace?.renderGlyph,
+    component.renderGlyph,
+    attrs.RENDER_GLYPH,
+    attrs.renderGlyph,
+  );
+}
+
+function renderScaleValue(component = {}, attrs = {}, extra = {}) {
+  return firstFiniteNumber(
+    extra.renderScale,
+    extra.supportSymbolScale,
+    extra.bmCiiTrace?.renderScale,
+    component.renderScale,
+    attrs.RENDER_SCALE,
+    attrs.renderScale,
+  );
+}
+
+function visualProfileValue(component = {}, attrs = {}, extra = {}) {
+  return firstNonEmpty(
+    extra.visualProfile,
+    extra.glbSupportVisualProfile,
+    extra.bmCiiTrace?.visualProfile,
+    extra.bmCiiRestraintVisualProfile?.profile,
+    component.visualProfile,
+    attrs.VISUAL_PROFILE,
+    attrs.visualProfile,
   );
 }
 
@@ -165,6 +207,9 @@ export function componentGeometryTrace(component = {}, extra = {}, context = {})
     supportKind: supportKind ? upper(supportKind) : '',
     axis: axisValue(component, attrs, extra),
     gap: gapValue(component, attrs, extra),
+    renderGlyph: renderGlyphValue(component, attrs, extra),
+    renderScale: renderScaleValue(component, attrs, extra),
+    visualProfile: visualProfileValue(component, attrs, extra),
   };
 }
 
@@ -209,6 +254,9 @@ export function withGeometryTrace(userData = {}, trace = {}) {
     supportKind: trace.supportKind || userData.supportKind || '',
     restraintAxis: trace.axis || userData.restraintAxis || '',
     restraintGap: trace.gap || userData.restraintGap || '',
+    renderGlyph: trace.renderGlyph || userData.renderGlyph || '',
+    renderScale: trace.renderScale ?? userData.renderScale,
+    visualProfile: trace.visualProfile || userData.visualProfile || userData.glbSupportVisualProfile || '',
   }, trace);
 }
 
