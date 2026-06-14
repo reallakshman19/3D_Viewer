@@ -1,7 +1,12 @@
 import { WorkflowModal } from './shared/WorkflowModal.js';
-import { renderXmlCiiWorkflowMatchedAuditPanel, renderXmlCiiWorkflowModelDataPanel } from './xml-cii-conversion-workflow-direct-panels.js';
+import {
+  renderXmlCiiWorkflowMatchedAuditPanel,
+  renderXmlCiiWorkflowModelDataPanel,
+  renderXmlCiiWorkflowOutputRunPanel,
+  renderXmlCiiWorkflowProcessEnrichmentPanel,
+} from './xml-cii-conversion-workflow-direct-panels.js';
 
-const FLAG = '__xmlCiiConversionWorkflowPopup_direct_v1';
+const FLAG = '__xmlCiiConversionWorkflowPopup_direct_v2';
 const ACTIVE_TAB_KEY = 'xmlCii2019.conversionWorkflow.activeTab.v1';
 const DIRECT_RUN_FLAG = '__xmlCiiConversionWorkflowAllowDirectRun';
 const WORKFLOW_TABS = Object.freeze([
@@ -10,33 +15,110 @@ const WORKFLOW_TABS = Object.freeze([
   { id: 'matched-audit', label: 'Matched Audit', state: 'Audit' },
   { id: 'output-run', label: 'Output / Run Conversion', state: 'Run' },
 ]);
-const PROCESS_PHASES = Object.freeze([
-  ['regex', 'Regex / Line Key Matching', 'Existing Branchname, line key, class, rating, and bore extraction.'],
-  ['import-masters', 'Process / Piping Class / Material / Wt.', 'Existing master import and mapping workflow.'],
-  ['preview', 'Enrichment Preview', 'Existing dry preview of branch enrichment and mapping quality.'],
-  ['diagnostics', 'Diagnostics Dry Run', 'Existing XML→CII diagnostic run and issue table.'],
-  ['weight-match', 'Weight Match', 'Existing approximate rigid/valve weight review.'],
-  ['support-mapper', 'Support Mapping', 'Existing support mapper rules and support-type classification.'],
-  ['config', 'Config JSON', 'Existing XML→CII enrichment configuration.'],
-  ['run', 'Existing Run Step', 'Existing finalize/run workflow step.'],
-]);
-function browserReady(){return typeof window!=='undefined'&&typeof document!=='undefined'}
-function text(v){return v==null?'':String(v)}
-function clean(v){return text(v).replace(/\s+/g,' ').trim()}
-function esc(v){return text(v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;')}
-function readStored(k,f=''){try{return window.localStorage.getItem(k)??f}catch{return f}}
-function writeStored(k,v){try{window.localStorage.setItem(k,v)}catch{}}
-function activeConverterId(root=document){return root.querySelector?.('#model-converters-select')?.value||''}
-function isXmlCiiActive(root=document){return activeConverterId(root)==='xml_to_cii'}
-function safeScrollTo(node){try{node?.scrollIntoView?.({behavior:'smooth',block:'start'})}catch{node?.scrollIntoView?.()}}
-function tabIntro(title,body){return `<div class="model-converters-workflow-detail-title">${esc(title)}</div><div class="model-converters-workflow-detail-text">${esc(body)}</div>`}
-function openExistingXmlCiiPhase(root,phaseId){const workflow=root.querySelector?.('#model-converters-xml-cii-workflow')||document.querySelector('#model-converters-xml-cii-workflow');if(!workflow)return false;workflow.dataset.selectedPhase=phaseId;const details=workflow.tagName==='DETAILS'?workflow:workflow.closest('details');if(details)details.open=true;safeScrollTo(workflow);return true}
-function scrollToSelector(root,selector){const node=root.querySelector?.(selector)||document.querySelector(selector);if(!node)return false;const details=node.tagName==='DETAILS'?node:node.closest?.('details');if(details)details.open=true;safeScrollTo(node);return true}
-function dispatchDirectRun(root){const runButton=root.querySelector?.('#model-converters-run')||document.querySelector('#model-converters-run');if(!runButton)return false;window[DIRECT_RUN_FLAG]=true;try{runButton.click()}finally{setTimeout(()=>{window[DIRECT_RUN_FLAG]=false},0)}return true}
-function renderProcessEnrichment(root,state){state.body.innerHTML=`${tabIntro('Process / Piping Class / Wt. Enrichment','Existing XML→CII workflow controls remain authoritative. This popup shows a real grouped phase table without moving existing DOM panels or changing converter logic.')}<div class="model-converters-workflow-master-card" style="margin-top:10px;"><div class="model-converters-workflow-section-title">Existing XML→CII workflow phases</div><table class="mc-preview-node-table" style="min-width:100%;font-size:12px;"><thead><tr><th>Phase</th><th>Purpose</th><th>Action</th></tr></thead><tbody>${PROCESS_PHASES.map(([id,label,desc])=>`<tr><td>${esc(label)}</td><td>${esc(desc)}</td><td><button type="button" class="model-converters-download-btn" data-xml-cii-popup-shortcut="${esc(id)}" data-shortcut-kind="phase">Open existing phase</button></td></tr>`).join('')}</tbody></table></div>`}
-function renderOutputRun(root,state){const out=clean(root.querySelector?.('#model-converters-output')?.textContent||'No output generated yet.');const status=clean(root.querySelector?.('#model-converters-status')?.textContent||'Idle');state.body.innerHTML=`${tabIntro('Output / Run Conversion','Run final XML→CII conversion using the existing converter runner. Outputs remain in the main Output panel.')}<div class="model-converters-workflow-master-card" style="margin-top:10px;"><div class="model-converters-workflow-preview-grid"><div><span>Status</span><strong>${esc(status||'Idle')}</strong></div><div><span>Output panel</span><strong>${esc(out.includes('No output')?'No output generated':'Output available')}</strong></div><div><span>Run path</span><strong>Existing converter runner</strong></div></div><div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;"><button type="button" class="model-converters-run-btn" data-xml-cii-popup-run>Run Conversion</button><button type="button" class="model-converters-download-btn" data-xml-cii-popup-shortcut="output" data-shortcut-kind="model">Show Main Output Panel</button></div></div>`;state.body.querySelector('[data-xml-cii-popup-run]')?.addEventListener('click',()=>{if(dispatchDirectRun(root))state.modal?.close()})}
-function bindShortcuts(root,state){state.body.querySelectorAll('[data-xml-cii-popup-shortcut]').forEach((button)=>button.addEventListener('click',()=>{const kind=button.getAttribute('data-shortcut-kind')||'model';const id=button.getAttribute('data-xml-cii-popup-shortcut')||'';const ok=kind==='phase'?openExistingXmlCiiPhase(root,id):scrollToSelector(root,id==='output'?'#model-converters-output':'#model-converters-xml-cii-workflow');if(ok)state.modal?.close();else button.textContent='Panel is not available yet'}))}
-function renderActiveTab(root,state){if(!state.body)return;const tabId=state.activeTab||WORKFLOW_TABS[0].id;if(tabId==='process-enrichment')renderProcessEnrichment(root,state);else if(tabId==='matched-audit')renderXmlCiiWorkflowMatchedAuditPanel(state.body);else if(tabId==='output-run')renderOutputRun(root,state);else renderXmlCiiWorkflowModelDataPanel(state.body,root);bindShortcuts(root,state)}
-function openConversionWorkflow(root=document,state){if(!browserReady())return;if(state.modal){renderActiveTab(root,state);return}const active=readStored(ACTIVE_TAB_KEY,'xml-model-data');state.activeTab=WORKFLOW_TABS.some((t)=>t.id===active)?active:'xml-model-data';state.modal=new WorkflowModal({title:'XML → CII (2019) Conversion Workflow',subtitle:'Integrated popup: XML model data, side-load audit, existing enrichment phases, matched audit, and final CII generation.',tabs:WORKFLOW_TABS,activeTabId:state.activeTab,onTabChange:(tabId)=>{state.activeTab=tabId;writeStored(ACTIVE_TAB_KEY,tabId);renderActiveTab(root,state)},onClose:()=>{state.modal=null;state.body=null}});state.body=state.modal.open();renderActiveTab(root,state)}
-function ensureWorkflowButton(root,state){const runButton=root.querySelector?.('#model-converters-run');if(!runButton)return;const xmlActive=isXmlCiiActive(root);let quickButton=root.querySelector('[data-xml-cii-open-conversion-workflow]');if(!quickButton){quickButton=document.createElement('button');quickButton.type='button';quickButton.className='model-converters-download-btn';quickButton.dataset.xmlCiiOpenConversionWorkflow='true';quickButton.textContent='Open XML→CII Workflow';quickButton.style.cssText='width:100%;padding:10px;margin-top:6px;';quickButton.addEventListener('click',()=>openConversionWorkflow(root,state));runButton.parentElement?.insertBefore(quickButton,runButton)}quickButton.hidden=!xmlActive;quickButton.disabled=!xmlActive}
-export function installXmlCiiConversionWorkflowPopup(container=document){if(!browserReady()||window[FLAG])return;window[FLAG]=true;const root=container||document;const state={modal:null,body:null,activeTab:'xml-model-data'};const interceptRun=(event)=>{const runButton=event.target?.closest?.('#model-converters-run');if(!runButton)return;if(window[DIRECT_RUN_FLAG])return;if(!isXmlCiiActive(root))return;event.preventDefault();event.stopPropagation();event.stopImmediatePropagation?.();openConversionWorkflow(root,state)};document.addEventListener('click',interceptRun,true);ensureWorkflowButton(root,state);root.querySelector?.('#model-converters-select')?.addEventListener('change',()=>ensureWorkflowButton(root,state))}
+
+function browserReady() { return typeof window !== 'undefined' && typeof document !== 'undefined'; }
+function text(v) { return v == null ? '' : String(v); }
+function readStored(k, f = '') { try { return window.localStorage.getItem(k) ?? f; } catch { return f; } }
+function writeStored(k, v) { try { window.localStorage.setItem(k, v); } catch {} }
+function activeConverterId(root = document) { return root.querySelector?.('#model-converters-select')?.value || ''; }
+function isXmlCiiActive(root = document) { return activeConverterId(root) === 'xml_to_cii'; }
+function safeScrollTo(node) { try { node?.scrollIntoView?.({ behavior: 'smooth', block: 'start' }); } catch { node?.scrollIntoView?.(); } }
+function openExistingXmlCiiPhase(root, phaseId) {
+  const workflow = root.querySelector?.('#model-converters-xml-cii-workflow') || document.querySelector('#model-converters-xml-cii-workflow');
+  if (!workflow) return false;
+  workflow.dataset.selectedPhase = phaseId;
+  const details = workflow.tagName === 'DETAILS' ? workflow : workflow.closest?.('details');
+  if (details) details.open = true;
+  safeScrollTo(workflow);
+  return true;
+}
+function scrollToSelector(root, selector) {
+  const node = root.querySelector?.(selector) || document.querySelector(selector);
+  if (!node) return false;
+  const details = node.tagName === 'DETAILS' ? node : node.closest?.('details');
+  if (details) details.open = true;
+  safeScrollTo(node);
+  return true;
+}
+function dispatchDirectRun(root) {
+  const runButton = root.querySelector?.('#model-converters-run') || document.querySelector('#model-converters-run');
+  if (!runButton) return false;
+  window[DIRECT_RUN_FLAG] = true;
+  try { runButton.click(); } finally { setTimeout(() => { window[DIRECT_RUN_FLAG] = false; }, 0); }
+  return true;
+}
+function renderActiveTab(root, state) {
+  if (!state.body) return;
+  const tabId = state.activeTab || WORKFLOW_TABS[0].id;
+  if (tabId === 'process-enrichment') {
+    renderXmlCiiWorkflowProcessEnrichmentPanel(state.body, root, {
+      openPhase: (phaseId) => openExistingXmlCiiPhase(root, phaseId),
+    });
+  } else if (tabId === 'matched-audit') {
+    renderXmlCiiWorkflowMatchedAuditPanel(state.body);
+  } else if (tabId === 'output-run') {
+    renderXmlCiiWorkflowOutputRunPanel(state.body, root, {
+      run: () => { if (dispatchDirectRun(root)) state.modal?.close(); },
+      showOutput: () => scrollToSelector(root, '#model-converters-output'),
+    });
+  } else {
+    renderXmlCiiWorkflowModelDataPanel(state.body, root);
+  }
+}
+function openConversionWorkflow(root = document, state) {
+  if (!browserReady()) return;
+  if (state.modal) { renderActiveTab(root, state); return; }
+  const active = readStored(ACTIVE_TAB_KEY, 'xml-model-data');
+  state.activeTab = WORKFLOW_TABS.some((t) => t.id === active) ? active : 'xml-model-data';
+  state.modal = new WorkflowModal({
+    title: 'XML → CII (2019) Conversion Workflow',
+    subtitle: 'Integrated popup: XML model data, side-load audit, existing enrichment phases, matched audit, and final CII generation.',
+    tabs: WORKFLOW_TABS,
+    activeTabId: state.activeTab,
+    onTabChange: (tabId) => {
+      state.activeTab = tabId;
+      writeStored(ACTIVE_TAB_KEY, tabId);
+      renderActiveTab(root, state);
+    },
+    onClose: () => { state.modal = null; state.body = null; },
+  });
+  state.body = state.modal.open();
+  renderActiveTab(root, state);
+}
+function ensureWorkflowButton(root, state) {
+  const runButton = root.querySelector?.('#model-converters-run');
+  if (!runButton) return;
+  const xmlActive = isXmlCiiActive(root);
+  let quickButton = root.querySelector('[data-xml-cii-open-conversion-workflow]');
+  if (!quickButton) {
+    quickButton = document.createElement('button');
+    quickButton.type = 'button';
+    quickButton.className = 'model-converters-download-btn';
+    quickButton.dataset.xmlCiiOpenConversionWorkflow = 'true';
+    quickButton.textContent = 'Open XML→CII Workflow';
+    quickButton.style.cssText = 'width:100%;padding:10px;margin-top:6px;';
+    quickButton.addEventListener('click', () => openConversionWorkflow(root, state));
+    runButton.parentElement?.insertBefore(quickButton, runButton);
+  }
+  quickButton.hidden = !xmlActive;
+  quickButton.disabled = !xmlActive;
+}
+export function installXmlCiiConversionWorkflowPopup(container = document) {
+  if (!browserReady() || window[FLAG]) return;
+  window[FLAG] = true;
+  const root = container || document;
+  const state = { modal: null, body: null, activeTab: 'xml-model-data' };
+  const interceptRun = (event) => {
+    const runButton = event.target?.closest?.('#model-converters-run');
+    if (!runButton) return;
+    if (window[DIRECT_RUN_FLAG]) return;
+    if (!isXmlCiiActive(root)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    event.stopImmediatePropagation?.();
+    openConversionWorkflow(root, state);
+  };
+  document.addEventListener('click', interceptRun, true);
+  ensureWorkflowButton(root, state);
+  root.querySelector?.('#model-converters-select')?.addEventListener('change', () => ensureWorkflowButton(root, state));
+}
