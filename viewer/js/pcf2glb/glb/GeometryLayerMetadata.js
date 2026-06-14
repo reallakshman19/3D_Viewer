@@ -3,6 +3,7 @@ import {
   normalizeRestraintKind,
   layerIdsForRestraintSupport,
   RESTRAINT_VISUAL_PROFILE,
+  visualProfileMetadata,
 } from './RestraintVisualProfile.js';
 
 export const BM_CII_LAYER_SCHEMA = 'bm-cii-layer/v1';
@@ -10,10 +11,6 @@ export const BM_CII_LAYER_MANIFEST_SCHEMA = 'bm-cii-layer-manifest/v1';
 
 function text(value) {
   return String(value ?? '').trim();
-}
-
-function upper(value) {
-  return text(value).toUpperCase();
 }
 
 function lower(value) {
@@ -29,14 +26,6 @@ function cleanLayerId(value) {
 
 function unique(values) {
   return Array.from(new Set(values.map(text).filter(Boolean)));
-}
-
-function axisLayer(axis) {
-  const raw = normalizeRestraintAxisLabel(axis);
-  if (raw.includes('X')) return 'axis.x';
-  if (raw.includes('Y')) return 'axis.y';
-  if (raw.includes('Z')) return 'axis.z';
-  return '';
 }
 
 export function normalizeSupportKind(value) {
@@ -65,11 +54,31 @@ function sourceForLayer(trace = {}, extra = {}) {
   return lower(trace.source || trace.componentSource || extra.source || 'inputxml');
 }
 
+function supportAxisFromTrace(trace = {}, extra = {}) {
+  return normalizeRestraintAxisLabel(trace.axis || trace.direction || trace.restraintAxis || extra.axis || extra.direction || '');
+}
+
+function supportKindFromTrace(trace = {}, extra = {}) {
+  return normalizeSupportKind(trace.supportKind || trace.kind || extra.supportKind || extra.kind) || 'UNKNOWN';
+}
+
+export function restraintVisualProfileForTrace(trace = {}, extra = {}) {
+  const category = categoryFromTrace(trace, extra);
+  if (category !== 'support') return null;
+  return visualProfileMetadata({
+    kind: supportKindFromTrace(trace, extra),
+    source: sourceForLayer(trace, extra),
+    axisLabel: supportAxisFromTrace(trace, extra),
+    scale: trace.renderScale || extra.renderScale,
+    role: trace.renderGlyph || extra.role || 'exported-support',
+  });
+}
+
 export function layerIdsForTrace(trace = {}, extra = {}) {
   const entity = lower(trace.entity || extra.entity);
   const category = categoryFromTrace(trace, extra);
   const source = sourceForLayer(trace, extra);
-  const kind = normalizeSupportKind(trace.supportKind || trace.kind || extra.supportKind || extra.kind);
+  const kind = supportKindFromTrace(trace, extra);
   const ids = [];
 
   if (entity === 'annotation' || category === 'annotation') {
@@ -80,7 +89,7 @@ export function layerIdsForTrace(trace = {}, extra = {}) {
   }
 
   if (category === 'support') {
-    const axis = normalizeRestraintAxisLabel(trace.axis || trace.direction || trace.restraintAxis || extra.axis || extra.direction);
+    const axis = supportAxisFromTrace(trace, extra);
     return unique([
       ...layerIdsForRestraintSupport({ source, kind, axisLabel: axis }),
       source ? `source.${cleanLayerId(source)}` : '',
@@ -102,8 +111,8 @@ export function layerIdsForTrace(trace = {}, extra = {}) {
 export function layerMetadataFromTrace(trace = {}, extra = {}) {
   const category = categoryFromTrace(trace, extra);
   const source = sourceForLayer(trace, extra);
-  const supportKind = normalizeSupportKind(trace.supportKind || trace.kind || extra.supportKind || extra.kind);
-  const axis = normalizeRestraintAxisLabel(trace.axis || trace.direction || trace.restraintAxis || extra.axis || extra.direction || '');
+  const supportKind = category === 'support' ? supportKindFromTrace(trace, extra) : '';
+  const axis = category === 'support' ? supportAxisFromTrace(trace, extra) : '';
   return {
     schema: BM_CII_LAYER_SCHEMA,
     category,
@@ -119,6 +128,7 @@ export function layerMetadataFromTrace(trace = {}, extra = {}) {
 
 export function withGeometryLayer(userData = {}, trace = {}, extra = {}) {
   const layer = layerMetadataFromTrace(trace, extra);
+  const visualProfile = restraintVisualProfileForTrace(trace, extra);
   return {
     ...(userData || {}),
     bmCiiLayerSchema: BM_CII_LAYER_SCHEMA,
@@ -126,6 +136,10 @@ export function withGeometryLayer(userData = {}, trace = {}, extra = {}) {
     bmCiiLayerIds: layer.layerIds,
     bmCiiLayerCategory: layer.category,
     bmCiiLayerSource: layer.source,
+    ...(visualProfile ? {
+      bmCiiRestraintVisualProfile: visualProfile,
+      glbSupportVisualProfile: visualProfile.profile,
+    } : {}),
   };
 }
 
@@ -148,6 +162,8 @@ export function buildDefaultBmCiiLayerManifest({ supportSource = '' } = {}) {
   return {
     schema: BM_CII_LAYER_MANIFEST_SCHEMA,
     restraintVisualProfile: RESTRAINT_VISUAL_PROFILE.id,
+    restraintVisualProfileSchema: RESTRAINT_VISUAL_PROFILE.schema,
+    restraintVisualProfileMinimums: RESTRAINT_VISUAL_PROFILE.minimums,
     layers: [
       layer('plant.pipe', 'Pipe', 'Plant Geometry'),
       layer('plant.bend', 'Bends', 'Plant Geometry'),
