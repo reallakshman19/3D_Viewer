@@ -2,15 +2,15 @@ import { installPsMappingUtilityTile as installBasePsMappingUtilityTile } from '
 import {
   DEFAULT_OPTIONS,
   runPsMappingResolver,
-} from './ps-mapping-utility/ps-mapping-engine-diagnostics-v2.js?v=20260614-support-number-wording-1';
+} from './ps-mapping-utility/ps-mapping-engine-diagnostics-v2.js?v=20260614-synthetic-missing-support-rows-1';
 
 const COPY_COLUMNS = [
-  ['psnoModel', 'SupportNo_Model'],
+  ['supportNoModel', 'SupportNo_Model'],
   ['modelBore', 'T2 Bore'],
   ['lineFamily', 'T2 Line Family'],
   ['supportTypesRequested', 'T2 Keywords'],
   ['candidateNode', 'Candidate Node'],
-  ['table1PsNo', 'Table-1 Support No'],
+  ['table1SupportNo', 'Table-1 Support No'],
   ['tag', 'Tag'],
   ['source', 'Source'],
   ['nodeLineFamily', 'T1 Line Family'],
@@ -22,10 +22,9 @@ const COPY_COLUMNS = [
   ['t2CoveredRestraints', 'T2 Covered Restraints'],
   ['missingNodeRestraints', 'Missing Node Restraints'],
   ['extraTable2Restraints', 'Extra Table-2 Restraints'],
-  ['proposedMissingSupportPsNo', 'Proposed Table-2 Support No'],
   ['supportGapMatch', 'Support Gap Match'],
   ['reason', 'Reason'],
-  ['psNoWiseAction', 'Support No. Wise Action'],
+  ['supportNoWiseAction', 'Support No. Wise Action'],
   ['nodeCoverageNote', 'Node Coverage Note'],
   ['psBasis', 'Support No. Basis'],
   ['boreBasis', 'Bore Basis'],
@@ -41,13 +40,15 @@ function genericText(value) {
   return String(value ?? '')
     .replace(/\bPSNO_Model\b/g, 'SupportNo_Model')
     .replace(/\bTable-1 PS No\b/g, 'Table-1 Support No')
-    .replace(/\bProposed Table-2 PS No\b/g, 'Proposed Table-2 Support No')
+    .replace(/\bProposed Table-2 PS No\b/g, 'SupportNo_Model')
+    .replace(/\bProposed Table-2 Support No\b/g, 'SupportNo_Model')
     .replace(/\bPS No\. Wise Action\b/g, 'Support No. Wise Action')
     .replace(/\bPS No\. wise action\b/g, 'Support No. wise action')
     .replace(/\bPS Basis\b/g, 'Support No. Basis')
     .replace(/\bPS NO\b/g, 'Support No')
     .replace(/\bPS No\b/g, 'Support No')
-    .replace(/synthetic IDs like PS-XYZ\.X1/g, 'synthetic IDs like <SupportNo>.X1')
+    .replace(/synthetic IDs like PS-XYZ\.X1/g, 'synthetic missing support rows use SupportNo_Model like <SupportNo>.X1')
+    .replace(/synthetic IDs like <SupportNo>\.X1/g, 'synthetic missing support rows use SupportNo_Model like <SupportNo>.X1')
     .replace(/synthetic PS-XYZ\.Xn IDs/g, 'synthetic <SupportNo>.Xn IDs')
     .replace(/PS-UNKNOWN/g, 'SUPPORT-UNKNOWN');
 }
@@ -86,8 +87,14 @@ function supportGapValue(row = {}) {
   return row.supportGapMatch || row.gapMatch || row.supportGapBasis || '';
 }
 
+function supportNoModelValue(row = {}) {
+  return row.supportNoModel || row.psnoModel || row.modelPsNo || row.rawPsNo || '';
+}
+
 function valueFor(row = {}, key) {
   if (key === 'supportGapMatch') return supportGapValue(row);
+  if (key === 'supportNoModel') return supportNoModelValue(row);
+  if (key === 'supportNoWiseAction') return row.supportNoWiseAction || row.psNoWiseAction || '';
   return row[key] ?? '';
 }
 
@@ -144,12 +151,14 @@ async function copyCandidatesWithSupportNoLabels(event, ctx = {}) {
 }
 
 export function installPsMappingUtilityTile(container, ctx = {}) {
-  document.addEventListener('click', (event) => copyCandidatesWithSupportNoLabels(event, ctx), true);
+  const clickHandler = (event) => copyCandidatesWithSupportNoLabels(event, ctx);
+  document.addEventListener('click', clickHandler, true);
   const destroyBase = installBasePsMappingUtilityTile(container, ctx);
   const observer = new MutationObserver(relabelVisibleUi);
   observer.observe(document.body, { childList: true, subtree: true, characterData: true });
   relabelVisibleUi();
   return () => {
+    document.removeEventListener('click', clickHandler, true);
     observer.disconnect();
     if (typeof destroyBase === 'function') destroyBase();
   };
