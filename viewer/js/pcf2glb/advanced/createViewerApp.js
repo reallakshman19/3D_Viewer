@@ -84,8 +84,11 @@ export function createViewerApp(previewContainer, toolbarContainer, propPanel, p
   const mountLayersForCurrentRoot = () => {
     if (!currentRoot) return null;
     layerPanelHost = options.layerPanelHost || layerPanelHost || ensureLayerPanelHost(previewContainer);
-    const manifest = layerManifestOf(currentRoot);
-    layerPanel = mountLayerPanel(layerPanelHost, currentRoot, manifest, {
+    // Target the full scene, not only the GLB root, because readable runtime
+    // support glyphs are world-space overlays added to the scene after GLB load.
+    const layerTarget = scene;
+    const manifest = layerManifestOf(layerTarget);
+    layerPanel = mountLayerPanel(layerPanelHost, layerTarget, manifest, {
       onChange: ({ layerId, checked }) => {
         debugPanel?.log?.('layers', 'info', `Layer ${layerId} ${checked ? 'on' : 'off'}`);
       },
@@ -429,54 +432,24 @@ export function createViewerApp(previewContainer, toolbarContainer, propPanel, p
           border-radius: 3px;
           pointer-events: none;
           white-space: nowrap;
-          box-shadow: 0 1px 3px rgba(0,0,0,0.3);
-          max-width: 220px;
-          overflow: hidden;
-          text-overflow: ellipsis;
+          transform: translate(-50%, -50%);
         `;
-        const obj = new CSS2DObject(div);
-        obj.position.set(-pos.y, pos.z, -pos.x);
-        obj.position.y += 14;
-        obj.userData.type = 'msg-square-label';
-        msgSquareGroup.add(obj);
-      }
-    },
-    loadMessageCircleNodes: (nodes = []) => {
-      // Clear existing labels
-      while (msgCircleGroup.children.length) {
-        msgCircleGroup.remove(msgCircleGroup.children[0]);
-      }
-      for (const { pos, text } of nodes) {
-        if (!pos || !text) continue;
-        const div = document.createElement('div');
-        div.textContent = text;
-        div.style.cssText = `
-          font: 700 10px/1 "Courier New", monospace;
-          color: #fff;
-          background: #1a56db;
-          padding: 2px 5px;
-          border: 2px solid #93c5fd;
-          border-radius: 999px;
-          pointer-events: none;
-          white-space: nowrap;
-          box-shadow: 0 1px 4px rgba(0,0,0,0.4);
-          letter-spacing: 0.03em;
-        `;
-        const obj = new CSS2DObject(div);
-        // PCF coords: X=East, Y=North, Z=Up to Three.js: X=-Y, Y=Z, Z=-X.
-        obj.position.set(-pos.y, pos.z, -pos.x);
-        obj.position.y += 8;
-        obj.userData.type = 'msg-circle-label';
-        msgCircleGroup.add(obj);
+        const label = new CSS2DObject(div);
+        label.position.set(Number(pos.x) || 0, Number(pos.y) || 0, Number(pos.z) || 0);
+        msgSquareGroup.add(label);
       }
     },
     dispose: () => {
       if (animationId) cancelAnimationFrame(animationId);
+      if (resizeObserver) resizeObserver.disconnect();
       if (windowResizeHandler) window.removeEventListener('resize', windowResizeHandler);
-      resizeObserver?.disconnect?.();
-      if (disposeRenderer) disposeRenderer();
-      if (controller) controller.dispose();
-      if (selection) selection.dispose();
+      if (measurementListener) measurementListener(null);
+      marqueeZoom?.dispose?.();
+      axesHelper?.dispose?.();
+      selection?.dispose?.();
+      toolbar?.dispose?.();
+      disposeScene(scene);
+      disposeRenderer?.();
       if (css2dRenderer?.domElement?.parentNode === previewContainer) {
         previewContainer.removeChild(css2dRenderer.domElement);
       }
