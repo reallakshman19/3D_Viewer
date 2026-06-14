@@ -2,7 +2,7 @@ import { installPsMappingUtilityTile as installBasePsMappingUtilityTile } from '
 import {
   DEFAULT_OPTIONS,
   runPsMappingResolver,
-} from './ps-mapping-utility/ps-mapping-engine-diagnostics-v2.js?v=20260612-line-label-copy-1';
+} from './ps-mapping-utility/ps-mapping-engine-diagnostics-v2.js?v=20260614-psno-wise-action-1';
 
 const STORAGE_KEY = 'psmap.showDetailDiagnosticColumns';
 const STYLE_ID = 'psmap-candidate-copy-ui-style';
@@ -23,6 +23,7 @@ const BASIC_COLUMNS = [
   ['supportMatch', 'Support Match'],
   ['supportGapMatch', 'Support Gap Match'],
   ['reason', 'Reason'],
+  ['psNoWiseAction', 'PS No. Wise Action'],
   ['nodeCoverageNote', 'Node Coverage Note'],
 ];
 
@@ -186,7 +187,7 @@ function renderCandidatePanel(panel, result) {
       <label><input type="checkbox" data-psmap-candidate-detail-checkbox ${showDetails ? 'checked' : ''}> <span>Show detail diagnostic columns</span></label>
       <span class="psmap-candidate-detail-help">Default off. Shows internal basis, review flags, score, warnings and source IDs.</span>
     </div>
-    <div class="psmap-candidate-copy-note"><b>Line Match labels:</b> Full Line Exact = raw normalized line matched; Line Family Exact = same line family after harmless branch/suffix cleanup. <b>Support Gap Match</b> is placed beside Support Match and included in Copy Candidates.</div>
+    <div class="psmap-candidate-copy-note"><b>ⓘ PS No. wise action assumption:</b> Table-1 is treated as the source of truth. Generated actions are Table-2/model correction instructions only. <b>Support gaps are child properties:</b> GUIDE GAP is checked only when GUIDE exists in both Table-1 and Table-2; LINE STOP GAP is checked only when LINE STOP exists in both Table-1 and Table-2.</div>
     ${candidateTable(rows, columns)}
   </div></section>`;
   panel.querySelector('[data-psmap-candidate-detail-checkbox]')?.addEventListener('change', (event) => {
