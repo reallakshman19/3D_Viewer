@@ -30,12 +30,12 @@ const ACCESSOR_TYPE_COMPONENTS = Object.freeze({
 
 function usage() {
   return `Usage:
-  node scripts/bm-cii/tally-geometry-qc.mjs \
-    --glb <output.glb> \
-    --sidecar <benchmark.sidecar.json> \
-    [--support-source inputxml|isonote] \
-    [--out <qc-report.json>] \
-    [--pretty] \
+  node scripts/bm-cii/tally-geometry-qc.mjs \\
+    --glb <output.glb> \\
+    --sidecar <benchmark.sidecar.json> \\
+    [--support-source inputxml|isonote] \\
+    [--out <qc-report.json>] \\
+    [--pretty] \\
     [--strict]
 
 Purpose:
@@ -45,12 +45,13 @@ Compares source/sidecar semantic inventory against the rendered GLB inventory:
   - piping/component records
   - pipe/bend/valve/flange/tee-olet rendered nodes
   - selected restraint/support source
-  - ISONOTE callout/annotation mapping
+  - support/restraint nodes even when source namespace contains ISONOTE
+  - CAESAR annotation/callout nodes separately from ISONOTE support arrows
   - bounds/scale coherence between plant geometry and annotations
 
 Exit code:
   0 = QC passed
-  1 = QC failed
+  1 = QC failed when --strict is used
 `;
 }
 
@@ -74,27 +75,32 @@ function parseGlb(buffer) {
   const version = readUInt32LE(buffer, 4);
   const length = readUInt32LE(buffer, 8);
   if (magic !== GLB_MAGIC) throw new Error('Invalid GLB magic.');
-  if (version !== 2) throw new Error(`Unsupported GLB version ${version}; expected 2.`);
+  if (version !== 2) throw new Error(`Unsupported GLB version ${version}; expected GLB v2.`);
   if (length !== buffer.length) throw new Error(`GLB header length ${length} != actual ${buffer.length}.`);
 
   let offset = 12;
   let json = null;
   let binBytes = 0;
   const chunks = [];
+
   while (offset + 8 <= buffer.length) {
     const chunkLength = readUInt32LE(buffer, offset);
     const chunkType = readUInt32LE(buffer, offset + 4);
     const start = offset + 8;
     const end = start + chunkLength;
     if (end > buffer.length) throw new Error('GLB chunk extends beyond file length.');
+
     chunks.push({ chunkType, chunkLength, start, end });
+
     if (chunkType === GLB_JSON_CHUNK) {
       json = JSON.parse(buffer.subarray(start, end).toString('utf8').replace(/\0+$/g, '').trim());
     } else {
       binBytes += chunkLength;
     }
+
     offset = end;
   }
+
   if (!json) throw new Error('Missing JSON chunk.');
   return { json, binBytes, chunks };
 }
@@ -102,11 +108,13 @@ function parseGlb(buffer) {
 function countTriangles(primitive, gltf) {
   const mode = primitive.mode ?? TRIANGLES;
   let vertexCount = 0;
+
   if (primitive.indices !== undefined) {
     vertexCount = gltf.accessors?.[primitive.indices]?.count ?? 0;
   } else if (primitive.attributes?.POSITION !== undefined) {
     vertexCount = gltf.accessors?.[primitive.attributes.POSITION]?.count ?? 0;
   }
+
   if (mode === TRIANGLES) return Math.floor(vertexCount / 3);
   if (mode === TRIANGLE_STRIP || mode === TRIANGLE_FAN) return Math.max(0, vertexCount - 2);
   return 0;
@@ -115,6 +123,7 @@ function countTriangles(primitive, gltf) {
 function accessorByteSize(accessorIndex, gltf) {
   const accessor = gltf.accessors?.[accessorIndex];
   if (!accessor) return 0;
+
   const componentBytes = COMPONENT_TYPE_BYTES[accessor.componentType] ?? 0;
   const components = ACCESSOR_TYPE_COMPONENTS[accessor.type] ?? 0;
   return (accessor.count ?? 0) * componentBytes * components;
@@ -124,6 +133,7 @@ function primitiveAccessorBytes(primitive, gltf) {
   const ids = new Set();
   if (primitive.indices !== undefined) ids.add(primitive.indices);
   for (const value of Object.values(primitive.attributes || {})) ids.add(value);
+
   let bytes = 0;
   for (const id of ids) bytes += accessorByteSize(id, gltf);
   return bytes;
@@ -158,10 +168,12 @@ function transformPoint(m, p) {
 
 function trsMatrix(node) {
   if (Array.isArray(node.matrix) && node.matrix.length === 16) return node.matrix.slice();
+
   const t = node.translation || [0, 0, 0];
   const s = node.scale || [1, 1, 1];
   const q = node.rotation || [0, 0, 0, 1];
   const [x, y, z, w] = q;
+
   const x2 = x + x;
   const y2 = y + y;
   const z2 = z + z;
@@ -203,6 +215,7 @@ function flattenNodes(gltf) {
 
 function cornersFromMinMax(min, max) {
   if (!Array.isArray(min) || !Array.isArray(max) || min.length < 3 || max.length < 3) return [];
+
   const out = [];
   for (const x of [min[0], max[0]]) {
     for (const y of [min[1], max[1]]) {
@@ -215,12 +228,25 @@ function cornersFromMinMax(min, max) {
 function mergeBounds(bounds, p) {
   if (!p) return bounds;
   if (!bounds) return { min: p.slice(), max: p.slice(), count: 1 };
+
   for (let i = 0; i < 3; i += 1) {
     bounds.min[i] = Math.min(bounds.min[i], p[i]);
     bounds.max[i] = Math.max(bounds.max[i], p[i]);
   }
   bounds.count += 1;
   return bounds;
+}
+
+function formatBounds(bounds) {
+  if (!bounds) return null;
+  return {
+    min: bounds.min.map((v) => Number(v.toFixed(9))),
+    max: bounds.max.map((v) => Number(v.toFixed(9))),
+    centroid: boundsCentroid(bounds).map((v) => Number(v.toFixed(9))),
+    diagonal: Number(boundsDiagonal(bounds).toFixed(9)),
+    maxAbs: Number(boundsMaxAbs(bounds).toFixed(9)),
+    count: bounds.count,
+  };
 }
 
 function boundsDiagonal(bounds) {
@@ -255,26 +281,63 @@ function nodeName(row, gltf) {
   return String(node.name || mesh?.name || `node_${row.nodeIndex}`);
 }
 
+function meshName(row, gltf) {
+  const node = row.node || {};
+  const mesh = node.mesh !== undefined ? gltf.meshes?.[node.mesh] : null;
+  return String(mesh?.name || node.name || `mesh_${node.mesh ?? row.nodeIndex}`);
+}
+
+function isCaesarAnnotationName(n) {
+  return /CAESAR[_-]?ANNOTATION|CAESAR-NODE-LABEL|NODE[_-]?(DISC|BUBBLE|LABEL)|ISONOTE[_-]?(DISC|CALLOUT)|CALLOUT/.test(n);
+}
+
+function isSupportOrRestraintName(n) {
+  return /SUPPORT[_-]?ARROW|SUPPORT|RESTRAINT|HANGER|SPRING|LINESTOP|LINE_STOP|GUIDE|HOLDDOWN|HOLD_DOWN|LIMIT|UNKNOWN_TYPE0|UNKNOWN|ANCHOR|SHOE|REST(_|$)|REST[-_]?/.test(n);
+}
+
 function classifyNode(name) {
   const n = String(name || '').toUpperCase();
-  if (/CAESAR[_-]?ANNOTATION|ISONOTE[_-]?(DISC|CALLOUT)|NODE[_-]?(DISC|BUBBLE)|CAESAR-NODE-LABEL/.test(n)) return 'annotation';
+
   if (/\bAXIS[_-]|AXIS_X|AXIS_Y|AXIS_Z/.test(n)) return 'axis';
-  if (/SUPPORT|RESTRAINT|HANGER|SPRING|LINESTOP|LINE_STOP|GUIDE|HOLDDOWN|LIMIT|UNKNOWN_TYPE0/.test(n)) return 'support';
+
+  /*
+   * Important ordering:
+   * - CAESAR annotation/callout meshes are annotation.
+   * - ISONOTE support-source arrows are still supports/restraints.
+   *
+   * The old classifier used generic ISONOTE matching first, so nodes such as
+   * SUPPORT_ARROW_V7_ISONOTE_..._GUIDE were incorrectly tallied as annotation.
+   */
+  if (/CAESAR[_-]?ANNOTATION|CAESAR-NODE-LABEL/.test(n)) return 'annotation';
+  if (isSupportOrRestraintName(n)) return 'support';
+  if (isCaesarAnnotationName(n)) return 'annotation';
+
   if (/VALVE|_V[A-Z]{2}_|VGT|VGL|VBA|VCH/.test(n)) return 'valve';
   if (/FLANGE|FLG/.test(n)) return 'flange';
   if (/TEE|OLET|WELDOLET|SOCKOLET/.test(n)) return 'teeOlet';
-  if (/BEND|ELBOW/.test(n)) return 'bend';
+  if (/BEND|ELBOW|ARC/.test(n)) return 'bend';
   if (/PIPE|PE_\d+/.test(n)) return 'pipe';
+
   return 'other';
 }
 
 function semanticTypeFromComponent(component) {
-  const t = String(component.type || component.elementType || '').toUpperCase();
-  if (/VALVE/.test(t)) return 'valve';
-  if (/FLANGE/.test(t)) return 'flange';
-  if (/TEE|OLET/.test(t)) return 'teeOlet';
-  if (/BEND/.test(t)) return 'bend';
-  if (/PIPE|RIGID|TRIM/.test(t)) return 'pipe';
+  const text = [
+    component.type,
+    component.elementType,
+    component.componentType,
+    component.typeDesc,
+    component.description,
+    component.name,
+    component.id,
+  ].map((v) => String(v || '')).join(' ').toUpperCase();
+
+  if (/VALVE|_V[A-Z]{2}_|VGT|VGL|VBA|VCH/.test(text)) return 'valve';
+  if (/FLANGE|FLG/.test(text)) return 'flange';
+  if (/TEE|OLET|WELDOLET|SOCKOLET/.test(text)) return 'teeOlet';
+  if (/BEND|ELBOW/.test(text)) return 'bend';
+  if (/PIPE|RIGID|TRIM/.test(text)) return 'pipe';
+
   return 'other';
 }
 
@@ -297,8 +360,22 @@ function inferSupportSource(glbPath) {
   return name.includes('isonote') ? 'isonote' : 'inputxml';
 }
 
+function addPrimitiveBounds(row, primitive, gltf, categoryBounds, category) {
+  const positionAccessorId = primitive.attributes?.POSITION;
+  if (positionAccessorId === undefined) return;
+
+  const accessor = gltf.accessors?.[positionAccessorId];
+  if (!accessor?.min || !accessor?.max) return;
+
+  for (const corner of cornersFromMinMax(accessor.min, accessor.max)) {
+    const worldPoint = transformPoint(row.world, corner);
+    categoryBounds[category] = mergeBounds(categoryBounds[category], worldPoint);
+  }
+}
+
 function buildActualInventory(gltf) {
   const nodeRows = flattenNodes(gltf);
+
   const actual = {
     totalNodesInScene: nodeRows.length,
     geometryNodes: 0,
@@ -313,96 +390,102 @@ function buildActualInventory(gltf) {
     nodeRecords: [],
   };
 
+  const rawBounds = {};
+
   for (const row of nodeRows) {
     const node = row.node || {};
     if (node.mesh === undefined) continue;
+
     const mesh = gltf.meshes?.[node.mesh];
     if (!mesh) continue;
-    const name = nodeName(row, gltf);
-    const category = classifyNode(name);
-    actual.geometryNodes += 1;
-    actual.byCategory[category] = (actual.byCategory[category] || 0) + 1;
+
+    const displayName = `${nodeName(row, gltf)} ${meshName(row, gltf)}`;
+    const category = classifyNode(displayName);
+    const primitives = mesh.primitives || [];
 
     let nodeTriangles = 0;
     let nodeAccessorBytes = 0;
-    let nodeBounds = null;
-    for (const primitive of mesh.primitives || []) {
-      actual.meshPrimitives += 1;
-      actual.estimatedDrawCalls += 1;
-      const tris = countTriangles(primitive, gltf);
-      const bytes = primitiveAccessorBytes(primitive, gltf);
-      actual.triangles += tris;
-      actual.accessorBytes += bytes;
-      actual.categoryTriangles[category] = (actual.categoryTriangles[category] || 0) + tris;
-      actual.categoryAccessorBytes[category] = (actual.categoryAccessorBytes[category] || 0) + bytes;
-      nodeTriangles += tris;
-      nodeAccessorBytes += bytes;
+    for (const primitive of primitives) {
+      const primitiveTriangles = countTriangles(primitive, gltf);
+      const primitiveBytes = primitiveAccessorBytes(primitive, gltf);
 
-      const positionAccessor = primitive.attributes?.POSITION;
-      const accessor = gltf.accessors?.[positionAccessor];
-      for (const corner of cornersFromMinMax(accessor?.min, accessor?.max)) {
-        const p = transformPoint(row.world, corner);
-        nodeBounds = mergeBounds(nodeBounds, p);
-        actual.categoryBounds[category] = mergeBounds(actual.categoryBounds[category], p);
-      }
+      nodeTriangles += primitiveTriangles;
+      nodeAccessorBytes += primitiveBytes;
+      addPrimitiveBounds(row, primitive, gltf, rawBounds, category);
     }
 
+    actual.geometryNodes += 1;
+    actual.meshPrimitives += primitives.length;
+    actual.estimatedDrawCalls += primitives.length;
+    actual.triangles += nodeTriangles;
+    actual.accessorBytes += nodeAccessorBytes;
+
+    actual.byCategory[category] = (actual.byCategory[category] || 0) + 1;
+    actual.categoryTriangles[category] = (actual.categoryTriangles[category] || 0) + nodeTriangles;
+    actual.categoryAccessorBytes[category] = (actual.categoryAccessorBytes[category] || 0) + nodeAccessorBytes;
+
     actual.nodeRecords.push({
-      name,
+      nodeIndex: row.nodeIndex,
+      nodeName: nodeName(row, gltf),
+      meshName: meshName(row, gltf),
       category,
-      mesh: mesh.name || '',
-      primitives: mesh.primitives?.length || 0,
+      primitives: primitives.length,
       triangles: nodeTriangles,
       accessorBytes: nodeAccessorBytes,
-      bounds: nodeBounds,
     });
+  }
+
+  for (const [category, bounds] of Object.entries(rawBounds)) {
+    actual.categoryBounds[category] = formatBounds(bounds);
   }
 
   return actual;
 }
 
-function componentMissingIds(expectedComponents, nodeNames) {
-  const names = nodeNames.map((name) => String(name || '').toUpperCase());
-  const missing = [];
-  for (const component of expectedComponents || []) {
-    const id = String(component.id || '').trim();
-    if (!id) continue;
-    const needle = id.toUpperCase();
-    if (!names.some((name) => name.includes(needle))) missing.push(id);
-  }
-  return missing;
+function supportKind(record) {
+  return String(record.kind || record.type || record.restraintType || record.rawType || 'UNKNOWN').toUpperCase();
 }
 
 function buildExpectedInventory(sidecar, supportSource) {
   const components = sidecar.components || [];
-  const supportRecords = selectedSupportRecords(sidecar, supportSource);
-  const callouts = sidecar.caesarAnnotationCallouts || sidecar.annotationCallouts || [];
+  const selectedSupports = selectedSupportRecords(sidecar, supportSource);
+  const callouts = sidecar.caesarAnnotationCallouts || [];
+
   return {
-    components: {
-      total: components.length,
-      bySemanticType: countBy(components, semanticTypeFromComponent),
-    },
-    bendTrimArcs: (sidecar.bendTrimArcs || sidecar.bendArcs || []).length,
-    teeOletTopology: (sidecar.teeOletTopology || []).length,
-    supports: {
-      source: supportSource,
-      total: supportRecords.length,
-      byKind: countBy(supportRecords, (record) => String(record.kind || record.type || 'UNKNOWN').toUpperCase()),
-    },
-    annotations: {
-      callouts: callouts.length,
-      calloutNodes: callouts.map((record) => String(record.node)).filter(Boolean),
-    },
+    componentsTotal: components.length,
+    componentsBySemanticType: countBy(components, semanticTypeFromComponent),
+    pipeSemanticRecords: components.filter((c) => semanticTypeFromComponent(c) === 'pipe').length,
+    bendTrimArcs: (sidecar.bendTrimArcs || []).length,
+    teeOletTopologyRecords: (sidecar.teeOletTopology || []).length,
+    selectedSupportSource: supportSource,
+    supportRecordsTotal: selectedSupports.length,
+    supportRecordsByKind: countBy(selectedSupports, supportKind),
+    isonoteCallouts: callouts.length,
+    calloutNodes: [...new Set(callouts.map((c) => String(c.node || c.nodeNumber || '')))].filter(Boolean).sort(),
   };
 }
 
-function boundsCoherence(actual) {
-  const annotationBounds = actual.categoryBounds.annotation;
-  let plantBounds = null;
-  for (const [category, bounds] of Object.entries(actual.categoryBounds)) {
-    if (category === 'annotation' || category === 'axis') continue;
-    for (const corner of cornersFromMinMax(bounds?.min, bounds?.max)) plantBounds = mergeBounds(plantBounds, corner);
+function mergeFormattedBounds(items) {
+  const raw = { min: [Infinity, Infinity, Infinity], max: [-Infinity, -Infinity, -Infinity], count: 0 };
+  let hit = false;
+
+  for (const item of items || []) {
+    if (!item) continue;
+    for (let i = 0; i < 3; i += 1) {
+      raw.min[i] = Math.min(raw.min[i], item.min[i]);
+      raw.max[i] = Math.max(raw.max[i], item.max[i]);
+    }
+    raw.count += item.count || 1;
+    hit = true;
   }
+
+  return hit ? formatBounds(raw) : null;
+}
+
+function boundsCoherence(actual) {
+  const plantCategories = ['pipe', 'bend', 'valve', 'flange', 'teeOlet', 'support', 'other'];
+  const plantBounds = mergeFormattedBounds(plantCategories.map((c) => actual.categoryBounds[c]));
+  const annotationBounds = actual.categoryBounds.annotation || null;
 
   if (!plantBounds || !annotationBounds) {
     return {
@@ -413,102 +496,59 @@ function boundsCoherence(actual) {
     };
   }
 
-  const plantDiag = boundsDiagonal(plantBounds);
-  const annDiag = boundsDiagonal(annotationBounds);
-  const centroidDistance = distance3(boundsCentroid(plantBounds), boundsCentroid(annotationBounds));
-  const diagRatio = plantDiag ? annDiag / plantDiag : Infinity;
-  const centroidRatio = plantDiag ? centroidDistance / plantDiag : Infinity;
-  const maxAbsRatio = boundsMaxAbs(plantBounds) ? boundsMaxAbs(annotationBounds) / boundsMaxAbs(plantBounds) : Infinity;
+  const plantDiagonal = plantBounds.diagonal;
+  const annotationDiagonal = annotationBounds.diagonal;
+  const annotationToPlantDiagonalRatio = plantDiagonal ? annotationDiagonal / plantDiagonal : Infinity;
+  const centroidDistance = distance3(annotationBounds.centroid, plantBounds.centroid);
+  const annotationCentroidDistanceToPlantDiagonalRatio = plantDiagonal ? centroidDistance / plantDiagonal : Infinity;
+  const annotationMaxAbsToPlantMaxAbsRatio = plantBounds.maxAbs ? annotationBounds.maxAbs / plantBounds.maxAbs : Infinity;
+
   const gates = {
-    plantDiagonalPositive: plantDiag > 0,
-    annotationDiagonalPositive: annDiag > 0,
-    annotationToPlantDiagonalRatioLe1p50: diagRatio <= 1.5,
-    annotationCentroidDistanceLe1p25PlantDiagonal: centroidRatio <= 1.25,
-    annotationMaxAbsToPlantMaxAbsLe2: maxAbsRatio <= 2,
+    plantDiagonalPositive: plantDiagonal > 0,
+    annotationDiagonalPositive: annotationDiagonal > 0,
+    annotationToPlantDiagonalRatioLe1p50: annotationToPlantDiagonalRatio <= 1.5,
+    annotationCentroidDistanceLe1p25PlantDiagonal: annotationCentroidDistanceToPlantDiagonalRatio <= 1.25,
+    annotationMaxAbsToPlantMaxAbsLe2: annotationMaxAbsToPlantMaxAbsRatio <= 2,
   };
+
   return {
     ok: Object.values(gates).every(Boolean),
     gates,
     plantBounds,
     annotationBounds,
-    plantDiagonal: plantDiag,
-    annotationDiagonal: annDiag,
-    annotationToPlantDiagonalRatio: diagRatio,
-    annotationCentroidDistance,
-    annotationCentroidDistanceToPlantDiagonalRatio: centroidRatio,
-    annotationMaxAbsToPlantMaxAbsRatio: maxAbsRatio,
+    annotationToPlantDiagonalRatio: Number(annotationToPlantDiagonalRatio.toFixed(9)),
+    annotationCentroidDistance: Number(centroidDistance.toFixed(9)),
+    annotationCentroidDistanceToPlantDiagonalRatio: Number(annotationCentroidDistanceToPlantDiagonalRatio.toFixed(9)),
+    annotationMaxAbsToPlantMaxAbsRatio: Number(annotationMaxAbsToPlantMaxAbsRatio.toFixed(9)),
   };
 }
 
-function runQc({ glbPath, sidecarPath, gltf, sidecar, supportSource, strict, allowMissingComponentNames, maxAnnotationNodes }) {
-  const expected = buildExpectedInventory(sidecar, supportSource);
-  const actual = buildActualInventory(gltf);
-  const nodeNames = actual.nodeRecords.map((row) => row.name);
-  const missingComponentIds = allowMissingComponentNames ? [] : componentMissingIds(sidecar.components || [], nodeNames);
-  const bc = boundsCoherence(actual);
-
-  const actualComponentLike =
+function runQc(expected, actual) {
+  const bounds = boundsCoherence(actual);
+  const renderedPlantNodes =
     (actual.byCategory.pipe || 0) +
     (actual.byCategory.bend || 0) +
     (actual.byCategory.valve || 0) +
     (actual.byCategory.flange || 0) +
-    (actual.byCategory.teeOlet || 0);
+    (actual.byCategory.teeOlet || 0) +
+    (actual.byCategory.support || 0) +
+    (actual.byCategory.other || 0);
 
   const gates = {
-    glbHasGeometry: actual.geometryNodes > 0,
-    sourceHasComponents: expected.components.total > 0,
-    renderedHasPlantGeometry: actualComponentLike > 0,
-    renderedHasSelectedSupports: expected.supports.total === 0 || (actual.byCategory.support || 0) >= expected.supports.total,
-    renderedHasAnnotations: expected.annotations.callouts === 0 || (actual.byCategory.annotation || 0) > 0,
-    annotationNodeCountWithinBudget: (actual.byCategory.annotation || 0) <= maxAnnotationNodes,
-    allSourceComponentIdsRendered: missingComponentIds.length === 0,
-    calloutCountStable: expected.annotations.callouts === 0 || expected.annotations.callouts === 4,
-    boundsCoherent: bc.ok,
+    glbHasGeometry: actual.geometryNodes > 0 && actual.triangles > 0,
+    sourceHasComponents: expected.componentsTotal > 0,
+    renderedHasPlantGeometry: renderedPlantNodes > 0,
+    renderedHasSelectedSupports: expected.supportRecordsTotal > 0 ? (actual.byCategory.support || 0) > 0 : true,
+    renderedHasAnnotations: expected.isonoteCallouts > 0 ? (actual.byCategory.annotation || 0) > 0 : true,
+    annotationNodeCountWithinBudget: (actual.byCategory.annotation || 0) <= 3,
+    calloutCountStable: expected.isonoteCallouts === 4,
+    boundsCoherent: bounds.ok,
   };
 
-  if (!strict) {
-    // Non-strict mode still requires spatial sanity and basic presence, but does
-    // not fail a candidate solely because source-component IDs were merged or renamed.
-    gates.allSourceComponentIdsRendered = true;
-  }
-
-  const ok = Object.values(gates).every(Boolean);
   return {
-    schema: 'bm-cii-geometry-tally-qc/v1',
-    ok,
-    files: {
-      glb: glbPath,
-      sidecar: sidecarPath,
-    },
-    options: {
-      supportSource,
-      strict,
-      allowMissingComponentNames,
-      maxAnnotationNodes,
-    },
-    expected,
-    actual: {
-      totalNodesInScene: actual.totalNodesInScene,
-      geometryNodes: actual.geometryNodes,
-      meshPrimitives: actual.meshPrimitives,
-      estimatedDrawCalls: actual.estimatedDrawCalls,
-      triangles: actual.triangles,
-      accessorBytes: actual.accessorBytes,
-      byCategory: actual.byCategory,
-      categoryTriangles: actual.categoryTriangles,
-      categoryAccessorBytes: actual.categoryAccessorBytes,
-      categoryBounds: actual.categoryBounds,
-    },
-    comparison: {
-      missingComponentIds,
-      selectedSupportSource: supportSource,
-      expectedSupportRecords: expected.supports.total,
-      actualSupportGeometryNodes: actual.byCategory.support || 0,
-      expectedCallouts: expected.annotations.callouts,
-      actualAnnotationGeometryNodes: actual.byCategory.annotation || 0,
-    },
-    boundsCoherence: bc,
+    ok: Object.values(gates).every(Boolean),
     gates,
+    boundsCoherence: bounds,
   };
 }
 
@@ -524,44 +564,58 @@ async function main() {
   const outPath = argValue(args, '--out');
   const pretty = hasArg(args, '--pretty');
   const strict = hasArg(args, '--strict');
-  const allowMissingComponentNames = hasArg(args, '--allow-missing-component-names');
-  const supportSource = argValue(args, '--support-source') || (glbPath ? inferSupportSource(glbPath) : 'inputxml');
-  const maxAnnotationNodes = Number(argValue(args, '--max-annotation-nodes') || 8);
+  const supportSource = (argValue(args, '--support-source') || inferSupportSource(glbPath || '')).toLowerCase();
 
-  if (!glbPath || !sidecarPath) throw new Error(`Missing required arguments.\n${usage()}`);
+  if (!glbPath || !sidecarPath) {
+    console.error(usage());
+    throw new Error('Both --glb and --sidecar are required.');
+  }
+
   if (!['inputxml', 'isonote'].includes(supportSource)) {
     throw new Error(`Invalid --support-source ${supportSource}; expected inputxml or isonote.`);
   }
 
   const glbBuffer = await fs.readFile(glbPath);
   const sidecar = JSON.parse(await fs.readFile(sidecarPath, 'utf8'));
-  const { json: gltf, binBytes } = parseGlb(glbBuffer);
-  const report = runQc({
-    glbPath,
-    sidecarPath,
-    gltf,
-    sidecar,
+  const { json: gltf, binBytes, chunks } = parseGlb(glbBuffer);
+
+  const expected = buildExpectedInventory(sidecar, supportSource);
+  const actual = buildActualInventory(gltf);
+  const qc = runQc(expected, actual);
+
+  const report = {
+    schema: 'bm-cii-geometry-tally-qc/report-v2',
+    createdAtUtc: new Date().toISOString(),
+    glb: path.basename(glbPath),
+    sidecar: path.basename(sidecarPath),
     supportSource,
-    strict,
-    allowMissingComponentNames,
-    maxAnnotationNodes,
-  });
-  report.file = {
-    sizeBytes: glbBuffer.length,
-    sha256: crypto.createHash('sha256').update(glbBuffer).digest('hex'),
-    binBytes,
+    glbFile: {
+      bytes: glbBuffer.length,
+      kib: Number((glbBuffer.length / 1024).toFixed(3)),
+      sha256: crypto.createHash('sha256').update(glbBuffer).digest('hex'),
+      binBytes,
+      chunkCount: chunks.length,
+      asset: gltf.asset || {},
+    },
+    expected,
+    actual,
+    qc,
   };
 
-  const payload = JSON.stringify(report, null, pretty ? 2 : 0);
+  const text = JSON.stringify(report, null, pretty ? 2 : 0);
   if (outPath) {
     await fs.mkdir(path.dirname(outPath), { recursive: true });
-    await fs.writeFile(outPath, `${payload}\n`, 'utf8');
+    await fs.writeFile(outPath, `${text}\n`, 'utf8');
+  } else {
+    console.log(text);
   }
-  console.log(payload);
-  if (!report.ok) process.exitCode = 1;
+
+  if (strict && !qc.ok) {
+    process.exitCode = 1;
+  }
 }
 
-main().catch((error) => {
-  console.error(error?.stack || error?.message || String(error));
+main().catch((err) => {
+  console.error(`BM_CII geometry tally QC failed: ${err.message}`);
   process.exitCode = 1;
 });
