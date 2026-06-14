@@ -6,6 +6,7 @@ import { enhanceLocalizedBendProxy } from './enhanceLocalizedBendProxy.js';
 import { enhanceSupportDirectionProxy } from './enhanceSupportDirectionProxyReferenceV2.js';
 import { enhanceTeeBodyProxy } from './enhanceTeeBodyProxy.js';
 import { hideGlbLabelAnchorMarkers } from './hideGlbLabelAnchorMarkers.js';
+import { applyComponentGeometryTrace } from './GeometryTraceMetadata.js';
 import {
   LINE_NO_METADATA_KEYS,
   firstLineNoValue,
@@ -35,6 +36,14 @@ function collectLineNos(model = {}) {
   ].map(normalizeLineNoValue).filter(Boolean))).sort();
 }
 
+function traceContextForComponent(component = {}, options = {}) {
+  const supportRendering = options.supportRendering || {};
+  return {
+    supportSource: supportRendering.source || options.supportSource || component.supportSource || component.source || '',
+    colorMode: options.colorMode || '',
+  };
+}
+
 export function buildExportScene(model, log, options = {}) {
   const scene = new THREE.Scene();
   const root = new THREE.Group();
@@ -49,7 +58,10 @@ export function buildExportScene(model, log, options = {}) {
       if (obj && comp.type === 'TEE') obj = enhanceTeeBodyProxy(obj, comp);
       if (obj && comp.type === 'SUPPORT') obj = enhanceSupportDirectionProxy(obj, comp, options);
       if (obj) obj = enhanceLocalizedBendProxy(obj, comp);
-      if (obj) root.add(obj);
+      if (obj) {
+        applyComponentGeometryTrace(obj, comp, traceContextForComponent(comp, options));
+        root.add(obj);
+      }
     } catch (err) {
       if (log) {
           log.error('COMPONENT_BUILD_FAILED', {
