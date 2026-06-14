@@ -12,6 +12,13 @@ const PROCESS_PHASES = Object.freeze([
   ['run', 'Existing Run Step', 'Final existing conversion workflow step.'],
 ]);
 
+const PROCESS_SUBTABS = Object.freeze([
+  ['line-process-data', 'Line / Process Data', ['regex', 'import-masters']],
+  ['piping-class-material-weight', 'Piping Class / Material / Weight', ['weight-match', 'support-mapper']],
+  ['support-preview-run', 'Support / Preview / Run', ['preview', 'diagnostics', 'config', 'run']],
+  ['configured-extraction-groups', 'Configured extraction groups', []],
+]);
+
 function text(value) { return value == null ? '' : String(value); }
 function esc(value) {
   return text(value).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
@@ -57,6 +64,30 @@ function outputSnapshot(root) {
   const payload = normalizePreviewPayload(readStored());
   return { outputText, statusText, payload };
 }
+function phaseById(id) {
+  return PROCESS_PHASES.find(([phaseId]) => phaseId === id) || null;
+}
+function phaseRows(ids) {
+  return asArray(ids)
+    .map((id) => phaseById(id))
+    .filter(Boolean)
+    .map(([id, label, desc]) => [
+      esc(label),
+      esc(desc),
+      `<button type="button" class="model-converters-download-btn" data-direct-process-phase="${esc(id)}">Open existing phase</button>`,
+    ]);
+}
+function renderProcessSubtabBody(subtabId, support) {
+  if (subtabId === 'configured-extraction-groups') {
+    return table(['Group', 'Configured aliases / state'], [
+      ['Sideload JSON Config', esc(support.sideloadJsonConfig ? 'Saved in support config' : 'Default / localStorage fallback')],
+      ['Manual Restraints', esc(support.sideload?.restraintsText ? 'Saved for run options' : 'Not saved')],
+      ['Diagnostics publishing', 'Matched Preview shared storage/event contract'],
+    ]);
+  }
+  const subtab = PROCESS_SUBTABS.find(([id]) => id === subtabId) || PROCESS_SUBTABS[0];
+  return table(['Phase', 'What it audits', 'Action'], phaseRows(subtab[2]));
+}
 
 export function renderXmlCiiWorkflowModelDataPanel(target, dataRoot = document) {
   if (!target) return;
@@ -88,23 +119,36 @@ export function renderXmlCiiWorkflowProcessEnrichmentPanel(target, dataRoot = do
   const configKeys = Object.keys(support || {});
   target.innerHTML = `
     <div class="model-converters-workflow-detail-title">Process / Piping Class / Wt. Enrichment</div>
-    <div class="model-converters-workflow-detail-text">Direct popup audit for the existing XML→CII enrichment workflow. It shows grouped tables and current configuration state without moving old DOM panels or changing converter logic.</div>
+    <div class="model-converters-workflow-detail-text">Direct popup audit for the existing XML→CII enrichment workflow. Each audit group is a real sub-tab with its own phase table; no old DOM panels are moved into the popup.</div>
     ${section('Current enrichment state', statsCards([
       ['Support config', configKeys.length ? `${configKeys.length} top-level keys` : 'Default / not loaded'],
       ['Regex / workflow panel', dataRoot?.querySelector?.('#model-converters-xml-cii-workflow') ? 'Available' : 'Not available'],
       ['Run path', 'Existing XML→CII runner'],
     ]))}
-    ${section('Line / Process Data', table(['Phase', 'What it audits', 'Action'], PROCESS_PHASES.slice(0, 2).map(([id, label, desc]) => [esc(label), esc(desc), `<button type="button" class="model-converters-download-btn" data-direct-process-phase="${esc(id)}">Open existing phase</button>`])))}
-    ${section('Piping Class / Material / Weight', table(['Phase', 'What it audits', 'Action'], PROCESS_PHASES.slice(2, 4).map(([id, label, desc]) => [esc(label), esc(desc), `<button type="button" class="model-converters-download-btn" data-direct-process-phase="${esc(id)}">Open existing phase</button>`])))}
-    ${section('Support / Preview / Run', table(['Phase', 'What it audits', 'Action'], PROCESS_PHASES.slice(4).map(([id, label, desc]) => [esc(label), esc(desc), `<button type="button" class="model-converters-download-btn" data-direct-process-phase="${esc(id)}">Open existing phase</button>`])))}
-    ${section('Configured extraction groups', table(['Group', 'Configured aliases / state'], [
-      ['Sideload JSON Config', esc(support.sideloadJsonConfig ? 'Saved in support config' : 'Default / localStorage fallback')],
-      ['Manual Restraints', esc(support.sideload?.restraintsText ? 'Saved for run options' : 'Not saved')],
-      ['Diagnostics publishing', 'Matched Preview shared storage/event contract'],
-    ]))}`;
-  target.querySelectorAll('[data-direct-process-phase]').forEach((button) => {
-    button.addEventListener('click', () => callbacks.openPhase?.(button.getAttribute('data-direct-process-phase') || ''));
+    <div class="model-converters-workflow-master-card" data-process-subtab-shell>
+      <div class="model-converters-workflow-section-title">Process enrichment sub-tabs</div>
+      <div role="tablist" aria-label="Process enrichment subtabs" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;">
+        ${PROCESS_SUBTABS.map(([id, label], index) => `<button type="button" role="tab" aria-selected="${index === 0 ? 'true' : 'false'}" class="model-converters-download-btn" data-process-subtab="${esc(id)}">${esc(label)}</button>`).join('')}
+      </div>
+      <div data-process-subtab-body></div>
+    </div>`;
+  const body = target.querySelector('[data-process-subtab-body]');
+  const setActive = (subtabId) => {
+    target.querySelectorAll('[data-process-subtab]').forEach((button) => {
+      const active = button.getAttribute('data-process-subtab') === subtabId;
+      button.setAttribute('aria-selected', active ? 'true' : 'false');
+      button.style.outline = active ? '2px solid #5aa7ff' : '';
+      button.style.background = active ? '#1f3652' : '';
+    });
+    if (body) body.innerHTML = renderProcessSubtabBody(subtabId, support);
+    target.querySelectorAll('[data-direct-process-phase]').forEach((button) => {
+      button.addEventListener('click', () => callbacks.openPhase?.(button.getAttribute('data-direct-process-phase') || ''));
+    });
+  };
+  target.querySelectorAll('[data-process-subtab]').forEach((button) => {
+    button.addEventListener('click', () => setActive(button.getAttribute('data-process-subtab') || PROCESS_SUBTABS[0][0]));
   });
+  setActive(PROCESS_SUBTABS[0][0]);
 }
 
 export function renderXmlCiiWorkflowOutputRunPanel(target, dataRoot = document, callbacks = {}) {
