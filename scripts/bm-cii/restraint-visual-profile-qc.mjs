@@ -5,6 +5,10 @@
  * This is intentionally stricter than generic layer QC. It fails when support
  * meshes are layer-toggleable but not stamped with the agreed engineering
  * visual profile contract.
+ *
+ * This gate is deliberately not satisfied by layer metadata alone. A support
+ * node must also carry a renderGlyph and renderScale so a metadata-only GLB
+ * cannot mask missing/weak baked or runtime restraint symbols.
  */
 
 import fs from 'node:fs';
@@ -33,6 +37,7 @@ Checks:
   3. Support kind normalizes to the shared restraint visual profile contract.
   4. Directional support kinds carry X/Y/Z axis where available/required.
   5. Support layer or trace declares profile v4-engineering-readable.
+  6. Support trace/metadata declares renderGlyph and renderScale.
 `);
   process.exit(exitCode);
 }
@@ -93,8 +98,9 @@ function walkNodes(gltf) {
     const extras = node.extras || {};
     const trace = extras.bmCiiTrace || inherited.trace || null;
     const layer = extras.bmCiiLayer || inherited.layer || null;
-    if (node.mesh !== undefined) rows.push({ nodeIndex, nodeName: node.name || `node_${nodeIndex}`, trace, layer, extras });
-    for (const child of node.children || []) visit(child, { trace, layer });
+    const profile = extras.bmCiiRestraintVisualProfile || inherited.profile || null;
+    if (node.mesh !== undefined) rows.push({ nodeIndex, nodeName: node.name || `node_${nodeIndex}`, trace, layer, profile, extras });
+    for (const child of node.children || []) visit(child, { trace, layer, profile });
   };
   const children = new Set();
   for (const node of nodes) for (const child of node.children || []) children.add(child);
@@ -112,9 +118,10 @@ function isSupport(row) {
 function supportRecord(row) {
   const trace = row.trace || {};
   const layer = row.layer || {};
-  const kind = normalizeRestraintKind(trace.supportKind || trace.kind || layer.supportKind || row.extras.supportKind || '');
-  const axis = normalizeRestraintAxisLabel(trace.axis || trace.direction || trace.restraintAxis || layer.axis || row.extras.restraintAxis || '');
-  const sourceRaw = String(trace.supportSource || trace.source || layer.source || row.extras.supportSource || '').toLowerCase();
+  const profileMeta = row.profile || row.extras.bmCiiRestraintVisualProfile || {};
+  const kind = normalizeRestraintKind(trace.supportKind || trace.kind || layer.supportKind || profileMeta.kind || row.extras.supportKind || '');
+  const axis = normalizeRestraintAxisLabel(trace.axis || trace.direction || trace.restraintAxis || layer.axis || profileMeta.axis || row.extras.restraintAxis || '');
+  const sourceRaw = String(trace.supportSource || trace.source || layer.source || profileMeta.source || row.extras.supportSource || '').toLowerCase();
   const source = sourceRaw.includes('isonote') ? 'isonote' : sourceRaw.includes('inputxml') ? 'inputxml' : sourceRaw;
   const profile = trace.visualProfile
     || trace.glbSupportVisualProfile
@@ -122,17 +129,19 @@ function supportRecord(row) {
     || layer.restraintVisualProfile
     || layer.visualProfile
     || row.extras.glbSupportVisualProfile
-    || row.extras.bmCiiRestraintVisualProfile?.profile
+    || profileMeta.profile
     || '';
-  const renderScale = Number(trace.renderScale ?? row.extras.bmCiiRestraintVisualProfile?.renderScale ?? NaN);
+  const renderGlyph = trace.renderGlyph || trace.glyph || profileMeta.role || row.extras.renderGlyph || '';
+  const renderScaleRaw = trace.renderScale ?? profileMeta.renderScale ?? row.extras.renderScale;
+  const renderScale = Number(renderScaleRaw);
   return {
     nodeName: row.nodeName,
     source,
     kind,
     axis,
     profile,
-    renderGlyph: trace.renderGlyph || trace.glyph || row.extras.renderGlyph || '',
-    renderScale: Number.isFinite(renderScale) ? renderScale : null,
+    renderGlyph,
+    renderScale: Number.isFinite(renderScale) && renderScale > 0 ? renderScale : null,
     layerIds: layer.layerIds || [],
   };
 }
@@ -148,6 +157,8 @@ function run(glbPath, expectedSource) {
   const missingSubtypeLayer = supportRows.filter(r => !r.layerIds.includes(`restraints.${String(r.kind || 'unknown').toLowerCase()}`));
   const missingSourceLayer = supportRows.filter(r => !r.layerIds.includes(`restraints.${expectedSource}`));
   const missingAxis = supportRows.filter(r => directional.has(r.kind) && !r.axis);
+  const missingGlyph = supportRows.filter(r => !r.renderGlyph);
+  const missingReadableScale = supportRows.filter(r => r.renderScale === null);
   const supportKindCounts = supportRows.reduce((acc, r) => {
     acc[r.kind || ''] = (acc[r.kind || ''] || 0) + 1;
     return acc;
@@ -160,9 +171,11 @@ function run(glbPath, expectedSource) {
     sourceLayerStamped: missingSourceLayer.length === 0,
     subtypeLayerStamped: missingSubtypeLayer.length === 0,
     directionalKindsCarryAxis: missingAxis.length === 0,
+    renderGlyphStamped: missingGlyph.length === 0,
+    readableScaleStamped: missingReadableScale.length === 0,
   };
   return {
-    schema: 'bm-cii-restraint-visual-profile-qc/v1',
+    schema: 'bm-cii-restraint-visual-profile-qc/v2',
     createdAtUtc: new Date().toISOString(),
     file: path.basename(glbPath),
     sha256,
@@ -178,6 +191,8 @@ function run(glbPath, expectedSource) {
       missingSubtypeLayer,
       missingSourceLayer,
       missingAxis,
+      missingGlyph,
+      missingReadableScale,
     },
     gates,
     ok: Object.values(gates).every(Boolean),
