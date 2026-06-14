@@ -7,6 +7,7 @@ import * as THREE from 'three';
 import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
 
 import { buildExportScene } from '../../viewer/js/pcf2glb/glb/buildExportScene.js';
+import { applyAnnotationGeometryTrace } from '../../viewer/js/pcf2glb/glb/GeometryTraceMetadata.js';
 import {
   buildCaesarAnnotationCoreObject,
   buildCaesarAnnotationSidecar,
@@ -211,6 +212,12 @@ function addRobustAnnotationToScene(scene, model, options) {
   const root = sceneRoot(scene);
   const annotationObject = buildCaesarAnnotationCoreObject(model, options);
   annotationObject.name = 'CAESAR_ANNOTATION_V11_ROBUST_LOW_POLY_VECTOR';
+  applyAnnotationGeometryTrace(annotationObject, {
+    source: 'ISONOTE',
+    callouts: annotationObject.userData.caesarAnnotationCallouts || [],
+    nodeCalloutMap: annotationObject.userData.caesarAnnotationNodeCalloutMap || {},
+    markerCount: annotationObject.userData.caesarAnnotationStats?.markerCount || 0,
+  });
   root.add(annotationObject);
 
   root.userData = {
@@ -222,6 +229,7 @@ function addRobustAnnotationToScene(scene, model, options) {
     caesarAnnotationCallouts: annotationObject.userData.caesarAnnotationCallouts,
     caesarAnnotationNodeCalloutMap: annotationObject.userData.caesarAnnotationNodeCalloutMap,
     caesarAnnotationGeometrySummary: annotationObject.userData.caesarAnnotationGeometrySummary,
+    bmCiiAnnotationTrace: annotationObject.userData.bmCiiTrace,
   };
 
   return annotationObject;
@@ -258,6 +266,7 @@ function buildVariantScene(model, variant, options) {
     colorMode: variant.colorMode,
     supportSource: variant.supportSource,
     caesarAnnotationGeometrySummary: annotationObject.userData.caesarAnnotationGeometrySummary,
+    bmCiiAnnotationTrace: annotationObject.userData.bmCiiTrace,
   };
   return scene;
 }
