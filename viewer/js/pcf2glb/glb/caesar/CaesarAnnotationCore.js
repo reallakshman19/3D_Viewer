@@ -15,6 +15,7 @@ import {
 } from './CaesarAnnotationGeometry.js';
 
 export const CAESAR_ANNOTATION_CORE_SCHEMA = 'caesar-annotation-core/robust-lowpoly-vector/v1';
+export const CAESAR_ANNOTATION_SIDECAR_SCHEMA = 'caesar-annotation-sidecar/v1';
 
 export const CAESAR_ANNOTATION_CORE_MODE = Object.freeze({
   off: 'off',
@@ -86,6 +87,16 @@ function normalizeVector(value, fallback = FALLBACK_TANGENT) {
 function pointKey(value) {
   const key = text(value);
   return key || null;
+}
+
+function vectorPayload(value) {
+  const v = vectorFrom(value);
+  if (!v) return null;
+  return {
+    x: Number(v.x.toFixed(6)),
+    y: Number(v.y.toFixed(6)),
+    z: Number(v.z.toFixed(6)),
+  };
 }
 
 function componentStart(component = {}) {
@@ -221,6 +232,25 @@ function joinIsonoteTexts(notes = []) {
   return unique.join(' | ');
 }
 
+function parseSupportTokens(noteText) {
+  const value = text(noteText);
+  const tokens = [];
+  const tokenRegex = /\b(LINE\s*STOP|LINESTOP|HOLD\s*DOWN|HOLDDOWN|GUIDE|REST|HANGER|SPRING|ANCHOR|LIMIT)\b\s*(?:\(([^)]*)\))?/gi;
+  let match;
+  while ((match = tokenRegex.exec(value))) {
+    const rawKind = upper(match[1]).replace(/\s+/g, '');
+    const kind = rawKind === 'HOLDOWN' ? 'HOLDDOWN' : rawKind;
+    const load = text(match[2]);
+    tokens.push({ kind, load });
+  }
+
+  if (/REST\s+NOT\s+DEFINED/i.test(value)) {
+    tokens.push({ kind: 'UNKNOWN', load: '', warning: 'REST_NOT_DEFINED' });
+  }
+
+  return tokens;
+}
+
 function calloutOffset(index, radius) {
   const signX = index % 2 === 0 ? -1 : 1;
   const signZ = Math.floor(index / 2) % 2 === 0 ? 1 : -1;
@@ -252,6 +282,12 @@ function createIsonoteMarkers(model, options, nodePoints, center, diagnostics) {
       node,
       text: textValue,
       caesarCalloutText: textValue,
+      supportTokens: parseSupportTokens(textValue),
+      sourceNotes: notes.map((note) => ({
+        node: note.node,
+        text: normalizeIsonoteText(note.text || note.note || note.raw),
+        sourceComponentId: note.sourceComponentId || note.componentId || '',
+      })),
       position,
       center: position,
       normal: basis.normal,
@@ -303,6 +339,61 @@ function createNodeLabelMarkers(model, options, nodePoints, center, isonoteMarke
   return markers;
 }
 
+function calloutPayload(marker) {
+  return {
+    no: marker.no,
+    node: marker.node,
+    label: marker.label || String(marker.no),
+    text: marker.text || marker.caesarCalloutText || '',
+    caesarCalloutText: marker.caesarCalloutText || marker.text || '',
+    supportTokens: Array.isArray(marker.supportTokens) ? marker.supportTokens : parseSupportTokens(marker.text || marker.caesarCalloutText),
+    position: vectorPayload(marker.position || marker.center),
+    leaderStart: vectorPayload(marker.leaderStart),
+    leaderEnd: vectorPayload(marker.leaderEnd || marker.position || marker.center),
+    radius: positiveNumber(marker.radius, DEFAULT_CAESAR_ANNOTATION_CORE_OPTIONS.isonoteRadius),
+    sourceNotes: Array.isArray(marker.sourceNotes) ? marker.sourceNotes : [],
+  };
+}
+
+function nodeLabelPayload(marker) {
+  return {
+    node: marker.node,
+    label: marker.label || marker.node,
+    position: vectorPayload(marker.position || marker.center),
+    leaderStart: vectorPayload(marker.leaderStart),
+    leaderEnd: vectorPayload(marker.leaderEnd || marker.position || marker.center),
+    radius: positiveNumber(marker.radius, DEFAULT_CAESAR_ANNOTATION_CORE_OPTIONS.nodeLabelRadius),
+  };
+}
+
+export function buildCaesarAnnotationSidecar(markersOrResult = [], options = {}) {
+  const markers = Array.isArray(markersOrResult) ? markersOrResult : markersOrResult.markers || [];
+  const stats = markersOrResult.stats || {};
+  const diagnostics = markersOrResult.diagnostics || [];
+  const callouts = markers
+    .filter((marker) => marker.kind === CAESAR_ANNOTATION_KIND.isonoteCallout)
+    .map(calloutPayload);
+  const nodeLabels = markers
+    .filter((marker) => marker.kind === CAESAR_ANNOTATION_KIND.nodeLabel)
+    .map(nodeLabelPayload);
+  const nodeCalloutMap = Object.fromEntries(callouts.map((callout) => [String(callout.node), callout.no]));
+
+  return {
+    schema: CAESAR_ANNOTATION_SIDECAR_SCHEMA,
+    coreSchema: CAESAR_ANNOTATION_CORE_SCHEMA,
+    geometrySchema: CAESAR_ANNOTATION_GEOMETRY_SCHEMA,
+    mode: options.mode || stats.mode || DEFAULT_CAESAR_ANNOTATION_CORE_OPTIONS.mode,
+    nodeLabelMode: options.nodeLabelMode || stats.nodeLabelMode || DEFAULT_CAESAR_ANNOTATION_CORE_OPTIONS.nodeLabelMode,
+    calloutCount: callouts.length,
+    nodeLabelCount: nodeLabels.length,
+    callouts,
+    nodeLabels,
+    nodeCalloutMap,
+    diagnostics,
+    stats,
+  };
+}
+
 export function normalizeCaesarAnnotationCoreOptions(options = {}) {
   const src = options.caesarAnnotation || options.annotation || options;
   const preferredKeyNodes = Array.isArray(src.preferredKeyNodes || src.keyNodes)
@@ -325,7 +416,13 @@ export function createCaesarAnnotationMarkers(model = {}, options = {}) {
   const normalized = normalizeCaesarAnnotationCoreOptions(options);
   const diagnostics = [];
   if (normalized.mode === CAESAR_ANNOTATION_CORE_MODE.off) {
-    return { markers: [], diagnostics, stats: { schema: CAESAR_ANNOTATION_CORE_SCHEMA, mode: normalized.mode, markerCount: 0 } };
+    const stats = { schema: CAESAR_ANNOTATION_CORE_SCHEMA, mode: normalized.mode, markerCount: 0 };
+    return {
+      markers: [],
+      diagnostics,
+      stats,
+      sidecar: buildCaesarAnnotationSidecar({ markers: [], diagnostics, stats }, normalized),
+    };
   }
 
   const nodePoints = collectNodePoints(model);
@@ -334,20 +431,23 @@ export function createCaesarAnnotationMarkers(model = {}, options = {}) {
   const nodeLabelMarkers = createNodeLabelMarkers(model, normalized, nodePoints, center, isonoteMarkers);
   const markers = [...isonoteMarkers, ...nodeLabelMarkers];
 
+  const stats = {
+    schema: CAESAR_ANNOTATION_CORE_SCHEMA,
+    geometrySchema: CAESAR_ANNOTATION_GEOMETRY_SCHEMA,
+    mode: normalized.mode,
+    nodeLabelMode: normalized.nodeLabelMode,
+    markerCount: markers.length,
+    isonoteCalloutCount: isonoteMarkers.length,
+    nodeLabelCount: nodeLabelMarkers.length,
+    mergeMarkers: normalized.mergeMarkers,
+    nodeCount: nodePoints.size,
+  };
+
   return {
     markers,
     diagnostics,
-    stats: {
-      schema: CAESAR_ANNOTATION_CORE_SCHEMA,
-      geometrySchema: CAESAR_ANNOTATION_GEOMETRY_SCHEMA,
-      mode: normalized.mode,
-      nodeLabelMode: normalized.nodeLabelMode,
-      markerCount: markers.length,
-      isonoteCalloutCount: isonoteMarkers.length,
-      nodeLabelCount: nodeLabelMarkers.length,
-      mergeMarkers: normalized.mergeMarkers,
-      nodeCount: nodePoints.size,
-    },
+    stats,
+    sidecar: buildCaesarAnnotationSidecar({ markers, diagnostics, stats }, normalized),
   };
 }
 
@@ -357,7 +457,15 @@ export function buildCaesarAnnotationCoreObject(modelOrMarkers = {}, options = {
   assertCaesarAnnotationMaterialContract(materials);
 
   const markerResult = Array.isArray(modelOrMarkers)
-    ? { markers: modelOrMarkers, diagnostics: [], stats: { schema: CAESAR_ANNOTATION_CORE_SCHEMA, markerCount: modelOrMarkers.length } }
+    ? (() => {
+        const stats = { schema: CAESAR_ANNOTATION_CORE_SCHEMA, markerCount: modelOrMarkers.length, mode: normalized.mode, nodeLabelMode: normalized.nodeLabelMode };
+        return {
+          markers: modelOrMarkers,
+          diagnostics: [],
+          stats,
+          sidecar: buildCaesarAnnotationSidecar({ markers: modelOrMarkers, diagnostics: [], stats }, normalized),
+        };
+      })()
     : createCaesarAnnotationMarkers(modelOrMarkers, normalized);
 
   const object = normalized.mergeMarkers
@@ -375,10 +483,18 @@ export function buildCaesarAnnotationCoreObject(modelOrMarkers = {}, options = {
     caesarAnnotationCoreMode: normalized.mode,
     caesarAnnotationStats: markerResult.stats,
     caesarAnnotationDiagnostics: markerResult.diagnostics,
+    caesarAnnotationSidecarSchema: CAESAR_ANNOTATION_SIDECAR_SCHEMA,
+    caesarAnnotationSidecar: markerResult.sidecar,
+    caesarAnnotationCallouts: markerResult.sidecar.callouts,
+    caesarAnnotationNodeCalloutMap: markerResult.sidecar.nodeCalloutMap,
   });
 
   const geometrySummary = summarizeCaesarAnnotationGeometry(object);
   object.userData.caesarAnnotationGeometrySummary = geometrySummary;
+  object.userData.caesarAnnotationSidecar.stats = {
+    ...(object.userData.caesarAnnotationSidecar.stats || {}),
+    geometrySummary,
+  };
 
   if (options.assertBudget) {
     assertCaesarAnnotationGeometryContract(object, options.budget || {});
@@ -392,7 +508,12 @@ export function prepareCaesarAnnotationCoreModel(model = {}, options = {}) {
   return {
     ...model,
     caesarAnnotationCoreSchema: CAESAR_ANNOTATION_CORE_SCHEMA,
+    caesarAnnotationSidecarSchema: CAESAR_ANNOTATION_SIDECAR_SCHEMA,
     caesarAnnotationMarkers: markerResult.markers,
+    caesarAnnotationCallouts: markerResult.sidecar.callouts,
+    caesarAnnotationNodeLabels: markerResult.sidecar.nodeLabels,
+    caesarAnnotationNodeCalloutMap: markerResult.sidecar.nodeCalloutMap,
+    caesarAnnotationSidecar: markerResult.sidecar,
     caesarAnnotationCoreStats: markerResult.stats,
     caesarAnnotationCoreDiagnostics: [
       ...(model.caesarAnnotationCoreDiagnostics || []),
@@ -402,6 +523,7 @@ export function prepareCaesarAnnotationCoreModel(model = {}, options = {}) {
 }
 
 export const __private__ = {
+  buildCaesarAnnotationSidecar,
   collectIsonotes,
   collectNodePoints,
   createIsonoteMarkers,
@@ -409,4 +531,5 @@ export const __private__ = {
   inferTangent,
   markerBasis,
   normalizeIsonoteText,
+  parseSupportTokens,
 };
