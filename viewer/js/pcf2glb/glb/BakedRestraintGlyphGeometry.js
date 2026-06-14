@@ -245,36 +245,25 @@ function buildRest(group, id, pos, pipeAxis, lateral, scale, color) {
 }
 
 function buildGuide(group, id, pos, pipeAxis, lateral, scale, color) {
-  const baseCenter = pos.clone().add(UP.clone().multiplyScalar(-scale * 0.88));
-  const basis = basisFrom(pipeAxis, lateral);
-  plate(group, `${id}-guide-base-plate`, baseCenter, pipeAxis, lateral, scale, color, 1.35, 0.95);
+  // GUIDE symbol: lateral arrows only. No guide plates/jaws.
   for (const sign of [1, -1]) {
-    const jawCenter = pos.clone().add(lateral.clone().multiplyScalar(sign * scale * 0.34));
-    box(group, `${id}-guide-jaw-${sign > 0 ? 'positive' : 'negative'}`, jawCenter, new THREE.Vector3(scale * 0.12, scale * 0.86, scale * 0.15), color, basis);
-    arrow(group, `${id}-guide-axis-${sign > 0 ? 'positive' : 'negative'}`,
+    arrow(group, `${id}-guide-lateral-arrow-${sign > 0 ? 'positive' : 'negative'}`,
       pos.clone().add(lateral.clone().multiplyScalar(sign * scale * 1.05)),
-      pos.clone().add(lateral.clone().multiplyScalar(sign * scale * 0.42)),
+      pos.clone().add(lateral.clone().multiplyScalar(sign * scale * 0.26)),
       color,
-      scale * 0.035,
+      scale * 0.048,
     );
   }
 }
 
 function buildLineStop(group, id, pos, pipeAxis, lateral, scale, color) {
-  const basis = basisFrom(pipeAxis, lateral);
-  plate(group, `${id}-linestop-base-plate`, pos.clone().add(UP.clone().multiplyScalar(-scale * 0.86)), pipeAxis, lateral, scale, color, 1.25, 0.80);
+  // LINESTOP symbol: axial arrows only. No stop plates/blocks.
   for (const sign of [1, -1]) {
-    box(group, `${id}-linestop-stop-${sign > 0 ? 'positive' : 'negative'}`,
-      pos.clone().add(pipeAxis.clone().multiplyScalar(sign * scale * 0.42)),
-      new THREE.Vector3(scale * 0.18, scale * 0.82, scale * 0.60),
+    arrow(group, `${id}-linestop-axial-arrow-${sign > 0 ? 'positive' : 'negative'}`,
+      pos.clone().add(pipeAxis.clone().multiplyScalar(sign * scale * 1.10)),
+      pos.clone().add(pipeAxis.clone().multiplyScalar(sign * scale * 0.26)),
       color,
-      basis,
-    );
-    arrow(group, `${id}-linestop-axis-${sign > 0 ? 'positive' : 'negative'}`,
-      pos.clone().add(pipeAxis.clone().multiplyScalar(sign * scale * 1.12)).add(lateral.clone().multiplyScalar(scale * 0.22)),
-      pos.clone().add(pipeAxis.clone().multiplyScalar(sign * scale * 0.55)).add(lateral.clone().multiplyScalar(scale * 0.22)),
-      color,
-      scale * 0.040,
+      scale * 0.052,
     );
   }
 }
@@ -310,11 +299,10 @@ function buildHanger(group, id, pos, pipeAxis, lateral, scale, color) {
 }
 
 function buildUnknown(group, id, pos, pipeAxis, lateral, scale, color) {
-  const baseCenter = pos.clone().add(UP.clone().multiplyScalar(-scale * 0.72));
-  plate(group, `${id}-unknown-base-plate`, baseCenter, pipeAxis, lateral, scale, color, 1.05, 0.70);
-  const warning = new THREE.Mesh(new THREE.OctahedronGeometry(scale * 0.22, 0), material(0xf59e0b));
+  // UNKNOWN / TYPE0 is a debug-only marker, intentionally small.
+  const warning = new THREE.Mesh(new THREE.OctahedronGeometry(scale * 0.16, 0), material(0xf59e0b));
   warning.name = `${id}-unknown-warning`;
-  warning.position.copy(pos.clone().add(UP.clone().multiplyScalar(scale * 0.45)));
+  warning.position.copy(pos.clone().add(UP.clone().multiplyScalar(scale * 0.35)));
   group.add(warning);
 }
 
@@ -354,6 +342,7 @@ function stampGlyphMetadata(target, { kind, source, axisLabel, scale, role, rend
     bmCiiRestraintVisualProfile: profile,
     supportReferenceStyle: true,
     supportReferenceStyleV4: true,
+    supportSymbolContract: (kind === 'GUIDE') ? 'lateral-arrows-only' : (kind === 'LINESTOP') ? 'axial-arrows-only' : '',
   };
 }
 
@@ -411,6 +400,7 @@ export function applyBakedRestraintGlyph(object, comp = {}, options = {}) {
     glbShape: `support-reference-v4-${kind.toLowerCase()}`,
     glbSupportVisualProfile: RESTRAINT_VISUAL_PROFILE.id,
     bmCiiRestraintVisualProfile: visualProfileMetadata({ kind, source, axisLabel, scale, role: 'baked-object-root' }),
+    supportSymbolContract: (kind === 'GUIDE') ? 'lateral-arrows-only' : (kind === 'LINESTOP') ? 'axial-arrows-only' : '',
     directionalSupportEnhanced: true,
     directionalSupportSymbolCount: markerGroup.children.length,
     supportReferenceStyle: true,
