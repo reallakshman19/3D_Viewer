@@ -46,10 +46,32 @@ export function normalizeSupportKind(value) {
   return raw;
 }
 
+function categoryFromTrace(trace = {}, extra = {}) {
+  return lower(trace.semanticCategory || trace.category || extra.category || 'other');
+}
+
+function sourceForLayer(trace = {}, extra = {}) {
+  const entity = lower(trace.entity || extra.entity);
+  const category = categoryFromTrace(trace, extra);
+
+  if (entity === 'annotation' || category === 'annotation') {
+    return lower(trace.source || extra.source || 'isonote');
+  }
+
+  if (category === 'support') {
+    return lower(trace.supportSource || trace.source || extra.source || 'generated');
+  }
+
+  // Plant geometry in the InputXML pipeline originates from InputXML, even when the
+  // selected restraint source is ISONOTE. Do not let supportSource leak into pipe,
+  // valve, flange, bend, or tee/olet layers.
+  return lower(trace.source || trace.componentSource || extra.source || 'inputxml');
+}
+
 export function layerIdsForTrace(trace = {}, extra = {}) {
   const entity = lower(trace.entity || extra.entity);
-  const category = lower(trace.semanticCategory || trace.category || extra.category || 'other');
-  const source = lower(trace.supportSource || trace.source || extra.source || 'generated');
+  const category = categoryFromTrace(trace, extra);
+  const source = sourceForLayer(trace, extra);
   const kind = normalizeSupportKind(trace.supportKind || trace.kind || extra.supportKind || extra.kind);
   const ids = [];
 
@@ -83,8 +105,8 @@ export function layerIdsForTrace(trace = {}, extra = {}) {
 }
 
 export function layerMetadataFromTrace(trace = {}, extra = {}) {
-  const category = lower(trace.semanticCategory || trace.category || extra.category || 'other');
-  const source = lower(trace.supportSource || trace.source || extra.source || 'generated');
+  const category = categoryFromTrace(trace, extra);
+  const source = sourceForLayer(trace, extra);
   const supportKind = normalizeSupportKind(trace.supportKind || trace.kind || extra.supportKind || extra.kind);
   return {
     schema: BM_CII_LAYER_SCHEMA,
@@ -92,6 +114,7 @@ export function layerMetadataFromTrace(trace = {}, extra = {}) {
     source,
     supportKind,
     axis: upper(trace.axis || trace.direction || trace.restraintAxis || extra.axis || extra.direction || ''),
+    gap: text(trace.gap || trace.restraintGap || extra.gap || ''),
     visibleDefault: extra.visibleDefault !== false,
     layerIds: layerIdsForTrace(trace, extra),
   };
@@ -119,39 +142,47 @@ export function applyGeometryLayer(object, trace = {}, extra = {}, { includeChil
   return object;
 }
 
-export function buildDefaultBmCiiLayerManifest({ supportSource = '', includeIsonote = true, includeInputXml = true } = {}) {
-  const selectedSource = lower(supportSource);
-  const layers = [
-    ['plant.pipe', 'Pipe', 'Plant Geometry', true],
-    ['plant.bend', 'Bends / Elbows', 'Plant Geometry', true],
-    ['plant.valve', 'Valves', 'Plant Geometry', true],
-    ['plant.flange', 'Flanges', 'Plant Geometry', true],
-    ['plant.tee_olet', 'Tee / Olet', 'Plant Geometry', true],
-    ['plant.other', 'Other Plant Geometry', 'Plant Geometry', true],
-    ['plant.axis', 'Axis / Triad', 'Plant Geometry', true],
-    ['plant.restraints', 'All Restraints', 'Supports / Restraints', true],
-    ['restraints.inputxml', 'InputXML Restraints', 'Supports / Restraints', includeInputXml && selectedSource !== 'isonote'],
-    ['restraints.isonote', 'ISONOTE Restraints', 'Supports / Restraints', includeIsonote && selectedSource === 'isonote'],
-    ['restraints.rest', 'REST', 'Supports / Restraints', true],
-    ['restraints.guide', 'GUIDE', 'Supports / Restraints', true],
-    ['restraints.linestop', 'LINESTOP', 'Supports / Restraints', true],
-    ['restraints.limit', 'LIMIT', 'Supports / Restraints', true],
-    ['restraints.anchor', 'ANCHOR', 'Supports / Restraints', true],
-    ['restraints.hanger', 'HANGER', 'Supports / Restraints', true],
-    ['restraints.spring', 'SPRING', 'Supports / Restraints', true],
-    ['restraints.unknown', 'UNKNOWN / TYPE0', 'Supports / Restraints', true],
-    ['axis.x', 'X-axis Restraints', 'Supports / Restraints', true],
-    ['axis.y', 'Y-axis Restraints', 'Supports / Restraints', true],
-    ['axis.z', 'Z-axis Restraints', 'Supports / Restraints', true],
-    ['annotation.all', 'All Annotations', 'Annotations', true],
-    ['annotation.callout', 'Callouts', 'Annotations', true],
-    ['annotation.isonote', 'ISONOTE Callouts', 'Annotations', true],
-    ['debug.qc', 'QC / Debug', 'Debug', false],
-  ].map(([id, label, group, defaultVisible]) => ({ id, label, group, defaultVisible }));
+function layer(id, label, group, defaultVisible = true) {
+  return { id, label, group, defaultVisible };
+}
 
+export function buildDefaultBmCiiLayerManifest({ supportSource = '' } = {}) {
+  const selectedSupportSource = lower(supportSource);
   return {
     schema: BM_CII_LAYER_MANIFEST_SCHEMA,
-    supportSource: selectedSource,
-    layers,
+    layers: [
+      layer('plant.pipe', 'Pipe', 'Plant Geometry'),
+      layer('plant.bend', 'Bends', 'Plant Geometry'),
+      layer('plant.valve', 'Valves', 'Plant Geometry'),
+      layer('plant.flange', 'Flanges', 'Plant Geometry'),
+      layer('plant.tee_olet', 'Tee / Olet', 'Plant Geometry'),
+      layer('plant.restraints', 'Restraints', 'Supports / Restraints'),
+      layer('plant.axis', 'Axis / Triad', 'Plant Geometry'),
+      layer('plant.other', 'Other Geometry', 'Plant Geometry'),
+
+      layer('restraints.inputxml', 'InputXML Restraints', 'Supports / Restraints', selectedSupportSource !== 'isonote'),
+      layer('restraints.isonote', 'ISONOTE Restraints', 'Supports / Restraints', selectedSupportSource === 'isonote'),
+      layer('restraints.rest', 'REST', 'Supports / Restraints'),
+      layer('restraints.guide', 'GUIDE', 'Supports / Restraints'),
+      layer('restraints.linestop', 'LINESTOP', 'Supports / Restraints'),
+      layer('restraints.limit', 'LIMIT', 'Supports / Restraints'),
+      layer('restraints.anchor', 'ANCHOR', 'Supports / Restraints'),
+      layer('restraints.hanger', 'HANGER', 'Supports / Restraints'),
+      layer('restraints.spring', 'SPRING', 'Supports / Restraints'),
+      layer('restraints.unknown', 'UNKNOWN / TYPE0', 'Supports / Restraints'),
+
+      layer('axis.x', 'X Axis', 'Direction / Axis'),
+      layer('axis.y', 'Y Axis', 'Direction / Axis'),
+      layer('axis.z', 'Z Axis', 'Direction / Axis'),
+
+      layer('annotation.all', 'Annotations', 'Annotations'),
+      layer('annotation.callout', 'Callouts', 'Annotations'),
+      layer('annotation.isonote', 'ISONOTE Callouts', 'Annotations'),
+
+      layer('source.inputxml', 'Source: InputXML', 'Source'),
+      layer('source.isonote', 'Source: ISONOTE', 'Source'),
+      layer('source.generated', 'Source: Generated', 'Source'),
+      layer('debug.qc', 'QC / Debug', 'Debug / QC', false),
+    ],
   };
 }
