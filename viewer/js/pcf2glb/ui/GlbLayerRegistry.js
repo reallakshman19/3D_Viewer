@@ -2,10 +2,19 @@ function userDataOf(object) {
   return object?.userData || {};
 }
 
+function normalizeLayerIds(ids) {
+  return Array.isArray(ids) ? ids.map(String).filter(Boolean) : [];
+}
+
 export function layerIdsOf(object) {
   const data = userDataOf(object);
   const ids = data.bmCiiLayer?.layerIds || data.bmCiiLayerIds || data.extras?.bmCiiLayer?.layerIds || [];
-  return Array.isArray(ids) ? ids.filter(Boolean) : [];
+  return normalizeLayerIds(ids);
+}
+
+function objectLayerMeta(object) {
+  const data = userDataOf(object);
+  return data.bmCiiLayer || data.extras?.bmCiiLayer || null;
 }
 
 export function layerManifestOf(gltfOrScene) {
@@ -28,7 +37,7 @@ export function layerManifestOf(gltfOrScene) {
         id,
         label: labelFromLayerId(id),
         group: groupFromLayerId(id),
-        defaultVisible: true,
+        defaultVisible: id !== 'restraints.unknown' && id !== 'debug.qc',
       })),
     };
   }
@@ -55,23 +64,58 @@ export function createLayerStateFromManifest(manifest = {}) {
   return state;
 }
 
+function hasAny(ids, predicate) {
+  for (const id of ids) if (predicate(id)) return true;
+  return false;
+}
+
+function hasLayer(ids, id) {
+  return ids.has(id);
+}
+
+function isRestraintObject(ids, meta = {}) {
+  return hasLayer(ids, 'plant.restraints')
+    || hasAny(ids, (id) => id.startsWith('restraints.'))
+    || meta.category === 'support';
+}
+
+function isAnnotationObject(ids, meta = {}) {
+  return hasLayer(ids, 'annotation.all')
+    || hasAny(ids, (id) => id.startsWith('annotation.'))
+    || meta.category === 'annotation';
+}
+
 export function isObjectVisibleByLayerState(object, state = {}) {
   const ids = new Set(layerIdsOf(object));
+  const meta = objectLayerMeta(object) || {};
   if (ids.size === 0) return true;
 
-  // Group AND semantics for restraints: semantic + source + subtype can be filtered independently.
-  if (ids.has('plant.restraints')) {
+  // Strict AND semantics for restraints. The parent semantic layer controls all
+  // restraint sublayers even if a generated GLB forgot to include plant.restraints
+  // on an individual support mesh.
+  if (isRestraintObject(ids, meta)) {
     if (state['plant.restraints'] === false) return false;
-    if (ids.has('restraints.inputxml') && state['restraints.inputxml'] === false) return false;
-    if (ids.has('restraints.isonote') && state['restraints.isonote'] === false) return false;
-    for (const id of ids) {
-      if (id.startsWith('restraints.') && id !== 'restraints.inputxml' && id !== 'restraints.isonote' && state[id] === false) return false;
-      if (id.startsWith('axis.') && state[id] === false) return false;
-    }
+
+    const hasInputXml = hasLayer(ids, 'restraints.inputxml') || meta.source === 'inputxml';
+    const hasIsonote = hasLayer(ids, 'restraints.isonote') || meta.source === 'isonote';
+    if (hasInputXml && state['restraints.inputxml'] === false) return false;
+    if (hasIsonote && state['restraints.isonote'] === false) return false;
+
+    const subtypeLayers = Array.from(ids).filter((id) => (
+      id.startsWith('restraints.')
+      && id !== 'restraints.inputxml'
+      && id !== 'restraints.isonote'
+    ));
+    for (const id of subtypeLayers) if (state[id] === false) return false;
+
+    const axisLayers = Array.from(ids).filter((id) => id.startsWith('axis.'));
+    for (const id of axisLayers) if (state[id] === false) return false;
+
     return true;
   }
 
-  if (ids.has('annotation.all')) {
+  // Strict AND semantics for annotations.
+  if (isAnnotationObject(ids, meta)) {
     if (state['annotation.all'] === false) return false;
     for (const id of ids) {
       if (id.startsWith('annotation.') && id !== 'annotation.all' && state[id] === false) return false;
@@ -121,6 +165,20 @@ function escapeHtml(value) {
     .replace(/'/g, '&#39;');
 }
 
+function sortGroupLayers(groupLayers = []) {
+  const order = [
+    'plant.pipe', 'plant.bend', 'plant.valve', 'plant.flange', 'plant.tee_olet', 'plant.restraints', 'plant.axis', 'plant.other',
+    'restraints.inputxml', 'restraints.isonote', 'restraints.rest', 'restraints.guide', 'restraints.linestop', 'restraints.limit', 'restraints.anchor', 'restraints.hanger', 'restraints.spring', 'restraints.unknown',
+    'axis.x', 'axis.y', 'axis.z',
+    'annotation.all', 'annotation.callout', 'annotation.isonote',
+  ];
+  const weight = (id) => {
+    const idx = order.indexOf(id);
+    return idx >= 0 ? idx : order.length + String(id).localeCompare('');
+  };
+  return [...groupLayers].sort((a, b) => weight(a.id) - weight(b.id));
+}
+
 export function buildLayerPanelHtml(manifest = {}) {
   const layers = manifest.layers || [];
   if (!layers.length) {
@@ -146,7 +204,7 @@ export function buildLayerPanelHtml(manifest = {}) {
       </div>`;
   for (const [group, groupLayers] of byGroup.entries()) {
     html += `<div class="bm-cii-layer-group" style="margin:10px 0 8px;"><div class="bm-cii-layer-group-title" style="font-size:10px; text-transform:uppercase; letter-spacing:.10em; color:#90acd0; margin-bottom:5px;">${escapeHtml(group)}</div>`;
-    for (const layer of groupLayers) {
+    for (const layer of sortGroupLayers(groupLayers)) {
       const checked = layer.defaultVisible === false ? '' : ' checked';
       html += `<label class="bm-cii-layer-row" style="display:flex; align-items:center; gap:7px; font-size:11px; line-height:1.35; margin:4px 0; cursor:pointer;"><input type="checkbox" data-layer-id="${escapeHtml(layer.id)}"${checked} style="accent-color:#4a9eff;"> <span>${escapeHtml(layer.label || labelFromLayerId(layer.id))}</span></label>`;
     }
