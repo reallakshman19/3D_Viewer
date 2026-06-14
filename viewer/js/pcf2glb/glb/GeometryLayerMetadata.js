@@ -113,6 +113,7 @@ export function layerMetadataFromTrace(trace = {}, extra = {}) {
   const source = sourceForLayer(trace, extra);
   const supportKind = category === 'support' ? supportKindFromTrace(trace, extra) : '';
   const axis = category === 'support' ? supportAxisFromTrace(trace, extra) : '';
+  const visibleDefault = extra.visibleDefault !== false && supportKind !== 'UNKNOWN' && supportKind !== 'TYPE0';
   return {
     schema: BM_CII_LAYER_SCHEMA,
     category,
@@ -120,7 +121,7 @@ export function layerMetadataFromTrace(trace = {}, extra = {}) {
     supportKind,
     axis,
     gap: text(trace.gap || trace.restraintGap || extra.gap || ''),
-    visibleDefault: extra.visibleDefault !== false,
+    visibleDefault,
     layerIds: layerIdsForTrace(trace, extra),
     restraintVisualProfile: category === 'support' ? RESTRAINT_VISUAL_PROFILE.id : '',
   };
@@ -183,7 +184,7 @@ export function buildDefaultBmCiiLayerManifest({ supportSource = '' } = {}) {
       layer('restraints.anchor', 'ANCHOR', 'Supports / Restraints'),
       layer('restraints.hanger', 'HANGER', 'Supports / Restraints'),
       layer('restraints.spring', 'SPRING', 'Supports / Restraints'),
-      layer('restraints.unknown', 'UNKNOWN / TYPE0', 'Supports / Restraints'),
+      layer('restraints.unknown', 'UNKNOWN / TYPE0', 'Supports / Restraints', false),
 
       layer('axis.x', 'X Axis', 'Direction / Axis'),
       layer('axis.y', 'Y Axis', 'Direction / Axis'),
@@ -195,7 +196,7 @@ export function buildDefaultBmCiiLayerManifest({ supportSource = '' } = {}) {
 
       layer('source.inputxml', 'Source: InputXML', 'Source'),
       layer('source.isonote', 'Source: ISONOTE', 'Source'),
-      layer('source.generated', 'Source: Generated', 'Source'),
+      layer('source.generated', 'Source: Generated', 'Source', false),
       layer('debug.qc', 'QC / Debug', 'Debug / QC', false),
     ],
   };
