@@ -107,6 +107,7 @@ function stampSupportMetadata(object, { source, kind, axisLabel, scale, role }) 
     bmCiiLayerIds: layerIds,
     bmCiiRestraintVisualProfile: visualProfile,
     glbSupportRuntimeRole: role,
+    supportSymbolContract: kind === 'GUIDE' ? 'lateral-arrows-only' : kind === 'LINESTOP' ? 'axial-arrows-only' : '',
   };
 }
 
@@ -205,11 +206,6 @@ function axisIndicator(pos, axisVector, axisLabel, scale) {
     scale * 0.036,
     `axis-${label}`,
   ));
-  const badge = new THREE.Mesh(new THREE.TorusGeometry(scale * 0.20, scale * 0.020, 8, 24), material(color));
-  badge.userData.glbSupportSymbolMesh = true;
-  badge.position.copy(pos.clone().add(axis.clone().multiplyScalar(scale * 0.88)));
-  orientAlongY(badge, axis);
-  group.add(badge);
   return group;
 }
 
@@ -222,38 +218,27 @@ function buildRest(group, pos, pipeAxis, lateral, scale, color) {
 }
 
 function buildGuide(group, pos, pipeAxis, lateral, scale, color) {
-  const baseCenter = pos.clone().add(UP.clone().multiplyScalar(-scale * 0.88));
-  const basis = basisFrom(pipeAxis, lateral);
-  group.add(plate(baseCenter, pipeAxis, lateral, scale, color, 1.35, 0.95));
+  // GUIDE symbol: lateral arrows only. No guide plates/jaws.
   for (const sign of [1, -1]) {
-    const jawCenter = pos.clone().add(lateral.clone().multiplyScalar(sign * scale * 0.34));
-    group.add(box(jawCenter, new THREE.Vector3(scale * 0.12, scale * 0.86, scale * 0.15), color, basis));
     group.add(arrow(
       pos.clone().add(lateral.clone().multiplyScalar(sign * scale * 1.05)),
-      pos.clone().add(lateral.clone().multiplyScalar(sign * scale * 0.42)),
+      pos.clone().add(lateral.clone().multiplyScalar(sign * scale * 0.26)),
       color,
-      scale * 0.035,
-      'guide-lateral-axis',
+      scale * 0.048,
+      'guide-lateral-arrow',
     ));
   }
 }
 
 function buildLineStop(group, pos, pipeAxis, lateral, scale, color) {
-  const basis = basisFrom(pipeAxis, lateral);
-  group.add(plate(pos.clone().add(UP.clone().multiplyScalar(-scale * 0.86)), pipeAxis, lateral, scale, color, 1.25, 0.80));
+  // LINESTOP symbol: axial arrows only. No stop plates/blocks.
   for (const sign of [1, -1]) {
-    group.add(box(
-      pos.clone().add(pipeAxis.clone().multiplyScalar(sign * scale * 0.42)),
-      new THREE.Vector3(scale * 0.18, scale * 0.82, scale * 0.60),
-      color,
-      basis,
-    ));
     group.add(arrow(
-      pos.clone().add(pipeAxis.clone().multiplyScalar(sign * scale * 1.12)).add(lateral.clone().multiplyScalar(scale * 0.22)),
-      pos.clone().add(pipeAxis.clone().multiplyScalar(sign * scale * 0.55)).add(lateral.clone().multiplyScalar(scale * 0.22)),
+      pos.clone().add(pipeAxis.clone().multiplyScalar(sign * scale * 1.10)),
+      pos.clone().add(pipeAxis.clone().multiplyScalar(sign * scale * 0.26)),
       color,
-      scale * 0.04,
-      'linestop-axial-axis',
+      scale * 0.052,
+      'linestop-axial-arrow',
     ));
   }
 }
@@ -289,22 +274,13 @@ function buildHanger(group, pos, pipeAxis, lateral, scale, color) {
   const pipeTop = pos.clone().add(UP.clone().multiplyScalar(scale * 0.15));
   group.add(plate(topCenter, pipeAxis, lateral, scale, color, 1.10, 0.85));
   group.add(cylinderBetween(topCenter.clone().add(UP.clone().multiplyScalar(-scale * 0.08)), pipeTop, color, scale * 0.028, 12));
-  for (let i = 0; i < 3; i += 1) {
-    const coil = new THREE.Mesh(new THREE.TorusGeometry(scale * 0.16, scale * 0.016, 8, 24), material(color));
-    coil.userData.glbSupportSymbolMesh = true;
-    coil.position.copy(pos.clone().add(UP.clone().multiplyScalar(scale * (0.48 + i * 0.16))));
-    orientAlongY(coil, UP);
-    group.add(coil);
-  }
   group.add(arrow(topCenter.clone().add(UP.clone().multiplyScalar(-scale * 0.12)), pipeTop, color, scale * 0.035, 'hanger-load-axis'));
 }
 
 function buildUnknown(group, pos, pipeAxis, lateral, scale, color) {
-  const baseCenter = pos.clone().add(UP.clone().multiplyScalar(-scale * 0.72));
-  group.add(plate(baseCenter, pipeAxis, lateral, scale, color, 1.05, 0.70));
-  const warning = new THREE.Mesh(new THREE.OctahedronGeometry(scale * 0.22, 0), material(0xf59e0b));
+  const warning = new THREE.Mesh(new THREE.OctahedronGeometry(scale * 0.16, 0), material(0xf59e0b));
   warning.userData.glbSupportSymbolMesh = true;
-  warning.position.copy(pos.clone().add(UP.clone().multiplyScalar(scale * 0.45)));
+  warning.position.copy(pos.clone().add(UP.clone().multiplyScalar(scale * 0.35)));
   group.add(warning);
 }
 
@@ -315,22 +291,23 @@ function buildAnchor(group, pos, pipeAxis, lateral, scale, color) {
   }
 }
 
-function disposeGroup(root) {
-  root.traverse((object) => {
-    object.geometry?.dispose?.();
-    const materials = Array.isArray(object.material) ? object.material : (object.material ? [object.material] : []);
-    materials.forEach((m) => m?.dispose?.());
+function disposeGroup(group) {
+  group.traverse((node) => {
+    if (!node.isMesh) return;
+    node.geometry?.dispose?.();
+    if (Array.isArray(node.material)) node.material.forEach((mat) => mat?.dispose?.());
+    else node.material?.dispose?.();
   });
 }
 
 function isBakedSupportReference(object) {
-  const data = object?.userData || {};
+  const data = object.userData || {};
   const layer = data.bmCiiLayer || {};
-  const name = `${object?.name || ''} ${data.glbShape || ''}`.toUpperCase();
+  const name = String(object.name || '').toUpperCase();
   return String(data.glbShape || '').startsWith('support-reference-v2-')
     || layer.category === 'support'
     || layer.layerIds?.includes?.('plant.restraints')
-    || name.includes('BM_CII_RESTRAINT_VISUAL')
+    || name.includes('BM_CII_RESTRAINT')
     || name.includes('SUPPORT_ARROW_V7');
 }
 
@@ -347,9 +324,7 @@ function computeSymbolScale(root, options = {}) {
   const box = new THREE.Box3().setFromObject(root);
   const diagonal = box.isEmpty() ? 1 : box.getSize(new THREE.Vector3()).length();
   const scaleMultiplier = Number(options.scaleMultiplier) > 0 ? Number(options.scaleMultiplier) : 1.0;
-  if (diagonal < 50) {
-    return Math.max(0.24, Math.min(0.90, diagonal * 0.082)) * scaleMultiplier;
-  }
+  if (diagonal < 50) return Math.max(0.24, Math.min(0.90, diagonal * 0.082)) * scaleMultiplier;
   return Math.max(24, Math.min(200, diagonal * 0.050)) * scaleMultiplier;
 }
 
@@ -435,8 +410,10 @@ export function applyGlbSupportSymbols(root, scene, options = {}) {
         renderGlyph: `runtime-${RESTRAINT_VISUAL_PROFILE.id}-${kind.toLowerCase()}`,
         renderScale: scale,
         visualProfile: RESTRAINT_VISUAL_PROFILE.id,
+        supportSymbolContract: kind === 'GUIDE' ? 'lateral-arrows-only' : kind === 'LINESTOP' ? 'axial-arrows-only' : '',
       },
       bmCiiRestraintVisualProfile: visualProfileMetadata({ kind, source, axisLabel, scale, role: 'runtime-symbol-root' }),
+      supportSymbolContract: kind === 'GUIDE' ? 'lateral-arrows-only' : kind === 'LINESTOP' ? 'axial-arrows-only' : '',
     };
     stampSupportMetadata(group, { source, kind, axisLabel, scale, role: 'runtime-symbol-root' });
 
@@ -468,6 +445,6 @@ export function applyGlbSupportSymbols(root, scene, options = {}) {
   const created = symbolRoot.children.length;
   if (created > 0) scene.add(symbolRoot);
 
-  console.info('[glb-support-symbols]', { created, scanned, hidden, scale, profile: RESTRAINT_VISUAL_PROFILE.id });
+  console.info('[glb-support-symbols]', { created, scanned, hidden, scale, profile: RESTRAINT_VISUAL_PROFILE.id, guide: 'lateral-arrows-only', linestop: 'axial-arrows-only' });
   return { created, scanned, hidden, scale, profile: RESTRAINT_VISUAL_PROFILE.id };
 }
