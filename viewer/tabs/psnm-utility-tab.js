@@ -3,7 +3,7 @@ import './psnm-utility/psnm-lite-persistence-transform-preview.js?v=20260609-lit
 import { renderPSNM_UtilityTab as renderPSNMCoreUtilityTab } from './psnm-utility-tab-v6.js?v=20260612-psnm-axis-engine-1';
 import { installPsnmAxisAutoAnchorAddon } from './psnm-utility/psnm-axis-auto-anchor-addon.js?v=20260612-axis-auto-anchor-addon-1';
 import { installPsnmAnchorPersistenceAddon } from './psnm-utility/psnm-anchor-persistence-addon.js?v=20260613-anchor-persistence-1';
-import { installPsMappingUtilityTile } from './ps-mapping-utility-tab-support-prefix-ui.js?v=20260614-support-prefix-ui-1';
+import { installPsMappingUtilityTile } from './ps-mapping-utility-tab-line-family-playground-ui.js?v=20260614-line-family-playground-1';
 import { installPsMappingModalBridge } from './ps-mapping-utility/ps-mapping-modal-bridge.js?v=20260611-modal-bridge-1';
 import './ps-mapping-utility/ps-mapping-mandatory-audit-shim.js?v=20260610-psmap-audit-tag-1';
 
