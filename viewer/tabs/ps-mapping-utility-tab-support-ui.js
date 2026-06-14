@@ -1,4 +1,9 @@
 import { installPsMappingUtilityTile as installBasePsMappingUtilityTile } from './ps-mapping-utility-tab.js?v=20260611-psmap-support-gap-rules-1';
+import {
+  evaluateSupportGapComparison,
+  extractTypedSupportGaps,
+  supportTypesFromText,
+} from './ps-mapping-utility/ps-mapping-support-gap-logic.js?v=20260614-support-parent-gap-1';
 
 const DEFAULT_SUPPORT_KEYWORD_RULES_TEXT = `Pattern	Canonical
 REST	REST
@@ -109,7 +114,7 @@ function patchSupportConfigControls() {
         <label class="psmap-check">
           <input type="checkbox" data-psmap-setup="enableSupportGapComparison" ${supportOptionState.enableSupportGapComparison ? 'checked' : ''}>
           Compare Support Gap
-          <span class="psmap-help" title="Compares Table-2 Support Gap against Table-1C [GUIDE GAP=..mm] for GUIDE supports.">i</span>
+          <span class="psmap-help" title="Support gaps are child properties. GUIDE GAP is compared only when GUIDE exists in both Table-1 and Table-2. LINE STOP GAP is compared only when LINE_STOP exists in both Table-1 and Table-2.">i</span>
         </label>
         <div class="psmap-field">
           <label>Gap tolerance mm</label>
@@ -154,7 +159,8 @@ function readCell(row, labels, label) {
 function setCell(row, labels, label, value) {
   const index = labels.indexOf(label);
   if (index < 0) return;
-  row.children[index].textContent = value == null ? '' : String(value);
+  const next = value == null ? '' : String(value);
+  if (row.children[index].textContent !== next) row.children[index].textContent = next;
 }
 
 function addColumn(info, label, afterLabel, valueFn, groupLabel = '') {
@@ -169,8 +175,6 @@ function addColumn(info, label, afterLabel, valueFn, groupLabel = '') {
   const th = document.createElement('th');
   th.textContent = label;
   info.table.querySelector('thead tr.psmap-labels')?.children[insertAfter]?.after(th);
-  const nextLabels = [...info.labels];
-  nextLabels.splice(insertAfter + 1, 0, label);
   for (const row of info.tbody.querySelectorAll('tr')) {
     const td = document.createElement('td');
     td.className = row.children[insertAfter]?.className || 'group-source';
@@ -180,40 +184,34 @@ function addColumn(info, label, afterLabel, valueFn, groupLabel = '') {
   info.labels.splice(insertAfter + 1, 0, label);
 }
 
+function supportLabel(type) {
+  return type === 'LINE_STOP' || type === 'STOP' ? 'LINE STOP' : String(type || '').replace(/_/g, ' ');
+}
+
 function splitSupportList(value) {
   return String(value || '')
     .split(/[;,|/]+/)
     .map((item) => item.trim())
     .filter(Boolean)
-    .map((item) => item.toUpperCase().replace(/^LINE[_\s-]*STOP$/, 'STOP'));
-}
-
-function extractFirstMm(value) {
-  const match = String(value || '').replace(/,/g, '').match(/(-?\d+(?:\.\d+)?)\s*(?:mm)?/i);
-  return match ? Number(match[1]) : null;
-}
-
-function extractGuideGapMm(text) {
-  const source = String(text || '');
-  const explicit = source.match(/GUIDE\s*GAP\s*=?\s*(-?\d+(?:\.\d+)?)\s*MM/i);
-  if (explicit) return Number(explicit[1]);
-  const bracket = source.match(/\[[^\]]*GAP\s*=?\s*(-?\d+(?:\.\d+)?)\s*MM[^\]]*\]/i);
-  return bracket ? Number(bracket[1]) : null;
-}
-
-function computeGapMatch(supportGapRaw, isonote, dtxr = '') {
-  const t2Gap = extractFirstMm(supportGapRaw);
-  const t1Gap = extractGuideGapMm(isonote);
-  const guide = /\bGUIDE\b/i.test(String(dtxr || '')) || t2Gap != null;
-  if (!guide && t2Gap == null) return '';
-  if (t2Gap != null && t1Gap != null) return Math.abs(t2Gap - t1Gap) <= Number(supportOptionState.supportGapToleranceMm || 0) ? 'GAP_EXACT' : 'GAP_CONFLICT';
-  if (guide && t2Gap == null && t1Gap != null) return 'GAP_MISSING_TABLE2';
-  if (t2Gap != null && t1Gap == null) return 'GAP_MISSING_TABLE1';
-  return '';
+    .map((item) => item.toUpperCase().replace(/^LINE[_\s-]*STOP$/, 'LINE_STOP').replace(/^STOP$/, 'LINE_STOP'));
 }
 
 function parseRawColumns(value) {
   try { return JSON.parse(String(value || '{}')); } catch { return {}; }
+}
+
+function readSupportGapRawFromRawColumns(raw) {
+  const cols = raw || {};
+  for (const [key, value] of Object.entries(cols)) {
+    const normalized = String(key).toLowerCase().replace(/[\s_-]+/g, ' ').trim();
+    if (normalized === 'support gap' || normalized === 'guide gap' || normalized === 'line stop gap' || normalized === 'stop gap' || normalized === 'gap') return value;
+  }
+  return '';
+}
+
+function firstGapValue(supportGapRaw, dtxr) {
+  const gaps = extractTypedSupportGaps(supportGapRaw, supportTypesFromText(dtxr), { fieldFallback: true });
+  return gaps.GUIDE ?? gaps.LINE_STOP ?? '';
 }
 
 function readCt2ModelMap() {
@@ -224,8 +222,10 @@ function readCt2ModelMap() {
     const psno = readCell(row, info.labels, 'PSNO_Model');
     const dtxr = readCell(row, info.labels, 'DTXR');
     const raw = parseRawColumns(readCell(row, info.labels, 'Raw Columns'));
-    const supportGapRaw = raw['Support Gap'] || raw['support gap'] || raw['Guide Gap'] || raw.Gap || '';
-    if (psno) map.set(psno, { dtxr, supportGapRaw });
+    const supportGapRaw = readCell(row, info.labels, 'Support Gap') || readSupportGapRawFromRawColumns(raw);
+    if (!psno) continue;
+    if (!map.has(psno)) map.set(psno, []);
+    map.get(psno).push({ psno, dtxr, supportGapRaw, supportGapMm: firstGapValue(supportGapRaw, dtxr) });
   }
   return map;
 }
@@ -235,21 +235,8 @@ function patchCt2SupportGapColumn() {
   if (!info) return;
   addColumn(info, 'Support Gap', 'DTXR', (row, labels) => {
     const raw = parseRawColumns(readCell(row, labels, 'Raw Columns'));
-    return raw['Support Gap'] || raw['support gap'] || raw['Guide Gap'] || raw.Gap || '';
+    return readSupportGapRawFromRawColumns(raw);
   }, 'Support');
-}
-
-function patchValidatorGapColumns() {
-  const info = getTableInfo('validator');
-  if (!info) return;
-  const modelMap = readCt2ModelMap();
-  addColumn(info, 'T2 Support Gap', 'T2 DTXR', (row, labels) => modelMap.get(readCell(row, labels, 'PSNO_Model'))?.supportGapRaw || '', 'Table-2 Source');
-  addColumn(info, 'Gap Match', 'Support Match', (row, labels) => {
-    const psno = readCell(row, labels, 'PSNO_Model');
-    const model = modelMap.get(psno) || {};
-    const note = readCoverageIsonote(readCell(row, labels, 'Node'));
-    return computeGapMatch(model.supportGapRaw, note, model.dtxr);
-  }, 'Match Basis');
 }
 
 function readCoverageIsonote(node) {
@@ -261,16 +248,69 @@ function readCoverageIsonote(node) {
   return '';
 }
 
+function rowSupportContext(row, labels, fallbackIsonote = '') {
+  return [
+    readCell(row, labels, 'T2 DTXR'),
+    readCell(row, labels, 'T2 Keywords'),
+    readCell(row, labels, 'T2 Support Types'),
+    readCell(row, labels, 'Support Match'),
+    fallbackIsonote,
+  ].filter(Boolean).join(' ');
+}
+
+function modelScore(model, rowContext) {
+  const modelTypes = supportTypesFromText(model?.dtxr || '');
+  const rowTypes = supportTypesFromText(rowContext || '');
+  let score = 0;
+  for (const type of modelTypes) if (rowTypes.has(type)) score += 10;
+  if (model?.dtxr && String(rowContext || '').toUpperCase().includes(String(model.dtxr).toUpperCase())) score += 100;
+  return score;
+}
+
+function resolveModel(psno, row, labels, modelMap, isonote = '') {
+  const models = modelMap.get(psno) || [];
+  if (!models.length) return {};
+  if (models.length === 1) return models[0];
+  const context = rowSupportContext(row, labels, isonote);
+  return [...models].sort((a, b) => modelScore(b, context) - modelScore(a, context))[0] || models[0];
+}
+
+function computeGapMatch(supportGapRaw, isonote, dtxr = '') {
+  return evaluateSupportGapComparison({
+    table1Text: isonote,
+    table2Text: dtxr,
+    table2GapRaw: supportGapRaw,
+    tolerance: supportOptionState.supportGapToleranceMm || 0,
+    enabled: supportOptionState.enableSupportGapComparison !== false,
+  }).status;
+}
+
+function patchValidatorGapColumns() {
+  const info = getTableInfo('validator');
+  if (!info) return;
+  const modelMap = readCt2ModelMap();
+  addColumn(info, 'T2 Support Gap', 'T2 DTXR', (row, labels) => {
+    const note = readCoverageIsonote(readCell(row, labels, 'Node'));
+    return resolveModel(readCell(row, labels, 'PSNO_Model'), row, labels, modelMap, note)?.supportGapRaw || '';
+  }, 'Table-2 Source');
+  addColumn(info, 'Gap Match', 'Support Match', (row, labels) => {
+    const psno = readCell(row, labels, 'PSNO_Model');
+    const note = readCoverageIsonote(readCell(row, labels, 'Node'));
+    const model = resolveModel(psno, row, labels, modelMap, note);
+    return computeGapMatch(model.supportGapRaw, note, model.dtxr);
+  }, 'Match Basis');
+}
+
 function patchCandidateGapColumns() {
   const info = getTableInfo('candidates');
   if (!info) return;
   const modelMap = readCt2ModelMap();
-  addColumn(info, 'T2 DTXR', 'T2 Line Family', (row, labels) => modelMap.get(readCell(row, labels, 'PSNO_Model'))?.dtxr || '', 'Table-2 Source');
-  addColumn(info, 'T2 Support Gap', 'T2 DTXR', (row, labels) => modelMap.get(readCell(row, labels, 'PSNO_Model'))?.supportGapRaw || '', 'Table-2 Source');
+  addColumn(info, 'T2 DTXR', 'T2 Line Family', (row, labels) => resolveModel(readCell(row, labels, 'PSNO_Model'), row, labels, modelMap, readCell(row, labels, 'ISONOTE'))?.dtxr || '', 'Table-2 Source');
+  addColumn(info, 'T2 Support Gap', 'T2 DTXR', (row, labels) => resolveModel(readCell(row, labels, 'PSNO_Model'), row, labels, modelMap, readCell(row, labels, 'ISONOTE'))?.supportGapRaw || '', 'Table-2 Source');
   addColumn(info, 'Gap Match', 'Support Match', (row, labels) => {
     const psno = readCell(row, labels, 'PSNO_Model');
-    const model = modelMap.get(psno) || {};
     const isonote = readCell(row, labels, 'ISONOTE');
+    const model = resolveModel(psno, row, labels, modelMap, isonote);
     return computeGapMatch(model.supportGapRaw, isonote, model.dtxr || readCell(row, labels, 'T2 DTXR'));
   }, 'Match Basis');
 }
@@ -286,7 +326,28 @@ function makeAuditRowsFromCoverage() {
     const table1PsNo = readCell(tr, info.labels, 'Table-1 PS No');
     const missingMasterKeywords = readCell(tr, info.labels, 'Missing Master Keywords');
     for (const missing of splitSupportList(missingMasterKeywords)) {
-      const row = { node, candidateNode: node, table1PsNo, tag: readCell(tr, info.labels, 'Tag'), source: readCell(tr, info.labels, 'Source'), lineFamily: readCell(tr, info.labels, 'Line Family'), pipeSizeRaw: readCell(tr, info.labels, 'Pipe Size'), derivedDn: readCell(tr, info.labels, 'Derived DN'), isonote: readCell(tr, info.labels, 'ISONOTE'), masterKeywords: readCell(tr, info.labels, 'Master Keywords'), missing, supportMatch: `${missing} missing`, supportBasis: 'SUPPORT_MISSING_MASTER_REQUIRED', finalStatus: 'SUPPORT_MISSING_REQUIRED', confidence: 'AUDIT', confidenceScore: '0', warnings: `SUPPORT_MISSING_REQUIRED: ${missing}`, action: `Add Table-2 DTXR/model support row for ${missing}, or revise Table-1C ISONOTE if ${missing} is not required.`, note: `${missing} missing from mapped Table-2 DTXR for Node ${node || '-'}.` };
+      const missingText = supportLabel(missing);
+      const row = {
+        node,
+        candidateNode: node,
+        table1PsNo,
+        tag: readCell(tr, info.labels, 'Tag'),
+        source: readCell(tr, info.labels, 'Source'),
+        lineFamily: readCell(tr, info.labels, 'Line Family'),
+        pipeSizeRaw: readCell(tr, info.labels, 'Pipe Size'),
+        derivedDn: readCell(tr, info.labels, 'Derived DN'),
+        isonote: readCell(tr, info.labels, 'ISONOTE'),
+        masterKeywords: readCell(tr, info.labels, 'Master Keywords'),
+        missing,
+        supportMatch: `${missingText} missing`,
+        supportBasis: 'SUPPORT_MISSING_MASTER_REQUIRED',
+        finalStatus: 'SUPPORT_MISSING_REQUIRED',
+        confidence: 'AUDIT',
+        confidenceScore: '0',
+        warnings: `SUPPORT_MISSING_REQUIRED: ${missingText}`,
+        action: `Add ${missingText} in Table-2 for this PS No.`,
+        note: `${missingText} missing from mapped Table-2 DTXR for Node ${node || '-'}. Table-1 is treated as correct.`,
+      };
       const key = auditKey(row);
       if (seen.has(key)) continue;
       seen.add(key);
