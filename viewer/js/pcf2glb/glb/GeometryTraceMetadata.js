@@ -1,3 +1,5 @@
+import { withGeometryLayer } from './GeometryLayerMetadata.js';
+
 export const BM_CII_GEOMETRY_TRACE_SCHEMA = 'bm-cii-geometry-trace/v1';
 
 function text(value) {
@@ -41,6 +43,37 @@ function fromNodeValue(component = {}, attrs = {}) {
 
 function toNodeValue(component = {}, attrs = {}) {
   return firstNonEmpty(component.toNode, component.to, component.node2, attrs.TO_NODE, attrs.ToNode, attrs.NODE2, component.node);
+}
+
+function axisValue(component = {}, attrs = {}, extra = {}) {
+  return firstNonEmpty(
+    extra.axis,
+    extra.direction,
+    extra.restraintAxis,
+    component.axis,
+    component.direction,
+    component.restraintAxis,
+    attrs.AXIS,
+    attrs.Axis,
+    attrs.DIRECTION,
+    attrs.Direction,
+    attrs.RESTRAINT_AXIS,
+    attrs['RESTRAINT-AXIS'],
+  );
+}
+
+function gapValue(component = {}, attrs = {}, extra = {}) {
+  return firstNonEmpty(
+    extra.gap,
+    component.gap,
+    component.gapMm,
+    component.restraintGap,
+    attrs.GAP,
+    attrs.Gap,
+    attrs.GAP_MM,
+    attrs['GAP-MM'],
+    attrs.RESTRAINT_GAP,
+  );
 }
 
 export function semanticCategoryFromComponent(component = {}, extra = {}) {
@@ -130,6 +163,8 @@ export function componentGeometryTrace(component = {}, extra = {}, context = {})
     lineNo: firstNonEmpty(context.lineNo, extra.lineNo, component.lineNo, attrs.LINE_NO, attrs.LineNo, attrs.Pipeline, component.pipelineRef),
     supportSource,
     supportKind: supportKind ? upper(supportKind) : '',
+    axis: axisValue(component, attrs, extra),
+    gap: gapValue(component, attrs, extra),
   };
 }
 
@@ -159,7 +194,7 @@ export function annotationGeometryTrace({ callouts = [], nodeCalloutMap = {}, ma
 
 export function withGeometryTrace(userData = {}, trace = {}) {
   if (!trace || typeof trace !== 'object') return { ...(userData || {}) };
-  return {
+  return withGeometryLayer({
     ...(userData || {}),
     bmCiiTraceSchema: BM_CII_GEOMETRY_TRACE_SCHEMA,
     bmCiiTrace: trace,
@@ -172,7 +207,9 @@ export function withGeometryTrace(userData = {}, trace = {}) {
     sourceToNode: trace.toNode || userData.sourceToNode || '',
     supportSource: trace.supportSource || userData.supportSource || '',
     supportKind: trace.supportKind || userData.supportKind || '',
-  };
+    restraintAxis: trace.axis || userData.restraintAxis || '',
+    restraintGap: trace.gap || userData.restraintGap || '',
+  }, trace);
 }
 
 export function applyGeometryTrace(object, trace, { includeChildren = true } = {}) {
