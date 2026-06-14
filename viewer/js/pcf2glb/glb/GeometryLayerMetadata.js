@@ -1,3 +1,10 @@
+import {
+  normalizeRestraintAxisLabel,
+  normalizeRestraintKind,
+  layerIdsForRestraintSupport,
+  RESTRAINT_VISUAL_PROFILE,
+} from './RestraintVisualProfile.js';
+
 export const BM_CII_LAYER_SCHEMA = 'bm-cii-layer/v1';
 export const BM_CII_LAYER_MANIFEST_SCHEMA = 'bm-cii-layer-manifest/v1';
 
@@ -25,25 +32,15 @@ function unique(values) {
 }
 
 function axisLayer(axis) {
-  const raw = upper(axis);
-  if (raw === 'X' || raw.includes('DX') || raw.includes('+X') || raw.includes('-X')) return 'axis.x';
-  if (raw === 'Y' || raw.includes('DY') || raw.includes('+Y') || raw.includes('-Y')) return 'axis.y';
-  if (raw === 'Z' || raw.includes('DZ') || raw.includes('+Z') || raw.includes('-Z')) return 'axis.z';
+  const raw = normalizeRestraintAxisLabel(axis);
+  if (raw.includes('X')) return 'axis.x';
+  if (raw.includes('Y')) return 'axis.y';
+  if (raw.includes('Z')) return 'axis.z';
   return '';
 }
 
 export function normalizeSupportKind(value) {
-  const raw = upper(value).replace(/[\s-]+/g, '_');
-  if (!raw) return '';
-  if (raw.includes('LINESTOP') || raw.includes('LINE_STOP') || raw.includes('LIMIT_STOP')) return 'LINESTOP';
-  if (raw.includes('GUIDE')) return 'GUIDE';
-  if (raw.includes('LIMIT')) return 'LIMIT';
-  if (raw.includes('ANCHOR') || raw === 'ANC') return 'ANCHOR';
-  if (raw.includes('HANGER')) return 'HANGER';
-  if (raw.includes('SPRING')) return 'SPRING';
-  if (raw.includes('REST') || raw.includes('SUPPORT') || raw.includes('SHOE')) return 'REST';
-  if (raw.includes('TYPE0') || raw === '0' || raw.includes('UNKNOWN')) return 'UNKNOWN';
-  return raw;
+  return normalizeRestraintKind(value);
 }
 
 function categoryFromTrace(trace = {}, extra = {}) {
@@ -83,13 +80,11 @@ export function layerIdsForTrace(trace = {}, extra = {}) {
   }
 
   if (category === 'support') {
-    ids.push('plant.restraints');
-    ids.push(source === 'isonote' ? 'restraints.isonote' : source === 'inputxml' ? 'restraints.inputxml' : `restraints.${cleanLayerId(source || 'generated')}`);
-    if (source) ids.push(`source.${cleanLayerId(source)}`);
-    if (kind) ids.push(`restraints.${cleanLayerId(kind)}`);
-    const axis = axisLayer(trace.axis || trace.direction || trace.restraintAxis || extra.axis || extra.direction);
-    if (axis) ids.push(axis);
-    return unique(ids);
+    const axis = normalizeRestraintAxisLabel(trace.axis || trace.direction || trace.restraintAxis || extra.axis || extra.direction);
+    return unique([
+      ...layerIdsForRestraintSupport({ source, kind, axisLabel: axis }),
+      source ? `source.${cleanLayerId(source)}` : '',
+    ]);
   }
 
   if (category === 'pipe') ids.push('plant.pipe');
@@ -108,15 +103,17 @@ export function layerMetadataFromTrace(trace = {}, extra = {}) {
   const category = categoryFromTrace(trace, extra);
   const source = sourceForLayer(trace, extra);
   const supportKind = normalizeSupportKind(trace.supportKind || trace.kind || extra.supportKind || extra.kind);
+  const axis = normalizeRestraintAxisLabel(trace.axis || trace.direction || trace.restraintAxis || extra.axis || extra.direction || '');
   return {
     schema: BM_CII_LAYER_SCHEMA,
     category,
     source,
     supportKind,
-    axis: upper(trace.axis || trace.direction || trace.restraintAxis || extra.axis || extra.direction || ''),
+    axis,
     gap: text(trace.gap || trace.restraintGap || extra.gap || ''),
     visibleDefault: extra.visibleDefault !== false,
     layerIds: layerIdsForTrace(trace, extra),
+    restraintVisualProfile: category === 'support' ? RESTRAINT_VISUAL_PROFILE.id : '',
   };
 }
 
@@ -150,6 +147,7 @@ export function buildDefaultBmCiiLayerManifest({ supportSource = '' } = {}) {
   const selectedSupportSource = lower(supportSource);
   return {
     schema: BM_CII_LAYER_MANIFEST_SCHEMA,
+    restraintVisualProfile: RESTRAINT_VISUAL_PROFILE.id,
     layers: [
       layer('plant.pipe', 'Pipe', 'Plant Geometry'),
       layer('plant.bend', 'Bends', 'Plant Geometry'),
