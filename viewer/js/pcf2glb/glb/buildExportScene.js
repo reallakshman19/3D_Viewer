@@ -7,6 +7,7 @@ import { enhanceSupportDirectionProxy } from './enhanceSupportDirectionProxyRefe
 import { enhanceTeeBodyProxy } from './enhanceTeeBodyProxy.js';
 import { hideGlbLabelAnchorMarkers } from './hideGlbLabelAnchorMarkers.js';
 import { applyComponentGeometryTrace } from './GeometryTraceMetadata.js';
+import { buildDefaultBmCiiLayerManifest } from './GeometryLayerMetadata.js';
 import {
   LINE_NO_METADATA_KEYS,
   firstLineNoValue,
@@ -74,6 +75,7 @@ export function buildExportScene(model, log, options = {}) {
   }
 
   const colorMode = options.colorMode || (model.options && model.options.colorMode) || 'engineering';
+  const supportSource = options.supportRendering?.source || options.supportSource || '';
   const paletteStats = applyEngineeringPalette(root, { colorMode });
   const labelAnchorStats = hideGlbLabelAnchorMarkers(root);
   const lineNos = collectLineNos(model);
@@ -83,6 +85,12 @@ export function buildExportScene(model, log, options = {}) {
     lineNos,
     engineeringPaletteStats: paletteStats,
     labelAnchorStats,
+    bmCiiLayerManifest: buildDefaultBmCiiLayerManifest({ supportSource }),
+  };
+
+  scene.userData = {
+    ...(scene.userData || {}),
+    bmCiiLayerManifest: root.userData.bmCiiLayerManifest,
   };
 
   return scene;
