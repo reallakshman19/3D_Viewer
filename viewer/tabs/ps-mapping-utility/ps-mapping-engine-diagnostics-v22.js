@@ -171,7 +171,9 @@ export function runPsMappingResolver(input = {}) {
   const rowsForDuplicateScan = Array.isArray(result.candidateRows) && result.candidateRows.length
     ? result.candidateRows
     : Array.isArray(result.candidates) ? result.candidates : [];
-  const duplicateMap = buildDuplicateSupportKeyMap(rowsForDuplicateScan);
+  const duplicateMap = upper(options.duplicateSupportKeyMode) === 'SILENT'
+    ? new Map()
+    : buildDuplicateSupportKeyMap(rowsForDuplicateScan);
   const prefixes = supportNoPrefixKeywords(options);
 
   function patchCollection(rows) {
