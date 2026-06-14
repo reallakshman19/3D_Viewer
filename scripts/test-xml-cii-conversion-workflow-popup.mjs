@@ -56,6 +56,7 @@ for (const text of [
   'Line / Process Data',
   'Piping Class / Material / Weight',
   'Support / Preview / Run',
+  'Configured extraction groups',
   'Pre-run checklist',
   'Latest output snapshot',
 ]) {
@@ -70,6 +71,23 @@ for (const selector of [
 ]) {
   assert(popup.includes(selector) || directPanels.includes(selector), `popup must wire existing selector: ${selector}`);
 }
+
+for (const phase of [
+  'Regex / Line Key Matching',
+  'Process / Piping Class / Material / Wt.',
+  'Weight Match',
+  'Support Mapping',
+  'Enrichment Preview',
+  'Diagnostics Dry Run',
+  'Config JSON',
+  'Existing Run Step',
+]) {
+  assert(directPanels.includes(phase), `process enrichment subtabs must include phase: ${phase}`);
+}
+assert(directPanels.includes('PROCESS_SUBTABS'), 'process enrichment must be backed by a real subtab registry');
+assert(directPanels.includes('data-process-subtab'), 'process enrichment must render clickable subtab buttons');
+assert(directPanels.includes('role="tablist"'), 'process enrichment subtabs must expose tablist semantics');
+assert(directPanels.includes('data-process-subtab-body'), 'process enrichment subtabs must render into a dedicated body');
 
 assert(popup.includes('__xmlCiiConversionWorkflowAllowDirectRun'), 'popup must provide guarded direct-run bypass for final Run Conversion');
 assert(popup.includes('event.stopImmediatePropagation'), 'run click must be intercepted before legacy conversion listener');
@@ -87,5 +105,7 @@ assert(!popup.includes('runJob({'), 'popup shell must not call converter runtime
 console.log('✅ XML CII direct conversion workflow popup static test passed', {
   tabs: 4,
   directPanels: 4,
+  processSubtabs: 4,
+  processPhases: 8,
   directRunnerGuard: true,
 });
