@@ -5,47 +5,16 @@ import {
   runPsMappingResolver as runV3PsMappingResolver,
   rowsToCsv,
 } from './ps-mapping-engine-diagnostics-v3.js?v=20260611-support-gap-rules-1';
+import {
+  evaluateSupportGapComparison,
+  extractTypedSupportGaps,
+  supportTypesFromText,
+} from './ps-mapping-support-gap-logic.js?v=20260614-support-parent-gap-1';
 
 export { DEFAULT_OPTIONS, DEFAULT_SUPPORT_KEYWORD_RULES_TEXT, rowsToCsv };
 
-const GAP_NUMBER = '(-?\\d+(?:\\.\\d+)?)';
-const MM_UNIT = '(?:m\\s*m|millimet(?:er|re)s?)';
-const GAP_WORD = '(?:guide\\s*)?gap';
-const GAP_SEP = '(?:=|:|-|\\bis\\b)?';
-const GAP_BEFORE_VALUE = new RegExp(`\\b${GAP_WORD}\\b\\s*${GAP_SEP}\\s*${GAP_NUMBER}\\s*(?:${MM_UNIT})?\\b`, 'i');
-const VALUE_BEFORE_GAP = new RegExp(`\\b${GAP_NUMBER}\\s*(?:${MM_UNIT})?\\s*${GAP_WORD}\\b`, 'i');
-const FIELD_FALLBACK_VALUE = new RegExp(`\\b${GAP_NUMBER}\\s*(?:${MM_UNIT})?\\b`, 'i');
-
 export function normalizePsMappingOptions(options = {}) {
   return normalizeV3Options(options);
-}
-
-function numeric(value) {
-  const parsed = Number(String(value ?? '').replace(/,/g, '').trim());
-  return Number.isFinite(parsed) ? parsed : null;
-}
-
-function normalizeGapSource(value) {
-  return String(value ?? '')
-    .replace(/[\u2010-\u2015]/g, '-')
-    .replace(/[\[\](){}]/g, ' ')
-    .replace(/,/g, '')
-    .replace(/\s+/g, ' ')
-    .trim();
-}
-
-function extractGapMm(value, { fieldFallback = false } = {}) {
-  const source = normalizeGapSource(value);
-  if (!source) return null;
-  const before = source.match(GAP_BEFORE_VALUE);
-  if (before) return numeric(before[1]);
-  const after = source.match(VALUE_BEFORE_GAP);
-  if (after) return numeric(after[1]);
-  if (fieldFallback) {
-    const fallback = source.match(FIELD_FALLBACK_VALUE);
-    if (fallback) return numeric(fallback[1]);
-  }
-  return null;
 }
 
 function rawColumnValue(rawColumns, aliases = []) {
@@ -61,16 +30,36 @@ function rawColumnValue(rawColumns, aliases = []) {
 function supportGapRawFromModel(model = {}) {
   return model.supportGapRaw
     || model.supportGap
-    || rawColumnValue(model.rawColumns, ['support gap', 'guide gap', 'gap'])
+    || rawColumnValue(model.rawColumns, ['support gap', 'guide gap', 'line stop gap', 'stop gap', 'gap'])
     || '';
 }
 
-function table1GapMmFromRow(row = {}) {
-  return extractGapMm(row.nodeIsonote || row.nodeIsonoteRaw || row.isonote || '', { fieldFallback: false });
+function table1TextFromRow(row = {}) {
+  return [
+    row.supportTypesAvailable,
+    row.nodeMasterKeywords,
+    row.table1SupportTypes,
+    row.nodeIsonote,
+    row.nodeIsonoteRaw,
+    row.isonote,
+  ].filter(Boolean).join(' ');
+}
+
+function table2TextFromRow(row = {}, model = {}) {
+  return [
+    row.supportTypesRequested,
+    row.modelDtxrKeywords,
+    row.t2Keywords,
+    row.dtxr,
+    row.DTXR,
+    model.dtxr,
+  ].filter(Boolean).join(' ');
 }
 
 function modelGapMmFromModel(model = {}) {
-  return extractGapMm(supportGapRawFromModel(model), { fieldFallback: true });
+  const modelTypes = supportTypesFromText(model.supportTypesRequested, model.modelDtxrKeywords, model.dtxr);
+  const gaps = extractTypedSupportGaps(supportGapRawFromModel(model), modelTypes, { fieldFallback: true });
+  return gaps.GUIDE ?? gaps.LINE_STOP ?? '';
 }
 
 function buildModelMap(models = []) {
@@ -78,11 +67,13 @@ function buildModelMap(models = []) {
   for (const model of models || []) {
     if (!model?.psnoModel) continue;
     const supportGapRaw = supportGapRawFromModel(model);
-    map.set(model.psnoModel, {
+    const normalized = {
       ...model,
       supportGapRaw,
-      supportGapMm: modelGapMmFromModel(model) ?? '',
-    });
+      supportGapMm: modelGapMmFromModel({ ...model, supportGapRaw }),
+    };
+    if (!map.has(model.psnoModel)) map.set(model.psnoModel, []);
+    map.get(model.psnoModel).push(normalized);
   }
   return map;
 }
@@ -97,19 +88,8 @@ function removeGapWarnings(existing) {
   return String(existing || '')
     .split(';')
     .map((part) => part.trim())
-    .filter((part) => part && !/^GAP_/i.test(part))
+    .filter((part) => part && !/^(?:GAP_|GUIDE_GAP_|LINE_STOP_GAP_)/i.test(part))
     .join('; ');
-}
-
-function isGuideRow(row = {}, model = {}) {
-  const source = [
-    row.supportTypesRequested,
-    row.modelDtxrKeywords,
-    row.supportMatch,
-    row.dtxr,
-    model.dtxr,
-  ].join(' ');
-  return /\bGUIDE\b/i.test(source);
 }
 
 function hasCleanResolvedContext(row) {
@@ -118,65 +98,84 @@ function hasCleanResolvedContext(row) {
     && ['SUPPORT_EXACT', 'SUPPORT_PARTIAL', 'SUPPORT_IGNORED'].includes(row.supportBasis);
 }
 
-function markGapExact(row, modelGapMm, table1GapMm) {
-  row.gapMatch = 'GAP_EXACT';
-  row.gapMatchDetail = `Table-2 Support Gap ${modelGapMm} mm matches Table-1C GUIDE GAP ${table1GapMm} mm.`;
-  row.supportGapBasis = 'GAP_EXACT';
+function markGapExact(row, comparison) {
+  row.gapMatch = comparison.status;
+  row.gapMatchDetail = comparison.detail;
+  row.supportGapBasis = comparison.status;
   row.warnings = removeGapWarnings(row.warnings);
+  if (comparison.kind === 'GUIDE') row.nodeGuideGapMm = comparison.table1GapMm ?? '';
+  if (comparison.kind === 'LINE_STOP') row.nodeLineStopGapMm = comparison.table1GapMm ?? '';
   if (row.finalStatus === 'USER_REVIEW_REQUIRED' && hasCleanResolvedContext(row) && !row.warnings) {
     row.finalStatus = 'MATCHED';
     row.reviewRequired = false;
     row.autoSelectable = true;
     row.confidence = 'HIGH';
     row.confidenceScore = Math.max(Number(row.confidenceScore || 0), 90);
-    row.reason = row.selected ? 'Selected best auto-approved consolidated Table-1 candidate.' : 'Gap comparison matched.';
+    row.reason = row.selected ? 'Selected best auto-approved consolidated Table-1 candidate.' : `${comparison.kind === 'LINE_STOP' ? 'Line stop' : 'Guide'} gap comparison matched.`;
     row.reviewAction = '';
     row.nodeCoverageNote = '';
   }
 }
 
-function markGapReview(row, status, detail) {
-  row.gapMatch = status;
-  row.gapMatchDetail = detail;
-  row.supportGapBasis = status;
+function markGapReview(row, comparison) {
+  row.gapMatch = comparison.status;
+  row.gapMatchDetail = comparison.detail;
+  row.supportGapBasis = comparison.status;
   row.autoSelectable = false;
   row.reviewRequired = true;
   row.selected = false;
   row.finalStatus = 'USER_REVIEW_REQUIRED';
   row.confidence = row.confidence === 'HIGH' ? 'REVIEW' : (row.confidence || 'REVIEW');
   row.confidenceScore = Math.min(Number(row.confidenceScore || 60) || 60, 60);
-  row.warnings = appendWarning(removeGapWarnings(row.warnings), status);
-  row.reason = detail;
-  row.reviewAction = detail;
-  row.nodeCoverageNote = detail;
+  row.warnings = appendWarning(removeGapWarnings(row.warnings), comparison.status);
+  row.reason = comparison.detail;
+  row.reviewAction = comparison.detail;
+  row.nodeCoverageNote = comparison.detail;
+  if (comparison.kind === 'GUIDE') row.nodeGuideGapMm = comparison.table1GapMm ?? '';
+  if (comparison.kind === 'LINE_STOP') row.nodeLineStopGapMm = comparison.table1GapMm ?? '';
+}
+
+function overlapScore(row = {}, model = {}) {
+  const rowTypes = supportTypesFromText(table1TextFromRow(row), table2TextFromRow(row, {}));
+  const modelTypes = supportTypesFromText(model.supportTypesRequested, model.modelDtxrKeywords, model.dtxr);
+  let score = 0;
+  for (const type of modelTypes) if (rowTypes.has(type)) score += 10;
+  if (String(row.dtxr || row.DTXR || '').trim() && String(row.dtxr || row.DTXR || '').trim() === String(model.dtxr || '').trim()) score += 100;
+  return score;
+}
+
+function resolveModelForRow(row = {}, modelByPs) {
+  const models = modelByPs.get(row.psnoModel) || [];
+  if (!models.length) return {};
+  if (models.length === 1) return models[0];
+  return [...models].sort((a, b) => overlapScore(row, b) - overlapScore(row, a))[0] || models[0];
 }
 
 function applyRobustGapComparison(row, options, modelByPs) {
   if (!row || options.enableSupportGapComparison === false) return row;
-  const model = modelByPs.get(row.psnoModel) || {};
+  const model = resolveModelForRow(row, modelByPs);
   const supportGapRaw = supportGapRawFromModel(model) || row.supportGapRaw || '';
-  const modelGapMm = modelGapMmFromModel({ ...model, supportGapRaw });
-  const table1GapMm = table1GapMmFromRow(row);
-  const guide = isGuideRow(row, model) || modelGapMm != null || table1GapMm != null;
+  const comparison = evaluateSupportGapComparison({
+    table1Text: table1TextFromRow(row),
+    table2Text: table2TextFromRow(row, model),
+    table2GapRaw: supportGapRaw,
+    tolerance: options.supportGapToleranceMm ?? 0,
+    enabled: options.enableSupportGapComparison !== false,
+  });
+
   row.supportGapRaw = supportGapRaw || row.supportGapRaw || '';
-  row.supportGapMm = modelGapMm ?? '';
-  row.nodeGuideGapMm = table1GapMm ?? '';
-  if (!guide && modelGapMm == null) { row.gapMatch = row.gapMatch || ''; return row; }
-  if (modelGapMm != null && table1GapMm != null) {
-    const tolerance = Number(options.supportGapToleranceMm ?? 0);
-    if (Math.abs(modelGapMm - table1GapMm) <= tolerance) markGapExact(row, modelGapMm, table1GapMm);
-    else markGapReview(row, 'GAP_CONFLICT', `Support gap conflict: Table-2 Support Gap ${modelGapMm} mm differs from Table-1C GUIDE GAP ${table1GapMm} mm.`);
+  row.supportGapMm = comparison.table2GapMm ?? modelGapMmFromModel({ ...model, supportGapRaw }) ?? '';
+  if (comparison.kind === 'GUIDE') row.nodeGuideGapMm = comparison.table1GapMm ?? '';
+  if (comparison.kind === 'LINE_STOP') row.nodeLineStopGapMm = comparison.table1GapMm ?? '';
+
+  if (!comparison.status) {
+    row.gapMatch = row.gapMatch || '';
+    row.supportGapBasis = row.supportGapBasis || '';
     return row;
   }
-  if (guide && modelGapMm == null && table1GapMm != null) {
-    markGapReview(row, 'GAP_MISSING_TABLE2', `Support gap missing in Table-2 for GUIDE; Table-1C GUIDE GAP is ${table1GapMm} mm.`);
-    return row;
-  }
-  if (modelGapMm != null && table1GapMm == null) {
-    markGapReview(row, 'GAP_MISSING_TABLE1', `Support gap ${modelGapMm} mm exists in Table-2, but Table-1C GUIDE GAP is missing.`);
-    return row;
-  }
-  row.gapMatch = row.gapMatch || '';
+
+  if (/_EXACT$/i.test(comparison.status)) markGapExact(row, comparison);
+  else markGapReview(row, comparison);
   return row;
 }
 
@@ -191,7 +190,7 @@ function normalizeConsolidatedTable2Rows(rows = []) {
     return {
       ...row,
       supportGapRaw,
-      supportGapMm: modelGapMmFromModel({ ...row, supportGapRaw }) ?? '',
+      supportGapMm: modelGapMmFromModel({ ...row, supportGapRaw }),
     };
   });
 }
@@ -204,7 +203,7 @@ function annotateRobustGapResult(result, options) {
   const candidateRows = normalizeRows(result?.candidateRows || result?.candidates, options, modelByPs);
   const candidates = normalizeRows(result?.candidates || candidateRows, options, modelByPs);
   const validatorRows = normalizeRows(result?.validatorRows || rows, options, modelByPs);
-  const gapConflicts = (candidates || []).filter((row) => row.gapMatch === 'GAP_CONFLICT').length;
+  const gapConflicts = (candidates || []).filter((row) => /GAP_CONFLICT$/i.test(row.gapMatch || '')).length;
   return {
     ...result,
     consolidatedTable2Rows,
@@ -219,7 +218,7 @@ function annotateRobustGapResult(result, options) {
     },
     approxConfig: {
       ...(result?.approxConfig || {}),
-      supportGapLogic: 'Robust parser accepts 5mm gap, 5 mm gap, gap=5mm, Gap = 5 mm, GUIDE GAP: 5 mm, and bracketed [GUIDE GAP=5mm] forms.',
+      supportGapLogic: 'Support-aware parser: GUIDE GAP is checked only under matched GUIDE parent; LINE STOP GAP is checked only under matched LINE_STOP parent; generic numeric Support Gap is inferred from the Table-2 support row type only.',
     },
   };
 }
