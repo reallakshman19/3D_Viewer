@@ -4,4 +4,4 @@ export {
   normalizePsMappingOptions,
   runPsMappingResolver,
   rowsToCsv,
-} from './ps-mapping-engine-diagnostics-v21.js';
+} from './ps-mapping-engine-diagnostics-v22.js';
