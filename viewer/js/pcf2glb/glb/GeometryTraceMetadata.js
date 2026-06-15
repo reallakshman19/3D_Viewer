@@ -118,8 +118,31 @@ function visualProfileValue(component = {}, attrs = {}, extra = {}) {
   );
 }
 
+function annotationKindValue(component = {}, attrs = {}, extra = {}) {
+  return upper(firstNonEmpty(
+    extra.annotationKind,
+    extra.caesarAnnotationKind,
+    component.annotationKind,
+    component.caesarAnnotationKind,
+    attrs.ANNOTATION_KIND,
+    attrs.caesarAnnotationKind,
+    attrs.CAESAR_ANNOTATION_KIND,
+    attrs.COMPONENT_KIND,
+    attrs.NODE_LABEL ? 'NODE_LABEL' : '',
+  ));
+}
+
 export function semanticCategoryFromComponent(component = {}, extra = {}) {
   const attrs = attrsOf(component);
+  const componentType = upper(firstNonEmpty(component.type, component.componentType, attrs.COMPONENT_KIND, attrs.COMPONENT_TYPE, attrs.ComponentType));
+  const extraShape = upper(firstNonEmpty(extra.glbShape, attrs.GLB_SHAPE, attrs.glbShape));
+  const annotationKind = annotationKindValue(component, attrs, extra);
+
+  // BM_CII node/callout label anchors can contain words like LINESTOP, GUIDE, REST, or HANGER
+  // in their display text. Classify them before support keyword matching so label anchors do
+  // not become UNKNOWN/TYPE0 restraint roots or pollute support counts/layers.
+  if (componentType === 'NODE_LABEL' || annotationKind === 'NODE_LABEL' || annotationKind === 'ISONOTE_CALLOUT' || extraShape.includes('NODE-LABEL-ANCHOR')) return 'annotation';
+
   const raw = upper([
     component.type,
     component.elementType,
@@ -197,6 +220,7 @@ export function componentGeometryTrace(component = {}, extra = {}, context = {})
   );
   const supportKind = firstNonEmpty(extra.supportKind, component.supportKind, attrs.SUPPORT_KIND, attrs.SKEY, attrs.SUPPORT_TAG);
   const sourceComponentId = firstNonEmpty(component.id, attrs.COMPONENT_IDENTIFIER, attrs['COMPONENT-IDENTIFIER'], attrs['COMPONENT-ATTRIBUTE97'], component.refNo);
+  const annotationKind = category === 'annotation' ? annotationKindValue(component, attrs, extra) || 'NODE_LABEL' : '';
 
   return {
     schema: BM_CII_GEOMETRY_TRACE_SCHEMA,
@@ -211,6 +235,9 @@ export function componentGeometryTrace(component = {}, extra = {}, context = {})
     toNode: toNodeValue(component, attrs),
     node: nodeValue(component, attrs),
     lineNo: firstNonEmpty(context.lineNo, extra.lineNo, component.lineNo, attrs.LINE_NO, attrs.LineNo, attrs.Pipeline, component.pipelineRef),
+    source: category === 'annotation' ? firstNonEmpty(component.source, attrs.SOURCE, context.source, 'isonote').toLowerCase() : firstNonEmpty(context.source, component.source, attrs.SOURCE, ''),
+    annotationKind,
+    text: category === 'annotation' ? firstNonEmpty(component.label, component.refNo, attrs.NODE_LABEL, attrs.TEXT, attrs.Note) : '',
     supportSource,
     supportKind: supportKind ? upper(supportKind) : '',
     axis: axisValue(component, attrs, extra),
