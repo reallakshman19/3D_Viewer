@@ -1,6 +1,6 @@
 # BM_CII restraint source audit workflow
 
-This workflow is intentionally **pre-GLB**. It is the controlled restart path after the failed restraint-symbol implementation. Do not generate or freeze a benchmark GLB until this audit passes and the generated GLB later passes visible-scene QC in the Basic GLB-PCF Viewer.
+This workflow is intentionally staged. It is the controlled restart path after the failed restraint-symbol implementation. Do not generate or freeze a benchmark GLB until the source audit, frame QC, annotation fidelity QC, generated GLB QC, and visible-scene QC in the Basic GLB-PCF Viewer all pass.
 
 ## Purpose
 
@@ -14,7 +14,15 @@ BM_CII_INPUT.XML + optional ISONOTE sidecar
   -> layer metadata expectation
 ```
 
-It does **not** build GLB files.
+The annotation gate creates and validates the source-truth annotation table:
+
+```text
+sidecar.caesarAnnotationCallouts only
+  -> ISONOTE callouts 1,2,3,4
+  -> nodes 35,130,205,255 only
+  -> node labels 35,130,205,255 only
+  -> unmerged traceable annotation objects for benchmark GLBs
+```
 
 ## Commands
 
@@ -30,6 +38,14 @@ node scripts/bm-cii/support-frame-qc.mjs \
   --audit-dir artifacts/bm-cii-restraint-audit
 ```
 
+After a v11 robust build has produced the sidecar summary:
+
+```bash
+node scripts/bm-cii/annotation-fidelity-qc.mjs \
+  --sidecar artifacts/bm-cii-v11-robust/BM_CII_Enriched_benchmark_v11_robust.sidecar.json \
+  --out artifacts/bm-cii-v11-robust/annotation_fidelity_qc_report.json
+```
+
 If no sidecar is available, `support-source-audit.mjs` uses the explicit BM_CII ISONOTE benchmark fallback table and marks the audit as failed. That is acceptable for source investigation only; it is not acceptable for baseline freeze.
 
 ## Output
@@ -42,9 +58,14 @@ artifacts/bm-cii-restraint-audit/
   source_audit.summary.json
   source_audit.md
   support_frame_qc_report.json
+
+artifacts/bm-cii-v11-robust/
+  BM_CII_Enriched_benchmark_v11_robust.sidecar.json
+  BM_CII_Enriched_benchmark_v11_robust.manifest.json
+  annotation_fidelity_qc_report.json
 ```
 
-## Required pass criteria before any GLB generation
+## Required pass criteria before final GLB freeze
 
 ```text
 InputXML records = 12
@@ -53,6 +74,14 @@ all records have resolved P/T/R frame
 UNKNOWN records have visibleDefault=false
 all support records have exact expectedSymbolContract
 all layerIds include plant.restraints + source + kind + axis if source axis exists
+
+annotation source = sidecar.caesarAnnotationCallouts only
+ISONOTE callouts = 4
+node labels = 4
+allowed callout numbers = 1,2,3,4 only
+allowed annotation nodes = 35,130,205,255 only
+mergeMarkers = false for benchmark annotations
+annotation.node layer is present for node labels
 ```
 
-No GLB should be generated when any frame is unresolved or when the sidecar source table is missing.
+No GLB should be frozen when any frame is unresolved, when the sidecar source table is missing, when annotation fidelity fails, or when the Basic GLB-PCF Viewer runtime lifecycle QC fails.
