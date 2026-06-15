@@ -13,8 +13,12 @@ import {
   buildCaesarAnnotationSidecar,
   prepareCaesarAnnotationCoreModel,
 } from '../../viewer/js/pcf2glb/glb/caesar/CaesarAnnotationCore.js';
+import {
+  supportComponentsFromSidecar,
+  supportRecordMappingTable,
+} from './sidecar-support-records.mjs';
 
-const SCRIPT_SCHEMA = 'bm-cii-v11-robust-build-script/v1';
+const SCRIPT_SCHEMA = 'bm-cii-v11-robust-build-script/v2-record-supports';
 const DEFAULT_OUT_DIR = 'artifacts/bm-cii-v11-robust';
 const DEFAULT_VARIANTS = Object.freeze([
   { name: 'engineering_inputxml', colorMode: 'engineering', supportSource: 'inputxml' },
@@ -22,6 +26,7 @@ const DEFAULT_VARIANTS = Object.freeze([
   { name: 'temp1_inputxml', colorMode: 'temp1', supportSource: 'inputxml' },
   { name: 'temp1_isonote', colorMode: 'temp1', supportSource: 'isonote' },
 ]);
+const ALLOWED_CALLOUT_NODES = new Set(['35', '130', '205', '255']);
 
 function usage() {
   return `Usage:
@@ -29,9 +34,8 @@ function usage() {
   node scripts/bm-cii/build-v11-robust.mjs --sidecar <sidecar.json> [--out-dir <dir>] [--annotation-only]
 
 Purpose:
-  Build BM_CII v11 robust GLB variants using the robust-lowpoly-vector
-  CAESAR annotation core. This script does not alter pipe/topology solving;
-  it consumes an already-built render model JSON or a sidecar JSON.
+  Build BM_CII v11 robust GLB variants from the repo export path.
+  Supports/restraints are converted as record-level objects; they are not merged by node.
 
 Outputs:
   BM_CII_Enriched_engineering_v11_robust_inputxml.glb
@@ -139,16 +143,7 @@ async function exportGlb(scene) {
   ensureNodeFileReader();
   const exporter = new GLTFExporter();
   const result = await new Promise((resolve, reject) => {
-    exporter.parse(
-      scene,
-      resolve,
-      reject,
-      {
-        binary: true,
-        onlyVisible: true,
-        trs: false,
-      },
-    );
+    exporter.parse(scene, resolve, reject, { binary: true, onlyVisible: true, trs: false });
   });
   return result instanceof ArrayBuffer ? Buffer.from(result) : Buffer.from(await result.arrayBuffer());
 }
@@ -161,6 +156,57 @@ function normalizePoint(value) {
   return [x, y, z].every(Number.isFinite) ? { x, y, z } : null;
 }
 
+function calloutNo(value, index) {
+  const n = Number(value?.no ?? value?.calloutNo ?? value?.label ?? index + 1);
+  return Number.isFinite(n) ? n : index + 1;
+}
+
+function sanitizeCallouts(callouts = []) {
+  return (Array.isArray(callouts) ? callouts : [])
+    .map((callout, index) => ({
+      no: calloutNo(callout, index),
+      node: String(callout.node || callout.nodeNumber || callout.NODE || ''),
+      text: callout.text || callout.caesarCalloutText || '',
+      caesarCalloutText: callout.caesarCalloutText || callout.text || '',
+      supportTokens: Array.isArray(callout.supportTokens) ? callout.supportTokens : [],
+      sourceNotes: Array.isArray(callout.sourceNotes) ? callout.sourceNotes : [],
+    }))
+    .filter((callout) => callout.no >= 1 && callout.no <= 4)
+    .filter((callout) => ALLOWED_CALLOUT_NODES.has(String(callout.node)))
+    .filter((callout) => callout.text);
+}
+
+function stripComponentAnnotations(component = {}) {
+  const raw = { ...(component.raw || {}) };
+  const attributes = { ...(component.attributes || {}) };
+  for (const key of ['ISONOTE', 'CAESAR_ISONOTE', 'NOTE', 'MESSAGE', 'Message']) {
+    delete raw[key];
+    delete attributes[key];
+  }
+  const clean = { ...component, raw, attributes };
+  delete clean.isonote;
+  delete clean.note;
+  return clean;
+}
+
+function sanitizeModelForAnnotations(model = {}) {
+  const callouts = sanitizeCallouts(model.caesarAnnotationCallouts || model.callouts || []);
+  return {
+    ...model,
+    caesarAnnotationCallouts: callouts,
+    callouts,
+    isonotes: [],
+    isonoteRows: [],
+    components: (model.components || []).map(stripComponentAnnotations),
+    elements: (model.elements || []).map(stripComponentAnnotations),
+  };
+}
+
+function componentSupportSource(component = {}) {
+  const raw = String(component.supportSource || component.source || component.attributes?.SUPPORT_SOURCE || component.raw?.SUPPORT_SOURCE || '').toLowerCase();
+  return raw.includes('isonote') ? 'isonote' : 'inputxml';
+}
+
 function deriveModelFromSidecar(sidecar = {}) {
   const nodes = sidecar.nodeCoordinatesGlbBasisMm || sidecar.nodes || sidecar.nodeCoordinates || {};
   const normalizedNodes = Object.fromEntries(
@@ -169,37 +215,35 @@ function deriveModelFromSidecar(sidecar = {}) {
       .filter(([, point]) => point),
   );
 
-  const caesarAnnotationCallouts = (sidecar.caesarAnnotationCallouts || sidecar.callouts || [])
-    .map((callout, index) => ({
-      no: Number(callout.no || index + 1),
-      node: String(callout.node || ''),
-      text: callout.text || callout.caesarCalloutText || '',
-      caesarCalloutText: callout.caesarCalloutText || callout.text || '',
-      supportTokens: Array.isArray(callout.supportTokens) ? callout.supportTokens : [],
-    }))
-    .filter((callout) => callout.node && callout.text);
+  const caesarAnnotationCallouts = sanitizeCallouts(sidecar.caesarAnnotationCallouts || sidecar.callouts || []);
+  const supportComponents = supportComponentsFromSidecar(sidecar, normalizedNodes);
+  const replacementSources = new Set(supportComponents.map((component) => component.supportSource));
+  const baseComponents = Array.isArray(sidecar.components) ? sidecar.components : [];
+  const retainedComponents = baseComponents.filter((component) => (
+    component.type !== 'SUPPORT' || !replacementSources.has(componentSupportSource(component))
+  ));
 
   return {
-    schema: 'bm-cii-v11-derived-model/from-sidecar/v1',
+    schema: 'bm-cii-v11-derived-model/from-sidecar-record-supports/v2',
     sourceSchema: sidecar.schema || '',
-    components: sidecar.components || [],
+    components: [...retainedComponents, ...supportComponents],
     elements: sidecar.elements || [],
     nodes: normalizedNodes,
     nodeCoordinatesGlbBasisMm: normalizedNodes,
     caesarAnnotationCallouts,
     supportsInputXml: sidecar.supportsInputXml || [],
     supportsIsonote: sidecar.supportsIsonote || [],
+    supportRecordMapping: supportRecordMappingTable(sidecar),
     sidecarSource: true,
   };
 }
 
 function filterSupportsForVariant(model, supportSource) {
   if (!Array.isArray(model.components)) return model;
+  const selectedSource = supportSource === 'isonote' ? 'isonote' : 'inputxml';
   const components = model.components.filter((component) => {
     if (component.type !== 'SUPPORT') return true;
-    const rawSource = String(component.supportSource || component.source || component.attributes?.SUPPORT_SOURCE || '').toLowerCase();
-    if (!rawSource) return true;
-    return rawSource === supportSource;
+    return componentSupportSource(component) === selectedSource;
   });
   return { ...model, components };
 }
@@ -237,7 +281,7 @@ function addRobustAnnotationToScene(scene, model, options) {
 
 function buildVariantScene(model, variant, options) {
   const variantModel = filterSupportsForVariant(model, variant.supportSource);
-  const preparedModel = prepareCaesarAnnotationCoreModel(variantModel, options.caesarAnnotation);
+  const annotationModel = prepareCaesarAnnotationCoreModel(sanitizeModelForAnnotations(variantModel), options.caesarAnnotation);
 
   const scene = options.annotationOnly
     ? new THREE.Scene()
@@ -257,7 +301,7 @@ function buildVariantScene(model, variant, options) {
     scene.add(root);
   }
 
-  const annotationObject = addRobustAnnotationToScene(scene, preparedModel, options.caesarAnnotation);
+  const annotationObject = addRobustAnnotationToScene(scene, annotationModel, options.caesarAnnotation);
   scene.name = `BM_CII_v11_robust_${variant.name}`;
   scene.userData = {
     ...(scene.userData || {}),
@@ -278,10 +322,7 @@ function outputNameForVariant(variant) {
 }
 
 async function build(args) {
-  const loaded = args.modelPath
-    ? await readJson(args.modelPath)
-    : deriveModelFromSidecar(await readJson(args.sidecarPath));
-
+  const loaded = args.modelPath ? await readJson(args.modelPath) : deriveModelFromSidecar(await readJson(args.sidecarPath));
   const outDir = path.resolve(args.outDir || DEFAULT_OUT_DIR);
   await fs.mkdir(outDir, { recursive: true });
 
@@ -295,16 +336,14 @@ async function build(args) {
     leaderSegments: 6,
     digitHeightRatio: 0.42,
     exportFullTextInGlb: false,
+    preferredKeyNodes: [...ALLOWED_CALLOUT_NODES],
   };
 
   const outputs = [];
   const sidecars = [];
 
   for (const variant of args.variants) {
-    const scene = buildVariantScene(loaded, variant, {
-      annotationOnly: args.annotationOnly,
-      caesarAnnotation,
-    });
+    const scene = buildVariantScene(loaded, variant, { annotationOnly: args.annotationOnly, caesarAnnotation });
     const fileName = outputNameForVariant(variant);
     const filePath = path.join(outDir, fileName);
     await fs.writeFile(filePath, await exportGlb(scene));
@@ -323,7 +362,7 @@ async function build(args) {
   }
 
   const mergedSidecar = {
-    schema: 'bm-cii-v11-robust-sidecar/v1',
+    schema: 'bm-cii-v11-robust-sidecar/v2-record-supports',
     scriptSchema: SCRIPT_SCHEMA,
     source: args.modelPath || args.sidecarPath,
     caesarAnnotationMode: caesarAnnotation.mode,
@@ -331,20 +370,23 @@ async function build(args) {
     variants: outputs,
     callouts: sidecars[0]?.callouts || [],
     nodeCalloutMap: sidecars[0]?.nodeCalloutMap || {},
+    supportRecordMapping: loaded.supportRecordMapping || [],
     sidecars,
   };
 
   const manifest = {
-    schema: 'bm-cii-v11-robust-manifest/v1',
+    schema: 'bm-cii-v11-robust-manifest/v2-record-supports',
     scriptSchema: SCRIPT_SCHEMA,
     createdAtUtc: new Date().toISOString(),
     source: args.modelPath || args.sidecarPath,
     annotationOnly: args.annotationOnly,
     outputs,
     sidecar: 'BM_CII_Enriched_benchmark_v11_robust.sidecar.json',
+    supportRecordMapping: 'BM_CII_Enriched_benchmark_v11_robust.support-record-map.json',
   };
 
   await writeJson(path.join(outDir, 'BM_CII_Enriched_benchmark_v11_robust.sidecar.json'), mergedSidecar);
+  await writeJson(path.join(outDir, 'BM_CII_Enriched_benchmark_v11_robust.support-record-map.json'), loaded.supportRecordMapping || []);
   await writeJson(path.join(outDir, 'BM_CII_Enriched_benchmark_v11_robust.manifest.json'), manifest);
   return manifest;
 }
@@ -374,4 +416,5 @@ export {
   build,
   deriveModelFromSidecar,
   parseArgs,
+  sanitizeModelForAnnotations,
 };
