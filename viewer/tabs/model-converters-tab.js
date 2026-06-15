@@ -9,7 +9,6 @@ import { installXmlCiiConversionWorkflowPopup } from './model-converters/xml-cii
 const MODEL_CONVERTER_INSTALLERS = Object.freeze([
   ['xml-cii-conversion-workflow-popup', installXmlCiiConversionWorkflowPopup],
   ['inputxml-dxf-legacy-bridge', installInputXmlDxfLegacyBridge],
-  ['inputxml-dxf-symbol-option', installInputXmlDxfSymbolOption],
   ['inputxml-dxf-projection-option', installInputXmlDxfProjectionOption],
   ['inputxml-glb-legacy-bridge', installInputXmlGlbLegacyBridge],
 ]);
@@ -22,13 +21,14 @@ function installSafely(name, installer, container) {
   }
 }
 
-function installBranchPickerImmediately(container) {
+function installInputXmlDxfImmediateEnhancers(container) {
   try {
-    // Keep this synchronous and explicit: the branch picker is a lightweight
-    // legacy InputXML→DXF enhancer and its static gate checks this installer call.
+    // Keep this synchronous and explicit: the branch picker and symbol checkbox are
+    // lightweight InputXML→DXF enhancers and their static gate checks these calls.
     installInputXmlDxfBranchPicker(container);
+    installInputXmlDxfSymbolOption(container);
   } catch (error) {
-    console.error('[ModelConverters] Optional installer failed: inputxml-dxf-branch-picker', error);
+    console.error('[ModelConverters] Optional installer failed: inputxml-dxf-immediate-enhancers', error);
   }
 }
 
@@ -40,10 +40,10 @@ function scheduleInstaller(name, installer, container) {
 export function renderModelConvertersTab(container, ctx) {
   const result = renderLegacyModelConvertersTab(container, ctx);
 
-  // Install the branch picker immediately after legacy render so existing
-  // InputXML→DXF controls are available for tests/users, while heavier XML/CII
-  // workflow helpers remain deferred and guarded for tab responsiveness.
-  installBranchPickerImmediately(container);
+  // Install critical lightweight InputXML→DXF enhancers immediately after legacy
+  // render so controls are available to tests/users without waiting for the
+  // deferred converter helper queue.
+  installInputXmlDxfImmediateEnhancers(container);
 
   // Emergency responsiveness guard:
   // keep the legacy converter UI as the only synchronous renderer. XML/CII popup
