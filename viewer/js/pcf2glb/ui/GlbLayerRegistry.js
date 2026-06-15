@@ -2,6 +2,10 @@ function userDataOf(object) {
   return object?.userData || {};
 }
 
+function truthy(value) {
+  return value === true || value === 1 || value === 'true' || value === '1' || value === 'yes' || value === 'YES';
+}
+
 function normalizeLayerIds(ids) {
   return Array.isArray(ids) ? ids.map(String).filter(Boolean) : [];
 }
@@ -17,17 +21,46 @@ function objectLayerMeta(object) {
   return data.bmCiiLayer || data.extras?.bmCiiLayer || null;
 }
 
+function objectForcedHidden(object) {
+  const data = userDataOf(object);
+  return truthy(data.bmCiiForceHidden)
+    || truthy(data.bmCiiRuntimeSuppressed)
+    || truthy(data.hiddenByRuntimeSupportProfile)
+    || truthy(data.hiddenByAuthoritativeSupportGlyphs)
+    || (data.glbSupportBakedFallback === false && Boolean(data.hiddenByRuntimeSupportProfile));
+}
+
+function countLayerObjects(scene) {
+  const counts = new Map();
+  scene?.traverse?.((object) => {
+    if (!object?.isMesh && object?.type !== 'Group') return;
+    if (objectForcedHidden(object)) return;
+    for (const id of layerIdsOf(object)) counts.set(id, (counts.get(id) || 0) + 1);
+  });
+  return counts;
+}
+
 export function layerManifestOf(gltfOrScene) {
   const scene = gltfOrScene?.scene || gltfOrScene;
+  const counts = countLayerObjects(scene);
   const candidates = [scene, ...(scene?.children || [])];
   for (const candidate of candidates) {
     const manifest = candidate?.userData?.bmCiiLayerManifest || candidate?.userData?.extras?.bmCiiLayerManifest;
-    if (manifest?.layers?.length) return manifest;
+    if (manifest?.layers?.length) {
+      return {
+        ...manifest,
+        layers: manifest.layers.map((layer) => ({
+          ...layer,
+          count: Number.isFinite(Number(layer.count)) ? Number(layer.count) : (counts.get(layer.id) || 0),
+        })),
+      };
+    }
   }
 
   // Fallback: build a manifest from layer IDs stamped directly on mesh nodes.
   const ids = new Set();
   scene?.traverse?.((object) => {
+    if (objectForcedHidden(object)) return;
     for (const id of layerIdsOf(object)) ids.add(id);
   });
   if (ids.size > 0) {
@@ -37,6 +70,7 @@ export function layerManifestOf(gltfOrScene) {
         id,
         label: labelFromLayerId(id),
         group: groupFromLayerId(id),
+        count: counts.get(id) || 0,
         defaultVisible: id !== 'restraints.unknown' && id !== 'debug.qc',
       })),
     };
@@ -48,6 +82,7 @@ export function layerManifestOf(gltfOrScene) {
 export function collectLayerRegistry(scene) {
   const registry = new Map();
   scene?.traverse?.((object) => {
+    if (objectForcedHidden(object)) return;
     for (const layerId of layerIdsOf(object)) {
       if (!registry.has(layerId)) registry.set(layerId, []);
       registry.get(layerId).push(object);
@@ -86,6 +121,8 @@ function isAnnotationObject(ids, meta = {}) {
 }
 
 export function isObjectVisibleByLayerState(object, state = {}) {
+  if (objectForcedHidden(object)) return false;
+
   const ids = new Set(layerIdsOf(object));
   const meta = objectLayerMeta(object) || {};
   if (ids.size === 0) return true;
@@ -137,6 +174,21 @@ export function applyLayerState(scene, state = {}) {
 }
 
 export function labelFromLayerId(id = '') {
+  const specific = {
+    'plant.restraints': 'Restraints',
+    'restraints.inputxml': 'InputXML',
+    'restraints.isonote': 'ISONOTE',
+    'restraints.linestop': 'LINESTOP',
+    'restraints.unknown': 'UNKNOWN/TYPE0',
+    'axis.x': 'X Axis Filter',
+    'axis.y': 'Y Axis Filter',
+    'axis.z': 'Z Axis Filter',
+    'annotation.all': 'Annotations',
+    'annotation.callout': 'Callouts',
+    'annotation.isonote': 'ISONOTE Callouts',
+    'annotation.node': 'Node Labels',
+  };
+  if (specific[id]) return specific[id];
   const tail = String(id).split('.').pop() || id;
   return tail
     .replace(/_/g, ' ')
@@ -170,13 +222,19 @@ function sortGroupLayers(groupLayers = []) {
     'plant.pipe', 'plant.bend', 'plant.valve', 'plant.flange', 'plant.tee_olet', 'plant.restraints', 'plant.axis', 'plant.other',
     'restraints.inputxml', 'restraints.isonote', 'restraints.rest', 'restraints.guide', 'restraints.linestop', 'restraints.limit', 'restraints.anchor', 'restraints.hanger', 'restraints.spring', 'restraints.unknown',
     'axis.x', 'axis.y', 'axis.z',
-    'annotation.all', 'annotation.callout', 'annotation.isonote',
+    'annotation.all', 'annotation.callout', 'annotation.isonote', 'annotation.node',
   ];
   const weight = (id) => {
     const idx = order.indexOf(id);
     return idx >= 0 ? idx : order.length + String(id).localeCompare('');
   };
   return [...groupLayers].sort((a, b) => weight(a.id) - weight(b.id));
+}
+
+function layerLabel(layer = {}) {
+  const label = layer.label || labelFromLayerId(layer.id);
+  if (Number.isFinite(Number(layer.count))) return `${label} (${Number(layer.count)})`;
+  return label;
 }
 
 export function buildLayerPanelHtml(manifest = {}) {
@@ -206,7 +264,9 @@ export function buildLayerPanelHtml(manifest = {}) {
     html += `<div class="bm-cii-layer-group" style="margin:10px 0 8px;"><div class="bm-cii-layer-group-title" style="font-size:10px; text-transform:uppercase; letter-spacing:.10em; color:#90acd0; margin-bottom:5px;">${escapeHtml(group)}</div>`;
     for (const layer of sortGroupLayers(groupLayers)) {
       const checked = layer.defaultVisible === false ? '' : ' checked';
-      html += `<label class="bm-cii-layer-row" style="display:flex; align-items:center; gap:7px; font-size:11px; line-height:1.35; margin:4px 0; cursor:pointer;"><input type="checkbox" data-layer-id="${escapeHtml(layer.id)}"${checked} style="accent-color:#4a9eff;"> <span>${escapeHtml(layer.label || labelFromLayerId(layer.id))}</span></label>`;
+      const disabled = Number(layer.count) === 0 ? ' disabled' : '';
+      const muted = Number(layer.count) === 0 ? ' opacity:.55;' : '';
+      html += `<label class="bm-cii-layer-row" style="display:flex; align-items:center; gap:7px; font-size:11px; line-height:1.35; margin:4px 0; cursor:pointer;${muted}"><input type="checkbox" data-layer-id="${escapeHtml(layer.id)}"${checked}${disabled} style="accent-color:#4a9eff;"> <span>${escapeHtml(layerLabel(layer))}</span></label>`;
     }
     html += '</div>';
   }
@@ -232,7 +292,10 @@ export function mountLayerPanel(container, scene, manifest = layerManifestOf(sce
   container.querySelector('[data-layer-action="all"]')?.addEventListener('click', () => {
     const next = Object.values(state).some((v) => v === false);
     for (const id of Object.keys(state)) state[id] = next;
-    container.querySelectorAll('input[data-layer-id]').forEach((input) => { input.checked = next; });
+    container.querySelectorAll('input[data-layer-id]').forEach((input) => {
+      input.checked = next;
+      if (!input.disabled) state[input.dataset.layerId] = next;
+    });
     apply();
     onChange?.({ state, layerId: '*', checked: next });
   });
