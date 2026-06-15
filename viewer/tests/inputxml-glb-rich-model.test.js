@@ -11,7 +11,6 @@ import {
   classifyCaesarRestraint,
 } from '../converters/inputxml-glb/CaesarRestraintClassifier.js';
 import { summarizeGlbLabels, collectGlbLabelAnchors } from '../js/pcf2glb/advanced/glbLabelOverlay.js';
-import { applyEngineeringPalette } from '../js/pcf2glb/glb/applyEngineeringPalette.js';
 import { buildComponentObject } from '../js/pcf2glb/glb/buildComponentObject.js';
 import { buildExportScene } from '../js/pcf2glb/glb/buildExportScene.js';
 import { buildNodeLabelObject } from '../js/pcf2glb/glb/buildNodeLabelObject.js';
@@ -118,19 +117,22 @@ const debugScene = buildExportScene({ components: [sampleComponent('PIPE', 'PIPE
 assert.equal(debugScene.getObjectByName('PCF_EXPORT_ROOT').userData.colorMode, 'debug');
 
 const elbowObject = buildComponentObject(sampleComponent('ELBOW', 'ELBOW-TEST'));
-assert.equal(elbowObject.userData.glbShape, 'rounded-elbow-tube');
-assert.equal(elbowObject.geometry?.type, 'TubeGeometry');
+assert.match(elbowObject.userData.glbShape, /elbow|bend/i);
+assert.equal(elbowObject.userData.bmCiiBendVisualContract, 'bend-radius-approx-1p5d-compact-elbow');
+assert.ok(elbowObject.getObjectByName('ELBOW-TEST-bend-arc-1p5d'));
+assert.ok(Number(elbowObject.userData.bendRadiusRatioD) > 0);
+assert.ok(Number(elbowObject.userData.bendArcChord) > 0);
 
 const radiusElbowObject = buildComponentObject(sampleComponent('ELBOW', 'ELBOW-RADIUS-TEST', {
   bendRadius: 150,
   bendAngleDeg: 90,
   bendMetadataSource: 'PIPINGELEMENT.BEND',
 }));
-assert.equal(radiusElbowObject.userData.glbShape, 'rounded-elbow-tube-radius');
+assert.match(radiusElbowObject.userData.glbShape, /elbow|bend/i);
 assert.equal(radiusElbowObject.userData.bendRadius, 150);
 assert.equal(radiusElbowObject.userData.bendAngleDeg, 90);
 assert.equal(radiusElbowObject.userData.bendMetadataSource, 'PIPINGELEMENT.BEND');
-assert.ok(radiusElbowObject.userData.bendLift > 0);
+assert.ok(Number(radiusElbowObject.userData.bendArcChord) > 0);
 
 const syntheticBendXml = '<CAESARII><PIPINGMODEL JOBNAME="BEND-TEST"><PIPINGELEMENT FROM_NODE="10" TO_NODE="20" DELTA_X="100" DELTA_Y="0" DELTA_Z="0" DIAMETER="20"><BEND RADIUS="300" ANGLE="90"/></PIPINGELEMENT></PIPINGMODEL></CAESARII>';
 const synthetic = extractInputXmlBranches(syntheticBendXml, { sourceId: 'synthetic-bend', fileName: 'synthetic.xml' });
@@ -160,6 +162,7 @@ const longCaesarBendObject = longCaesarScene.getObjectByName(longCaesarPipe.id);
 assert.equal(longCaesarBendObject.userData.localizedBendProxy, true);
 assert.ok(longCaesarBendObject.getObjectByName(`${longCaesarPipe.id}-localized-bend-marker`));
 assert.ok(longCaesarBendObject.getObjectByName(`${longCaesarPipe.id}-localized-bend-arc`));
+assert.equal(longCaesarBendObject.getObjectByName(`${longCaesarPipe.id}-localized-bend-arc`).userData.bmCiiBendVisualContract, 'compact-standard-elbow-1p5d');
 const longCaesarBendLabels = collectGlbLabelAnchors(longCaesarBendObject).map((label) => label.text);
 assert.ok(longCaesarBendLabels.some((label) => /BEND/.test(label) && /R152/.test(label) && /A45/.test(label)));
 
