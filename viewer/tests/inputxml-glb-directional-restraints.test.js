@@ -4,235 +4,157 @@ import * as THREE from 'three';
 import { applyGlbSupportSymbols } from '../js/pcf2glb/advanced/applyGlbSupportSymbols.js';
 import { buildExportScene } from '../js/pcf2glb/glb/buildExportScene.js';
 
-function support(id, kind, axis = { x: 1, y: 0, z: 0 }, extra = {}) {
-  const { component = {}, attributes = {} } = extra;
+function support(id, kind, axis = '', extra = {}) {
+  const node = extra.node || '35';
+  const recordId = extra.recordId || `inputxml:${id}`;
   return {
     id,
     type: 'SUPPORT',
-    bore: component.bore ?? 20,
-    coOrds: { x: 0, y: 0, z: 0 },
-    ep1: { x: 0, y: 0, z: 0 },
-    refNo: id,
+    bmCiiSupportRecord: true,
+    bmCiiGlyphOnlySupport: true,
+    supportRenderingMode: 'bm-cii-glyph-only',
+    recordId,
+    sourceRecordIndex: extra.sourceRecordIndex || 1,
+    source: 'inputxml',
+    supportSource: 'inputxml',
+    node,
     supportKind: kind,
+    kind,
+    axis,
+    restraintAxis: axis,
+    bore: extra.bore ?? 20,
+    outsideDiameter: extra.outsideDiameter ?? 20,
+    pipeRadius: extra.pipeRadius ?? 10,
+    pipePoint: extra.pipePoint || { x: 100, y: 0, z: 0 },
+    displayPointGlb: extra.pipePoint || { x: 100, y: 0, z: 0 },
+    pipeTangent: extra.pipeTangent || { x: 1, y: 0, z: 0 },
+    pipeTangentGlb: extra.pipeTangent || { x: 1, y: 0, z: 0 },
+    gap: extra.gap ?? null,
+    bidirectional: Boolean(extra.bidirectional),
     attributes: {
-      COMPONENT_IDENTIFIER: id,
-      SUPPORT_TAG: id,
+      SUPPORT_SOURCE: 'inputxml',
       SUPPORT_KIND: kind,
-      CAESAR_SUPPORT_KIND: kind,
-      caesarXCosine: String(axis.x),
-      caesarYCosine: String(axis.y),
-      caesarZCosine: String(axis.z),
-      ...attributes,
+      AXIS: axis,
+      NODE: node,
     },
-    raw: {
-      caesarSupportKind: kind,
-      caesarXCosine: String(axis.x),
-      caesarYCosine: String(axis.y),
-      caesarZCosine: String(axis.z),
-    },
-    ...component,
+    raw: {},
   };
 }
 
-function supportObject(component) {
-  const scene = buildExportScene({ components: [component] });
-  const object = scene.getObjectByName(component.id);
-  assert.ok(object, `${component.id} should be present in GLB scene`);
-  assert.equal(object.userData.directionalSupportEnhanced, true);
-  assert.equal(object.userData.supportReferenceStyle, true);
-  assert.ok(object.userData.directionalSupportSymbolCount > 0);
-  assert.ok(object.userData.supportSymbolScale >= 22, `${component.id} should use visible engineering scale`);
-  return object;
+function buildSupportScene(component) {
+  const scene = buildExportScene({ components: [component] }, null, {
+    supportRendering: {
+      source: 'inputxml',
+      mode: 'bm-cii-glyph-only',
+      authoritative: true,
+    },
+  });
+  const root = scene.getObjectByName('PCF_EXPORT_ROOT');
+  assert.ok(root, 'export root should exist');
+  assert.equal(root.userData.bmCiiSupportGlyphsAuthoritative, true, 'BM_CII glyph-only GLB must be authoritative');
+  return { scene, root };
 }
 
-function child(object, name) {
-  const found = object.getObjectByName(name);
-  assert.ok(found, `${object.name} should contain ${name}`);
+function supportRoot(root, recordId) {
+  let found = null;
+  root.traverse((object) => {
+    if (object.userData?.supportRecordId === recordId || object.userData?.bmCiiTrace?.recordId === recordId) {
+      if (object.userData?.bmCiiTrace?.entity === 'support') found = object;
+    }
+  });
+  assert.ok(found, `support root ${recordId} should exist`);
   return found;
 }
 
-function noChild(object, name) {
-  const found = object.getObjectByName(name);
-  assert.equal(found, undefined, `${object.name} should not contain ${name}`);
-}
-
-function collectRuntimeRoleMeshes(root, role) {
-  const meshes = [];
+function primitives(root, recordId) {
+  const out = [];
   root.traverse((object) => {
-    if (object.userData?.glbSupportSymbolRole !== role) return;
-    object.traverse((childObject) => {
-      if (childObject.isMesh) meshes.push(childObject);
-    });
+    const primitive = object.userData?.bmCiiGlyphPrimitive;
+    if (!primitive) return;
+    if (object.userData?.bmCiiTrace?.recordId !== recordId) return;
+    out.push({ object, primitive, role: primitive.role });
   });
-  return meshes;
+  return out;
 }
 
-function referenceBase(object, id) {
-  child(object, `${id}-directional-symbols`);
-  child(object, `${id}-reference-base-pad`);
+function roles(root, recordId) {
+  return primitives(root, recordId).map((entry) => entry.role);
 }
 
-const guide = supportObject(support('GUIDE-X', 'GUIDE', { x: 1, y: 0, z: 0 }));
-referenceBase(guide, 'GUIDE-X');
-child(guide, 'GUIDE-X-guide-base');
-child(guide, 'GUIDE-X-guide-reference-post');
-child(guide, 'GUIDE-X-guide-bar-positive');
-child(guide, 'GUIDE-X-guide-bar-negative');
-child(guide, 'GUIDE-X-guide-axis-positive');
-child(guide, 'GUIDE-X-guide-axis-positive-shaft');
-child(guide, 'GUIDE-X-guide-axis-negative');
-noChild(guide, 'GUIDE-X-rest-axis');
-noChild(guide, 'GUIDE-X-guide-rest-axis');
-assert.equal(guide.userData.supportKind, 'GUIDE');
-assert.deepEqual(guide.userData.supportAxis, { x: 1, y: 0, z: 0 });
+function assertOnlyRoles(root, recordId, allowedPrefixes) {
+  const actualRoles = roles(root, recordId);
+  assert.ok(actualRoles.length > 0, `${recordId} should have visible glyph primitives`);
+  for (const role of actualRoles) {
+    assert.ok(
+      allowedPrefixes.some((prefix) => role.startsWith(prefix)),
+      `${recordId} has unexpected primitive role ${role}; roles=${actualRoles.join(', ')}`,
+    );
+  }
+}
 
-const guideY = supportObject(support('GUIDE-Y', 'GUIDE', { x: 0, y: 1, z: 0 }));
-const guideYPositiveShaft = child(guideY, 'GUIDE-Y-guide-axis-positive-shaft');
-assert.ok(
-  Math.abs(guideYPositiveShaft.position.x) > Math.abs(guideYPositiveShaft.position.z),
-  'export GUIDE with vertical source axis should fall back to lateral X, not axial Z',
-);
-noChild(guideY, 'GUIDE-Y-rest-axis');
+function headPrimitive(root, recordId, prefix) {
+  const found = primitives(root, recordId).find((entry) => entry.role.startsWith(prefix) && entry.role.endsWith(':head'));
+  assert.ok(found, `${recordId} should contain ${prefix}:head`);
+  return found.primitive;
+}
 
-const lineStop = supportObject(support('LS-Z', 'LINESTOP', { x: 0, y: 0, z: 1 }));
-child(lineStop, 'LS-Z-linestop-plate-positive');
-child(lineStop, 'LS-Z-linestop-plate-negative');
-child(lineStop, 'LS-Z-linestop-axis-positive');
-child(lineStop, 'LS-Z-linestop-axis-negative');
-const lineStopPositiveShaft = child(lineStop, 'LS-Z-linestop-axis-positive-shaft');
-assert.ok(
-  Math.abs(lineStopPositiveShaft.position.x) > 0.1,
-  'export LINESTOP should be offset from the pipe centerline',
-);
-assert.equal(lineStop.userData.supportKind, 'LINESTOP');
+function vec(value) {
+  return new THREE.Vector3(value[0], value[1], value[2]);
+}
 
-const lineStopX = supportObject(support('LS-X', 'LINESTOP', { x: 1, y: 0, z: 0 }));
-child(lineStopX, 'LS-X-linestop-plate-positive');
-child(lineStopX, 'LS-X-linestop-plate-negative');
-const lineStopXPositiveShaft = child(lineStopX, 'LS-X-linestop-axis-positive-shaft');
-assert.ok(
-  Math.abs(lineStopXPositiveShaft.position.z) > 0.1,
-  'export LINESTOP-X should be offset from the pipe centerline',
-);
-assert.ok(
-  Math.abs(lineStopXPositiveShaft.position.x) > Math.abs(lineStopXPositiveShaft.position.z),
-  'export LINESTOP-X should remain axial in X while offset in Z',
-);
+function distancePointToLine(point, linePoint, lineDir) {
+  const p = vec(point);
+  const lp = vec(linePoint);
+  const dir = vec(lineDir).normalize();
+  return new THREE.Vector3().subVectors(p, lp).cross(dir).length();
+}
 
-const limit = supportObject(support('LIMIT-X', 'LIMIT', { x: -1, y: 0, z: 0 }));
-referenceBase(limit, 'LIMIT-X');
-child(limit, 'LIMIT-X-reference-post');
-child(limit, 'LIMIT-X-limit-stop-plate');
-child(limit, 'LIMIT-X-limit-axis');
-assert.equal(limit.userData.supportKind, 'LIMIT');
-assert.deepEqual(limit.userData.supportAxis, { x: -1, y: 0, z: 0 });
+const guideRecord = 'inputxml:GUIDE-Y';
+const guideComponent = support('GUIDE-Y', 'GUIDE', 'Y', { recordId: guideRecord, pipeTangent: { x: 1, y: 0, z: 0 } });
+const { scene: guideScene, root: guideExportRoot } = buildSupportScene(guideComponent);
+const guide = supportRoot(guideExportRoot, guideRecord);
+assert.equal(guide.userData.bmCiiTrace.supportKind, 'GUIDE');
+assert.equal(guide.userData.bmCiiTrace.supportSymbolContract, 'guide-lateral-arrows-tip-at-od2');
+assertOnlyRoles(guideExportRoot, guideRecord, ['guide-lateral-arrow-positive', 'guide-lateral-arrow-negative']);
+assert.ok(!roles(guideExportRoot, guideRecord).some((role) => /vertical|axis|plate|block|rest|linestop|limit/i.test(role)), 'GUIDE must be lateral arrows only');
+const guideHead = headPrimitive(guideExportRoot, guideRecord, 'guide-lateral-arrow-positive');
+assert.ok(Math.abs(vec(guideHead.tip).distanceTo(vec(guide.userData.bmCiiTrace.pipePoint)) - guide.userData.bmCiiTrace.pipeRadius) < 1e-6, 'GUIDE tip must touch OD/2');
 
-const anchor = supportObject(support('ANCHOR', 'ANCHOR'));
-referenceBase(anchor, 'ANCHOR');
-child(anchor, 'ANCHOR-anchor-block');
-for (let index = 1; index <= 6; index += 1) child(anchor, `ANCHOR-anchor-axis-${index}`);
-assert.equal(anchor.userData.supportKind, 'ANCHOR');
+const restRecord = 'inputxml:REST-Y';
+const { root: restRoot } = buildSupportScene(support('REST-Y', 'REST', 'Y', { recordId: restRecord, pipeTangent: { x: 1, y: 0, z: 0 } }));
+const rest = supportRoot(restRoot, restRecord);
+assert.equal(rest.userData.bmCiiTrace.supportSymbolContract, 'rest-vertical-arrow-tip-at-od2');
+assertOnlyRoles(restRoot, restRecord, ['rest-vertical-arrow']);
+const restHead = headPrimitive(restRoot, restRecord, 'rest-vertical-arrow');
+assert.ok(Math.abs(Math.abs(vec(restHead.direction).dot(new THREE.Vector3(0, 1, 0))) - 1) < 1e-6, 'REST arrow must be vertical');
+assert.ok(Math.abs(distancePointToLine(restHead.tip, rest.userData.bmCiiTrace.pipePoint, rest.userData.bmCiiTrace.pipeTangent) - rest.userData.bmCiiTrace.pipeRadius) < 1e-6, 'REST tip must touch OD surface');
 
-const hanger = supportObject(support('HANGER', 'HANGER', { x: 0, y: 1, z: 0 }));
-child(hanger, 'HANGER-hanger-rod');
-child(hanger, 'HANGER-hanger-ring');
-child(hanger, 'HANGER-hanger-load-axis');
-assert.equal(hanger.userData.supportKind, 'HANGER');
+const lineStopRecord = 'inputxml:LINESTOP-Z';
+const { root: lineStopRoot } = buildSupportScene(support('LS-Z', 'LINESTOP', 'Z', { recordId: lineStopRecord, pipeTangent: { x: 1, y: 0, z: 0 } }));
+const lineStop = supportRoot(lineStopRoot, lineStopRecord);
+assert.equal(lineStop.userData.bmCiiTrace.supportSymbolContract, 'linestop-axial-arrows-offset-od2');
+assertOnlyRoles(lineStopRoot, lineStopRecord, ['linestop-axial-arrow-positive', 'linestop-axial-arrow-negative']);
+const lineStopHead = headPrimitive(lineStopRoot, lineStopRecord, 'linestop-axial-arrow-positive');
+assert.ok(Math.abs(Math.abs(vec(lineStopHead.direction).dot(vec(lineStop.userData.bmCiiTrace.pipeTangent))) - 1) < 1e-6, 'LINESTOP arrow must be axial');
+assert.ok(Math.abs(distancePointToLine(lineStopHead.tip, lineStop.userData.bmCiiTrace.pipePoint, lineStop.userData.bmCiiTrace.pipeTangent) - lineStop.userData.bmCiiTrace.pipeRadius) < 1e-6, 'LINESTOP arrow line must be offset OD/2');
 
-const spring = supportObject(support('SPRING', 'SPRING', { x: 0, y: 1, z: 0 }));
-child(spring, 'SPRING-hanger-rod');
-child(spring, 'SPRING-hanger-ring');
-assert.equal(spring.userData.supportKind, 'SPRING');
+const limitRecord = 'inputxml:LIMIT-X';
+const { root: limitRoot } = buildSupportScene(support('LIMIT-X', 'LIMIT', 'X', { recordId: limitRecord, pipeTangent: { x: 1, y: 0, z: 0 }, gap: 10 }));
+const limit = supportRoot(limitRoot, limitRecord);
+assert.equal(limit.userData.bmCiiTrace.supportSymbolContract, 'limit-axial-arrow-offset-od2');
+assertOnlyRoles(limitRoot, limitRecord, ['limit-axial-arrow-positive', 'limit-gap-tick']);
+assert.equal(roles(limitRoot, limitRecord).filter((role) => role.startsWith('limit-axial-arrow') && role.endsWith(':head')).length, 1, 'LIMIT is one-way unless bidirectional');
 
-const rest = supportObject(support('REST-Y', 'REST', { x: 0, y: 1, z: 0 }));
-referenceBase(rest, 'REST-Y');
-child(rest, 'REST-Y-reference-post');
-child(rest, 'REST-Y-rest-base');
-child(rest, 'REST-Y-rest-axis');
-assert.equal(rest.userData.supportKind, 'REST');
+const unknownRecord = 'inputxml:UNKNOWN';
+const { root: unknownRoot } = buildSupportScene(support('UNKNOWN', 'UNKNOWN', '', { recordId: unknownRecord }));
+const unknown = supportRoot(unknownRoot, unknownRecord);
+assert.equal(unknown.userData.bmCiiTrace.supportSymbolContract, 'unknown-debug-default-off');
+assert.equal(unknown.userData.bmCiiTrace.visibleDefault, false);
+assert.equal(primitives(unknownRoot, unknownRecord).length, 0, 'UNKNOWN/TYPE0 must have no visible real support primitives');
 
-const largeGuide = supportObject(support('GUIDE-LARGE', 'GUIDE', { x: 1, y: 0, z: 0 }, { component: { bore: 300 } }));
-assert.ok(largeGuide.userData.supportSymbolScale > guide.userData.supportSymbolScale);
-child(largeGuide, 'GUIDE-LARGE-reference-base-pad');
-noChild(largeGuide, 'GUIDE-LARGE-rest-axis');
-
-const runtimeRoot = new THREE.Group();
-const runtimeGuide = new THREE.Object3D();
-runtimeGuide.name = 'RUNTIME-GUIDE';
-runtimeGuide.userData = {
-  supportKind: 'GUIDE',
-  supportAxis: { x: 0, y: 1, z: 0 },
-};
-runtimeRoot.add(runtimeGuide);
-const runtimeLineStop = new THREE.Object3D();
-runtimeLineStop.name = 'RUNTIME-LINESTOP';
-runtimeLineStop.position.set(100, 0, 0);
-runtimeLineStop.userData = {
-  supportKind: 'LINESTOP',
-  supportAxis: { x: 0, y: 0, z: 1 },
-};
-runtimeRoot.add(runtimeLineStop);
-const runtimeLineStopX = new THREE.Object3D();
-runtimeLineStopX.name = 'RUNTIME-LINESTOP-X';
-runtimeLineStopX.position.set(200, 0, 0);
-runtimeLineStopX.userData = {
-  supportKind: 'LINESTOP',
-  supportAxis: { x: 1, y: 0, z: 0 },
-};
-runtimeRoot.add(runtimeLineStopX);
-const runtimeScene = new THREE.Scene();
-runtimeScene.add(runtimeRoot);
-const runtimeStats = applyGlbSupportSymbols(runtimeRoot, runtimeScene, { scaleMultiplier: 1 });
-assert.equal(runtimeStats.created, 3);
-
-const runtimeSymbols = runtimeScene.getObjectByName('__GLB_SUPPORT_SYMBOLS_V3__');
-assert.ok(runtimeSymbols, 'runtime support symbols root should be created');
-const runtimeRoles = [];
-runtimeSymbols.traverse((object) => {
-  if (object.userData?.glbSupportSymbolRole) runtimeRoles.push(object.userData.glbSupportSymbolRole);
-});
-assert.equal(runtimeRoles.filter((role) => role === 'rest-axis').length, 0, 'runtime GUIDE must not emit a REST upward arrow');
-assert.equal(runtimeRoles.filter((role) => role === 'guide-axis').length, 2, 'runtime GUIDE should emit two lateral guide arrows');
-assert.equal(runtimeRoles.filter((role) => role === 'linestop-axis').length, 4, 'runtime LINESTOP should emit two axial line-stop arrows per line stop');
-
-const runtimeGuideMeshes = collectRuntimeRoleMeshes(runtimeSymbols, 'guide-axis');
-assert.ok(
-  runtimeGuideMeshes.some((mesh) => Math.abs(mesh.position.x) > Math.abs(mesh.position.z)),
-  'runtime GUIDE with vertical source axis should draw laterally instead of axially',
-);
-
-const runtimeLineStopMeshes = collectRuntimeRoleMeshes(runtimeSymbols, 'linestop-axis');
-assert.ok(
-  runtimeLineStopMeshes.some((mesh) => Math.abs(mesh.position.x - runtimeLineStop.position.x) > 0.1),
-  'runtime LINESTOP-Z should be offset from the pipe centerline',
-);
-assert.ok(
-  runtimeLineStopMeshes.some((mesh) => Math.abs(mesh.position.z - runtimeLineStopX.position.z) > 0.1),
-  'runtime LINESTOP-X should be offset from the pipe centerline',
-);
-
-const fallbackScene = buildExportScene({
-  components: [
-    support('GUIDE-FALLBACK', 'GUIDE', { x: 1, y: 0, z: 0 }),
-    support('LINESTOP-FALLBACK', 'LINESTOP', { x: 0, y: 0, z: 1 }),
-    support('REST-FALLBACK', 'REST', { x: 0, y: 1, z: 0 }),
-  ],
-});
-const fallbackRoot = fallbackScene.getObjectByName('PCF_EXPORT_ROOT');
-const fallbackStats = applyGlbSupportSymbols(fallbackRoot, fallbackScene, { scaleMultiplier: 1 });
-assert.equal(fallbackStats.created, 3);
-
-const bakedByKind = new Map();
-fallbackRoot.traverse((object) => {
-  const shape = String(object.userData?.glbShape || '');
-  if (!shape.startsWith('support-reference-v2-')) return;
-  bakedByKind.set(shape.replace('support-reference-v2-', '').toUpperCase(), object);
-});
-
-assert.equal(bakedByKind.get('GUIDE')?.visible, false, 'GUIDE baked glyph should stay hidden after runtime replacement');
-assert.equal(bakedByKind.get('GUIDE')?.userData.glbSupportBakedFallback, false);
-assert.equal(bakedByKind.get('LINESTOP')?.visible, false, 'LINESTOP baked glyph should stay hidden after runtime replacement');
-assert.equal(bakedByKind.get('LINESTOP')?.userData.glbSupportBakedFallback, false);
-assert.equal(bakedByKind.get('REST')?.visible, false, 'REST baked glyph should stay hidden after runtime replacement');
+const runtimeStats = applyGlbSupportSymbols(guideExportRoot, guideScene, { scaleMultiplier: 1 });
+assert.equal(runtimeStats.created, 0);
+assert.equal(runtimeStats.skipped, true, 'runtime overlay must skip authoritative baked BM_CII glyphs');
+assert.equal(runtimeStats.reason, 'authoritative-baked-support-glyphs');
 
 console.log('inputxml-glb-directional-restraints.test.js passed');
