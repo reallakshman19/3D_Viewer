@@ -25,3 +25,11 @@ export {
   DEFAULT_PROPERTY_TRANSFER_REPORT_COLUMNS,
   propertyTransferRowsToCsv,
 } from './inputxml-property-transfer-report.js';
+
+export {
+  applyInputXmlPropertyTransfer,
+  applyWritePlanToTargetXml,
+  buildAuditRows,
+  buildWritePlan,
+  propertyTransferAuditRowsToCsv,
+} from './inputxml-property-transfer-writer.js';
