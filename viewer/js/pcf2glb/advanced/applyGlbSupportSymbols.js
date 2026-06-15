@@ -26,6 +26,14 @@ function material(color, options = {}) {
   });
 }
 
+function text(value) {
+  return String(value ?? '').trim();
+}
+
+function truthy(value) {
+  return value === true || value === 1 || value === 'true' || value === '1' || value === 'yes' || value === 'YES';
+}
+
 function sourceOf(data = {}) {
   const layerSource = String(data.bmCiiLayer?.source || '').toLowerCase();
   const traceSource = String(data.bmCiiTrace?.supportSource || data.bmCiiTrace?.source || '').toLowerCase();
@@ -46,16 +54,15 @@ function axisLabelOf(data = {}) {
   );
 }
 
-function vectorFrom(value) {
+function vectorFrom(value, { normalize = true } = {}) {
+  let v = null;
   if (Array.isArray(value)) {
-    const v = new THREE.Vector3(Number(value[0]) || 0, Number(value[1]) || 0, Number(value[2]) || 0);
-    return v.lengthSq() > 1e-8 ? v.normalize() : null;
+    v = new THREE.Vector3(Number(value[0]) || 0, Number(value[1]) || 0, Number(value[2]) || 0);
+  } else if (value && typeof value === 'object') {
+    v = new THREE.Vector3(Number(value.x) || 0, Number(value.y) || 0, Number(value.z) || 0);
   }
-  if (value && typeof value === 'object') {
-    const v = new THREE.Vector3(Number(value.x) || 0, Number(value.y) || 0, Number(value.z) || 0);
-    return v.lengthSq() > 1e-8 ? v.normalize() : null;
-  }
-  return null;
+  if (!v || v.lengthSq() <= 1e-8) return null;
+  return normalize ? v.normalize() : v;
 }
 
 function axisVectorFromLabel(label) {
@@ -71,6 +78,55 @@ function axisVectorOf(data = {}, axisLabel = '') {
   let vector = vectorFrom(data.supportAxis) || vectorFrom(rawAxis) || axisVectorFromLabel(axisLabel) || X_AXIS.clone();
   if (data.supportAxisSpace === 'caesar-zup') vector = new THREE.Vector3(vector.x, vector.z, -vector.y);
   return vector.lengthSq() > 1e-8 ? vector.normalize() : X_AXIS.clone();
+}
+
+function pipePointOf(data = {}, object, target) {
+  const trace = data.bmCiiTrace || {};
+  const point = vectorFrom(
+    trace.pipePoint
+      || trace.point
+      || trace.supportPoint
+      || data.supportPipePoint
+      || data.pipePoint
+      || data.point,
+    { normalize: false },
+  );
+  if (point) {
+    target.copy(point);
+    return target;
+  }
+  object.getWorldPosition(target);
+  return target;
+}
+
+function supportRecordIdOf(data = {}) {
+  return text(data.supportRecordId || data.recordId || data.bmCiiTrace?.recordId || data.bmCiiTrace?.supportRecordId || data.bmCiiLayer?.recordId);
+}
+
+function supportContractOf(data = {}) {
+  return text(data.supportSymbolContract || data.bmCiiTrace?.supportSymbolContract || data.bmCiiLayer?.supportSymbolContract);
+}
+
+function isAuthoritativeBakedSupportGlyph(object) {
+  const data = object?.userData || {};
+  const name = String(object?.name || '').toUpperCase();
+  if (truthy(data.bmCiiSupportGlyphsAuthoritative) || truthy(data.extras?.bmCiiSupportGlyphsAuthoritative)) return true;
+  if (truthy(data.bmCiiTrace?.supportGlyphsAuthoritative)) return true;
+  if (supportRecordIdOf(data) && supportContractOf(data)) return true;
+  if (name.startsWith('BM_CII_FINAL_OD2_') || name.includes('FINAL_OD2')) return true;
+  return false;
+}
+
+function sceneHasAuthoritativeBakedSupportGlyphs(root) {
+  if (!root) return false;
+  const data = root.userData || {};
+  if (truthy(data.bmCiiSupportGlyphsAuthoritative) || truthy(data.extras?.bmCiiSupportGlyphsAuthoritative)) return true;
+  let found = false;
+  root.traverse?.((object) => {
+    if (found) return;
+    if (isAuthoritativeBakedSupportGlyph(object)) found = true;
+  });
+  return found;
 }
 
 function orientAlongY(object, direction) {
@@ -264,6 +320,7 @@ function isCandidateSupportObject(object) {
   if (!object?.isMesh && object?.type !== 'Group') return false;
   const data = object.userData || {};
   if (data.glbSupportSymbolMesh || data.glbSupportSymbol || data.glbSupportSymbolRoot) return false;
+  if (isAuthoritativeBakedSupportGlyph(object)) return false;
   const layer = data.bmCiiLayer || {};
   const kind = kindOf(data);
   return Boolean(kind) || layer.category === 'support' || layer.layerIds?.includes?.('plant.restraints') || isBakedSupportReference(object);
@@ -277,15 +334,23 @@ function computeSymbolScale(root, options = {}) {
   return Math.max(24, Math.min(200, diagonal * 0.050)) * scaleMultiplier;
 }
 
-function supportKey(kind, source, position, axisLabel) {
+function supportKey(kind, source, position, axisLabel, data = {}) {
+  const recordId = supportRecordIdOf(data);
+  if (recordId) return recordId;
   return `${source}:${kind}:${axisLabel}:${position.x.toFixed(3)}:${position.y.toFixed(3)}:${position.z.toFixed(3)}`;
 }
 
 function hideBakedSupportMarkers(root) {
   root.traverse((object) => {
     if (!isBakedSupportReference(object)) return;
+    if (isAuthoritativeBakedSupportGlyph(object)) return;
     object.visible = false;
-    object.userData = { ...(object.userData || {}), glbSupportBakedFallback: false, hiddenByRuntimeSupportProfile: RESTRAINT_VISUAL_PROFILE.id };
+    object.userData = {
+      ...(object.userData || {}),
+      glbSupportBakedFallback: false,
+      bmCiiForceHidden: true,
+      hiddenByRuntimeSupportProfile: RESTRAINT_VISUAL_PROFILE.id,
+    };
   });
 }
 
@@ -294,6 +359,25 @@ export function applyGlbSupportSymbols(root, scene, options = {}) {
   if (existing) {
     existing.parent?.remove?.(existing);
     disposeGroup(existing);
+  }
+
+  if (sceneHasAuthoritativeBakedSupportGlyphs(root)) {
+    console.info('[glb-support-symbols]', {
+      created: 0,
+      scanned: 0,
+      hidden: 0,
+      skipped: true,
+      reason: 'authoritative-baked-support-glyphs',
+      profile: RESTRAINT_VISUAL_PROFILE.id,
+    });
+    return {
+      created: 0,
+      scanned: 0,
+      hidden: 0,
+      skipped: true,
+      reason: 'authoritative-baked-support-glyphs',
+      profile: RESTRAINT_VISUAL_PROFILE.id,
+    };
   }
 
   root.updateMatrixWorld(true);
@@ -320,8 +404,8 @@ export function applyGlbSupportSymbols(root, scene, options = {}) {
     const restraintAxis = axisVectorOf(data, axisLabel);
     const pipeRadius = pipeRadiusOf(data, scale);
 
-    object.getWorldPosition(worldPos);
-    const key = supportKey(kind, source, worldPos, axisLabel);
+    pipePointOf(data, object, worldPos);
+    const key = supportKey(kind, source, worldPos, axisLabel, data);
     if (seen.has(key)) return;
     seen.add(key);
     scanned += 1;
@@ -330,12 +414,12 @@ export function applyGlbSupportSymbols(root, scene, options = {}) {
     const lateral = kind === 'GUIDE' ? horizontalAxisOrFallback(restraintAxis, X_AXIS) : lateralAxis(pipeAxis);
 
     const group = new THREE.Group();
-    group.name = `glb-support-${kind.toLowerCase()}-${source}-${object.name || object.uuid}`;
+    group.name = `glb-support-${kind.toLowerCase()}-${source}-${supportRecordIdOf(data) || object.name || object.uuid}`;
     group.userData = {
       glbSupportSymbolKind: kind,
       glbSupportSymbol: true,
       glbSupportVisualProfile: RESTRAINT_VISUAL_PROFILE.id,
-      pcfId: data.pcfId || data.componentId || object.name || object.uuid,
+      pcfId: data.pcfId || data.componentId || supportRecordIdOf(data) || object.name || object.uuid,
       pcfType: data.pcfType || 'SUPPORT',
       refNo: data.refNo || data.REF_NO || '',
       lineNo: data.lineNo || '',
@@ -350,6 +434,7 @@ export function applyGlbSupportSymbols(root, scene, options = {}) {
         supportKind: kind,
         supportSource: source,
         axis: axisLabel,
+        pipePoint: [worldPos.x, worldPos.y, worldPos.z],
         renderGlyph: `runtime-${RESTRAINT_VISUAL_PROFILE.id}-${kind.toLowerCase()}`,
         renderScale: scale,
         visualProfile: RESTRAINT_VISUAL_PROFILE.id,
@@ -380,7 +465,7 @@ export function applyGlbSupportSymbols(root, scene, options = {}) {
   });
 
   hideBakedSupportMarkers(root);
-  root.traverse((object) => { if (isBakedSupportReference(object)) hidden += 1; });
+  root.traverse((object) => { if (isBakedSupportReference(object) && !isAuthoritativeBakedSupportGlyph(object)) hidden += 1; });
 
   const created = symbolRoot.children.length;
   if (created > 0) scene.add(symbolRoot);
