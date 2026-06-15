@@ -56,21 +56,12 @@ class CircularArcCurve3 extends THREE.Curve {
   }
 }
 
-function bendRadiusFromComponent(comp = {}, nominalDiameter) {
-  const explicit = numberOrNull(comp.bendRadius)
-    ?? numberOrNull(comp.attributes?.BEND_RADIUS)
-    ?? numberOrNull(comp.raw?.inputXmlBendRadius)
-    ?? numberOrNull(comp.raw?.BEND_RADIUS)
-    ?? numberOrNull(comp.raw?.RADIUS)
-    ?? numberOrNull(comp.raw?.CURVE_RADIUS);
-
-  // BM_CII visual contract is standard long-radius elbow. If the source radius is
-  // absent or implausibly short/long for visual benchmark geometry, use 1.5D.
-  const defaultRadius = nominalDiameter * DEFAULT_RADIUS_RATIO_D;
-  if (!explicit) return defaultRadius;
-  const ratio = explicit / nominalDiameter;
-  if (ratio < 1.25 || ratio > 1.75) return defaultRadius;
-  return explicit;
+function bendRadiusFromComponent(_comp = {}, nominalDiameter) {
+  // Gate J is a visual engineering contract for BM_CII benchmark bends: render
+  // compact standard elbows at 1.5D even when CAESAR source uses approximate or
+  // inconsistent radius metadata. Source radius remains traceable elsewhere; the
+  // visual elbow radius is intentionally normalized for QC/review.
+  return nominalDiameter * DEFAULT_RADIUS_RATIO_D;
 }
 
 function bendAngleDegFromComponent(comp = {}) {
@@ -102,7 +93,7 @@ function makeCylinderBetween(start, end, radius, color, name) {
   return mesh;
 }
 
-function resolveBendVertex({ comp, p1, p2, incoming, outgoing, cutback }) {
+function resolveBendVertex({ comp, p1, p2, cutback }) {
   const explicit = pointVector(comp.bendVertex || comp.bendPoint || comp.vertexPoint || comp.attributes?.BEND_VERTEX);
   if (explicit) return explicit;
 
@@ -131,7 +122,7 @@ export function compactElbowMetrics(comp = {}) {
   const normal = safeBendNormal(incoming);
   const outgoing = rotateAroundAxis(incoming, normal, angleRad);
   const cutback = Math.max(pipeRadius, radius * Math.tan(angleRad / 2));
-  const vertex = resolveBendVertex({ comp, p1, p2, incoming, outgoing, cutback });
+  const vertex = resolveBendVertex({ comp, p1, p2, cutback });
   const tangent1 = vertex.clone().add(incoming.clone().multiplyScalar(-cutback));
   const tangent2 = vertex.clone().add(outgoing.clone().multiplyScalar(cutback));
   const radial1 = new THREE.Vector3().crossVectors(normal, incoming).normalize();
@@ -169,39 +160,16 @@ export function compactElbowMetrics(comp = {}) {
   };
 }
 
-export function buildCompactElbowContractObject(comp = {}, options = {}) {
-  const metrics = compactElbowMetrics(comp);
-  if (!metrics) return null;
-
-  const color = options.color ?? 0xaa55aa;
-  const includeStraightLegs = options.includeStraightLegs !== false;
-  const group = new THREE.Group();
-  group.name = comp.id || 'compact-elbow';
-
-  const arcCurve = new CircularArcCurve3(metrics.center, metrics.radiusVectorStart, metrics.normal, metrics.angleRad);
-  const arc = new THREE.Mesh(
-    new THREE.TubeGeometry(arcCurve, 32, metrics.pipeRadius, 18, false),
-    new THREE.MeshStandardMaterial({ color, roughness: 0.62, metalness: 0.05 }),
-  );
-  arc.name = `${group.name}-compact-elbow-arc`;
-  arc.userData = { bmCiiBendPrimitiveRole: 'compact-elbow-arc' };
-  group.add(arc);
-
-  if (includeStraightLegs) {
-    const legA = makeCylinderBetween(metrics.p1, metrics.tangent1, metrics.pipeRadius, color, `${group.name}-straight-leg-in`);
-    const legB = makeCylinderBetween(metrics.tangent2, metrics.p2, metrics.pipeRadius, color, `${group.name}-straight-leg-out`);
-    if (legA) group.add(legA);
-    if (legB) group.add(legB);
-  }
-
-  group.userData = {
+function compactContractUserData(comp = {}, metrics, role = '') {
+  return {
     ...(comp.attributes || {}),
     ...(comp.raw || {}),
     pcfType: comp.type,
     pcfId: comp.id,
     bore: metrics.nominalDiameter,
     labelText: comp.label || comp.name || comp.refNo || comp.id,
-    glbShape: 'compact-standard-elbow-1p5d',
+    glbShape: role || 'compact-standard-elbow-1p5d',
+    bmCiiBendPrimitiveRole: role,
     bmCiiBendVisualContract: 'compact-standard-elbow-1p5d',
     bmCiiCompactElbowContract: true,
     bendCurveType: 'CircularArcCurve3',
@@ -218,6 +186,40 @@ export function buildCompactElbowContractObject(comp = {}, options = {}) {
     bendTangentPoint2: metrics.tangent2.toArray(),
     bendMetadataSource: comp.bendMetadataSource || comp.attributes?.BEND_METADATA_SOURCE || 'BM_CII_TOPOLOGY_COMPACT_ELBOW',
   };
+}
+
+export function buildCompactElbowContractObject(comp = {}, options = {}) {
+  const metrics = compactElbowMetrics(comp);
+  if (!metrics) return null;
+
+  const color = options.color ?? 0xaa55aa;
+  const includeStraightLegs = options.includeStraightLegs !== false;
+  const group = new THREE.Group();
+  group.name = comp.id || 'compact-elbow';
+
+  const arcCurve = new CircularArcCurve3(metrics.center, metrics.radiusVectorStart, metrics.normal, metrics.angleRad);
+  const arc = new THREE.Mesh(
+    new THREE.TubeGeometry(arcCurve, 32, metrics.pipeRadius, 18, false),
+    new THREE.MeshStandardMaterial({ color, roughness: 0.62, metalness: 0.05 }),
+  );
+  arc.name = `${group.name}-compact-elbow-arc`;
+  arc.userData = compactContractUserData(comp, metrics, 'compact-elbow-arc');
+  group.add(arc);
+
+  if (includeStraightLegs) {
+    const legA = makeCylinderBetween(metrics.p1, metrics.tangent1, metrics.pipeRadius, color, `${group.name}-straight-leg-in`);
+    const legB = makeCylinderBetween(metrics.tangent2, metrics.p2, metrics.pipeRadius, color, `${group.name}-straight-leg-out`);
+    if (legA) {
+      legA.userData = compactContractUserData(comp, metrics, 'compact-elbow-straight-leg-in');
+      group.add(legA);
+    }
+    if (legB) {
+      legB.userData = compactContractUserData(comp, metrics, 'compact-elbow-straight-leg-out');
+      group.add(legB);
+    }
+  }
+
+  group.userData = compactContractUserData(comp, metrics, 'compact-standard-elbow-1p5d');
 
   return group;
 }
