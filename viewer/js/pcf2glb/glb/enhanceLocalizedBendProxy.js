@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { buildCompactElbowContractObject } from './CompactElbowContract.js';
 
 function numberOrNull(value) {
   const numeric = Number(value);
@@ -45,46 +46,6 @@ function bendLabel(comp = {}) {
   ].filter(Boolean).join(' ');
 }
 
-function makeArcMarker({ comp, center, dir, side, bore, chord }) {
-  const sourceRadius = numberOrNull(comp.bendRadius ?? comp.attributes?.BEND_RADIUS);
-  const sourceAngle = numberOrNull(comp.bendAngleDeg ?? comp.attributes?.BEND_ANGLE_DEG) ?? 45;
-  const visualRadius = Math.max(
-    bore * 1.4,
-    Math.min(sourceRadius || chord * 0.18, chord * 0.28, 220),
-  );
-  const angleRad = THREE.MathUtils.degToRad(Math.max(18, Math.min(Math.abs(sourceAngle), 120)));
-  const half = angleRad / 2;
-  const points = [];
-
-  for (let i = 0; i <= 14; i += 1) {
-    const t = -half + (angleRad * i) / 14;
-    const along = Math.sin(t) * visualRadius * 0.7;
-    const offset = (1 - Math.cos(t)) * visualRadius + visualRadius * 0.18;
-    points.push(center.clone()
-      .add(dir.clone().multiplyScalar(along))
-      .add(side.clone().multiplyScalar(offset)));
-  }
-
-  const curve = new THREE.CatmullRomCurve3(points);
-  const geometry = new THREE.TubeGeometry(curve, 16, Math.max(bore * 0.045, 1.4), 8, false);
-  const material = new THREE.MeshStandardMaterial({
-    color: 0xf59e0b,
-    emissive: 0x7c2d12,
-    emissiveIntensity: 0.18,
-    roughness: 0.5,
-    metalness: 0.05,
-  });
-  const mesh = new THREE.Mesh(geometry, material);
-  mesh.name = `${comp.id}-localized-bend-arc`;
-  mesh.userData = {
-    glbShape: 'localized-bend-arc',
-    bendRadius: sourceRadius,
-    bendAngleDeg: sourceAngle,
-    bendNode: text(comp.bendNode || comp.attributes?.BEND_NODE),
-  };
-  return mesh;
-}
-
 function makeBendLabelAnchor({ comp, center, side, bore }) {
   const anchor = new THREE.Mesh(
     new THREE.SphereGeometry(Math.max(bore * 0.08, 2.5), 10, 10),
@@ -95,7 +56,7 @@ function makeBendLabelAnchor({ comp, center, side, bore }) {
       roughness: 0.45,
     }),
   );
-  anchor.position.copy(center.clone().add(side.clone().multiplyScalar(Math.max(bore * 1.4, 28))));
+  anchor.position.copy(center.clone().add(side.clone().multiplyScalar(Math.max(bore * 1.65, 42))));
   anchor.name = `label:${comp.id}:localized-bend`;
   anchor.userData = {
     id: `${comp.id}:localized-bend-label`,
@@ -123,17 +84,18 @@ export function enhanceLocalizedBendProxy(object, comp = {}) {
 
   const bore = Math.max(numberOrNull(comp.bore ?? comp.ep1?.bore ?? comp.ep2?.bore) || 20, 5);
   const { dir, side } = safeBasis(delta);
-  const center = new THREE.Vector3().addVectors(p1, p2).multiplyScalar(0.5);
+  const center = p2.clone();
 
   const group = new THREE.Group();
   group.name = object.name || comp.id || 'localized-bend-component';
   group.userData = {
     ...(object.userData || {}),
-    glbShape: 'pipe-with-localized-bend-marker',
+    glbShape: 'pipe-with-compact-localized-bend',
     localizedBendProxy: true,
     bendRadius: numberOrNull(comp.bendRadius ?? comp.attributes?.BEND_RADIUS),
     bendAngleDeg: numberOrNull(comp.bendAngleDeg ?? comp.attributes?.BEND_ANGLE_DEG),
     bendNode: text(comp.bendNode || comp.attributes?.BEND_NODE),
+    bmCiiBendVisualContract: 'compact-standard-elbow-1p5d',
   };
 
   group.add(object);
@@ -141,14 +103,31 @@ export function enhanceLocalizedBendProxy(object, comp = {}) {
   const marker = new THREE.Group();
   marker.name = `${comp.id}-localized-bend-marker`;
   marker.userData = {
-    glbShape: 'localized-bend-marker',
+    glbShape: 'localized-compact-elbow-marker',
     localizedBendProxy: true,
     bendRadius: group.userData.bendRadius,
     bendAngleDeg: group.userData.bendAngleDeg,
     bendNode: group.userData.bendNode,
+    bmCiiBendVisualContract: 'compact-standard-elbow-1p5d',
   };
-  marker.add(makeArcMarker({ comp, center, dir, side, bore, chord }));
-  marker.add(makeBendLabelAnchor({ comp, center, side, bore }));
+
+  const compactArc = buildCompactElbowContractObject({
+    ...comp,
+    ep1: comp.ep1,
+    ep2: comp.ep2,
+    bendVertex: { x: center.x, y: center.y, z: center.z },
+  }, { includeStraightLegs: false, color: 0xf59e0b });
+  if (compactArc) {
+    compactArc.name = `${comp.id}-localized-bend-arc`;
+    compactArc.userData = {
+      ...(compactArc.userData || {}),
+      glbShape: 'localized-compact-elbow-arc',
+      localizedBendProxy: true,
+      bmCiiBendVisualContract: 'compact-standard-elbow-1p5d',
+    };
+    marker.add(compactArc);
+  }
+  marker.add(makeBendLabelAnchor({ comp, center: center.clone().add(dir.clone().multiplyScalar(-Math.min(chord * 0.06, bore * 2))), side, bore }));
   group.add(marker);
 
   return group;
