@@ -31,6 +31,8 @@ jobs:
           node --check scripts/bm-cii/annotation-fidelity-qc.mjs
           node --check scripts/bm-cii/support-export-glyph-path-qc.mjs
           node --check scripts/bm-cii/glb-visible-scene-qc.mjs
+          node --check scripts/bm-cii/component-presence-qc.mjs
+          node --check scripts/bm-cii/bm-cii-xml-components.mjs
           node --check scripts/bm-cii/build-v11-robust.mjs
           node --check scripts/bm-cii/run-bm-cii-benchmark-qc.mjs
 
@@ -39,6 +41,13 @@ jobs:
 
       - name: Generate repo-path BM_CII GLBs and run QC gates
         run: node scripts/bm-cii/run-bm-cii-benchmark-qc.mjs
+
+      - name: Run BM_CII component presence QC
+        run: |
+          node scripts/bm-cii/component-presence-qc.mjs --glb artifacts/bm-cii-v11-robust/BM_CII_Enriched_engineering_v11_robust_inputxml.glb --expected artifacts/bm-cii-v11-robust/qc/component_expected_summary.json --out artifacts/bm-cii-v11-robust/qc/component_presence_qc_engineering_inputxml.json
+          node scripts/bm-cii/component-presence-qc.mjs --glb artifacts/bm-cii-v11-robust/BM_CII_Enriched_engineering_v11_robust_isonote.glb --expected artifacts/bm-cii-v11-robust/qc/component_expected_summary.json --out artifacts/bm-cii-v11-robust/qc/component_presence_qc_engineering_isonote.json
+          node scripts/bm-cii/component-presence-qc.mjs --glb artifacts/bm-cii-v11-robust/BM_CII_Enriched_temp1_v11_robust_inputxml.glb --expected artifacts/bm-cii-v11-robust/qc/component_expected_summary.json --out artifacts/bm-cii-v11-robust/qc/component_presence_qc_temp1_inputxml.json
+          node scripts/bm-cii/component-presence-qc.mjs --glb artifacts/bm-cii-v11-robust/BM_CII_Enriched_temp1_v11_robust_isonote.glb --expected artifacts/bm-cii-v11-robust/qc/component_expected_summary.json --out artifacts/bm-cii-v11-robust/qc/component_presence_qc_temp1_isonote.json
 
       - name: Upload BM_CII benchmark artifacts
         uses: actions/upload-artifact@v4
