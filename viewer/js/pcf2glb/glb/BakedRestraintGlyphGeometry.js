@@ -2,11 +2,15 @@ import * as THREE from 'three';
 import {
   RESTRAINT_VISUAL_PROFILE,
   SUPPORT_SYMBOL_COLORS,
-  layerIdsForRestraintSupport,
   normalizeRestraintAxisLabel,
   normalizeRestraintKind,
   visualProfileMetadata,
 } from './RestraintVisualProfile.js';
+import {
+  normalizeSupportRecord,
+  supportSymbolContractFor,
+  supportTraceFromRecord,
+} from './SupportRecordNormalizer.js';
 
 const UP = new THREE.Vector3(0, 1, 0);
 const X_AXIS = new THREE.Vector3(1, 0, 0);
@@ -41,39 +45,6 @@ function vectorFrom(value) {
     return v.lengthSq() > 1e-8 ? v.normalize() : null;
   }
   return null;
-}
-
-function kindFrom(attrs = {}, comp = {}) {
-  return normalizeRestraintKind(
-    comp.supportKind
-      || attrs.supportKind
-      || attrs.SUPPORT_KIND
-      || attrs.CAESAR_SUPPORT_KIND
-      || attrs.caesarSupportKind
-      || attrs.CMPSUPTYPE
-      || attrs.SKEY
-      || attrs.SUPPORT_TAG
-      || attrs.labelText,
-  ) || 'UNKNOWN';
-}
-
-function axisLabelFrom(attrs = {}, comp = {}) {
-  return normalizeRestraintAxisLabel(
-    comp.axis
-      || comp.direction
-      || comp.restraintAxis
-      || attrs.axis
-      || attrs.direction
-      || attrs.restraintAxis
-      || attrs.SUPPORT_DIRECTION
-      || attrs['SUPPORT-DIRECTION']
-      || attrs.AXIS
-      || attrs.Axis
-      || attrs.DIRECTION
-      || attrs.Direction
-      || attrs.RESTRAINT_AXIS
-      || attrs['RESTRAINT-AXIS'],
-  );
 }
 
 function axisVectorFromLabel(label) {
@@ -218,7 +189,6 @@ function buildLineStop(group, id, pos, pipeRadius, pipeAxis, scale, color) {
 }
 
 function buildLimit(group, id, pos, pipeRadius, axis, lateral, scale, color) {
-  // LIMIT follows the axial rule: arrow path is offset vertically by OD/2 from pipe center.
   const limitAxis = axis.clone().normalize();
   const surface = pos.clone().add(UP.clone().multiplyScalar(pipeRadius));
   const basis = basisFrom(limitAxis, lateral);
@@ -265,35 +235,55 @@ function hideExistingProxyMeshes(object, markerGroupName) {
   return hidden;
 }
 
-function stampGlyphMetadata(target, { kind, source, axisLabel, scale, role, renderGlyph }) {
-  const profile = visualProfileMetadata({ kind, source, axisLabel, scale, role });
-  const layerIds = layerIdsForRestraintSupport({ source, kind, axisLabel });
+function stampLayerMetadata(target, record, { scale, role }) {
+  const profile = visualProfileMetadata({ kind: record.kind, source: record.source, axisLabel: record.axis, scale, role });
   target.userData = {
     ...(target.userData || {}),
     bmCiiLayerSchema: LAYER_SCHEMA,
     bmCiiLayer: {
       schema: LAYER_SCHEMA,
       category: 'support',
-      source,
-      supportKind: normalizeRestraintKind(kind) || 'UNKNOWN',
-      axis: normalizeRestraintAxisLabel(axisLabel),
-      visibleDefault: kind !== 'UNKNOWN',
-      layerIds,
+      source: record.source,
+      supportKind: record.kind,
+      axis: record.axis,
+      visibleDefault: record.visibleDefault,
+      layerIds: record.layerIds,
       restraintVisualProfile: profile.profile,
+      supportGlyphRole: role,
     },
-    bmCiiLayerIds: layerIds,
-    supportKind: normalizeRestraintKind(kind) || 'UNKNOWN',
-    supportSource: source,
-    restraintAxis: normalizeRestraintAxisLabel(axisLabel),
+    bmCiiLayerIds: record.layerIds,
+    supportKind: record.kind,
+    supportSource: record.source,
+    restraintAxis: record.axis,
     supportSymbolScale: scale,
-    renderGlyph,
     renderScale: scale,
     visualProfile: RESTRAINT_VISUAL_PROFILE.id,
     glbSupportVisualProfile: RESTRAINT_VISUAL_PROFILE.id,
     bmCiiRestraintVisualProfile: profile,
     supportReferenceStyle: true,
     supportReferenceStyleV5: true,
-    supportSymbolContract: (kind === 'GUIDE') ? 'lateral-arrows-touch-od-no-axis-marker' : (kind === 'LINESTOP') ? 'axial-arrows-offset-od2-no-axis-marker' : '',
+    supportGlyphRole: role,
+    supportSymbolContract: record.supportSymbolContract,
+    supportRecordId: record.recordId,
+  };
+}
+
+function stampGlyphMetadata(target, record, { scale, role, renderGlyph }) {
+  stampLayerMetadata(target, record, { scale, role });
+  const isRenderableRecordRoot = role === 'baked-symbol-root';
+  target.userData = {
+    ...(target.userData || {}),
+    renderGlyph,
+    bmCiiTrace: isRenderableRecordRoot
+      ? supportTraceFromRecord(record, { renderGlyph, renderScale: scale, visualProfile: RESTRAINT_VISUAL_PROFILE.id })
+      : {
+        entity: 'supportPart',
+        parentRecordId: record.recordId,
+        supportRecordId: record.recordId,
+        supportKind: record.kind,
+        supportSource: record.source,
+        supportSymbolContract: record.supportSymbolContract,
+      },
   };
 }
 
@@ -301,20 +291,25 @@ export function applyBakedRestraintGlyph(object, comp = {}, options = {}) {
   if (!object || comp.type !== 'SUPPORT') return object;
 
   const attrs = attrsFrom(object, comp);
-  const kind = kindFrom(attrs, comp);
-  const axisLabel = axisLabelFrom(attrs, comp);
-  const axis = axisVectorFrom(attrs, comp, axisLabel);
   const source = sourceOf(attrs, comp, options);
+  const sourceRecord = normalizeSupportRecord({ ...attrs, ...comp }, {
+    source,
+    supportSource: source,
+    index: comp.supportRecordIndex ?? comp.recordIndex ?? comp.index ?? comp.supportIndex,
+  });
+  const kind = sourceRecord.kind;
+  const axisLabel = sourceRecord.axis;
+  const axis = axisVectorFrom(attrs, comp, axisLabel);
   const scale = supportScaleFor(comp, attrs, options);
   const pipeRadius = pipeRadiusFor(comp, attrs);
   const color = SUPPORT_SYMBOL_COLORS[kind] || SUPPORT_SYMBOL_COLORS.UNKNOWN;
-  const id = text(comp.id || object.name || 'support');
+  const id = text(comp.id || sourceRecord.recordId || object.name || 'support');
 
   const pipeAxis = (kind === 'LINESTOP' || kind === 'LIMIT') ? horizontalAxisOrFallback(axis, Z_AXIS) : axis.clone().normalize();
   const lateral = kind === 'GUIDE' ? horizontalAxisOrFallback(axis, X_AXIS) : lateralAxis(pipeAxis);
 
   const markerGroup = new THREE.Group();
-  markerGroup.name = `${id}-restraint-${RESTRAINT_VISUAL_PROFILE.id}-${kind.toLowerCase()}`;
+  markerGroup.name = `${sourceRecord.recordId}-restraint-${RESTRAINT_VISUAL_PROFILE.id}-${kind.toLowerCase()}`;
   const renderGlyph = `baked-${RESTRAINT_VISUAL_PROFILE.id}-${kind.toLowerCase()}`;
   const origin = new THREE.Vector3(0, 0, 0);
 
@@ -326,8 +321,10 @@ export function applyBakedRestraintGlyph(object, comp = {}, options = {}) {
   else if (kind === 'HANGER' || kind === 'SPRING') buildHanger(markerGroup, id, origin, pipeAxis, lateral, scale, color);
   else buildUnknown(markerGroup, id, origin, pipeAxis, lateral, scale, color);
 
-  markerGroup.traverse((child) => stampGlyphMetadata(child, { kind, source, axisLabel, scale, role: child === markerGroup ? 'baked-symbol-root' : 'baked-symbol-child', renderGlyph }));
-  stampGlyphMetadata(markerGroup, { kind, source, axisLabel, scale, role: 'baked-symbol-root', renderGlyph });
+  const glyphMeshes = [];
+  markerGroup.traverse((child) => { if (child.isMesh) glyphMeshes.push(child); });
+  glyphMeshes.forEach((child, index) => stampGlyphMetadata(child, sourceRecord, { scale, role: index === 0 ? 'baked-symbol-root' : 'baked-symbol-child', renderGlyph }));
+  stampLayerMetadata(markerGroup, sourceRecord, { scale, role: 'baked-group' });
 
   const hiddenOriginalProxyMeshes = hideExistingProxyMeshes(object, markerGroup.name);
   object.add(markerGroup);
@@ -338,19 +335,21 @@ export function applyBakedRestraintGlyph(object, comp = {}, options = {}) {
     supportAxis: { x: axis.x, y: axis.y, z: axis.z },
     restraintAxis: axisLabel,
     supportSource: source,
+    supportRecordId: sourceRecord.recordId,
     supportSymbolScale: scale,
     supportPipeRadius: pipeRadius,
     renderGlyph,
     renderScale: scale,
     visualProfile: RESTRAINT_VISUAL_PROFILE.id,
-    glbShape: `support-reference-v5-${kind.toLowerCase()}`,
+    glbShape: `support-reference-v6-${kind.toLowerCase()}`,
     glbSupportVisualProfile: RESTRAINT_VISUAL_PROFILE.id,
+    bmCiiTrace: supportTraceFromRecord(sourceRecord, { renderGlyph, renderScale: scale, visualProfile: RESTRAINT_VISUAL_PROFILE.id }),
     bmCiiRestraintVisualProfile: visualProfileMetadata({ kind, source, axisLabel, scale, role: 'baked-object-root' }),
-    supportSymbolContract: (kind === 'GUIDE') ? 'lateral-arrows-touch-od-no-axis-marker' : (kind === 'LINESTOP') ? 'axial-arrows-offset-od2-no-axis-marker' : '',
+    supportSymbolContract: sourceRecord.supportSymbolContract || supportSymbolContractFor(kind),
     directionalSupportEnhanced: true,
     directionalSupportSymbolCount: markerGroup.children.length,
     supportReferenceStyle: true,
-    supportReferenceStyleV5: true,
+    supportReferenceStyleV6: true,
     hiddenOriginalProxyMeshCount: hiddenOriginalProxyMeshes.length,
   };
   return object;
