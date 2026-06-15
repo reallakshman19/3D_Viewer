@@ -1,5 +1,6 @@
 const SENTINEL = -1.0101;
 const EPS = 1e-9;
+const DEFAULT_LONG_RADIUS_BEND_RATIO_D = 1.5;
 
 function text(value) { return String(value ?? '').trim(); }
 function attrs(src = '') { const out = {}; const re = /([A-Za-z0-9_:\-.]+)="([^"]*)"/g; let m; while ((m = re.exec(src))) out[m[1]] = m[2]; return out; }
@@ -12,6 +13,7 @@ function mul(a, s) { return { x: a.x * s, y: a.y * s, z: a.z * s }; }
 function dot(a, b) { return a.x * b.x + a.y * b.y + a.z * b.z; }
 function len(a) { return Math.sqrt(dot(a, a)); }
 function norm(a) { const l = a ? len(a) : 0; return l > EPS ? mul(a, 1 / l) : null; }
+function defaultBendRadiusForBore(bore) { return Number.isFinite(Number(bore)) && Number(bore) > 0 ? Number(bore) * DEFAULT_LONG_RADIUS_BEND_RATIO_D : null; }
 
 function categoryForType(type) {
   const raw = text(type).toUpperCase();
@@ -103,8 +105,9 @@ function rigidComponentFromElement(element, rigid, segment, rigidIndex) {
 function bendComponentFromElement(element, bend, segment, bendIndex) {
   if (!segment?.p1 || !segment?.p2 || !segment?.diameter) return null;
   const bore = Number(segment.diameter);
-  const bendRadius = num(bend.RADIUS ?? bend.BEND_RADIUS ?? bend.CURVE_RADIUS);
-  const bendAngleDeg = num(bend.ANGLE ?? bend.BEND_ANGLE);
+  const sourceRadius = num(bend.RADIUS ?? bend.BEND_RADIUS ?? bend.CURVE_RADIUS);
+  const bendRadius = sourceRadius ?? defaultBendRadiusForBore(bore);
+  const bendAngleDeg = num(bend.ANGLE ?? bend.BEND_ANGLE) ?? 90;
   return {
     id: `BM_CII_XML_BEND_${String(element.index).padStart(3, '0')}_${element.from}_${element.to}_${String(bendIndex + 1).padStart(2, '0')}`,
     type: 'BEND',
@@ -116,16 +119,19 @@ function bendComponentFromElement(element, bend, segment, bendIndex) {
     ep2: point(segment.p2, bore),
     bendRadius,
     bendAngleDeg,
-    bendMetadataSource: 'BM_CII_INPUT.XML/BEND',
+    bendRadiusRatioD: bendRadius && bore ? bendRadius / bore : null,
+    bendMetadataSource: sourceRadius ? 'BM_CII_INPUT.XML/BEND' : 'BM_CII_INPUT.XML/BEND_DEFAULT_1_5D',
     bmCiiRequiresCurvedGeometry: true,
-    raw: { ...bend, SOURCE: 'BM_CII_INPUT.XML', ELEMENT_INDEX: element.index, FROM_NODE: element.from, TO_NODE: element.to, DIAMETER: bore },
+    raw: { ...bend, SOURCE: 'BM_CII_INPUT.XML', ELEMENT_INDEX: element.index, FROM_NODE: element.from, TO_NODE: element.to, DIAMETER: bore, BEND_RADIUS: bendRadius, BEND_RADIUS_RATIO_D: bendRadius && bore ? bendRadius / bore : null },
     attributes: {
       SOURCE: 'BM_CII_INPUT.XML',
       COMPONENT_KIND: 'BEND',
       COMPONENT_TYPE: 'BEND',
       ELEMENT_INDEX: String(element.index),
-      BEND_METADATA_SOURCE: 'BM_CII_INPUT.XML/BEND',
+      BEND_METADATA_SOURCE: sourceRadius ? 'BM_CII_INPUT.XML/BEND' : 'BM_CII_INPUT.XML/BEND_DEFAULT_1_5D',
       BEND_MUST_RENDER_CURVED: 'true',
+      BEND_RADIUS: String(bendRadius || ''),
+      BEND_RADIUS_RATIO_D: bendRadius && bore ? String(bendRadius / bore) : '',
     },
   };
 }
@@ -231,6 +237,8 @@ export function componentsFromBmCiiXml(xml = '', frameIndex = {}) {
       xmlBendRows: elements.reduce((sum, element) => sum + element.bends.length, 0),
       pipeSegmentsSkippedForCurvedBends: bendElementIndexes.size,
       derivedBranchTees: unique.filter((component) => /^BM_CII_XML_TEE_NODE_/.test(component.id)).length,
+      defaultBendRadiusRatioD: DEFAULT_LONG_RADIUS_BEND_RATIO_D,
+      defaultedBendRadiusCount: unique.filter((component) => component.type === 'BEND' && component.bendMetadataSource === 'BM_CII_INPUT.XML/BEND_DEFAULT_1_5D').length,
     },
     summary: summaryForComponents(unique),
   };
