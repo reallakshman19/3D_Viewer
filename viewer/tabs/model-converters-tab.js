@@ -4,6 +4,7 @@ import { installInputXmlDxfLegacyBridge } from './model-converters/inputxml-dxf-
 import { installInputXmlDxfProjectionOption } from './model-converters/inputxml-dxf-projection-option.js';
 import { installInputXmlDxfSymbolOption } from './model-converters/inputxml-dxf-symbol-option.js';
 import { installInputXmlGlbLegacyBridge } from './model-converters/inputxml-glb-legacy-bridge.js';
+import { installInputXmlPropertyTransferUi } from './model-converters/inputxml-property-transfer-ui.js?v=20260615-inputxml-property-transfer-ui-1';
 import { installXmlCiiConversionWorkflowPopup } from './model-converters/xml-cii-conversion-workflow-popup.js';
 
 const MODEL_CONVERTER_INSTALLERS = Object.freeze([
@@ -12,6 +13,7 @@ const MODEL_CONVERTER_INSTALLERS = Object.freeze([
   ['inputxml-dxf-symbol-option', installInputXmlDxfSymbolOption],
   ['inputxml-dxf-projection-option', installInputXmlDxfProjectionOption],
   ['inputxml-glb-legacy-bridge', installInputXmlGlbLegacyBridge],
+  ['inputxml-property-transfer-ui', installInputXmlPropertyTransferUi],
 ]);
 
 function installSafely(name, installer, container) {
