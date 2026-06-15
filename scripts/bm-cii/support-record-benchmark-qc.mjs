@@ -51,13 +51,9 @@ function parseArgs(argv) {
   const args = { pretty: false, strict: false };
   for (let i = 2; i < argv.length; i += 1) {
     const arg = argv[i];
-    if (arg === '--pretty') {
-      args.pretty = true;
-    } else if (arg === '--strict') {
-      args.strict = true;
-    } else if (arg.startsWith('--')) {
-      args[arg.slice(2)] = argv[++i];
-    }
+    if (arg === '--pretty') args.pretty = true;
+    else if (arg === '--strict') args.strict = true;
+    else if (arg.startsWith('--')) args[arg.slice(2)] = argv[++i];
   }
   return args;
 }
@@ -82,9 +78,7 @@ function readGlbJson(file) {
     offset += 8;
     const chunk = bytes.subarray(offset, offset + chunkLength);
     offset += chunkLength;
-    if (chunkType === 0x4e4f534a) {
-      return JSON.parse(chunk.toString('utf8').replace(/[\u0000\s]+$/g, ''));
-    }
+    if (chunkType === 0x4e4f534a) return JSON.parse(chunk.toString('utf8').replace(/[\u0000\s]+$/g, ''));
   }
   throw new Error(`Missing JSON chunk: ${file}`);
 }
@@ -137,6 +131,11 @@ function firstNonEmpty(...values) {
   return '';
 }
 
+function supportRecordIdOf({ source, index, node, kind, axis }) {
+  const indexText = String(index).padStart(2, '0');
+  return `${source}:${indexText}:node:${node || 'NA'}:kind:${kind || 'UNKNOWN'}:axis:${axis || 'NA'}`;
+}
+
 function expectedSupportRecords(sidecar, source) {
   const supports = supportArrayForSource(sidecar, source);
   return supports.map((support, index) => {
@@ -147,7 +146,7 @@ function expectedSupportRecords(sidecar, source) {
       support.recordId,
       support.id,
       support.supportId,
-      `${source}:${String(index + 1).padStart(2, '0')}:node:${node}:kind:${kind}:axis:${axis || 'NA'}`,
+      supportRecordIdOf({ source, index: index + 1, node, kind, axis }),
     ));
     return {
       index: index + 1,
@@ -186,8 +185,12 @@ function layerIdsOf(node = {}) {
   return Array.isArray(ids) ? ids.filter(Boolean) : [];
 }
 
-function isSupportTrace(trace) {
-  return trace?.entity === 'support' || trace?.semanticCategory === 'support' || trace?.supportKind || trace?.supportSource;
+function isSupportGlyphTrace(trace) {
+  return trace?.entity === 'support';
+}
+
+function isSupportPartTrace(trace) {
+  return trace?.entity === 'supportPart' || trace?.entity === 'support-part';
 }
 
 function isSupportLayer(layer) {
@@ -198,6 +201,7 @@ function renderedSupportRecords(gltf) {
   const records = [];
   const supportLikeOrphans = [];
   const supportLikeNodes = [];
+  const supportParts = [];
 
   (gltf.nodes || []).forEach((node, index) => {
     if (node.mesh === undefined || node.mesh === null) return;
@@ -205,12 +209,13 @@ function renderedSupportRecords(gltf) {
     const trace = traceOf(node);
     const layer = layerOf(node);
     const layerIds = layerIdsOf(node);
-    const supportTrace = isSupportTrace(trace);
+    const supportTrace = isSupportGlyphTrace(trace);
+    const supportPartTrace = isSupportPartTrace(trace);
     const supportLayer = isSupportLayer(layer);
     const supportName = SUPPORT_LIKE_NAME.test(name);
 
-    if (supportName || supportLayer || supportTrace) {
-      supportLikeNodes.push({ index, name, hasTrace: !!trace, hasLayer: !!layer, layerIds });
+    if (supportName || supportLayer || supportTrace || supportPartTrace) {
+      supportLikeNodes.push({ index, name, traceEntity: trace?.entity || '', hasTrace: !!trace, hasLayer: !!layer, layerIds });
     }
 
     if (supportTrace) {
@@ -230,12 +235,14 @@ function renderedSupportRecords(gltf) {
         visibleDefault: layer?.visibleDefault !== false,
         layerIds,
       });
+    } else if (supportPartTrace) {
+      supportParts.push({ index, name, parentRecordId: trace.parentRecordId || trace.supportRecordId || '', layerIds });
     } else if (supportName || supportLayer) {
       supportLikeOrphans.push({ index, name, hasLayer: !!layer, layerIds });
     }
   });
 
-  return { records, supportLikeOrphans, supportLikeNodes };
+  return { records, supportLikeOrphans, supportLikeNodes, supportParts };
 }
 
 function keyFor(record) {
@@ -263,11 +270,8 @@ function compareRecords(expected, actual, source) {
   const matched = [];
   for (const [key, expectedRecord] of expectedByKey.entries()) {
     const actualRecord = actualByKey.get(key);
-    if (!actualRecord) {
-      missing.push({ key, expected: expectedRecord });
-    } else {
-      matched.push({ key, expected: expectedRecord, actual: actualRecord });
-    }
+    if (!actualRecord) missing.push({ key, expected: expectedRecord });
+    else matched.push({ key, expected: expectedRecord, actual: actualRecord });
   }
 
   const unexpected = [];
@@ -279,6 +283,10 @@ function compareRecords(expected, actual, source) {
   const invalidKinds = actual.filter((record) => !VALID_SUPPORT_KINDS.has(record.kind));
   const missingRecordId = actual.filter((record) => !record.recordId);
   const missingContract = actual.filter((record) => !record.contract && !record.renderGlyph);
+  const contractMismatch = actual.filter((record) => {
+    const expectedContract = EXPECTED_CONTRACT[record.kind] || EXPECTED_CONTRACT.UNKNOWN;
+    return record.contract && record.contract !== expectedContract;
+  });
   const unknownVisible = actual.filter((record) => UNKNOWN_KINDS.has(record.kind) && record.visibleDefault !== false);
 
   return {
@@ -291,6 +299,7 @@ function compareRecords(expected, actual, source) {
     invalidKinds,
     missingRecordId,
     missingContract,
+    contractMismatch,
     unknownVisible,
   };
 }
@@ -300,7 +309,7 @@ function runQc({ glbFile, sidecarFile, supportSource }) {
   const sidecar = readJson(sidecarFile);
   const gltf = readGlbJson(glbFile);
   const expected = expectedSupportRecords(sidecar, source);
-  const { records: actual, supportLikeOrphans, supportLikeNodes } = renderedSupportRecords(gltf);
+  const { records: actual, supportLikeOrphans, supportLikeNodes, supportParts } = renderedSupportRecords(gltf);
   const compare = compareRecords(expected, actual, source);
 
   const gates = {
@@ -315,11 +324,12 @@ function runQc({ glbFile, sidecarFile, supportSource }) {
     noInvalidSupportKinds: compare.invalidKinds.length === 0,
     allSupportGlyphsHaveRecordId: compare.missingRecordId.length === 0,
     allSupportGlyphsHaveContractOrGlyph: compare.missingContract.length === 0,
+    allSupportGlyphContractsMatchKind: compare.contractMismatch.length === 0,
     unknownType0NotVisibleByDefault: compare.unknownVisible.length === 0,
   };
 
   return {
-    schema: 'bm-cii-support-record-benchmark-qc/report-v1',
+    schema: 'bm-cii-support-record-benchmark-qc/report-v2',
     createdAtUtc: new Date().toISOString(),
     glb: path.basename(glbFile),
     sidecar: path.basename(sidecarFile),
@@ -331,12 +341,14 @@ function runQc({ glbFile, sidecarFile, supportSource }) {
       renderedSupportRecords: actual.length,
       supportLikeNodes: supportLikeNodes.length,
       supportLikeOrphans: supportLikeOrphans.length,
+      supportPartNodes: supportParts.length,
       matchedSupportRecords: compare.matched.length,
       missingSupportRecords: compare.missing.length,
       unexpectedSupportRecords: compare.unexpected.length,
     },
     expected,
     actual,
+    supportParts,
     supportLikeOrphans,
     failures: {
       missing: compare.missing,
@@ -347,6 +359,7 @@ function runQc({ glbFile, sidecarFile, supportSource }) {
       invalidKinds: compare.invalidKinds,
       missingRecordId: compare.missingRecordId,
       missingContract: compare.missingContract,
+      contractMismatch: compare.contractMismatch,
       unknownVisible: compare.unknownVisible,
     },
   };
