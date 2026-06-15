@@ -2,6 +2,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import {
+  applyInputXmlPropertyTransfer,
   runInputXmlPropertyTransferPreview,
 } from '../viewer/tabs/inputxml-property-transfer/index.js';
 
@@ -47,12 +48,27 @@ function parseCsv(text) {
   });
 }
 
+function textBetween(xml, tag) {
+  const match = String(xml || '').match(new RegExp(`<${tag}\\b[^>]*>([\\s\\S]*?)<\\/${tag}>`, 'i'));
+  return match ? match[1].trim() : '';
+}
+
+function nodeXmlByName(xml, nodeName) {
+  const nodeRe = /<Node\b[^>]*>[\s\S]*?<\/Node>/gi;
+  let match;
+  while ((match = nodeRe.exec(xml))) {
+    if (textBetween(match[0], 'NodeName') === nodeName) return match[0];
+  }
+  return '';
+}
+
 function main() {
   const sourceXmlText = readRequired(sourceXmlPath);
   const targetXmlText = readRequired(targetXmlPath);
   const expected = new Map(parseCsv(readRequired(expectedCsvPath)).map((row) => [row.targetNode, row]));
 
   const result = runInputXmlPropertyTransferPreview({ sourceXmlText, targetXmlText, options: CONFIG });
+  const writerResult = applyInputXmlPropertyTransfer({ sourceXmlText, targetXmlText, options: CONFIG, previewResult: result });
   const report = result.rows.map((row) => ({
     targetNode: row.targetNode,
     targetNodeNumber: row.targetNodeNumber,
@@ -85,6 +101,34 @@ function main() {
     }
   }
 
+  const transferredRows = result.rows.filter((row) => row.decision === 'TRANSFERRED');
+  const expectedWrittenChanges = transferredRows.reduce((sum, row) => sum + row.propertyChanges, 0);
+  if (!writerResult.xmlChanged) failures.push('writer: updated XML was not changed for transferred rows');
+  if (writerResult.writerSummary.written !== expectedWrittenChanges) {
+    failures.push(`writer: wrote ${writerResult.writerSummary.written} properties, expected ${expectedWrittenChanges}`);
+  }
+
+  const pipe01 = nodeXmlByName(writerResult.updatedXmlText, 'TGT-PIPE-01');
+  if (textBetween(pipe01, 'WallThickness') !== '11.13') failures.push('writer: TGT-PIPE-01 WallThickness not transferred');
+  if (textBetween(pipe01, 'Weight') !== '12.1') failures.push('writer: TGT-PIPE-01 Weight not transferred');
+  if (textBetween(pipe01, 'MaterialCode') !== 'A333-6') failures.push('writer: TGT-PIPE-01 MaterialCode not transferred');
+
+  const noMatchPipe = nodeXmlByName(writerResult.updatedXmlText, 'TGT-PIPE-04');
+  if (textBetween(noMatchPipe, 'WallThickness') !== '0') failures.push('writer: no-coordinate TGT-PIPE-04 was modified');
+  if (textBetween(noMatchPipe, 'MaterialCode') !== 'TARGET-KEEP') failures.push('writer: no-coordinate TGT-PIPE-04 MaterialCode changed');
+
+  const diaBlockedFlange = nodeXmlByName(writerResult.updatedXmlText, 'TGT-FLANGE-10');
+  if (textBetween(diaBlockedFlange, 'Weight') !== '0') failures.push('writer: diameter-blocked TGT-FLANGE-10 Weight changed');
+
+  const lineBlockedValve = nodeXmlByName(writerResult.updatedXmlText, 'TGT-VALVE-17');
+  if (textBetween(lineBlockedValve, 'Weight') !== '0') failures.push('writer: line-family-blocked TGT-VALVE-17 Weight changed');
+
+  const ambiguousValve = nodeXmlByName(writerResult.updatedXmlText, 'TGT-VALVE-24');
+  if (textBetween(ambiguousValve, 'Weight') !== '0') failures.push('writer: ambiguous TGT-VALVE-24 Weight changed');
+
+  if (writerResult.updatedXmlText.includes('<NodeNumber>10</NodeNumber>')) failures.push('writer: target NodeNumber appears overwritten by source NodeNumber');
+  if (!writerResult.updatedXmlText.includes('<NodeNumber>1010</NodeNumber>')) failures.push('writer: original target NodeNumber 1010 missing');
+
   const { summary } = result;
   console.log('InputXML property transfer coordinate benchmark');
   console.log(`  Source nodes: ${summary.sourceNodes}`);
@@ -97,6 +141,8 @@ function main() {
   console.log(`  Diameter blocked: ${summary.diameterBlocked}`);
   console.log(`  Line family blocked: ${summary.lineFamilyBlocked}`);
   console.log(`  Ambiguous: ${summary.ambiguous}`);
+  console.log(`  XML writer changed: ${writerResult.xmlChanged ? 'YES' : 'NO'}`);
+  console.log(`  XML properties written: ${writerResult.writerSummary.written}`);
 
   const sampleRows = report.filter((row) => ['TGT-PIPE-01', 'TGT-PIPE-04', 'TGT-FLANGE-10', 'TGT-VALVE-17', 'TGT-VALVE-24'].includes(row.targetNode));
   console.log('\nSample decisions:');
