@@ -153,8 +153,8 @@ function annotationLabelComponents(benchmarkSidecar = {}, nodes = {}) {
       label: `ISONOTE ${no}: ${label}`,
       refNo: `ISONOTE ${no}`,
       coOrds: pointWithOffset(base, { x: 85 + no * 8, y: 90, z: no % 2 ? 55 : -55 }),
-      raw: { SOURCE: 'BM_CII_INPUT.XML', NODE_LABEL: `ISONOTE ${no}: ${label}`, NODE: node, ANNOTATION_KIND: 'ISONOTE_CALLOUT' },
-      attributes: { SOURCE: 'ISONOTE', COMPONENT_KIND: 'NODE_LABEL', NODE_LABEL: `ISONOTE ${no}: ${label}`, NODE: node },
+      raw: { SOURCE: 'ISONOTE', NODE_LABEL: `ISONOTE ${no}: ${label}`, NODE: node, ANNOTATION_KIND: 'ISONOTE_CALLOUT' },
+      attributes: { SOURCE: 'ISONOTE', COMPONENT_KIND: 'NODE_LABEL', ANNOTATION_KIND: 'ISONOTE_CALLOUT', NODE_LABEL: `ISONOTE ${no}: ${label}`, NODE: node },
     });
   }
 
@@ -169,8 +169,8 @@ function annotationLabelComponents(benchmarkSidecar = {}, nodes = {}) {
       label: `NODE ${node}`,
       refNo: `NODE ${node}`,
       coOrds: pointWithOffset(base, { x: -70, y: 55, z: 45 }),
-      raw: { SOURCE: 'BM_CII_INPUT.XML', NODE_LABEL: `NODE ${node}`, NODE: node, ANNOTATION_KIND: 'NODE_LABEL' },
-      attributes: { SOURCE: 'GENERATED', COMPONENT_KIND: 'NODE_LABEL', NODE_LABEL: `NODE ${node}`, NODE: node },
+      raw: { SOURCE: 'GENERATED', NODE_LABEL: `NODE ${node}`, NODE: node, ANNOTATION_KIND: 'NODE_LABEL' },
+      attributes: { SOURCE: 'GENERATED', COMPONENT_KIND: 'NODE_LABEL', ANNOTATION_KIND: 'NODE_LABEL', NODE_LABEL: `NODE ${node}`, NODE: node },
     });
   }
   return out;
@@ -183,8 +183,11 @@ function categoryForType(type) {
   if (raw === 'VALVE') return 'valve';
   if (raw === 'FLANGE') return 'flange';
   if (raw === 'TEE' || raw === 'OLET') return 'teeOlet';
-  if (raw === 'NODE_LABEL') return 'other';
   return 'other';
+}
+
+function plantComponentsOnly(components = []) {
+  return components.filter((component) => text(component.type).toUpperCase() !== 'NODE_LABEL');
 }
 
 function summaryForComponents(components = []) {
@@ -209,25 +212,29 @@ async function composeRepoBenchmarkInputs({ xmlPath, auditDir, benchmarkSidecarP
   const xml = await fs.readFile(xmlPath, 'utf8');
   const componentResult = componentsFromBmCiiXml(xml, frameIndex);
   const annotationLabels = annotationLabelComponents(benchmarkSidecar, frameIndex.nodes || {});
-  const fullComponents = [...componentResult.components, ...annotationLabels];
+  const plantComponents = plantComponentsOnly(componentResult.components);
+  const fullComponents = [...plantComponents, ...annotationLabels];
+  const plantSummary = summaryForComponents(plantComponents);
   const fullSummary = summaryForComponents(fullComponents);
 
   const fullModel = {
-    schema: 'bm-cii-repo-generated-full-render-model/v2',
+    schema: 'bm-cii-repo-generated-full-render-model/v3',
     sourceXml: rel(xmlPath),
     generatedBy: 'scripts/bm-cii/run-bm-cii-benchmark-qc.mjs',
     modelRole: 'authoritative-plant-geometry-with-annotation-label-anchors',
     nodeCoordinatesGlbBasisMm: frameIndex.nodes || {},
     nodes: frameIndex.nodes || {},
     components: fullComponents,
-    bmCiiComponentSummary: fullSummary,
+    bmCiiPlantComponentSummary: plantSummary,
+    bmCiiFullModelComponentSummary: fullSummary,
+    bmCiiComponentSummary: plantSummary,
     bmCiiXmlComponentSourceStats: componentResult.sourceStats,
     bmCiiAnnotationLabelAnchorCount: annotationLabels.length,
     bmCiiModelSource: 'xml-derived-full-render-model-plus-sidecar-annotation-label-anchors',
   };
 
   const sidecar = {
-    schema: 'bm-cii-repo-generated-benchmark-sidecar/v4',
+    schema: 'bm-cii-repo-generated-benchmark-sidecar/v5',
     sourceXml: rel(xmlPath),
     sourceBenchmarkSidecar: rel(benchmarkSidecarPath),
     generatedBy: 'scripts/bm-cii/run-bm-cii-benchmark-qc.mjs',
@@ -236,7 +243,9 @@ async function composeRepoBenchmarkInputs({ xmlPath, auditDir, benchmarkSidecarP
     supportsInputXml: (inputxml.records || []).map(compactSupportRecord),
     supportsIsonote: (isonote.records || []).map(compactSupportRecord),
     caesarAnnotationCallouts: benchmarkSidecar.caesarAnnotationCallouts || [],
-    bmCiiComponentSummary: fullSummary,
+    bmCiiPlantComponentSummary: plantSummary,
+    bmCiiFullModelComponentSummary: fullSummary,
+    bmCiiComponentSummary: plantSummary,
     bmCiiXmlComponentSourceStats: componentResult.sourceStats,
     bmCiiAnnotationLabelAnchorCount: annotationLabels.length,
     bmCiiAnnotationWhitelist: {
@@ -250,7 +259,8 @@ async function composeRepoBenchmarkInputs({ xmlPath, auditDir, benchmarkSidecarP
   const sidecarPath = path.join(outDir, 'BM_CII_repo_generated_benchmark.sidecar.json');
   await writeJson(modelPath, fullModel);
   await writeJson(sidecarPath, sidecar);
-  await writeJson(path.join(qcDir, 'component_expected_summary.json'), fullSummary);
+  await writeJson(path.join(qcDir, 'component_expected_summary.json'), plantSummary);
+  await writeJson(path.join(qcDir, 'component_expected_full_model_summary.json'), fullSummary);
   await writeJson(path.join(qcDir, 'component_source_stats.json'), componentResult.sourceStats);
   await writeJson(path.join(qcDir, 'component_expected_model.json'), fullModel);
   return { modelPath, sidecarPath };
