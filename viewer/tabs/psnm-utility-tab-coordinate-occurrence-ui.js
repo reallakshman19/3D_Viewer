@@ -94,12 +94,10 @@ function enhanceMasterPsOccurrence(container) {
 
   ({ indexOf } = headerIndexes(table));
   const occurrenceIndex = indexOf('PS Occurrence');
-  const coordIndex = indexOf('PS Coord Key');
-  if (coordIndex >= 0) {
-    insertColumnAfter(table, occurrenceIndex, 'Identity Warning', 'psnm-identity-warning-cell', (row) => {
-      const current = headerIndexes(table).indexOf;
-      return identityWarning(table, row, current('PS Name'), current('PS Coord Key'));
-    });
+  const coordIndexBeforeIdentity = indexOf('PS Coord Key');
+  const psIndexBeforeIdentity = indexOf('PS Name');
+  if (coordIndexBeforeIdentity >= 0) {
+    insertColumnAfter(table, occurrenceIndex, 'Identity Warning', 'psnm-identity-warning-cell', (row) => identityWarning(table, row, psIndexBeforeIdentity, coordIndexBeforeIdentity));
   }
 }
 
