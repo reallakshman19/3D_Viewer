@@ -2,7 +2,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 
-const SCHEMA = 'bm-cii-restraint-source-audit/v1';
+const SCHEMA = 'bm-cii-restraint-source-audit/v2';
 const DEFAULT_XML = 'Benchmarks/INPUT XML to CII 2019/BM_CII/BM_CII_INPUT.XML';
 const DEFAULT_OUT_DIR = 'artifacts/bm-cii-restraint-audit';
 const SENTINEL = -1.0101;
@@ -20,7 +20,6 @@ const CONTRACT = Object.freeze({
   UNKNOWN: 'unknown-debug-default-off',
 });
 
-// Explicit BM_CII benchmark map. Unknown CAESAR numbers intentionally remain UNKNOWN.
 const CAESAR_TYPE_MAP = Object.freeze({
   0: ['UNKNOWN', ''],
   1: ['REST', 'X'],
@@ -51,7 +50,7 @@ const BM_CII_EXPECTED_ISONOTE = Object.freeze([
 ].map(([node, kind, axis]) => ({ node, kind, axis })));
 
 function usage() {
-  return `Usage:\n  node scripts/bm-cii/support-source-audit.mjs [--xml ${DEFAULT_XML}] [--sidecar <sidecar.json>] [--out-dir ${DEFAULT_OUT_DIR}]\n\nThis creates source-truth support tables only. It does not generate GLB.\n`;
+  return `Usage:\n  node scripts/bm-cii/support-source-audit.mjs [--xml ${DEFAULT_XML}] [--sidecar <sidecar.json>] [--out-dir ${DEFAULT_OUT_DIR}]\n\nRobust source-truth support table. It does not generate GLB.\n`;
 }
 
 function parseArgs(argv) {
@@ -87,6 +86,7 @@ function nodeLabel(value) {
   return out === null ? '' : String(Math.round(out));
 }
 
+function text(value) { return String(value ?? '').trim(); }
 function v(x = 0, y = 0, z = 0) { return { x: Number(x) || 0, y: Number(y) || 0, z: Number(z) || 0 }; }
 function add(a, b) { return v(a.x + b.x, a.y + b.y, a.z + b.z); }
 function sub(a, b) { return v(a.x - b.x, a.y - b.y, a.z - b.z); }
@@ -98,11 +98,11 @@ function norm(a) { const l = len(a); return l > EPS ? mul(a, 1 / l) : null; }
 function parseXml(xml) {
   const elements = [];
   let inheritedDiameter = null;
-  const elementRe = /<PIPINGELEMENT\b([\s\S]*?)(?:<\/PIPINGELEMENT>|\/>)/g;
+  const elementRe = /<PIPINGELEMENT\b([^>]*)(?:\/>|>([\s\S]*?)<\/PIPINGELEMENT>)/g;
   let m;
   while ((m = elementRe.exec(xml))) {
-    const block = m[0];
     const head = attrs(m[1]);
+    const block = m[2] || '';
     const from = nodeLabel(head.FROM_NODE);
     const to = nodeLabel(head.TO_NODE);
     if (!from || !to) continue;
@@ -134,7 +134,7 @@ function parseXml(xml) {
 function solveNodes(elements) {
   const nodes = new Map();
   if (elements[0]) nodes.set(elements[0].from, v(0, 0, 0));
-  for (let guard = 0; guard < elements.length * 4; guard += 1) {
+  for (let guard = 0; guard < Math.max(elements.length * 4, 1); guard += 1) {
     let changed = false;
     for (const e of elements) {
       const a = nodes.get(e.from);
@@ -172,7 +172,7 @@ function frameFor(node, segs) {
 }
 
 function normalizeKind(value) {
-  const raw = String(value || '').toUpperCase();
+  const raw = text(value).toUpperCase();
   if (raw.includes('HOLD')) return 'HOLDDOWN';
   if (raw.includes('HANG')) return 'HANGER';
   if (raw.includes('SPRING')) return 'SPRING';
@@ -180,7 +180,7 @@ function normalizeKind(value) {
   if (raw.includes('GUIDE')) return 'GUIDE';
   if (raw.includes('LIMIT')) return 'LIMIT';
   if (raw.includes('REST') || raw.includes('SHOE')) return 'REST';
-  if (raw.includes('TYPE0') || raw.includes('UNKNOWN')) return 'UNKNOWN';
+  if (raw.includes('TYPE0') || raw.includes('UNKNOWN') || raw === '0') return 'UNKNOWN';
   return raw || 'UNKNOWN';
 }
 
@@ -193,47 +193,30 @@ function inputXmlRecords(model, nodes, segs) {
   for (const e of model.elements) for (const r of e.restraints) {
     const [kind, axis] = CAESAR_TYPE_MAP[r.type] || ['UNKNOWN', ''];
     const frame = frameFor(r.node, segs);
-    records.push({
-      recordId: recordId('inputxml', records.length), source: 'inputxml', sourceRecordIndex: records.length + 1,
-      sourceElementIndex: e.index, node: r.node, rawType: r.type, sourceKind: r.type === 0 ? 'UNKNOWN_TYPE0' : `CAESAR_TYPE_${r.type}`,
-      kind, axis, gap: r.gap, pipePoint: nodes[r.node] || null, pipeTangent: frame.tangent, pipeRadius: frame.pipeRadius,
-      frameStatus: frame.status, frame, expectedSymbolContract: contract(kind), visibleDefault: kind !== 'UNKNOWN', layerIds: layers('inputxml', kind, axis),
-    });
+    records.push({ recordId: recordId('inputxml', records.length), source: 'inputxml', sourceRecordIndex: records.length + 1, sourceElementIndex: e.index, node: r.node, rawType: r.type, sourceKind: r.type === 0 ? 'UNKNOWN_TYPE0' : `CAESAR_TYPE_${r.type}`, kind, axis, gap: r.gap, pipePoint: nodes[r.node] || null, pipeTangent: frame.tangent, pipeRadius: frame.pipeRadius, frameStatus: frame.status, frame, expectedSymbolContract: contract(kind), visibleDefault: kind !== 'UNKNOWN', layerIds: layers('inputxml', kind, axis) });
   }
   return records;
 }
 
-function tokensFromCallout(c) {
-  if (Array.isArray(c.supportTokens)) return c.supportTokens;
-  const t = String(c.text || c.caesarCalloutText || c.label || '');
-  return ['LINESTOP', 'GUIDE', 'REST', 'HOLDDOWN', 'HANGER', 'SPRING', 'LIMIT', 'UNKNOWN'].filter((k) => new RegExp(`\\b${k}\\b`, 'i').test(t));
-}
-
 function isonoteRecords(sidecar, nodes, segs) {
   const explicit = Array.isArray(sidecar?.supportsIsonote) ? sidecar.supportsIsonote : [];
-  const rows = explicit.length ? explicit.map((raw) => ({ node: String(raw.node ?? raw.NODE ?? '').replace(/\.0+$/, ''), kind: normalizeKind(raw.kind || raw.supportKind || raw.sourceKind || raw.type || raw.text), axis: String(raw.axis || raw.restraintAxis || '').toUpperCase().replace(/[^XYZ]/g, ''), gap: raw.gap ?? raw.gapMm ?? null })) : [];
-  if (!rows.length && sidecar) {
-    const callouts = sidecar.caesarAnnotationCallouts || sidecar.callouts || [];
-    for (const c of callouts) for (const token of tokensFromCallout(c)) rows.push({ node: String(c.node || '').replace(/\.0+$/, ''), kind: normalizeKind(token), axis: '', gap: null, calloutNo: c.no || c.calloutNo || null });
-  }
+  const rows = explicit.map((raw) => ({ node: text(raw.node ?? raw.NODE).replace(/\.0+$/, ''), kind: normalizeKind(raw.kind || raw.supportKind || raw.sourceKind || raw.type || raw.text), axis: text(raw.axis || raw.restraintAxis).toUpperCase().replace(/[^XYZ]/g, ''), gap: raw.gap ?? raw.gapMm ?? null }));
   const finalRows = rows.length ? rows : BM_CII_EXPECTED_ISONOTE.map((r) => ({ ...r, benchmarkFallback: 'used because no sidecar was supplied' }));
   return finalRows.map((r, i) => {
     const frame = frameFor(r.node, segs);
-    return { recordId: recordId('isonote', i), source: 'isonote', sourceRecordIndex: i + 1, node: r.node, sourceKind: r.kind, kind: r.kind, axis: r.axis || '', gap: r.gap ?? null, calloutNo: r.calloutNo ?? null, pipePoint: nodes[r.node] || null, pipeTangent: frame.tangent, pipeRadius: frame.pipeRadius, frameStatus: frame.status, frame, expectedSymbolContract: contract(r.kind), visibleDefault: r.kind !== 'UNKNOWN', layerIds: layers('isonote', r.kind, r.axis || ''), benchmarkFallback: r.benchmarkFallback || undefined };
+    return { recordId: recordId('isonote', i), source: 'isonote', sourceRecordIndex: i + 1, node: r.node, sourceKind: r.kind, kind: r.kind, axis: r.axis || '', gap: r.gap ?? null, pipePoint: nodes[r.node] || null, pipeTangent: frame.tangent, pipeRadius: frame.pipeRadius, frameStatus: frame.status, frame, expectedSymbolContract: contract(r.kind), visibleDefault: r.kind !== 'UNKNOWN', layerIds: layers('isonote', r.kind, r.axis || ''), benchmarkFallback: r.benchmarkFallback || undefined };
   });
 }
 
 function compareRows(records, expected, source) {
   const issues = [];
   if (records.length !== expected.length) issues.push(`${source}: expected ${expected.length} records, got ${records.length}`);
-  for (let i = 0; i < Math.min(records.length, expected.length); i += 1) {
-    for (const key of ['node', 'kind', 'axis']) if ((records[i][key] || '') !== (expected[i][key] || '')) issues.push(`${source}:${String(i + 1).padStart(2, '0')}: ${key} expected ${expected[i][key] || 'NA'}, got ${records[i][key] || 'NA'}`);
-  }
+  for (let i = 0; i < Math.min(records.length, expected.length); i += 1) for (const key of ['node', 'kind', 'axis']) if ((records[i][key] || '') !== (expected[i][key] || '')) issues.push(`${source}:${String(i + 1).padStart(2, '0')}: ${key} expected ${expected[i][key] || 'NA'}, got ${records[i][key] || 'NA'}`);
   return issues;
 }
 
 function md(summary, inputxml, isonote) {
-  const lines = ['# BM_CII restraint source audit', '', `Status: **${summary.status.toUpperCase()}**`, '', '| Item | Value |', '|---|---:|', `| InputXML records | ${summary.counts.inputxml} |`, `| ISONOTE records | ${summary.counts.isonote} |`, `| Unresolved frames | ${summary.counts.unresolvedFrames} |`, `| Issues | ${summary.counts.issues} |`, '', 'Generated GLB: **no**', 'Visual QC: **not applied**', ''];
+  const lines = ['# BM_CII restraint source audit', '', `Status: **${summary.status.toUpperCase()}**`, '', '| Item | Value |', '|---|---|', `| InputXML records | ${summary.counts.inputxml} |`, `| ISONOTE records | ${summary.counts.isonote} |`, `| Unresolved frames | ${summary.counts.unresolvedFrames} |`, `| Issues | ${summary.counts.issues} |`, ''];
   for (const [title, rows] of [['InputXML', inputxml], ['ISONOTE', isonote]]) {
     lines.push(`## ${title} records`, '', '| recordId | node | kind | axis | frame | contract |', '|---|---:|---|---|---|---|');
     for (const r of rows) lines.push(`| ${r.recordId} | ${r.node} | ${r.kind} | ${r.axis || 'NA'} | ${r.frameStatus} | ${r.expectedSymbolContract} |`);
@@ -266,6 +249,7 @@ async function main() {
   await writeJson(path.join(outDir, 'source_audit.summary.json'), summary);
   await fs.writeFile(path.join(outDir, 'source_audit.md'), md(summary, inputxml, isonote), 'utf8');
   process.stdout.write(`${JSON.stringify(summary, null, 2)}\n`);
+  if (summary.status !== 'pass') process.exitCode = 1;
 }
 
 main().catch((error) => { process.stderr.write(`${error?.stack || error?.message || String(error)}\n\n${usage()}`); process.exitCode = 1; });
