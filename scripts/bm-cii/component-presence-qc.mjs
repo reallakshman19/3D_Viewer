@@ -67,9 +67,12 @@ function countComponents(gltf) {
     const node = nodes[index];
     const trace = traceOf(node);
     if (trace.entity !== 'component') continue;
+    const category = text(trace.semanticCategory || 'other') || 'other';
+    // Annotation label anchors are exported as component traces so the Basic Viewer can
+    // show labels. They are not plant components and must not affect plant completeness.
+    if (category === 'support' || category === 'annotation') continue;
     const key = text(trace.traceKey || trace.sourceComponentId || node.name || `component:${index}`);
     if (!key || byKey.has(key)) continue;
-    const category = text(trace.semanticCategory || 'other') || 'other';
     const type = text(trace.componentType || category).toUpperCase() || 'UNKNOWN';
     byKey.set(key, { key, name: text(node.name), category, type, fromNode: trace.fromNode || '', toNode: trace.toNode || '' });
   }
@@ -100,7 +103,7 @@ function run() {
   const expected = JSON.parse(fs.readFileSync(args.expected, 'utf8'));
   const gltf = readJsonChunk(args.glb);
   const { summary: actual, components } = countComponents(gltf);
-  const report = { schema: 'bm-cii-component-presence-qc/v1', glb: path.resolve(args.glb), expected, actual, components, failures: [], pass: false };
+  const report = { schema: 'bm-cii-component-presence-qc/v2', glb: path.resolve(args.glb), expected, actual, components, failures: [], pass: false };
   compareSummary(report, expected, actual);
   report.pass = report.failures.length === 0;
   if (args.out) { fs.mkdirSync(path.dirname(args.out), { recursive: true }); fs.writeFileSync(args.out, `${JSON.stringify(report, null, 2)}\n`); }
