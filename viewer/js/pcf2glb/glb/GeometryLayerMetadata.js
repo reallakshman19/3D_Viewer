@@ -17,6 +17,10 @@ function lower(value) {
   return text(value).toLowerCase();
 }
 
+function upper(value) {
+  return text(value).toUpperCase();
+}
+
 function cleanLayerId(value) {
   return lower(value)
     .replace(/[^a-z0-9._-]+/g, '_')
@@ -62,6 +66,10 @@ function supportKindFromTrace(trace = {}, extra = {}) {
   return normalizeSupportKind(trace.supportKind || trace.kind || extra.supportKind || extra.kind) || 'UNKNOWN';
 }
 
+function annotationKindFromTrace(trace = {}, extra = {}) {
+  return upper(trace.annotationKind || trace.caesarAnnotationKind || extra.annotationKind || extra.caesarAnnotationKind || '');
+}
+
 export function restraintVisualProfileForTrace(trace = {}, extra = {}) {
   const category = categoryFromTrace(trace, extra);
   if (category !== 'support') return null;
@@ -82,8 +90,14 @@ export function layerIdsForTrace(trace = {}, extra = {}) {
   const ids = [];
 
   if (entity === 'annotation' || category === 'annotation') {
-    ids.push('annotation.all', 'annotation.callout');
-    if (source) ids.push(`annotation.${cleanLayerId(source)}`);
+    const annotationKind = annotationKindFromTrace(trace, extra);
+    ids.push('annotation.all');
+    if (annotationKind === 'NODE_LABEL') {
+      ids.push('annotation.node');
+    } else {
+      ids.push('annotation.callout');
+      if (source === 'isonote') ids.push('annotation.isonote');
+    }
     if (source) ids.push(`source.${cleanLayerId(source)}`);
     return unique(ids);
   }
@@ -113,6 +127,7 @@ export function layerMetadataFromTrace(trace = {}, extra = {}) {
   const source = sourceForLayer(trace, extra);
   const supportKind = category === 'support' ? supportKindFromTrace(trace, extra) : '';
   const axis = category === 'support' ? supportAxisFromTrace(trace, extra) : '';
+  const annotationKind = category === 'annotation' ? annotationKindFromTrace(trace, extra) : '';
   const visibleDefault = extra.visibleDefault !== false && supportKind !== 'UNKNOWN' && supportKind !== 'TYPE0';
   return {
     schema: BM_CII_LAYER_SCHEMA,
@@ -120,6 +135,7 @@ export function layerMetadataFromTrace(trace = {}, extra = {}) {
     source,
     supportKind,
     axis,
+    annotationKind,
     gap: text(trace.gap || trace.restraintGap || extra.gap || ''),
     visibleDefault,
     layerIds: layerIdsForTrace(trace, extra),
@@ -193,6 +209,7 @@ export function buildDefaultBmCiiLayerManifest({ supportSource = '' } = {}) {
       layer('annotation.all', 'Annotations', 'Annotations'),
       layer('annotation.callout', 'Callouts', 'Annotations'),
       layer('annotation.isonote', 'ISONOTE Callouts', 'Annotations'),
+      layer('annotation.node', 'Node Labels', 'Annotations'),
 
       layer('source.inputxml', 'Source: InputXML', 'Source'),
       layer('source.isonote', 'Source: ISONOTE', 'Source'),
