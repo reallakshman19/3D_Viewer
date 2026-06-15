@@ -34,12 +34,13 @@ function usage() {
   node scripts/bm-cii/glb-visible-scene-qc.mjs --glb <file.glb> [options]
 
 Options:
-  --expected-support <json>       Expected support mapping JSON. Array or object accepted.
+  --expected-support <json>             Expected support mapping JSON. Array or object accepted.
   --expected-source <inputxml|isonote>
-  --expected-support-count <n>    Required support root count when no mapping file is supplied.
-  --expected-callout-count <n>    Defaults to 4.
-  --expected-node-label-count <n> Defaults to 4.
-  --out <json>                    Write report JSON.
+  --expected-support-count <n>          Required support root count when no mapping file is supplied.
+  --expected-callout-count <n>          Defaults to 4.
+  --expected-node-label-count <n>       Defaults to 4.
+  --expected-component-summary <json>   Expected component summary from the full plant model.
+  --out <json>                          Write report JSON.
 `);
   process.exit(2);
 }
@@ -64,7 +65,7 @@ function readJsonChunk(filePath) {
   if (filePath.toLowerCase().endsWith('.gltf') || data.slice(0, 1).toString('utf8') === '{') return JSON.parse(data.toString('utf8'));
   if (data.length < 20) throw new Error(`Invalid GLB: file too short: ${filePath}`);
   if (data.readUInt32LE(0) !== 0x46546c67) throw new Error(`Invalid GLB magic: ${filePath}`);
-  if (data.readUInt32LE(4) !== 2) throw new Error(`Unsupported GLB version; expected 2`);
+  if (data.readUInt32LE(4) !== 2) throw new Error('Unsupported GLB version; expected 2');
   let offset = 12;
   while (offset + 8 <= data.length) {
     const chunkLength = data.readUInt32LE(offset);
@@ -173,7 +174,15 @@ function primitiveInfo(node = {}) {
   const extras = extrasOf(node);
   const trace = traceOf(node);
   const primitive = extras.bmCiiGlyphPrimitive || {};
-  return { name: text(node.name), recordId: text(trace.recordId || extras.supportRecordId), role: text(primitive.role || trace.role), contract: text(primitive.contract || trace.supportSymbolContract), start: vec(primitive.start || trace.start), tip: vec(primitive.tip || trace.tip), direction: normalize(vec(primitive.direction || trace.direction || null)) };
+  return {
+    name: text(node.name),
+    recordId: text(trace.recordId || extras.supportRecordId),
+    role: text(primitive.role || trace.role),
+    contract: text(primitive.contract || trace.supportSymbolContract),
+    start: vec(primitive.start || trace.start),
+    tip: vec(primitive.tip || trace.tip),
+    direction: normalize(vec(primitive.direction || trace.direction || null)),
+  };
 }
 
 function requireLayer(report, support, id) { if (!support.layerIds.includes(id)) report.failures.push(`${support.recordId || support.name}: missing layer '${id}'`); }
@@ -261,12 +270,88 @@ function dedupeAnnotations(items) {
   return [...byKey.values()];
 }
 
+function componentInfo(node = {}, index) {
+  const extras = extrasOf(node);
+  const trace = traceOf(node);
+  const category = text(trace.semanticCategory || extras.bmCiiLayer?.category || extras.bmCiiTraceCategory);
+  const type = upper(trace.componentType || extras.pcfType || extras.type || extras.componentType || category);
+  const sourceComponentId = text(trace.sourceComponentId || extras.sourceComponentId || extras.pcfId || node.name);
+  const traceKey = text(trace.traceKey || extras.bmCiiTraceKey || sourceComponentId || node.name);
+  return {
+    index,
+    name: text(node.name),
+    key: sourceComponentId || traceKey || `${index}:${text(node.name)}`,
+    traceKey,
+    sourceComponentId,
+    category,
+    type,
+    glbShape: text(trace.glbShape || extras.glbShape),
+    layerIds: layerIdsOf(extras),
+  };
+}
+function isComponentNode(node = {}) {
+  const trace = traceOf(node);
+  if (trace.entity !== 'component') return false;
+  const category = text(trace.semanticCategory).toLowerCase();
+  return category && !['support', 'annotation'].includes(category);
+}
+function componentSummaryFromItems(items = []) {
+  const byKey = new Map();
+  for (const item of items) if (!byKey.has(item.key)) byKey.set(item.key, item);
+  const unique = [...byKey.values()];
+  const byCategory = {};
+  const byType = {};
+  for (const item of unique) {
+    const category = item.category || 'other';
+    const type = item.type || 'UNKNOWN';
+    byCategory[category] = (byCategory[category] || 0) + 1;
+    byType[type] = (byType[type] || 0) + 1;
+  }
+  return {
+    total: unique.length,
+    byCategory,
+    byType,
+    nonPipeTotal: unique.filter((item) => item.type !== 'PIPE').length,
+    unique,
+  };
+}
+function checkComponentCompleteness(report, actualSummary, expectedPath) {
+  if (!expectedPath) return;
+  const expected = JSON.parse(fs.readFileSync(expectedPath, 'utf8'));
+  report.expectedComponentSummary = expected;
+  report.actualComponentSummary = {
+    total: actualSummary.total,
+    byCategory: actualSummary.byCategory,
+    byType: actualSummary.byType,
+    nonPipeTotal: actualSummary.nonPipeTotal,
+  };
+  if (Number(expected.total) !== actualSummary.total) report.failures.push(`component total ${actualSummary.total} != expected ${expected.total}`);
+  for (const [type, count] of Object.entries(expected.byType || {})) {
+    const actual = actualSummary.byType[type] || 0;
+    if (actual !== count) report.failures.push(`component type ${type} count ${actual} != expected ${count}`);
+  }
+  for (const [category, count] of Object.entries(expected.byCategory || {})) {
+    const actual = actualSummary.byCategory[category] || 0;
+    if (actual !== count) report.failures.push(`component category ${category} count ${actual} != expected ${count}`);
+  }
+  const bendCount = Number(expected.byType?.BEND || expected.byType?.ELBOW || 0);
+  if (bendCount > 0) {
+    const badBends = actualSummary.unique.filter((item) => ['BEND', 'ELBOW'].includes(item.type) && !/(elbow|bend|rounded|tube)/i.test(`${item.glbShape} ${item.name}`));
+    if (badBends.length) report.failures.push(`bend components lack curved/tube shape metadata: ${badBends.map((item) => item.sourceComponentId || item.name).join(', ')}`);
+  }
+  const teeExpected = Number(expected.byType?.TEE || 0) + Number(expected.byType?.OLET || 0) + Number(expected.byCategory?.teeOlet || 0);
+  if (teeExpected > 0) {
+    const badTees = actualSummary.unique.filter((item) => ['TEE', 'OLET'].includes(item.type) && !/(tee|olet|branch|collar|pad)/i.test(`${item.glbShape} ${item.name}`));
+    if (badTees.length) report.failures.push(`tee/olet components lack branch shape metadata: ${badTees.map((item) => item.sourceComponentId || item.name).join(', ')}`);
+  }
+}
+
 function run() {
   const args = parseArgs(process.argv);
   const gltf = readJsonChunk(args.glb);
   const nodes = gltf.nodes || [];
   const reachable = reachableNodeIndices(gltf);
-  const report = { schema: 'bm-cii-glb-visible-scene-qc/v2', glb: path.resolve(args.glb), generatedAt: new Date().toISOString(), pass: false, counts: {}, supportRoots: [], annotations: {}, failures: [], warnings: [] };
+  const report = { schema: 'bm-cii-glb-visible-scene-qc/v3', glb: path.resolve(args.glb), generatedAt: new Date().toISOString(), pass: false, counts: {}, supportRoots: [], annotations: {}, failures: [], warnings: [] };
 
   const allLegacyNodes = nodes.map((node, index) => ({ index, name: text(node.name) })).filter((entry) => LEGACY_NODE_PATTERNS.some((pattern) => pattern.test(entry.name)));
   for (const entry of allLegacyNodes) report.failures.push(`legacy/orphan node physically present: [${entry.index}] ${entry.name}`);
@@ -276,12 +361,17 @@ function run() {
   const supportRoots = [];
   const supportPrimitives = [];
   const annotationPrimitiveNodes = [];
+  const componentNodes = [];
   for (const index of reachable) {
     const node = nodes[index];
     if (isSupportRoot(node)) supportRoots.push(supportRootInfo(gltf, index));
     if (isSupportPrimitive(node)) supportPrimitives.push(primitiveInfo(node));
     if (isAnnotationNode(node)) annotationPrimitiveNodes.push(annotationInfo(node));
+    if (isComponentNode(node)) componentNodes.push(componentInfo(node, index));
   }
+
+  const componentSummary = componentSummaryFromItems(componentNodes);
+  checkComponentCompleteness(report, componentSummary, args['expected-component-summary']);
 
   const duplicateRecordIds = new Map();
   for (const support of supportRoots) {
@@ -325,7 +415,25 @@ function run() {
   }
   for (const annotation of uniqueAnnotations) if (annotation.kind === 'MERGED' || /MERGED/i.test(annotation.name)) report.failures.push(`${annotation.name}: merged annotation marker is not allowed for BM_CII benchmark QC`);
 
-  report.counts = { nodes: nodes.length, reachableNodes: reachable.size, supportRoots: supportRoots.length, supportPrimitives: supportPrimitives.length, legacyOrphanNodes: allLegacyNodes.length, annotationPrimitiveNodes: annotationPrimitiveNodes.length, uniqueAnnotations: uniqueAnnotations.length, isonoteCallouts: callouts.length, nodeLabels: nodeLabels.length };
+  report.counts = {
+    nodes: nodes.length,
+    reachableNodes: reachable.size,
+    componentNodes: componentNodes.length,
+    uniqueComponents: componentSummary.total,
+    supportRoots: supportRoots.length,
+    supportPrimitives: supportPrimitives.length,
+    legacyOrphanNodes: allLegacyNodes.length,
+    annotationPrimitiveNodes: annotationPrimitiveNodes.length,
+    uniqueAnnotations: uniqueAnnotations.length,
+    isonoteCallouts: callouts.length,
+    nodeLabels: nodeLabels.length,
+  };
+  report.componentSummary = report.actualComponentSummary || {
+    total: componentSummary.total,
+    byCategory: componentSummary.byCategory,
+    byType: componentSummary.byType,
+    nonPipeTotal: componentSummary.nonPipeTotal,
+  };
   report.supportRoots = supportRoots;
   report.annotations = { callouts, nodeLabels, primitiveNodes: annotationPrimitiveNodes.length };
   report.pass = report.failures.length === 0;
