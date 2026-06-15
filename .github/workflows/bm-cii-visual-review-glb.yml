@@ -1,0 +1,36 @@
+name: BM_CII Visual Review GLB
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'Benchmarks/INPUT XML to CII 2019/BM_CII/BM_CII_INPUT.XML'
+      - 'scripts/bm-cii/generate-bm-cii-visual-review-glb.mjs'
+      - 'viewer/js/pcf2glb/**'
+      - '.github/workflows/bm-cii-visual-review-glb.yml'
+
+jobs:
+  visual-review-glb:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install GLB generation dependency
+        run: npm install --no-save three
+
+      - name: Syntax check BM_CII visual review generator
+        run: node --check scripts/bm-cii/generate-bm-cii-visual-review-glb.mjs
+
+      - name: Generate BM_CII visual-review GLB
+        run: node scripts/bm-cii/generate-bm-cii-visual-review-glb.mjs
+
+      - name: Upload visual-review GLB artifact
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: bm-cii-visual-review-glb
+          path: artifacts/bm-cii-visual-review/**
