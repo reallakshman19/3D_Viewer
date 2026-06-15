@@ -6,6 +6,8 @@ import { firstLineNoValue } from '../../../utils/line-no-metadata.js';
 
 const UP = new THREE.Vector3(0, 1, 0);
 const Z_AXIS = new THREE.Vector3(0, 0, 1);
+const DEFAULT_LONG_RADIUS_BEND_RATIO_D = 1.5;
+const DEFAULT_BEND_ANGLE_DEG = 90;
 
 function vectorFromPoint(point) {
   const x = Number(point?.x);
@@ -48,13 +50,14 @@ function lineNoForComponent(comp = {}, attrs = {}) {
   );
 }
 
-function bendRadiusFromComponent(comp = {}) {
+function bendRadiusFromComponent(comp = {}, pipeRadius = null) {
   return numberOrNull(comp.bendRadius)
     ?? numberOrNull(comp.attributes?.BEND_RADIUS)
     ?? numberOrNull(comp.raw?.inputXmlBendRadius)
     ?? numberOrNull(comp.raw?.BEND_RADIUS)
     ?? numberOrNull(comp.raw?.RADIUS)
-    ?? numberOrNull(comp.raw?.CURVE_RADIUS);
+    ?? numberOrNull(comp.raw?.CURVE_RADIUS)
+    ?? (pipeRadius ? pipeRadius * 2 * DEFAULT_LONG_RADIUS_BEND_RATIO_D : null);
 }
 
 function bendAngleDegFromComponent(comp = {}) {
@@ -62,7 +65,8 @@ function bendAngleDegFromComponent(comp = {}) {
     ?? numberOrNull(comp.attributes?.BEND_ANGLE_DEG)
     ?? numberOrNull(comp.raw?.inputXmlBendAngleDeg)
     ?? numberOrNull(comp.raw?.BEND_ANGLE)
-    ?? numberOrNull(comp.raw?.ANGLE);
+    ?? numberOrNull(comp.raw?.ANGLE)
+    ?? DEFAULT_BEND_ANGLE_DEG;
 }
 
 function componentUserData(comp, extra = {}) {
@@ -172,46 +176,61 @@ export function buildGenericProxy(comp, color = 0xcc5555) {
   return applyUserData(mesh, componentUserData(comp, { glbShape: 'generic-proxy' }));
 }
 
-function elbowLiftFromRadius(chordLength, bendRadius, pipeRadius, bendAngleDeg) {
-  if (!bendRadius || bendRadius <= 0) return null;
-  const angleRad = bendAngleDeg && bendAngleDeg > 0 && bendAngleDeg < 180
-    ? THREE.MathUtils.degToRad(bendAngleDeg)
-    : null;
-  let sagitta = null;
-  if (angleRad) {
-    sagitta = bendRadius * (1 - Math.cos(angleRad / 2));
-  } else if (chordLength < bendRadius * 2) {
-    sagitta = bendRadius - Math.sqrt(Math.max((bendRadius ** 2) - ((chordLength / 2) ** 2), 0));
-  }
-  if (!Number.isFinite(sagitta) || sagitta <= 0) return null;
-  return Math.max(sagitta, pipeRadius * 1.5);
-}
-
 function buildElbowMesh(comp, color = 0xaa55aa) {
   const { p1, p2 } = endpointPair(comp);
   if (!p1 || !p2 || p1.distanceTo(p2) < 0.1) return buildGenericProxy(comp, color);
 
-  const radius = boreRadius(comp);
-  const bendRadius = bendRadiusFromComponent(comp);
-  const bendAngleDeg = bendAngleDegFromComponent(comp);
-  const axis = safeAxis(p1, p2);
-  const side = perpendicularAxis(axis);
+  const pipeRadius = boreRadius(comp);
+  const nominalDiameter = pipeRadius * 2;
+  const targetBendRadius = bendRadiusFromComponent(comp, pipeRadius) || nominalDiameter * DEFAULT_LONG_RADIUS_BEND_RATIO_D;
+  const rawAngleDeg = bendAngleDegFromComponent(comp);
+  const bendAngleDeg = Math.min(120, Math.max(30, rawAngleDeg || DEFAULT_BEND_ANGLE_DEG));
+  const bendAngleRad = THREE.MathUtils.degToRad(bendAngleDeg);
+  const chordAxis = safeAxis(p1, p2);
+  const side = perpendicularAxis(chordAxis);
   const chordLength = p1.distanceTo(p2);
-  const radiusDrivenLift = elbowLiftFromRadius(chordLength, bendRadius, radius, bendAngleDeg);
-  const lift = radiusDrivenLift ?? Math.max(radius * 2.5, chordLength * 0.22);
-  const control = midpoint(p1, p2).add(side.multiplyScalar(lift));
-  const curve = new THREE.CatmullRomCurve3([p1, control, p2]);
 
-  const geom = new THREE.TubeGeometry(curve, bendRadius ? 36 : 24, radius, 16, false);
-  const mat = new THREE.MeshStandardMaterial({ color, roughness: 0.62, metalness: 0.05 });
-  const mesh = new THREE.Mesh(geom, mat);
-  mesh.name = comp.id;
-  return applyUserData(mesh, componentUserData(comp, {
-    glbShape: bendRadius ? 'rounded-elbow-tube-radius' : 'rounded-elbow-tube',
-    bendRadius: bendRadius || null,
-    bendAngleDeg: bendAngleDeg || null,
-    bendMetadataSource: comp.bendMetadataSource || comp.attributes?.BEND_METADATA_SOURCE || '',
-    bendLift: lift,
+  // BM_CII visual bends must look like standard long-radius piping elbows, not
+  // free-form splines. If the XML chord is longer than a 1.5D elbow chord, keep
+  // the curved arc compact and fill the remaining length with straight sleeves.
+  const targetArcChord = Math.max(
+    pipeRadius * 2.0,
+    Math.min(chordLength, 2 * targetBendRadius * Math.sin(bendAngleRad / 2)),
+  );
+  const sagitta = Math.max(
+    pipeRadius * 0.45,
+    targetBendRadius * (1 - Math.cos(bendAngleRad / 2)),
+  );
+  const center = midpoint(p1, p2);
+  const arcStart = center.clone().add(chordAxis.clone().multiplyScalar(-targetArcChord / 2));
+  const arcEnd = center.clone().add(chordAxis.clone().multiplyScalar(targetArcChord / 2));
+  const control = center.clone().add(side.clone().multiplyScalar(sagitta));
+  const curve = new THREE.QuadraticBezierCurve3(arcStart, control, arcEnd);
+
+  const group = new THREE.Group();
+  group.name = comp.id;
+
+  const sleeveA = cylinderBetween(p1, arcStart, pipeRadius, color, `${comp.id}-bend-tangent-sleeve-a`);
+  const sleeveB = cylinderBetween(arcEnd, p2, pipeRadius, color, `${comp.id}-bend-tangent-sleeve-b`);
+  if (sleeveA) group.add(sleeveA);
+  if (sleeveB) group.add(sleeveB);
+
+  const elbow = new THREE.Mesh(
+    new THREE.TubeGeometry(curve, 32, pipeRadius, 18, false),
+    new THREE.MeshStandardMaterial({ color, roughness: 0.62, metalness: 0.05 }),
+  );
+  elbow.name = `${comp.id}-bend-arc-1p5d`;
+  group.add(elbow);
+
+  return applyUserData(group, componentUserData(comp, {
+    glbShape: 'elbow-arc-1p5d-with-straight-sleeves',
+    bendRadius: targetBendRadius,
+    bendAngleDeg,
+    bendRadiusRatioD: targetBendRadius / nominalDiameter,
+    bendMetadataSource: comp.bendMetadataSource || comp.attributes?.BEND_METADATA_SOURCE || 'BM_CII_INPUT.XML/BEND_DEFAULT_1_5D',
+    bendArcChord: targetArcChord,
+    bendSagitta: sagitta,
+    bmCiiBendVisualContract: 'bend-radius-approx-1p5d-compact-elbow',
   }));
 }
 
@@ -351,8 +370,7 @@ function buildOletProxy(comp, color = 0x55aa55) {
 
   const b = new THREE.Vector3(branch.x, branch.y, branch.z);
   const dir = new THREE.Vector3().subVectors(b, c);
-  const length = dir.length();
-  if (length < 0.1) return buildGenericProxy(comp, color);
+  if (dir.length() < 0.1) return buildGenericProxy(comp, color);
 
   const group = new THREE.Group();
   group.name = comp.id;
@@ -514,7 +532,7 @@ export function buildSupportProxy(comp) {
     const coilRadius = radius * 0.7;
     const segments = 64;
     const points = [];
-    for (let i = 0; i <= segments; i++) {
+    for (let i = 0; i <= segments; i += 1) {
       const t = i / segments;
       const angle = t * Math.PI * 2 * coilTurns;
       points.push(new THREE.Vector3(
