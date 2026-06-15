@@ -7,6 +7,7 @@ on:
       - 'viewer/tabs/inputxml-property-transfer/**'
       - 'viewer/tabs/model-converters/inputxml-property-transfer-ui.js'
       - 'viewer/tabs/model-converters/inputxml-property-transfer-popup-ui.js'
+      - 'viewer/tabs/model-converters/inputxml-property-transfer-popup-ui-v2.js'
       - 'Benchmarks/InputXML Property Transfer/**'
       - 'scripts/test-inputxml-property-transfer-coordinate-benchmark.mjs'
       - '.github/workflows/inputxml-property-transfer-tests.yml'
@@ -15,6 +16,7 @@ on:
       - 'viewer/tabs/inputxml-property-transfer/**'
       - 'viewer/tabs/model-converters/inputxml-property-transfer-ui.js'
       - 'viewer/tabs/model-converters/inputxml-property-transfer-popup-ui.js'
+      - 'viewer/tabs/model-converters/inputxml-property-transfer-popup-ui-v2.js'
       - 'Benchmarks/InputXML Property Transfer/**'
       - 'scripts/test-inputxml-property-transfer-coordinate-benchmark.mjs'
       - '.github/workflows/inputxml-property-transfer-tests.yml'
@@ -41,6 +43,7 @@ jobs:
           node --check viewer/tabs/inputxml-property-transfer/index.js
           node --check viewer/tabs/model-converters/inputxml-property-transfer-ui.js
           node --check viewer/tabs/model-converters/inputxml-property-transfer-popup-ui.js
+          node --check viewer/tabs/model-converters/inputxml-property-transfer-popup-ui-v2.js
           node --check scripts/test-inputxml-property-transfer-coordinate-benchmark.mjs
 
       - name: Run coordinate benchmark
