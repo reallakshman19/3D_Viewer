@@ -174,8 +174,34 @@ function normalizePoint(value) {
   return [x, y, z].every(Number.isFinite) ? { x, y, z } : null;
 }
 
+function numberOrNull(value) {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
 function text(value) {
   return String(value ?? '').trim();
+}
+
+function normalizeKind(value) {
+  const raw = text(value).toUpperCase();
+  if (raw.includes('HOLD')) return 'HOLDDOWN';
+  if (raw.includes('HANG')) return 'HANGER';
+  if (raw.includes('SPRING')) return 'SPRING';
+  if (raw.includes('LINE') || raw.includes('STOP')) return 'LINESTOP';
+  if (raw.includes('GUIDE')) return 'GUIDE';
+  if (raw.includes('LIMIT')) return 'LIMIT';
+  if (raw.includes('REST') || raw.includes('SHOE')) return 'REST';
+  if (raw.includes('TYPE0') || raw.includes('UNKNOWN') || raw === '0') return 'UNKNOWN';
+  return raw || 'UNKNOWN';
+}
+
+function normalizeAxis(value) {
+  const raw = text(value).toUpperCase();
+  if (raw.includes('X')) return 'X';
+  if (raw.includes('Y')) return 'Y';
+  if (raw.includes('Z')) return 'Z';
+  return '';
 }
 
 function sanitizeAnnotationText(value) {
@@ -226,6 +252,81 @@ function sanitizeCaesarAnnotationCallouts(sidecar = {}) {
     .sort((a, b) => a.no - b.no);
 }
 
+function firstArray(...values) {
+  return values.find((value) => Array.isArray(value) && value.length) || [];
+}
+
+function supportRowsForSource(sidecar = {}, source = 'inputxml') {
+  if (source === 'isonote') {
+    return firstArray(
+      sidecar.supportsIsonote,
+      sidecar.supportRecordsIsonote,
+      sidecar.isonoteSupportRecords,
+      sidecar.records?.isonote,
+      sidecar.supports?.filter?.((row) => text(row.source || row.supportSource).toLowerCase().includes('isonote')),
+    );
+  }
+  return firstArray(
+    sidecar.supportsInputXml,
+    sidecar.supportsInputXML,
+    sidecar.supportRecordsInputXml,
+    sidecar.inputxmlSupportRecords,
+    sidecar.records?.inputxml,
+    sidecar.supports?.filter?.((row) => !text(row.source || row.supportSource).toLowerCase().includes('isonote')),
+  );
+}
+
+function supportComponentFromRow(raw = {}, source = 'inputxml', index = 0, nodes = {}) {
+  const node = text(raw.node || raw.NODE || raw.Node || raw.nodeNumber || raw.nodeId).replace(/\.0+$/, '');
+  const kind = normalizeKind(raw.kind || raw.supportKind || raw.normalizedKind || raw.sourceKind || raw.type || raw.supportType || raw.text || raw.labelText);
+  const axis = normalizeAxis(raw.axis || raw.restraintAxis || raw.direction || raw.SUPPORT_DIRECTION || raw.AXIS || raw.Axis);
+  const point = normalizePoint(raw.pipePoint || raw.point || raw.displayPointGlb || raw.displayPointGlbMm || raw.coOrds || raw.coord || raw.coordinate) || nodes[node] || null;
+  const tangent = normalizePoint(raw.pipeTangent || raw.pipeTangentGlb || raw.tangent || raw.pipeAxis || raw.axisVector) || null;
+  const explicitRadius = numberOrNull(raw.pipeRadius ?? raw.pipeRadiusGlb ?? raw.pipeRadiusMm ?? raw.radius);
+  const outsideDiameter = numberOrNull(raw.outsideDiameter ?? raw.OutsideDiameter ?? raw.DIAMETER ?? raw.diameter ?? raw.bore ?? raw.BORE);
+  const pipeRadius = explicitRadius ?? (outsideDiameter ? outsideDiameter / 2 : null);
+  const sourceRecordIndex = Number(raw.sourceRecordIndex ?? raw.recordIndex ?? raw.index ?? index + 1) || index + 1;
+  const recordId = text(raw.recordId || raw.id || `${source}:${String(sourceRecordIndex).padStart(2, '0')}`);
+
+  return {
+    id: `bm-cii-support:${recordId}`,
+    type: 'SUPPORT',
+    bmCiiSupportRecord: true,
+    bmCiiGlyphOnlySupport: true,
+    supportRenderingMode: 'bm-cii-glyph-only',
+    recordId,
+    sourceRecordIndex,
+    source,
+    supportSource: source,
+    node,
+    supportKind: kind,
+    kind,
+    axis,
+    restraintAxis: axis,
+    gap: raw.gap ?? raw.gapMm ?? raw.GAP ?? null,
+    bidirectional: Boolean(raw.bidirectional || raw.twoWay || raw.isBidirectional),
+    pipePoint: point,
+    displayPointGlb: point,
+    pipeTangent: tangent,
+    pipeTangentGlb: tangent,
+    pipeRadius,
+    outsideDiameter,
+    raw,
+    attributes: {
+      SUPPORT_SOURCE: source,
+      SUPPORT_KIND: kind,
+      AXIS: axis,
+      NODE: node,
+    },
+  };
+}
+
+function supportComponentsFromSidecar(sidecar = {}, nodes = {}) {
+  return ['inputxml', 'isonote'].flatMap((source) => supportRowsForSource(sidecar, source)
+    .map((row, index) => supportComponentFromRow(row, source, index, nodes))
+    .filter((component) => component.node && component.supportKind && component.pipePoint));
+}
+
 function deriveModelFromSidecar(sidecar = {}) {
   const nodes = sidecar.nodeCoordinatesGlbBasisMm || sidecar.nodes || sidecar.nodeCoordinates || {};
   const normalizedNodes = Object.fromEntries(
@@ -235,11 +336,15 @@ function deriveModelFromSidecar(sidecar = {}) {
   );
 
   const caesarAnnotationCallouts = sanitizeCaesarAnnotationCallouts(sidecar);
+  const baseComponents = (sidecar.components || [])
+    .map(stripComponentAnnotationFallbacks)
+    .filter((component) => component.type !== 'SUPPORT');
+  const supportComponents = supportComponentsFromSidecar(sidecar, normalizedNodes);
 
   return {
     schema: 'bm-cii-v11-derived-model/from-sidecar/v1',
     sourceSchema: sidecar.schema || '',
-    components: (sidecar.components || []).map(stripComponentAnnotationFallbacks),
+    components: [...baseComponents, ...supportComponents],
     elements: (sidecar.elements || []).map(stripComponentAnnotationFallbacks),
     nodes: normalizedNodes,
     nodeCoordinatesGlbBasisMm: normalizedNodes,
@@ -252,6 +357,11 @@ function deriveModelFromSidecar(sidecar = {}) {
       source: 'sidecar.caesarAnnotationCallouts',
       callouts: [...BM_CII_ANNOTATION_CALLOUTS],
       nodes: [...BM_CII_ANNOTATION_NODES],
+    },
+    bmCiiSupportGlyphOnly: supportComponents.length > 0,
+    bmCiiSupportRows: {
+      inputxml: supportRowsForSource(sidecar, 'inputxml').length,
+      isonote: supportRowsForSource(sidecar, 'isonote').length,
     },
     sidecarSource: true,
   };
@@ -309,7 +419,11 @@ function buildVariantScene(model, variant, options) {
     ? new THREE.Scene()
     : buildExportScene(variantModel, null, {
         colorMode: variant.colorMode,
-        supportRendering: { source: variant.supportSource },
+        supportRendering: {
+          source: variant.supportSource,
+          mode: 'bm-cii-glyph-only',
+          authoritative: true,
+        },
       });
 
   if (options.annotationOnly) {
@@ -384,6 +498,9 @@ async function build(args) {
       fileName,
       filePath,
       bytes: (await fs.stat(filePath)).size,
+      supportGlyphOnly: Boolean(root.userData.bmCiiSupportGlyphOnly),
+      supportGlyphsAuthoritative: Boolean(root.userData.bmCiiSupportGlyphsAuthoritative),
+      supportGlyphOnlyCount: root.userData.bmCiiGlyphOnlySupportCount || 0,
       annotationSummary: root.userData.caesarAnnotationGeometrySummary || null,
       calloutCount: root.userData.caesarAnnotationCallouts?.length || 0,
       nodeLabelCount: root.userData.caesarAnnotationNodeLabels?.length || 0,
@@ -451,4 +568,5 @@ export {
   deriveModelFromSidecar,
   parseArgs,
   sanitizeCaesarAnnotationCallouts,
+  supportComponentsFromSidecar,
 };
