@@ -9,7 +9,6 @@ import { installXmlCiiConversionWorkflowPopup } from './model-converters/xml-cii
 const MODEL_CONVERTER_INSTALLERS = Object.freeze([
   ['xml-cii-conversion-workflow-popup', installXmlCiiConversionWorkflowPopup],
   ['inputxml-dxf-legacy-bridge', installInputXmlDxfLegacyBridge],
-  ['inputxml-dxf-projection-option', installInputXmlDxfProjectionOption],
   ['inputxml-glb-legacy-bridge', installInputXmlGlbLegacyBridge],
 ]);
 
@@ -23,9 +22,11 @@ function installSafely(name, installer, container) {
 
 function installInputXmlDxfImmediateEnhancers(container) {
   try {
-    // Keep this synchronous and explicit: the branch picker and symbol checkbox are
-    // lightweight InputXML→DXF enhancers and their static gate checks these calls.
+    // Keep this synchronous and explicit: the branch picker, projection selector,
+    // and symbol checkbox are lightweight InputXML→DXF enhancers. Static gate
+    // checks verify these direct installer calls remain present.
     installInputXmlDxfBranchPicker(container);
+    installInputXmlDxfProjectionOption(container);
     installInputXmlDxfSymbolOption(container);
   } catch (error) {
     console.error('[ModelConverters] Optional installer failed: inputxml-dxf-immediate-enhancers', error);
