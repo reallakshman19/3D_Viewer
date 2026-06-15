@@ -153,8 +153,8 @@ function annotationLabelComponents(benchmarkSidecar = {}, nodes = {}) {
       label: `ISONOTE ${no}: ${label}`,
       refNo: `ISONOTE ${no}`,
       coOrds: pointWithOffset(base, { x: 85 + no * 8, y: 90, z: no % 2 ? 55 : -55 }),
-      raw: { SOURCE: 'ISONOTE', NODE_LABEL: `ISONOTE ${no}: ${label}`, NODE: node, ANNOTATION_KIND: 'ISONOTE_CALLOUT' },
-      attributes: { SOURCE: 'ISONOTE', COMPONENT_KIND: 'NODE_LABEL', ANNOTATION_KIND: 'ISONOTE_CALLOUT', NODE_LABEL: `ISONOTE ${no}: ${label}`, NODE: node },
+      raw: { SOURCE: 'ISONOTE', NODE_LABEL: `ISONOTE ${no}: ${label}`, NODE: node, ANNOTATION_KIND: 'LABEL_ANCHOR', LABEL_ANCHOR_KIND: 'ISONOTE_CALLOUT' },
+      attributes: { SOURCE: 'ISONOTE', COMPONENT_KIND: 'NODE_LABEL', ANNOTATION_KIND: 'LABEL_ANCHOR', LABEL_ANCHOR_KIND: 'ISONOTE_CALLOUT', NODE_LABEL: `ISONOTE ${no}: ${label}`, NODE: node },
     });
   }
 
