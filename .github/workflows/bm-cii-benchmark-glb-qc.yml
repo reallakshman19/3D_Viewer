@@ -1,0 +1,50 @@
+name: BM_CII Benchmark GLB QC
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'Benchmarks/INPUT XML to CII 2019/BM_CII/BM_CII_INPUT.XML'
+      - 'benchmarks/bm-cii/**'
+      - 'scripts/bm-cii/**'
+      - 'viewer/js/pcf2glb/**'
+      - '.github/workflows/bm-cii-benchmark-glb-qc.yml'
+
+jobs:
+  bm-cii-benchmark-glb-qc:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install GLB generation dependency
+        run: npm install --no-save three
+
+      - name: Syntax check BM_CII benchmark scripts
+        run: |
+          node --check scripts/bm-cii/support-source-audit.mjs
+          node --check scripts/bm-cii/support-frame-qc.mjs
+          node --check scripts/bm-cii/basic-viewer-runtime-qc.mjs
+          node --check scripts/bm-cii/annotation-fidelity-qc.mjs
+          node --check scripts/bm-cii/support-export-glyph-path-qc.mjs
+          node --check scripts/bm-cii/glb-visible-scene-qc.mjs
+          node --check scripts/bm-cii/build-v11-robust.mjs
+          node --check scripts/bm-cii/run-bm-cii-benchmark-qc.mjs
+
+      - name: Run Basic Viewer runtime containment QC
+        run: node scripts/bm-cii/basic-viewer-runtime-qc.mjs
+
+      - name: Generate repo-path BM_CII GLBs and run QC gates
+        run: node scripts/bm-cii/run-bm-cii-benchmark-qc.mjs
+
+      - name: Upload BM_CII benchmark artifacts
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: bm-cii-benchmark-glb-qc
+          path: |
+            artifacts/bm-cii-restraint-audit/**
+            artifacts/bm-cii-v11-robust/**
