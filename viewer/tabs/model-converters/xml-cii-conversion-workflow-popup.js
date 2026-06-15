@@ -4,9 +4,10 @@ import {
   renderXmlCiiWorkflowProcessEnrichmentPanel,
 } from './xml-cii-conversion-workflow-direct-panels.js';
 
-const FLAG = '__xmlCiiConversionWorkflowPopup_direct_v4';
+const FLAG = '__xmlCiiConversionWorkflowPopup_direct_v5';
 const ACTIVE_TAB_KEY = 'xmlCii2019.conversionWorkflow.activeTab.v2';
 const DIRECT_RUN_FLAG = '__xmlCiiConversionWorkflowAllowDirectRun';
+const XML_CII_CONVERTER_IDS = new Set(['xml_to_cii', 'inputxml_to_cii2019', 'xml_to_cii2019']);
 
 const WORKFLOW_TABS = Object.freeze([
   { id: 'xml-model-data', label: 'XML - Model Data', state: 'Model' },
@@ -36,7 +37,7 @@ function activeConverterId(root = document) {
 }
 
 function isXmlCiiActive(root = document) {
-  return activeConverterId(root) === 'xml_to_cii';
+  return XML_CII_CONVERTER_IDS.has(activeConverterId(root));
 }
 
 function safeScrollTo(node) {
@@ -170,6 +171,13 @@ function openConversionWorkflow(root = document, state) {
   renderActiveTab(root, state);
 }
 
+function applyWorkflowButtonVisibility(quickButton, xmlActive) {
+  quickButton.hidden = !xmlActive;
+  quickButton.disabled = !xmlActive;
+  quickButton.style.display = xmlActive ? '' : 'none';
+  quickButton.setAttribute('aria-hidden', xmlActive ? 'false' : 'true');
+}
+
 function ensureWorkflowButton(root, state) {
   const runButton = root.querySelector?.('#model-converters-run');
   if (!runButton) return;
@@ -184,12 +192,13 @@ function ensureWorkflowButton(root, state) {
     quickButton.dataset.xmlCiiOpenConversionWorkflow = 'true';
     quickButton.textContent = 'Open XML→CII Workflow';
     quickButton.style.cssText = 'width:100%;padding:10px;margin-top:6px;';
-    quickButton.addEventListener('click', () => openConversionWorkflow(root, state));
+    quickButton.addEventListener('click', () => {
+      if (isXmlCiiActive(root)) openConversionWorkflow(root, state);
+    });
     runButton.parentElement?.insertBefore(quickButton, runButton);
   }
 
-  quickButton.hidden = !xmlActive;
-  quickButton.disabled = !xmlActive;
+  applyWorkflowButtonVisibility(quickButton, xmlActive);
 }
 
 export function installXmlCiiConversionWorkflowPopup(container = document) {
@@ -211,7 +220,9 @@ export function installXmlCiiConversionWorkflowPopup(container = document) {
     openConversionWorkflow(root, state);
   };
 
+  const refreshButton = () => setTimeout(() => ensureWorkflowButton(root, state), 0);
+
   document.addEventListener('click', interceptRun, true);
   ensureWorkflowButton(root, state);
-  root.querySelector?.('#model-converters-select')?.addEventListener('change', () => ensureWorkflowButton(root, state));
+  root.querySelector?.('#model-converters-select')?.addEventListener('change', refreshButton);
 }
