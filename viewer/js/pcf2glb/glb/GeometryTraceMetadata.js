@@ -177,6 +177,14 @@ export function calloutTraceKey(callout = {}) {
   return ['annotation', 'ISONOTE_CALLOUT', no || 'NO_NO', node || 'NO_NODE'].join('|');
 }
 
+function annotationMarkerTraceKey(marker = {}) {
+  const kind = upper(firstNonEmpty(marker.caesarAnnotationKind, marker.annotationKind, marker.kind, 'CAESAR_ANNOTATION'));
+  const no = firstNonEmpty(marker.caesarAnnotationNo, marker.no, marker.calloutNo, marker.label);
+  const node = firstNonEmpty(marker.caesarAnnotationNode, marker.node, marker.nodeNumber, marker.NODE);
+  if (kind === 'NODE_LABEL') return ['annotation', 'NODE_LABEL', node || 'NO_NODE'].join('|');
+  return ['annotation', kind || 'ISONOTE_CALLOUT', no || 'NO_NO', node || 'NO_NODE'].join('|');
+}
+
 export function componentGeometryTrace(component = {}, extra = {}, context = {}) {
   const attrs = attrsOf(component);
   const category = semanticCategoryFromComponent(component, extra);
@@ -213,7 +221,7 @@ export function componentGeometryTrace(component = {}, extra = {}, context = {})
   };
 }
 
-export function annotationGeometryTrace({ callouts = [], nodeCalloutMap = {}, markerCount = 0, source = 'ISONOTE' } = {}) {
+export function annotationGeometryTrace({ callouts = [], nodeCalloutMap = {}, nodeLabels = [], markerCount = 0, source = 'ISONOTE' } = {}) {
   const normalizedCallouts = (callouts || []).map((callout) => ({
     traceKey: calloutTraceKey(callout),
     no: Number(callout.no || callout.calloutNo || 0) || null,
@@ -221,18 +229,27 @@ export function annotationGeometryTrace({ callouts = [], nodeCalloutMap = {}, ma
     source,
     text: firstNonEmpty(callout.text, callout.caesarCalloutText),
   }));
+  const normalizedNodeLabels = (nodeLabels || []).map((label) => ({
+    traceKey: annotationMarkerTraceKey({ caesarAnnotationKind: 'NODE_LABEL', node: label.node }),
+    node: firstNonEmpty(label.node, label.nodeNumber, label.NODE),
+    label: firstNonEmpty(label.label, label.node),
+    source,
+  }));
 
   return {
     schema: BM_CII_GEOMETRY_TRACE_SCHEMA,
     entity: 'annotation',
-    traceKey: 'annotation|CAESAR_ANNOTATION|MERGED',
+    traceKey: 'annotation|CAESAR_ANNOTATION|ROOT',
     semanticCategory: 'annotation',
-    annotationKind: 'CAESAR_ANNOTATION_MERGED_CALLOUTS',
+    annotationKind: 'CAESAR_ANNOTATION_ROOT',
     source,
-    markerCount: Number(markerCount) || normalizedCallouts.length,
+    markerCount: Number(markerCount) || (normalizedCallouts.length + normalizedNodeLabels.length),
     calloutCount: normalizedCallouts.length,
+    nodeLabelCount: normalizedNodeLabels.length,
     calloutNodes: normalizedCallouts.map((callout) => callout.node).filter(Boolean),
+    nodeLabelNodes: normalizedNodeLabels.map((label) => label.node).filter(Boolean),
     callouts: normalizedCallouts,
+    nodeLabels: normalizedNodeLabels,
     nodeCalloutMap,
   };
 }
@@ -275,7 +292,30 @@ export function applyComponentGeometryTrace(object, component, context = {}) {
   return applyGeometryTrace(object, trace, { includeChildren: true });
 }
 
+function markerSpecificAnnotationTrace(baseTrace = {}, target = {}) {
+  const data = target?.userData || {};
+  const kind = firstNonEmpty(data.caesarAnnotationKind, baseTrace.annotationKind);
+  const node = firstNonEmpty(data.caesarAnnotationNode, baseTrace.node);
+  const no = firstNonEmpty(data.caesarAnnotationNo, data.labelText, baseTrace.no);
+  if (!kind || kind === 'CAESAR_ANNOTATION_ROOT' || kind === 'MERGED') return baseTrace;
+  return {
+    ...baseTrace,
+    traceKey: annotationMarkerTraceKey({ caesarAnnotationKind: kind, caesarAnnotationNo: no, caesarAnnotationNode: node }),
+    annotationKind: kind,
+    node,
+    no: Number(no) || null,
+    text: firstNonEmpty(data.caesarAnnotationText, baseTrace.text),
+  };
+}
+
 export function applyAnnotationGeometryTrace(object, annotation = {}) {
-  const trace = annotationGeometryTrace(annotation);
-  return applyGeometryTrace(object, trace, { includeChildren: true });
+  const baseTrace = annotationGeometryTrace(annotation);
+  if (!object) return object;
+  const apply = (target) => {
+    const trace = markerSpecificAnnotationTrace(baseTrace, target);
+    target.userData = withGeometryTrace(target.userData || {}, trace);
+  };
+  apply(object);
+  if (object.traverse) object.traverse((child) => apply(child));
+  return object;
 }
