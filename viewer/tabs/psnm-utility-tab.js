@@ -1,6 +1,6 @@
 import './psnm-utility/psnm-context-actions.js?v=20260613-context-actions-no-blocker-1';
 import './psnm-utility/psnm-lite-persistence-transform-preview.js?v=20260609-lite-persist-preview-2';
-import { renderPSNM_UtilityTab as renderPSNMCoreUtilityTab } from './psnm-utility-tab-coordinate-first-ui.js?v=20260615-coordinate-first-phase-a-1';
+import { renderPSNM_UtilityTab as renderPSNMCoreUtilityTab } from './psnm-utility-tab-coordinate-occurrence-ui.js?v=20260615-coordinate-occurrence-phase-b-1';
 import { installPsnmAxisAutoAnchorAddon } from './psnm-utility/psnm-axis-auto-anchor-addon.js?v=20260612-axis-auto-anchor-addon-1';
 import { installPsnmAnchorPersistenceAddon } from './psnm-utility/psnm-anchor-persistence-addon.js?v=20260613-anchor-persistence-1';
 import { installPsMappingUtilityTile } from './ps-mapping-utility-tab-support-prefix-ui.js?v=20260614-support-prefix-ui-no-duplicate-playground-1';
