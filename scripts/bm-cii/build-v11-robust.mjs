@@ -16,6 +16,19 @@ import {
 
 const SCRIPT_SCHEMA = 'bm-cii-v11-robust-build-script/v1';
 const DEFAULT_OUT_DIR = 'artifacts/bm-cii-v11-robust';
+const BM_CII_ANNOTATION_NODES = Object.freeze(['35', '130', '205', '255']);
+const BM_CII_ANNOTATION_CALLOUTS = Object.freeze([1, 2, 3, 4]);
+const ANNOTATION_ATTR_KEYS = Object.freeze([
+  'ISONOTE',
+  'CAESAR_ISONOTE',
+  'NOTE',
+  'NOTES',
+  'MESSAGE',
+  'TEXT',
+  'COMMENT',
+  'LABEL',
+  'LABEL_TEXT',
+]);
 const DEFAULT_VARIANTS = Object.freeze([
   { name: 'engineering_inputxml', colorMode: 'engineering', supportSource: 'inputxml' },
   { name: 'engineering_isonote', colorMode: 'engineering', supportSource: 'isonote' },
@@ -161,6 +174,58 @@ function normalizePoint(value) {
   return [x, y, z].every(Number.isFinite) ? { x, y, z } : null;
 }
 
+function text(value) {
+  return String(value ?? '').trim();
+}
+
+function sanitizeAnnotationText(value) {
+  const raw = text(value);
+  const match = raw.match(/ISONOTE\s*'([^']+)'/i);
+  return match ? match[1].trim() : raw;
+}
+
+function strippedAnnotationAttrs(attrs = {}) {
+  if (!attrs || typeof attrs !== 'object') return attrs;
+  const clone = { ...attrs };
+  for (const key of ANNOTATION_ATTR_KEYS) {
+    delete clone[key];
+    delete clone[key.toLowerCase()];
+    delete clone[key.charAt(0) + key.slice(1).toLowerCase()];
+  }
+  return clone;
+}
+
+function stripComponentAnnotationFallbacks(component = {}) {
+  if (!component || typeof component !== 'object') return component;
+  const clone = { ...component };
+  for (const key of ['isonote', 'note', 'notes', 'message', 'text', 'comment', 'labelText']) delete clone[key];
+  if (clone.attributes) clone.attributes = strippedAnnotationAttrs(clone.attributes);
+  if (clone.raw) clone.raw = strippedAnnotationAttrs(clone.raw);
+  return clone;
+}
+
+function sanitizeCaesarAnnotationCallouts(sidecar = {}) {
+  const nodes = new Set(BM_CII_ANNOTATION_NODES);
+  const numbers = new Set(BM_CII_ANNOTATION_CALLOUTS);
+  const rawCallouts = sidecar.caesarAnnotationCallouts || sidecar.callouts || [];
+  return rawCallouts
+    .map((callout, index) => {
+      const no = Number(callout.no || callout.calloutNo || index + 1);
+      const node = text(callout.node || callout.NODE || callout.nodeNumber);
+      const textValue = sanitizeAnnotationText(callout.text || callout.caesarCalloutText || callout.note || callout.ISONOTE);
+      return {
+        no,
+        node,
+        text: textValue,
+        caesarCalloutText: textValue,
+        supportTokens: Array.isArray(callout.supportTokens) ? callout.supportTokens : [],
+        source: 'sidecar.caesarAnnotationCallouts',
+      };
+    })
+    .filter((callout) => numbers.has(callout.no) && nodes.has(callout.node) && callout.text)
+    .sort((a, b) => a.no - b.no);
+}
+
 function deriveModelFromSidecar(sidecar = {}) {
   const nodes = sidecar.nodeCoordinatesGlbBasisMm || sidecar.nodes || sidecar.nodeCoordinates || {};
   const normalizedNodes = Object.fromEntries(
@@ -169,26 +234,25 @@ function deriveModelFromSidecar(sidecar = {}) {
       .filter(([, point]) => point),
   );
 
-  const caesarAnnotationCallouts = (sidecar.caesarAnnotationCallouts || sidecar.callouts || [])
-    .map((callout, index) => ({
-      no: Number(callout.no || index + 1),
-      node: String(callout.node || ''),
-      text: callout.text || callout.caesarCalloutText || '',
-      caesarCalloutText: callout.caesarCalloutText || callout.text || '',
-      supportTokens: Array.isArray(callout.supportTokens) ? callout.supportTokens : [],
-    }))
-    .filter((callout) => callout.node && callout.text);
+  const caesarAnnotationCallouts = sanitizeCaesarAnnotationCallouts(sidecar);
 
   return {
     schema: 'bm-cii-v11-derived-model/from-sidecar/v1',
     sourceSchema: sidecar.schema || '',
-    components: sidecar.components || [],
-    elements: sidecar.elements || [],
+    components: (sidecar.components || []).map(stripComponentAnnotationFallbacks),
+    elements: (sidecar.elements || []).map(stripComponentAnnotationFallbacks),
     nodes: normalizedNodes,
     nodeCoordinatesGlbBasisMm: normalizedNodes,
     caesarAnnotationCallouts,
+    isonotes: [],
+    isonoteRows: [],
     supportsInputXml: sidecar.supportsInputXml || [],
     supportsIsonote: sidecar.supportsIsonote || [],
+    bmCiiAnnotationWhitelist: {
+      source: 'sidecar.caesarAnnotationCallouts',
+      callouts: [...BM_CII_ANNOTATION_CALLOUTS],
+      nodes: [...BM_CII_ANNOTATION_NODES],
+    },
     sidecarSource: true,
   };
 }
@@ -215,6 +279,7 @@ function addRobustAnnotationToScene(scene, model, options) {
   applyAnnotationGeometryTrace(annotationObject, {
     source: 'ISONOTE',
     callouts: annotationObject.userData.caesarAnnotationCallouts || [],
+    nodeLabels: annotationObject.userData.caesarAnnotationSidecar?.nodeLabels || [],
     nodeCalloutMap: annotationObject.userData.caesarAnnotationNodeCalloutMap || {},
     markerCount: annotationObject.userData.caesarAnnotationStats?.markerCount || 0,
   });
@@ -227,6 +292,7 @@ function addRobustAnnotationToScene(scene, model, options) {
     caesarAnnotationSidecarSchema: annotationObject.userData.caesarAnnotationSidecarSchema,
     caesarAnnotationSidecar: annotationObject.userData.caesarAnnotationSidecar,
     caesarAnnotationCallouts: annotationObject.userData.caesarAnnotationCallouts,
+    caesarAnnotationNodeLabels: annotationObject.userData.caesarAnnotationSidecar?.nodeLabels || [],
     caesarAnnotationNodeCalloutMap: annotationObject.userData.caesarAnnotationNodeCalloutMap,
     caesarAnnotationGeometrySummary: annotationObject.userData.caesarAnnotationGeometrySummary,
     bmCiiAnnotationTrace: annotationObject.userData.bmCiiTrace,
@@ -287,10 +353,11 @@ async function build(args) {
 
   const caesarAnnotation = {
     mode: 'robust-lowpoly-vector',
-    nodeLabelMode: 'off',
-    mergeMarkers: true,
+    nodeLabelMode: 'isonote-nodes-only',
+    mergeMarkers: false,
     maxIsonoteCallouts: 4,
-    maxNodeLabels: 0,
+    maxNodeLabels: 4,
+    preferredKeyNodes: [...BM_CII_ANNOTATION_NODES],
     discSegments: 16,
     leaderSegments: 6,
     digitHeightRatio: 0.42,
@@ -318,6 +385,8 @@ async function build(args) {
       filePath,
       bytes: (await fs.stat(filePath)).size,
       annotationSummary: root.userData.caesarAnnotationGeometrySummary || null,
+      calloutCount: root.userData.caesarAnnotationCallouts?.length || 0,
+      nodeLabelCount: root.userData.caesarAnnotationNodeLabels?.length || 0,
     });
     sidecars.push(root.userData.caesarAnnotationSidecar || buildCaesarAnnotationSidecar([], caesarAnnotation));
   }
@@ -328,8 +397,13 @@ async function build(args) {
     source: args.modelPath || args.sidecarPath,
     caesarAnnotationMode: caesarAnnotation.mode,
     nodeLabelMode: caesarAnnotation.nodeLabelMode,
+    mergeMarkers: caesarAnnotation.mergeMarkers,
+    annotationSource: 'sidecar.caesarAnnotationCallouts',
+    allowedCallouts: [...BM_CII_ANNOTATION_CALLOUTS],
+    allowedNodes: [...BM_CII_ANNOTATION_NODES],
     variants: outputs,
     callouts: sidecars[0]?.callouts || [],
+    nodeLabels: sidecars[0]?.nodeLabels || [],
     nodeCalloutMap: sidecars[0]?.nodeCalloutMap || {},
     sidecars,
   };
@@ -369,9 +443,12 @@ const modulePath = fileURLToPath(import.meta.url);
 if (invokedPath === modulePath) await main();
 
 export {
+  BM_CII_ANNOTATION_CALLOUTS,
+  BM_CII_ANNOTATION_NODES,
   DEFAULT_VARIANTS,
   SCRIPT_SCHEMA,
   build,
   deriveModelFromSidecar,
   parseArgs,
+  sanitizeCaesarAnnotationCallouts,
 };
