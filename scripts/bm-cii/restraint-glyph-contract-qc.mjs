@@ -9,6 +9,8 @@ const CHUNK_JSON = 0x4e4f534a;
 const CHUNK_BIN = 0x004e4942;
 const QC_SCHEMA = 'bm-cii-restraint-glyph-contract-qc/v1';
 const UP = [0, 1, 0];
+const X_AXIS = [1, 0, 0];
+const Z_AXIS = [0, 0, 1];
 const KIND_CONTRACT = Object.freeze({
   GUIDE: 'guide-lateral-arrows-tip-at-od2',
   LINESTOP: 'linestop-axial-arrows-offset-od2',
@@ -16,7 +18,7 @@ const KIND_CONTRACT = Object.freeze({
   LIMIT: 'limit-axial-arrow-offset-od2',
   ['HAN' + 'GER']: 'han' + 'ger-spring-moderate-symbol',
   SPRING: 'han' + 'ger-spring-moderate-symbol',
-  UNKNOWN: 'unknown-debug-marker-hidden-default',
+  UNKNOWN: 'unknown-debug-default-off',
 });
 const FORBIDDEN_BY_KIND = Object.freeze({
   GUIDE: [/axis/i, /vertical/i, /plate/i, /jaw/i, /block/i],
@@ -132,8 +134,7 @@ function rotationMatrix(q = []) {
 function localMatrix(node = {}) {
   if (Array.isArray(node.matrix) && node.matrix.length === 16) return node.matrix.map(Number);
   return multiply(multiply(translationMatrix(node.translation || [0, 0, 0]), rotationMatrix(node.rotation || [0, 0, 0, 1])), scaleMatrix(node.scale || [1, 1, 1]));
-}
-
+}\n
 function transformPoint(m, p) {
   const x = p[0], y = p[1], z = p[2];
   return [
@@ -153,9 +154,18 @@ function add(a, b) { return [a[0] + b[0], a[1] + b[1], a[2] + b[2]]; }
 function sub(a, b) { return [a[0] - b[0], a[1] - b[1], a[2] - b[2]]; }
 function mul(a, s) { return [a[0] * s, a[1] * s, a[2] * s]; }
 function dot(a, b) { return a[0] * b[0] + a[1] * b[1] + a[2] * b[2]; }
+function cross(a, b) { return [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]]; }
 function len(a) { return Math.sqrt(dot(a, a)); }
 function dist(a, b) { return len(sub(a, b)); }
 function norm(a, fallback = [0, 0, 1]) { const l = len(a); return l > 1e-9 ? mul(a, 1 / l) : [...fallback]; }
+
+function pipeFrameFromExtras(extras) {
+  const tangent = norm(vectorFrom(extras.e.supportPipeTangent || extras.trace.pipeTangent || extras.record.pipeTangent, Z_AXIS), Z_AXIS);
+  let lateral = cross(UP, tangent);
+  lateral = len(lateral) > 1e-9 ? norm(lateral, X_AXIS) : [...X_AXIS];
+  const vertical = Math.abs(dot(tangent, UP)) > 0.85;
+  return { tangent, lateral, vertical };
+}
 
 function accessorByteSize(componentType) {
   if (componentType === 5126 || componentType === 5125 || componentType === 5123) return componentType === 5123 ? 2 : 4;
@@ -255,15 +265,23 @@ function hasForbiddenName(kind, names) {
 
 function expectedTargets(kind, rootOrigin, extras) {
   const radius = Number(extras.record.pipeRadius || extras.e.supportPipeRadius || extras.trace.pipeRadius || 0);
-  const lateral = norm(vectorFrom(extras.e.supportLateralVector || extras.trace.lateralVector, [1, 0, 0]), [1, 0, 0]);
-  const tangent = norm(vectorFrom(extras.e.supportPipeTangent || extras.trace.pipeTangent, [0, 0, 1]), [0, 0, 1]);
-  const axis = norm(vectorFrom(extras.e.supportAxis || extras.trace.axisVector || tangent, tangent), tangent);
-  void axis;
   if (!radius || radius <= 0) return [];
+  const { tangent, lateral, vertical } = pipeFrameFromExtras(extras);
   if (kind === 'GUIDE') return [add(rootOrigin, mul(lateral, radius)), add(rootOrigin, mul(lateral, -radius))];
-  if (kind === 'LINESTOP') return [add(rootOrigin, mul(UP, radius))];
-  if (kind === 'LIMIT') return [add(rootOrigin, mul(UP, radius))];
-  if (kind === 'REST') return [add(rootOrigin, mul(UP, -radius))];
+  if (kind === 'REST') {
+    const base = vertical ? add(rootOrigin, mul(lateral, radius)) : rootOrigin;
+    return [add(base, mul(UP, -radius))];
+  }
+  if (kind === 'LINESTOP') {
+    const offset = vertical ? add(rootOrigin, mul(lateral, radius)) : add(rootOrigin, mul(UP, -radius));
+    return [add(offset, mul(tangent, radius)), add(offset, mul(tangent, -radius))];
+  }
+  if (kind === 'LIMIT') {
+    const offset = vertical ? add(rootOrigin, mul(lateral, radius)) : add(rootOrigin, mul(UP, -radius));
+    const targets = [add(offset, mul(tangent, radius))];
+    if (extras.record.limitBidirectional === true) targets.push(add(offset, mul(tangent, -radius)));
+    return targets;
+  }
   return [];
 }
 
