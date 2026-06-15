@@ -213,26 +213,33 @@ function supportScaleFrom(attrs = {}, pipeRadius = 20, fallbackScale = null) {
   return Math.max(pipeRadius * 2.6, 28);
 }
 
-function horizontalProjection(vector, fallback) {
-  const v = vector.clone().sub(UP.clone().multiplyScalar(vector.dot(UP)));
-  if (v.lengthSq() > EPS) return v.normalize();
-  return fallback.clone().normalize();
-}
-
-function lateralFrom(pipeTangent, axisVector, kind) {
-  if (kind === 'GUIDE') {
-    const fallback = new THREE.Vector3().crossVectors(pipeTangent, UP);
-    const safeFallback = fallback.lengthSq() > EPS ? fallback.normalize() : X_AXIS.clone();
-    return horizontalProjection(axisVector, safeFallback);
-  }
-  const side = new THREE.Vector3().crossVectors(pipeTangent, UP);
+function lateralFrom(pipeTangent) {
+  // Geometry lateral direction is derived only from pipe tangent.
+  // Restraint axis remains metadata/filtering and must not become a visible arrow direction.
+  const side = new THREE.Vector3().crossVectors(UP, pipeTangent);
   if (side.lengthSq() > EPS) return side.normalize();
-  const sideX = new THREE.Vector3().crossVectors(pipeTangent, X_AXIS);
-  return sideX.lengthSq() > EPS ? sideX.normalize() : Z_AXIS.clone();
+  return X_AXIS.clone();
 }
 
 function gapFrom(attrs = {}) {
   return firstNonEmpty(attrs.gap, attrs.Gap, attrs.GAP, attrs.gapMm, attrs.GAP_MM, attrs.restraintGap, attrs.RESTRAINT_GAP);
+}
+
+function limitDirectionFrom(attrs = {}) {
+  return firstNonEmpty(
+    attrs.limitDirection,
+    attrs.directionality,
+    attrs.directionMode,
+    attrs.limitMode,
+    attrs.LIMIT_DIRECTION,
+    attrs.DIRECTIONALITY,
+  );
+}
+
+function isBidirectionalLimit(attrs = {}) {
+  if (attrs.bidirectional === true || attrs.limitBidirectional === true || attrs.isBidirectional === true) return true;
+  const raw = text(limitDirectionFrom(attrs)).toUpperCase();
+  return raw.includes('BOTH') || raw.includes('BI-DIR') || raw.includes('BIDIR') || raw.includes('+/-') || raw.includes('+-');
 }
 
 export function normalizeSupportRecord(rawSupport = {}, source = '', index = 0, overrides = {}) {
@@ -273,9 +280,11 @@ export function normalizeSupportRecord(rawSupport = {}, source = '', index = 0, 
       || (kind === 'LINESTOP' || kind === 'LIMIT' ? axisVector : null),
     Z_AXIS,
   );
-  const lateralVector = normalizeVector(overrides.lateralVector || attrs.lateralVector || lateralFrom(pipeTangent, axisVector, kind), X_AXIS);
+  const lateralVector = normalizeVector(overrides.lateralVector || attrs.lateralVector || lateralFrom(pipeTangent), X_AXIS);
   const supportSymbolScale = supportScaleFrom({ ...attrs, ...overrides }, pipeRadius, overrides.scaleFallback);
   const gap = gapFrom(attrs);
+  const limitDirection = limitDirectionFrom(attrs);
+  const limitBidirectional = isBidirectionalLimit(attrs);
   const id = `${supportSource}:${supportRecordIndex}:${node}:${kind}:${axis || 'NA'}`;
   const layerIds = layerIdsForRestraintSupport({ source: supportSource, kind, axisLabel: axis });
 
@@ -296,6 +305,8 @@ export function normalizeSupportRecord(rawSupport = {}, source = '', index = 0, 
     pipeRadius,
     supportSymbolScale,
     gap,
+    limitDirection,
+    limitBidirectional,
     visibleDefault: kind !== 'UNKNOWN',
     layerIds,
     raw: rawSupport,
@@ -317,13 +328,7 @@ export function supportRecordMetadata(record = {}) {
     visibleDefault: record.visibleDefault !== false,
     layerIds: [...(record.layerIds || [])],
     gap: record.gap || '',
+    limitDirection: record.limitDirection || '',
+    limitBidirectional: record.limitBidirectional === true,
   };
 }
-
-export const __private__ = {
-  axisNameFromLabel,
-  firstNonEmpty,
-  firstFinite,
-  normalizedKindFrom,
-  pipeRadiusFrom,
-};
