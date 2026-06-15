@@ -105,8 +105,43 @@ function stableVector(vector, fallback) {
   return v.normalize();
 }
 
+function pipeFrame(record) {
+  const t = stableVector(record.pipeTangent, Z_AXIS);
+  let lateral = new THREE.Vector3().crossVectors(UP, t);
+  if (lateral.lengthSq() < EPS) lateral = X_AXIS.clone();
+  lateral.normalize();
+  const radial2 = new THREE.Vector3().crossVectors(t, lateral);
+  if (radial2.lengthSq() < EPS) radial2.copy(UP);
+  else radial2.normalize();
+  return { t, up: UP.clone(), lateral, radial2, pipeIsVertical: Math.abs(t.dot(UP)) > 0.85 };
+}
+
+function glyphLength(record, multiplier = 1.65) {
+  return Math.max((record.supportSymbolScale || 0) * 0.72, (record.pipeRadius || 1) * multiplier);
+}
+
 function supportColor(record) {
   return SUPPORT_SYMBOL_COLORS[record.kind] || SUPPORT_SYMBOL_COLORS.UNKNOWN;
+}
+
+function isBidirectionalLimit(record) {
+  const raw = String(
+    record.limitDirection
+      || record.directionality
+      || record.raw?.limitDirection
+      || record.raw?.directionality
+      || record.raw?.direction
+      || record.raw?.DIRECTION
+      || record.raw?.axisDirection
+      || '',
+  ).toUpperCase();
+  return record.bidirectional === true
+    || record.limitBidirectional === true
+    || raw.includes('BOTH')
+    || raw.includes('BI-DIR')
+    || raw.includes('BIDIR')
+    || raw.includes('+/-')
+    || raw.includes('+-');
 }
 
 export function supportContractForKind(kind = '') {
@@ -115,52 +150,71 @@ export function supportContractForKind(kind = '') {
   if (kind === 'LIMIT') return 'limit-axial-arrow-offset-od2';
   if (kind === 'REST') return 'rest-vertical-arrow-tip-at-od2';
   if (kind === ('HAN' + 'GER') || kind === 'SPRING') return ('han' + 'ger-spring-moderate-symbol');
-  if (kind === 'UNKNOWN') return 'unknown-debug-marker-hidden-default';
+  if (kind === 'UNKNOWN') return 'unknown-debug-default-off';
   return 'restraint-glyph-record-root';
 }
 
 export function buildGuideGlyph(group, record) {
+  // GUIDE = lateral arrows only. Axis metadata is not a visible axis arrow.
+  const { lateral } = pipeFrame(record);
   const p = record.pipePoint.clone();
-  const lateral = stableVector(record.lateralVector, X_AXIS);
   const r = record.pipeRadius;
-  const scale = record.supportSymbolScale;
   const color = supportColor(record);
-  const arrowLength = Math.max(scale * 0.72, r * 1.65);
-  const arrowRadius = Math.max(scale * 0.028, 1.2);
+  const arrowLength = glyphLength(record, 1.65);
+  const arrowRadius = Math.max(record.supportSymbolScale * 0.028, 1.2);
   for (const sign of [1, -1]) {
     const tip = p.clone().add(lateral.clone().multiplyScalar(sign * r));
-    const start = tip.clone().add(lateral.clone().multiplyScalar(sign * arrowLength));
+    const start = p.clone().add(lateral.clone().multiplyScalar(sign * (r + arrowLength)));
     arrow(group, `${safeName(record.id)}-guide-lateral-arrow-${sign > 0 ? 'positive' : 'negative'}`, start, tip, color, arrowRadius);
   }
 }
 
+function axialOffsetPoint(record, frame) {
+  const p = record.pipePoint.clone();
+  const r = record.pipeRadius;
+  // Horizontal/near-horizontal pipe: axial arrow runs just below the pipe OD.
+  // Vertical/near-vertical pipe: axial arrow runs beside the pipe at OD/2.
+  return frame.pipeIsVertical
+    ? p.add(frame.lateral.clone().multiplyScalar(r))
+    : p.add(frame.up.clone().multiplyScalar(-r));
+}
+
 export function buildLineStopGlyph(group, record) {
-  const surface = record.pipePoint.clone().add(UP.clone().multiplyScalar(record.pipeRadius));
-  const pipeAxis = stableVector(record.pipeTangent, Z_AXIS);
-  const scale = record.supportSymbolScale;
+  // LINESTOP = axial arrows only. Offset from pipe centerline by OD/2; no plate/block/axis marker.
+  const frame = pipeFrame(record);
+  const offset = axialOffsetPoint(record, frame);
+  const r = record.pipeRadius;
   const color = supportColor(record);
-  const arrowLength = Math.max(scale * 0.82, record.pipeRadius * 1.75);
-  const arrowRadius = Math.max(scale * 0.030, 1.2);
+  const arrowLength = glyphLength(record, 1.75);
+  const arrowRadius = Math.max(record.supportSymbolScale * 0.030, 1.2);
   for (const sign of [1, -1]) {
-    const start = surface.clone().add(pipeAxis.clone().multiplyScalar(sign * arrowLength));
-    arrow(group, `${safeName(record.id)}-linestop-axial-arrow-${sign > 0 ? 'positive' : 'negative'}`, start, surface, color, arrowRadius);
+    const tip = offset.clone().add(frame.t.clone().multiplyScalar(sign * r));
+    const start = offset.clone().add(frame.t.clone().multiplyScalar(sign * (r + arrowLength)));
+    arrow(group, `${safeName(record.id)}-linestop-axial-arrow-${sign > 0 ? 'positive' : 'negative'}`, start, tip, color, arrowRadius);
   }
 }
 
 export function buildLimitGlyph(group, record) {
-  const surface = record.pipePoint.clone().add(UP.clone().multiplyScalar(record.pipeRadius));
-  const axis = stableVector(record.axisVector || record.pipeTangent, Z_AXIS);
-  const lateral = stableVector(record.lateralVector, X_AXIS);
+  // LIMIT uses the same OD/2 axial offset as LINESTOP. Render one-way unless source says bidirectional.
+  const frame = pipeFrame(record);
+  const offset = axialOffsetPoint(record, frame);
+  const r = record.pipeRadius;
   const scale = record.supportSymbolScale;
   const color = supportColor(record);
-  const arrowLength = Math.max(scale * 0.82, record.pipeRadius * 1.65);
+  const arrowLength = glyphLength(record, 1.65);
   const arrowRadius = Math.max(scale * 0.026, 1.0);
-  arrow(group, `${safeName(record.id)}-limit-axial-arrow`, surface.clone().add(axis.clone().multiplyScalar(arrowLength)), surface, color, arrowRadius);
+  const signs = isBidirectionalLimit(record) ? [1, -1] : [1];
+
+  for (const sign of signs) {
+    const tip = offset.clone().add(frame.t.clone().multiplyScalar(sign * r));
+    const start = offset.clone().add(frame.t.clone().multiplyScalar(sign * (r + arrowLength)));
+    arrow(group, `${safeName(record.id)}-limit-axial-arrow-${sign > 0 ? 'positive' : 'negative'}`, start, tip, color, arrowRadius);
+  }
 
   if (record.gap) {
-    const basis = basisFrom(axis, lateral);
+    const basis = basisFrom(frame.t, frame.lateral);
     const tickSize = Math.max(scale * 0.070, 2.0);
-    const tickCenter = surface.clone().add(axis.clone().multiplyScalar(Math.max(scale * 0.18, record.pipeRadius * 0.45)));
+    const tickCenter = offset.clone().add(frame.t.clone().multiplyScalar(r + arrowLength * 0.45));
     box(
       group,
       `${safeName(record.id)}-limit-gap-tick`,
@@ -173,8 +227,14 @@ export function buildLimitGlyph(group, record) {
 }
 
 export function buildRestGlyph(group, record) {
-  const tip = record.pipePoint.clone().add(UP.clone().multiplyScalar(-record.pipeRadius));
-  const start = tip.clone().add(UP.clone().multiplyScalar(-Math.max(record.supportSymbolScale * 0.76, record.pipeRadius * 1.7)));
+  // REST = vertical arrow only. For vertical pipe, offset beside OD/2 so the arrow does not run through centerline.
+  const frame = pipeFrame(record);
+  const r = record.pipeRadius;
+  const base = frame.pipeIsVertical
+    ? record.pipePoint.clone().add(frame.lateral.clone().multiplyScalar(r))
+    : record.pipePoint.clone();
+  const tip = base.clone().add(frame.up.clone().multiplyScalar(-r));
+  const start = tip.clone().add(frame.up.clone().multiplyScalar(-glyphLength(record, 1.7)));
   arrow(group, `${safeName(record.id)}-rest-vertical-arrow`, start, tip, supportColor(record), Math.max(record.supportSymbolScale * 0.026, 1.0));
 }
 
@@ -212,7 +272,8 @@ function buildAnchorGlyph(group, record) {
   const color = supportColor(record);
   const radius = Math.max(record.supportSymbolScale * 0.020, 0.9);
   const len = Math.max(record.supportSymbolScale * 0.44, record.pipeRadius * 1.25);
-  for (const dir of [UP, UP.clone().negate(), record.pipeTangent, record.pipeTangent.clone().negate(), record.lateralVector, record.lateralVector.clone().negate()]) {
+  const frame = pipeFrame(record);
+  for (const dir of [UP, UP.clone().negate(), frame.t, frame.t.clone().negate(), frame.lateral, frame.lateral.clone().negate()]) {
     const safe = stableVector(dir, Z_AXIS);
     arrow(group, `${safeName(record.id)}-anchor-direction-arrow`, p.clone().add(safe.clone().multiplyScalar(len)), p, color, radius);
   }
@@ -258,7 +319,6 @@ export function stampSupportObjectMetadata(object, record, { role = '', renderGl
     supportLateralVector: { x: record.lateralVector.x, y: record.lateralVector.y, z: record.lateralVector.z },
     supportPipeRadius: record.pipeRadius,
     supportSymbolScale: record.supportSymbolScale,
-    renderGlyph,
     renderScale: record.supportSymbolScale,
     visualProfile: RESTRAINT_VISUAL_PROFILE.id,
     glbSupportVisualProfile: RESTRAINT_VISUAL_PROFILE.id,
@@ -336,6 +396,7 @@ export const __private__ = {
   basisFrom,
   cylinderBetween,
   material,
+  pipeFrame,
   safeName,
   stableVector,
 };
