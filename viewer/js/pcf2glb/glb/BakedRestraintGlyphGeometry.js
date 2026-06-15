@@ -1,8 +1,8 @@
 import * as THREE from 'three';
 import {
-  AXIS_SYMBOL_COLORS,
   RESTRAINT_VISUAL_PROFILE,
   SUPPORT_SYMBOL_COLORS,
+  layerIdsForRestraintSupport,
   normalizeRestraintAxisLabel,
   normalizeRestraintKind,
   visualProfileMetadata,
@@ -12,6 +12,7 @@ const UP = new THREE.Vector3(0, 1, 0);
 const X_AXIS = new THREE.Vector3(1, 0, 0);
 const Y_AXIS = new THREE.Vector3(0, 1, 0);
 const Z_AXIS = new THREE.Vector3(0, 0, 1);
+const LAYER_SCHEMA = 'bm-cii-layer/v1';
 
 function text(value) {
   return String(value ?? '').trim();
@@ -27,25 +28,19 @@ function number(value) {
 }
 
 function attrsFrom(object, comp = {}) {
-  return {
-    ...(comp.raw || {}),
-    ...(comp.attributes || {}),
-    ...(object?.userData || {}),
-  };
+  return { ...(comp.raw || {}), ...(comp.attributes || {}), ...(object?.userData || {}) };
 }
 
-function vectorFromObject(value) {
+function vectorFrom(value) {
   if (Array.isArray(value)) {
-    const axis = new THREE.Vector3(Number(value[0]) || 0, Number(value[1]) || 0, Number(value[2]) || 0);
-    return axis.lengthSq() > 1e-8 ? axis.normalize() : null;
+    const v = new THREE.Vector3(Number(value[0]) || 0, Number(value[1]) || 0, Number(value[2]) || 0);
+    return v.lengthSq() > 1e-8 ? v.normalize() : null;
   }
-  if (!value || typeof value !== 'object') return null;
-  const x = number(value.x ?? value.X);
-  const y = number(value.y ?? value.Y);
-  const z = number(value.z ?? value.Z);
-  if ([x, y, z].some((v) => v == null)) return null;
-  const axis = new THREE.Vector3(x, y, z);
-  return axis.lengthSq() > 1e-8 ? axis.normalize() : null;
+  if (value && typeof value === 'object') {
+    const v = new THREE.Vector3(Number(value.x) || 0, Number(value.y) || 0, Number(value.z) || 0);
+    return v.lengthSq() > 1e-8 ? v.normalize() : null;
+  }
+  return null;
 }
 
 function kindFrom(attrs = {}, comp = {}) {
@@ -63,7 +58,7 @@ function kindFrom(attrs = {}, comp = {}) {
 }
 
 function axisLabelFrom(attrs = {}, comp = {}) {
-  const direct = normalizeRestraintAxisLabel(
+  return normalizeRestraintAxisLabel(
     comp.axis
       || comp.direction
       || comp.restraintAxis
@@ -79,16 +74,6 @@ function axisLabelFrom(attrs = {}, comp = {}) {
       || attrs.RESTRAINT_AXIS
       || attrs['RESTRAINT-AXIS'],
   );
-  if (direct) return direct;
-  const vec = vectorFromObject(comp.supportAxis || attrs.supportAxis || attrs.SUPPORT_AXIS || attrs.caesarSupportAxis);
-  if (vec) return normalizeRestraintAxisLabel([vec.x, vec.y, vec.z]);
-  const cosines = [
-    attrs.caesarXCosine ?? attrs.XCOSINE ?? attrs.X_COSINE ?? attrs.XCOS ?? attrs.X,
-    attrs.caesarYCosine ?? attrs.YCOSINE ?? attrs.Y_COSINE ?? attrs.YCOS ?? attrs.Y,
-    attrs.caesarZCosine ?? attrs.ZCOSINE ?? attrs.Z_COSINE ?? attrs.ZCOS ?? attrs.Z,
-  ].map(Number);
-  if (cosines.every(Number.isFinite)) return normalizeRestraintAxisLabel(cosines);
-  return '';
 }
 
 function axisVectorFromLabel(label) {
@@ -100,12 +85,12 @@ function axisVectorFromLabel(label) {
 }
 
 function axisVectorFrom(attrs = {}, comp = {}, axisLabel = '') {
-  return vectorFromObject(comp.supportAxis)
-    || vectorFromObject(attrs.supportAxis)
-    || vectorFromObject(attrs.SUPPORT_AXIS)
-    || vectorFromObject(attrs.caesarSupportAxis)
+  return vectorFrom(comp.supportAxis)
+    || vectorFrom(attrs.supportAxis)
+    || vectorFrom(attrs.SUPPORT_AXIS)
+    || vectorFrom(attrs.caesarSupportAxis)
     || axisVectorFromLabel(axisLabel)
-    || Z_AXIS.clone();
+    || X_AXIS.clone();
 }
 
 function pipeRadiusFor(comp = {}, attrs = {}) {
@@ -125,13 +110,7 @@ function sourceOf(attrs = {}, comp = {}, options = {}) {
 }
 
 function material(color) {
-  return new THREE.MeshStandardMaterial({
-    color,
-    emissive: color,
-    emissiveIntensity: 0.10,
-    roughness: 0.42,
-    metalness: 0.08,
-  });
+  return new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: 0.10, roughness: 0.42, metalness: 0.08 });
 }
 
 function orientFromY(object, direction) {
@@ -151,21 +130,6 @@ function basisFrom(primary, lateral) {
   let y = new THREE.Vector3().crossVectors(z, x).normalize();
   if (y.dot(UP) < 0) y.negate();
   return { x, y, z };
-}
-
-function box(group, name, center, size, color, basis = null) {
-  const mesh = new THREE.Mesh(new THREE.BoxGeometry(size.x, size.y, size.z), material(color));
-  mesh.name = name;
-  mesh.position.copy(center);
-  if (basis?.x && basis?.y && basis?.z) {
-    mesh.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(
-      basis.x.clone().normalize(),
-      basis.y.clone().normalize(),
-      basis.z.clone().normalize(),
-    ));
-  }
-  group.add(mesh);
-  return mesh;
 }
 
 function cylinderBetween(group, name, start, end, radius, color, radialSegments = 14) {
@@ -196,6 +160,17 @@ function arrow(group, name, start, end, color, radius) {
   return head;
 }
 
+function box(group, name, center, size, color, basis = null) {
+  const mesh = new THREE.Mesh(new THREE.BoxGeometry(size.x, size.y, size.z), material(color));
+  mesh.name = name;
+  mesh.position.copy(center);
+  if (basis?.x && basis?.y && basis?.z) {
+    mesh.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(basis.x.clone().normalize(), basis.y.clone().normalize(), basis.z.clone().normalize()));
+  }
+  group.add(mesh);
+  return mesh;
+}
+
 function torus(group, name, center, normal, major, minor, color) {
   const mesh = new THREE.Mesh(new THREE.TorusGeometry(major, minor, 8, 24), material(color));
   mesh.name = name;
@@ -218,96 +193,59 @@ function horizontalAxisOrFallback(axis, fallback) {
   return horizontal.lengthSq() > 1e-8 ? horizontal.normalize() : fallback.clone().normalize();
 }
 
-function plate(group, name, center, pipeAxis, lateral, scale, color, width = 1.25, depth = 0.82) {
-  return box(group, name, center, new THREE.Vector3(scale * width, scale * 0.12, scale * depth), color, basisFrom(pipeAxis, lateral));
+function buildRest(group, id, pos, pipeRadius, scale, color) {
+  const tip = pos.clone().add(UP.clone().multiplyScalar(-pipeRadius));
+  const start = tip.clone().add(UP.clone().multiplyScalar(-scale * 0.92));
+  arrow(group, `${id}-rest-vertical-arrow`, start, tip, color, scale * 0.040);
 }
 
-function axisIndicator(group, pos, axisVector, axisLabel, scale) {
-  const label = normalizeRestraintAxisLabel(axisLabel);
-  if (!label) return;
-  const axis = (axisVectorFromLabel(label) || axisVector || X_AXIS).clone().normalize();
-  const color = AXIS_SYMBOL_COLORS[label.replace(/[+-]/g, '')] || 0x60a5fa;
-  arrow(group, `axis-indicator-${label}`,
-    pos.clone().add(axis.clone().multiplyScalar(scale * 0.18)),
-    pos.clone().add(axis.clone().multiplyScalar(scale * 0.76)),
-    color,
-    scale * 0.036,
-  );
-  torus(group, `axis-indicator-${label}-badge`, pos.clone().add(axis.clone().multiplyScalar(scale * 0.88)), axis, scale * 0.20, scale * 0.020, color);
-}
-
-function buildRest(group, id, pos, pipeAxis, lateral, scale, color) {
-  const baseCenter = pos.clone().add(UP.clone().multiplyScalar(-scale * 0.88));
-  const pipeBase = pos.clone().add(UP.clone().multiplyScalar(-scale * 0.16));
-  plate(group, `${id}-rest-base-plate`, baseCenter, pipeAxis, lateral, scale, color, 1.35, 0.95);
-  cylinderBetween(group, `${id}-rest-post`, baseCenter.clone().add(UP.clone().multiplyScalar(scale * 0.08)), pipeBase, scale * 0.045, color, 14);
-  arrow(group, `${id}-rest-vertical-axis`, baseCenter.clone().add(UP.clone().multiplyScalar(scale * 0.20)), pipeBase, color, scale * 0.040);
-}
-
-function buildGuide(group, id, pos, pipeAxis, lateral, scale, color) {
-  // GUIDE symbol: lateral arrows only. No guide plates/jaws.
+function buildGuide(group, id, pos, pipeRadius, lateral, scale, color) {
+  // GUIDE = lateral arrows only. Tips touch pipe circumference. No vertical/axis arrows and no plates.
   for (const sign of [1, -1]) {
-    arrow(group, `${id}-guide-lateral-arrow-${sign > 0 ? 'positive' : 'negative'}`,
-      pos.clone().add(lateral.clone().multiplyScalar(sign * scale * 1.05)),
-      pos.clone().add(lateral.clone().multiplyScalar(sign * scale * 0.26)),
-      color,
-      scale * 0.048,
-    );
+    const tip = pos.clone().add(lateral.clone().multiplyScalar(sign * pipeRadius));
+    const start = pos.clone().add(lateral.clone().multiplyScalar(sign * scale * 1.05));
+    arrow(group, `${id}-guide-lateral-arrow-${sign > 0 ? 'positive' : 'negative'}`, start, tip, color, scale * 0.048);
   }
 }
 
-function buildLineStop(group, id, pos, pipeAxis, lateral, scale, color) {
-  // LINESTOP symbol: axial arrows only. No stop plates/blocks.
+function buildLineStop(group, id, pos, pipeRadius, pipeAxis, scale, color) {
+  // LINESTOP = axial arrows only. Arrows are offset vertically by OD/2 and converge to pipe circumference.
+  const surface = pos.clone().add(UP.clone().multiplyScalar(pipeRadius));
   for (const sign of [1, -1]) {
-    arrow(group, `${id}-linestop-axial-arrow-${sign > 0 ? 'positive' : 'negative'}`,
-      pos.clone().add(pipeAxis.clone().multiplyScalar(sign * scale * 1.10)),
-      pos.clone().add(pipeAxis.clone().multiplyScalar(sign * scale * 0.26)),
-      color,
-      scale * 0.052,
-    );
+    const start = surface.clone().add(pipeAxis.clone().multiplyScalar(sign * scale * 1.10));
+    arrow(group, `${id}-linestop-axial-arrow-${sign > 0 ? 'positive' : 'negative'}`, start, surface, color, scale * 0.052);
   }
 }
 
-function buildLimit(group, id, pos, axis, lateral, scale, color) {
+function buildLimit(group, id, pos, pipeRadius, axis, lateral, scale, color) {
+  // LIMIT follows the axial rule: arrow path is offset vertically by OD/2 from pipe center.
   const limitAxis = axis.clone().normalize();
+  const surface = pos.clone().add(UP.clone().multiplyScalar(pipeRadius));
   const basis = basisFrom(limitAxis, lateral);
-  plate(group, `${id}-limit-base-plate`, pos.clone().add(UP.clone().multiplyScalar(-scale * 0.76)), limitAxis, lateral, scale, color, 1.05, 0.70);
-  box(group, `${id}-limit-stop-block`, pos.clone().add(limitAxis.clone().multiplyScalar(scale * 0.50)), new THREE.Vector3(scale * 0.18, scale * 0.78, scale * 0.48), color, basis);
-  arrow(group, `${id}-limit-direction-axis`,
-    pos.clone().add(limitAxis.clone().multiplyScalar(scale * 1.18)).add(UP.clone().multiplyScalar(scale * 0.12)),
-    pos.clone().add(limitAxis.clone().multiplyScalar(scale * 0.58)).add(UP.clone().multiplyScalar(scale * 0.12)),
-    color,
-    scale * 0.042,
-  );
-  box(group, `${id}-limit-gap-tick`,
-    pos.clone().add(limitAxis.clone().multiplyScalar(scale * 0.82)).add(UP.clone().multiplyScalar(scale * 0.45)),
-    new THREE.Vector3(scale * RESTRAINT_VISUAL_PROFILE.minimums.limitGapTickWidth, scale * 0.045, scale * 0.22),
-    0xf59e0b,
-    basis,
-  );
+  arrow(group, `${id}-limit-direction-arrow`, surface.clone().add(limitAxis.clone().multiplyScalar(scale * 1.12)), surface, color, scale * 0.042);
+  box(group, `${id}-limit-gap-tick-a`, surface.clone().add(limitAxis.clone().multiplyScalar(scale * 0.26)).add(UP.clone().multiplyScalar(scale * 0.18)), new THREE.Vector3(scale * 0.040, scale * 0.28, scale * 0.16), 0xf59e0b, basis);
+  box(group, `${id}-limit-gap-tick-b`, surface.clone().add(limitAxis.clone().multiplyScalar(scale * 0.36)).add(UP.clone().multiplyScalar(scale * 0.18)), new THREE.Vector3(scale * 0.040, scale * 0.28, scale * 0.16), 0xf97316, basis);
 }
 
 function buildHanger(group, id, pos, pipeAxis, lateral, scale, color) {
   const topCenter = pos.clone().add(UP.clone().multiplyScalar(scale * 1.55));
   const pipeTop = pos.clone().add(UP.clone().multiplyScalar(scale * 0.15));
-  plate(group, `${id}-hanger-top-plate`, topCenter, pipeAxis, lateral, scale, color, 1.10, 0.85);
+  box(group, `${id}-hanger-top-plate`, topCenter, new THREE.Vector3(scale * 1.10, scale * 0.12, scale * 0.85), color, basisFrom(pipeAxis, lateral));
   cylinderBetween(group, `${id}-hanger-rod`, topCenter.clone().add(UP.clone().multiplyScalar(-scale * 0.08)), pipeTop, scale * 0.028, color, 12);
   for (let i = 0; i < 3; i += 1) {
     torus(group, `${id}-hanger-coil-${i + 1}`, pos.clone().add(UP.clone().multiplyScalar(scale * (0.48 + i * 0.16))), UP, scale * 0.16, scale * 0.016, color);
   }
-  arrow(group, `${id}-hanger-load-axis`, topCenter.clone().add(UP.clone().multiplyScalar(-scale * 0.12)), pipeTop, color, scale * 0.035);
 }
 
-function buildUnknown(group, id, pos, pipeAxis, lateral, scale, color) {
-  // UNKNOWN / TYPE0 is a debug-only marker, intentionally small.
-  const warning = new THREE.Mesh(new THREE.OctahedronGeometry(scale * 0.16, 0), material(0xf59e0b));
+function buildUnknown(group, id, pos, pipeAxis, lateral, scale) {
+  const warning = new THREE.Mesh(new THREE.OctahedronGeometry(scale * 0.12, 0), material(0xf59e0b));
   warning.name = `${id}-unknown-warning`;
   warning.position.copy(pos.clone().add(UP.clone().multiplyScalar(scale * 0.35)));
   group.add(warning);
 }
 
-function buildAnchor(group, id, pos, pipeAxis, lateral, scale, color) {
-  buildRest(group, id, pos, pipeAxis, lateral, scale, color);
+function buildAnchor(group, id, pos, pipeRadius, pipeAxis, lateral, scale, color) {
+  buildRest(group, id, pos, pipeRadius, scale, color);
   for (const dir of [UP, UP.clone().negate(), pipeAxis, pipeAxis.clone().negate(), lateral, lateral.clone().negate()]) {
     arrow(group, `${id}-anchor-axis`, pos.clone(), pos.clone().add(dir.clone().normalize().multiplyScalar(scale * 0.72)), color, scale * 0.032);
   }
@@ -329,8 +267,21 @@ function hideExistingProxyMeshes(object, markerGroupName) {
 
 function stampGlyphMetadata(target, { kind, source, axisLabel, scale, role, renderGlyph }) {
   const profile = visualProfileMetadata({ kind, source, axisLabel, scale, role });
+  const layerIds = layerIdsForRestraintSupport({ source, kind, axisLabel });
   target.userData = {
     ...(target.userData || {}),
+    bmCiiLayerSchema: LAYER_SCHEMA,
+    bmCiiLayer: {
+      schema: LAYER_SCHEMA,
+      category: 'support',
+      source,
+      supportKind: normalizeRestraintKind(kind) || 'UNKNOWN',
+      axis: normalizeRestraintAxisLabel(axisLabel),
+      visibleDefault: kind !== 'UNKNOWN',
+      layerIds,
+      restraintVisualProfile: profile.profile,
+    },
+    bmCiiLayerIds: layerIds,
     supportKind: normalizeRestraintKind(kind) || 'UNKNOWN',
     supportSource: source,
     restraintAxis: normalizeRestraintAxisLabel(axisLabel),
@@ -341,8 +292,8 @@ function stampGlyphMetadata(target, { kind, source, axisLabel, scale, role, rend
     glbSupportVisualProfile: RESTRAINT_VISUAL_PROFILE.id,
     bmCiiRestraintVisualProfile: profile,
     supportReferenceStyle: true,
-    supportReferenceStyleV4: true,
-    supportSymbolContract: (kind === 'GUIDE') ? 'lateral-arrows-only' : (kind === 'LINESTOP') ? 'axial-arrows-only' : '',
+    supportReferenceStyleV5: true,
+    supportSymbolContract: (kind === 'GUIDE') ? 'lateral-arrows-touch-od-no-axis-marker' : (kind === 'LINESTOP') ? 'axial-arrows-offset-od2-no-axis-marker' : '',
   };
 }
 
@@ -359,26 +310,21 @@ export function applyBakedRestraintGlyph(object, comp = {}, options = {}) {
   const color = SUPPORT_SYMBOL_COLORS[kind] || SUPPORT_SYMBOL_COLORS.UNKNOWN;
   const id = text(comp.id || object.name || 'support');
 
-  const pipeAxis = (kind === 'LINESTOP' || kind === 'LIMIT')
-    ? horizontalAxisOrFallback(axis, Z_AXIS)
-    : axis.clone().normalize();
-  const lateral = kind === 'GUIDE'
-    ? horizontalAxisOrFallback(axis, X_AXIS)
-    : lateralAxis(pipeAxis);
+  const pipeAxis = (kind === 'LINESTOP' || kind === 'LIMIT') ? horizontalAxisOrFallback(axis, Z_AXIS) : axis.clone().normalize();
+  const lateral = kind === 'GUIDE' ? horizontalAxisOrFallback(axis, X_AXIS) : lateralAxis(pipeAxis);
 
   const markerGroup = new THREE.Group();
   markerGroup.name = `${id}-restraint-${RESTRAINT_VISUAL_PROFILE.id}-${kind.toLowerCase()}`;
   const renderGlyph = `baked-${RESTRAINT_VISUAL_PROFILE.id}-${kind.toLowerCase()}`;
   const origin = new THREE.Vector3(0, 0, 0);
 
-  if (kind === 'REST' || kind === 'SHOE' || kind === 'HOLDDOWN') buildRest(markerGroup, id, origin, pipeAxis, lateral, scale, color);
-  else if (kind === 'GUIDE') buildGuide(markerGroup, id, origin, pipeAxis, lateral, scale, color);
-  else if (kind === 'LINESTOP') buildLineStop(markerGroup, id, origin, pipeAxis, lateral, scale, color);
-  else if (kind === 'LIMIT') buildLimit(markerGroup, id, origin, axis, lateral, scale, color);
-  else if (kind === 'ANCHOR') buildAnchor(markerGroup, id, origin, pipeAxis, lateral, scale, color);
+  if (kind === 'REST' || kind === 'SHOE' || kind === 'HOLDDOWN') buildRest(markerGroup, id, origin, pipeRadius, scale, color);
+  else if (kind === 'GUIDE') buildGuide(markerGroup, id, origin, pipeRadius, lateral, scale, color);
+  else if (kind === 'LINESTOP') buildLineStop(markerGroup, id, origin, pipeRadius, pipeAxis, scale, color);
+  else if (kind === 'LIMIT') buildLimit(markerGroup, id, origin, pipeRadius, axis, lateral, scale, color);
+  else if (kind === 'ANCHOR') buildAnchor(markerGroup, id, origin, pipeRadius, pipeAxis, lateral, scale, color);
   else if (kind === 'HANGER' || kind === 'SPRING') buildHanger(markerGroup, id, origin, pipeAxis, lateral, scale, color);
   else buildUnknown(markerGroup, id, origin, pipeAxis, lateral, scale, color);
-  axisIndicator(markerGroup, origin, axis, axisLabel, scale);
 
   markerGroup.traverse((child) => stampGlyphMetadata(child, { kind, source, axisLabel, scale, role: child === markerGroup ? 'baked-symbol-root' : 'baked-symbol-child', renderGlyph }));
   stampGlyphMetadata(markerGroup, { kind, source, axisLabel, scale, role: 'baked-symbol-root', renderGlyph });
@@ -397,14 +343,14 @@ export function applyBakedRestraintGlyph(object, comp = {}, options = {}) {
     renderGlyph,
     renderScale: scale,
     visualProfile: RESTRAINT_VISUAL_PROFILE.id,
-    glbShape: `support-reference-v4-${kind.toLowerCase()}`,
+    glbShape: `support-reference-v5-${kind.toLowerCase()}`,
     glbSupportVisualProfile: RESTRAINT_VISUAL_PROFILE.id,
     bmCiiRestraintVisualProfile: visualProfileMetadata({ kind, source, axisLabel, scale, role: 'baked-object-root' }),
-    supportSymbolContract: (kind === 'GUIDE') ? 'lateral-arrows-only' : (kind === 'LINESTOP') ? 'axial-arrows-only' : '',
+    supportSymbolContract: (kind === 'GUIDE') ? 'lateral-arrows-touch-od-no-axis-marker' : (kind === 'LINESTOP') ? 'axial-arrows-offset-od2-no-axis-marker' : '',
     directionalSupportEnhanced: true,
     directionalSupportSymbolCount: markerGroup.children.length,
     supportReferenceStyle: true,
-    supportReferenceStyleV4: true,
+    supportReferenceStyleV5: true,
     hiddenOriginalProxyMeshCount: hiddenOriginalProxyMeshes.length,
   };
   return object;
