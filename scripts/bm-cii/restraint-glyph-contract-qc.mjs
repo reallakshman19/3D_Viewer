@@ -134,7 +134,8 @@ function rotationMatrix(q = []) {
 function localMatrix(node = {}) {
   if (Array.isArray(node.matrix) && node.matrix.length === 16) return node.matrix.map(Number);
   return multiply(multiply(translationMatrix(node.translation || [0, 0, 0]), rotationMatrix(node.rotation || [0, 0, 0, 1])), scaleMatrix(node.scale || [1, 1, 1]));
-}\n
+}
+
 function transformPoint(m, p) {
   const x = p[0], y = p[1], z = p[2];
   return [
