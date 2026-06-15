@@ -32,6 +32,40 @@ function PSNM_isTrue(value) {
   return /^(yes|y|true|1|m|mandatory|required|req|must)$/i.test(String(value ?? '').trim());
 }
 
+function clean(value) {
+  return String(value ?? '').trim();
+}
+
+function appendRemark(row, remark) {
+  const note = clean(remark);
+  if (!note) return row;
+  const existing = clean(row.remarks || '');
+  if (existing.includes(note)) return row;
+  row.remarks = [existing, note].filter(Boolean).join(' | ');
+  return row;
+}
+
+function addIdentityNote(row, code, remark) {
+  row.identityWarning = [row.identityWarning, code].filter(Boolean).join(';');
+  return appendRemark(row, remark);
+}
+
+function coordKeyFromPosition(positionRaw, decimals = 3) {
+  try {
+    const parsed = PSNM_parsePsPosition(positionRaw);
+    return [parsed.e, parsed.u, parsed.s]
+      .map((value) => Number(value).toFixed(decimals))
+      .join('|');
+  } catch {
+    return '';
+  }
+}
+
+function occurrenceIdFor(psKey, index) {
+  const base = clean(psKey) || 'PS-UNNAMED';
+  return `${base}#${String(index).padStart(3, '0')}`;
+}
+
 function PSNM_positionFromAnyText(value) {
   const text = String(value || '').replace(/,/g, ' ');
   const parts = [];
@@ -54,7 +88,7 @@ function PSNM_findPsName(cells, byHeader = {}) {
 }
 
 function PSNM_positionFromRow(cells, byHeader = {}) {
-  const direct = byHeader.position || byHeader['ps position'] || byHeader['position raw'] || byHeader['coordinates'] || byHeader.coord || byHeader.coordinate;
+  const direct = byHeader.position || byHeader['ps position'] || byHeader['position raw'] || byHeader.coordinates || byHeader.coord || byHeader.coordinate;
   const fromDirect = PSNM_positionFromAnyText(direct);
   if (fromDirect) return fromDirect;
 
@@ -147,9 +181,7 @@ export function PSNM_parseTable4A(text, logger = null) {
     const byHeader = {};
     if (headers) headers.forEach((header, cellIndex) => { byHeader[header] = cells[cellIndex] ?? ''; });
 
-    const psName = PSNM_normalizePsName(
-      byHeader['ps name'] || byHeader.psname || byHeader['mandatory ps name'] || cells[0] || line
-    );
+    const psName = PSNM_normalizePsName(byHeader['ps name'] || byHeader.psname || byHeader['mandatory ps name'] || cells[0] || line);
     if (!psName || /^mandatory ps name$/i.test(psName)) continue;
 
     const mandatoryRaw = byHeader.mandatory || byHeader.required || cells[1] || 'YES';
@@ -180,11 +212,13 @@ function PSNM_parseMasterPsPosition(row, logger = null) {
     row.psE = parsed.e;
     row.psU = parsed.u;
     row.psS = parsed.s;
+    row.psCoordKey = coordKeyFromPosition(row.positionRaw);
     if (row.status === PSNM_MASTER_STATUS.INVALID_POSITION) row.status = PSNM_MASTER_STATUS.OK;
   } catch (error) {
     row.psE = null;
     row.psU = null;
     row.psS = null;
+    row.psCoordKey = '';
     row.status = row.positionRaw ? PSNM_MASTER_STATUS.INVALID_POSITION : row.status;
     if (row.positionRaw) {
       logger?.user?.('ERROR', 'Invalid PS Position', row.sourceTable || 'Master PS', row.psName, error.message || String(error), 'Correct PS position format: E ...mm S/N ...mm U ...mm.', { rowId: row.rowId });
@@ -195,16 +229,45 @@ function PSNM_parseMasterPsPosition(row, logger = null) {
 
 export function PSNM_recomputeMasterPsRow(row, logger = null) {
   row.psKey = PSNM_normalizePsName(row.psName);
+  if (!row.psOccurrenceId) row.psOccurrenceId = occurrenceIdFor(row.psKey, row.psOccurrenceIndex || 1);
   if (row.enabled === false) row.status = PSNM_MASTER_STATUS.DISABLED;
   else if (PSNM_isAuditStatus(row.auditStatus || row.status)) {
     row.status = row.auditStatus || row.status;
     return row;
   }
   if (row.status !== PSNM_MASTER_STATUS.MISSING_FROM_TABLE1 && row.enabled !== false) {
-    row.status = PSNM_MASTER_STATUS.OK;
+    row.status = row.status === PSNM_MASTER_STATUS.INVALID_POSITION ? row.status : PSNM_MASTER_STATUS.OK;
     PSNM_parseMasterPsPosition(row, logger);
   }
   return row;
+}
+
+function addToGroup(map, key, row) {
+  if (!key) return;
+  if (!map.has(key)) map.set(key, []);
+  map.get(key).push(row);
+}
+
+function duplicateGroups(map) {
+  return Array.from(map.entries()).filter(([, rows]) => rows.length > 1);
+}
+
+function applyPsOverrideToRows(rows, override, logger) {
+  const psKey = PSNM_normalizePsName(override.psName);
+  const matches = rows.filter((row) => row.psKey === psKey || PSNM_normalizePsName(row.psName) === psKey);
+  if (!matches.length) return false;
+
+  for (const existing of matches) {
+    existing.isMandatoryPs = existing.isMandatoryPs || override.isMandatoryPs;
+    existing.mandatorySource = [existing.mandatorySource, override.mandatorySource].filter(Boolean).join(';');
+    if (override.p1boreOverride != null) existing.p1bore = override.p1boreOverride;
+    if (override.positionOverride) {
+      existing.positionRaw = override.positionOverride;
+      PSNM_parseMasterPsPosition(existing, logger);
+    }
+    if (override.remarks) appendRemark(existing, override.remarks);
+  }
+  return true;
 }
 
 export function PSNM_resolveMasterPsTable({ table1Text, table4AText, logger = null }) {
@@ -212,8 +275,11 @@ export function PSNM_resolveMasterPsTable({ table1Text, table4AText, logger = nu
   if (!table1Rows.length && String(table1Text || '').trim()) table1Rows = PSNM_parseTable1Fallback(table1Text, logger);
   const table4ARows = PSNM_parseTable4A(table4AText, logger);
   PSNM_logPsTableLogic({ logger, table1Text, table1Rows, table4AText, table4ARows });
-  const byPs = new Map();
-  const duplicateKeys = new Set();
+
+  const rows = [];
+  const byPsKey = new Map();
+  const byCoordKey = new Map();
+  const byPsAndCoord = new Map();
 
   for (const row of table1Rows) {
     const auditStatus = row.auditStatus || '';
@@ -221,11 +287,9 @@ export function PSNM_resolveMasterPsTable({ table1Text, table4AText, logger = nu
     const psKey = PSNM_normalizePsName(visiblePsName);
     if (!psKey) continue;
 
-    if (byPs.has(psKey)) {
-      duplicateKeys.add(psKey);
-      logger?.user?.('WARNING', 'Duplicate PS', 'Table 1', row.psName, 'Duplicate PS name found. First row kept in Master PS No.', 'Review duplicate PS in Table 1 before matching.', { psName: row.psName, rowIndex: row.rowIndex });
-      continue;
-    }
+    const currentPsCount = (byPsKey.get(psKey)?.length || 0) + 1;
+    const psOccurrenceId = occurrenceIdFor(psKey, currentPsCount);
+    const coordKey = coordKeyFromPosition(row.position);
 
     const master = PSNM_makeMasterPsRow({
       psKey,
@@ -242,48 +306,73 @@ export function PSNM_resolveMasterPsTable({ table1Text, table4AText, logger = nu
       auditAction: row.auditAction || '',
       remarks: row.auditAction || '',
     });
+    master.psOccurrenceId = psOccurrenceId;
+    master.psOccurrenceIndex = currentPsCount;
+    master.psCoordKey = coordKey;
+    master.coordinateIdentityKey = `${coordKey || 'NO_COORD'}||${psKey}||${row.rowIndex ?? rows.length + 1}`;
     PSNM_parseMasterPsPosition(master, logger);
-    byPs.set(psKey, master);
+
+    addToGroup(byPsKey, psKey, master);
+    addToGroup(byCoordKey, coordKey, master);
+    addToGroup(byPsAndCoord, `${psKey}||${coordKey || 'NO_COORD'}`, master);
+    rows.push(master);
+  }
+
+  for (const [psKey, groupRows] of duplicateGroups(byPsKey)) {
+    const distinctCoords = new Set(groupRows.map((row) => row.psCoordKey || 'NO_COORD'));
+    const reason = distinctCoords.size > 1
+      ? `Same PS Name appears at ${distinctCoords.size} different coordinate(s). Retained as separate coordinate occurrences.`
+      : 'Same PS Name appears more than once at the same coordinate. Retained with duplicate-coordinate warning.';
+    for (const row of groupRows) addIdentityNote(row, 'DUPLICATE_PS_OCCURRENCE', reason);
+    logger?.user?.('WARNING', 'Duplicate PS Occurrence', 'Table 1', psKey, reason, 'Coordinate-first matching keeps these rows instead of dropping later PS labels. Review Master PS occurrence IDs.', { psName: psKey, count: groupRows.length, distinctCoordinateCount: distinctCoords.size });
+  }
+
+  for (const [coordKey, groupRows] of duplicateGroups(byCoordKey)) {
+    const names = Array.from(new Set(groupRows.map((row) => row.psName).filter(Boolean)));
+    const reason = names.length > 1
+      ? `Multiple PS labels share coordinate key ${coordKey}: ${names.join(', ')}.`
+      : `Duplicate PS coordinate key ${coordKey}.`;
+    for (const row of groupRows) addIdentityNote(row, 'DUPLICATE_PS_COORDINATE', reason);
+    logger?.user?.('WARNING', 'Duplicate PS Coordinate', 'Table 1', coordKey, reason, 'Coordinate is the matching basis; review duplicate PS coordinates before final acceptance.', { coordKey, psNames: names, count: groupRows.length });
+  }
+
+  for (const [, groupRows] of duplicateGroups(byPsAndCoord)) {
+    for (const row of groupRows) addIdentityNote(row, 'DUPLICATE_PS_AND_COORDINATE', 'Same PS Name and same coordinate appears more than once. Verify duplicate source rows.');
   }
 
   for (const override of table4ARows) {
     const psKey = PSNM_normalizePsName(override.psName);
     if (!psKey) continue;
-    const existing = byPs.get(psKey);
-    if (!existing) {
-      const missing = PSNM_makeMasterPsRow({
-        psKey,
-        psName: override.psName,
-        p1bore: override.p1boreOverride,
-        positionRaw: override.positionOverride,
-        isMandatoryPs: override.isMandatoryPs,
-        mandatorySource: 'TABLE4A',
-        sourceTable: 'TABLE4A',
-        sourceRow: override.sourceRow,
-        status: PSNM_MASTER_STATUS.MISSING_FROM_TABLE1,
-        remarks: override.remarks || 'Listed in Table 4A but absent from Table 1.',
-      });
-      if (missing.positionRaw) PSNM_parseMasterPsPosition(missing, logger);
-      byPs.set(psKey, missing);
-      logger?.user?.('WARNING', 'Mandatory PS Missing', 'Table 4A', override.psName, 'PS is mandatory/overridden in Table 4A but absent from Table 1.', 'Add this PS to Table 1 or remove it from Table 4A.', { psName: override.psName });
-      continue;
-    }
-    existing.isMandatoryPs = existing.isMandatoryPs || override.isMandatoryPs;
-    existing.mandatorySource = [existing.mandatorySource, override.mandatorySource].filter(Boolean).join(';');
-    if (override.p1boreOverride != null) existing.p1bore = override.p1boreOverride;
-    if (override.positionOverride) {
-      existing.positionRaw = override.positionOverride;
-      PSNM_parseMasterPsPosition(existing, logger);
-    }
-    if (override.remarks) existing.remarks = [existing.remarks, override.remarks].filter(Boolean).join(' | ');
+    if (applyPsOverrideToRows(rows, override, logger)) continue;
+
+    const missing = PSNM_makeMasterPsRow({
+      psKey,
+      psName: override.psName,
+      p1bore: override.p1boreOverride,
+      positionRaw: override.positionOverride,
+      isMandatoryPs: override.isMandatoryPs,
+      mandatorySource: 'TABLE4A',
+      sourceTable: 'TABLE4A',
+      sourceRow: override.sourceRow,
+      status: PSNM_MASTER_STATUS.MISSING_FROM_TABLE1,
+      remarks: override.remarks || 'Listed in Table 4A but absent from Table 1.',
+    });
+    missing.psOccurrenceId = occurrenceIdFor(psKey, 1);
+    missing.psOccurrenceIndex = 1;
+    missing.psCoordKey = coordKeyFromPosition(missing.positionRaw);
+    if (missing.positionRaw) PSNM_parseMasterPsPosition(missing, logger);
+    rows.push(missing);
+    logger?.user?.('WARNING', 'Mandatory PS Missing', 'Table 4A', override.psName, 'PS is mandatory/overridden in Table 4A but absent from Table 1.', 'Add this PS to Table 1 or remove it from Table 4A.', { psName: override.psName });
   }
 
-  const rows = Array.from(byPs.values()).map((row) => PSNM_recomputeMasterPsRow(row, logger));
+  const finalRows = rows.map((row) => PSNM_recomputeMasterPsRow(row, logger));
   return {
-    rows,
+    rows: finalRows,
     table1Rows,
     table4ARows,
-    issues: rows.filter((row) => row.status !== PSNM_MASTER_STATUS.OK),
-    duplicateKeys: Array.from(duplicateKeys),
+    issues: finalRows.filter((row) => row.status !== PSNM_MASTER_STATUS.OK),
+    duplicateKeys: Array.from(duplicateGroups(byPsKey), ([key]) => key),
+    duplicateCoordinateKeys: Array.from(duplicateGroups(byCoordKey), ([key]) => key),
+    coordinateOccurrenceMode: 'COORDINATE_OCCURRENCE',
   };
 }
