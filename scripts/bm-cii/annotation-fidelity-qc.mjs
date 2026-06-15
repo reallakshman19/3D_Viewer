@@ -4,6 +4,7 @@ import path from 'node:path';
 
 const EXPECTED_CALLOUTS = Object.freeze([1, 2, 3, 4]);
 const EXPECTED_NODES = Object.freeze(['35', '130', '205', '255']);
+const EXPECTED_NODE_LABEL_MODE = 'key-nodes';
 const DEFAULT_SIDECAR = 'artifacts/bm-cii-v11-robust/BM_CII_Enriched_benchmark_v11_robust.sidecar.json';
 
 function usage() {
@@ -13,7 +14,7 @@ function usage() {
 Purpose:
   Validate BM_CII annotation benchmark fidelity after v11 robust build:
   - exactly four ISONOTE callouts
-  - exactly four node labels
+  - exactly four independently enforced node labels
   - allowed nodes only: 35, 130, 205, 255
   - allowed callout numbers only: 1, 2, 3, 4
   - sidecar-only annotation source
@@ -65,8 +66,8 @@ function validateSidecar(sidecar) {
   if (sidecar.annotationSource !== 'sidecar.caesarAnnotationCallouts') {
     fail(failures, 'ANNOTATION_SOURCE_NOT_SIDECAR', 'Annotation source must be sidecar.caesarAnnotationCallouts.', { annotationSource: sidecar.annotationSource });
   }
-  if (sidecar.nodeLabelMode !== 'isonote-nodes-only') {
-    fail(failures, 'NODE_LABEL_MODE_WRONG', 'Node labels must be generated from ISONOTE nodes only.', { nodeLabelMode: sidecar.nodeLabelMode });
+  if (sidecar.nodeLabelMode !== EXPECTED_NODE_LABEL_MODE) {
+    fail(failures, 'NODE_LABEL_MODE_WRONG', 'Node labels must be independently enforced from the BM_CII node whitelist.', { nodeLabelMode: sidecar.nodeLabelMode, expectedNodeLabelMode: EXPECTED_NODE_LABEL_MODE });
   }
   if (sidecar.mergeMarkers !== false) {
     fail(failures, 'ANNOTATIONS_MERGED', 'Benchmark annotations must be unmerged and traceable.', { mergeMarkers: sidecar.mergeMarkers });
@@ -124,7 +125,7 @@ function validateSidecar(sidecar) {
       calloutCount: 4,
       nodeLabelCount: 4,
       annotationSource: 'sidecar.caesarAnnotationCallouts',
-      nodeLabelMode: 'isonote-nodes-only',
+      nodeLabelMode: EXPECTED_NODE_LABEL_MODE,
       mergeMarkers: false,
     },
     actual: {
@@ -172,4 +173,4 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   });
 }
 
-export { EXPECTED_CALLOUTS, EXPECTED_NODES, validateSidecar };
+export { EXPECTED_CALLOUTS, EXPECTED_NODES, EXPECTED_NODE_LABEL_MODE, validateSidecar };
