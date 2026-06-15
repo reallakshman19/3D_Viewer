@@ -15,7 +15,7 @@ function norm(a) { const l = a ? len(a) : 0; return l > EPS ? mul(a, 1 / l) : nu
 
 function categoryForType(type) {
   const raw = text(type).toUpperCase();
-  if (raw === 'PIPE') return 'pipe';
+  if (raw === 'PIPE' || raw === 'COUPLING' || raw === 'UNION') return 'pipe';
   if (raw === 'BEND' || raw === 'ELBOW') return 'bend';
   if (raw === 'VALVE') return 'valve';
   if (raw === 'FLANGE') return 'flange';
@@ -189,8 +189,15 @@ function teeComponentsFromConnectivity(segments = []) {
 
 function summaryForComponents(components = []) {
   const byType = {}; const byCategory = {};
-  for (const component of components) { const type = text(component.type || 'UNKNOWN').toUpperCase(); const category = categoryForType(type); byType[type] = (byType[type] || 0) + 1; byCategory[category] = (byCategory[category] || 0) + 1; }
-  return { total: components.length, byType, byCategory, nonPipeTotal: components.filter((component) => text(component.type).toUpperCase() !== 'PIPE').length };
+  let nonPipeTotal = 0;
+  for (const component of components) {
+    const type = text(component.type || 'UNKNOWN').toUpperCase();
+    const category = categoryForType(type);
+    byType[type] = (byType[type] || 0) + 1;
+    byCategory[category] = (byCategory[category] || 0) + 1;
+    if (category !== 'pipe') nonPipeTotal += 1;
+  }
+  return { total: components.length, byType, byCategory, nonPipeTotal };
 }
 
 export function componentsFromBmCiiXml(xml = '', frameIndex = {}) {
