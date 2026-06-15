@@ -6,6 +6,7 @@ import {
 } from './buildBmCiiGlyphOnlySupportObject.js';
 import { buildComponentObject } from './buildComponentObject.js';
 import { buildNodeLabelObject } from './buildNodeLabelObject.js';
+import { enforceCompactElbowContract } from './CompactElbowContract.js';
 import { enhanceLocalizedBendProxy } from './enhanceLocalizedBendProxy.js';
 import { enhanceSupportDirectionProxy } from './enhanceSupportDirectionProxyReferenceV2.js';
 import { enhanceTeeBodyProxy } from './enhanceTeeBodyProxy.js';
@@ -69,6 +70,7 @@ export function buildExportScene(model, log, options = {}) {
         obj = comp.type === 'NODE_LABEL'
           ? buildNodeLabelObject(comp)
           : buildComponentObject(comp, log);
+        if (obj && (comp.type === 'BEND' || comp.type === 'ELBOW')) obj = enforceCompactElbowContract(obj, comp, options);
         if (obj && comp.type === 'TEE') obj = enhanceTeeBodyProxy(obj, comp);
         if (obj && comp.type === 'SUPPORT') obj = enhanceSupportDirectionProxy(obj, comp, options);
       }
@@ -79,13 +81,7 @@ export function buildExportScene(model, log, options = {}) {
         root.add(obj);
       }
     } catch (err) {
-      if (log) {
-          log.error('COMPONENT_BUILD_FAILED', {
-              id: comp.id,
-              type: comp.type,
-              message: String((err && err.message) || err),
-          });
-      }
+      if (log) log.warn('COMPONENT_BUILD_SKIPPED', { id: comp.id, type: comp.type, message: String(err?.message || err) });
     }
   }
 
