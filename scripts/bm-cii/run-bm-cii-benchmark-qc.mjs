@@ -4,6 +4,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import { execFile } from 'node:child_process';
+import { componentsFromBmCiiXml } from './bm-cii-xml-components.mjs';
 
 const execFileAsync = promisify(execFile);
 
@@ -44,7 +45,7 @@ function parseArgs(argv) {
 }
 
 function rel(filePath) {
-  return path.relative(ROOT, filePath).replaceAll('\\\\', '/');
+  return path.relative(ROOT, filePath).replaceAll('\\', '/');
 }
 
 async function readJson(filePath) {
@@ -87,36 +88,6 @@ async function runNode(script, args, options = {}) {
   }
 }
 
-function pointWithBore(point, bore) {
-  return { x: point.x, y: point.y, z: point.z, bore };
-}
-
-function pipeComponentFromSegment(segment) {
-  if (!segment.p1 || !segment.p2 || !segment.diameter) return null;
-  const bore = Number(segment.diameter);
-  return {
-    id: `BM_CII_XML_PIPE_${String(segment.elementIndex).padStart(3, '0')}_${segment.from}_${segment.to}`,
-    type: 'PIPE',
-    source: 'inputxml',
-    fromNode: segment.from,
-    toNode: segment.to,
-    bore,
-    ep1: pointWithBore(segment.p1, bore),
-    ep2: pointWithBore(segment.p2, bore),
-    raw: {
-      SOURCE: 'BM_CII_INPUT.XML',
-      ELEMENT_INDEX: segment.elementIndex,
-      FROM_NODE: segment.from,
-      TO_NODE: segment.to,
-      DIAMETER: bore,
-    },
-    attributes: {
-      SOURCE: 'BM_CII_INPUT.XML',
-      COMPONENT_KIND: 'PIPE',
-    },
-  };
-}
-
 function compactSupportRecord(record) {
   return {
     recordId: record.recordId,
@@ -144,22 +115,25 @@ function compactSupportRecord(record) {
   };
 }
 
-async function composeRepoSidecar({ auditDir, benchmarkSidecarPath, outDir }) {
+async function composeRepoSidecar({ xmlPath, auditDir, benchmarkSidecarPath, outDir, qcDir }) {
   const inputxml = await readJson(path.join(auditDir, 'support_expected_from_inputxml.json'));
   const isonote = await readJson(path.join(auditDir, 'support_expected_from_isonote.json'));
   const frameIndex = await readJson(path.join(auditDir, 'support_frame_index.json'));
   const benchmarkSidecar = await readJson(benchmarkSidecarPath);
-  const pipeComponents = (frameIndex.segments || []).map(pipeComponentFromSegment).filter(Boolean);
+  const xml = await fs.readFile(xmlPath, 'utf8');
+  const componentResult = componentsFromBmCiiXml(xml, frameIndex);
   const sidecar = {
-    schema: 'bm-cii-repo-generated-benchmark-sidecar/v1',
-    sourceXml: DEFAULT_XML,
+    schema: 'bm-cii-repo-generated-benchmark-sidecar/v2',
+    sourceXml: rel(xmlPath),
     sourceBenchmarkSidecar: rel(benchmarkSidecarPath),
     generatedBy: 'scripts/bm-cii/run-bm-cii-benchmark-qc.mjs',
     nodeCoordinatesGlbBasisMm: frameIndex.nodes || {},
-    components: pipeComponents,
+    components: componentResult.components,
     supportsInputXml: (inputxml.records || []).map(compactSupportRecord),
     supportsIsonote: (isonote.records || []).map(compactSupportRecord),
     caesarAnnotationCallouts: benchmarkSidecar.caesarAnnotationCallouts || [],
+    bmCiiComponentSummary: componentResult.summary,
+    bmCiiXmlComponentSourceStats: componentResult.sourceStats,
     bmCiiAnnotationWhitelist: {
       source: 'benchmarks/bm-cii/BM_CII_benchmark_isonote.sidecar.json',
       callouts: [1, 2, 3, 4],
@@ -168,6 +142,8 @@ async function composeRepoSidecar({ auditDir, benchmarkSidecarPath, outDir }) {
   };
   const sidecarPath = path.join(outDir, 'BM_CII_repo_generated_benchmark.sidecar.json');
   await writeJson(sidecarPath, sidecar);
+  await writeJson(path.join(qcDir, 'component_expected_summary.json'), componentResult.summary);
+  await writeJson(path.join(qcDir, 'component_source_stats.json'), componentResult.sourceStats);
   return sidecarPath;
 }
 
@@ -207,7 +183,7 @@ async function run() {
     '--out', rel(path.join(qcDir, 'support_frame_qc_report.json')),
   ], { name: 'support frame QC' }));
 
-  const generatedSidecar = await composeRepoSidecar({ auditDir, benchmarkSidecarPath, outDir });
+  const generatedSidecar = await composeRepoSidecar({ xmlPath, auditDir, benchmarkSidecarPath, outDir, qcDir });
 
   await pushStep(runNode('scripts/bm-cii/support-export-glyph-path-qc.mjs', [], { name: 'support export path QC' }));
 
@@ -229,6 +205,7 @@ async function run() {
       '--expected-support-count', String(variant.count),
       '--expected-callout-count', '4',
       '--expected-node-label-count', '4',
+      '--expected-component-summary', rel(path.join(qcDir, 'component_expected_summary.json')),
       '--out', rel(path.join(qcDir, `glb_visible_scene_qc_${variant.name}.json`)),
     ], { name: `visible scene QC ${variant.name}` }));
   }
@@ -239,7 +216,7 @@ async function run() {
 async function writeSummary({ status, steps, outDir, auditDir }) {
   const glbs = VARIANTS.map((variant) => path.join(outDir, variant.glb));
   const summary = {
-    schema: 'bm-cii-repo-path-benchmark-run/v1',
+    schema: 'bm-cii-repo-path-benchmark-run/v2',
     status,
     generatedByRepoCode: true,
     generatedGlb: status === 'pass',
@@ -259,28 +236,26 @@ async function writeSummary({ status, steps, outDir, auditDir }) {
     '',
     '| Item | Value |',
     '|---|---|',
-    '| Generated by repo code | yes |',
-    `| Automated QC | ${status} |`,
-    '| Visual QC | not applied |',
-    `| Output directory | ${rel(outDir)} |`,
-    '',
-    '## GLBs',
-    '',
-    ...glbs.map((glb) => `- ${rel(glb)}`),
+    `| Generated by repo code | yes |`,
+    `| Generated GLB | ${status === 'pass' ? 'yes' : 'no'} |`,
+    `| Automated support QC | ${steps.every((step) => step.status === 'pass') ? 'pass' : 'fail'} |`,
+    `| Visual QC | not applied |`,
     '',
     '## Steps',
     '',
     '| Step | Status | Command |',
     '|---|---|---|',
-    ...steps.map((step) => `| ${step.name} | ${step.status} | \`${step.command.replaceAll('`', '\\`')}\` |`),
+    ...steps.map((step) => `| ${step.name} | ${step.status} | \`${step.command}\` |`),
     '',
-    'Do not freeze this benchmark until Basic GLB-PCF Viewer screenshot review passes.',
+    '## GLBs',
+    '',
+    ...glbs.map((file) => `- ${rel(file)}`),
     '',
   ].join('\n');
-  await fs.writeFile(path.join(outDir, 'BM_CII_repo_path_benchmark_summary.md'), md, 'utf8');
+  await fs.writeFile(path.join(outDir, 'summary.md'), md, 'utf8');
 }
 
 run().catch((error) => {
-  process.stderr.write(`${error?.stack || error?.message || String(error)}\n\n${usage()}`);
-  process.exitCode = 1;
+  console.error(error);
+  process.exit(1);
 });
