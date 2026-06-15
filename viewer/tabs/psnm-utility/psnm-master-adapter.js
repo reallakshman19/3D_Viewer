@@ -13,6 +13,9 @@ export function PSNM_masterPsToMatchRows(masterPsRows = []) {
       mandatorySource: row.mandatorySource || '',
       rowIndex: row.sourceRow ?? index + 1,
       masterPsRowId: row.rowId,
+      psOccurrenceId: row.psOccurrenceId || '',
+      psOccurrenceIndex: row.psOccurrenceIndex || 1,
+      psCoordKey: row.psCoordKey || '',
       sourceTable: row.sourceTable,
     }));
 }
@@ -50,15 +53,29 @@ export function PSNM_masterMandatoryNodeRows(masterNodeRows = []) {
     }));
 }
 
+function matchForMasterPsRow(row, index, matchRows = []) {
+  const byMasterId = matchRows.find((item) => item.masterPsRowId === row.rowId);
+  if (byMasterId) return byMasterId;
+
+  // The core engine returns one result row for each PS input row in order. Use
+  // row-order fallback before PS-name fallback so duplicate PS labels remain
+  // occurrence-aware even if the engine output does not yet expose row ids.
+  const byIndex = matchRows[index];
+  if (byIndex && byIndex.psName === row.psName) return byIndex;
+
+  return matchRows.find((item) => item.psName === row.psName);
+}
+
 export function PSNM_masterPsCoverageRows(masterPsRows = [], matchRows = []) {
   return masterPsRows
     .filter((row) => row && row.enabled !== false && row.isMandatoryPs === true)
-    .map((row) => {
-      const match = matchRows.find((item) => item.masterPsRowId === row.rowId || item.psName === row.psName);
+    .map((row, index) => {
+      const match = matchForMasterPsRow(row, index, matchRows);
       const auditStatus = row.auditStatus || (PSNM_isAuditStatus(row.status) ? row.status : '');
       if (auditStatus) {
         return {
           psName: row.psName,
+          psOccurrenceId: row.psOccurrenceId || '',
           mandatorySource: row.mandatorySource || 'TABLE1',
           matchedNode: '',
           occurrenceId: '',
@@ -72,6 +89,7 @@ export function PSNM_masterPsCoverageRows(masterPsRows = [], matchRows = []) {
       if (row.status === 'MISSING_FROM_TABLE1') {
         return {
           psName: row.psName,
+          psOccurrenceId: row.psOccurrenceId || '',
           mandatorySource: row.mandatorySource || 'TABLE4A',
           matchedNode: '',
           occurrenceId: '',
@@ -83,6 +101,7 @@ export function PSNM_masterPsCoverageRows(masterPsRows = [], matchRows = []) {
       if (!match || match.finalStatus === 'UNMAPPED') {
         return {
           psName: row.psName,
+          psOccurrenceId: row.psOccurrenceId || '',
           mandatorySource: row.mandatorySource || '',
           matchedNode: '',
           occurrenceId: '',
@@ -94,6 +113,7 @@ export function PSNM_masterPsCoverageRows(masterPsRows = [], matchRows = []) {
       if (match.finalStatus === 'USER_REVIEW_REQUIRED' || match.matchType === 'AMBIGUOUS') {
         return {
           psName: row.psName,
+          psOccurrenceId: row.psOccurrenceId || '',
           mandatorySource: row.mandatorySource || '',
           matchedNode: '',
           occurrenceId: '',
@@ -104,6 +124,7 @@ export function PSNM_masterPsCoverageRows(masterPsRows = [], matchRows = []) {
       }
       return {
         psName: row.psName,
+        psOccurrenceId: row.psOccurrenceId || '',
         mandatorySource: row.mandatorySource || '',
         matchedNode: match.matchingNode || '',
         occurrenceId: match.occurrenceId || '',
