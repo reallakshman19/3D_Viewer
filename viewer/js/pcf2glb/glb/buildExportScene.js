@@ -1,5 +1,9 @@
 import * as THREE from 'three';
 import { applyEngineeringPalette } from './applyEngineeringPalette.js';
+import {
+  buildBmCiiGlyphOnlySupportObject,
+  isBmCiiGlyphOnlySupportMode,
+} from './buildBmCiiGlyphOnlySupportObject.js';
 import { buildComponentObject } from './buildComponentObject.js';
 import { buildNodeLabelObject } from './buildNodeLabelObject.js';
 import { enhanceLocalizedBendProxy } from './enhanceLocalizedBendProxy.js';
@@ -51,16 +55,27 @@ export function buildExportScene(model, log, options = {}) {
   root.name = 'PCF_EXPORT_ROOT';
   scene.add(root);
 
+  let glyphOnlySupportCount = 0;
+
   for (const comp of model.components) {
     try {
-      let obj = comp.type === 'NODE_LABEL'
-        ? buildNodeLabelObject(comp)
-        : buildComponentObject(comp, log);
-      if (obj && comp.type === 'TEE') obj = enhanceTeeBodyProxy(obj, comp);
-      if (obj && comp.type === 'SUPPORT') obj = enhanceSupportDirectionProxy(obj, comp, options);
+      const useGlyphOnlySupport = comp.type === 'SUPPORT' && isBmCiiGlyphOnlySupportMode(comp, options);
+      let obj = null;
+
+      if (useGlyphOnlySupport) {
+        obj = buildBmCiiGlyphOnlySupportObject(comp, options);
+        glyphOnlySupportCount += 1;
+      } else {
+        obj = comp.type === 'NODE_LABEL'
+          ? buildNodeLabelObject(comp)
+          : buildComponentObject(comp, log);
+        if (obj && comp.type === 'TEE') obj = enhanceTeeBodyProxy(obj, comp);
+        if (obj && comp.type === 'SUPPORT') obj = enhanceSupportDirectionProxy(obj, comp, options);
+      }
+
       if (obj) obj = enhanceLocalizedBendProxy(obj, comp);
       if (obj) {
-        applyComponentGeometryTrace(obj, comp, traceContextForComponent(comp, options));
+        if (!useGlyphOnlySupport) applyComponentGeometryTrace(obj, comp, traceContextForComponent(comp, options));
         root.add(obj);
       }
     } catch (err) {
@@ -76,6 +91,7 @@ export function buildExportScene(model, log, options = {}) {
 
   const colorMode = options.colorMode || (model.options && model.options.colorMode) || 'engineering';
   const supportSource = options.supportRendering?.source || options.supportSource || '';
+  const supportGlyphsAuthoritative = glyphOnlySupportCount > 0 && options.supportRendering?.authoritative !== false;
   const paletteStats = applyEngineeringPalette(root, { colorMode });
   const labelAnchorStats = hideGlbLabelAnchorMarkers(root);
   const lineNos = collectLineNos(model);
@@ -86,11 +102,17 @@ export function buildExportScene(model, log, options = {}) {
     engineeringPaletteStats: paletteStats,
     labelAnchorStats,
     bmCiiLayerManifest: buildDefaultBmCiiLayerManifest({ supportSource }),
+    bmCiiSupportGlyphOnly: glyphOnlySupportCount > 0,
+    bmCiiSupportGlyphsAuthoritative: supportGlyphsAuthoritative,
+    bmCiiGlyphOnlySupportCount: glyphOnlySupportCount,
   };
 
   scene.userData = {
     ...(scene.userData || {}),
     bmCiiLayerManifest: root.userData.bmCiiLayerManifest,
+    bmCiiSupportGlyphOnly: root.userData.bmCiiSupportGlyphOnly,
+    bmCiiSupportGlyphsAuthoritative: root.userData.bmCiiSupportGlyphsAuthoritative,
+    bmCiiGlyphOnlySupportCount: glyphOnlySupportCount,
   };
 
   return scene;
