@@ -1,10 +1,46 @@
+const COLOR_BY_FIELD_LABELS = new Map([
+  ['lineNo', 'Line No.'],
+  ['Line No', 'Line No.'],
+  ['bore', 'Bore'],
+  ['Bore', 'Bore'],
+  ['materialName', 'materialName'],
+  ['wallThickness', 'wallThickness'],
+  ['pressure', 'pressure'],
+  ['hydroPressure', 'hydroPressure'],
+  ['materialThickness', 'Material Thickness'],
+  ['temp1', 'Temp1'],
+  ['temp2', 'Temp2'],
+  ['temp3', 'Temp3'],
+  ['Pressure', 'Pressure'],
+  ['Hydro Pressure', 'Hydro Pressure'],
+]);
+
+const COLOR_BY_FIELD_ORDER = [
+  'lineNo',
+  'bore',
+  'materialName',
+  'wallThickness',
+  'pressure',
+  'hydroPressure',
+  'materialThickness',
+  'temp1',
+  'temp2',
+  'temp3',
+  'Pressure',
+  'Hydro Pressure',
+];
+
+function escapeAttr(value) {
+  return String(value ?? '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
 export function createToolbar(container, cameraController) {
   const CLIP_ICON = '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M4 10h16"/><path d="M10 4v16"/></svg>';
   container.innerHTML = `
     <div style="display:flex; flex-wrap:wrap; gap:10px; align-items:center; justify-content:flex-end;">
       <label style="display:flex; align-items:center; gap:8px; padding:8px 10px; border-radius:12px; background:rgba(255,255,255,0.08); border:1px solid rgba(255,255,255,0.08); color:#d8e6f7; font-size:12px; font-weight:600;">
         <span>Color By</span>
-        <select id="adv-color-prop" style="font-size:12px; padding:6px 10px; max-width:160px; border-radius:10px; border:1px solid rgba(255,255,255,0.15); background:#f7fbff; color:#102033;" disabled>
+        <select id="adv-color-prop" style="font-size:12px; padding:6px 10px; max-width:180px; border-radius:10px; border:1px solid rgba(255,255,255,0.15); background:#f7fbff; color:#102033;" disabled>
           <option value="default">Default</option>
         </select>
       </label>
@@ -83,12 +119,15 @@ export function createToolbar(container, cameraController) {
       _paintMeasureButton();
     },
     setProperties: (props) => {
+      const available = new Set((props || []).map(String));
       let html = '<option value="default">Default</option>';
-      props.forEach((prop) => {
-        html += `<option value="${prop}">${prop}</option>`;
-      });
+      for (const prop of COLOR_BY_FIELD_ORDER) {
+        if (!available.has(prop)) continue;
+        const label = COLOR_BY_FIELD_LABELS.get(prop) || prop;
+        html += `<option value="${escapeAttr(prop)}">${escapeAttr(label)}</option>`;
+      }
       colorSelect.innerHTML = html;
-      colorSelect.disabled = false;
+      colorSelect.disabled = html.indexOf('<option value="') === html.lastIndexOf('<option value="');
     },
     updateLegend: (legendHtml) => {
       if (!legendHtml) {
