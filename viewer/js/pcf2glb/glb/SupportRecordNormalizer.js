@@ -10,6 +10,10 @@ function text(value) {
   return String(value ?? '').trim();
 }
 
+function upper(value) {
+  return text(value).toUpperCase();
+}
+
 function firstNonEmpty(...values) {
   for (const value of values) {
     if (value !== undefined && value !== null && text(value) !== '') return value;
@@ -25,6 +29,21 @@ function normalizeKind(value) {
   const kind = normalizeRestraintKind(value) || 'UNKNOWN';
   if (kind === 'SHOE') return 'REST';
   if (kind === 'SUPPORT') return 'REST';
+  return kind;
+}
+
+function normalizeKindFromRaw(raw = {}) {
+  const rawKind = firstNonEmpty(raw.kind, raw.type, raw.display, raw.supportKind, raw.restraintType, raw.CMPSUPTYPE, raw.SKEY, raw.labelText);
+  let kind = normalizeKind(rawKind);
+  const displayText = upper(firstNonEmpty(raw.display, raw.Display, raw.note, raw.Note, raw.labelText, raw.name));
+  const typeText = upper(firstNonEmpty(raw.TYPE, raw.Type, raw.type, raw.kind, raw.supportKind, raw.restraintType));
+
+  // BM_CII InputXML basic benchmark: Type 0 rows that are explicitly labelled
+  // as ANCHOR/ANC/ANCHOR_PROVISIONAL are real anchor symbols for the visual
+  // review, not UNKNOWN debug markers.
+  if (kind === 'UNKNOWN' && (displayText.includes('ANCHOR') || typeText === 'ANC')) {
+    kind = 'ANCHOR';
+  }
   return kind;
 }
 
@@ -120,11 +139,11 @@ function supportDetailFields(raw = {}, { source = '', node = '', kind = '', axis
 export function supportSymbolContractFor(kind) {
   const normalizedKind = normalizeKind(kind);
   if (normalizedKind === 'GUIDE') return 'guide-lateral-arrows-tip-at-od2';
-  if (normalizedKind === 'REST' || normalizedKind === 'HOLDDOWN' || normalizedKind === 'SHOE') return 'rest-vertical-arrow-tip-at-od2';
+  if (normalizedKind === 'REST' || normalizedKind === 'HOLDDOWN' || normalizedKind === 'SHOE') return 'rest-axis-arrow-tip-at-od2';
   if (normalizedKind === 'LINESTOP') return 'linestop-axial-arrows-offset-od2';
   if (normalizedKind === 'LIMIT') return 'limit-axial-arrow-offset-od2';
-  if (normalizedKind === 'HANGER' || normalizedKind === 'SPRING') return 'hanger-spring-symbol';
-  if (normalizedKind === 'ANCHOR') return 'anchor-fixed-symbol';
+  if (normalizedKind === 'HANGER' || normalizedKind === 'SPRING') return 'spring-coil-only-no-arrow';
+  if (normalizedKind === 'ANCHOR') return 'anchor-flat-flow-blocking-plate';
   return 'unknown-debug-default-off';
 }
 
@@ -139,7 +158,7 @@ export function normalizeSupportRecord(raw = {}, context = {}) {
   const source = normalizedSource(firstNonEmpty(context.source, context.supportSource, raw.source, raw.supportSource, raw.SUPPORT_SOURCE));
   const index = Number(context.index ?? raw.index ?? raw.recordIndex ?? raw.supportIndex ?? 0) || 0;
   const node = text(firstNonEmpty(raw.node, raw.nodeNumber, raw.NodeNumber, raw.supportNode, raw.sourceNode, raw.CAESAR_NODE));
-  const kind = normalizeKind(firstNonEmpty(raw.kind, raw.type, raw.display, raw.supportKind, raw.restraintType, raw.CMPSUPTYPE, raw.SKEY, raw.labelText));
+  const kind = normalizeKindFromRaw(raw);
   const axis = normalizeAxis(firstNonEmpty(raw.axis, raw.axisGlb, raw.direction, raw.restraintAxis, raw.supportAxis, raw.SUPPORT_AXIS, raw.SUPPORT_DIRECTION, raw.AXIS, raw.Direction));
   const recordId = text(firstNonEmpty(
     raw.recordId,
