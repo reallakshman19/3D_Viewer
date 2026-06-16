@@ -78,6 +78,31 @@ function projectPerpendicular(vector, tangent) {
   return projected.lengthSq() > EPS ? projected.normalize() : null;
 }
 
+function lateralBasisFromPipeTangent(pipeTangent) {
+  const tangent = pipeTangent?.clone?.().normalize?.() || X_AXIS.clone();
+  if (tangent.lengthSq() < EPS) tangent.copy(X_AXIS);
+
+  let lateralA = projectPerpendicular(Y_AXIS, tangent);
+  if (!lateralA) lateralA = projectPerpendicular(Z_AXIS, tangent) || projectPerpendicular(X_AXIS, tangent) || Y_AXIS.clone();
+  lateralA.normalize();
+
+  let lateralB = new THREE.Vector3().crossVectors(tangent, lateralA);
+  if (lateralB.lengthSq() < EPS) lateralB = projectPerpendicular(X_AXIS, tangent) || Z_AXIS.clone();
+  lateralB.normalize();
+
+  return { tangent, lateralA, lateralB };
+}
+
+function signedClosestLateralAxis(cosineAxis, lateralA, lateralB) {
+  const c = cosineAxis?.clone?.().normalize?.();
+  if (!c || c.lengthSq() < EPS) return lateralA.clone();
+
+  const aDot = c.dot(lateralA);
+  const bDot = c.dot(lateralB);
+  if (Math.abs(aDot) >= Math.abs(bDot)) return lateralA.clone().multiplyScalar(aDot < 0 ? -1 : 1).normalize();
+  return lateralB.clone().multiplyScalar(bDot < 0 ? -1 : 1).normalize();
+}
+
 function material(color = GUIDE_COLOR) {
   return new THREE.MeshStandardMaterial({
     color,
@@ -137,27 +162,34 @@ function removePreviousGuideGlyphs(object) {
 
 function guideLateralAxisFromCosine(object, comp = {}) {
   const data = object?.userData || {};
-  // GUIDE direction is primary from raw InputXML restraint cosine/axis.  Do not
-  // reuse already-normalized REST supportAxis/canvasAxis because that mixes the
-  // Y axis-restraint path with the GUIDE family path.
+  // GUIDE always has two possible lateral axes in the pipe cross-section.
+  // Select one of those two axes using the raw InputXML restraint cosine.  Do
+  // not use the axis-restraint label path because GUIDE is a family, while
+  // X/Y/Z/+Y are direction data.
   const cosineAxis = rawCosineAxisFrom(object, comp)
     || optionalVectorFrom(data.restraintCosineAxis)
     || optionalVectorFrom(comp.axis)
+    || optionalVectorFrom(comp.axisGlb)
     || Y_AXIS.clone();
   const pipeTangent = vectorFrom(
     data.pipeTangent || comp.pipeTangentGlb || comp.pipeTangent || comp.pipeAxis || comp.axisGlb,
     X_AXIS,
   );
-  return projectPerpendicular(cosineAxis, pipeTangent)
-    || projectPerpendicular(Y_AXIS, pipeTangent)
-    || projectPerpendicular(X_AXIS, pipeTangent)
-    || projectPerpendicular(Z_AXIS, pipeTangent)
-    || Y_AXIS.clone();
+  const basis = lateralBasisFromPipeTangent(pipeTangent);
+  const selected = signedClosestLateralAxis(cosineAxis, basis.lateralA, basis.lateralB);
+  return {
+    axis: selected,
+    pipeTangent: basis.tangent,
+    lateralA: basis.lateralA,
+    lateralB: basis.lateralB,
+    cosineAxis,
+  };
 }
 
 function addGuideCosineLateralGlyph(object, comp = {}) {
   const data = object?.userData || {};
-  const lateral = guideLateralAxisFromCosine(object, comp).normalize();
+  const guide = guideLateralAxisFromCosine(object, comp);
+  const lateral = guide.axis.normalize();
   const pipeRadius = Math.max(5, number(data.supportPipeRadius, number(comp.bore, 100) / 2));
   const scale = Math.max(28, number(data.renderScale, number(data.supportSymbolScale, pipeRadius * 3.0)));
   const length = scale * 0.64;
@@ -178,9 +210,14 @@ function addGuideCosineLateralGlyph(object, comp = {}) {
       ...(data || {}),
       supportKind: 'GUIDE',
       restraintAxis: data.restraintAxis || data.AXIS || comp.axisLabel || 'N/A',
-      supportSymbolContract: 'GUIDE=lateral-arrow-pair-from-raw-cosine-axis',
+      supportSymbolContract: 'GUIDE=lateral-arrow-pair-from-restraint-cosine-axis-with-fixed-od-tips',
       guideLateralCosineAxis: { x: lateral.x, y: lateral.y, z: lateral.z },
-      guideLateralBasis: 'raw-restraint-cosine-axis-projected-perpendicular-to-pipe-tangent',
+      guideRestraintCosineAxis: { x: guide.cosineAxis.x, y: guide.cosineAxis.y, z: guide.cosineAxis.z },
+      guidePipeLateralAxisA: { x: guide.lateralA.x, y: guide.lateralA.y, z: guide.lateralA.z },
+      guidePipeLateralAxisB: { x: guide.lateralB.x, y: guide.lateralB.y, z: guide.lateralB.z },
+      guideOdTouchPositiveTip: { x: positiveTip.x, y: positiveTip.y, z: positiveTip.z },
+      guideOdTouchNegativeTip: { x: negativeTip.x, y: negativeTip.y, z: negativeTip.z },
+      guideLateralBasis: 'select-closest-of-two-pipe-lateral-axes-from-raw-restraint-cosine; arrow-head-apexes-at-P±axis*OD/2',
       renderGlyph: 'baked-guide-cosine-lateral-inputxml-basic',
     };
   });
@@ -188,9 +225,14 @@ function addGuideCosineLateralGlyph(object, comp = {}) {
   object.userData = {
     ...data,
     supportKind: 'GUIDE',
-    supportSymbolContract: 'GUIDE=lateral-arrow-pair-from-raw-cosine-axis',
+    supportSymbolContract: 'GUIDE=lateral-arrow-pair-from-restraint-cosine-axis-with-fixed-od-tips',
     guideLateralCosineAxis: { x: lateral.x, y: lateral.y, z: lateral.z },
-    guideLateralBasis: 'raw-restraint-cosine-axis-projected-perpendicular-to-pipe-tangent',
+    guideRestraintCosineAxis: { x: guide.cosineAxis.x, y: guide.cosineAxis.y, z: guide.cosineAxis.z },
+    guidePipeLateralAxisA: { x: guide.lateralA.x, y: guide.lateralA.y, z: guide.lateralA.z },
+    guidePipeLateralAxisB: { x: guide.lateralB.x, y: guide.lateralB.y, z: guide.lateralB.z },
+    guideOdTouchPositiveTip: { x: positiveTip.x, y: positiveTip.y, z: positiveTip.z },
+    guideOdTouchNegativeTip: { x: negativeTip.x, y: negativeTip.y, z: negativeTip.z },
+    guideLateralBasis: 'select-closest-of-two-pipe-lateral-axes-from-raw-restraint-cosine; arrow-head-apexes-at-P±axis*OD/2',
     renderGlyph: 'baked-guide-cosine-lateral-inputxml-basic',
     directionalSupportSymbolCount: group.children.length,
   };
