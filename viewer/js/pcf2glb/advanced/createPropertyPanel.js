@@ -6,6 +6,9 @@ import {
 
 const SUPPORT_DISPLAY_FIELDS = [
   ['TYPE', ['TYPE', 'supportType', 'supportKind', 'kind', 'pcfType', 'type']],
+  ['AXIS', ['AXIS', 'axis', 'restraintAxis', 'supportAxis']],
+  ['NODE', ['NODE', 'node', 'sourceNode', 'supportNode', 'fromNode']],
+  ['SOURCE', ['SOURCE', 'source', 'supportSource']],
   ['STIFFNESS', ['STIFFNESS', 'supportStiffness', 'stiffness', 'restraintStiffness']],
   ['GAP', ['GAP', 'supportGap', 'gap', 'gapMm', 'restraintGap']],
   ['FRIC_COEF', ['FRIC_COEF', 'supportFricCoef', 'fricCoef', 'frictionCoefficient', 'mu']],
@@ -40,12 +43,28 @@ function esc(value) {
     .replace(/'/g, '&#39;');
 }
 
+function valueText(value) {
+  if (value === undefined || value === null || value === '') return '';
+  if (typeof value === 'object') {
+    if (Array.isArray(value)) return value.map(valueText).join(', ');
+    const entries = Object.entries(value)
+      .filter(([, item]) => item !== undefined && item !== null && item !== '')
+      .map(([key, item]) => `${key}:${valueText(item)}`);
+    return entries.join(' ');
+  }
+  return String(value);
+}
+
 function first(data, keys, fallback = '') {
   for (const key of keys) {
-    const value = data?.[key];
-    if (value !== undefined && value !== null && value !== '') return value;
+    const value = valueText(data?.[key]);
+    if (value !== '') return value;
   }
-  return fallback;
+  return valueText(fallback);
+}
+
+function firstOrNA(data, keys, fallback = '') {
+  return first(data, keys, fallback) || 'N/A';
 }
 
 function mergedUserData(object3D) {
@@ -104,21 +123,22 @@ export function createPropertyPanel(propPanel, propContent) {
       let html = '<div style="font-family: monospace; font-size: 12px; margin-bottom: 10px; line-height: 1.42;">';
       if (isSupportLike(meta, item)) {
         for (const [label, keys] of SUPPORT_DISPLAY_FIELDS) {
-          html += `<strong>${esc(label)}:</strong> ${esc(first(meta, keys, ''))}<br/>`;
+          html += `<strong>${esc(label)}:</strong> ${esc(firstOrNA(meta, keys))}<br/>`;
         }
         html += '<hr style="border: 0; border-top: 1px solid rgba(255,255,255,0.18); margin: 8px 0;"/>';
       }
       for (const [label, keys] of DISPLAY_FIELDS) {
         const fallback = label === 'ID' ? item.id : label === 'Type' ? item.type : label === 'Ref No' ? item.refNo : label === 'Bore' ? item.bore : '';
-        html += `<strong>${esc(label)}:</strong> ${esc(first(meta, keys, fallback))}<br/>`;
+        html += `<strong>${esc(label)}:</strong> ${esc(firstOrNA(meta, keys, fallback))}<br/>`;
       }
       html += '</div>';
 
       html += '<strong>Fallback Properties</strong><div style="background: rgba(0,0,0,0.5); padding: 5px; border-radius: 4px; margin-top: 5px; max-height: 220px; overflow-y: auto;"><table style="width: 100%; text-align: left; border-collapse: collapse;">';
       const fallbackMeta = Object.keys(meta).length > 0 ? meta : { uuid: item.uuid, name: item.object3D?.name };
       for (const [key, value] of Object.entries(fallbackMeta)) {
-        if (value === null || value === undefined || value === '') continue;
-        html += `<tr><td style="padding: 4px; border-bottom: 1px solid #444; color: #aaa; width: 40%; word-break: break-word;">${esc(key)}</td><td style="padding: 4px; border-bottom: 1px solid #444; color: #fff; word-break: break-word;">${esc(value)}</td></tr>`;
+        const display = valueText(value);
+        if (display === '') continue;
+        html += `<tr><td style="padding: 4px; border-bottom: 1px solid #444; color: #aaa; width: 40%; word-break: break-word;">${esc(key)}</td><td style="padding: 4px; border-bottom: 1px solid #444; color: #fff; word-break: break-word;">${esc(display)}</td></tr>`;
       }
       html += '</table></div>';
 
