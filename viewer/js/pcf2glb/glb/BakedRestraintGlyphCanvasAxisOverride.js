@@ -10,7 +10,6 @@ import {
   supportSymbolContractFor,
   supportTraceFromRecord,
 } from './SupportRecordNormalizer.js';
-import { applyBakedRestraintGlyph as applyLegacyBakedRestraintGlyph } from './BakedRestraintGlyphGeometry.js';
 
 const EPS = 1e-8;
 const UP = new THREE.Vector3(0, 1, 0);
@@ -44,20 +43,31 @@ function vectorFrom(value) {
   return null;
 }
 
+/**
+ * Convert source restraint axis into Basic GLB canvas axis.
+ *
+ * BM_CII/InputXML support axes are CAESAR-style global axes. The Basic GLB
+ * canvas is Y-up:
+ *
+ *   source X -> canvas X  (E/W)
+ *   source Y -> canvas Z  (N/S horizontal)
+ *   source Z -> canvas Y  (UP)
+ *
+ * KIND/TYPE decides the symbol family. This function only decides arrow
+ * direction on the canvas.
+ */
 function canvasAxisFromLabel(axisLabel = '') {
   const normalized = normalizeRestraintAxisLabel(axisLabel);
-  if (normalized.includes('X')) return normalized.startsWith('-') ? X_AXIS.clone().negate() : X_AXIS.clone();
-  if (normalized.includes('Y')) return normalized.startsWith('-') ? Y_AXIS.clone().negate() : Y_AXIS.clone();
-  if (normalized.includes('Z')) return normalized.startsWith('-') ? Z_AXIS.clone().negate() : Z_AXIS.clone();
+  const sign = normalized.startsWith('-') ? -1 : 1;
+  if (normalized.includes('X')) return X_AXIS.clone().multiplyScalar(sign);
+  if (normalized.includes('Y')) return Z_AXIS.clone().multiplyScalar(sign);
+  if (normalized.includes('Z')) return Y_AXIS.clone().multiplyScalar(sign);
   return null;
 }
 
 function canvasAxisFrom(attrs = {}, comp = {}, axisLabel = '') {
-  return vectorFrom(comp.supportAxis)
-    || vectorFrom(attrs.supportAxis)
-    || vectorFrom(attrs.SUPPORT_AXIS)
-    || vectorFrom(attrs.caesarSupportAxis)
-    || vectorFrom(attrs.restraintAxisVector)
+  return vectorFrom(comp.canvasAxis)
+    || vectorFrom(attrs.canvasAxis)
     || canvasAxisFromLabel(axisLabel)
     || X_AXIS.clone();
 }
@@ -140,6 +150,15 @@ function arrowFixedTip(group, name, tip, outwardAxis, length, color, radius) {
   return head;
 }
 
+function torus(group, name, center, normal, major, minor, color) {
+  const mesh = new THREE.Mesh(new THREE.TorusGeometry(major, minor, 8, 28), material(color));
+  mesh.name = name;
+  mesh.position.copy(center);
+  orientFromY(mesh, normal);
+  group.add(mesh);
+  return mesh;
+}
+
 function projectPerpendicular(vector, tangent) {
   if (!vector || !tangent) return null;
   const projected = vector.clone().sub(tangent.clone().multiplyScalar(vector.dot(tangent)));
@@ -150,12 +169,15 @@ function makeCircumferenceFrame(center, pipeTangent, pipeRadius) {
   const point = center.clone();
   const T = pipeTangent?.clone?.().normalize?.() || X_AXIS.clone();
   if (T.lengthSq() < EPS) T.copy(X_AXIS);
+
   let top = projectPerpendicular(UP, T);
   if (!top) top = projectPerpendicular(X_AXIS, T) || projectPerpendicular(Z_AXIS, T) || X_AXIS.clone();
   top.normalize();
+
   let side = new THREE.Vector3().crossVectors(T, top);
   if (side.lengthSq() < EPS) side = projectPerpendicular(Z_AXIS, T) || Z_AXIS.clone();
   side.normalize();
+
   return {
     point,
     pipeTangent: T,
@@ -185,6 +207,14 @@ function plainCircumferenceFrame(frame) {
   ]);
 }
 
+function axialOffsetTip(frame, canvasAxis) {
+  const axis = canvasAxis?.clone?.().normalize?.() || frame.pipeTangent.clone();
+  // For vertical/near-vertical axial arrows, offset beside the pipe instead of
+  // passing through the centerline. Otherwise use the bottom OD point.
+  if (Math.abs(axis.dot(UP)) > 0.85) return frame.anchors.CIRCUM_SIDE1.clone();
+  return frame.anchors.CIRCUM_BOT.clone();
+}
+
 function hideExistingProxyMeshes(object, markerGroupName) {
   const hidden = [];
   for (const child of object.children || []) {
@@ -203,6 +233,10 @@ function stampLayerMetadata(target, record, { scale, role }) {
   const profile = visualProfileMetadata({ kind: record.kind, source: record.source, axisLabel: record.axis, scale, role });
   target.userData = {
     ...(target.userData || {}),
+    ...(record.details || {}),
+    AXIS: record.axis || 'N/A',
+    NODE: record.node || 'N/A',
+    SOURCE: record.source || 'N/A',
     bmCiiLayerSchema: LAYER_SCHEMA,
     bmCiiLayer: {
       schema: LAYER_SCHEMA,
@@ -225,7 +259,7 @@ function stampLayerMetadata(target, record, { scale, role }) {
     glbSupportVisualProfile: RESTRAINT_VISUAL_PROFILE.id,
     bmCiiRestraintVisualProfile: profile,
     supportReferenceStyle: true,
-    supportReferenceStyleV9FixedTipScale: true,
+    supportReferenceStyleV10KindCanvasAxis: true,
     supportGlyphRole: role,
     supportSymbolContract: record.supportSymbolContract,
     supportRecordId: record.recordId,
@@ -247,7 +281,7 @@ function stampGlyphMetadata(target, record, { scale, role, renderGlyph, canvasAx
         visualProfile: RESTRAINT_VISUAL_PROFILE.id,
         circumferenceAnchors: record.circumferenceAnchors || null,
         canvasAxis: canvasAxis ? { x: canvasAxis.x, y: canvasAxis.y, z: canvasAxis.z } : null,
-        placementContract: 'kind-decides-symbol-axis-decides-canvas-direction-fixed-tip-circumference',
+        placementContract: 'kind-decides-symbol-axis-only-canvas-direction-fixed-tip-circumference',
       })
       : {
         entity: 'supportPart',
@@ -258,21 +292,82 @@ function stampGlyphMetadata(target, record, { scale, role, renderGlyph, canvasAx
         supportSymbolContract: record.supportSymbolContract,
         circumferenceAnchors: record.circumferenceAnchors || null,
         canvasAxis: canvasAxis ? { x: canvasAxis.x, y: canvasAxis.y, z: canvasAxis.z } : null,
+        ...(record.details || {}),
+        AXIS: record.axis || 'N/A',
+        NODE: record.node || 'N/A',
+        SOURCE: record.source || 'N/A',
       },
   };
 }
 
-function buildCanvasAxisLineStopOrLimit(group, id, frame, canvasAxis, scale, color, kind) {
+function buildRest(group, id, frame, scale, color) {
+  // REST = one vertical arrow only. Axis is metadata only for this symbol family.
   const tip = frame.anchors.CIRCUM_BOT.clone();
-  const axis = canvasAxis.clone().normalize();
-  // KIND decides symbol family; X/Y/Z is only the converted canvas direction.
-  // 3x review scale lengthens the tail and thickens the arrow only. The cone
-  // apex/tip remains exactly fixed at the saved CIRCUM_BOT coordinate.
-  arrowFixedTip(group, `${id}-${kind.toLowerCase()}-canvas-axis-positive-tip-circum-bot`, tip, axis, scale * 1.10, color, scale * 0.052);
-  arrowFixedTip(group, `${id}-${kind.toLowerCase()}-canvas-axis-negative-tip-circum-bot`, tip, axis.clone().negate(), scale * 1.10, color, scale * 0.052);
+  arrowFixedTip(group, `${id}-rest-one-vertical-arrow-tip-circum-bot`, tip, UP.clone().negate(), scale * 0.92, color, scale * 0.040);
 }
 
-function applyCanvasAxisLineStopLimit(object, comp = {}, options = {}) {
+function buildGuide(group, id, frame, canvasAxis, scale, color) {
+  // GUIDE = guide symbol only. Canvas axis controls direction; no symbol-family
+  // reclassification occurs here.
+  let axis = projectPerpendicular(canvasAxis, frame.pipeTangent) || projectPerpendicular(canvasAxis, UP) || frame.side.clone();
+  if (axis.lengthSq() < EPS || Math.abs(axis.dot(UP)) > 0.90) axis = frame.side.clone();
+  axis.normalize();
+  const positiveTip = frame.point.clone().add(axis.clone().multiplyScalar(frame.pipeRadius));
+  const negativeTip = frame.point.clone().add(axis.clone().multiplyScalar(-frame.pipeRadius));
+  arrowFixedTip(group, `${id}-guide-positive-fixed-tip-circum`, positiveTip, axis, scale * 1.05, color, scale * 0.048);
+  arrowFixedTip(group, `${id}-guide-negative-fixed-tip-circum`, negativeTip, axis.clone().negate(), scale * 1.05, color, scale * 0.048);
+}
+
+function buildLineStopOrLimit(group, id, frame, canvasAxis, scale, color, kind) {
+  // LINESTOP/LIMIT = axial symbol family. Axis is only the converted canvas
+  // direction. Both arrow tips are fixed to the selected OD point.
+  const axis = canvasAxis.clone().normalize();
+  const tip = axialOffsetTip(frame, axis);
+  arrowFixedTip(group, `${id}-${kind.toLowerCase()}-canvas-axis-positive-fixed-tip`, tip, axis, scale * 1.10, color, scale * 0.052);
+  arrowFixedTip(group, `${id}-${kind.toLowerCase()}-canvas-axis-negative-fixed-tip`, tip, axis.clone().negate(), scale * 1.10, color, scale * 0.052);
+}
+
+function buildSpring(group, id, frame, scale, color) {
+  const tip = frame.anchors.CIRCUM_TOP.clone();
+  const top = tip.clone().add(UP.clone().multiplyScalar(scale * 1.15));
+  const coilStart = tip.clone().add(UP.clone().multiplyScalar(scale * 0.18));
+  const coilEnd = top.clone().add(UP.clone().multiplyScalar(-scale * 0.18));
+  cylinderBetween(group, `${id}-spring-center-rod`, coilStart, coilEnd, scale * 0.018, color, 12);
+
+  const ringCount = 6;
+  for (let i = 0; i < ringCount; i += 1) {
+    const f = ringCount === 1 ? 0.5 : i / (ringCount - 1);
+    const c = coilStart.clone().lerp(coilEnd, f);
+    torus(group, `${id}-spring-visible-coil-${i + 1}`, c, UP, scale * 0.16, scale * 0.018, color);
+  }
+
+  arrowFixedTip(group, `${id}-spring-hanger-arrow-tip-circum-top`, tip, UP, scale * 0.62, color, scale * 0.036);
+}
+
+function buildUnknown(group, id, frame, scale) {
+  const warning = new THREE.Mesh(new THREE.OctahedronGeometry(scale * 0.06, 0), material(0x64748b));
+  warning.name = `${id}-unknown-debug-hidden-marker`;
+  warning.position.copy(frame.point);
+  warning.visible = false;
+  group.add(warning);
+}
+
+function buildSymbolForKind(group, id, record, frame, canvasAxis, scale, color) {
+  const kind = record.kind;
+  if (kind === 'REST' || kind === 'SHOE' || kind === 'HOLDDOWN') buildRest(group, id, frame, scale, color);
+  else if (kind === 'GUIDE') buildGuide(group, id, frame, canvasAxis, scale, color);
+  else if (kind === 'LINESTOP' || kind === 'LIMIT') buildLineStopOrLimit(group, id, frame, canvasAxis, scale, color, kind);
+  else if (kind === 'HANGER' || kind === 'SPRING') buildSpring(group, id, frame, scale, color);
+  else if (kind === 'ANCHOR') {
+    buildRest(group, id, frame, scale, color);
+    buildLineStopOrLimit(group, id, frame, X_AXIS, scale, color, 'LINESTOP');
+    buildGuide(group, id, frame, Z_AXIS, scale, color);
+  } else buildUnknown(group, id, frame, scale);
+}
+
+export function applyBakedRestraintGlyph(object, comp = {}, options = {}) {
+  if (!object || comp.type !== 'SUPPORT') return object;
+
   const attrs = attrsFrom(object, comp);
   const source = sourceOf(attrs, comp, options);
   const sourceRecord = normalizeSupportRecord({ ...attrs, ...comp }, {
@@ -280,6 +375,7 @@ function applyCanvasAxisLineStopLimit(object, comp = {}, options = {}) {
     supportSource: source,
     index: comp.supportRecordIndex ?? comp.recordIndex ?? comp.index ?? comp.supportIndex,
   });
+
   const kind = sourceRecord.kind;
   const axisLabel = sourceRecord.axis;
   const canvasAxis = canvasAxisFrom(attrs, comp, axisLabel).normalize();
@@ -288,14 +384,15 @@ function applyCanvasAxisLineStopLimit(object, comp = {}, options = {}) {
   const pipeRadius = pipeRadiusFor(comp, attrs);
   const color = SUPPORT_SYMBOL_COLORS[kind] || SUPPORT_SYMBOL_COLORS.UNKNOWN;
   const id = text(comp.id || sourceRecord.recordId || object.name || 'support');
+
   const frame = makeCircumferenceFrame(new THREE.Vector3(0, 0, 0), pipeAxis, pipeRadius);
   sourceRecord.circumferenceAnchors = plainCircumferenceFrame(frame);
 
   const markerGroup = new THREE.Group();
-  markerGroup.name = `${sourceRecord.recordId}-restraint-${RESTRAINT_VISUAL_PROFILE.id}-${kind.toLowerCase()}-canvas-axis-fixed-tip`;
-  const renderGlyph = `baked-${RESTRAINT_VISUAL_PROFILE.id}-${kind.toLowerCase()}-canvas-axis-fixed-tip`;
+  markerGroup.name = `${sourceRecord.recordId}-restraint-${RESTRAINT_VISUAL_PROFILE.id}-${kind.toLowerCase()}-v10-kind-canvas-axis`;
+  const renderGlyph = `baked-${RESTRAINT_VISUAL_PROFILE.id}-${kind.toLowerCase()}-v10-kind-canvas-axis`;
 
-  buildCanvasAxisLineStopOrLimit(markerGroup, id, frame, canvasAxis, scale, color, kind);
+  buildSymbolForKind(markerGroup, id, sourceRecord, frame, canvasAxis, scale, color);
 
   const glyphMeshes = [];
   markerGroup.traverse((child) => { if (child.isMesh) glyphMeshes.push(child); });
@@ -311,6 +408,10 @@ function applyCanvasAxisLineStopLimit(object, comp = {}, options = {}) {
   object.add(markerGroup);
   object.userData = {
     ...(object.userData || {}),
+    ...(sourceRecord.details || {}),
+    AXIS: axisLabel || 'N/A',
+    NODE: sourceRecord.node || 'N/A',
+    SOURCE: source,
     labelText: object.userData?.labelText || `${id} ${kind}`,
     supportKind: kind,
     supportAxis: { x: canvasAxis.x, y: canvasAxis.y, z: canvasAxis.z },
@@ -325,7 +426,7 @@ function applyCanvasAxisLineStopLimit(object, comp = {}, options = {}) {
     renderGlyph,
     renderScale: scale,
     visualProfile: RESTRAINT_VISUAL_PROFILE.id,
-    glbShape: `support-reference-v9-fixed-tip-canvas-axis-${kind.toLowerCase()}`,
+    glbShape: `support-reference-v10-kind-canvas-axis-${kind.toLowerCase()}`,
     glbSupportVisualProfile: RESTRAINT_VISUAL_PROFILE.id,
     bmCiiTrace: supportTraceFromRecord(sourceRecord, {
       renderGlyph,
@@ -333,34 +434,17 @@ function applyCanvasAxisLineStopLimit(object, comp = {}, options = {}) {
       visualProfile: RESTRAINT_VISUAL_PROFILE.id,
       circumferenceAnchors: sourceRecord.circumferenceAnchors,
       canvasAxis: { x: canvasAxis.x, y: canvasAxis.y, z: canvasAxis.z },
-      placementContract: 'kind-decides-symbol-axis-decides-canvas-direction-fixed-tip-circumference',
+      placementContract: 'kind-decides-symbol-axis-only-canvas-direction-fixed-tip-circumference',
     }),
     bmCiiRestraintVisualProfile: visualProfileMetadata({ kind, source, axisLabel, scale, role: 'baked-object-root' }),
     supportSymbolContract: sourceRecord.supportSymbolContract || supportSymbolContractFor(kind),
-    supportPlacementContract: 'kind-decides-symbol-axis-decides-canvas-direction-fixed-tip-circumference',
+    supportPlacementContract: 'kind-decides-symbol-axis-only-canvas-direction-fixed-tip-circumference',
     directionalSupportEnhanced: true,
     directionalSupportSymbolCount: markerGroup.children.length,
     supportReferenceStyle: true,
-    supportReferenceStyleV9FixedTipScale: true,
+    supportReferenceStyleV10KindCanvasAxis: true,
     fixedTipScaleApplied: true,
     hiddenOriginalProxyMeshCount: hiddenOriginalProxyMeshes.length,
   };
   return object;
-}
-
-export function applyBakedRestraintGlyph(object, comp = {}, options = {}) {
-  if (!object || comp.type !== 'SUPPORT') return object;
-  const attrs = attrsFrom(object, comp);
-  const source = sourceOf(attrs, comp, options);
-  const sourceRecord = normalizeSupportRecord({ ...attrs, ...comp }, {
-    source,
-    supportSource: source,
-    index: comp.supportRecordIndex ?? comp.recordIndex ?? comp.index ?? comp.supportIndex,
-  });
-
-  if (sourceRecord.kind === 'LINESTOP' || sourceRecord.kind === 'LIMIT') {
-    return applyCanvasAxisLineStopLimit(object, comp, options);
-  }
-
-  return applyLegacyBakedRestraintGlyph(object, comp, options);
 }
