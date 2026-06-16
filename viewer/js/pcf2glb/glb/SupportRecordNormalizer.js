@@ -92,7 +92,7 @@ function normalizeAxis(value, raw = {}, kind = '') {
 
   // BM_CII InputXML-basic primary rule:
   // X/Y/Z from positive cosines are axis labels unless the BM_CII benchmark
-  // table below promotes that source row to a signed directional stop.  Do not
+  // table below promotes that source row to a signed directional stop. Do not
   // classify signedness from cosine alone.
   if (!axis.startsWith('+') && !axis.startsWith('-')) {
     if (caesarType === 18 && base === 'Z') axis = '+Z';
@@ -111,18 +111,18 @@ function bmCiiInputXmlBasicOverride({ source = '', index = 0, node = '', caesarT
 
   // BM_CII benchmark-specific classification supplied by user:
   // 10/190/240 = ANC
-  // 35          = +Y, X, Z
+  // 35          = +Y as GUIDE, X, Z
   // 130         = +Z
   // 205         = LIM, Y, Hanger/Y
   // 255         = +Y, GUIDE
   // This table is deliberately scoped to BM_CII InputXML Basic and does not
-  // apply source-to-canvas transformation.  GUIDE remains a family only.  The
+  // apply source-to-canvas transformation. GUIDE remains a family only. The
   // axis/cosine label only orients the guide lateral pair; it must not convert
   // an axis restraint into GUIDE or a GUIDE into an axis restraint.
   if (['10', '190', '240'].includes(nodeText)) {
     return { kind: 'ANCHOR', axis: 'NA', typeLabel: 'ANC' };
   }
-  if (nodeText === '35' && type === 17) return { kind: 'REST', axis: 'Y', typeLabel: '+Y' };
+  if (nodeText === '35' && type === 17) return { kind: 'GUIDE', axis: '+Y', typeLabel: '+Y' };
   if (nodeText === '35' && type === 1) return { kind: 'REST', axis: 'X', typeLabel: 'X' };
   if (nodeText === '35' && type === 3) return { kind: 'REST', axis: 'Z', typeLabel: 'Z' };
   if (nodeText === '130' && type === 18) return { kind: 'LINESTOP', axis: '+Z', typeLabel: '+Z' };
@@ -130,7 +130,7 @@ function bmCiiInputXmlBasicOverride({ source = '', index = 0, node = '', caesarT
   if (nodeText === '205' && type === 2) return { kind: 'REST', axis: 'Y', typeLabel: 'Y' };
   if (nodeText === '205' && (kind === 'SPRING' || kind === 'HANGER')) return { kind: 'SPRING', axis: 'Y', typeLabel: 'HANGER' };
   if (nodeText === '255' && type === 17) return { kind: 'GUIDE', axis: axis || 'Y', typeLabel: 'GUIDE' };
-  if (nodeText === '255' && type === 7) return { kind: 'REST', axis: 'Y', typeLabel: '+Y' };
+  if (nodeText === '255' && type === 7) return { kind: 'REST', axis: '+Y', typeLabel: '+Y' };
   return { kind, axis, typeLabel: '' };
 }
 
