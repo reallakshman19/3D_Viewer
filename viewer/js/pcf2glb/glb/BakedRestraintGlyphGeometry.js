@@ -12,6 +12,7 @@ import {
   supportTraceFromRecord,
 } from './SupportRecordNormalizer.js';
 
+const EPS = 1e-8;
 const UP = new THREE.Vector3(0, 1, 0);
 const X_AXIS = new THREE.Vector3(1, 0, 0);
 const Y_AXIS = new THREE.Vector3(0, 1, 0);
@@ -38,11 +39,18 @@ function attrsFrom(object, comp = {}) {
 function vectorFrom(value) {
   if (Array.isArray(value)) {
     const v = new THREE.Vector3(Number(value[0]) || 0, Number(value[1]) || 0, Number(value[2]) || 0);
-    return v.lengthSq() > 1e-8 ? v.normalize() : null;
+    return v.lengthSq() > EPS ? v.normalize() : null;
+  }
+  if (typeof value === 'string') {
+    const parts = value.split(/[\s,;]+/).map(Number).filter(Number.isFinite);
+    if (parts.length >= 3) {
+      const v = new THREE.Vector3(parts[0], parts[1], parts[2]);
+      return v.lengthSq() > EPS ? v.normalize() : null;
+    }
   }
   if (value && typeof value === 'object') {
     const v = new THREE.Vector3(Number(value.x) || 0, Number(value.y) || 0, Number(value.z) || 0);
-    return v.lengthSq() > 1e-8 ? v.normalize() : null;
+    return v.lengthSq() > EPS ? v.normalize() : null;
   }
   return null;
 }
@@ -60,8 +68,35 @@ function axisVectorFrom(attrs = {}, comp = {}, axisLabel = '') {
     || vectorFrom(attrs.supportAxis)
     || vectorFrom(attrs.SUPPORT_AXIS)
     || vectorFrom(attrs.caesarSupportAxis)
+    || vectorFrom(attrs.restraintAxisVector)
     || axisVectorFromLabel(axisLabel)
     || X_AXIS.clone();
+}
+
+function pipeTangentFrom(attrs = {}, comp = {}, axis = X_AXIS, kind = '') {
+  const tangent = vectorFrom(comp.pipeTangent)
+    || vectorFrom(comp.pipeAxis)
+    || vectorFrom(comp.pipeDirection)
+    || vectorFrom(comp.tangent)
+    || vectorFrom(comp.axisGlb)
+    || vectorFrom(attrs.pipeTangent)
+    || vectorFrom(attrs.pipeAxis)
+    || vectorFrom(attrs.pipeDirection)
+    || vectorFrom(attrs.tangent)
+    || vectorFrom(attrs.PipeTangent)
+    || vectorFrom(attrs.PIPE_TANGENT)
+    || vectorFrom(attrs.PIPE_AXIS)
+    || vectorFrom(attrs.pipeDirectionGlb)
+    || vectorFrom(attrs.centerlineDirection)
+    || vectorFrom(attrs.componentAxis);
+
+  if (tangent) return tangent.normalize();
+
+  // LINESTOP/LIMIT source axes are normally axial restraints, so axis is the
+  // safest fallback when the exporter has not supplied pipe tangent yet.
+  if (kind === 'LINESTOP' || kind === 'LIMIT') return horizontalAxisOrFallback(axis, X_AXIS);
+
+  return horizontalAxisOrFallback(axis, X_AXIS);
 }
 
 function pipeRadiusFor(comp = {}, attrs = {}) {
@@ -86,16 +121,16 @@ function material(color) {
 
 function orientFromY(object, direction) {
   const dir = direction?.clone?.().normalize?.();
-  if (!dir || dir.lengthSq() < 1e-8) return;
+  if (!dir || dir.lengthSq() < EPS) return;
   object.quaternion.setFromUnitVectors(UP, dir);
 }
 
 function basisFrom(primary, lateral) {
   const x = primary.clone().normalize();
   let z = lateral.clone().normalize();
-  if (z.lengthSq() < 1e-8 || Math.abs(z.dot(x)) > 0.96) {
+  if (z.lengthSq() < EPS || Math.abs(z.dot(x)) > 0.96) {
     z = new THREE.Vector3().crossVectors(x, UP);
-    if (z.lengthSq() < 1e-8) z = Z_AXIS.clone();
+    if (z.lengthSq() < EPS) z = Z_AXIS.clone();
     z.normalize();
   }
   let y = new THREE.Vector3().crossVectors(z, x).normalize();
@@ -151,74 +186,135 @@ function torus(group, name, center, normal, major, minor, color) {
   return mesh;
 }
 
-function lateralAxis(pipeAxis) {
-  const cross = new THREE.Vector3().crossVectors(pipeAxis, UP);
-  if (cross.lengthSq() > 1e-8) return cross.normalize();
-  const crossX = new THREE.Vector3().crossVectors(pipeAxis, X_AXIS);
-  return crossX.lengthSq() > 1e-8 ? crossX.normalize() : Z_AXIS.clone();
-}
-
 function horizontalAxisOrFallback(axis, fallback) {
-  const source = axis?.lengthSq?.() > 1e-8 ? axis.clone().normalize() : fallback.clone();
+  const source = axis?.lengthSq?.() > EPS ? axis.clone().normalize() : fallback.clone();
   const horizontal = source.sub(UP.clone().multiplyScalar(source.dot(UP)));
-  return horizontal.lengthSq() > 1e-8 ? horizontal.normalize() : fallback.clone().normalize();
+  return horizontal.lengthSq() > EPS ? horizontal.normalize() : fallback.clone().normalize();
 }
 
-function buildRest(group, id, pos, pipeRadius, scale, color) {
-  const tip = pos.clone().add(UP.clone().multiplyScalar(-pipeRadius));
+function projectPerpendicular(vector, tangent) {
+  if (!vector || !tangent) return null;
+  const projected = vector.clone().sub(tangent.clone().multiplyScalar(vector.dot(tangent)));
+  return projected.lengthSq() > EPS ? projected.normalize() : null;
+}
+
+function makeCircumferenceFrame(center, pipeTangent, pipeRadius) {
+  const point = center.clone();
+  const T = pipeTangent?.clone?.().normalize?.() || X_AXIS.clone();
+  if (T.lengthSq() < EPS) T.copy(X_AXIS);
+
+  let top = projectPerpendicular(UP, T);
+  if (!top) top = projectPerpendicular(X_AXIS, T) || projectPerpendicular(Z_AXIS, T) || X_AXIS.clone();
+  top.normalize();
+
+  let side = new THREE.Vector3().crossVectors(T, top);
+  if (side.lengthSq() < EPS) side = projectPerpendicular(Z_AXIS, T) || Z_AXIS.clone();
+  side.normalize();
+
+  const anchors = {
+    CIRCUM_TOP: point.clone().add(top.clone().multiplyScalar(pipeRadius)),
+    CIRCUM_BOT: point.clone().add(top.clone().multiplyScalar(-pipeRadius)),
+    CIRCUM_SIDE1: point.clone().add(side.clone().multiplyScalar(pipeRadius)),
+    CIRCUM_SIDE2: point.clone().add(side.clone().multiplyScalar(-pipeRadius)),
+  };
+
+  const radialForAxis = (axis) => projectPerpendicular(axis?.clone?.().normalize?.(), T);
+  const tipForAxis = (axis, sign = 1) => {
+    const radial = radialForAxis(axis);
+    if (!radial) return null;
+    return point.clone().add(radial.multiplyScalar(sign * pipeRadius));
+  };
+
+  return {
+    point,
+    pipeTangent: T,
+    pipeRadius,
+    top,
+    side,
+    anchors,
+    radialForAxis,
+    tipForAxis,
+  };
+}
+
+function plainVector(v) {
+  return [Number(v.x.toFixed(6)), Number(v.y.toFixed(6)), Number(v.z.toFixed(6))];
+}
+
+function plainCircumferenceFrame(frame) {
+  return {
+    supportPoint: plainVector(frame.point),
+    pipeTangent: plainVector(frame.pipeTangent),
+    pipeRadius: Number(frame.pipeRadius.toFixed(6)),
+    CIRCUM_TOP: plainVector(frame.anchors.CIRCUM_TOP),
+    CIRCUM_BOT: plainVector(frame.anchors.CIRCUM_BOT),
+    CIRCUM_SIDE1: plainVector(frame.anchors.CIRCUM_SIDE1),
+    CIRCUM_SIDE2: plainVector(frame.anchors.CIRCUM_SIDE2),
+  };
+}
+
+function outwardTailFromTip(tip, outward, length) {
+  return tip.clone().add(outward.clone().normalize().multiplyScalar(length));
+}
+
+function buildRest(group, id, frame, scale, color) {
+  // REST = vertical arrow only. Arrow pointer exactly touches CIRCUM_BOT.
+  const tip = frame.anchors.CIRCUM_BOT.clone();
   const start = tip.clone().add(UP.clone().multiplyScalar(-scale * 0.92));
-  arrow(group, `${id}-rest-vertical-arrow`, start, tip, color, scale * 0.040);
+  arrow(group, `${id}-rest-vertical-arrow-tip-circum-bot`, start, tip, color, scale * 0.040);
 }
 
-function buildGuide(group, id, pos, pipeRadius, lateral, scale, color) {
-  // GUIDE = lateral arrows only. Tips touch pipe circumference. No vertical/axis arrows and no plates.
-  for (const sign of [1, -1]) {
-    const tip = pos.clone().add(lateral.clone().multiplyScalar(sign * pipeRadius));
-    const start = pos.clone().add(lateral.clone().multiplyScalar(sign * scale * 1.05));
-    arrow(group, `${id}-guide-lateral-arrow-${sign > 0 ? 'positive' : 'negative'}`, start, tip, color, scale * 0.048);
-  }
+function buildGuide(group, id, frame, guideAxis, scale, color) {
+  // GUIDE = lateral arrows only. Arrow pointers exactly touch lateral CIRCUM points.
+  const radial = frame.radialForAxis(guideAxis) || frame.side.clone();
+  const positiveTip = frame.point.clone().add(radial.clone().multiplyScalar(frame.pipeRadius));
+  const negativeTip = frame.point.clone().add(radial.clone().multiplyScalar(-frame.pipeRadius));
+  arrow(group, `${id}-guide-lateral-arrow-positive-tip-circum`, outwardTailFromTip(positiveTip, radial, scale * 1.05), positiveTip, color, scale * 0.048);
+  arrow(group, `${id}-guide-lateral-arrow-negative-tip-circum`, outwardTailFromTip(negativeTip, radial.clone().negate(), scale * 1.05), negativeTip, color, scale * 0.048);
 }
 
-function buildLineStop(group, id, pos, pipeRadius, pipeAxis, scale, color) {
-  // LINESTOP = axial arrows only. Arrows are offset vertically by OD/2 and converge to pipe circumference.
-  const surface = pos.clone().add(UP.clone().multiplyScalar(pipeRadius));
-  for (const sign of [1, -1]) {
-    const start = surface.clone().add(pipeAxis.clone().multiplyScalar(sign * scale * 1.10));
-    arrow(group, `${id}-linestop-axial-arrow-${sign > 0 ? 'positive' : 'negative'}`, start, surface, color, scale * 0.052);
-  }
+function buildLineStop(group, id, frame, scale, color) {
+  // LINESTOP = axial arrows only. Both pointers exactly touch CIRCUM_BOT.
+  const tip = frame.anchors.CIRCUM_BOT.clone();
+  const axis = frame.pipeTangent.clone().normalize();
+  arrow(group, `${id}-linestop-axial-arrow-positive-tip-circum-bot`, tip.clone().add(axis.clone().multiplyScalar(scale * 1.10)), tip, color, scale * 0.052);
+  arrow(group, `${id}-linestop-axial-arrow-negative-tip-circum-bot`, tip.clone().add(axis.clone().multiplyScalar(-scale * 1.10)), tip, color, scale * 0.052);
 }
 
-function buildLimit(group, id, pos, pipeRadius, axis, lateral, scale, color) {
-  const limitAxis = axis.clone().normalize();
-  const surface = pos.clone().add(UP.clone().multiplyScalar(pipeRadius));
-  const basis = basisFrom(limitAxis, lateral);
-  arrow(group, `${id}-limit-direction-arrow`, surface.clone().add(limitAxis.clone().multiplyScalar(scale * 1.12)), surface, color, scale * 0.042);
-  box(group, `${id}-limit-gap-tick-a`, surface.clone().add(limitAxis.clone().multiplyScalar(scale * 0.26)).add(UP.clone().multiplyScalar(scale * 0.18)), new THREE.Vector3(scale * 0.040, scale * 0.28, scale * 0.16), 0xf59e0b, basis);
-  box(group, `${id}-limit-gap-tick-b`, surface.clone().add(limitAxis.clone().multiplyScalar(scale * 0.36)).add(UP.clone().multiplyScalar(scale * 0.18)), new THREE.Vector3(scale * 0.040, scale * 0.28, scale * 0.16), 0xf97316, basis);
+function buildLimit(group, id, frame, limitAxis, scale, color) {
+  // LIMIT uses the same axial CIRCUM_BOT placement as LINESTOP. One arrow unless bidirectional is provided elsewhere.
+  const tip = frame.anchors.CIRCUM_BOT.clone();
+  const axis = frame.pipeTangent.clone().normalize();
+  const basis = basisFrom(axis, frame.side);
+  arrow(group, `${id}-limit-axial-arrow-tip-circum-bot`, tip.clone().add(axis.clone().multiplyScalar(scale * 1.12)), tip, color, scale * 0.042);
+  box(group, `${id}-limit-gap-tick-a`, tip.clone().add(axis.clone().multiplyScalar(scale * 0.26)).add(UP.clone().multiplyScalar(scale * 0.18)), new THREE.Vector3(scale * 0.040, scale * 0.28, scale * 0.16), 0xf59e0b, basis);
+  box(group, `${id}-limit-gap-tick-b`, tip.clone().add(axis.clone().multiplyScalar(scale * 0.36)).add(UP.clone().multiplyScalar(scale * 0.18)), new THREE.Vector3(scale * 0.040, scale * 0.28, scale * 0.16), 0xf97316, basis);
 }
 
-function buildHanger(group, id, pos, pipeAxis, lateral, scale, color) {
-  const topCenter = pos.clone().add(UP.clone().multiplyScalar(scale * 1.55));
-  const pipeTop = pos.clone().add(UP.clone().multiplyScalar(scale * 0.15));
-  box(group, `${id}-hanger-top-plate`, topCenter, new THREE.Vector3(scale * 1.10, scale * 0.12, scale * 0.85), color, basisFrom(pipeAxis, lateral));
-  cylinderBetween(group, `${id}-hanger-rod`, topCenter.clone().add(UP.clone().multiplyScalar(-scale * 0.08)), pipeTop, scale * 0.028, color, 12);
+function buildHanger(group, id, frame, scale, color) {
+  // HANGER = vertical-down support arrow. Arrow pointer exactly touches CIRCUM_TOP.
+  const tip = frame.anchors.CIRCUM_TOP.clone();
+  const start = tip.clone().add(UP.clone().multiplyScalar(scale * 1.10));
+  arrow(group, `${id}-hanger-vertical-arrow-tip-circum-top`, start, tip, color, scale * 0.040);
+  const rodTop = start.clone().add(UP.clone().multiplyScalar(scale * 0.20));
+  cylinderBetween(group, `${id}-hanger-rod`, rodTop, start, scale * 0.026, color, 12);
   for (let i = 0; i < 3; i += 1) {
-    torus(group, `${id}-hanger-coil-${i + 1}`, pos.clone().add(UP.clone().multiplyScalar(scale * (0.48 + i * 0.16))), UP, scale * 0.16, scale * 0.016, color);
+    torus(group, `${id}-hanger-coil-${i + 1}`, start.clone().add(UP.clone().multiplyScalar(scale * (0.18 + i * 0.13))), UP, scale * 0.14, scale * 0.014, color);
   }
 }
 
-function buildUnknown(group, id, pos, pipeAxis, lateral, scale) {
-  const warning = new THREE.Mesh(new THREE.OctahedronGeometry(scale * 0.12, 0), material(0xf59e0b));
-  warning.name = `${id}-unknown-warning`;
-  warning.position.copy(pos.clone().add(UP.clone().multiplyScalar(scale * 0.35)));
+function buildUnknown(group, id, frame, scale) {
+  const warning = new THREE.Mesh(new THREE.OctahedronGeometry(scale * 0.06, 0), material(0x64748b));
+  warning.name = `${id}-unknown-debug-hidden-marker`;
+  warning.position.copy(frame.point);
+  warning.visible = false;
   group.add(warning);
 }
 
-function buildAnchor(group, id, pos, pipeRadius, pipeAxis, lateral, scale, color) {
-  buildRest(group, id, pos, pipeRadius, scale, color);
-  for (const dir of [UP, UP.clone().negate(), pipeAxis, pipeAxis.clone().negate(), lateral, lateral.clone().negate()]) {
-    arrow(group, `${id}-anchor-axis`, pos.clone(), pos.clone().add(dir.clone().normalize().multiplyScalar(scale * 0.72)), color, scale * 0.032);
-  }
+function buildAnchor(group, id, frame, guideAxis, scale, color) {
+  buildRest(group, id, frame, scale, color);
+  buildLineStop(group, id, frame, scale, color);
+  buildGuide(group, id, frame, guideAxis, scale, color);
 }
 
 function hideExistingProxyMeshes(object, markerGroupName) {
@@ -262,9 +358,11 @@ function stampLayerMetadata(target, record, { scale, role }) {
     bmCiiRestraintVisualProfile: profile,
     supportReferenceStyle: true,
     supportReferenceStyleV5: true,
+    supportReferenceStyleV7CircumferenceAnchors: true,
     supportGlyphRole: role,
     supportSymbolContract: record.supportSymbolContract,
     supportRecordId: record.recordId,
+    circumferenceAnchors: record.circumferenceAnchors || null,
   };
 }
 
@@ -275,7 +373,13 @@ function stampGlyphMetadata(target, record, { scale, role, renderGlyph }) {
     ...(target.userData || {}),
     renderGlyph,
     bmCiiTrace: isRenderableRecordRoot
-      ? supportTraceFromRecord(record, { renderGlyph, renderScale: scale, visualProfile: RESTRAINT_VISUAL_PROFILE.id })
+      ? supportTraceFromRecord(record, {
+        renderGlyph,
+        renderScale: scale,
+        visualProfile: RESTRAINT_VISUAL_PROFILE.id,
+        circumferenceAnchors: record.circumferenceAnchors || null,
+        placementContract: 'arrow-tips-touch-saved-circumference-anchors',
+      })
       : {
         entity: 'supportPart',
         parentRecordId: record.recordId,
@@ -283,6 +387,7 @@ function stampGlyphMetadata(target, record, { scale, role, renderGlyph }) {
         supportKind: record.kind,
         supportSource: record.source,
         supportSymbolContract: record.supportSymbolContract,
+        circumferenceAnchors: record.circumferenceAnchors || null,
       },
   };
 }
@@ -305,21 +410,24 @@ export function applyBakedRestraintGlyph(object, comp = {}, options = {}) {
   const color = SUPPORT_SYMBOL_COLORS[kind] || SUPPORT_SYMBOL_COLORS.UNKNOWN;
   const id = text(comp.id || sourceRecord.recordId || object.name || 'support');
 
-  const pipeAxis = (kind === 'LINESTOP' || kind === 'LIMIT') ? horizontalAxisOrFallback(axis, Z_AXIS) : axis.clone().normalize();
-  const lateral = kind === 'GUIDE' ? horizontalAxisOrFallback(axis, X_AXIS) : lateralAxis(pipeAxis);
+  const pipeAxis = pipeTangentFrom(attrs, comp, axis, kind);
+  const guideAxis = axis.lengthSq() > EPS && Math.abs(axis.clone().normalize().dot(pipeAxis)) < 0.85
+    ? axis.clone().normalize()
+    : (projectPerpendicular(axis, pipeAxis) || new THREE.Vector3().crossVectors(pipeAxis, UP).normalize() || Z_AXIS.clone());
+  const frame = makeCircumferenceFrame(new THREE.Vector3(0, 0, 0), pipeAxis, pipeRadius);
+  sourceRecord.circumferenceAnchors = plainCircumferenceFrame(frame);
 
   const markerGroup = new THREE.Group();
   markerGroup.name = `${sourceRecord.recordId}-restraint-${RESTRAINT_VISUAL_PROFILE.id}-${kind.toLowerCase()}`;
   const renderGlyph = `baked-${RESTRAINT_VISUAL_PROFILE.id}-${kind.toLowerCase()}`;
-  const origin = new THREE.Vector3(0, 0, 0);
 
-  if (kind === 'REST' || kind === 'SHOE' || kind === 'HOLDDOWN') buildRest(markerGroup, id, origin, pipeRadius, scale, color);
-  else if (kind === 'GUIDE') buildGuide(markerGroup, id, origin, pipeRadius, lateral, scale, color);
-  else if (kind === 'LINESTOP') buildLineStop(markerGroup, id, origin, pipeRadius, pipeAxis, scale, color);
-  else if (kind === 'LIMIT') buildLimit(markerGroup, id, origin, pipeRadius, axis, lateral, scale, color);
-  else if (kind === 'ANCHOR') buildAnchor(markerGroup, id, origin, pipeRadius, pipeAxis, lateral, scale, color);
-  else if (kind === 'HANGER' || kind === 'SPRING') buildHanger(markerGroup, id, origin, pipeAxis, lateral, scale, color);
-  else buildUnknown(markerGroup, id, origin, pipeAxis, lateral, scale, color);
+  if (kind === 'REST' || kind === 'SHOE' || kind === 'HOLDDOWN') buildRest(markerGroup, id, frame, scale, color);
+  else if (kind === 'GUIDE') buildGuide(markerGroup, id, frame, guideAxis, scale, color);
+  else if (kind === 'LINESTOP') buildLineStop(markerGroup, id, frame, scale, color);
+  else if (kind === 'LIMIT') buildLimit(markerGroup, id, frame, axis, scale, color);
+  else if (kind === 'ANCHOR') buildAnchor(markerGroup, id, frame, guideAxis, scale, color);
+  else if (kind === 'HANGER' || kind === 'SPRING') buildHanger(markerGroup, id, frame, scale, color);
+  else buildUnknown(markerGroup, id, frame, scale);
 
   const glyphMeshes = [];
   markerGroup.traverse((child) => { if (child.isMesh) glyphMeshes.push(child); });
@@ -333,23 +441,32 @@ export function applyBakedRestraintGlyph(object, comp = {}, options = {}) {
     labelText: object.userData?.labelText || `${id} ${kind}`,
     supportKind: kind,
     supportAxis: { x: axis.x, y: axis.y, z: axis.z },
+    pipeTangent: { x: pipeAxis.x, y: pipeAxis.y, z: pipeAxis.z },
     restraintAxis: axisLabel,
     supportSource: source,
     supportRecordId: sourceRecord.recordId,
     supportSymbolScale: scale,
     supportPipeRadius: pipeRadius,
+    circumferenceAnchors: sourceRecord.circumferenceAnchors,
     renderGlyph,
     renderScale: scale,
     visualProfile: RESTRAINT_VISUAL_PROFILE.id,
-    glbShape: `support-reference-v6-${kind.toLowerCase()}`,
+    glbShape: `support-reference-v7-circumference-${kind.toLowerCase()}`,
     glbSupportVisualProfile: RESTRAINT_VISUAL_PROFILE.id,
-    bmCiiTrace: supportTraceFromRecord(sourceRecord, { renderGlyph, renderScale: scale, visualProfile: RESTRAINT_VISUAL_PROFILE.id }),
+    bmCiiTrace: supportTraceFromRecord(sourceRecord, {
+      renderGlyph,
+      renderScale: scale,
+      visualProfile: RESTRAINT_VISUAL_PROFILE.id,
+      circumferenceAnchors: sourceRecord.circumferenceAnchors,
+      placementContract: 'arrow-tips-touch-saved-circumference-anchors',
+    }),
     bmCiiRestraintVisualProfile: visualProfileMetadata({ kind, source, axisLabel, scale, role: 'baked-object-root' }),
     supportSymbolContract: sourceRecord.supportSymbolContract || supportSymbolContractFor(kind),
+    supportPlacementContract: 'arrow-tips-touch-saved-circumference-anchors',
     directionalSupportEnhanced: true,
     directionalSupportSymbolCount: markerGroup.children.length,
     supportReferenceStyle: true,
-    supportReferenceStyleV6: true,
+    supportReferenceStyleV7CircumferenceAnchors: true,
     hiddenOriginalProxyMeshCount: hiddenOriginalProxyMeshes.length,
   };
   return object;
