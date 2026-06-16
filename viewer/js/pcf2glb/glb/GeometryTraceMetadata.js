@@ -41,6 +41,7 @@ function nodeValue(component = {}, attrs = {}) {
     attrs.Node,
     attrs.NODE_NO,
     attrs.NodeNumber,
+    attrs.NODE_NUMBER,
     attrs.FROM_NODE,
     attrs.TO_NODE,
   );
@@ -136,8 +137,12 @@ export function semanticCategoryFromComponent(component = {}, extra = {}) {
     attrs.ComponentType,
     attrs.SKEY,
     attrs.SUPPORT_TAG,
+    attrs.ANNOTATION_TYPE,
+    attrs.ANNOTATION_KIND,
+    attrs.NODE_LABEL,
   ].join(' '));
 
+  if (component.type === 'NODE_LABEL' || raw.includes('NODE_LABEL') || raw.includes('NODE ANNOTATION')) return 'annotation';
   if (raw.includes('SUPPORT') || raw.includes('RESTRAINT') || raw.includes('GUIDE') || raw.includes('LINESTOP') || raw.includes('LINE STOP') || raw.includes('HANGER') || raw.includes('SPRING') || raw.includes('ANCHOR') || raw.includes('SHOE') || raw.includes('REST')) return 'support';
   if (/VALVE|\bVGT\b|\bVGL\b|\bVBA\b|\bVCH\b/.test(raw)) return 'valve';
   if (/FLANGE|\bFLG\b/.test(raw)) return 'flange';
@@ -155,7 +160,7 @@ export function componentTraceKey(component = {}, extra = {}) {
   const toNode = toNodeValue(component, attrs);
   const node = nodeValue(component, attrs);
   return [
-    'component',
+    category === 'annotation' ? 'annotation' : 'component',
     category,
     id || 'NO_ID',
     fromNode || node || '',
@@ -189,16 +194,25 @@ export function componentGeometryTrace(component = {}, extra = {}, context = {})
   );
   const supportKind = firstNonEmpty(extra.supportKind, component.supportKind, attrs.SUPPORT_KIND, attrs.SKEY, attrs.SUPPORT_TAG);
   const sourceComponentId = firstNonEmpty(component.id, attrs.COMPONENT_IDENTIFIER, attrs['COMPONENT-IDENTIFIER'], attrs['COMPONENT-ATTRIBUTE97'], component.refNo);
+  const annotationKind = category === 'annotation'
+    ? firstNonEmpty(extra.annotationKind, extra.annotationType, attrs.ANNOTATION_KIND, attrs.ANNOTATION_TYPE, 'NODE_LABEL')
+    : '';
+  const source = category === 'annotation'
+    ? firstNonEmpty(component.source, attrs.SOURCE, attrs.Source, 'inputxml')
+    : firstNonEmpty(component.source, attrs.SOURCE, attrs.Source, 'inputxml');
 
   return {
     schema: BM_CII_GEOMETRY_TRACE_SCHEMA,
-    entity: 'component',
+    entity: category === 'annotation' ? 'annotation' : 'component',
     traceKey: componentTraceKey(component, extra),
     sourceComponentId,
     sourceRefNo: firstNonEmpty(component.refNo, attrs['COMPONENT-ATTRIBUTE97'], attrs.REF_NO, attrs.RefNo),
     semanticCategory: category,
+    annotationKind,
+    annotationType: annotationKind,
+    source,
     componentType: firstNonEmpty(component.type, component.componentType, attrs.COMPONENT_TYPE, attrs.ComponentType),
-    glbShape: firstNonEmpty(extra.glbShape),
+    glbShape: firstNonEmpty(extra.glbShape, attrs.glbShape),
     fromNode: fromNodeValue(component, attrs),
     toNode: toNodeValue(component, attrs),
     node: nodeValue(component, attrs),
@@ -252,6 +266,8 @@ export function withGeometryTrace(userData = {}, trace = {}) {
     sourceToNode: trace.toNode || userData.sourceToNode || '',
     supportSource: trace.supportSource || userData.supportSource || '',
     supportKind: trace.supportKind || userData.supportKind || '',
+    annotationKind: trace.annotationKind || userData.annotationKind || '',
+    annotationType: trace.annotationType || userData.annotationType || '',
     restraintAxis: trace.axis || userData.restraintAxis || '',
     restraintGap: trace.gap || userData.restraintGap || '',
     renderGlyph: trace.renderGlyph || userData.renderGlyph || '',
@@ -272,7 +288,8 @@ export function applyGeometryTrace(object, trace, { includeChildren = true } = {
 
 export function applyComponentGeometryTrace(object, component, context = {}) {
   const trace = componentGeometryTrace(component, object?.userData || {}, context);
-  return applyGeometryTrace(object, trace, { includeChildren: true });
+  const includeChildren = component?.type !== 'NODE_LABEL';
+  return applyGeometryTrace(object, trace, { includeChildren });
 }
 
 export function applyAnnotationGeometryTrace(object, annotation = {}) {
