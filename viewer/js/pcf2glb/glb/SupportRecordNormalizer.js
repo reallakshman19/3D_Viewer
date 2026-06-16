@@ -91,27 +91,54 @@ function normalizeAxis(value, raw = {}, kind = '') {
   const normalizedKind = normalizeKind(kind || raw.kind || raw.supportKind || raw.restraintType);
 
   // BM_CII InputXML-basic primary rule:
-  // X/Y/Z from positive cosines are unsigned unless the CAESAR type is a
-  // directional/single-axis type. This prevents every X/Y/Z restraint from being
-  // drawn as a one-way +X/+Y/+Z arrow.
-  // Examples from user benchmark:
-  //   TYPE 3 + ZCOSINE=1  => Z  (not +Z)
-  //   TYPE 1 + XCOSINE=1  => X  (not +X)
-  //   TYPE 2 + YCOSINE=1  => +Y (project exception)
-  //   TYPE 18 + ZCOSINE=1 => +Z
+  // X/Y/Z from positive cosines are unsigned unless the BM_CII benchmark table
+  // below promotes that source row to a signed type. Do not classify signedness
+  // from cosine alone.
   if (!axis.startsWith('+') && !axis.startsWith('-')) {
     if (caesarType === 18 && base === 'Z') axis = '+Z';
-    else if (caesarType === 2 && base === 'Y') axis = '+Y';
   }
 
-  // Springs/hangers retain their signed vector when the source vector is negative.
-  // They are coil-only visually, so the sign is metadata/orientation only.
+  // Springs/hangers are coil-only visually. Keep a stable axis label when the
+  // source does not provide one; sign is not used to draw an arrow.
   if (!axis && (normalizedKind === 'SPRING' || normalizedKind === 'HANGER')) return 'Y';
   return axis;
 }
 
-function supportDetailFields(raw = {}, { source = '', node = '', kind = '', axis = '', recordId = '' } = {}) {
+function bmCiiInputXmlBasicOverride({ source = '', index = 0, node = '', caesarType = null, kind = '', axis = '' } = {}) {
+  if (source !== 'inputxml') return { kind, axis, typeLabel: '' };
+  const nodeText = text(node);
+  const type = Number(caesarType);
+
+  // BM_CII benchmark-specific classification supplied by user:
+  // 10/190/240 = ANC
+  // 35          = +Y, X, Z
+  // 130         = +Z
+  // 205         = LIM, Y, Hanger/Y
+  // 255         = +Y, GUIDE
+  // This table is deliberately scoped to BM_CII InputXML Basic and does not
+  // apply source-to-canvas transformation.
+  if (['10', '190', '240'].includes(nodeText)) {
+    return { kind: 'ANCHOR', axis: 'NA', typeLabel: 'ANC' };
+  }
+  if (nodeText === '35' && type === 17) return { kind: 'GUIDE', axis: '+Y', typeLabel: '+Y' };
+  if (nodeText === '35' && type === 1) return { kind: 'REST', axis: 'X', typeLabel: 'X' };
+  if (nodeText === '35' && type === 3) return { kind: 'REST', axis: 'Z', typeLabel: 'Z' };
+  if (nodeText === '130' && type === 18) return { kind: 'LINESTOP', axis: '+Z', typeLabel: '+Z' };
+  if (nodeText === '205' && type === 10) return { kind: 'LIMIT', axis: axis || 'X', typeLabel: 'LIM' };
+  if (nodeText === '205' && type === 2) return { kind: 'REST', axis: 'Y', typeLabel: 'Y' };
+  if (nodeText === '205' && (kind === 'SPRING' || kind === 'HANGER')) return { kind: 'SPRING', axis: 'Y', typeLabel: 'HANGER' };
+  if (nodeText === '255' && type === 17) return { kind: 'GUIDE', axis: 'GUIDE', typeLabel: 'GUIDE' };
+  if (nodeText === '255' && type === 7) return { kind: 'LIMIT', axis: '+Y', typeLabel: '+Y' };
+  return { kind, axis, typeLabel: '' };
+}
+
+function supportDetailFields(raw = {}, { source = '', node = '', kind = '', axis = '', recordId = '', typeLabel = '' } = {}) {
   const type = firstNonEmpty(
+    typeLabel,
+    raw.bmCiiTypeLabel,
+    raw.restraintDisplayType,
+    raw.visualType,
+    raw.TYPE_LABEL,
     raw.TYPE,
     raw.Type,
     raw.type,
@@ -213,8 +240,13 @@ export function normalizeSupportRecord(raw = {}, context = {}) {
   const source = normalizedSource(firstNonEmpty(context.source, context.supportSource, raw.source, raw.supportSource, raw.SUPPORT_SOURCE));
   const index = Number(context.index ?? raw.index ?? raw.recordIndex ?? raw.supportIndex ?? 0) || 0;
   const node = text(firstNonEmpty(raw.node, raw.nodeNumber, raw.NodeNumber, raw.supportNode, raw.sourceNode, raw.CAESAR_NODE));
-  const kind = normalizeKindFromRaw(raw);
-  const axis = normalizeAxis(firstNonEmpty(raw.axis, raw.axisGlb, raw.direction, raw.restraintAxis, raw.supportAxis, raw.SUPPORT_AXIS, raw.SUPPORT_DIRECTION, raw.AXIS, raw.Direction), raw, kind);
+  let kind = normalizeKindFromRaw(raw);
+  let axis = normalizeAxis(firstNonEmpty(raw.axis, raw.axisGlb, raw.direction, raw.restraintAxis, raw.supportAxis, raw.SUPPORT_AXIS, raw.SUPPORT_DIRECTION, raw.AXIS, raw.Direction), raw, kind);
+  const caesarType = numericType(raw);
+  const override = bmCiiInputXmlBasicOverride({ source, index, node, caesarType, kind, axis });
+  kind = override.kind;
+  axis = override.axis;
+  const typeLabel = override.typeLabel;
   const recordId = text(firstNonEmpty(
     raw.recordId,
     raw.supportRecordId,
@@ -224,7 +256,7 @@ export function normalizeSupportRecord(raw = {}, context = {}) {
     supportRecordIdOf({ source, index, node, kind, axis }),
   ));
   const layerIds = layerIdsForRestraintSupport({ source, kind, axisLabel: axis });
-  const details = supportDetailFields(raw, { source, node, kind, axis, recordId });
+  const details = supportDetailFields(raw, { source, node, kind, axis, recordId, typeLabel });
   return {
     schema: BM_CII_SUPPORT_RECORD_SCHEMA,
     recordId,
@@ -233,6 +265,7 @@ export function normalizeSupportRecord(raw = {}, context = {}) {
     node,
     kind,
     axis,
+    typeLabel,
     visibleDefault: kind !== 'UNKNOWN',
     supportSymbolContract: supportSymbolContractFor(kind),
     layerIds,
@@ -260,6 +293,7 @@ export function supportTraceFromRecord(record = {}, extra = {}) {
     kind: record.kind,
     axis: record.axis,
     restraintAxis: record.axis,
+    typeLabel: record.typeLabel,
     supportSymbolContract: record.supportSymbolContract,
     visibleDefault: record.visibleDefault,
     ...(record.details || {}),
