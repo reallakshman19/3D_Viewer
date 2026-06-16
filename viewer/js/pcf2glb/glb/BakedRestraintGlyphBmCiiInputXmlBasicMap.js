@@ -22,6 +22,7 @@ const ARROW_RADIUS_FACTOR = 0.044;
 function text(value) { return String(value ?? '').trim(); }
 function upper(value) { return text(value).toUpperCase(); }
 function number(value) { const n = Number(value); return Number.isFinite(n) ? n : null; }
+function positiveNumber(value) { const n = number(value); return n && n > 0 ? n : null; }
 function attrsFrom(object, comp = {}) { return { ...(comp.raw || {}), ...(comp.attributes || {}), ...(object?.userData || {}) }; }
 function sourceOf(attrs = {}, comp = {}, options = {}) {
   const raw = upper(options.supportRendering?.source || options.supportSource || comp.supportSource || comp.source || attrs.supportSource || attrs.SUPPORT_SOURCE || attrs['SUPPORT-SOURCE']);
@@ -82,15 +83,50 @@ function pipeTangentFrom(attrs = {}, comp = {}, fallbackAxis = X_AXIS) {
     || fallbackAxis.clone().normalize();
 }
 
+function firstPositive(...values) {
+  for (const value of values) {
+    const n = positiveNumber(value);
+    if (n !== null) return n;
+  }
+  return null;
+}
+
+function diameterFor(comp = {}, attrs = {}) {
+  // OD is the source of truth for restraint contact.  Nominal bore is only a
+  // last-resort fallback when the source has no outside diameter.
+  return firstPositive(
+    comp.bmCiiOdTouchDiameter,
+    attrs.bmCiiOdTouchDiameter,
+    comp.OutsideDiameter,
+    attrs.OutsideDiameter,
+    comp.OUTSIDE_DIAMETER,
+    attrs.OUTSIDE_DIAMETER,
+    comp.outsideDiameter,
+    attrs.outsideDiameter,
+    comp.OD,
+    attrs.OD,
+    comp.od,
+    attrs.od,
+    comp.outerDiameter,
+    attrs.outerDiameter,
+    comp.DIAMETER,
+    attrs.DIAMETER,
+    comp.diameter,
+    attrs.diameter,
+    comp.bore,
+    attrs.bore,
+    attrs.BORE,
+  ) || 100;
+}
+
 function pipeRadiusFor(comp = {}, attrs = {}) {
-  const bore = number(comp.bore ?? attrs.bore ?? attrs.BORE ?? attrs.DIAMETER ?? attrs.OutsideDiameter) || 100;
-  return Math.max(bore / 2, 5);
+  return Math.max(diameterFor(comp, attrs) / 2, 5);
 }
 
 function supportScaleFor(comp = {}, attrs = {}, options = {}) {
-  const bore = number(comp.bore ?? attrs.bore ?? attrs.BORE ?? attrs.DIAMETER ?? attrs.OutsideDiameter) || 100;
+  const d = diameterFor(comp, attrs);
   const multiplier = number(options.supportSymbolScale) || number(options.restraintSymbolScale) || 0.95;
-  const baseScale = Math.max(28, Math.min(190, bore * multiplier));
+  const baseScale = Math.max(28, Math.min(190, d * multiplier));
   return baseScale * SCALE_MULTIPLIER;
 }
 
@@ -117,7 +153,6 @@ function cylinderBetween(group, name, start, end, radius, color, radialSegments 
 }
 
 function arrowFixedTip(group, name, tip, arrowDirection, length, color, radius) {
-  // arrowDirection is the visual pointing direction. The cone apex is fixed at tip.
   const dir = arrowDirection?.clone?.().normalize?.() || X_AXIS.clone();
   if (dir.lengthSq() < EPS) return null;
   const tail = tip.clone().add(dir.clone().multiplyScalar(-length));
@@ -181,7 +216,7 @@ function plainCircumferenceFrame(frame) {
   return Object.fromEntries([
     ['supportPoint', plainVector(frame.point)],
     ['pipeTangent', plainVector(frame.pipeTangent)],
-    ['pipeRadius', Number(frame.pipeRadius.toFixed(6))],
+    ['pipeRadius_OD_over_2', Number(frame.pipeRadius.toFixed(6))],
     ...Object.entries(frame.anchors).map(([key, value]) => [key, plainVector(value)]),
   ]);
 }
@@ -192,6 +227,10 @@ function isSignedAxis(axisLabel = '') {
 
 function axisTip(frame, axis) {
   const dir = axis.clone().normalize();
+  // OD/2 global rule: an axial arrow cannot use the pipe centreline as its tip.
+  // If the restraint direction is parallel to the pipe tangent, place its head
+  // on a circumference anchor and run the arrow along the axis from outside.
+  if (Math.abs(dir.dot(frame.pipeTangent)) > 0.92) return frame.anchors.CIRCUM_BOT.clone();
   if (Math.abs(dir.dot(Y_AXIS)) > 0.90) return dir.dot(Y_AXIS) >= 0 ? frame.anchors.CIRCUM_TOP.clone() : frame.anchors.CIRCUM_BOT.clone();
   return frame.point.clone().add(dir.multiplyScalar(frame.pipeRadius));
 }
@@ -245,6 +284,7 @@ function stampLayerMetadata(target, record, { scale, role }) {
     supportSymbolContract: record.supportSymbolContract,
     supportRecordId: record.recordId,
     circumferenceAnchors: record.circumferenceAnchors || null,
+    odTouchContract: 'all-restraint-symbol-tips-and-contact-geometry-use-R=OD/2',
   };
 }
 
@@ -261,7 +301,7 @@ function stampGlyphMetadata(target, record, { scale, role, renderGlyph, canvasAx
         visualProfile: RESTRAINT_VISUAL_PROFILE.id,
         circumferenceAnchors: record.circumferenceAnchors || null,
         canvasAxis: canvasAxis ? { x: canvasAxis.x, y: canvasAxis.y, z: canvasAxis.z } : null,
-        placementContract: 'bm-cii-inputxml-basic-type-map-kind-family-axis-orients-fixed-tip-no-transform',
+        placementContract: 'bm-cii-inputxml-basic-all-restraints-od2-touch-no-transform',
       })
       : {
         entity: 'supportPart',
@@ -289,32 +329,32 @@ function buildGuide(group, id, frame, canvasAxis, scale, color) {
   axis.normalize();
   const positiveTip = frame.point.clone().add(axis.clone().multiplyScalar(frame.pipeRadius));
   const negativeTip = frame.point.clone().add(axis.clone().multiplyScalar(-frame.pipeRadius));
-  arrowFixedTip(group, `${id}-guide-positive-lateral-fixed-tip`, positiveTip, axis.clone().negate(), commonLength(scale), color, commonRadius(scale));
-  arrowFixedTip(group, `${id}-guide-negative-lateral-fixed-tip`, negativeTip, axis.clone(), commonLength(scale), color, commonRadius(scale));
+  arrowFixedTip(group, `${id}-guide-positive-lateral-fixed-tip-od2`, positiveTip, axis.clone().negate(), commonLength(scale), color, commonRadius(scale));
+  arrowFixedTip(group, `${id}-guide-negative-lateral-fixed-tip-od2`, negativeTip, axis.clone(), commonLength(scale), color, commonRadius(scale));
 }
 
 function buildAxisRestraint(group, id, frame, axisLabel, canvasAxis, scale, color) {
   const axis = canvasAxis?.clone?.().normalize?.() || Y_AXIS.clone();
   if (isSignedAxis(axisLabel)) {
     const tip = axisTip(frame, axis);
-    arrowFixedTip(group, `${id}-rest-single-signed-axis-fixed-tip`, tip, axis, commonLength(scale), color, commonRadius(scale));
+    arrowFixedTip(group, `${id}-rest-single-signed-axis-fixed-tip-od2`, tip, axis, commonLength(scale), color, commonRadius(scale));
     return;
   }
   const plusTip = axisTip(frame, axis);
   const minusTip = axisTip(frame, axis.clone().negate());
-  arrowFixedTip(group, `${id}-rest-unsigned-plus-axis-fixed-tip`, plusTip, axis, commonLength(scale), color, commonRadius(scale));
-  arrowFixedTip(group, `${id}-rest-unsigned-minus-axis-fixed-tip`, minusTip, axis.clone().negate(), commonLength(scale), color, commonRadius(scale));
+  arrowFixedTip(group, `${id}-rest-axis-pair-plus-fixed-tip-od2`, plusTip, axis, commonLength(scale), color, commonRadius(scale));
+  arrowFixedTip(group, `${id}-rest-axis-pair-minus-fixed-tip-od2`, minusTip, axis.clone().negate(), commonLength(scale), color, commonRadius(scale));
 }
 
 function buildLineStopOrLimit(group, id, frame, axisLabel, canvasAxis, scale, color, kind) {
   const axis = canvasAxis?.clone?.().normalize?.() || frame.pipeTangent.clone();
   const tip = frame.anchors.CIRCUM_BOT.clone();
   if (isSignedAxis(axisLabel)) {
-    arrowFixedTip(group, `${id}-${kind.toLowerCase()}-single-signed-axial-fixed-tip`, tip, axis, commonLength(scale), color, commonRadius(scale));
+    arrowFixedTip(group, `${id}-${kind.toLowerCase()}-single-signed-axial-fixed-tip-od2`, tip, axis, commonLength(scale), color, commonRadius(scale));
     return;
   }
-  arrowFixedTip(group, `${id}-${kind.toLowerCase()}-unsigned-plus-axial-fixed-tip`, tip, axis, commonLength(scale), color, commonRadius(scale));
-  arrowFixedTip(group, `${id}-${kind.toLowerCase()}-unsigned-minus-axial-fixed-tip`, tip, axis.clone().negate(), commonLength(scale), color, commonRadius(scale));
+  arrowFixedTip(group, `${id}-${kind.toLowerCase()}-axis-pair-plus-fixed-tip-od2`, tip, axis, commonLength(scale), color, commonRadius(scale));
+  arrowFixedTip(group, `${id}-${kind.toLowerCase()}-axis-pair-minus-fixed-tip-od2`, tip, axis.clone().negate(), commonLength(scale), color, commonRadius(scale));
 }
 
 function buildSpring(group, id, frame, scale, color) {
@@ -324,7 +364,7 @@ function buildSpring(group, id, frame, scale, color) {
   for (let i = 0; i < 7; i += 1) {
     const f = i / 6;
     const c = coilStart.clone().lerp(coilEnd, f);
-    torus(group, `${id}-spring-coil-only-${i + 1}`, c, UP, scale * 0.18, scale * 0.022, color);
+    torus(group, `${id}-spring-coil-only-od2-${i + 1}`, c, UP, scale * 0.18, scale * 0.022, color);
   }
 }
 
@@ -332,7 +372,7 @@ function buildAnchor(group, id, frame, scale, color) {
   const thickness = Math.max(scale * 0.12, frame.pipeRadius * 0.45);
   const start = frame.point.clone().add(frame.pipeTangent.clone().multiplyScalar(-thickness * 0.5));
   const end = frame.point.clone().add(frame.pipeTangent.clone().multiplyScalar(thickness * 0.5));
-  cylinderBetween(group, `${id}-anchor-flat-flow-blocking-plate`, start, end, Math.max(frame.pipeRadius * 1.75, scale * 0.34), color, 32);
+  cylinderBetween(group, `${id}-anchor-flat-flow-blocking-plate-od2`, start, end, Math.max(frame.pipeRadius * 1.75, scale * 0.34), color, 32);
 }
 
 function buildUnknown(group, id, frame, scale) {
@@ -374,8 +414,8 @@ export function applyBakedRestraintGlyph(object, comp = {}, options = {}) {
   sourceRecord.circumferenceAnchors = plainCircumferenceFrame(frame);
 
   const markerGroup = new THREE.Group();
-  markerGroup.name = `${sourceRecord.recordId}-restraint-${RESTRAINT_VISUAL_PROFILE.id}-${kind.toLowerCase()}-bm-cii-inputxml-basic-map`;
-  const renderGlyph = `baked-${RESTRAINT_VISUAL_PROFILE.id}-${kind.toLowerCase()}-bm-cii-inputxml-basic-map`;
+  markerGroup.name = `${sourceRecord.recordId}-restraint-${RESTRAINT_VISUAL_PROFILE.id}-${kind.toLowerCase()}-bm-cii-inputxml-basic-od2`;
+  const renderGlyph = `baked-${RESTRAINT_VISUAL_PROFILE.id}-${kind.toLowerCase()}-bm-cii-inputxml-basic-od2`;
   buildSymbolForKind(markerGroup, id, sourceRecord, frame, canvasAxis, scale, color);
 
   const glyphMeshes = [];
@@ -406,11 +446,13 @@ export function applyBakedRestraintGlyph(object, comp = {}, options = {}) {
     supportRecordId: sourceRecord.recordId,
     supportSymbolScale: scale,
     supportPipeRadius: pipeRadius,
+    bmCiiOdTouchRadius: pipeRadius,
+    bmCiiOdTouchDiameter: pipeRadius * 2,
     circumferenceAnchors: sourceRecord.circumferenceAnchors,
     renderGlyph,
     renderScale: scale,
     visualProfile: RESTRAINT_VISUAL_PROFILE.id,
-    glbShape: `support-reference-bm-cii-inputxml-basic-map-${kind.toLowerCase()}`,
+    glbShape: `support-reference-bm-cii-inputxml-basic-od2-${kind.toLowerCase()}`,
     glbSupportVisualProfile: RESTRAINT_VISUAL_PROFILE.id,
     bmCiiTrace: supportTraceFromRecord(sourceRecord, {
       renderGlyph,
@@ -418,11 +460,12 @@ export function applyBakedRestraintGlyph(object, comp = {}, options = {}) {
       visualProfile: RESTRAINT_VISUAL_PROFILE.id,
       circumferenceAnchors: sourceRecord.circumferenceAnchors,
       canvasAxis: { x: canvasAxis.x, y: canvasAxis.y, z: canvasAxis.z },
-      placementContract: 'bm-cii-inputxml-basic-type-map-kind-family-axis-orients-fixed-tip-no-transform',
+      placementContract: 'bm-cii-inputxml-basic-all-restraints-od2-touch-no-transform',
     }),
     bmCiiRestraintVisualProfile: visualProfileMetadata({ kind, source, axisLabel, scale, role: 'baked-object-root' }),
     supportSymbolContract: sourceRecord.supportSymbolContract,
-    supportPlacementContract: 'bm-cii-inputxml-basic-type-map-kind-family-axis-orients-fixed-tip-no-transform',
+    supportPlacementContract: 'bm-cii-inputxml-basic-all-restraints-od2-touch-no-transform',
+    odTouchContract: 'all-restraint-symbol-tips-and-contact-geometry-use-R=OD/2',
     directionalSupportEnhanced: true,
     directionalSupportSymbolCount: markerGroup.children.length,
     supportReferenceStyle: true,
