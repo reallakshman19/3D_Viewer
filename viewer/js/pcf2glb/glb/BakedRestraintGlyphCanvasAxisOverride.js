@@ -20,22 +20,10 @@ const Z_AXIS = new THREE.Vector3(0, 0, 1);
 const LAYER_SCHEMA = 'bm-cii-layer/v1';
 const RESTRAINT_SYMBOL_REVIEW_SCALE_MULTIPLIER = 3.0;
 
-function text(value) {
-  return String(value ?? '').trim();
-}
-
-function upper(value) {
-  return text(value).toUpperCase();
-}
-
-function number(value) {
-  const n = Number(value);
-  return Number.isFinite(n) ? n : null;
-}
-
-function attrsFrom(object, comp = {}) {
-  return { ...(comp.raw || {}), ...(comp.attributes || {}), ...(object?.userData || {}) };
-}
+function text(value) { return String(value ?? '').trim(); }
+function upper(value) { return text(value).toUpperCase(); }
+function number(value) { const n = Number(value); return Number.isFinite(n) ? n : null; }
+function attrsFrom(object, comp = {}) { return { ...(comp.raw || {}), ...(comp.attributes || {}), ...(object?.userData || {}) }; }
 
 function vectorFrom(value) {
   if (Array.isArray(value)) {
@@ -90,7 +78,6 @@ function pipeTangentFrom(attrs = {}, comp = {}, fallbackAxis = X_AXIS) {
     || vectorFrom(attrs.pipeDirectionGlb)
     || vectorFrom(attrs.centerlineDirection)
     || vectorFrom(attrs.componentAxis);
-
   if (tangent) return tangent.normalize();
   return fallbackAxis.clone().normalize();
 }
@@ -142,33 +129,15 @@ function arrowFixedTip(group, name, tip, outwardAxis, length, color, radius) {
   const arrowLength = delta.length();
   if (arrowLength < 1e-6) return null;
   const dir = delta.clone().normalize();
-  const headLength = Math.min(Math.max(radius * 5.0, arrowLength * 0.22), arrowLength * 0.42);
+  const headLength = Math.min(Math.max(radius * 5.0, arrowLength * 0.20), arrowLength * 0.42);
   const shaftEnd = tip.clone().sub(dir.clone().multiplyScalar(headLength));
   cylinderBetween(group, `${name}-shaft`, start, shaftEnd, radius, color, 14);
   const head = new THREE.Mesh(new THREE.ConeGeometry(radius * 3.8, headLength, 18), material(color));
-  head.name = `${name}-head`;
+  head.name = `${name}-head-fixed-tip`;
   head.position.copy(shaftEnd.clone().add(dir.clone().multiplyScalar(headLength * 0.5)));
   orientFromY(head, dir);
   group.add(head);
   return head;
-}
-
-function box(group, name, center, size, color, primaryAxis, lateralAxis) {
-  const mesh = new THREE.Mesh(new THREE.BoxGeometry(size.x, size.y, size.z), material(color));
-  mesh.name = name;
-  mesh.position.copy(center);
-  const x = primaryAxis.clone().normalize();
-  let z = lateralAxis.clone().normalize();
-  if (z.lengthSq() < EPS || Math.abs(z.dot(x)) > 0.96) {
-    z = new THREE.Vector3().crossVectors(x, UP);
-    if (z.lengthSq() < EPS) z = Z_AXIS.clone();
-    z.normalize();
-  }
-  let y = new THREE.Vector3().crossVectors(z, x).normalize();
-  if (y.dot(UP) < 0) y.negate();
-  mesh.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(x, y, z));
-  group.add(mesh);
-  return mesh;
 }
 
 function projectPerpendicular(vector, tangent) {
@@ -181,15 +150,12 @@ function makeCircumferenceFrame(center, pipeTangent, pipeRadius) {
   const point = center.clone();
   const T = pipeTangent?.clone?.().normalize?.() || X_AXIS.clone();
   if (T.lengthSq() < EPS) T.copy(X_AXIS);
-
   let top = projectPerpendicular(UP, T);
   if (!top) top = projectPerpendicular(X_AXIS, T) || projectPerpendicular(Z_AXIS, T) || X_AXIS.clone();
   top.normalize();
-
   let side = new THREE.Vector3().crossVectors(T, top);
   if (side.lengthSq() < EPS) side = projectPerpendicular(Z_AXIS, T) || Z_AXIS.clone();
   side.normalize();
-
   return {
     point,
     pipeTangent: T,
@@ -209,10 +175,7 @@ function makeCircumferenceFrame(center, pipeTangent, pipeRadius) {
   };
 }
 
-function plainVector(v) {
-  return [Number(v.x.toFixed(6)), Number(v.y.toFixed(6)), Number(v.z.toFixed(6))];
-}
-
+function plainVector(v) { return [Number(v.x.toFixed(6)), Number(v.y.toFixed(6)), Number(v.z.toFixed(6))]; }
 function plainCircumferenceFrame(frame) {
   return Object.fromEntries([
     ['supportPoint', plainVector(frame.point)],
@@ -262,7 +225,7 @@ function stampLayerMetadata(target, record, { scale, role }) {
     glbSupportVisualProfile: RESTRAINT_VISUAL_PROFILE.id,
     bmCiiRestraintVisualProfile: profile,
     supportReferenceStyle: true,
-    supportReferenceStyleV8CanvasAxis: true,
+    supportReferenceStyleV9FixedTipScale: true,
     supportGlyphRole: role,
     supportSymbolContract: record.supportSymbolContract,
     supportRecordId: record.recordId,
@@ -284,7 +247,7 @@ function stampGlyphMetadata(target, record, { scale, role, renderGlyph, canvasAx
         visualProfile: RESTRAINT_VISUAL_PROFILE.id,
         circumferenceAnchors: record.circumferenceAnchors || null,
         canvasAxis: canvasAxis ? { x: canvasAxis.x, y: canvasAxis.y, z: canvasAxis.z } : null,
-        placementContract: 'kind-decides-symbol-axis-decides-canvas-direction-tip-at-circumference',
+        placementContract: 'kind-decides-symbol-axis-decides-canvas-direction-fixed-tip-circumference',
       })
       : {
         entity: 'supportPart',
@@ -299,19 +262,14 @@ function stampGlyphMetadata(target, record, { scale, role, renderGlyph, canvasAx
   };
 }
 
-function buildCanvasAxisLineStop(group, id, frame, canvasAxis, scale, color) {
+function buildCanvasAxisLineStopOrLimit(group, id, frame, canvasAxis, scale, color, kind) {
   const tip = frame.anchors.CIRCUM_BOT.clone();
   const axis = canvasAxis.clone().normalize();
-  arrowFixedTip(group, `${id}-linestop-canvas-axis-positive-tip-circum-bot`, tip, axis, scale * 1.10, color, scale * 0.052);
-  arrowFixedTip(group, `${id}-linestop-canvas-axis-negative-tip-circum-bot`, tip, axis.clone().negate(), scale * 1.10, color, scale * 0.052);
-}
-
-function buildCanvasAxisLimit(group, id, frame, canvasAxis, scale, color) {
-  const tip = frame.anchors.CIRCUM_BOT.clone();
-  const axis = canvasAxis.clone().normalize();
-  arrowFixedTip(group, `${id}-limit-canvas-axis-tip-circum-bot`, tip, axis, scale * 1.12, color, scale * 0.042);
-  box(group, `${id}-limit-gap-tick-a`, tip.clone().add(axis.clone().multiplyScalar(scale * 0.26)).add(UP.clone().multiplyScalar(scale * 0.18)), new THREE.Vector3(scale * 0.040, scale * 0.28, scale * 0.16), color, axis, frame.side);
-  box(group, `${id}-limit-gap-tick-b`, tip.clone().add(axis.clone().multiplyScalar(scale * 0.36)).add(UP.clone().multiplyScalar(scale * 0.18)), new THREE.Vector3(scale * 0.040, scale * 0.28, scale * 0.16), color, axis, frame.side);
+  // KIND decides symbol family; X/Y/Z is only the converted canvas direction.
+  // 3x review scale lengthens the tail and thickens the arrow only. The cone
+  // apex/tip remains exactly fixed at the saved CIRCUM_BOT coordinate.
+  arrowFixedTip(group, `${id}-${kind.toLowerCase()}-canvas-axis-positive-tip-circum-bot`, tip, axis, scale * 1.10, color, scale * 0.052);
+  arrowFixedTip(group, `${id}-${kind.toLowerCase()}-canvas-axis-negative-tip-circum-bot`, tip, axis.clone().negate(), scale * 1.10, color, scale * 0.052);
 }
 
 function applyCanvasAxisLineStopLimit(object, comp = {}, options = {}) {
@@ -334,11 +292,10 @@ function applyCanvasAxisLineStopLimit(object, comp = {}, options = {}) {
   sourceRecord.circumferenceAnchors = plainCircumferenceFrame(frame);
 
   const markerGroup = new THREE.Group();
-  markerGroup.name = `${sourceRecord.recordId}-restraint-${RESTRAINT_VISUAL_PROFILE.id}-${kind.toLowerCase()}-canvas-axis`;
-  const renderGlyph = `baked-${RESTRAINT_VISUAL_PROFILE.id}-${kind.toLowerCase()}-canvas-axis`;
+  markerGroup.name = `${sourceRecord.recordId}-restraint-${RESTRAINT_VISUAL_PROFILE.id}-${kind.toLowerCase()}-canvas-axis-fixed-tip`;
+  const renderGlyph = `baked-${RESTRAINT_VISUAL_PROFILE.id}-${kind.toLowerCase()}-canvas-axis-fixed-tip`;
 
-  if (kind === 'LINESTOP') buildCanvasAxisLineStop(markerGroup, id, frame, canvasAxis, scale, color);
-  else buildCanvasAxisLimit(markerGroup, id, frame, canvasAxis, scale, color);
+  buildCanvasAxisLineStopOrLimit(markerGroup, id, frame, canvasAxis, scale, color, kind);
 
   const glyphMeshes = [];
   markerGroup.traverse((child) => { if (child.isMesh) glyphMeshes.push(child); });
@@ -368,7 +325,7 @@ function applyCanvasAxisLineStopLimit(object, comp = {}, options = {}) {
     renderGlyph,
     renderScale: scale,
     visualProfile: RESTRAINT_VISUAL_PROFILE.id,
-    glbShape: `support-reference-v8-canvas-axis-${kind.toLowerCase()}`,
+    glbShape: `support-reference-v9-fixed-tip-canvas-axis-${kind.toLowerCase()}`,
     glbSupportVisualProfile: RESTRAINT_VISUAL_PROFILE.id,
     bmCiiTrace: supportTraceFromRecord(sourceRecord, {
       renderGlyph,
@@ -376,15 +333,16 @@ function applyCanvasAxisLineStopLimit(object, comp = {}, options = {}) {
       visualProfile: RESTRAINT_VISUAL_PROFILE.id,
       circumferenceAnchors: sourceRecord.circumferenceAnchors,
       canvasAxis: { x: canvasAxis.x, y: canvasAxis.y, z: canvasAxis.z },
-      placementContract: 'kind-decides-symbol-axis-decides-canvas-direction-tip-at-circumference',
+      placementContract: 'kind-decides-symbol-axis-decides-canvas-direction-fixed-tip-circumference',
     }),
     bmCiiRestraintVisualProfile: visualProfileMetadata({ kind, source, axisLabel, scale, role: 'baked-object-root' }),
     supportSymbolContract: sourceRecord.supportSymbolContract || supportSymbolContractFor(kind),
-    supportPlacementContract: 'kind-decides-symbol-axis-decides-canvas-direction-tip-at-circumference',
+    supportPlacementContract: 'kind-decides-symbol-axis-decides-canvas-direction-fixed-tip-circumference',
     directionalSupportEnhanced: true,
     directionalSupportSymbolCount: markerGroup.children.length,
     supportReferenceStyle: true,
-    supportReferenceStyleV8CanvasAxis: true,
+    supportReferenceStyleV9FixedTipScale: true,
+    fixedTipScaleApplied: true,
     hiddenOriginalProxyMeshCount: hiddenOriginalProxyMeshes.length,
   };
   return object;
@@ -400,8 +358,6 @@ export function applyBakedRestraintGlyph(object, comp = {}, options = {}) {
     index: comp.supportRecordIndex ?? comp.recordIndex ?? comp.index ?? comp.supportIndex,
   });
 
-  // TYPE/KIND decides the symbol family. X/Y/Z is only converted to canvas axis
-  // and used as arrow orientation. Do not reinterpret axis labels as GUIDE or REST.
   if (sourceRecord.kind === 'LINESTOP' || sourceRecord.kind === 'LIMIT') {
     return applyCanvasAxisLineStopLimit(object, comp, options);
   }
