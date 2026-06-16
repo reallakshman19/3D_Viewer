@@ -36,6 +36,87 @@ function normalizeAxis(value) {
   return '';
 }
 
+function supportDetailFields(raw = {}, { source = '', node = '', kind = '', axis = '', recordId = '' } = {}) {
+  const type = firstNonEmpty(
+    raw.TYPE,
+    raw.Type,
+    raw.type,
+    raw.kind,
+    raw.supportKind,
+    raw.restraintType,
+    raw.CMPSUPTYPE,
+    raw.CAESAR_TYPE,
+    raw.caesar_type,
+    kind,
+  );
+  const stiffness = firstNonEmpty(
+    raw.STIFFNESS,
+    raw.Stiffness,
+    raw.stiffness,
+    raw.restraintStiffness,
+    raw.supportStiffness,
+    raw.K,
+    raw.k,
+  );
+  const gap = firstNonEmpty(
+    raw.GAP,
+    raw.Gap,
+    raw.gap,
+    raw.gapMm,
+    raw.restraintGap,
+    raw.supportGap,
+  );
+  const fricCoef = firstNonEmpty(
+    raw.FRIC_COEF,
+    raw.FricCoef,
+    raw.fricCoef,
+    raw.frictionCoefficient,
+    raw.FRICTION,
+    raw.friction,
+    raw.MU,
+    raw.mu,
+  );
+  const tag = firstNonEmpty(
+    raw.TAG,
+    raw.Tag,
+    raw.tag,
+    raw.supportTag,
+    raw.NodeName,
+    raw.nodeName,
+    raw.name,
+    recordId,
+  );
+  const guid = firstNonEmpty(
+    raw.GUID,
+    raw.Guid,
+    raw.guid,
+    raw.componentGuid,
+    raw.ComponentRefNo,
+    raw.componentRefNo,
+    raw.refNo,
+    raw.id,
+    recordId,
+  );
+
+  return {
+    TYPE: type,
+    STIFFNESS: stiffness,
+    GAP: gap,
+    FRIC_COEF: fricCoef,
+    TAG: tag,
+    GUID: guid,
+    supportType: type,
+    supportStiffness: stiffness,
+    supportGap: gap,
+    supportFricCoef: fricCoef,
+    supportTag: tag,
+    supportGuid: guid,
+    supportNode: node,
+    supportAxis: axis,
+    supportSource: source,
+  };
+}
+
 export function supportSymbolContractFor(kind) {
   const normalizedKind = normalizeKind(kind);
   if (normalizedKind === 'GUIDE') return 'guide-lateral-arrows-tip-at-od2';
@@ -69,6 +150,7 @@ export function normalizeSupportRecord(raw = {}, context = {}) {
     supportRecordIdOf({ source, index, node, kind, axis }),
   ));
   const layerIds = layerIdsForRestraintSupport({ source, kind, axisLabel: axis });
+  const details = supportDetailFields(raw, { source, node, kind, axis, recordId });
   return {
     schema: BM_CII_SUPPORT_RECORD_SCHEMA,
     recordId,
@@ -80,6 +162,7 @@ export function normalizeSupportRecord(raw = {}, context = {}) {
     visibleDefault: kind !== 'UNKNOWN',
     supportSymbolContract: supportSymbolContractFor(kind),
     layerIds,
+    details,
     raw,
   };
 }
@@ -105,6 +188,7 @@ export function supportTraceFromRecord(record = {}, extra = {}) {
     restraintAxis: record.axis,
     supportSymbolContract: record.supportSymbolContract,
     visibleDefault: record.visibleDefault,
+    ...(record.details || {}),
     ...extra,
   };
 }
