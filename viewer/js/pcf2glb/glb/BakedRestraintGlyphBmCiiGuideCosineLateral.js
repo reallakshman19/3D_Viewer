@@ -33,6 +33,43 @@ function vectorFrom(value, fallback = X_AXIS) {
   return fallback.clone().normalize();
 }
 
+function optionalVectorFrom(value) {
+  if (value instanceof THREE.Vector3) return value.lengthSq() > EPS ? value.clone().normalize() : null;
+  if (Array.isArray(value)) {
+    const v = new THREE.Vector3(Number(value[0]) || 0, Number(value[1]) || 0, Number(value[2]) || 0);
+    return v.lengthSq() > EPS ? v.normalize() : null;
+  }
+  if (typeof value === 'string') {
+    const parts = value.split(/[\s,;]+/).map(Number).filter(Number.isFinite);
+    if (parts.length >= 3) {
+      const v = new THREE.Vector3(parts[0], parts[1], parts[2]);
+      return v.lengthSq() > EPS ? v.normalize() : null;
+    }
+  }
+  if (value && typeof value === 'object') {
+    const v = new THREE.Vector3(Number(value.x) || 0, Number(value.y) || 0, Number(value.z) || 0);
+    return v.lengthSq() > EPS ? v.normalize() : null;
+  }
+  return null;
+}
+
+function rawCosineAxisFrom(object, comp = {}) {
+  const data = object?.userData || {};
+  const raw = { ...(comp.raw || {}), ...(comp.attributes || {}), ...(data.raw || {}) };
+  const x = number(raw.XCOSINE ?? raw.xcosine ?? raw.XCosine ?? raw.xcos ?? raw.XCOS ?? raw.cosineX ?? raw.CX, null);
+  const y = number(raw.YCOSINE ?? raw.ycosine ?? raw.YCosine ?? raw.ycos ?? raw.YCOS ?? raw.cosineY ?? raw.CY, null);
+  const z = number(raw.ZCOSINE ?? raw.zcosine ?? raw.ZCosine ?? raw.zcos ?? raw.ZCOS ?? raw.cosineZ ?? raw.CZ, null);
+  if ([x, y, z].every((v) => Number.isFinite(v))) {
+    const v = new THREE.Vector3(x, y, z);
+    if (v.lengthSq() > EPS) return v.normalize();
+  }
+  return optionalVectorFrom(raw.axis)
+    || optionalVectorFrom(raw.axisGlb)
+    || optionalVectorFrom(comp.axis)
+    || optionalVectorFrom(comp.axisGlb)
+    || optionalVectorFrom(data.restraintCosineAxis);
+}
+
 function projectPerpendicular(vector, tangent) {
   const v = vector?.clone?.().normalize?.();
   const t = tangent?.clone?.().normalize?.();
@@ -100,10 +137,13 @@ function removePreviousGuideGlyphs(object) {
 
 function guideLateralAxisFromCosine(object, comp = {}) {
   const data = object?.userData || {};
-  const cosineAxis = vectorFrom(
-    data.supportAxis || data.canvasAxis || data.restraintCosineAxis || data.axisGlb || comp.axisGlb || comp.axis || comp.raw?.axis,
-    Y_AXIS,
-  );
+  // GUIDE direction is primary from raw InputXML restraint cosine/axis.  Do not
+  // reuse already-normalized REST supportAxis/canvasAxis because that mixes the
+  // Y axis-restraint path with the GUIDE family path.
+  const cosineAxis = rawCosineAxisFrom(object, comp)
+    || optionalVectorFrom(data.restraintCosineAxis)
+    || optionalVectorFrom(comp.axis)
+    || Y_AXIS.clone();
   const pipeTangent = vectorFrom(
     data.pipeTangent || comp.pipeTangentGlb || comp.pipeTangent || comp.pipeAxis || comp.axisGlb,
     X_AXIS,
@@ -138,9 +178,9 @@ function addGuideCosineLateralGlyph(object, comp = {}) {
       ...(data || {}),
       supportKind: 'GUIDE',
       restraintAxis: data.restraintAxis || data.AXIS || comp.axisLabel || 'N/A',
-      supportSymbolContract: 'GUIDE=lateral-arrow-pair-from-cosine-axis',
+      supportSymbolContract: 'GUIDE=lateral-arrow-pair-from-raw-cosine-axis',
       guideLateralCosineAxis: { x: lateral.x, y: lateral.y, z: lateral.z },
-      guideLateralBasis: 'project-restraint-cosine-axis-perpendicular-to-pipe-tangent',
+      guideLateralBasis: 'raw-restraint-cosine-axis-projected-perpendicular-to-pipe-tangent',
       renderGlyph: 'baked-guide-cosine-lateral-inputxml-basic',
     };
   });
@@ -148,9 +188,9 @@ function addGuideCosineLateralGlyph(object, comp = {}) {
   object.userData = {
     ...data,
     supportKind: 'GUIDE',
-    supportSymbolContract: 'GUIDE=lateral-arrow-pair-from-cosine-axis',
+    supportSymbolContract: 'GUIDE=lateral-arrow-pair-from-raw-cosine-axis',
     guideLateralCosineAxis: { x: lateral.x, y: lateral.y, z: lateral.z },
-    guideLateralBasis: 'project-restraint-cosine-axis-perpendicular-to-pipe-tangent',
+    guideLateralBasis: 'raw-restraint-cosine-axis-projected-perpendicular-to-pipe-tangent',
     renderGlyph: 'baked-guide-cosine-lateral-inputxml-basic',
     directionalSupportSymbolCount: group.children.length,
   };
