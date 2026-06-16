@@ -13,6 +13,14 @@ function number(value, fallback = 0) {
   return Number.isFinite(n) ? n : fallback;
 }
 
+function firstFinitePositive(...values) {
+  for (const value of values) {
+    const n = Number(value);
+    if (Number.isFinite(n) && n > EPS) return n;
+  }
+  return null;
+}
+
 function vectorFrom(value, fallback = X_AXIS) {
   if (value instanceof THREE.Vector3) return value.clone().normalize();
   if (Array.isArray(value)) {
@@ -186,11 +194,29 @@ function guideLateralAxisFromCosine(object, comp = {}) {
   };
 }
 
+function pipeRadiusFromSupport(data = {}, comp = {}) {
+  const radius = firstFinitePositive(
+    data.supportPipeRadius,
+    data.pipeRadius,
+    data.radius,
+    comp.supportPipeRadius,
+    comp.pipeRadius,
+    comp.radius,
+  );
+  if (radius) return radius;
+  const od = firstFinitePositive(data.OutsideDiameter, data.outsideDiameter, data.OD, comp.OutsideDiameter, comp.outsideDiameter, comp.OD);
+  if (od) return od / 2;
+  const bore = firstFinitePositive(data.bore, data.BORE, comp.bore, comp.BORE);
+  return bore ? bore / 2 : 0.03015;
+}
+
 function addGuideCosineLateralGlyph(object, comp = {}) {
   const data = object?.userData || {};
   const guide = guideLateralAxisFromCosine(object, comp);
   const lateral = guide.axis.normalize();
-  const pipeRadius = Math.max(5, number(data.supportPipeRadius, number(comp.bore, 100) / 2));
+  // Do not apply a large minimum radius here.  GUIDE arrow tips must touch the
+  // pipe OD, so the radius is the actual rendered OD/2, not a symbol scale.
+  const pipeRadius = pipeRadiusFromSupport(data, comp);
   const scale = Math.max(28, number(data.renderScale, number(data.supportSymbolScale, pipeRadius * 3.0)));
   const length = scale * 0.64;
   const radius = scale * 0.044;
@@ -210,6 +236,7 @@ function addGuideCosineLateralGlyph(object, comp = {}) {
       ...(data || {}),
       supportKind: 'GUIDE',
       restraintAxis: data.restraintAxis || data.AXIS || comp.axisLabel || 'N/A',
+      supportPipeRadius: pipeRadius,
       supportSymbolContract: 'GUIDE=lateral-arrow-pair-from-restraint-cosine-axis-with-fixed-od-tips',
       guideLateralCosineAxis: { x: lateral.x, y: lateral.y, z: lateral.z },
       guideRestraintCosineAxis: { x: guide.cosineAxis.x, y: guide.cosineAxis.y, z: guide.cosineAxis.z },
@@ -225,6 +252,7 @@ function addGuideCosineLateralGlyph(object, comp = {}) {
   object.userData = {
     ...data,
     supportKind: 'GUIDE',
+    supportPipeRadius: pipeRadius,
     supportSymbolContract: 'GUIDE=lateral-arrow-pair-from-restraint-cosine-axis-with-fixed-od-tips',
     guideLateralCosineAxis: { x: lateral.x, y: lateral.y, z: lateral.z },
     guideRestraintCosineAxis: { x: guide.cosineAxis.x, y: guide.cosineAxis.y, z: guide.cosineAxis.z },
