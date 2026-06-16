@@ -47,12 +47,67 @@ function normalizeKindFromRaw(raw = {}) {
   return kind;
 }
 
-function normalizeAxis(value) {
-  const axis = normalizeRestraintAxisLabel(value);
-  if (axis.includes('X')) return axis.startsWith('-') ? '-X' : '+X';
-  if (axis.includes('Y')) return axis.startsWith('-') ? '-Y' : '+Y';
-  if (axis.includes('Z')) return axis.startsWith('-') ? '-Z' : '+Z';
-  return '';
+function numericType(raw = {}) {
+  const n = Number(firstNonEmpty(raw.caesar_type, raw.CAESAR_TYPE, raw.TYPE, raw.Type, raw.restraintNumericType));
+  return Number.isFinite(n) ? n : null;
+}
+
+function vectorAxisLabel(value) {
+  if (!Array.isArray(value)) return '';
+  const nums = value.map(Number);
+  const abs = nums.map((n) => Math.abs(Number.isFinite(n) ? n : 0));
+  const max = Math.max(...abs);
+  if (max <= 0) return '';
+  const index = abs.indexOf(max);
+  const letter = ['X', 'Y', 'Z'][index];
+  // Positive cosine values in InputXML are not automatically directional "+".
+  // A negative cosine is physically signed and is retained as -X/-Y/-Z.
+  return nums[index] < 0 ? `-${letter}` : letter;
+}
+
+function rawAxisLabel(value) {
+  if (Array.isArray(value)) return vectorAxisLabel(value);
+  if (value && typeof value === 'object') return vectorAxisLabel([value.x, value.y, value.z]);
+  const raw = upper(value);
+  if (!raw) return '';
+  if (/^[+-][XYZ]$/.test(raw)) return raw;
+  if (/^[XYZ]$/.test(raw)) return raw;
+  if (raw.includes('-X')) return '-X';
+  if (raw.includes('+X')) return '+X';
+  if (raw.includes('-Y')) return '-Y';
+  if (raw.includes('+Y')) return '+Y';
+  if (raw.includes('-Z')) return '-Z';
+  if (raw.includes('+Z')) return '+Z';
+  if (raw.includes('DX') || raw.includes('X')) return 'X';
+  if (raw.includes('DY') || raw.includes('Y')) return 'Y';
+  if (raw.includes('DZ') || raw.includes('Z')) return 'Z';
+  return normalizeRestraintAxisLabel(raw).replace(/^\+/, '');
+}
+
+function normalizeAxis(value, raw = {}, kind = '') {
+  let axis = rawAxisLabel(value);
+  const base = axis.replace(/^[+-]/, '');
+  const caesarType = numericType(raw);
+  const normalizedKind = normalizeKind(kind || raw.kind || raw.supportKind || raw.restraintType);
+
+  // BM_CII InputXML-basic primary rule:
+  // X/Y/Z from positive cosines are unsigned unless the CAESAR type is a
+  // directional/single-axis type. This prevents every X/Y/Z restraint from being
+  // drawn as a one-way +X/+Y/+Z arrow.
+  // Examples from user benchmark:
+  //   TYPE 3 + ZCOSINE=1  => Z  (not +Z)
+  //   TYPE 1 + XCOSINE=1  => X  (not +X)
+  //   TYPE 2 + YCOSINE=1  => +Y (project exception)
+  //   TYPE 18 + ZCOSINE=1 => +Z
+  if (!axis.startsWith('+') && !axis.startsWith('-')) {
+    if (caesarType === 18 && base === 'Z') axis = '+Z';
+    else if (caesarType === 2 && base === 'Y') axis = '+Y';
+  }
+
+  // Springs/hangers retain their signed vector when the source vector is negative.
+  // They are coil-only visually, so the sign is metadata/orientation only.
+  if (!axis && (normalizedKind === 'SPRING' || normalizedKind === 'HANGER')) return 'Y';
+  return axis;
 }
 
 function supportDetailFields(raw = {}, { source = '', node = '', kind = '', axis = '', recordId = '' } = {}) {
@@ -150,7 +205,7 @@ export function supportSymbolContractFor(kind) {
 export function supportRecordIdOf({ source = 'inputxml', index = 0, node = '', kind = 'UNKNOWN', axis = '' } = {}) {
   const indexText = String(Number(index) > 0 ? Number(index) : 0).padStart(2, '0');
   const normalizedKind = normalizeKind(kind);
-  const normalizedAxis = normalizeAxis(axis).replace(/^\+/, '') || 'NA';
+  const normalizedAxis = rawAxisLabel(axis) || 'NA';
   return `${normalizedSource(source)}:${indexText}:node:${text(node) || 'NA'}:kind:${normalizedKind}:axis:${normalizedAxis}`;
 }
 
@@ -159,7 +214,7 @@ export function normalizeSupportRecord(raw = {}, context = {}) {
   const index = Number(context.index ?? raw.index ?? raw.recordIndex ?? raw.supportIndex ?? 0) || 0;
   const node = text(firstNonEmpty(raw.node, raw.nodeNumber, raw.NodeNumber, raw.supportNode, raw.sourceNode, raw.CAESAR_NODE));
   const kind = normalizeKindFromRaw(raw);
-  const axis = normalizeAxis(firstNonEmpty(raw.axis, raw.axisGlb, raw.direction, raw.restraintAxis, raw.supportAxis, raw.SUPPORT_AXIS, raw.SUPPORT_DIRECTION, raw.AXIS, raw.Direction));
+  const axis = normalizeAxis(firstNonEmpty(raw.axis, raw.axisGlb, raw.direction, raw.restraintAxis, raw.supportAxis, raw.SUPPORT_AXIS, raw.SUPPORT_DIRECTION, raw.AXIS, raw.Direction), raw, kind);
   const recordId = text(firstNonEmpty(
     raw.recordId,
     raw.supportRecordId,
