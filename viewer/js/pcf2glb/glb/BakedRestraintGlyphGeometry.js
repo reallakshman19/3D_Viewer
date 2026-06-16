@@ -18,6 +18,7 @@ const X_AXIS = new THREE.Vector3(1, 0, 0);
 const Y_AXIS = new THREE.Vector3(0, 1, 0);
 const Z_AXIS = new THREE.Vector3(0, 0, 1);
 const LAYER_SCHEMA = 'bm-cii-layer/v1';
+const RESTRAINT_SYMBOL_REVIEW_SCALE_MULTIPLIER = 3.0;
 
 function text(value) {
   return String(value ?? '').trim();
@@ -107,7 +108,8 @@ function pipeRadiusFor(comp = {}, attrs = {}) {
 function supportScaleFor(comp = {}, attrs = {}, options = {}) {
   const bore = number(comp.bore ?? attrs.bore ?? attrs.BORE ?? attrs.DIAMETER ?? attrs.OutsideDiameter) || 100;
   const multiplier = number(options.supportSymbolScale) || number(options.restraintSymbolScale) || 0.95;
-  return Math.max(28, Math.min(190, bore * multiplier));
+  const baseScale = Math.max(28, Math.min(190, bore * multiplier));
+  return baseScale * RESTRAINT_SYMBOL_REVIEW_SCALE_MULTIPLIER;
 }
 
 function sourceOf(attrs = {}, comp = {}, options = {}) {
