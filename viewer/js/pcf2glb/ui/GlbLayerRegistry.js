@@ -2,8 +2,101 @@ function userDataOf(object) {
   return object?.userData || {};
 }
 
+function layerKey(value = '') {
+  return String(value || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[_\s/-]+/g, '.');
+}
+
+const BARE_PLANT_LAYER_ALIASES = new Map([
+  ['pipe', 'plant.pipe'],
+  ['pipes', 'plant.pipe'],
+  ['bend', 'plant.bend'],
+  ['bends', 'plant.bend'],
+  ['elbow', 'plant.bend'],
+  ['elbows', 'plant.bend'],
+  ['pipe.trimmed.for.bend', 'plant.pipe_trimmed_for_bend'],
+  ['pipe.trimmed.for.bends', 'plant.pipe_trimmed_for_bend'],
+  ['pipe.trimmed.for.bend', 'plant.pipe_trimmed_for_bend'],
+  ['pipe.trimmed', 'plant.pipe_trimmed_for_bend'],
+  ['pipe_trimmed_for_bend', 'plant.pipe_trimmed_for_bend'],
+  ['pipe.trimmed.for.bend', 'plant.pipe_trimmed_for_bend'],
+  ['flange', 'plant.flange'],
+  ['flanges', 'plant.flange'],
+  ['flange.pair', 'plant.flange_pair'],
+  ['flangepair', 'plant.flange_pair'],
+  ['valve', 'plant.valve'],
+  ['valves', 'plant.valve'],
+  ['valve.flanged', 'plant.valve_flanged'],
+  ['valveflanged', 'plant.valve_flanged'],
+  ['rigid', 'plant.rigid'],
+  ['rigids', 'plant.rigid'],
+  ['rigid.unspecified', 'plant.rigid_unspecified'],
+  ['rigidunspecified', 'plant.rigid_unspecified'],
+  ['olet', 'plant.olet'],
+  ['olets', 'plant.olet'],
+  ['tee', 'plant.tee_olet'],
+  ['tee.olet', 'plant.tee_olet'],
+  ['teeolet', 'plant.tee_olet'],
+  ['reducer', 'plant.reducer'],
+  ['reducers', 'plant.reducer'],
+  ['cap', 'plant.cap'],
+  ['caps', 'plant.cap'],
+  ['terminal', 'plant.cap'],
+]);
+
+const BARE_RESTRAINT_LAYER_ALIASES = new Map([
+  ['restraints', 'plant.restraints'],
+  ['support', 'plant.restraints'],
+  ['supports', 'plant.restraints'],
+  ['support.restraints', 'plant.restraints'],
+  ['inputxml', 'restraints.inputxml'],
+  ['input.xml', 'restraints.inputxml'],
+  ['isonote', 'restraints.isonote'],
+  ['iso.note', 'restraints.isonote'],
+  ['rest', 'restraints.rest'],
+  ['guide', 'restraints.guide'],
+  ['line.stop', 'restraints.linestop'],
+  ['linestop', 'restraints.linestop'],
+  ['limit', 'restraints.limit'],
+  ['spring', 'restraints.spring'],
+  ['hanger', 'restraints.hanger'],
+  ['anchor', 'restraints.anchor'],
+  ['unknown', 'restraints.unknown'],
+  ['unknown.type0', 'restraints.unknown'],
+  ['type0', 'restraints.unknown'],
+]);
+
+function canonicalLayerId(rawId = '') {
+  const id = String(rawId || '').trim();
+  if (!id) return '';
+  const key = layerKey(id);
+
+  if (key.startsWith('plant.')) return key;
+  if (key.startsWith('restraints.')) return key.replace('restraints.line.stop', 'restraints.linestop');
+  if (key.startsWith('annotation.')) return key;
+  if (key.startsWith('axis.')) return key;
+  if (key.startsWith('source.')) return key;
+  if (key.startsWith('debug.')) return key;
+
+  if (BARE_PLANT_LAYER_ALIASES.has(key)) return BARE_PLANT_LAYER_ALIASES.get(key);
+  if (BARE_RESTRAINT_LAYER_ALIASES.has(key)) return BARE_RESTRAINT_LAYER_ALIASES.get(key);
+
+  return id;
+}
+
 function normalizeLayerIds(ids) {
-  return Array.isArray(ids) ? ids.map(String).filter(Boolean) : [];
+  if (!Array.isArray(ids)) return [];
+  const out = [];
+  const seen = new Set();
+  for (const rawId of ids) {
+    const id = canonicalLayerId(rawId);
+    if (!id || seen.has(id)) continue;
+    seen.add(id);
+    out.push(id);
+  }
+  return out;
 }
 
 export function layerIdsOf(object) {
@@ -26,9 +119,13 @@ function isDebugLayerId(id = '') {
 }
 
 function normalizedDefaultVisible(layer = {}) {
-  const id = String(layer.id || '');
+  const id = canonicalLayerId(layer.id || '');
   if (!id) return false;
-  if (id === 'restraints.unknown') return false;
+
+  // Native Basic GLB-PCF default review mode must match direct GLB viewing:
+  // plant geometry ON, support/annotation/debug layers OFF until explicitly enabled.
+  if (id === 'plant.restraints') return false;
+  if (id.startsWith('restraints.')) return false;
   if (id === 'plant.annotations') return false;
   if (isAnnotationLayerId(id)) return false;
   if (isDebugLayerId(id)) return false;
@@ -36,12 +133,12 @@ function normalizedDefaultVisible(layer = {}) {
 }
 
 function normalizeManifestLayer(layer = {}) {
-  const id = String(layer.id || '').trim();
+  const id = canonicalLayerId(layer.id || '');
   if (!id) return null;
   return {
     ...layer,
     id,
-    label: layer.label || labelFromLayerId(id),
+    label: labelFromLayerId(id),
     // Always derive the group from the layer id for known BM_CII layers. Older
     // generated GLBs sometimes stamped plant geometry with the support group,
     // which made Pipe/Bend/Valve/Flange appear under Supports / Restraints.
@@ -61,7 +158,7 @@ export function normalizeLayerManifest(manifest = {}) {
   }
   return {
     ...manifest,
-    schema: manifest.schema || 'bm-cii-layer-manifest/normalized-v1',
+    schema: manifest.schema || 'bm-cii-layer-manifest/normalized-v2-canonical',
     layers,
   };
 }
@@ -81,7 +178,7 @@ export function layerManifestOf(gltfOrScene) {
   });
   if (ids.size > 0) {
     return normalizeLayerManifest({
-      schema: 'bm-cii-layer-manifest/generated-from-node-layers-v1',
+      schema: 'bm-cii-layer-manifest/generated-from-node-layers-v2-canonical',
       layers: Array.from(ids).sort().map((id) => ({
         id,
         label: labelFromLayerId(id),
@@ -144,22 +241,22 @@ export function isObjectVisibleByLayerState(object, state = {}) {
   // restraint sublayers even if a generated GLB forgot to include plant.restraints
   // on an individual support mesh.
   if (isRestraintObject(ids, meta)) {
-    if (state['plant.restraints'] === false) return false;
+    if (state['plant.restraints'] !== true) return false;
 
     const hasInputXml = hasLayer(ids, 'restraints.inputxml') || meta.source === 'inputxml';
     const hasIsonote = hasLayer(ids, 'restraints.isonote') || meta.source === 'isonote';
-    if (hasInputXml && state['restraints.inputxml'] === false) return false;
-    if (hasIsonote && state['restraints.isonote'] === false) return false;
+    if (hasInputXml && state['restraints.inputxml'] !== true) return false;
+    if (hasIsonote && state['restraints.isonote'] !== true) return false;
 
     const subtypeLayers = Array.from(ids).filter((id) => (
       id.startsWith('restraints.')
       && id !== 'restraints.inputxml'
       && id !== 'restraints.isonote'
     ));
-    for (const id of subtypeLayers) if (state[id] === false) return false;
+    for (const id of subtypeLayers) if (state[id] !== true) return false;
 
     const axisLayers = Array.from(ids).filter((id) => id.startsWith('axis.'));
-    for (const id of axisLayers) if (state[id] === false) return false;
+    for (const id of axisLayers) if (state[id] !== true) return false;
 
     return true;
   }
@@ -168,10 +265,10 @@ export function isObjectVisibleByLayerState(object, state = {}) {
   // default-off in the normalized manifest, but when enabled the sublayers are
   // still independent and predictable.
   if (isAnnotationObject(ids, meta)) {
-    if (state['plant.annotations'] === false) return false;
-    if (state['annotation.all'] === false) return false;
+    if (state['plant.annotations'] !== true) return false;
+    if (state['annotation.all'] !== true) return false;
     for (const id of ids) {
-      if (id.startsWith('annotation.') && id !== 'annotation.all' && state[id] === false) return false;
+      if (id.startsWith('annotation.') && id !== 'annotation.all' && state[id] !== true) return false;
     }
     return true;
   }
@@ -190,7 +287,16 @@ export function applyLayerState(scene, state = {}) {
 }
 
 export function labelFromLayerId(id = '') {
-  const tail = String(id).split('.').pop() || id;
+  const value = canonicalLayerId(id);
+  if (value === 'plant.pipe_trimmed_for_bend') return 'Pipe Trimmed For Bend';
+  if (value === 'plant.flange_pair') return 'Flange Pair';
+  if (value === 'plant.valve_flanged') return 'Valve Flanged';
+  if (value === 'plant.rigid_unspecified') return 'Rigid Unspecified';
+  if (value === 'plant.tee_olet') return 'Tee / Olet';
+  if (value === 'restraints.inputxml') return 'InputXML';
+  if (value === 'restraints.isonote') return 'ISONOTE';
+  if (value === 'restraints.linestop') return 'LINESTOP';
+  const tail = String(value).split('.').pop() || value;
   return tail
     .replace(/_/g, ' ')
     .replace(/\b\w/g, (m) => m.toUpperCase())
@@ -201,7 +307,7 @@ export function labelFromLayerId(id = '') {
 }
 
 export function groupFromLayerId(id = '', fallback = 'Layers') {
-  const value = String(id || '');
+  const value = canonicalLayerId(id);
   if (value === 'plant.restraints') return 'Supports / Restraints';
   if (value === 'plant.annotations') return 'Annotations';
   if (value.startsWith('plant.')) return 'Plant Geometry';
@@ -238,14 +344,15 @@ function escapeHtml(value) {
 
 function sortGroupLayers(groupLayers = []) {
   const order = [
-    'plant.pipe', 'plant.bend', 'plant.valve', 'plant.flange', 'plant.flange_pair', 'plant.tee_olet', 'plant.rigid', 'plant.olet', 'plant.other',
+    'plant.pipe', 'plant.bend', 'plant.pipe_trimmed_for_bend', 'plant.valve', 'plant.valve_flanged', 'plant.flange', 'plant.flange_pair', 'plant.tee_olet', 'plant.rigid', 'plant.rigid_unspecified', 'plant.olet', 'plant.reducer', 'plant.cap', 'plant.other',
     'plant.restraints', 'restraints.inputxml', 'restraints.isonote', 'restraints.rest', 'restraints.guide', 'restraints.linestop', 'restraints.limit', 'restraints.anchor', 'restraints.hanger', 'restraints.spring', 'restraints.unknown',
     'plant.annotations', 'annotation.all', 'annotation.callout', 'annotation.node_labels', 'annotation.isonote',
     'axis.x', 'axis.y', 'axis.z',
   ];
   const weight = (id) => {
-    const idx = order.indexOf(id);
-    return idx >= 0 ? idx : order.length + String(id).localeCompare('');
+    const canonical = canonicalLayerId(id);
+    const idx = order.indexOf(canonical);
+    return idx >= 0 ? idx : order.length + String(canonical).localeCompare('');
   };
   return [...groupLayers].sort((a, b) => weight(a.id) - weight(b.id));
 }
@@ -298,18 +405,22 @@ export function mountLayerPanel(container, scene, manifest = layerManifestOf(sce
     input.addEventListener('change', () => {
       state[input.dataset.layerId] = input.checked;
       apply();
-      onChange?.({ state, layerId: input.dataset.layerId, checked: input.checked });
+      onChange?.({ layerId: input.dataset.layerId, checked: input.checked, state: { ...state } });
     });
   });
 
-  container.querySelector('[data-layer-action="all"]')?.addEventListener('click', () => {
-    const next = Object.values(state).some((v) => v === false);
-    for (const id of Object.keys(state)) state[id] = next;
-    container.querySelectorAll('input[data-layer-id]').forEach((input) => { input.checked = next; });
+  const allBtn = container.querySelector('[data-layer-action="all"]');
+  allBtn?.addEventListener('click', () => {
+    const inputs = Array.from(container.querySelectorAll('input[data-layer-id]'));
+    const next = inputs.some((input) => !input.checked);
+    inputs.forEach((input) => {
+      input.checked = next;
+      state[input.dataset.layerId] = next;
+    });
     apply();
-    onChange?.({ state, layerId: '*', checked: next });
+    onChange?.({ layerId: '*', checked: next, state: { ...state } });
   });
 
   apply();
-  return { state, manifest: normalizedManifest, apply };
+  return { state, apply, manifest: normalizedManifest };
 }
