@@ -84,6 +84,23 @@ function rawAxisLabel(value) {
   return normalizeRestraintAxisLabel(raw).replace(/^\+/, '');
 }
 
+function cosineAxisFromRaw(raw = {}, fallbackAxis = '') {
+  const x = Number(firstNonEmpty(raw.XCOSINE, raw.xcosine, raw.XCosine, raw.xcos, raw.XCOS, raw.cosineX, raw.CX));
+  const y = Number(firstNonEmpty(raw.YCOSINE, raw.ycosine, raw.YCosine, raw.ycos, raw.YCOS, raw.cosineY, raw.CY));
+  const z = Number(firstNonEmpty(raw.ZCOSINE, raw.zcosine, raw.ZCosine, raw.zcos, raw.ZCOS, raw.cosineZ, raw.CZ));
+  if ([x, y, z].some(Number.isFinite)) {
+    const vals = [Number.isFinite(x) ? x : 0, Number.isFinite(y) ? y : 0, Number.isFinite(z) ? z : 0];
+    const abs = vals.map((n) => Math.abs(n));
+    const max = Math.max(...abs);
+    if (max > 0) {
+      const i = abs.indexOf(max);
+      const letter = ['X', 'Y', 'Z'][i];
+      return vals[i] < 0 ? `-${letter}` : letter;
+    }
+  }
+  return rawAxisLabel(fallbackAxis) || 'NA';
+}
+
 function normalizeAxis(value, raw = {}, kind = '') {
   let axis = rawAxisLabel(value);
   const base = axis.replace(/^[+-]/, '');
@@ -105,45 +122,55 @@ function normalizeAxis(value, raw = {}, kind = '') {
 }
 
 function bmCiiInputXmlBasicOverride({ source = '', index = 0, node = '', caesarType = null, kind = '', axis = '' } = {}) {
-  if (source !== 'inputxml') return { kind, axis, typeLabel: '', bmCiiItem: '' };
+  if (source !== 'inputxml') return { kind, axis, typeLabel: '', bmCiiItem: '', family: '' };
   const nodeText = text(node);
   const type = Number(caesarType);
 
   // BM_CII benchmark-specific classification supplied by user.
-  // IMPORTANT: keep BM_CII item, visual family, and axis as separate fields.
-  // Do not combine labels such as "+Y / GUIDE", "LIM / X", "HANGER / Y", or
-  // "GUIDE / Y".  The slash form is ambiguous and caused review confusion.
+  // IMPORTANT: keep BM_CII item, engineering family, render kind, pipe-axis
+  // basis, and cosine direction as separate fields.
   //
-  // BM_CII item  = what the benchmark row says (+Y, X, Z, LIM, HANGER, GUIDE, ANC)
-  // kind         = visual family (GUIDE, REST, LIMIT, LINESTOP, SPRING, ANCHOR)
-  // axis         = cosine/axis direction used only to orient that family.
+  // BM_CII item   = what the benchmark row says (+Y, X, Z, LIM, HANGER, GUIDE, ANC)
+  // family        = engineering meaning shown in audit/property panels
+  // kind          = renderer symbol family used internally
+  // axis          = InputXML axis label used to orient the symbol
   if (['10', '190', '240'].includes(nodeText)) {
-    return { kind: 'ANCHOR', axis: 'NA', typeLabel: 'ANCHOR', bmCiiItem: 'ANC' };
+    return { kind: 'ANCHOR', axis: 'NA', typeLabel: 'ANCHOR', bmCiiItem: 'ANC', family: 'ANCHOR' };
   }
-  if (nodeText === '35' && type === 17) return { kind: 'GUIDE', axis: '+Y', typeLabel: 'GUIDE', bmCiiItem: '+Y' };
-  if (nodeText === '35' && type === 1) return { kind: 'REST', axis: 'X', typeLabel: 'REST', bmCiiItem: 'X' };
-  if (nodeText === '35' && type === 3) return { kind: 'REST', axis: 'Z', typeLabel: 'REST', bmCiiItem: 'Z' };
-  if (nodeText === '130' && type === 18) return { kind: 'LINESTOP', axis: '+Z', typeLabel: 'LINESTOP', bmCiiItem: '+Z' };
-  if (nodeText === '205' && type === 10) return { kind: 'LIMIT', axis: axis || 'X', typeLabel: 'LIMIT', bmCiiItem: 'LIM' };
-  if (nodeText === '205' && type === 2) return { kind: 'REST', axis: 'Y', typeLabel: 'REST', bmCiiItem: 'Y' };
-  if (nodeText === '205' && (kind === 'SPRING' || kind === 'HANGER')) return { kind: 'SPRING', axis: 'Y', typeLabel: 'HANGER', bmCiiItem: 'HANGER' };
-  if (nodeText === '255' && type === 17) return { kind: 'GUIDE', axis: axis || 'Y', typeLabel: 'GUIDE', bmCiiItem: 'GUIDE' };
-  if (nodeText === '255' && type === 7) return { kind: 'REST', axis: '+Y', typeLabel: 'REST', bmCiiItem: '+Y' };
-  return { kind, axis, typeLabel: normalizeKind(kind), bmCiiItem: '' };
+  if (nodeText === '35' && type === 17) return { kind: 'GUIDE', axis: '+Y', typeLabel: 'GUIDE', bmCiiItem: '+Y', family: 'GUIDE' };
+  if (nodeText === '35' && type === 1) return { kind: 'REST', axis: 'X', typeLabel: 'AXIS RESTRAINT', bmCiiItem: 'X', family: 'AXIS RESTRAINT' };
+  if (nodeText === '35' && type === 3) return { kind: 'REST', axis: 'Z', typeLabel: 'AXIS RESTRAINT', bmCiiItem: 'Z', family: 'AXIS RESTRAINT' };
+  if (nodeText === '130' && type === 18) return { kind: 'LINESTOP', axis: '+Z', typeLabel: 'LINESTOP / DIRECTIONAL STOP', bmCiiItem: '+Z', family: 'LINESTOP / DIRECTIONAL STOP' };
+  if (nodeText === '205' && type === 10) return { kind: 'LIMIT', axis: axis || 'X', typeLabel: 'LIMIT', bmCiiItem: 'LIM', family: 'LIMIT' };
+  if (nodeText === '205' && type === 2) return { kind: 'REST', axis: 'Y', typeLabel: 'AXIS RESTRAINT', bmCiiItem: 'Y', family: 'AXIS RESTRAINT' };
+  if (nodeText === '205' && (kind === 'SPRING' || kind === 'HANGER')) return { kind: 'SPRING', axis: 'Y', typeLabel: 'HANGER / SPRING', bmCiiItem: 'HANGER', family: 'HANGER / SPRING' };
+  if (nodeText === '255' && type === 17) return { kind: 'GUIDE', axis: axis || 'Y', typeLabel: 'GUIDE', bmCiiItem: 'GUIDE', family: 'GUIDE' };
+  if (nodeText === '255' && type === 7) return { kind: 'REST', axis: '+Y', typeLabel: 'AXIS RESTRAINT / DIRECTIONAL', bmCiiItem: '+Y', family: 'AXIS RESTRAINT / DIRECTIONAL' };
+  return { kind, axis, typeLabel: normalizeKind(kind), bmCiiItem: '', family: '' };
 }
 
-function supportDetailFields(raw = {}, { source = '', node = '', kind = '', axis = '', recordId = '', typeLabel = '', bmCiiItem = '' } = {}) {
-  const type = firstNonEmpty(
+function defaultPipeAxisBasisFor({ kind = '', family = '', axis = '' } = {}) {
+  const normalizedKind = normalizeKind(kind);
+  const familyText = upper(family);
+  if (normalizedKind === 'ANCHOR') return 'AXIAL / FLOW-BLOCKING';
+  if (normalizedKind === 'GUIDE') return 'LATERAL';
+  if (normalizedKind === 'LINESTOP' || normalizedKind === 'LIMIT') return 'AXIAL';
+  if (normalizedKind === 'SPRING' || normalizedKind === 'HANGER') return 'LATERAL / VERTICAL HANGER';
+  if (familyText.includes('AXIS RESTRAINT')) return 'PIPE-RELATIVE AXIS PAIR';
+  return axis ? 'PIPE-RELATIVE AXIS' : 'N/A';
+}
+
+function supportDetailFields(raw = {}, { source = '', node = '', kind = '', axis = '', recordId = '', typeLabel = '', bmCiiItem = '', family = '', cosineAxis = '', pipeAxisBasis = '' } = {}) {
+  const renderKind = firstNonEmpty(kind, raw.kind, raw.supportKind, raw.restraintType, raw.CMPSUPTYPE);
+  const engineeringFamily = firstNonEmpty(
+    family,
+    raw.engineeringFamily,
+    raw.supportEngineeringFamily,
+    raw.family,
     typeLabel,
     raw.visualFamily,
     raw.supportFamily,
-    kind,
-    raw.kind,
-    raw.supportKind,
-    raw.restraintType,
-    raw.CMPSUPTYPE,
-    raw.CAESAR_TYPE,
-    raw.caesar_type,
+    renderKind,
   );
   const stiffness = firstNonEmpty(
     raw.STIFFNESS,
@@ -195,16 +222,26 @@ function supportDetailFields(raw = {}, { source = '', node = '', kind = '', axis
   );
 
   return {
-    TYPE: type,
+    TYPE: engineeringFamily,
+    FAMILY: engineeringFamily,
+    RENDER_KIND: renderKind,
     BM_CII_ITEM: firstNonEmpty(bmCiiItem, raw.bmCiiItem, raw.BM_CII_ITEM),
+    AXIS_PIPE_BASIS: firstNonEmpty(pipeAxisBasis, raw.axisPipeBasis, raw.AXIS_PIPE_BASIS, defaultPipeAxisBasisFor({ kind, family: engineeringFamily, axis })),
+    COSINE: firstNonEmpty(cosineAxis, raw.cosineAxis, raw.COSINE, cosineAxisFromRaw(raw, axis)),
+    AXIS_LABEL: axis || 'N/A',
     STIFFNESS: stiffness,
     GAP: gap,
     FRIC_COEF: fricCoef,
     TAG: tag,
     GUID: guid,
-    supportType: type,
-    supportFamily: type,
+    supportType: engineeringFamily,
+    supportFamily: engineeringFamily,
+    supportEngineeringFamily: engineeringFamily,
+    supportRenderKind: renderKind,
     supportBmCiiItem: firstNonEmpty(bmCiiItem, raw.bmCiiItem, raw.BM_CII_ITEM),
+    supportAxisPipeBasis: firstNonEmpty(pipeAxisBasis, raw.axisPipeBasis, raw.AXIS_PIPE_BASIS, defaultPipeAxisBasisFor({ kind, family: engineeringFamily, axis })),
+    supportCosine: firstNonEmpty(cosineAxis, raw.cosineAxis, raw.COSINE, cosineAxisFromRaw(raw, axis)),
+    supportAxisLabel: axis || 'N/A',
     supportStiffness: stiffness,
     supportGap: gap,
     supportFricCoef: fricCoef,
@@ -219,7 +256,7 @@ function supportDetailFields(raw = {}, { source = '', node = '', kind = '', axis
 export function supportSymbolContractFor(kind) {
   const normalizedKind = normalizeKind(kind);
   if (normalizedKind === 'GUIDE') return 'guide-lateral-arrows-tip-at-od2';
-  if (normalizedKind === 'REST' || normalizedKind === 'HOLDDOWN' || normalizedKind === 'SHOE') return 'rest-axis-arrow-tip-at-od2';
+  if (normalizedKind === 'REST' || normalizedKind === 'HOLDDOWN' || normalizedKind === 'SHOE') return 'axis-restraint-arrows-tip-at-od2';
   if (normalizedKind === 'LINESTOP') return 'linestop-axial-arrows-offset-od2';
   if (normalizedKind === 'LIMIT') return 'limit-axial-arrow-offset-od2';
   if (normalizedKind === 'HANGER' || normalizedKind === 'SPRING') return 'spring-coil-only-no-arrow';
@@ -246,6 +283,9 @@ export function normalizeSupportRecord(raw = {}, context = {}) {
   axis = override.axis;
   const typeLabel = override.typeLabel;
   const bmCiiItem = override.bmCiiItem;
+  const family = firstNonEmpty(override.family, typeLabel, kind);
+  const cosineAxis = cosineAxisFromRaw(raw, axis);
+  const pipeAxisBasis = defaultPipeAxisBasisFor({ kind, family, axis });
   const recordId = text(firstNonEmpty(
     raw.recordId,
     raw.supportRecordId,
@@ -255,7 +295,7 @@ export function normalizeSupportRecord(raw = {}, context = {}) {
     supportRecordIdOf({ source, index, node, kind, axis }),
   ));
   const layerIds = layerIdsForRestraintSupport({ source, kind, axisLabel: axis });
-  const details = supportDetailFields(raw, { source, node, kind, axis, recordId, typeLabel, bmCiiItem });
+  const details = supportDetailFields(raw, { source, node, kind, axis, recordId, typeLabel, bmCiiItem, family, cosineAxis, pipeAxisBasis });
   return {
     schema: BM_CII_SUPPORT_RECORD_SCHEMA,
     recordId,
@@ -263,7 +303,12 @@ export function normalizeSupportRecord(raw = {}, context = {}) {
     index,
     node,
     kind,
+    renderKind: kind,
+    family,
     axis,
+    axisLabel: axis,
+    cosineAxis,
+    pipeAxisBasis,
     typeLabel,
     bmCiiItem,
     visibleDefault: kind !== 'UNKNOWN',
@@ -279,6 +324,8 @@ export function isUnknownSupportRecord(record = {}) {
 }
 
 export function supportTraceFromRecord(record = {}, extra = {}) {
+  const pipeAxisBasis = firstNonEmpty(extra.pipeAxisBasis, extra.axisPipeBasis, record.pipeAxisBasis, record.details?.AXIS_PIPE_BASIS);
+  const cosineAxis = firstNonEmpty(extra.cosineAxis, extra.COSINE, record.cosineAxis, record.details?.COSINE);
   return {
     schema: BM_CII_SUPPORT_RECORD_SCHEMA,
     entity: 'support',
@@ -289,14 +336,24 @@ export function supportTraceFromRecord(record = {}, extra = {}) {
     supportSource: record.source,
     node: record.node,
     sourceNode: record.node,
-    supportKind: record.kind,
-    kind: record.kind,
-    axis: record.axis,
-    restraintAxis: record.axis,
-    typeLabel: record.typeLabel,
     bmCiiItem: record.bmCiiItem,
     supportBmCiiItem: record.bmCiiItem,
-    supportFamily: record.typeLabel || record.kind,
+    family: record.family,
+    supportFamily: record.family,
+    engineeringFamily: record.family,
+    renderKind: record.renderKind || record.kind,
+    supportRenderKind: record.renderKind || record.kind,
+    supportKind: record.kind,
+    kind: record.kind,
+    axisPipeBasis: pipeAxisBasis,
+    supportAxisPipeBasis: pipeAxisBasis,
+    cosine: cosineAxis,
+    cosineAxis,
+    supportCosine: cosineAxis,
+    axis: record.axis,
+    restraintAxis: record.axis,
+    axisLabel: record.axis,
+    typeLabel: record.typeLabel,
     supportSymbolContract: record.supportSymbolContract,
     visibleDefault: record.visibleDefault,
     ...(record.details || {}),
