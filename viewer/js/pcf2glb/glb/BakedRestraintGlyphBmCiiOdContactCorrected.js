@@ -1,6 +1,13 @@
 import * as THREE from 'three';
 import { SUPPORT_SYMBOL_COLORS, visualProfileMetadata, RESTRAINT_VISUAL_PROFILE } from './RestraintVisualProfile.js';
 import { normalizeSupportRecord, supportTraceFromRecord } from './SupportRecordNormalizer.js';
+import {
+  makePipeOdFrame,
+  plainVector,
+  resolveGuideContacts,
+  resolveRestraintArrowContact,
+  restraintGapOffsetFrom,
+} from './RestraintOdGapPlacementPolicy.js';
 
 const EPS = 1e-8;
 const UP = new THREE.Vector3(0, 1, 0);
@@ -14,7 +21,7 @@ const SCALE_MULTIPLIER = 3.0;
 function text(value) { return String(value ?? '').trim(); }
 function upper(value) { return text(value).toUpperCase(); }
 function number(value) { const n = Number(value); return Number.isFinite(n) ? n : null; }
-function positive(value) { const n = number(value); return n && n > 0 ? n : null; }
+function positive(value) { const n = number(value); return n !== null && n > 0 ? n : null; }
 function firstPositive(...values) { for (const value of values) { const n = positive(value); if (n !== null) return n; } return null; }
 function attrsFrom(object, comp = {}) { return { ...(comp.raw || {}), ...(comp.attributes || {}), ...(object?.userData || {}), ...comp }; }
 function sourceOf(attrs = {}, comp = {}, options = {}) {
@@ -59,8 +66,7 @@ function rawCosineAxis(attrs = {}, fallbackAxis = '') {
   return axisFromLabel(fallbackAxis) || X_AXIS.clone();
 }
 function pipeTangentFrom(attrs = {}, comp = {}, fallbackAxis = X_AXIS) {
-  // InputXML-basic path: prefer untransformed/raw pipe tangent fields.  GLB/canvas
-  // transformed tangents are intentionally not primary here.
+  // InputXML-basic path: prefer raw/untransformed pipe tangent fields.
   return vectorFrom(comp.pipeTangent)
     || vectorFrom(comp.pipeAxis)
     || vectorFrom(comp.pipeDirection)
@@ -147,46 +153,7 @@ function torus(group, name, center, normal, major, minor, color) {
   group.add(mesh);
   return mesh;
 }
-function projectPerpendicular(vector, tangent) {
-  const v = vector?.clone?.().normalize?.();
-  const t = tangent?.clone?.().normalize?.();
-  if (!v || !t || v.lengthSq() < EPS || t.lengthSq() < EPS) return null;
-  const p = v.sub(t.clone().multiplyScalar(v.dot(t)));
-  return p.lengthSq() > EPS ? p.normalize() : null;
-}
-function makeFrame(pipeTangent, radius) {
-  const point = new THREE.Vector3(0, 0, 0);
-  const T = pipeTangent?.clone?.().normalize?.() || X_AXIS.clone();
-  let top = projectPerpendicular(UP, T) || projectPerpendicular(X_AXIS, T) || projectPerpendicular(Z_AXIS, T) || X_AXIS.clone();
-  top.normalize();
-  let side = new THREE.Vector3().crossVectors(T, top);
-  if (side.lengthSq() < EPS) side = projectPerpendicular(Z_AXIS, T) || Z_AXIS.clone();
-  side.normalize();
-  return {
-    point,
-    pipeTangent: T,
-    top,
-    side,
-    pipeRadius: radius,
-    anchors: {
-      CIRCUM_TOP: point.clone().add(top.clone().multiplyScalar(radius)),
-      CIRCUM_BOT: point.clone().add(top.clone().multiplyScalar(-radius)),
-      CIRCUM_SIDE1: point.clone().add(side.clone().multiplyScalar(radius)),
-      CIRCUM_SIDE2: point.clone().add(side.clone().multiplyScalar(-radius)),
-    },
-  };
-}
-function plain(v) { return [Number(v.x.toFixed(6)), Number(v.y.toFixed(6)), Number(v.z.toFixed(6))]; }
 function isSignedAxis(label = '') { return /^[+-][XYZ]$/i.test(text(label)); }
-function inwardTipForDirection(frame, direction) {
-  const dir = direction.clone().normalize();
-  if (Math.abs(dir.dot(frame.pipeTangent)) > 0.92) return frame.anchors.CIRCUM_BOT.clone();
-  const radial = projectPerpendicular(dir, frame.pipeTangent);
-  if (!radial) return frame.anchors.CIRCUM_BOT.clone();
-  // Critical OD/2 rule: arrowFixedTip(tip, dir) points toward +dir.  The pipe
-  // contact point is therefore the opposite radial side, P - radial * R.
-  return frame.point.clone().add(radial.multiplyScalar(-frame.pipeRadius));
-}
 function hideExistingMeshes(object) {
   const hidden = [];
   for (const child of object.children || []) {
@@ -213,33 +180,48 @@ function stamp(target, record, common) {
     bmCiiTrace: supportTraceFromRecord(record, common),
   };
 }
-function buildAxis(group, id, record, frame, axis, scale, color) {
+function contactPlain(contact) {
+  return {
+    tip: plainVector(contact.tip),
+    direction: plainVector(contact.arrowDirection),
+    appliedAxis: plainVector(contact.appliedAxis),
+    parallelToPipe: contact.parallelToPipe,
+    lateralOffsetAxis: plainVector(contact.lateralOffsetAxis),
+    basePipeRadius: contact.basePipeRadius,
+    gapOffset: contact.gapOffset,
+    offsetRadius: contact.offsetRadius,
+    rule: contact.rule,
+  };
+}
+function buildAxis(group, id, record, frame, axis, scale, color, gapOffset) {
   const len = scale * ARROW_LENGTH_FACTOR;
   const r = scale * ARROW_RADIUS_FACTOR;
   if (isSignedAxis(record.axis)) {
-    const tip = inwardTipForDirection(frame, axis);
-    arrowFixedTip(group, `${id}-single-axis-tip-at-od2`, tip, axis, len, color, r);
-    return [{ tip: plain(tip), direction: plain(axis) }];
+    const contact = resolveRestraintArrowContact({ frame, appliedAxis: axis, arrowDirection: axis, gapOffset });
+    arrowFixedTip(group, `${id}-single-axis-tip-at-od2-gap-policy`, contact.tip, axis, len, color, r);
+    return [contactPlain(contact)];
   }
-  const plusTip = inwardTipForDirection(frame, axis);
-  const minusTip = inwardTipForDirection(frame, axis.clone().negate());
-  arrowFixedTip(group, `${id}-axis-pair-plus-tip-at-od2`, plusTip, axis, len, color, r);
-  arrowFixedTip(group, `${id}-axis-pair-minus-tip-at-od2`, minusTip, axis.clone().negate(), len, color, r);
-  return [{ tip: plain(plusTip), direction: plain(axis) }, { tip: plain(minusTip), direction: plain(axis.clone().negate()) }];
+  const plusContact = resolveRestraintArrowContact({ frame, appliedAxis: axis, arrowDirection: axis, gapOffset });
+  const minusContact = resolveRestraintArrowContact({ frame, appliedAxis: axis.clone().negate(), arrowDirection: axis.clone().negate(), gapOffset });
+  arrowFixedTip(group, `${id}-axis-pair-plus-tip-at-od2-gap-policy`, plusContact.tip, axis, len, color, r);
+  arrowFixedTip(group, `${id}-axis-pair-minus-tip-at-od2-gap-policy`, minusContact.tip, axis.clone().negate(), len, color, r);
+  return [contactPlain(plusContact), contactPlain(minusContact)];
 }
-function buildAxial(group, id, record, frame, axis, scale, color) {
+function buildAxial(group, id, record, frame, axis, scale, color, gapOffset) {
   const len = scale * ARROW_LENGTH_FACTOR;
   const r = scale * ARROW_RADIUS_FACTOR;
-  const tip = frame.anchors.CIRCUM_BOT.clone();
   if (isSignedAxis(record.axis)) {
-    arrowFixedTip(group, `${id}-single-axial-tip-at-od2`, tip, axis, len, color, r);
-    return [{ tip: plain(tip), direction: plain(axis) }];
+    const contact = resolveRestraintArrowContact({ frame, appliedAxis: axis, arrowDirection: axis, gapOffset, preferredLateralAxis: frame.top.clone().negate() });
+    arrowFixedTip(group, `${id}-single-axial-tip-at-od2-gap-policy`, contact.tip, axis, len, color, r);
+    return [contactPlain(contact)];
   }
-  arrowFixedTip(group, `${id}-axial-pair-plus-tip-at-od2`, tip, frame.pipeTangent.clone(), len, color, r);
-  arrowFixedTip(group, `${id}-axial-pair-minus-tip-at-od2`, tip, frame.pipeTangent.clone().negate(), len, color, r);
-  return [{ tip: plain(tip), direction: plain(frame.pipeTangent) }, { tip: plain(tip), direction: plain(frame.pipeTangent.clone().negate()) }];
+  const plusContact = resolveRestraintArrowContact({ frame, appliedAxis: frame.pipeTangent, arrowDirection: frame.pipeTangent, gapOffset, preferredLateralAxis: frame.top.clone().negate() });
+  const minusContact = resolveRestraintArrowContact({ frame, appliedAxis: frame.pipeTangent.clone().negate(), arrowDirection: frame.pipeTangent.clone().negate(), gapOffset, preferredLateralAxis: frame.top.clone().negate() });
+  arrowFixedTip(group, `${id}-axial-pair-plus-tip-at-od2-gap-policy`, plusContact.tip, frame.pipeTangent.clone(), len, color, r);
+  arrowFixedTip(group, `${id}-axial-pair-minus-tip-at-od2-gap-policy`, minusContact.tip, frame.pipeTangent.clone().negate(), len, color, r);
+  return [contactPlain(plusContact), contactPlain(minusContact)];
 }
-function buildGuide(group, id, record, frame, cosineAxis, scale, color) {
+function buildGuide(group, id, record, frame, cosineAxis, scale, color, gapOffset) {
   const len = scale * ARROW_LENGTH_FACTOR;
   const r = scale * ARROW_RADIUS_FACTOR;
   const L1 = frame.top.clone();
@@ -248,28 +230,30 @@ function buildGuide(group, id, record, frame, cosineAxis, scale, color) {
   const d2 = cosineAxis.dot(L2);
   let axis = Math.abs(d1) >= Math.abs(d2) ? L1.multiplyScalar(d1 >= 0 ? 1 : -1) : L2.multiplyScalar(d2 >= 0 ? 1 : -1);
   axis.normalize();
-  const tip1 = frame.point.clone().add(axis.clone().multiplyScalar(frame.pipeRadius));
-  const tip2 = frame.point.clone().add(axis.clone().multiplyScalar(-frame.pipeRadius));
-  arrowFixedTip(group, `${id}-guide-positive-lateral-tip-at-od2`, tip1, axis.clone().negate(), len, color, r);
-  arrowFixedTip(group, `${id}-guide-negative-lateral-tip-at-od2`, tip2, axis.clone(), len, color, r);
-  return [{ tip: plain(tip1), direction: plain(axis.clone().negate()) }, { tip: plain(tip2), direction: plain(axis) }];
+  const contacts = resolveGuideContacts({ frame, guideAxis: axis, gapOffset });
+  arrowFixedTip(group, `${id}-guide-positive-lateral-tip-at-od2-gap-policy`, contacts.positiveTip, axis.clone().negate(), len, color, r);
+  arrowFixedTip(group, `${id}-guide-negative-lateral-tip-at-od2-gap-policy`, contacts.negativeTip, axis.clone(), len, color, r);
+  return [
+    { tip: plainVector(contacts.positiveTip), direction: plainVector(axis.clone().negate()), guideAxis: plainVector(axis), gapOffset: contacts.gapOffset, offsetRadius: contacts.offsetRadius, rule: contacts.rule },
+    { tip: plainVector(contacts.negativeTip), direction: plainVector(axis), guideAxis: plainVector(axis), gapOffset: contacts.gapOffset, offsetRadius: contacts.offsetRadius, rule: contacts.rule },
+  ];
 }
-function buildSpring(group, id, frame, scale, color) {
-  const tip = frame.anchors.CIRCUM_TOP.clone();
-  const start = tip.clone().add(UP.clone().multiplyScalar(scale * 0.18));
-  const end = tip.clone().add(UP.clone().multiplyScalar(scale * 0.92));
+function buildSpring(group, id, frame, scale, color, gapOffset) {
+  const startPoint = frame.point.clone().add(frame.top.clone().multiplyScalar(frame.pipeRadius + Math.max(gapOffset || 0, 0)));
+  const start = startPoint.clone().add(UP.clone().multiplyScalar(scale * 0.18));
+  const end = startPoint.clone().add(UP.clone().multiplyScalar(scale * 0.92));
   for (let i = 0; i < 7; i += 1) {
     const c = start.clone().lerp(end, i / 6);
-    torus(group, `${id}-spring-coil-only-starts-at-od2-${i + 1}`, c, UP, scale * 0.18, scale * 0.022, color);
+    torus(group, `${id}-spring-coil-only-starts-at-od2-gap-policy-${i + 1}`, c, UP, scale * 0.18, scale * 0.022, color);
   }
-  return [{ springReferencePointAtOD: plain(tip) }];
+  return [{ springReferencePointAtOD: plainVector(startPoint), gapOffset, rule: 'spring/hanger has no arrow; positive GAP moves coil reference away from pipe from CIRCUM_TOP' }];
 }
 function buildAnchor(group, id, frame, scale, color) {
   const thickness = Math.max(scale * 0.12, frame.pipeRadius * 0.45);
   const start = frame.point.clone().add(frame.pipeTangent.clone().multiplyScalar(-thickness * 0.5));
   const end = frame.point.clone().add(frame.pipeTangent.clone().multiplyScalar(thickness * 0.5));
   cylinderBetween(group, `${id}-anchor-flat-flow-blocking-plate-od2`, start, end, Math.max(frame.pipeRadius * 1.75, scale * 0.34), color, 32);
-  return [{ plateNormal: plain(frame.pipeTangent), plateCoversOD: true }];
+  return [{ plateNormal: plainVector(frame.pipeTangent), plateCoversOD: true, rule: 'anchor plate blocks flow normal to pipe tangent' }];
 }
 
 export function applyBakedRestraintGlyph(object, comp = {}, options = {}) {
@@ -281,37 +265,40 @@ export function applyBakedRestraintGlyph(object, comp = {}, options = {}) {
   const radius = Math.max(diameter / 2, 5);
   const axis = axisFromLabel(record.axis) || X_AXIS.clone();
   const tangent = pipeTangentFrom(attrs, comp, axis);
-  const frame = makeFrame(tangent, radius);
+  const frame = makePipeOdFrame({ pipeTangent: tangent, pipeRadius: radius });
+  const gapPolicy = restraintGapOffsetFrom({ attrs, comp, record, options });
   const scale = scaleFor(diameter, options);
   const color = SUPPORT_SYMBOL_COLORS[record.kind] || SUPPORT_SYMBOL_COLORS.UNKNOWN;
   const id = text(comp.id || record.recordId || object.name || 'support');
   const group = new THREE.Group();
-  group.name = `${record.recordId}-bm-cii-corrected-od2-${record.kind.toLowerCase()}`;
+  group.name = `${record.recordId}-bm-cii-od2-gap-policy-${record.kind.toLowerCase()}`;
   const hidden = hideExistingMeshes(object);
   let contacts = [];
-  if (record.kind === 'GUIDE') contacts = buildGuide(group, id, record, frame, rawCosineAxis(attrs, record.axis), scale, color);
-  else if (record.kind === 'LINESTOP' || record.kind === 'LIMIT') contacts = buildAxial(group, id, record, frame, axis, scale, color);
-  else if (record.kind === 'SPRING' || record.kind === 'HANGER') contacts = buildSpring(group, id, frame, scale, color);
+  if (record.kind === 'GUIDE') contacts = buildGuide(group, id, record, frame, rawCosineAxis(attrs, record.axis), scale, color, gapPolicy.gapOffset);
+  else if (record.kind === 'LINESTOP' || record.kind === 'LIMIT') contacts = buildAxial(group, id, record, frame, axis, scale, color, gapPolicy.gapOffset);
+  else if (record.kind === 'SPRING' || record.kind === 'HANGER') contacts = buildSpring(group, id, frame, scale, color, gapPolicy.gapOffset);
   else if (record.kind === 'ANCHOR') contacts = buildAnchor(group, id, frame, scale, color);
-  else contacts = buildAxis(group, id, record, frame, axis, scale, color);
+  else contacts = buildAxis(group, id, record, frame, axis, scale, color, gapPolicy.gapOffset);
+
   const common = {
     NODE: record.node || 'N/A',
     AXIS: record.axis || 'N/A',
     SOURCE: source,
     supportSource: source,
     supportPoint: [0, 0, 0],
-    pipeTangent: plain(frame.pipeTangent),
+    pipeTangent: plainVector(frame.pipeTangent),
     bmCiiOdTouchRadius: radius,
     bmCiiOdTouchDiameter: diameter,
     circumferenceAnchors: {
-      CIRCUM_TOP: plain(frame.anchors.CIRCUM_TOP),
-      CIRCUM_BOT: plain(frame.anchors.CIRCUM_BOT),
-      CIRCUM_SIDE1: plain(frame.anchors.CIRCUM_SIDE1),
-      CIRCUM_SIDE2: plain(frame.anchors.CIRCUM_SIDE2),
+      CIRCUM_TOP: plainVector(frame.anchors.CIRCUM_TOP),
+      CIRCUM_BOT: plainVector(frame.anchors.CIRCUM_BOT),
+      CIRCUM_SIDE1: plainVector(frame.anchors.CIRCUM_SIDE1),
+      CIRCUM_SIDE2: plainVector(frame.anchors.CIRCUM_SIDE2),
     },
+    odGapPlacementPolicy: gapPolicy,
     odTouchContacts: contacts,
-    renderGlyph: 'baked-bm-cii-corrected-all-axis-od2-contact',
-    placementContract: 'BM_CII corrected: all arrows point inward/touch OD2; axial arrows are offset to OD2; guide uses own restraint cosine',
+    renderGlyph: 'baked-bm-cii-independent-od-gap-placement-policy',
+    placementContract: 'BM_CII independent policy: if applied restraint axis is parallel to pipe, offset the arrow line to a lateral OD/2 axis; if GAP>0, move contact head farther away by GAP*10mm',
     bmCiiRestraintVisualProfile: visualProfileMetadata({ kind: record.kind, source, axisLabel: record.axis, scale, role: 'baked-object-root' }),
     visualProfile: RESTRAINT_VISUAL_PROFILE.id,
     hiddenOriginalProxyMeshCount: hidden.length,
