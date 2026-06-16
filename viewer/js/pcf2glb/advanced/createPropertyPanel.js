@@ -4,6 +4,15 @@ import {
   lineNoFromMetadata,
 } from '../../../utils/line-no-metadata.js';
 
+const SUPPORT_DISPLAY_FIELDS = [
+  ['TYPE', ['TYPE', 'supportType', 'supportKind', 'kind', 'pcfType', 'type']],
+  ['STIFFNESS', ['STIFFNESS', 'supportStiffness', 'stiffness', 'restraintStiffness']],
+  ['GAP', ['GAP', 'supportGap', 'gap', 'gapMm', 'restraintGap']],
+  ['FRIC_COEF', ['FRIC_COEF', 'supportFricCoef', 'fricCoef', 'frictionCoefficient', 'mu']],
+  ['TAG', ['TAG', 'supportTag', 'tag', 'labelText', 'name']],
+  ['GUID', ['GUID', 'supportGuid', 'guid', 'componentGuid', 'supportRecordId', 'recordId']],
+];
+
 const DISPLAY_FIELDS = [
   ['ID', ['pcfId', 'id', 'name']],
   ['Type', ['pcfType', 'type', 'sourceComponentType', 'componentKind']],
@@ -41,12 +50,33 @@ function first(data, keys, fallback = '') {
 
 function mergedUserData(object3D) {
   const chain = [];
+  const traceChain = [];
   let current = object3D || null;
   while (current) {
-    if (current.userData && Object.keys(current.userData).length) chain.unshift(current.userData);
+    if (current.userData && Object.keys(current.userData).length) {
+      chain.unshift(current.userData);
+      if (current.userData.bmCiiTrace && typeof current.userData.bmCiiTrace === 'object') {
+        traceChain.unshift(current.userData.bmCiiTrace);
+      }
+    }
     current = current.parent || null;
   }
-  return Object.assign({}, ...chain, object3D?.userData || {});
+  const mergedTrace = Object.assign({}, ...traceChain);
+  const merged = Object.assign({}, ...chain, object3D?.userData || {});
+  const currentTrace = merged.bmCiiTrace && typeof merged.bmCiiTrace === 'object' ? merged.bmCiiTrace : {};
+  return {
+    ...mergedTrace,
+    ...merged,
+    bmCiiTrace: { ...mergedTrace, ...currentTrace },
+  };
+}
+
+function isSupportLike(meta = {}, item = {}) {
+  const trace = meta.bmCiiTrace && typeof meta.bmCiiTrace === 'object' ? meta.bmCiiTrace : {};
+  return trace.entity === 'support'
+    || trace.semanticCategory === 'support'
+    || Boolean(meta.supportRecordId || meta.supportKind || meta.supportSource)
+    || String(item?.type || '').toUpperCase().includes('SUPPORT');
 }
 
 export function createPropertyPanel(propPanel, propContent) {
@@ -72,6 +102,12 @@ export function createPropertyPanel(propPanel, propContent) {
       if (lineNo) meta.lineNo = lineNo;
 
       let html = '<div style="font-family: monospace; font-size: 12px; margin-bottom: 10px; line-height: 1.42;">';
+      if (isSupportLike(meta, item)) {
+        for (const [label, keys] of SUPPORT_DISPLAY_FIELDS) {
+          html += `<strong>${esc(label)}:</strong> ${esc(first(meta, keys, ''))}<br/>`;
+        }
+        html += '<hr style="border: 0; border-top: 1px solid rgba(255,255,255,0.18); margin: 8px 0;"/>';
+      }
       for (const [label, keys] of DISPLAY_FIELDS) {
         const fallback = label === 'ID' ? item.id : label === 'Type' ? item.type : label === 'Ref No' ? item.refNo : label === 'Bore' ? item.bore : '';
         html += `<strong>${esc(label)}:</strong> ${esc(first(meta, keys, fallback))}<br/>`;
