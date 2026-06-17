@@ -1,10 +1,18 @@
 {
   "schema": "bm-cii-latest-glb-manifest/v1",
   "latest": {
-    "url": "",
-    "base64Url": "",
-    "description": "Set url/base64Url to a deployed BM_CII engineering GLB. If no candidate is configured, the Basic GLB-PCF BM_CII quick mock generates a BM_CII-specific procedural benchmark scene and never falls back to generic mock geometry."
+    "url": "test/bm-cii/latest/BM_CII_latest_engineering.glb",
+    "encoding": "binary",
+    "description": "BM_CII latest generated benchmark GLB. Place the generated GLB at viewer/test/bm-cii/latest/BM_CII_latest_engineering.glb so the BM_CII quick mock loads the same reviewed file.",
+    "expectedSha256": "d50cbce32b7a0096c9462a2503286980c4611bcca64fc688bced58caa61fe68e",
+    "sourceRun": "v61"
   },
-  "proceduralFallback": true,
-  "candidates": []
+  "proceduralFallback": false,
+  "candidates": [
+    {
+      "url": "test/bm-cii/latest/BM_CII_latest_engineering.glb",
+      "encoding": "binary",
+      "description": "BM_CII v61 generated GLB"
+    }
+  ]
 }
