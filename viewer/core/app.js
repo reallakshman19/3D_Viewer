@@ -120,11 +120,16 @@ async function ensureTabModule(tab) {
   return tabRendererCache.get(tab.id);
 }
 
-function clearActiveTab() {
+function cleanupActiveTab() {
   if (typeof activeTabDestroy === 'function') {
     try { activeTabDestroy(); } catch (error) { console.warn('Tab destroy failed', error); }
   }
   activeTabDestroy = null;
+}
+
+function renderTabError(tab, error) {
+  if (!appShell) return;
+  appShell.content.innerHTML = `<div class="tab-error">Failed to load ${tab.label}: ${error.message || error}</div>`;
 }
 
 async function renderActiveTab(tabId) {
@@ -141,13 +146,13 @@ async function renderActiveTab(tabId) {
   try {
     const renderer = await ensureTabModule(tab);
     if (token !== activeRenderToken) return;
-    clearActiveTab();
+    cleanupActiveTab();
     appShell.content.innerHTML = '';
     activeTabDestroy = renderer(appShell.content, { state, emit, on }) || null;
   } catch (error) {
     console.error(`Failed to render tab ${tab.id}`, error);
     if (token !== activeRenderToken) return;
-    appShell.content.innerHTML = `<div class="tab-error">Failed to load ${tab.label}: ${error.message || error}</div>`;
+    renderTabError(tab, error);
   }
 }
 
@@ -201,7 +206,7 @@ export async function initApp(root = document.getElementById('app')) {
   const initialTab = normalizeTabId(new URL(location.href).searchParams.get('tab') || state.activeTab || tabs[0]?.id);
   await renderActiveTab(initialTab);
   appDestroy = () => {
-    clearActiveTab();
+    cleanupActiveTab();
     if (typeof unsubscribeTabChange === 'function') unsubscribeTabChange();
     root.innerHTML = '';
     appShell = null;
