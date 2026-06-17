@@ -1,5 +1,6 @@
 export const RuntimeEvents = Object.freeze({
   TAB_CHANGED: 'tab-changed',
+  TAB_CHANGE_REQUESTED: 'tab-change-requested',
   TAB_RENDERED: 'tab-rendered',
   FILE_LOADED: 'file-loaded',
   PARSE_COMPLETE: 'parse-complete',
