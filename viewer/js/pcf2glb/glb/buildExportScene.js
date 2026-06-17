@@ -55,7 +55,7 @@ export function buildExportScene(model, log, options = {}) {
     try {
       let obj = comp.type === 'NODE_LABEL'
         ? buildNodeLabelObject(comp)
-        : buildComponentObject(comp, log);
+        : buildComponentObject(comp, log, options);
       if (obj && comp.type === 'TEE') obj = enhanceTeeBodyProxy(obj, comp);
       if (obj && comp.type === 'SUPPORT') obj = enhanceSupportDirectionProxy(obj, comp, options);
       if (obj) obj = enhanceLocalizedBendProxy(obj, comp);
@@ -76,6 +76,7 @@ export function buildExportScene(model, log, options = {}) {
 
   const colorMode = options.colorMode || (model.options && model.options.colorMode) || 'engineering';
   const supportSource = options.supportRendering?.source || options.supportSource || '';
+  const glbVisualProfile = text(options.glbVisualProfile || '');
   const paletteStats = applyEngineeringPalette(root, { colorMode });
   const labelAnchorStats = hideGlbLabelAnchorMarkers(root);
   const lineNos = collectLineNos(model);
@@ -83,6 +84,7 @@ export function buildExportScene(model, log, options = {}) {
     ...root.userData,
     lineNo: lineNos[0] || '',
     lineNos,
+    glbVisualProfile,
     engineeringPaletteStats: paletteStats,
     labelAnchorStats,
     bmCiiLayerManifest: buildDefaultBmCiiLayerManifest({ supportSource }),
@@ -90,6 +92,7 @@ export function buildExportScene(model, log, options = {}) {
 
   scene.userData = {
     ...(scene.userData || {}),
+    glbVisualProfile,
     bmCiiLayerManifest: root.userData.bmCiiLayerManifest,
   };
 

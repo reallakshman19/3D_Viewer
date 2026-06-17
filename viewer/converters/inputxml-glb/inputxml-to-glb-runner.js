@@ -7,6 +7,8 @@ import { appendInputXmlGlbNodeLabels } from './InputXmlGlbNodeLabels.js';
 import { adaptUxmlToGlbModel } from './UxmlToGlbModelAdapter.js';
 import { applyBmCiiSupportAnnotationEnrichment } from './BmCiiSupportAnnotationEnrichment.js';
 
+const FORCED_GLB_VISUAL_PROFILE = 'basic-only';
+
 function text(value) {
   return String(value ?? '').trim();
 }
@@ -194,7 +196,12 @@ export async function run(ctx = {}) {
     }
 
     ctx.setStatus?.('Building 3D GLB scene...', 'running');
-    const scene = buildExportScene(model, createSceneLog(stdout, stderr), bmCiiSceneOptions(bmCiiSupportAnnotation));
+    const sceneOptions = {
+      ...bmCiiSceneOptions(bmCiiSupportAnnotation),
+      glbVisualProfile: FORCED_GLB_VISUAL_PROFILE,
+    };
+    stdout.push(`GLB visual profile: ${FORCED_GLB_VISUAL_PROFILE} (rich profile disabled).`);
+    const scene = buildExportScene(model, createSceneLog(stdout, stderr), sceneOptions);
     const glbBlob = await exportSceneToGLB(scene);
     const arrayBuffer = await blobLikeToArrayBuffer(glbBlob);
     const stem = baseName(sourceName);
@@ -216,6 +223,7 @@ export async function run(ctx = {}) {
             exportNodeLabels: options.exportNodeLabels !== false,
             exportRestraintText: options.exportRestraintText !== false && options.showSupportLabels !== false,
             exportComponentText: options.exportComponentText !== false && options.showComponentLabels !== false,
+            glbVisualProfile: FORCED_GLB_VISUAL_PROFILE,
           },
           bmCiiSupportAnnotation,
           bmCiiEnrichmentStats,

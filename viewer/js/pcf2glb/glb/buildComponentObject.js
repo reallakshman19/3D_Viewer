@@ -463,6 +463,25 @@ function _addArrow(group, axis, dist, radius, color) {
   return arrow;
 }
 
+function isBasicOnlyProfile(options = {}) {
+  const profile = String(options.glbVisualProfile || options.visualProfile || '').trim().toLowerCase();
+  if (!profile) return true;
+  return profile === 'basic' || profile === 'basic-only' || profile === 'basic_only';
+}
+
+function buildBasicOnlyComponentObject(comp) {
+  if (comp.type === 'MESSAGE-SQUARE' || comp.type === 'MESSAGE-CIRCLE') return null;
+  if (comp.type === 'SUPPORT') return buildSupportProxy(comp);
+  if (comp.ep1 && comp.ep2) {
+    try {
+      return buildPipeMesh(comp);
+    } catch {
+      return buildGenericProxy(comp, 0x777777);
+    }
+  }
+  return buildGenericProxy(comp, 0x777777);
+}
+
 export function buildSupportProxy(comp) {
   const ptSrc = comp.coOrds || comp.ep1;
   const pt = ptSrc ? new THREE.Vector3(ptSrc.x, ptSrc.y, ptSrc.z) : new THREE.Vector3();
@@ -554,7 +573,11 @@ export function buildSupportProxy(comp) {
   return applyUserData(group, userData);
 }
 
-export function buildComponentObject(comp, log) {
+export function buildComponentObject(comp, log, options = {}) {
+  if (isBasicOnlyProfile(options)) {
+    return buildBasicOnlyComponentObject(comp);
+  }
+
   switch (comp.type) {
     case 'PIPE':
       return buildPipeMesh(comp);
