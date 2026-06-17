@@ -204,7 +204,23 @@ function addGuideBars(group, id, axis, radius, color) {
   const a = axis.clone().normalize();
   const side = perpendicular(a);
   addBasePad(group, id, radius, color);
+  addBox(
+    group,
+    `${id}-guide-base`,
+    new THREE.Vector3(radius * 2.75, radius * 0.28, radius * 2.75),
+    new THREE.Vector3(0, -radius * 2.15, 0),
+    color,
+  );
   addReferencePost(group, id, radius, color);
+  addCylinder(
+    group,
+    `${id}-guide-reference-post`,
+    Math.max(radius * 0.10, 0.9),
+    radius * 2.35,
+    UP,
+    new THREE.Vector3(0, -radius * 1.35 + (radius * 2.35) / 2, 0),
+    color,
+  );
   const barSize = new THREE.Vector3(radius * 0.18, radius * 1.65, radius * 0.28);
   const pos = a.clone().multiplyScalar(radius * 0.9).add(side.clone().multiplyScalar(radius * 0.18));
   const neg = a.clone().multiplyScalar(-radius * 0.9).add(side.clone().multiplyScalar(radius * 0.18));
@@ -284,7 +300,7 @@ export function enhanceSupportDirectionProxy(object, comp = {}, options = {}) {
     supportKind: kind,
     supportAxis: { x: axis.x, y: axis.y, z: axis.z },
     supportSymbolScale: radius,
-    glbShape: `support-reference-${kind.toLowerCase()}`,
+    glbShape: `support-reference-v2-${kind.toLowerCase()}`,
   };
 
   if (kind === 'GUIDE') addGuideBars(markerGroup, id, axis, radius, color);

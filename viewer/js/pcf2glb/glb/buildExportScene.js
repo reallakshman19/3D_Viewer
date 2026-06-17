@@ -3,7 +3,7 @@ import { applyEngineeringPalette } from './applyEngineeringPalette.js';
 import { buildComponentObject } from './buildComponentObject.js';
 import { buildNodeLabelObject } from './buildNodeLabelObject.js';
 import { enhanceLocalizedBendProxy } from './enhanceLocalizedBendProxy.js';
-import { enhanceSupportDirectionProxy } from './enhanceSupportDirectionProxyReferenceV2.js';
+import { enhanceSupportDirectionProxy } from './enhanceSupportDirectionProxy.js';
 import { enhanceTeeBodyProxy } from './enhanceTeeBodyProxy.js';
 import { hideGlbLabelAnchorMarkers } from './hideGlbLabelAnchorMarkers.js';
 import { applyComponentGeometryTrace } from './GeometryTraceMetadata.js';
