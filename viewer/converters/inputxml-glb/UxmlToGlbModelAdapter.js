@@ -1,4 +1,3 @@
-import { classifyComponentLayer, classifySupportType, parseSelectedBranches } from '../inputxml-dxf/InputXmlToDxfProjector.js';
 import { classifyCaesarRestraint } from './CaesarRestraintClassifier.js';
 import { bendMetadataFromComponentRaw } from './InputXmlBendMetadata.js';
 import {
@@ -14,6 +13,69 @@ function text(value) {
 
 function upper(value) {
   return text(value).toUpperCase();
+}
+
+function wordsFrom(...values) {
+  return values.map(upper).filter(Boolean).join(' ');
+}
+
+function parseSelectedBranches(selectedBranches) {
+  if (!selectedBranches) return new Set();
+  if (selectedBranches instanceof Set) return new Set([...selectedBranches].map(text).filter(Boolean));
+  if (Array.isArray(selectedBranches)) return new Set(selectedBranches.map(text).filter(Boolean));
+  return new Set(String(selectedBranches).split(/[\s,;]+/).map(text).filter(Boolean));
+}
+
+function classifyComponentLayer(component = {}, segment = {}) {
+  const raw = component.rawAttributes || {};
+  const haystack = wordsFrom(
+    component.normalizedType,
+    component.type,
+    component.skey,
+    component.name,
+    component.id,
+    segment.type,
+    raw.COMPONENT_TYPE,
+    raw.componentType,
+    raw.SKEY,
+    raw.TYPE,
+  );
+  if (/SUPPORT|RESTRAINT|ANCHOR|GUIDE|LINE\s*STOP|LINESTOP|HANGER|SPRING|LIMIT/.test(haystack)) return 'SUPPORTS';
+  if (/VALVE|GATE|BALL|CHECK|GLOBE/.test(haystack)) return 'VALVES';
+  if (/FLANGE|WELD\s*NECK|WELDNECK|BLIND/.test(haystack)) return 'FLANGES';
+  if (/REDUCER|REDUCING|ECC|CONC/.test(haystack)) return 'REDUCERS';
+  if (/TEE|BRANCH/.test(haystack)) return 'TEES';
+  if (/OLET|WELDOLET|SOCKOLET|THREDOLET/.test(haystack)) return 'OLETS';
+  if (/BEND|ELBOW/.test(haystack)) return 'ELBOWS';
+  if (/NOZZLE|CAP|CLOSURE/.test(haystack)) return 'NOZZLES';
+  return 'PIPES';
+}
+
+function classifySupportType(support = {}, component = {}) {
+  const raw = { ...(component.rawAttributes || {}), ...(support.rawAttributes || {}) };
+  const haystack = wordsFrom(
+    support.type,
+    support.skey,
+    support.id,
+    component.normalizedType,
+    component.type,
+    component.skey,
+    component.id,
+    raw.CAESAR_SUPPORT_KIND,
+    raw.INPUTXML_SUPPORT_KIND,
+    raw.SUPPORT_KIND,
+    raw.CMPSUPTYPE,
+    raw.SUPPORT_TYPE,
+    raw.TYPE,
+    raw.SKEY,
+  );
+  if (/GUIDE/.test(haystack)) return 'GUIDE';
+  if (/LINE\s*STOP|LINESTOP/.test(haystack)) return 'LINESTOP';
+  if (/LIMIT|\bLIM\b/.test(haystack)) return 'LIMIT';
+  if (/ANCHOR|\bANC\b/.test(haystack)) return 'ANCHOR';
+  if (/HANGER|SPRING/.test(haystack)) return 'SPRING';
+  if (/REST|RESTRAINT|\+Y|\bY\b/.test(haystack)) return 'REST';
+  return 'REST';
 }
 
 function point3(point, bore = null) {
