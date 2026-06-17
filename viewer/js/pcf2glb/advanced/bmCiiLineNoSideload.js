@@ -30,11 +30,57 @@ function first(source, keys, fallback = '') {
   return text(fallback);
 }
 
+function firstNode(source, keys = []) {
+  return normalizeNodeId(first(source, keys));
+}
+
+function identityText(item = {}, meta = {}) {
+  const parts = [
+    item?.id,
+    item?.type,
+    item?.refNo,
+    item?.name,
+    meta?.id,
+    meta?.pcfId,
+    meta?.name,
+    meta?.supportRecordId,
+    meta?.recordId,
+    meta?.labelText,
+  ];
+  let current = item?.object3D || null;
+  while (current) {
+    parts.push(current.name, current.uuid);
+    current = current.parent || null;
+  }
+  return parts.map(text).filter(Boolean).join(' ');
+}
+
+function nodeFromIdentity(item = {}, meta = {}) {
+  const raw = identityText(item, meta);
+  if (!raw) return '';
+  const patterns = [
+    /(?:^|[_\s:;-])node[_\s:;-]*([0-9]+(?:\.[0-9]+)?)/i,
+    /(?:^|[_\s:;-])support[_\s:;-]*node[_\s:;-]*([0-9]+(?:\.[0-9]+)?)/i,
+    /\bN(?:ODE)?\s*([0-9]+(?:\.[0-9]+)?)\b/i,
+  ];
+  for (const pattern of patterns) {
+    const match = raw.match(pattern);
+    const node = normalizeNodeId(match?.[1]);
+    if (node) return node;
+  }
+  return '';
+}
+
 function nodePairFromMeta(meta = {}) {
   return {
     from: normalizeNodeId(first(meta, ['fromNode', 'FROM_NODE', 'From Node'])),
     to: normalizeNodeId(first(meta, ['toNode', 'TO_NODE', 'To Node'])),
   };
+}
+
+function directNodeFromMeta(item = {}, meta = {}) {
+  return firstNode(meta, ['NODE', 'node', 'supportNode', 'sourceNode', 'CAESAR_NODE', 'NodeNumber', 'nodeNumber'])
+    || nodeFromIdentity(item, meta);
 }
 
 function rootOf(object3D) {
@@ -55,10 +101,13 @@ function componentKey(meta = {}, object3D = null) {
 
 function looksLikeSupport(meta = {}, type = '') {
   const trace = meta.bmCiiTrace && typeof meta.bmCiiTrace === 'object' ? meta.bmCiiTrace : {};
+  const raw = `${type || ''} ${meta?.id || ''} ${meta?.name || ''} ${meta?.supportRecordId || ''} ${meta?.recordId || ''}`.toUpperCase();
   return trace.entity === 'support'
     || trace.semanticCategory === 'support'
     || Boolean(meta.supportRecordId || meta.supportKind || meta.supportSource)
-    || String(type || '').toUpperCase().includes('SUPPORT');
+    || raw.includes('SUPPORT')
+    || raw.includes('RESTRAINT')
+    || raw.includes('BM_CII_BAKED_SUPPORT');
 }
 
 function resolveRuntimeUrl(url) {
@@ -80,7 +129,7 @@ function applyRecords(records) {
       lineNo,
       anchorNode: node,
       source: record?.source || 'BM_CII line-no sideload',
-      scope: record?.scope || 'topology-carry-forward',
+      scope: record?.scope || 'node-wise sideload',
     });
   }
   state.topologyRoot = null;
@@ -157,15 +206,34 @@ function buildTopology(root) {
   }
 }
 
+function directLineFromNode(node) {
+  const detail = state.byNode.get(normalizeNodeId(node));
+  if (!detail) return null;
+  return {
+    value: detail.lineNo,
+    source: detail.source,
+    anchorNode: detail.anchorNode,
+    scope: 'node-wise sideload direct',
+    pending: false,
+  };
+}
+
 export function bmCiiLineNoFromSideload(item, meta, supportLike = false) {
-  if (supportLike) return { value: '', pending: false };
   if (!state.loaded) return { value: '', pending: true };
   if (state.byNode.size === 0) return { value: '', pending: false };
 
+  // Supports/restraints are record-scoped and must not receive topology
+  // carry-forward. A direct node-wise sideload value is allowed because it is
+  // attached to the selected support node itself, not inherited from another
+  // restraint row.
+  if (supportLike) {
+    return directLineFromNode(directNodeFromMeta(item, meta)) || { value: '', pending: false };
+  }
+
   const pair = nodePairFromMeta(meta);
-  for (const node of [pair.from, pair.to]) {
-    const direct = state.byNode.get(node);
-    if (direct) return { value: direct.lineNo, source: direct.source, anchorNode: direct.anchorNode, scope: 'node-wise sideload direct', pending: false };
+  for (const node of [pair.from, pair.to, directNodeFromMeta(item, meta)]) {
+    const direct = directLineFromNode(node);
+    if (direct) return direct;
   }
 
   const root = rootOf(item?.object3D);
