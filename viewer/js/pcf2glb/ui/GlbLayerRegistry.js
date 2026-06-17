@@ -419,3 +419,42 @@ export function renderLayerControls(manifest = {}, state = {}, onToggle = () => 
 
   return container;
 }
+
+export function mountLayerPanel(host, scene, manifest = {}, options = {}) {
+  const normalizedManifest = normalizeLayerManifest(manifest?.layers ? manifest : layerManifestOf(scene));
+  let state = createLayerStateFromManifest(normalizedManifest);
+
+  const render = () => {
+    if (!host) return;
+    host.replaceChildren?.();
+    const controls = renderLayerControls(normalizedManifest, state, (layerId, checked) => {
+      state = { ...state, [layerId]: !!checked };
+      applyLayerState(scene, state);
+      options.onChange?.({ layerId, checked: !!checked, state: { ...state }, manifest: normalizedManifest });
+      render();
+    });
+    if (controls) host.appendChild(controls);
+  };
+
+  applyLayerState(scene, state);
+  render();
+
+  return {
+    manifest: normalizedManifest,
+    getState: () => ({ ...state }),
+    setState: (nextState = {}) => {
+      state = { ...state, ...nextState };
+      applyLayerState(scene, state);
+      render();
+    },
+    setLayer: (layerId, checked) => {
+      state = { ...state, [layerId]: !!checked };
+      applyLayerState(scene, state);
+      options.onChange?.({ layerId, checked: !!checked, state: { ...state }, manifest: normalizedManifest });
+      render();
+    },
+    dispose: () => {
+      host?.replaceChildren?.();
+    },
+  };
+}
