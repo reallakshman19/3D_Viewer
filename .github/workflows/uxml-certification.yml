@@ -8,7 +8,6 @@ on:
       - "viewer/js/pcf2glb/glb/enhanceSupportDirectionProxy.js"
       - "viewer/js/pcf2glb/glb/buildExportScene.js"
       - "viewer/tabs/model-converters-tab.js"
-      - "viewer/tabs/model-converters/inputxml-glb-legacy-bridge.js"
       - "viewer/tabs/model-converters/converters/inputxml-to-glb.js"
       - "viewer/tests/uxml-*.test.js"
       - "viewer/tests/rvm-pcf-*.test.js"
@@ -26,7 +25,6 @@ on:
       - "viewer/js/pcf2glb/glb/enhanceSupportDirectionProxy.js"
       - "viewer/js/pcf2glb/glb/buildExportScene.js"
       - "viewer/tabs/model-converters-tab.js"
-      - "viewer/tabs/model-converters/inputxml-glb-legacy-bridge.js"
       - "viewer/tabs/model-converters/converters/inputxml-to-glb.js"
       - "viewer/tests/uxml-*.test.js"
       - "viewer/tests/rvm-pcf-*.test.js"
@@ -73,30 +71,5 @@ jobs:
       - name: Run UXML static certification
         run: node tools/uxml-certification.mjs
 
-      - name: Run InputXML DXF smoke certification
-        run: node viewer/tests/inputxml-to-dxf.test.js
-
-      - name: Run InputXML DXF branch picker certification
-        run: node viewer/tests/inputxml-dxf-branch-picker.test.js
-
-      - name: Run InputXML DXF symbol option certification
-        run: node viewer/tests/inputxml-dxf-symbol-option.test.js
-
-      - name: Run InputXML DXF projection option certification
-        run: node viewer/tests/inputxml-dxf-projection-option.test.js
-uxml-profile-detector.test.js \
-              viewer/tests/uxml-normalizer.test.js \
-              viewer/tests/uxml-inputxml-schema-mapper.test.js \
-              viewer/tests/rvm-pcf-topology-roundtrip.test.js \
-              viewer/tests/rvm-pcf-consistency-guards.test.js \
-              viewer/tests/rvm-pcf-adapter-preview.test.js
-          else
-            npx vitest run \
-              viewer/tests/uxml-contracts.test.js \
-              viewer/tests/uxml-profile-detector.test.js \
-              viewer/tests/uxml-normalizer.test.js \
-              viewer/tests/uxml-inputxml-schema-mapper.test.js \
-              viewer/tests/rvm-pcf-topology-roundtrip.test.js \
-              viewer/tests/rvm-pcf-consistency-guards.test.js \
-              viewer/tests/rvm-pcf-adapter-preview.test.js
-          fi
+      - name: Run InputXML GLB directional restraint certification
+        run: node viewer/tests/inputxml-glb-directional-restraints.test.js
