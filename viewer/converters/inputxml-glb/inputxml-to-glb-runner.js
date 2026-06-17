@@ -111,6 +111,21 @@ function bmCiiSupportAnnotationSummary(options = {}) {
   };
 }
 
+function supportRenderingSourceForBmCiiMode(mode) {
+  const normalized = text(mode).toLowerCase();
+  if (normalized === 'isonote-expected') return 'isonote';
+  if (normalized === 'compare') return 'compare';
+  return 'inputxml';
+}
+
+function bmCiiSceneOptions(summary) {
+  if (!summary) return {};
+  return {
+    supportRendering: { source: supportRenderingSourceForBmCiiMode(summary.mode) },
+    bmCiiSupportAnnotation: summary,
+  };
+}
+
 export async function run(ctx = {}) {
   const stdout = [];
   const stderr = [];
@@ -173,7 +188,7 @@ export async function run(ctx = {}) {
     }
 
     ctx.setStatus?.('Building 3D GLB scene...', 'running');
-    const scene = buildExportScene(model, createSceneLog(stdout, stderr));
+    const scene = buildExportScene(model, createSceneLog(stdout, stderr), bmCiiSceneOptions(bmCiiSupportAnnotation));
     const glbBlob = await exportSceneToGLB(scene);
     const arrayBuffer = await blobLikeToArrayBuffer(glbBlob);
     const stem = baseName(sourceName);
