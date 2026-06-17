@@ -3,6 +3,10 @@ import {
   firstLineNoValue,
   lineNoFromMetadata,
 } from '../../../utils/line-no-metadata.js';
+import {
+  bmCiiLineNoFromSideload,
+  ensureBmCiiLineNoSideloadLoaded,
+} from './bmCiiLineNoSideload.js';
 
 const SUPPORT_DISPLAY_FIELDS = [
   ['TYPE', ['TYPE', 'supportType', 'supportKind', 'kind', 'pcfType', 'type']],
@@ -99,53 +103,79 @@ function isSupportLike(meta = {}, item = {}) {
 }
 
 export function createPropertyPanel(propPanel, propContent) {
-  function lineNoForItem(item, meta) {
-    return firstLineNoValue(
+  let activeItem = null;
+
+  function lineNoForItem(item, meta, supportLike) {
+    const explicit = firstLineNoValue(
       lineNoFromMetadata(meta, LINE_NO_METADATA_KEYS),
       meta?.lineNo,
       meta?.['Line No'],
       item?.lineNo,
       item?.object3D?.userData?.lineNo
     );
+    if (explicit) return { value: explicit, source: 'explicit component metadata', scope: 'component metadata' };
+    return bmCiiLineNoFromSideload(item, meta, supportLike);
   }
 
+  function show(item) {
+    activeItem = item || null;
+    if (!item) {
+      propPanel.style.display = 'none';
+      return;
+    }
+
+    const meta = { ...(item.rawMeta || {}), ...mergedUserData(item.object3D) };
+    const supportLike = isSupportLike(meta, item);
+    const lineNo = lineNoForItem(item, meta, supportLike);
+    if (lineNo?.pending) {
+      ensureBmCiiLineNoSideloadLoaded()?.then?.(() => {
+        if (activeItem === item) show(item);
+      });
+    }
+    if (lineNo?.value) {
+      meta.lineNo = lineNo.value;
+      meta.LINE_NO_SOURCE = lineNo.source;
+      meta.LINE_NO_SCOPE = lineNo.scope;
+      if (lineNo.anchorNode) meta.LINE_NO_ANCHOR_NODE = lineNo.anchorNode;
+    }
+
+    let html = '<div style="font-family: monospace; font-size: 12px; margin-bottom: 10px; line-height: 1.42;">';
+    if (supportLike) {
+      for (const [label, keys] of SUPPORT_DISPLAY_FIELDS) {
+        html += `<strong>${esc(label)}:</strong> ${esc(firstOrNA(meta, keys))}<br/>`;
+      }
+      html += '<hr style="border: 0; border-top: 1px solid rgba(255,255,255,0.18); margin: 8px 0;"/>';
+    }
+    for (const [label, keys] of DISPLAY_FIELDS) {
+      const fallback = label === 'ID' ? item.id : label === 'Type' ? item.type : label === 'Ref No' ? item.refNo : label === 'Bore' ? item.bore : '';
+      html += `<strong>${esc(label)}:</strong> ${esc(firstOrNA(meta, keys, fallback))}<br/>`;
+    }
+    if (meta.LINE_NO_SOURCE) {
+      html += `<strong>Line No Source:</strong> ${esc(meta.LINE_NO_SOURCE)}<br/>`;
+      if (meta.LINE_NO_ANCHOR_NODE) html += `<strong>Line No Anchor Node:</strong> ${esc(meta.LINE_NO_ANCHOR_NODE)}<br/>`;
+      if (meta.LINE_NO_SCOPE) html += `<strong>Line No Scope:</strong> ${esc(meta.LINE_NO_SCOPE)}<br/>`;
+    }
+    html += '</div>';
+
+    html += '<strong>Fallback Properties</strong><div style="background: rgba(0,0,0,0.5); padding: 5px; border-radius: 4px; margin-top: 5px; max-height: 220px; overflow-y: auto;"><table style="width: 100%; text-align: left; border-collapse: collapse;">';
+    const fallbackMeta = Object.keys(meta).length > 0 ? meta : { uuid: item.uuid, name: item.object3D?.name };
+    for (const [key, value] of Object.entries(fallbackMeta)) {
+      const display = valueText(value);
+      if (display === '') continue;
+      html += `<tr><td style="padding: 4px; border-bottom: 1px solid #444; color: #aaa; width: 40%; word-break: break-word;">${esc(key)}</td><td style="padding: 4px; border-bottom: 1px solid #444; color: #fff; word-break: break-word;">${esc(display)}</td></tr>`;
+    }
+    html += '</table></div>';
+
+    propContent.innerHTML = html;
+    propPanel.style.display = 'block';
+  }
+
+  ensureBmCiiLineNoSideloadLoaded();
+
   return {
-    show: (item) => {
-      if (!item) {
-        propPanel.style.display = 'none';
-        return;
-      }
-
-      const meta = { ...(item.rawMeta || {}), ...mergedUserData(item.object3D) };
-      const lineNo = lineNoForItem(item, meta);
-      if (lineNo) meta.lineNo = lineNo;
-
-      let html = '<div style="font-family: monospace; font-size: 12px; margin-bottom: 10px; line-height: 1.42;">';
-      if (isSupportLike(meta, item)) {
-        for (const [label, keys] of SUPPORT_DISPLAY_FIELDS) {
-          html += `<strong>${esc(label)}:</strong> ${esc(firstOrNA(meta, keys))}<br/>`;
-        }
-        html += '<hr style="border: 0; border-top: 1px solid rgba(255,255,255,0.18); margin: 8px 0;"/>';
-      }
-      for (const [label, keys] of DISPLAY_FIELDS) {
-        const fallback = label === 'ID' ? item.id : label === 'Type' ? item.type : label === 'Ref No' ? item.refNo : label === 'Bore' ? item.bore : '';
-        html += `<strong>${esc(label)}:</strong> ${esc(firstOrNA(meta, keys, fallback))}<br/>`;
-      }
-      html += '</div>';
-
-      html += '<strong>Fallback Properties</strong><div style="background: rgba(0,0,0,0.5); padding: 5px; border-radius: 4px; margin-top: 5px; max-height: 220px; overflow-y: auto;"><table style="width: 100%; text-align: left; border-collapse: collapse;">';
-      const fallbackMeta = Object.keys(meta).length > 0 ? meta : { uuid: item.uuid, name: item.object3D?.name };
-      for (const [key, value] of Object.entries(fallbackMeta)) {
-        const display = valueText(value);
-        if (display === '') continue;
-        html += `<tr><td style="padding: 4px; border-bottom: 1px solid #444; color: #aaa; width: 40%; word-break: break-word;">${esc(key)}</td><td style="padding: 4px; border-bottom: 1px solid #444; color: #fff; word-break: break-word;">${esc(display)}</td></tr>`;
-      }
-      html += '</table></div>';
-
-      propContent.innerHTML = html;
-      propPanel.style.display = 'block';
-    },
+    show,
     hide: () => {
+      activeItem = null;
       propPanel.style.display = 'none';
     }
   };
