@@ -1,0 +1,16 @@
+{
+  "schema": "bm-cii-latest-glb-manifest/v1",
+  "description": "Basic GLB-PCF BM_CII quick mock manifest. Update latest.url whenever a new generated BM_CII GLB is committed for review.",
+  "latest": {
+    "name": "BM_CII latest engineering GLB",
+    "url": "benchmarks/bm-cii/latest/BM_CII_latest_engineering.glb",
+    "source": "generated BM_CII review artifact",
+    "notes": "The Basic GLB-PCF Quick Mocks BM_CII button reads this manifest. Future generated GLBs should update this path or this manifest."
+  },
+  "candidates": [
+    {
+      "name": "BM_CII latest engineering GLB",
+      "url": "benchmarks/bm-cii/latest/BM_CII_latest_engineering.glb"
+    }
+  ]
+}
