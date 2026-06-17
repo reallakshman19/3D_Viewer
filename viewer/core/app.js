@@ -186,19 +186,35 @@ function createNav(tabs) {
   return nav;
 }
 
-export async function initApp(root = document.getElementById('app')) {
-  if (!root) throw new Error('App root #app not found');
+function resolveAppRoot(candidateRoot) {
+  if (candidateRoot instanceof Element) return candidateRoot;
+
+  const explicitRoot = document.getElementById('app');
+  if (explicitRoot) return explicitRoot;
+
+  const legacyRoot = document.getElementById('app-layout');
+  if (legacyRoot) return legacyRoot;
+
+  const createdRoot = document.createElement('div');
+  createdRoot.id = 'app';
+  document.body.prepend(createdRoot);
+  return createdRoot;
+}
+
+export async function initApp(root) {
+  const resolvedRoot = resolveAppRoot(root);
   await loadVisibilityRules();
   const tabs = visibleTabs();
   const shell = document.createElement('div');
   shell.className = 'app-shell';
+  shell.id = 'app-shell';
   const nav = createNav(tabs);
   const content = document.createElement('main');
   content.className = 'app-content';
   shell.append(nav, content);
-  root.innerHTML = '';
-  root.appendChild(shell);
-  appShell = { root, shell, nav, content };
+  resolvedRoot.innerHTML = '';
+  resolvedRoot.appendChild(shell);
+  appShell = { root: resolvedRoot, shell, nav, content };
   initDevDebugWindow({ emit, on, state });
   unsubscribeTabChange = on(RuntimeEvents.TAB_CHANGE_REQUESTED, ({ tabId } = {}) => {
     if (tabId) renderActiveTab(tabId);
@@ -208,13 +224,13 @@ export async function initApp(root = document.getElementById('app')) {
   appDestroy = () => {
     cleanupActiveTab();
     if (typeof unsubscribeTabChange === 'function') unsubscribeTabChange();
-    root.innerHTML = '';
+    resolvedRoot.innerHTML = '';
     appShell = null;
   };
   return appDestroy;
 }
 
-export function init(root = document.getElementById('app')) {
+export function init(root) {
   return initApp(root);
 }
 
