@@ -12,6 +12,48 @@ const dummyLogger = {
   error: () => {}
 };
 
+const BM_CII_LATEST_GLB_MANIFEST_URL = 'benchmarks/bm-cii/latest-glb-manifest.json';
+const BM_CII_DEFAULT_LATEST_GLB_URL = 'benchmarks/bm-cii/latest/BM_CII_latest_engineering.glb';
+
+function resolveBenchmarkUrl(url) {
+  if (!url) return '';
+  if (/^https?:\/\//i.test(url)) return url;
+  if (typeof window !== 'undefined' && window.location) {
+    return new URL(url.replace(/^\/+/, ''), `${window.location.origin}${window.location.pathname.replace(/[^/]*$/, '')}`).toString();
+  }
+  return url;
+}
+
+async function fetchJsonQuietly(url) {
+  try {
+    const response = await fetch(resolveBenchmarkUrl(url), { cache: 'no-store' });
+    if (!response.ok) return null;
+    return await response.json();
+  } catch (err) {
+    return null;
+  }
+}
+
+async function loadFirstAvailableGlb(candidates = []) {
+  const unique = [...new Set(candidates.filter(Boolean))];
+  const failures = [];
+  for (const candidate of unique) {
+    const url = resolveBenchmarkUrl(candidate);
+    try {
+      const response = await fetch(url, { cache: 'no-store' });
+      if (!response.ok) {
+        failures.push(`${candidate}: ${response.status}`);
+        continue;
+      }
+      const blob = await response.blob();
+      return URL.createObjectURL(blob);
+    } catch (err) {
+      failures.push(`${candidate}: ${err?.message || err}`);
+    }
+  }
+  throw new Error(`No BM_CII benchmark GLB found. Update ${BM_CII_LATEST_GLB_MANIFEST_URL} or add ${BM_CII_DEFAULT_LATEST_GLB_URL}. ${failures.join('; ')}`);
+}
+
 export async function loadMockPcfToGlbUrl() {
   try {
     const response = await fetch('data/mocks/mock_complex_piping.pcf');
@@ -22,6 +64,19 @@ export async function loadMockPcfToGlbUrl() {
     console.error("Mock PCF load error:", err);
     throw err;
   }
+}
+
+export async function loadBmCiiLatestGlbUrl() {
+  const manifest = await fetchJsonQuietly(BM_CII_LATEST_GLB_MANIFEST_URL);
+  const latest = manifest?.latest || {};
+  const candidates = [
+    latest.url,
+    latest.glbUrl,
+    manifest?.latestUrl,
+    ...(Array.isArray(manifest?.candidates) ? manifest.candidates.map((item) => item?.url || item?.glbUrl || item) : []),
+    BM_CII_DEFAULT_LATEST_GLB_URL,
+  ];
+  return loadFirstAvailableGlb(candidates);
 }
 
 export async function loadPcfTextToGlbUrl(text) {
