@@ -120,9 +120,9 @@ function orientFromY(object, direction) {
 function orientPlaneNormal(object, faceDirection) {
   const dir = faceDirection?.clone?.().normalize?.() || Z_AXIS.clone();
   if (!dir || dir.lengthSq() < 1e-12) return;
-  // THREE.PlaneGeometry has local +Z as its front normal.  This is retained for
-  // exported/static GLB inspection, but Basic GLB/PCF uses an explicit CSS2D
-  // label anchor so node text remains camera-facing and cannot appear edge-on.
+  // THREE.PlaneGeometry has local +Z as its front normal. This is used only
+  // when a static baked plate is explicitly requested; Basic GLB/PCF uses the
+  // explicit CSS2D label anchor for readable camera-facing node text.
   object.quaternion.setFromUnitVectors(Z_AXIS, dir);
 }
 
@@ -320,18 +320,20 @@ export function buildNodeLabelObject(comp = {}) {
     group.add(leader);
   }
 
-  // Static/baked plate is a reference only.  It is hidden by default because the
-  // Basic viewer renders the readable node text through a CSS2D camera-facing
-  // anchor, which avoids all backside and edge-on label failures.
-  const plate = new THREE.Mesh(new THREE.PlaneGeometry(scale * 3.0, scale * 1.05), labelMaterial(0x0f172a, 0x075985, attrs, comp));
-  plate.name = `node-annotation-label:${label}`;
-  plate.position.copy(labelAnchor);
-  plate.visible = plateVisible;
-  orientPlaneNormal(plate, faceDirectionVector);
-  stampNodeAnnotation(plate, comp, attrs, { part: 'label', role: 'node-label-static-plate', faceDirection: faceDirectionVector, faceDirectionRaw, doubleSided, exportLabel: false });
-  plate.userData.NOTE = `Runtime CSS2D display label is ${displayLabel}; raw node label is available as NODE_LABEL.`;
-  plate.userData.NODE_LABEL_STATIC_PLATE_VISIBLE = plateVisible;
-  group.add(plate);
+  // Static/baked plates are omitted by default, not merely hidden. The Basic
+  // viewer layer panel can re-enable hidden meshes, so leaving hidden plates in
+  // the GLB creates blue edge-on slivers. A plate is exported only when the user
+  // explicitly opts into NODE_LABEL_STATIC_PLATE_VISIBLE / NODE_LABEL_BAKED_PLATE_VISIBLE.
+  if (plateVisible) {
+    const plate = new THREE.Mesh(new THREE.PlaneGeometry(scale * 3.0, scale * 1.05), labelMaterial(0x0f172a, 0x075985, attrs, comp));
+    plate.name = `node-annotation-label:${label}`;
+    plate.position.copy(labelAnchor);
+    orientPlaneNormal(plate, faceDirectionVector);
+    stampNodeAnnotation(plate, comp, attrs, { part: 'label', role: 'node-label-static-plate', faceDirection: faceDirectionVector, faceDirectionRaw, doubleSided, exportLabel: false });
+    plate.userData.NOTE = `Runtime CSS2D display label is ${displayLabel}; raw node label is available as NODE_LABEL.`;
+    plate.userData.NODE_LABEL_STATIC_PLATE_VISIBLE = true;
+    group.add(plate);
+  }
 
   // Explicit label anchor consumed by glbLabelOverlayFinal.js. This gives Basic
   // GLB/PCF a camera-facing HTML label, so node labels stay readable in ISO,
@@ -348,7 +350,7 @@ export function buildNodeLabelObject(comp = {}) {
     exportLabel: true,
     labelAnchor: true,
   });
-  overlayAnchor.userData.NOTE = `Camera-facing Basic viewer label is ${displayLabel}; static GLB plate is ${plateVisible ? 'visible' : 'hidden'} by default.`;
+  overlayAnchor.userData.NOTE = `Camera-facing Basic viewer label is ${displayLabel}; static GLB plate is ${plateVisible ? 'visible' : 'not exported'} by default.`;
   group.add(overlayAnchor);
 
   stampNodeAnnotation(group, comp, attrs, { part: 'node', role: 'node-annotation-group', faceDirection: faceDirectionVector, faceDirectionRaw, doubleSided, exportLabel: false });
@@ -362,7 +364,8 @@ export function buildNodeLabelObject(comp = {}) {
     labelReadableBothSides: doubleSided,
     labelRuntimeOverlay: true,
     labelStaticPlateVisible: plateVisible,
-    labelPlacementContract: 'node-marker-centreline-leader-no-arrow-label-offset-from-pipe-css2d-camera-facing-anchor',
+    labelStaticPlateExported: plateVisible,
+    labelPlacementContract: 'node-marker-centreline-leader-no-arrow-label-offset-from-pipe-css2d-camera-facing-anchor-no-static-plate-by-default',
   };
 
   return group;
