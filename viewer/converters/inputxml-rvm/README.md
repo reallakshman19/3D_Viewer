@@ -1,13 +1,25 @@
-# InputXML → RVM (self-contained converter)
+# InputXML → RVM (+GLB) converter
 
 Converts a CAESAR II **Input XML** file into a binary **AVEVA RVM** model
-(exact parametric primitives) plus an optional `.att` attribute dump.
-
-Pipeline:
+(exact parametric primitives) plus an optional `.att` attribute dump, and an
+optional **GLB** companion for the in-browser viewer.
 
 ```
-Input XML → UXML document → parametric component model → binary RVM (+ .att)
+Input XML → UXML document → parametric component model ┬→ binary RVM (+ .att)   [Navisworks]
+                                                       └→ GLB (optional)         [web viewer / GitHub Pages]
 ```
+
+## Two outputs, two targets
+
+| Output | Target | Notes |
+| --- | --- | --- |
+| `.rvm` (+ `.att`) | **Navisworks / AVEVA Review** (desktop) | Standard AVEVA binary RVM; rvmparser-validated. |
+| `.glb` (optional) | The repo's **in-browser viewer** on GitHub Pages | The static viewer renders GLB, not raw binary RVM. |
+
+Everything runs **client-side**, so the converter works on GitHub Pages (static
+hosting) with no backend. The RVM path needs nothing external; the optional GLB
+uses three.js from the page's importmap (the same CDN the rest of the viewer
+already uses) and performs no network fetches of its own.
 
 The RVM is serialised from the **parametric component model** (cylinders, snouts,
 tori, boxes), never from tessellated geometry, so the output is exact and compact.
@@ -53,11 +65,26 @@ non-sibling specifier the test fails.
 - `ctx.options`:
   - `rvmPrecision` (default `3`) — coordinate rounding (decimals).
   - `includeAtt` (default `true`) — also emit the `.att` attribute dump.
+  - `includeGlb` (default `true`) — also emit a `.glb` companion for the web viewer.
   - `includeSidecarJson` (default `false`) — also emit a diagnostics sidecar JSON.
 - `ctx.setStatus(message, state)` — optional progress callback.
 
-Returns `{ ok, outputs: [{ name, base64|text, mime }], logs: { stdout, stderr } }`.
-The `.rvm` output is binary (base64-encoded).
+Returns
+`{ ok, outputs: [{ name, base64|text, mime }], logs: { stdout, stderr }, model, stem }`.
+The `.rvm` output is binary (base64-encoded). `model`/`stem` are returned so an
+outer layer can build the GLB companion without this runner importing three.js.
+
+## Where the GLB comes from (the one shared dependency)
+
+The self-contained runner here only ever produces the RVM. The optional GLB is
+added by the registry wrapper
+`viewer/tabs/model-converters/converters/inputxml-to-rvm.js`, which lives
+**outside** this folder and is therefore allowed to reach for shared code. It
+dynamically imports the shared three.js exporter
+(`viewer/js/pcf2glb/glb/{buildExportScene,exportSceneToGLB}.js`) inside a
+try/catch: if three.js is unavailable (e.g. Node tests) the GLB is skipped with a
+log line and the RVM is unaffected. This keeps the strict "no shared modules"
+guarantee on the RVM/parsing core while still serving the web viewer.
 
 ## Registration
 
