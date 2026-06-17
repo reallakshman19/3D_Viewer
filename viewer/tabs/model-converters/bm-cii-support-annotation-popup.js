@@ -117,13 +117,13 @@ function renderAdvancedFields(root) {
       <select data-option-key="bmCiiSupportMode">
         <option value="inputxml-actual">InputXML actual restraints</option>
         <option value="isonote-expected">ISONOTE expected restraints</option>
-        <option value="compare">Compare actual vs expected</option>
+        <option value="compare" selected>Compare actual vs expected</option>
       </select>
     </label>
     <label class="model-converters-label">
       <span>SINGLE AXIS Z decision</span>
       <select data-option-key="bmCiiSingleAxisZDecision">
-        <option value="warning">No +/- provided → warning marker</option>
+        <option value="warning" selected>No +/- provided → warning marker</option>
         <option value="+Z">Resolve as +Z</option>
         <option value="-Z">Resolve as -Z</option>
       </select>
@@ -143,6 +143,14 @@ function renderAdvancedFields(root) {
     <label style="display:flex;align-items:center;gap:8px;color:#d7e6ff;font-size:12px;">
       <input type="checkbox" data-option-key="exportNodeLabels" checked>
       <span>Export node labels</span>
+    </label>
+    <label style="display:flex;align-items:center;gap:8px;color:#d7e6ff;font-size:12px;">
+      <input type="checkbox" data-option-key="exportComponentText">
+      <span>Export component text labels (off for compact BM_CII output)</span>
+    </label>
+    <label style="display:flex;align-items:center;gap:8px;color:#d7e6ff;font-size:12px;">
+      <input type="checkbox" data-option-key="exportRestraintText">
+      <span>Export support/restraint text labels (off for compact BM_CII output)</span>
     </label>
     <button type="button" class="model-converters-download-btn" data-bmcii-support-popup="setup">Open BM_CII setup / rules popup</button>
     ${noteBlock('Locked support mapping', 'REST = +Y upward. HOLDDOWN = vertical ±Y. GUIDE = lateral: pipe X→Z, pipe Z→X, vertical pipe→±X and ±Z. LIMIT/LIM and LINE STOP = axial ± unless explicit sign. Can Spring/Spring Can = warning coil below pipe.')}
@@ -194,8 +202,15 @@ function readOptions(root) {
     else options[key] = input.value;
   }
   options.bmCiiSupportAnnotationTool = true;
+  options.bmCiiSupportMode = text(options.bmCiiSupportMode) || 'compare';
+  options.bmCiiIsonoteSideloadText = text(options.bmCiiIsonoteSideloadText) || DEFAULT_ISONOTE_TEXT;
+  options.bmCiiLineNoSideloadText = text(options.bmCiiLineNoSideloadText) || DEFAULT_LINE_NO_TEXT;
   options.bmCiiSupportMappingContract = 'common-inputxml-support-mapper/v3';
   options.bmCiiAxialResolver = 'engineering-contact-first-then-ODx2over3-only-if-pipe-parallel';
+  options.exportComponentText = options.exportComponentText === true;
+  options.showComponentLabels = options.exportComponentText;
+  options.exportRestraintText = options.exportRestraintText === true;
+  options.showSupportLabels = options.exportRestraintText;
   return options;
 }
 
@@ -228,7 +243,7 @@ function parseIsonoteRows(rawText) {
 }
 
 function buildAudit(options, secondaryText, sourceName) {
-  const isonoteText = [options.bmCiiIsonoteSideloadText, secondaryText].map(text).filter(Boolean).join('\n');
+  const isonoteText = [options.bmCiiIsonoteSideloadText, secondaryText].map(text).filter(Boolean).join('\n') || DEFAULT_ISONOTE_TEXT;
   const records = parseIsonoteRows(isonoteText);
   const singleAxis = [];
   for (const row of records) {
@@ -237,7 +252,7 @@ function buildAudit(options, secondaryText, sourceName) {
     }
   }
   return {
-    schema: 'bm-cii-support-annotation-converter-audit/v1',
+    schema: 'bm-cii-support-annotation-converter-audit/v2',
     source: sourceName,
     mode: options.bmCiiSupportMode,
     supportMappingContract: options.bmCiiSupportMappingContract,
@@ -245,7 +260,11 @@ function buildAudit(options, secondaryText, sourceName) {
     isonoteRecordCount: records.length,
     isonoteRecords: records,
     singleAxisPrompts: singleAxis,
-    lineNoSideloadText: options.bmCiiLineNoSideloadText || '',
+    lineNoSideloadText: options.bmCiiLineNoSideloadText || DEFAULT_LINE_NO_TEXT,
+    compactOutput: {
+      exportComponentText: options.exportComponentText === true,
+      exportRestraintText: options.exportRestraintText === true,
+    },
     rules: {
       rest: 'REST is always +Y upward.',
       holddown: 'HOLDDOWN is vertical double-arrow ±Y.',
