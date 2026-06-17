@@ -14,9 +14,8 @@ const dummyLogger = {
 
 const BM_CII_LATEST_GLB_MANIFEST_URL = 'benchmarks/bm-cii/latest-glb-manifest.json';
 // Keep empty by default so the deployed viewer has no mandatory binary GLB asset.
-// The manifest can point to a generated BM_CII GLB when one is deployed; otherwise
-// the BM_CII button falls back to the generated mock GLB below instead of failing
-// static app-entrypoint validation.
+// IMPORTANT: the BM_CII quick mock must not fall back to the generic pipe/flange
+// mock, because that makes review screenshots look like the wrong benchmark.
 const BM_CII_DEFAULT_LATEST_GLB_URL = '';
 
 function resolveBenchmarkUrl(url) {
@@ -41,6 +40,9 @@ async function fetchJsonQuietly(url) {
 async function loadFirstAvailableGlb(candidates = []) {
   const unique = [...new Set(candidates.filter(Boolean))];
   const failures = [];
+  if (unique.length === 0) {
+    throw new Error(`BM_CII latest GLB is not configured. Update ${BM_CII_LATEST_GLB_MANIFEST_URL} with a BM_CII GLB URL.`);
+  }
   for (const candidate of unique) {
     const url = resolveBenchmarkUrl(candidate);
     try {
@@ -80,12 +82,9 @@ export async function loadBmCiiLatestGlbUrl() {
     ...(Array.isArray(manifest?.candidates) ? manifest.candidates.map((item) => item?.url || item?.glbUrl || item) : []),
     BM_CII_DEFAULT_LATEST_GLB_URL,
   ];
-  try {
-    return await loadFirstAvailableGlb(candidates);
-  } catch (err) {
-    console.warn('BM_CII latest GLB is not deployed yet; loading generated GLB mock instead.', err);
-    return loadMockGlbUrl();
-  }
+  // Do not fall back to loadMockGlbUrl(); BM_CII review must never silently load
+  // an unrelated generic GLB. Surface a clear configuration error instead.
+  return await loadFirstAvailableGlb(candidates);
 }
 
 export async function loadPcfTextToGlbUrl(text) {
