@@ -116,6 +116,7 @@ function cosineAxisFromRaw(raw = {}, fallbackAxis = '') {
 
 function normalizeAxis(value, raw = {}, kind = '') {
   let axis = rawAxisLabel(value);
+  const hasExplicitAxis = !!axis;
   if (!axis) {
     const cosineAxis = cosineAxisFromRaw(raw, '');
     if (cosineAxis && cosineAxis !== 'NA') axis = cosineAxis;
@@ -123,6 +124,14 @@ function normalizeAxis(value, raw = {}, kind = '') {
   const base = axis.replace(/^[+-]/, '');
   const caesarType = numericType(raw);
   const normalizedKind = normalizeKind(kind || raw.kind || raw.supportKind || raw.restraintType);
+
+  // If axis comes only from raw cosines (no explicit text direction), keep
+  // LIMIT/LINESTOP as axis-family by default so they render axial pairs.
+  // Signed single-axis arrows should come from explicit source intent, except
+  // the InputXML type-18 benchmark rule handled below.
+  if (!hasExplicitAxis && (normalizedKind === 'LINESTOP' || normalizedKind === 'LIMIT')) {
+    axis = base;
+  }
 
   // BM_CII InputXML-basic primary rule:
   // X/Y/Z from positive cosines are axis labels unless the BM_CII benchmark
