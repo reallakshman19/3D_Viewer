@@ -1,11 +1,12 @@
 import { createViewerApp } from '../advanced/createViewerApp.js';
-import { loadMockPcfToGlbUrl, loadMockGlbUrl, loadPcfTextToGlbUrl } from '../pro-editor/core/mockLoader.js';
+import { loadMockPcfToGlbUrl, loadMockGlbUrl, loadPcfTextToGlbUrl, loadBmCiiLatestGlbUrl } from '../pro-editor/core/mockLoader.js';
 import { parsePcfText } from '../pcf/parsePcfText.js';
 import { normalizePcfModel } from '../pcf/normalizePcfModel.js';
 
 const MOCK_BUTTON_LABELS = {
   pcf: 'PCF Mock',
   glb: 'GLB Mock',
+  bmCii: 'BM_CII',
 };
 
 const BASIC_GLB_SIDEBAR_COLLAPSED_KEY = 'basic-glb-sidebar-collapsed-v1';
@@ -36,10 +37,12 @@ export function renderBasicGlbPcfPanel(container) {
 
         <section style="padding:16px; border-radius:16px; background:#142338; color:#eef5ff; border:1px solid rgba(255,255,255,0.08); box-shadow:0 14px 34px rgba(6,12,22,0.28);">
           <div style="font-size:11px; font-weight:700; letter-spacing:0.12em; text-transform:uppercase; color:#90acd0; margin-bottom:10px;">Quick Mocks</div>
-          <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
-            <button id="btn-adv-mock-pcf" class="btn-secondary" title="Load mock piping PCF and convert to GLB" style="justify-content:center; padding:10px 12px; border-radius:12px; background:#1b3350; color:#dce9fb; border:1px solid rgba(144,172,208,0.35);">PCF Mock</button>
-            <button id="btn-adv-mock-glb" class="btn-secondary" title="Load generated mock GLB geometry" style="justify-content:center; padding:10px 12px; border-radius:12px; background:#1b3350; color:#dce9fb; border:1px solid rgba(144,172,208,0.35);">GLB Mock</button>
+          <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px;">
+            <button id="btn-adv-mock-pcf" class="btn-secondary" title="Load mock piping PCF and convert to GLB" style="justify-content:center; padding:10px 8px; border-radius:12px; background:#1b3350; color:#dce9fb; border:1px solid rgba(144,172,208,0.35);">PCF Mock</button>
+            <button id="btn-adv-mock-glb" class="btn-secondary" title="Load generated mock GLB geometry" style="justify-content:center; padding:10px 8px; border-radius:12px; background:#1b3350; color:#dce9fb; border:1px solid rgba(144,172,208,0.35);">GLB Mock</button>
+            <button id="btn-adv-mock-bm-cii" class="btn-secondary" title="Load latest BM_CII benchmark GLB from benchmarks/bm-cii/latest-glb-manifest.json" style="justify-content:center; padding:10px 8px; border-radius:12px; background:linear-gradient(135deg,#204b37,#17314d); color:#eafff3; border:1px solid rgba(122,231,183,0.45);">BM_CII</button>
           </div>
+          <div style="margin-top:8px; font-size:10px; color:#9bb6d8; line-height:1.35;">BM_CII loads the latest committed benchmark GLB manifest for fast review.</div>
         </section>
 
         <section style="padding:16px; border-radius:16px; background:rgba(255,255,255,0.74); border:1px solid rgba(16,32,51,0.08);">
@@ -134,6 +137,7 @@ export function renderBasicGlbPcfPanel(container) {
   const debugLogs = container.querySelector('#adv-debug-logs');
   const btnMockPcf = container.querySelector('#btn-adv-mock-pcf');
   const btnMockGlb = container.querySelector('#btn-adv-mock-glb');
+  const btnMockBmCii = container.querySelector('#btn-adv-mock-bm-cii');
   const measureChip = container.querySelector('#adv-measure-chip');
   const measureStripButton = container.querySelector('[data-adv-nav="MEASURE"]');
   const sidebar = container.querySelector('#basic-glb-sidebar');
@@ -246,6 +250,19 @@ export function renderBasicGlbPcfPanel(container) {
     }
   });
 
+  btnMockBmCii?.addEventListener('click', async () => {
+    setBusy(btnMockBmCii, MOCK_BUTTON_LABELS.bmCii, true);
+    try {
+      const url = await loadBmCiiLatestGlbUrl();
+      await viewerApp.loadGLB(url);
+    } catch (err) {
+      console.error('BM_CII benchmark GLB load error:', err);
+      window.alert?.(`BM_CII benchmark GLB not found. ${err?.message || err}`);
+    } finally {
+      setBusy(btnMockBmCii, MOCK_BUTTON_LABELS.bmCii, false);
+    }
+  });
+
   btnCloseProps.addEventListener('click', () => {
     propPanel.style.display = 'none';
   });
@@ -311,7 +328,7 @@ export function renderBasicGlbPcfPanel(container) {
         viewerApp.toggleSection();
         button.style.background  = clipActive ? 'rgba(180,60,60,0.55)'  : 'rgba(19,36,57,0.42)';
         button.style.borderColor = clipActive ? 'rgba(255,140,140,0.5)' : 'rgba(175,214,255,0.18)';
-        button.textContent = clipActive ? '\u2702 CLIP' : 'CLIP';
+        button.textContent = clipActive ? '✂ CLIP' : 'CLIP';
         if (clipActive) {
           _modelBox = viewerApp.getModelBounds?.() || null;
           if (sectionPanel) sectionPanel.style.display = 'block';
