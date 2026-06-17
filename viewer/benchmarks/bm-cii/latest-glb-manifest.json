@@ -3,9 +3,9 @@
   "latest": {
     "url": "test/bm-cii/latest/BM_CII_latest_engineering.glb",
     "encoding": "binary",
-    "description": "BM_CII latest generated benchmark GLB. Place the generated GLB at viewer/test/bm-cii/latest/BM_CII_latest_engineering.glb so the BM_CII quick mock loads the same reviewed file.",
-    "expectedSha256": "d50cbce32b7a0096c9462a2503286980c4611bcca64fc688bced58caa61fe68e",
-    "sourceRun": "v61"
+    "description": "BM_CII v63 metadata-fixed benchmark GLB. Place the generated GLB at viewer/test/bm-cii/latest/BM_CII_latest_engineering.glb so the BM_CII quick mock loads the same reviewed file.",
+    "expectedSha256": "981cca1264c750540c9528b2718569fb8eb2b6ab3d4cd8dc6b72d29b51cef755",
+    "sourceRun": "v63-component-metadata-fixed"
   },
   "lineNoSideloadUrl": "benchmarks/bm-cii/BM_CII_LINE_NO_sideload.json",
   "proceduralFallback": false,
@@ -13,7 +13,7 @@
     {
       "url": "test/bm-cii/latest/BM_CII_latest_engineering.glb",
       "encoding": "binary",
-      "description": "BM_CII v61 generated GLB"
+      "description": "BM_CII v63 component metadata fixed GLB"
     }
   ]
 }
