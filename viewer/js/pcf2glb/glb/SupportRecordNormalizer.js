@@ -98,9 +98,9 @@ function rawAxisLabel(value) {
 }
 
 function cosineAxisFromRaw(raw = {}, fallbackAxis = '') {
-  const x = Number(firstNonEmpty(raw.XCOSINE, raw.xcosine, raw.XCosine, raw.xcos, raw.XCOS, raw.cosineX, raw.CX));
-  const y = Number(firstNonEmpty(raw.YCOSINE, raw.ycosine, raw.YCosine, raw.ycos, raw.YCOS, raw.cosineY, raw.CY));
-  const z = Number(firstNonEmpty(raw.ZCOSINE, raw.zcosine, raw.ZCosine, raw.zcos, raw.ZCOS, raw.cosineZ, raw.CZ));
+  const x = Number(firstNonEmpty(raw.XCOSINE, raw.xcosine, raw.XCosine, raw.xcos, raw.XCOS, raw.cosineX, raw.CX, raw.caesarXCosine, raw.CaesarXCosine, raw.CAESAR_XCOSINE));
+  const y = Number(firstNonEmpty(raw.YCOSINE, raw.ycosine, raw.YCosine, raw.ycos, raw.YCOS, raw.cosineY, raw.CY, raw.caesarYCosine, raw.CaesarYCosine, raw.CAESAR_YCOSINE));
+  const z = Number(firstNonEmpty(raw.ZCOSINE, raw.zcosine, raw.ZCosine, raw.zcos, raw.ZCOS, raw.cosineZ, raw.CZ, raw.caesarZCosine, raw.CaesarZCosine, raw.CAESAR_ZCOSINE));
   if ([x, y, z].some(Number.isFinite)) {
     const vals = [Number.isFinite(x) ? x : 0, Number.isFinite(y) ? y : 0, Number.isFinite(z) ? z : 0];
     const abs = vals.map((n) => Math.abs(n));
@@ -116,6 +116,10 @@ function cosineAxisFromRaw(raw = {}, fallbackAxis = '') {
 
 function normalizeAxis(value, raw = {}, kind = '') {
   let axis = rawAxisLabel(value);
+  if (!axis) {
+    const cosineAxis = cosineAxisFromRaw(raw, '');
+    if (cosineAxis && cosineAxis !== 'NA') axis = cosineAxis;
+  }
   const base = axis.replace(/^[+-]/, '');
   const caesarType = numericType(raw);
   const normalizedKind = normalizeKind(kind || raw.kind || raw.supportKind || raw.restraintType);
