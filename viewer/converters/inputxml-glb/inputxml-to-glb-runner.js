@@ -84,12 +84,40 @@ function applyLabelExportOptions(model, options = {}) {
   return stats;
 }
 
+function bmCiiSupportAnnotationSummary(options = {}) {
+  if (!options.bmCiiSupportAnnotationTool) return null;
+  const isonoteText = text(options.bmCiiIsonoteSideloadText);
+  const lineNoText = text(options.bmCiiLineNoSideloadText);
+  const bundleText = text(options.bmCiiSideloadBundleText);
+  return {
+    schema: 'bm-cii-support-annotation-options/v1',
+    enabled: true,
+    mode: text(options.bmCiiSupportMode) || 'inputxml-actual',
+    sideloadBundleName: text(options.bmCiiSideloadBundleName),
+    isonoteSideloadLineCount: isonoteText ? isonoteText.split(/\r?\n/).filter(Boolean).length : 0,
+    lineNoSideloadLineCount: lineNoText ? lineNoText.split(/\r?\n/).filter(Boolean).length : 0,
+    sideloadBundleLineCount: bundleText ? bundleText.split(/\r?\n/).filter(Boolean).length : 0,
+    singleAxisZDecision: text(options.bmCiiSingleAxisZDecision) || 'warning',
+    supportMappingContract: text(options.bmCiiSupportMappingContract) || 'common-inputxml-support-mapper/v3',
+    axialResolver: text(options.bmCiiAxialResolver) || 'engineering-contact-first-then-ODx2over3-only-if-pipe-parallel',
+    rules: {
+      rest: 'REST is always +Y upward.',
+      holddown: 'HOLDDOWN is vertical double-arrow ±Y.',
+      guide: 'Horizontal X pipe -> ±Z; horizontal Z pipe -> ±X; vertical pipe -> ±X and ±Z.',
+      axial: 'LINE STOP, LIMIT, LIM = axial ± unless explicit sign; axial gap = 10×GAP.',
+      springWarning: 'Can Spring / Spring Can = warning coil below pipe.',
+      visualResolver: 'Apply OD×2/3 only after engineering contact and only for final pipe-parallel/axial symbols.',
+    },
+  };
+}
+
 export async function run(ctx = {}) {
   const stdout = [];
   const stderr = [];
   const file = (ctx.inputFiles || []).find((entry) => entry?.role === 'primary') || ctx.inputFiles?.[0];
   const sourceName = file?.name || 'input.xml';
   const options = ctx.options || {};
+  const bmCiiSupportAnnotation = bmCiiSupportAnnotationSummary(options);
 
   try {
     if (!file) throw new Error('Select a primary Input XML file first.');
@@ -112,6 +140,9 @@ export async function run(ctx = {}) {
     if (caesarSupportMetadata.supportTagCount) {
       stdout.push(`InputXML CAESAR support/restraint tags: ${caesarSupportMetadata.supportTagCount}; expanded: ${caesarSupportMetadata.expandedSupportCount}`);
       stdout.push(`InputXML CAESAR support kinds: ${JSON.stringify(caesarSupportMetadata.kindCounts)}`);
+    }
+    if (bmCiiSupportAnnotation) {
+      stdout.push(`BM_CII support/annotation tool active: ${JSON.stringify({ mode: bmCiiSupportAnnotation.mode, singleAxisZDecision: bmCiiSupportAnnotation.singleAxisZDecision })}`);
     }
 
     const { model, stats, diagnostics } = adaptUxmlToGlbModel(extracted.doc, options);
@@ -165,6 +196,7 @@ export async function run(ctx = {}) {
             exportRestraintText: options.exportRestraintText !== false && options.showSupportLabels !== false,
             exportComponentText: options.exportComponentText !== false && options.showComponentLabels !== false,
           },
+          bmCiiSupportAnnotation,
           stats: {
             ...stats,
             bendMetadata,
