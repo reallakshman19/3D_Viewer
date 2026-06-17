@@ -6,7 +6,7 @@ on:
       - 'viewer/converters/inputxml-glb/**'
       - 'viewer/js/pcf2glb/**'
       - 'viewer/validators/**'
-      - 'viewer/tests/inputxml-glb-rich-model.test.js'
+      - 'viewer/tests/inputxml-glb-directional-restraints.test.js'
       - 'viewer/tests/glb-validation-report.test.js'
       - 'tools/gltf-validator/**'
       - '.github/workflows/glb-validation.yml'
@@ -16,6 +16,8 @@ on:
       - 'viewer/converters/inputxml-glb/**'
       - 'viewer/js/pcf2glb/**'
       - 'viewer/validators/**'
+      - 'viewer/tests/inputxml-glb-directional-restraints.test.js'
+      - 'viewer/tests/glb-validation-report.test.js'
       - 'tools/gltf-validator/**'
       - '.github/workflows/glb-validation.yml'
 
@@ -29,8 +31,8 @@ jobs:
           node-version: 22
       - name: Install validation dependencies
         run: npm install --no-save three gltf-validator
-      - name: Run GLB model tests
-        run: node viewer/tests/inputxml-glb-rich-model.test.js
+      - name: Run InputXML GLB directional restraint tests
+        run: node viewer/tests/inputxml-glb-directional-restraints.test.js
       - name: Run GLB validation report tests
         run: node viewer/tests/glb-validation-report.test.js
       - name: Generate sample InputXML GLB
