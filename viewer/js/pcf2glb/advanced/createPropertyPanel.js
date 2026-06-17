@@ -26,7 +26,7 @@ const SUPPORT_DISPLAY_FIELDS = [
 const IDENTITY_FIELDS = [
   ['ID', ['pcfId', 'id', 'name'], (item) => item?.id],
   ['Engineering Type', ['engineeringType', 'componentType', 'sourceComponentType', 'componentKind', 'pcfType', 'type'], (item) => item?.type],
-  ['Mesh Role', ['meshRole', 'glbShape', 'pcfType', 'type'], (item) => item?.object3D?.name || item?.type],
+  ['Mesh Role', ['meshRole', 'glbShape', 'shapeRole', 'pcfType', 'type'], (item) => item?.object3D?.name || item?.type],
   ['Ref No', ['refNo', 'REF_NO', 'pcfId', 'id'], (item) => item?.refNo || item?.id],
 ];
 
@@ -64,6 +64,17 @@ const SOURCE_FIELDS = [
   ['Benchmark', ['benchmarkName', 'benchmark', 'sourceRun']],
 ];
 
+const BADGE_COLORS = Object.freeze({
+  Explicit: '#86efac',
+  Resolved: '#86efac',
+  Sideloaded: '#fbbf24',
+  Inherited: '#67e8f9',
+  'Record scoped': '#fca5a5',
+  Debug: '#c4b5fd',
+  Unavailable: '#94a3b8',
+  Rejected: '#f87171',
+});
+
 function esc(value) {
   return String(value ?? '')
     .replace(/&/g, '&amp;')
@@ -85,6 +96,11 @@ function valueText(value) {
   return String(value);
 }
 
+function isUnavailable(value) {
+  const raw = valueText(value).trim();
+  return raw === '' || raw.toUpperCase() === NA || /^(NULL|UNDEFINED|NAN)$/i.test(raw);
+}
+
 function first(data, keys, fallback = '') {
   for (const key of keys) {
     const value = valueText(data?.[key]);
@@ -97,21 +113,10 @@ function firstOrNA(data, keys, fallback = '') {
   return first(data, keys, fallback) || NA;
 }
 
-function fieldStatus(value, preferred = '') {
-  if (!value || value === NA) return 'Unavailable';
-  return preferred || 'Resolved';
-}
-
 function statusChip(status) {
   const label = esc(status || 'Resolved');
-  const color = status === 'Unavailable'
-    ? '#94a3b8'
-    : status === 'Sideloaded'
-      ? '#fbbf24'
-      : status === 'Debug'
-        ? '#a78bfa'
-        : '#86efac';
-  return `<span style="float:right; color:${color}; font-size:10px; letter-spacing:.02em;">${label}</span>`;
+  const color = BADGE_COLORS[status] || BADGE_COLORS.Resolved;
+  return `<span style="display:inline-flex; align-items:center; justify-content:center; border:1px solid ${color}; color:${color}; border-radius:999px; padding:1px 6px; font-size:10px; line-height:1.35; white-space:nowrap;">${label}</span>`;
 }
 
 function normalizeNodeId(value) {
@@ -270,28 +275,70 @@ function clearInvalidLineNoFields(meta = {}) {
   if (Object.prototype.hasOwnProperty.call(meta, 'lineNo') && !normalizeLineNoValue(meta.lineNo)) meta.lineNo = '';
 }
 
+function classifyPanel(meta = {}, item = {}, supportLike = false, isonoteLike = false) {
+  if (supportLike) return 'Support / Restraint';
+  if (isonoteLike) return 'ISONOTE Annotation';
+  const type = first(meta, ['engineeringType', 'componentType', 'sourceComponentType', 'componentKind', 'pcfType', 'type'], item?.type || 'Component');
+  return type || 'Component';
+}
+
+function renderHeader(item, meta, supportLike, isonoteLike) {
+  const title = classifyPanel(meta, item, supportLike, isonoteLike);
+  const id = first(meta, ['pcfId', 'id', 'name'], item?.id || item?.object3D?.name || 'Selected item') || 'Selected item';
+  const node = normalizeNodeId(first(meta, ['NODE', 'node', 'sourceNode', 'supportNode', 'fromNode']));
+  const from = first(meta, ['fromNode', 'FROM_NODE']);
+  const to = first(meta, ['toNode', 'TO_NODE']);
+  const sub = node ? `Node ${node}` : from && to ? `Nodes ${from} → ${to}` : '';
+  return `
+    <div style="margin:0 0 10px 0; padding:10px 10px; border:1px solid rgba(148,163,184,.22); border-radius:10px; background:linear-gradient(135deg,rgba(15,23,42,.96),rgba(30,41,59,.86));">
+      <div style="display:flex; justify-content:space-between; gap:8px; align-items:flex-start;">
+        <div style="min-width:0;">
+          <div style="font-size:13px; font-weight:800; color:#f8fafc; word-break:break-word;">${esc(title)}</div>
+          <div style="font-size:11px; color:#cbd5e1; word-break:break-word; margin-top:2px;">${esc(id)}</div>
+          ${sub ? `<div style="font-size:11px; color:#93c5fd; margin-top:2px;">${esc(sub)}</div>` : ''}
+        </div>
+        ${supportLike ? statusChip('Record scoped') : isonoteLike ? statusChip('Sideloaded') : statusChip('Resolved')}
+      </div>
+    </div>`;
+}
+
 function renderSection(title, rows, options = {}) {
-  const filtered = rows.filter((row) => options.showEmpty || (row.value && row.value !== NA));
+  const filtered = rows.filter((row) => options.showEmpty || !isUnavailable(row.value));
   if (!filtered.length && options.hideIfEmpty) return '';
-  let html = `<section style="margin: 0 0 10px 0; border:1px solid rgba(148,163,184,.22); border-radius:8px; overflow:hidden;">`;
-  html += `<div style="background:rgba(15,23,42,.88); color:#e2e8f0; padding:6px 8px; font-weight:700;">${esc(title)}</div>`;
+  const accent = options.accent || '#38bdf8';
+  let html = `<section style="margin:0 0 10px 0; border:1px solid rgba(148,163,184,.22); border-radius:10px; overflow:hidden; background:rgba(2,6,23,.28);">`;
+  html += `<div style="display:flex; align-items:center; gap:7px; background:rgba(15,23,42,.92); color:#e2e8f0; padding:7px 9px; font-weight:800; letter-spacing:.01em;"><span style="width:3px;height:14px;background:${accent};border-radius:999px;display:inline-block;"></span>${esc(title)}</div>`;
   html += '<div style="padding:6px 8px;">';
   for (const row of filtered) {
-    const value = row.value || NA;
-    html += `<div style="padding:3px 0; border-bottom:1px solid rgba(148,163,184,.10);">`;
-    html += `<strong>${esc(row.label)}:</strong> <span style="color:#fff;">${esc(value)}</span>`;
-    if (row.status) html += statusChip(row.status);
+    const value = isUnavailable(row.value) ? NA : row.value;
+    html += `<div style="display:grid; grid-template-columns:minmax(104px,38%) 1fr auto; column-gap:8px; align-items:start; padding:5px 0; border-bottom:1px solid rgba(148,163,184,.10);">`;
+    html += `<div style="color:#cbd5e1; font-weight:700;">${esc(row.label)}</div>`;
+    html += `<div style="color:#f8fafc; word-break:break-word; white-space:normal;">${esc(value)}</div>`;
+    html += `<div>${row.status ? statusChip(row.status) : ''}</div>`;
     html += '</div>';
   }
   html += '</div></section>';
   return html;
 }
 
+function fieldSourceStatus(meta, keys, value, defaultStatus = '') {
+  if (isUnavailable(value)) return 'Unavailable';
+  const sourceKeys = [];
+  for (const key of keys || []) {
+    sourceKeys.push(`${key}Source`, `${key}_SOURCE`, `${String(key).toUpperCase()}_SOURCE`);
+  }
+  const sourceValue = first(meta, sourceKeys);
+  if (/inherit/i.test(sourceValue)) return 'Inherited';
+  if (/sideload/i.test(sourceValue)) return 'Sideloaded';
+  if (/explicit/i.test(sourceValue)) return 'Explicit';
+  return defaultStatus || 'Resolved';
+}
+
 function rowsFromFields(meta, item, fields, status = '') {
   return fields.map(([label, keys, fallback]) => {
     const fallbackValue = typeof fallback === 'function' ? fallback(item, meta) : fallback;
     const value = firstOrNA(meta, keys, fallbackValue || '');
-    return { label, value, status: fieldStatus(value, status) };
+    return { label, value, status: fieldSourceStatus(meta, keys, value, status) };
   });
 }
 
@@ -304,13 +351,20 @@ function debugRows(meta) {
 function renderDebug(meta) {
   const rows = debugRows(meta);
   if (!rows.length) return '';
-  let html = '<details style="margin-top:8px;"><summary style="cursor:pointer; color:#c4b5fd; font-weight:700;">Raw / Debug Metadata</summary>';
-  html += '<div style="background: rgba(0,0,0,0.46); padding: 5px; border-radius: 4px; margin-top: 5px; max-height: 240px; overflow-y: auto;"><table style="width: 100%; text-align: left; border-collapse: collapse;">';
+  let html = '<details style="margin-top:8px;"><summary style="cursor:pointer; color:#c4b5fd; font-weight:800; padding:6px 0;">Raw / Debug Metadata</summary>';
+  html += '<div style="background: rgba(0,0,0,0.46); padding: 5px; border-radius: 8px; margin-top: 5px; max-height: 260px; overflow-y: auto;"><table style="width: 100%; text-align: left; border-collapse: collapse;">';
   for (const row of rows) {
-    html += `<tr><td style="padding: 4px; border-bottom: 1px solid #444; color: #aaa; width: 40%; word-break: break-word;">${esc(row.key)}</td><td style="padding: 4px; border-bottom: 1px solid #444; color: #fff; word-break: break-word;">${esc(row.value)}</td></tr>`;
+    html += `<tr><td style="padding: 4px; border-bottom: 1px solid #444; color: #aaa; width: 40%; word-break: break-word;">${esc(row.key)}</td><td style="padding: 4px; border-bottom: 1px solid #444; color: #fff; word-break: break-word; white-space:normal;">${esc(row.value)}</td></tr>`;
   }
   html += '</table></div></details>';
   return html;
+}
+
+function renderRuleNote(supportLike) {
+  if (supportLike) {
+    return '<div style="margin:-4px 0 10px 0; padding:6px 8px; border-left:3px solid #fca5a5; background:rgba(127,29,29,.22); color:#fecaca; font-size:11px;">Carry-forward: not applicable to supports/restraints. Each restraint row is record-scoped.</div>';
+  }
+  return '<div style="margin:-4px 0 10px 0; padding:6px 8px; border-left:3px solid #67e8f9; background:rgba(8,47,73,.22); color:#bae6fd; font-size:11px;">Component/process properties may use InputXML resolved values. Restraint properties never inherit from component context.</div>';
 }
 
 export function createPropertyPanel(propPanel, propContent) {
@@ -358,34 +412,38 @@ export function createPropertyPanel(propPanel, propContent) {
       meta.LINE_NO = '';
     }
 
-    let html = '<div style="font-family: monospace; font-size: 12px; margin-bottom: 10px; line-height: 1.42; color:#e5e7eb;">';
+    let html = '<div style="font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: 12px; margin-bottom: 10px; line-height: 1.42; color:#e5e7eb;">';
+    html += renderHeader(item, meta, supportLike, isonoteLike);
+    html += renderRuleNote(supportLike);
 
     if (supportLike) {
-      html += renderSection('Support / Restraint', rowsFromFields(meta, item, SUPPORT_DISPLAY_FIELDS, 'Record scoped'), { showEmpty: true });
-      html += '<div style="margin: -4px 0 10px 0; color:#fbbf24; font-size:11px;">Carry-forward: Not applicable to supports/restraints.</div>';
+      html += renderSection('Support / Restraint', rowsFromFields(meta, item, SUPPORT_DISPLAY_FIELDS, 'Record scoped'), { showEmpty: true, accent: '#fca5a5' });
     }
 
-    html += renderSection('Identity', rowsFromFields(meta, item, IDENTITY_FIELDS), { showEmpty: true });
+    html += renderSection('Identity', rowsFromFields(meta, item, IDENTITY_FIELDS), { showEmpty: true, accent: '#38bdf8' });
 
+    const lineStatus = lineNo?.value
+      ? (/sideload/i.test(lineNo.source || '') ? 'Sideloaded' : 'Explicit')
+      : 'Unavailable';
     const lineRows = [
-      { label: 'Line No.', value: lineNo?.value || NA, status: lineNo?.value ? 'Sideloaded' : 'Unavailable' },
+      { label: 'Line No.', value: lineNo?.value || NA, status: lineStatus },
       { label: 'Line No Source', value: meta.LINE_NO_SOURCE || NA, status: meta.LINE_NO_SOURCE ? 'Debug' : 'Unavailable' },
       { label: 'Line No Anchor Node', value: meta.LINE_NO_ANCHOR_NODE || NA, status: meta.LINE_NO_ANCHOR_NODE ? 'Debug' : 'Unavailable' },
       { label: 'Line No Scope', value: meta.LINE_NO_SCOPE || NA, status: meta.LINE_NO_SCOPE ? 'Debug' : 'Unavailable' },
       ...rowsFromFields(meta, item, LINE_NODE_FIELDS),
     ];
-    html += renderSection('Line / Node', lineRows, { showEmpty: true });
+    html += renderSection('Line / Node', lineRows, { showEmpty: true, accent: '#fbbf24' });
 
     if (isonoteLike) {
-      html += renderSection('ISONOTE Annotation', rowsFromFields(meta, item, ISONOTE_FIELDS, 'Sideloaded'), { showEmpty: true });
+      html += renderSection('ISONOTE Annotation', rowsFromFields(meta, item, ISONOTE_FIELDS, 'Sideloaded'), { showEmpty: true, accent: '#f59e0b' });
     }
 
     if (!supportLike && !isonoteLike) {
-      html += renderSection('Component Data', rowsFromFields(meta, item, COMPONENT_FIELDS), { showEmpty: true });
-      html += renderSection('Process / Analysis', rowsFromFields(meta, item, PROCESS_FIELDS), { showEmpty: true });
+      html += renderSection('Component Data', rowsFromFields(meta, item, COMPONENT_FIELDS), { showEmpty: true, accent: '#22c55e' });
+      html += renderSection('Process / Analysis', rowsFromFields(meta, item, PROCESS_FIELDS), { showEmpty: true, accent: '#a78bfa' });
     }
 
-    html += renderSection('Source / Debug Summary', rowsFromFields(meta, item, SOURCE_FIELDS, 'Debug'), { hideIfEmpty: true });
+    html += renderSection('Source / Debug Summary', rowsFromFields(meta, item, SOURCE_FIELDS, 'Debug'), { hideIfEmpty: true, accent: '#94a3b8' });
     html += renderDebug(meta);
     html += '</div>';
 
