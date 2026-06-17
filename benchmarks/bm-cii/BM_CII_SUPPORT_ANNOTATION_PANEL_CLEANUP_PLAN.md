@@ -1,6 +1,6 @@
 # BM_CII Support / Annotation / Component Panel Cleanup Tracker
 
-Branch: `SupportAnnotationPanelCleanupv1`
+Branch: `SupportAnnotationPanelCleanupv1` merged to `main` for the first stabilization pass.
 
 ## Scope
 
@@ -12,7 +12,7 @@ Stabilize BM_CII InputXML Basic GLB review so the Basic GLB-PCF Viewer can be tr
 |---|---|---|
 | 0. Baseline freeze | In progress | BM_CII manifest remains strict: no generic/procedural fallback. |
 | 1. Component panel data correctness | Implemented | Panel reads resolved metadata and rejects provenance as Line No. |
-| 2. Component panel UI cleanup | Implemented initial pass | Engineering fields grouped; raw metadata moved to closed debug details. |
+| 2. Component panel UI cleanup | Implemented second pass | Panel now has a selected-item header, colored engineering sections, row badges, wrapped long values, explicit support record-scope notice, and closed Raw / Debug Metadata. |
 | 3. ISONOTE annotation cleanup | Pending GLB generator pass | Requires next GLB run to bake final readable ISONOTE boards. |
 | 4. ISONOTE restraint validation | Implemented report/script | Static validation compares ISONOTE intent against approved InputXML restraint table. |
 | 5. Layer panel cleanup | Pending | Needs canonical layer registry pass after annotation board finalization. |
@@ -27,6 +27,14 @@ Stabilize BM_CII InputXML Basic GLB review so the Basic GLB-PCF Viewer can be tr
 - Restraint/support records are record-scoped; no carry-forward is allowed for restraints.
 - ISONOTE display text must use the sideloaded source text exactly.
 - BM_CII quick mock must not load a generic GLB or procedural substitute.
+
+## Component Panel Presentation Rules
+
+- Component/process objects show `Identity`, `Line / Node`, `Component Data`, `Process / Analysis`, `Source / Debug Summary`, and closed `Raw / Debug Metadata`.
+- Support/restraint objects show `Support / Restraint` first and include a visible warning that carry-forward is not applicable.
+- ISONOTE objects show `ISONOTE Annotation` with the exact sideloaded source note text.
+- Long fields such as ISONOTE source text and provenance traces must wrap, not overflow the panel.
+- Raw metadata is available only under `Raw / Debug Metadata`; it must not pollute engineering rows.
 
 ## Current Validation Summary
 
