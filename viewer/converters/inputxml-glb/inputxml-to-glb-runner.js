@@ -1,4 +1,4 @@
-import { extractInputXmlBranches } from '../inputxml-dxf/InputXmlBranchExtractor.js';
+import { extractInputXmlBranches } from './InputXmlBranchExtractor.js';
 import { buildExportScene } from '../../js/pcf2glb/glb/buildExportScene.js';
 import { exportSceneToGLB } from '../../js/pcf2glb/glb/exportSceneToGLB.js';
 import { applyInputXmlBendMetadata } from './InputXmlBendMetadata.js';
@@ -238,17 +238,15 @@ export async function run(ctx = {}) {
       ok: true,
       outputs,
       logs: { stdout, stderr },
-      diagnostics: [...(extracted.diagnostics || []), ...(diagnostics || [])],
     };
   } catch (error) {
-    const message = error?.message || String(error);
+    const message = error instanceof Error ? error.message : String(error);
     stderr.push(message);
-    ctx.setStatus?.(`Failed: ${message}`, 'bad');
+    ctx.setStatus?.(`Failed: ${message}`, 'error');
     return {
       ok: false,
       outputs: [],
       logs: { stdout, stderr },
-      diagnostics: [{ type: 'inputxml-glb-runner-error', severity: 'ERROR', message }],
     };
   }
 }
