@@ -3,6 +3,16 @@ import { downloadOutput } from './core/output-utils.js';
 
 const CONVERTER_ID = 'inputxml_to_basic_glb';
 const CONVERTER_LABEL = 'InputXML→Basic GLB';
+
+const DEFAULT_ISONOTE = `NODE,ISONOTE
+35,:/PS-123 :ISONOTE 'REST(28kN), GUIDE(6kN),LINE STOP(15kN)'
+130,:ISONOTE 'REST NOT DEFINED, SINGLE AXIS Z'
+255,:ISONOTE 'REST(3kN), GUIDE(1kN)'
+205,:/PS-456 :ISONOTE 'REST(10kN), HOLDDOWN,LINE STOP(6kN), Holddown without Guide Can Spring'`;
+
+const DEFAULT_LINE_NO = `NODE,LINE_NO
+10,LINE XYZ`;
+
 function text(value) { return String(value ?? '').trim(); }
 function esc(value) { return text(value).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;'); }
 function appendConverterOption(root) {
@@ -27,10 +37,18 @@ function renderOutputs(root, outputs) {
 }
 function renderAdvancedFields(root) {
   const fields = root.querySelector('#model-converters-advanced-fields'); if (!fields) return;
-  fields.innerHTML = `
-    <label style="display:flex;align-items:center;gap:8px;color:#d7e6ff;font-size:12px;"><input type="checkbox" data-option-key="includeSupports" checked><span>Render XML restraints/hangers as basic arrows</span></label>
-    <label style="display:flex;align-items:center;gap:8px;color:#d7e6ff;font-size:12px;"><input type="checkbox" data-option-key="includeNodeMarkers" checked><span>Render node dots</span></label>
-    <label style="display:flex;align-items:center;gap:8px;color:#d7e6ff;font-size:12px;"><input type="checkbox" data-option-key="includeSidecarJson" checked><span>Export sidecar JSON</span></label>`;
+  const sel = (key, opts, label) => `<label style="display:flex;flex-direction:column;gap:3px;color:#d7e6ff;font-size:12px;">${label}<select data-option-key="${key}" style="background:#1a2535;color:#d7e6ff;border:1px solid #2e4057;border-radius:4px;padding:3px 6px;font-size:12px;">${opts.map(([v, l]) => `<option value="${v}">${l}</option>`).join('')}</select></label>`;
+  const chk = (key, label, checked = true) => `<label style="display:flex;align-items:center;gap:8px;color:#d7e6ff;font-size:12px;"><input type="checkbox" data-option-key="${key}"${checked ? ' checked' : ''}><span>${label}</span></label>`;
+  const ta = (key, label, val, rows = 3) => `<label style="display:flex;flex-direction:column;gap:3px;color:#d7e6ff;font-size:12px;">${label}<textarea data-option-key="${key}" rows="${rows}" style="background:#1a2535;color:#d7e6ff;border:1px solid #2e4057;border-radius:4px;padding:4px 6px;font-size:11px;font-family:monospace;resize:vertical;">${esc(val)}</textarea></label>`;
+  fields.innerHTML = `<div style="display:flex;flex-direction:column;gap:10px;margin-top:4px;">
+${sel('supportMode', [['compare','Compare (InputXML + ISONOTE)'],['inputxml-actual','InputXML actual only'],['isonote-expected','ISONOTE expected only']], 'Support Mode')}
+${sel('singleAxisDecision', [['warning','Warning triangle'],['+',' Force + (positive)'],['−','Force − (negative)']], 'Ambiguous Single-Axis Sign')}
+${chk('nodeLabels', 'Node labels', true)}
+${chk('isonoteBoards', 'ISONOTE annotation boards', true)}
+${chk('includeSidecarJson', 'Export sidecar JSON (audit)', true)}
+${ta('isonoteText', 'ISONOTE Sideload (CSV: NODE,ISONOTE)', DEFAULT_ISONOTE, 5)}
+${ta('lineNoText', 'LINE_NO Sideload (CSV: NODE,LINE_NO)', DEFAULT_LINE_NO, 2)}
+</div>`;
 }
 function renderInputXmlBasicGlbMode(root) {
   const primaryLabel = root.querySelector('#model-converters-primary-label');
@@ -46,7 +64,7 @@ function renderInputXmlBasicGlbMode(root) {
   if (xmlWorkflow) { xmlWorkflow.hidden = true; xmlWorkflow.open = false; }
   if (supportMapper) { supportMapper.hidden = true; supportMapper.open = false; }
   renderAdvancedFields(root);
-  setStatus(root, 'Build a lightweight independent Basic GLB from CAESAR II Input XML. No rich GLB/CAESAR annotation pipeline is used.', '');
+  setStatus(root, 'Build a rich independent GLB from CAESAR II Input XML with ISONOTE annotations and support symbols.', '');
   resetOutput(root);
 }
 function readOptions(root) { const options = {}; for (const input of root.querySelectorAll('[data-option-key]')) { const key = input.getAttribute('data-option-key'); if (!key) continue; options[key] = input.type === 'checkbox' ? input.checked : input.type === 'number' ? Number(input.value) : input.value; } return options; }
