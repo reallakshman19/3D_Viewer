@@ -99,6 +99,8 @@ function material(color, emissive = color, options = {}) {
     metalness: 0.02,
     side: options.side ?? THREE.FrontSide,
     depthWrite: options.depthWrite ?? true,
+    transparent: options.transparent ?? false,
+    opacity: options.opacity ?? 1,
   });
 }
 
@@ -118,10 +120,9 @@ function orientFromY(object, direction) {
 function orientPlaneNormal(object, faceDirection) {
   const dir = faceDirection?.clone?.().normalize?.() || Z_AXIS.clone();
   if (!dir || dir.lengthSq() < 1e-12) return;
-  // THREE.PlaneGeometry has local +Z as its front normal.  This aligns the
-  // visible/front side of the label plate to the configured direction.  Label
-  // material is double-sided by default so a Basic viewer camera on the opposite
-  // side does not show a blank/back-side plate.
+  // THREE.PlaneGeometry has local +Z as its front normal.  This is retained for
+  // exported/static GLB inspection, but Basic GLB/PCF uses an explicit CSS2D
+  // label anchor so node text remains camera-facing and cannot appear edge-on.
   object.quaternion.setFromUnitVectors(Z_AXIS, dir);
 }
 
@@ -140,7 +141,7 @@ function layerIdsForPart(part = 'node') {
   const base = ['plant.annotations', 'annotation.all', 'annotation.node', 'source.inputxml'];
   if (part === 'marker') return [...base, 'annotation.node_marker'];
   if (part === 'leader') return [...base, 'annotation.node_leader'];
-  if (part === 'label') return [...base, 'annotation.node_label'];
+  if (part === 'label' || part === 'label-anchor') return [...base, 'annotation.node_label'];
   return base;
 }
 
@@ -180,7 +181,26 @@ function nodeLabelDoubleSided(comp = {}, attrs = {}) {
   ), true);
 }
 
-function stampNodeAnnotation(target, comp, attrs, { part = 'node', role = 'node-annotation', faceDirection = null, faceDirectionRaw = '+Z', doubleSided = true } = {}) {
+function staticPlateVisible(comp = {}, attrs = {}) {
+  return bool(firstNonEmpty(
+    attrs.NODE_LABEL_STATIC_PLATE_VISIBLE,
+    attrs.NODE_LABEL_BAKED_PLATE_VISIBLE,
+    attrs.ANNOTATION_STATIC_PLATE_VISIBLE,
+    comp.nodeLabelStaticPlateVisible,
+    comp.nodeLabelBakedPlateVisible,
+    comp.annotationStaticPlateVisible,
+  ), false);
+}
+
+function stampNodeAnnotation(target, comp, attrs, {
+  part = 'node',
+  role = 'node-annotation',
+  faceDirection = null,
+  faceDirectionRaw = '+Z',
+  doubleSided = true,
+  exportLabel = false,
+  labelAnchor = false,
+} = {}) {
   const node = text(attrs.NODE_NUMBER || attrs.NODE || comp.refNo || comp.label || comp.id).replace(/^N/i, '');
   const label = nodeLabelText(comp, attrs);
   const displayLabel = nodeLabelDisplayText(label);
@@ -202,6 +222,11 @@ function stampNodeAnnotation(target, comp, attrs, { part = 'node', role = 'node-
     NODE_LABEL: label,
     NODE_LABEL_DISPLAY: displayLabel,
     SOURCE: 'InputXML',
+    labelKind: 'node',
+    labelAnchor,
+    exportLabel,
+    EXPORT_LABEL: exportLabel,
+    hideLabel: !exportLabel,
     labelText: label,
     labelDisplayText: displayLabel,
     sourceNode: node || label,
@@ -212,11 +237,17 @@ function stampNodeAnnotation(target, comp, attrs, { part = 'node', role = 'node-
     NODE_LABEL_FACE_DIRECTION: faceDirectionRaw || '+Z',
     NODE_LABEL_DOUBLE_SIDED: doubleSided,
     NODE_LABEL_READABLE_BOTH_SIDES: doubleSided,
+    NODE_LABEL_RUNTIME_OVERLAY: exportLabel && labelAnchor,
+    NODE_LABEL_CAMERA_FACING: exportLabel && labelAnchor,
     annotationFaceDirection: { x: faceVector.x, y: faceVector.y, z: faceVector.z },
-    annotationFacingMode: doubleSided ? 'fixed-axis-configurable-double-sided' : 'fixed-axis-configurable-front-side',
-    labelOrientationContract: doubleSided
-      ? 'label-plane-front-normal-faces-configured-direction-default-+Z-material-double-sided'
-      : 'label-plane-front-normal-faces-configured-direction-default-+Z',
+    annotationFacingMode: exportLabel && labelAnchor
+      ? 'runtime-css2d-camera-facing-anchor'
+      : (doubleSided ? 'fixed-axis-configurable-double-sided-static-reference' : 'fixed-axis-configurable-front-side-static-reference'),
+    labelOrientationContract: exportLabel && labelAnchor
+      ? 'css2d-node-label-anchor-camera-facing-in-basic-viewer'
+      : (doubleSided
+        ? 'static-label-plane-front-normal-faces-configured-direction-default-+Z-material-double-sided'
+        : 'static-label-plane-front-normal-faces-configured-direction-default-+Z'),
     bmCiiLayerSchema: LAYER_SCHEMA,
     bmCiiLayer: {
       schema: LAYER_SCHEMA,
@@ -228,7 +259,7 @@ function stampNodeAnnotation(target, comp, attrs, { part = 'node', role = 'node-
       layerIds,
     },
     bmCiiLayerIds: layerIds,
-    glbShape: `node-annotation-${part}`,
+    glbShape: labelAnchor ? 'node-label-anchor' : `node-annotation-${part}`,
   };
 }
 
@@ -261,6 +292,7 @@ export function buildNodeLabelObject(comp = {}) {
   const { top, side } = labelOffsetBasis(comp, attrs);
   const { raw: faceDirectionRaw, vector: faceDirectionVector } = labelFaceDirection(comp, attrs);
   const doubleSided = nodeLabelDoubleSided(comp, attrs);
+  const plateVisible = staticPlateVisible(comp, attrs);
   const sideSign = staggerSign(attrs.NODE_LABEL_INDEX ?? comp.nodeLabelIndex);
   const labelAnchor = pt.clone()
     .add(top.clone().multiplyScalar(scale * 1.85))
@@ -272,31 +304,54 @@ export function buildNodeLabelObject(comp = {}) {
   const marker = new THREE.Mesh(new THREE.SphereGeometry(markerRadius, 12, 12), material(0x38bdf8, 0x0ea5e9));
   marker.name = `node-annotation-marker:${label}`;
   marker.position.copy(pt);
-  stampNodeAnnotation(marker, comp, attrs, { part: 'marker', role: 'node-marker', faceDirection: faceDirectionVector, faceDirectionRaw, doubleSided });
+  stampNodeAnnotation(marker, comp, attrs, { part: 'marker', role: 'node-marker', faceDirection: faceDirectionVector, faceDirectionRaw, doubleSided, exportLabel: false });
   group.add(marker);
 
   const ring = new THREE.Mesh(new THREE.TorusGeometry(markerRadius * 1.85, markerRadius * 0.12, 8, 28), material(0xe0f2fe, 0x38bdf8));
   ring.name = `node-annotation-ring:${label}`;
   ring.position.copy(pt);
   ring.quaternion.setFromUnitVectors(Z_AXIS, top);
-  stampNodeAnnotation(ring, comp, attrs, { part: 'marker', role: 'node-marker-ring', faceDirection: faceDirectionVector, faceDirectionRaw, doubleSided });
+  stampNodeAnnotation(ring, comp, attrs, { part: 'marker', role: 'node-marker-ring', faceDirection: faceDirectionVector, faceDirectionRaw, doubleSided, exportLabel: false });
   group.add(ring);
 
   const leader = cylinderBetween(`node-annotation-leader:${label}`, pt, labelAnchor, Math.max(markerRadius * 0.18, 0.16), 0x93c5fd);
   if (leader) {
-    stampNodeAnnotation(leader, comp, attrs, { part: 'leader', role: 'node-leader', faceDirection: faceDirectionVector, faceDirectionRaw, doubleSided });
+    stampNodeAnnotation(leader, comp, attrs, { part: 'leader', role: 'node-leader', faceDirection: faceDirectionVector, faceDirectionRaw, doubleSided, exportLabel: false });
     group.add(leader);
   }
 
+  // Static/baked plate is a reference only.  It is hidden by default because the
+  // Basic viewer renders the readable node text through a CSS2D camera-facing
+  // anchor, which avoids all backside and edge-on label failures.
   const plate = new THREE.Mesh(new THREE.PlaneGeometry(scale * 3.0, scale * 1.05), labelMaterial(0x0f172a, 0x075985, attrs, comp));
   plate.name = `node-annotation-label:${label}`;
   plate.position.copy(labelAnchor);
+  plate.visible = plateVisible;
   orientPlaneNormal(plate, faceDirectionVector);
-  stampNodeAnnotation(plate, comp, attrs, { part: 'label', role: 'node-label-plate', faceDirection: faceDirectionVector, faceDirectionRaw, doubleSided });
-  plate.userData.NOTE = `Visible display label is ${displayLabel}; raw node label is available as NODE_LABEL.`;
+  stampNodeAnnotation(plate, comp, attrs, { part: 'label', role: 'node-label-static-plate', faceDirection: faceDirectionVector, faceDirectionRaw, doubleSided, exportLabel: false });
+  plate.userData.NOTE = `Runtime CSS2D display label is ${displayLabel}; raw node label is available as NODE_LABEL.`;
+  plate.userData.NODE_LABEL_STATIC_PLATE_VISIBLE = plateVisible;
   group.add(plate);
 
-  stampNodeAnnotation(group, comp, attrs, { part: 'node', role: 'node-annotation-group', faceDirection: faceDirectionVector, faceDirectionRaw, doubleSided });
+  // Explicit label anchor consumed by glbLabelOverlayFinal.js. This gives Basic
+  // GLB/PCF a camera-facing HTML label, so node labels stay readable in ISO,
+  // TOP, FRONT, SIDE and arbitrary orbit views.
+  const overlayAnchor = new THREE.Group();
+  overlayAnchor.name = `node-label:${label}`;
+  overlayAnchor.position.copy(labelAnchor);
+  stampNodeAnnotation(overlayAnchor, comp, attrs, {
+    part: 'label-anchor',
+    role: 'node-label-css2d-anchor',
+    faceDirection: faceDirectionVector,
+    faceDirectionRaw,
+    doubleSided,
+    exportLabel: true,
+    labelAnchor: true,
+  });
+  overlayAnchor.userData.NOTE = `Camera-facing Basic viewer label is ${displayLabel}; static GLB plate is ${plateVisible ? 'visible' : 'hidden'} by default.`;
+  group.add(overlayAnchor);
+
+  stampNodeAnnotation(group, comp, attrs, { part: 'node', role: 'node-annotation-group', faceDirection: faceDirectionVector, faceDirectionRaw, doubleSided, exportLabel: false });
   group.userData = {
     ...group.userData,
     nodeCoordinate: { x: pt.x, y: pt.y, z: pt.z },
@@ -305,7 +360,9 @@ export function buildNodeLabelObject(comp = {}) {
     labelFaceDirectionRaw: faceDirectionRaw,
     labelDoubleSided: doubleSided,
     labelReadableBothSides: doubleSided,
-    labelPlacementContract: 'node-marker-centreline-leader-no-arrow-label-offset-from-pipe',
+    labelRuntimeOverlay: true,
+    labelStaticPlateVisible: plateVisible,
+    labelPlacementContract: 'node-marker-centreline-leader-no-arrow-label-offset-from-pipe-css2d-camera-facing-anchor',
   };
 
   return group;
