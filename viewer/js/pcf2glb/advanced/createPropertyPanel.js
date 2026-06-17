@@ -2,6 +2,7 @@ import {
   LINE_NO_METADATA_KEYS,
   firstLineNoValue,
   lineNoFromMetadata,
+  normalizeLineNoValue,
 } from '../../../utils/line-no-metadata.js';
 import {
   bmCiiLineNoFromSideload,
@@ -24,7 +25,7 @@ const DISPLAY_FIELDS = [
   ['ID', ['pcfId', 'id', 'name']],
   ['Type', ['pcfType', 'type', 'sourceComponentType', 'componentKind']],
   ['Ref No', ['refNo', 'REF_NO', 'pcfId', 'id']],
-  ['Line No.', ['lineNo', 'Line No']],
+  ['Line No.', ['lineNo']],
   ['From Node', ['fromNode']],
   ['To Node', ['toNode']],
   ['Bore', ['bore', 'Bore', 'diameterMm']],
@@ -206,6 +207,16 @@ function promoteSupportMeta(item, meta) {
   return promoted;
 }
 
+function clearInvalidLineNoFields(meta = {}) {
+  for (const key of LINE_NO_METADATA_KEYS) {
+    if (Object.prototype.hasOwnProperty.call(meta, key) && !normalizeLineNoValue(meta[key])) {
+      meta[key] = '';
+    }
+  }
+  if (Object.prototype.hasOwnProperty.call(meta, 'Line No') && !normalizeLineNoValue(meta['Line No'])) meta['Line No'] = '';
+  if (Object.prototype.hasOwnProperty.call(meta, 'lineNo') && !normalizeLineNoValue(meta.lineNo)) meta.lineNo = '';
+}
+
 export function createPropertyPanel(propPanel, propContent) {
   let activeItem = null;
 
@@ -231,6 +242,8 @@ export function createPropertyPanel(propPanel, propContent) {
     let meta = { ...(item.rawMeta || {}), ...mergedUserData(item.object3D) };
     const supportLike = isSupportLike(meta, item);
     if (supportLike) meta = promoteSupportMeta(item, meta);
+
+    clearInvalidLineNoFields(meta);
     const lineNo = lineNoForItem(item, meta, supportLike);
     if (lineNo?.pending) {
       ensureBmCiiLineNoSideloadLoaded()?.then?.(() => {
@@ -242,6 +255,10 @@ export function createPropertyPanel(propPanel, propContent) {
       meta.LINE_NO_SOURCE = lineNo.source;
       meta.LINE_NO_SCOPE = lineNo.scope;
       if (lineNo.anchorNode) meta.LINE_NO_ANCHOR_NODE = lineNo.anchorNode;
+    } else {
+      meta.lineNo = '';
+      meta['Line No'] = '';
+      meta.LINE_NO = '';
     }
 
     let html = '<div style="font-family: monospace; font-size: 12px; margin-bottom: 10px; line-height: 1.42;">';
@@ -254,7 +271,8 @@ export function createPropertyPanel(propPanel, propContent) {
     }
     for (const [label, keys] of DISPLAY_FIELDS) {
       const fallback = label === 'ID' ? item.id : label === 'Type' ? item.type : label === 'Ref No' ? item.refNo : label === 'Bore' ? item.bore : '';
-      html += `<strong>${esc(label)}:</strong> ${esc(firstOrNA(meta, keys, fallback))}<br/>`;
+      const displayValue = label === 'Line No.' ? (lineNo?.value || 'N/A') : firstOrNA(meta, keys, fallback);
+      html += `<strong>${esc(label)}:</strong> ${esc(displayValue)}<br/>`;
     }
     if (meta.LINE_NO_SOURCE) {
       html += `<strong>Line No Source:</strong> ${esc(meta.LINE_NO_SOURCE)}<br/>`;
