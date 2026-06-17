@@ -22,6 +22,14 @@ function firstNonEmpty(...values) {
   return '';
 }
 
+function bool(value, fallback = false) {
+  if (value === undefined || value === null || text(value) === '') return fallback;
+  const raw = upper(value);
+  if (['1', 'TRUE', 'YES', 'Y', 'ON'].includes(raw)) return true;
+  if (['0', 'FALSE', 'NO', 'N', 'OFF'].includes(raw)) return false;
+  return fallback;
+}
+
 function number(value, fallback = 0) {
   const n = Number(value);
   return Number.isFinite(n) ? n : fallback;
@@ -82,13 +90,22 @@ function nodeLabelDisplayText(label = '') {
   return /^N/i.test(raw) ? raw.toUpperCase() : `N${raw}`;
 }
 
-function material(color, emissive = color) {
+function material(color, emissive = color, options = {}) {
   return new THREE.MeshStandardMaterial({
     color,
     emissive,
     emissiveIntensity: 0.18,
     roughness: 0.50,
     metalness: 0.02,
+    side: options.side ?? THREE.FrontSide,
+    depthWrite: options.depthWrite ?? true,
+  });
+}
+
+function labelMaterial(color, emissive = color, attrs = {}, comp = {}) {
+  const doubleSided = nodeLabelDoubleSided(comp, attrs);
+  return material(color, emissive, {
+    side: doubleSided ? THREE.DoubleSide : THREE.FrontSide,
   });
 }
 
@@ -102,7 +119,9 @@ function orientPlaneNormal(object, faceDirection) {
   const dir = faceDirection?.clone?.().normalize?.() || Z_AXIS.clone();
   if (!dir || dir.lengthSq() < 1e-12) return;
   // THREE.PlaneGeometry has local +Z as its front normal.  This aligns the
-  // visible/front side of the label plate to the configured direction.
+  // visible/front side of the label plate to the configured direction.  Label
+  // material is double-sided by default so a Basic viewer camera on the opposite
+  // side does not show a blank/back-side plate.
   object.quaternion.setFromUnitVectors(Z_AXIS, dir);
 }
 
@@ -148,7 +167,20 @@ function labelFaceDirection(comp = {}, attrs = {}) {
   };
 }
 
-function stampNodeAnnotation(target, comp, attrs, { part = 'node', role = 'node-annotation', faceDirection = null, faceDirectionRaw = '+Z' } = {}) {
+function nodeLabelDoubleSided(comp = {}, attrs = {}) {
+  return bool(firstNonEmpty(
+    attrs.NODE_LABEL_DOUBLE_SIDED,
+    attrs.NODE_LABEL_READABLE_BOTH_SIDES,
+    attrs.ANNOTATION_DOUBLE_SIDED,
+    attrs.LABEL_DOUBLE_SIDED,
+    comp.nodeLabelDoubleSided,
+    comp.nodeLabelReadableBothSides,
+    comp.annotationDoubleSided,
+    comp.labelDoubleSided,
+  ), true);
+}
+
+function stampNodeAnnotation(target, comp, attrs, { part = 'node', role = 'node-annotation', faceDirection = null, faceDirectionRaw = '+Z', doubleSided = true } = {}) {
   const node = text(attrs.NODE_NUMBER || attrs.NODE || comp.refNo || comp.label || comp.id).replace(/^N/i, '');
   const label = nodeLabelText(comp, attrs);
   const displayLabel = nodeLabelDisplayText(label);
@@ -178,9 +210,13 @@ function stampNodeAnnotation(target, comp, attrs, { part = 'node', role = 'node-
     hasSupport: String(attrs.HAS_SUPPORT ?? comp.hasSupport ?? '').toLowerCase() === 'true',
     hasComponent: String(attrs.HAS_COMPONENT ?? comp.hasComponent ?? '').toLowerCase() === 'true',
     NODE_LABEL_FACE_DIRECTION: faceDirectionRaw || '+Z',
+    NODE_LABEL_DOUBLE_SIDED: doubleSided,
+    NODE_LABEL_READABLE_BOTH_SIDES: doubleSided,
     annotationFaceDirection: { x: faceVector.x, y: faceVector.y, z: faceVector.z },
-    annotationFacingMode: 'fixed-axis-configurable',
-    labelOrientationContract: 'label-plane-front-normal-faces-configured-direction-default-+Z',
+    annotationFacingMode: doubleSided ? 'fixed-axis-configurable-double-sided' : 'fixed-axis-configurable-front-side',
+    labelOrientationContract: doubleSided
+      ? 'label-plane-front-normal-faces-configured-direction-default-+Z-material-double-sided'
+      : 'label-plane-front-normal-faces-configured-direction-default-+Z',
     bmCiiLayerSchema: LAYER_SCHEMA,
     bmCiiLayer: {
       schema: LAYER_SCHEMA,
@@ -224,6 +260,7 @@ export function buildNodeLabelObject(comp = {}) {
   const markerRadius = Math.max(scale * 0.12, 0.8);
   const { top, side } = labelOffsetBasis(comp, attrs);
   const { raw: faceDirectionRaw, vector: faceDirectionVector } = labelFaceDirection(comp, attrs);
+  const doubleSided = nodeLabelDoubleSided(comp, attrs);
   const sideSign = staggerSign(attrs.NODE_LABEL_INDEX ?? comp.nodeLabelIndex);
   const labelAnchor = pt.clone()
     .add(top.clone().multiplyScalar(scale * 1.85))
@@ -235,37 +272,39 @@ export function buildNodeLabelObject(comp = {}) {
   const marker = new THREE.Mesh(new THREE.SphereGeometry(markerRadius, 12, 12), material(0x38bdf8, 0x0ea5e9));
   marker.name = `node-annotation-marker:${label}`;
   marker.position.copy(pt);
-  stampNodeAnnotation(marker, comp, attrs, { part: 'marker', role: 'node-marker', faceDirection: faceDirectionVector, faceDirectionRaw });
+  stampNodeAnnotation(marker, comp, attrs, { part: 'marker', role: 'node-marker', faceDirection: faceDirectionVector, faceDirectionRaw, doubleSided });
   group.add(marker);
 
   const ring = new THREE.Mesh(new THREE.TorusGeometry(markerRadius * 1.85, markerRadius * 0.12, 8, 28), material(0xe0f2fe, 0x38bdf8));
   ring.name = `node-annotation-ring:${label}`;
   ring.position.copy(pt);
   ring.quaternion.setFromUnitVectors(Z_AXIS, top);
-  stampNodeAnnotation(ring, comp, attrs, { part: 'marker', role: 'node-marker-ring', faceDirection: faceDirectionVector, faceDirectionRaw });
+  stampNodeAnnotation(ring, comp, attrs, { part: 'marker', role: 'node-marker-ring', faceDirection: faceDirectionVector, faceDirectionRaw, doubleSided });
   group.add(ring);
 
   const leader = cylinderBetween(`node-annotation-leader:${label}`, pt, labelAnchor, Math.max(markerRadius * 0.18, 0.16), 0x93c5fd);
   if (leader) {
-    stampNodeAnnotation(leader, comp, attrs, { part: 'leader', role: 'node-leader', faceDirection: faceDirectionVector, faceDirectionRaw });
+    stampNodeAnnotation(leader, comp, attrs, { part: 'leader', role: 'node-leader', faceDirection: faceDirectionVector, faceDirectionRaw, doubleSided });
     group.add(leader);
   }
 
-  const plate = new THREE.Mesh(new THREE.PlaneGeometry(scale * 3.0, scale * 1.05), material(0x0f172a, 0x075985));
+  const plate = new THREE.Mesh(new THREE.PlaneGeometry(scale * 3.0, scale * 1.05), labelMaterial(0x0f172a, 0x075985, attrs, comp));
   plate.name = `node-annotation-label:${label}`;
   plate.position.copy(labelAnchor);
   orientPlaneNormal(plate, faceDirectionVector);
-  stampNodeAnnotation(plate, comp, attrs, { part: 'label', role: 'node-label-plate', faceDirection: faceDirectionVector, faceDirectionRaw });
+  stampNodeAnnotation(plate, comp, attrs, { part: 'label', role: 'node-label-plate', faceDirection: faceDirectionVector, faceDirectionRaw, doubleSided });
   plate.userData.NOTE = `Visible display label is ${displayLabel}; raw node label is available as NODE_LABEL.`;
   group.add(plate);
 
-  stampNodeAnnotation(group, comp, attrs, { part: 'node', role: 'node-annotation-group', faceDirection: faceDirectionVector, faceDirectionRaw });
+  stampNodeAnnotation(group, comp, attrs, { part: 'node', role: 'node-annotation-group', faceDirection: faceDirectionVector, faceDirectionRaw, doubleSided });
   group.userData = {
     ...group.userData,
     nodeCoordinate: { x: pt.x, y: pt.y, z: pt.z },
     labelAnchor: { x: labelAnchor.x, y: labelAnchor.y, z: labelAnchor.z },
     labelFaceDirection: { x: faceDirectionVector.x, y: faceDirectionVector.y, z: faceDirectionVector.z },
     labelFaceDirectionRaw: faceDirectionRaw,
+    labelDoubleSided: doubleSided,
+    labelReadableBothSides: doubleSided,
     labelPlacementContract: 'node-marker-centreline-leader-no-arrow-label-offset-from-pipe',
   };
 
