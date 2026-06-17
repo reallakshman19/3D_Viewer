@@ -45,7 +45,7 @@ async function loadPsnmUtilityRenderer() {
 const TABS = [
   { id: 'viewer3d', label: '3D Viewer', load: () => import('../tabs/viewer3d-tab.js?v=20260518-statusbar-theme-12').then((module) => pickRenderer(module, 'renderViewer3D', 'viewer3d')) },
   { id: 'viewer3d-rvm', label: '3D RVM Viewer', load: () => import('../tabs/viewer3d-rvm-tab.js?v=20260518-statusbar-theme-12').then((module) => pickRenderer(module, 'renderViewer3DRvm', 'viewer3d-rvm')) },
-  { id: 'model-converters', label: '3D Model Converters', load: () => import('../tabs/model-converters-tab.js?v=20260612-projection-import-fix').then((module) => pickRenderer(module, 'renderModelConvertersTab', 'model-converters')) },
+  { id: 'model-converters', label: '3D Model Converters', load: () => import('../tabs/model-converters-tab.js?v=20260617-bmcii-enrich-fix-2').then((module) => pickRenderer(module, 'renderModelConvertersTab', 'model-converters')) },
   { id: 'basic-glb-pcf', label: 'Basic GLB-PCF', load: () => import('../js/pcf2glb/ui/BasicGlbPcfPanel.js').then((module) => pickRenderer(module, 'renderBasicGlbPcfPanel', 'basic-glb-pcf')) },
   { id: 'pcfx-converter', label: 'PCFX Converter', load: () => import('../tabs/pcfx-converter-tab.js').then((module) => pickRenderer(module, 'renderPcfxConverterTab', 'pcfx-converter')) },
   { id: 'model-exchange', label: 'Model Exchange', load: () => import('../tabs/model-exchange-tab.js').then((module) => pickRenderer(module, 'renderModelExchangeTab', 'model-exchange')) },
@@ -78,179 +78,137 @@ let activeRenderToken = 0;
 
 async function loadVisibilityRules() {
   if (!visibilityRulesPromise) {
-    visibilityRulesPromise = fetch(TAB_VISIBILITY_URL, { cache: 'no-store' })
-      .then((response) => {
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        return response.json();
-      })
-      .then((json) => {
-        const rules = json && typeof json === 'object' ? json : {};
-        visibilityRules = rules;
-        return rules;
-      })
-      .catch((error) => {
-        console.warn('[app] tab visibility config unavailable; showing all tabs', error);
-        visibilityRules = {};
-        return visibilityRules;
-      });
+    visibilityRulesPromise = fetch(TAB_VISIBILITY_URL)
+      .then((response) => response.ok ? response.json() : { hiddenTabs: [] })
+      .catch(() => ({ hiddenTabs: [] }));
   }
-  return visibilityRulesPromise;
+  visibilityRules = await visibilityRulesPromise;
+  return visibilityRules;
 }
 
 function normalizeTabId(tabId) {
-  return TAB_ID_ALIASES.get(String(tabId || '').trim()) || String(tabId || '').trim();
+  return TAB_ID_ALIASES.get(tabId) || tabId;
 }
 
 function visibleTabs() {
-  const hidden = new Set((visibilityRules?.hiddenTabs || []).map(normalizeTabId));
+  const hidden = new Set(visibilityRules?.hiddenTabs || []);
   return TABS.filter((tab) => !hidden.has(tab.id));
 }
 
-function getDefaultTabId() {
-  const tabs = visibleTabs();
-  return tabs[0]?.id || 'viewer3d';
+function groupVisibleTabs(tabs) {
+  const byId = new Map(tabs.map((tab) => [tab.id, tab]));
+  const used = new Set();
+  const groups = [];
+
+  for (const group of TAB_GROUPS) {
+    const items = group.ids.map((id) => byId.get(id)).filter(Boolean);
+    if (items.length) {
+      items.forEach((tab) => used.add(tab.id));
+      groups.push({ label: group.label, tabs: items });
+    }
+  }
+
+  const other = tabs.filter((tab) => !used.has(tab.id));
+  if (other.length) groups.push({ label: 'Other', tabs: other });
+  return groups;
 }
 
-async function loadRenderer(tab) {
+async function ensureTabModule(tab) {
   if (!tabRendererCache.has(tab.id)) {
     tabRendererCache.set(tab.id, tab.load());
   }
   return tabRendererCache.get(tab.id);
 }
 
-function showToast(message, type = 'info') {
-  const container = document.getElementById('app-toast-container') || document.body;
-  const toast = document.createElement('div');
-  toast.className = `app-toast app-toast--${type}`;
-  const msg = document.createElement('span');
-  msg.className = 'app-toast__msg';
-  msg.textContent = message;
-  toast.appendChild(msg);
-  container.appendChild(toast);
-  requestAnimationFrame(() => toast.classList.add('app-toast--in'));
-  setTimeout(() => {
-    toast.classList.remove('app-toast--in');
-    toast.classList.add('app-toast--out');
-    setTimeout(() => toast.remove(), 220);
-  }, 3200);
-}
-
-function renderShell() {
-  const tabs = visibleTabs();
-  const tabById = new Map(tabs.map((t) => [t.id, t]));
-  const groupedIds = new Set(TAB_GROUPS.flatMap((g) => g.ids));
-
-  function renderTabs() {
-    const parts = [];
-    for (const group of TAB_GROUPS) {
-      const groupTabs = group.ids.map((id) => tabById.get(id)).filter(Boolean);
-      if (!groupTabs.length) continue;
-      if (parts.length) parts.push('<span class="tab-sep" aria-hidden="true"></span>');
-      for (const t of groupTabs) {
-        parts.push(`<button type="button" class="tab-btn" data-tab-id="${t.id}">${t.label}</button>`);
-      }
-    }
-    const ungrouped = tabs.filter((t) => !groupedIds.has(t.id));
-    if (ungrouped.length) {
-      if (parts.length) parts.push('<span class="tab-sep" aria-hidden="true"></span>');
-      for (const t of ungrouped) {
-        parts.push(`<button type="button" class="tab-btn" data-tab-id="${t.id}">${t.label}</button>`);
-      }
-    }
-    return parts.join('');
+function clearActiveTab() {
+  if (typeof activeTabDestroy === 'function') {
+    try { activeTabDestroy(); } catch (error) { console.warn('Tab destroy failed', error); }
   }
-
-  return `
-    <header id="app-header">
-      <div class="app-brand">
-        <div class="header-title">PCF / GLB Viewer</div>
-        <div class="header-sub">3D review, converters &amp; utilities</div>
-      </div>
-      <nav id="tab-bar" aria-label="Application tabs">
-        ${renderTabs()}
-      </nav>
-    </header>
-    <main id="tab-content" tabindex="-1"></main>
-  `;
-}
-
-function syncActiveTabButton() {
-  document.querySelectorAll('[data-tab-id]').forEach((btn) => {
-    btn.classList.toggle('active', btn.dataset.tabId === state.activeTab);
-  });
-}
-
-function renderAppShell() {
-  const mount = document.getElementById('app-layout') || document.body;
-  mount.innerHTML = renderShell();
-  document.querySelectorAll('[data-tab-id]').forEach((button) => {
-    button.addEventListener('click', () => setActiveTab(button.dataset.tabId));
-  });
-  syncActiveTabButton();
-}
-
-function renderTabError(tab, error) {
-  const container = document.getElementById('tab-content');
-  if (!container) return;
-  container.innerHTML = `<section class="tab-error"><h2>${tab?.label || 'Tab'} failed to load</h2><pre>${String(error?.stack || error?.message || error)}</pre></section>`;
-}
-
-function cleanupActiveTab() {
-  if (!activeTabDestroy) return;
-  try { activeTabDestroy(); } catch (error) { console.warn('[app] active tab cleanup failed', error); }
   activeTabDestroy = null;
 }
 
-async function renderActiveTab() {
-  const token = ++activeRenderToken;
-  const tabs = visibleTabs();
-  const activeId = normalizeTabId(state.activeTab) || getDefaultTabId();
-  const tab = tabs.find((item) => item.id === activeId) || tabs[0];
+async function renderActiveTab(tabId) {
+  if (!appShell) return;
+  const normalizedId = normalizeTabId(tabId);
+  const tab = visibleTabs().find((item) => item.id === normalizedId) || visibleTabs()[0];
   if (!tab) return;
-  if (state.activeTab !== tab.id) state.activeTab = tab.id;
-  syncActiveTabButton();
-  const container = document.getElementById('tab-content');
-  if (!container) return;
-  cleanupActiveTab();
-  container.innerHTML = '<div class="tab-loading">Loading…</div>';
+  const token = ++activeRenderToken;
+
+  if (state.activeTab !== tab.id) setActiveTab(tab.id);
+  appShell.content.innerHTML = '<div class="tab-loading">Loading…</div>';
+  updateActiveNav(tab.id);
+
   try {
-    const renderer = await loadRenderer(tab);
+    const renderer = await ensureTabModule(tab);
     if (token !== activeRenderToken) return;
-    container.innerHTML = '';
-    const destroy = renderer(container, { state, emit, on, RuntimeEvents, showToast });
-    activeTabDestroy = typeof destroy === 'function' ? destroy : null;
-    try { emit(RuntimeEvents.TAB_RENDERED, { tabId: tab.id }); } catch (e) { console.warn('[app] TAB_RENDERED emit failed', e); }
+    clearActiveTab();
+    appShell.content.innerHTML = '';
+    activeTabDestroy = renderer(appShell.content, { state, emit, on }) || null;
   } catch (error) {
+    console.error(`Failed to render tab ${tab.id}`, error);
     if (token !== activeRenderToken) return;
-    console.error(`[app] failed to render tab ${tab.id}`, error);
-    renderTabError(tab, error);
-    try { emit(RuntimeEvents.RENDER_ERROR, { tabId: tab.id, error }); } catch {}
+    appShell.content.innerHTML = `<div class="tab-error">Failed to load ${tab.label}: ${error.message || error}</div>`;
   }
 }
 
-async function boot() {
-  loadStickyState?.();
-  await loadVisibilityRules();
-  state.activeTab = normalizeTabId(state.activeTab) || getDefaultTabId();
-  renderAppShell();
-  await renderActiveTab();
+function updateActiveNav(activeId) {
+  if (!appShell) return;
+  appShell.nav.querySelectorAll('button[data-tab-id]').forEach((button) => {
+    button.classList.toggle('active', button.dataset.tabId === activeId);
+  });
 }
 
-export function init() {
-  if (appDestroy) appDestroy();
-  unsubscribeTabChange = on(RuntimeEvents.TAB_CHANGED, async () => {
-    syncActiveTabButton();
-    await renderActiveTab();
+function createNav(tabs) {
+  const nav = document.createElement('div');
+  nav.className = 'app-nav';
+  for (const group of groupVisibleTabs(tabs)) {
+    const groupWrap = document.createElement('div');
+    groupWrap.className = 'app-nav-group';
+    const label = document.createElement('span');
+    label.className = 'app-nav-group-label';
+    label.textContent = group.label;
+    groupWrap.appendChild(label);
+    for (const tab of group.tabs) {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.dataset.tabId = tab.id;
+      button.textContent = tab.label;
+      button.addEventListener('click', () => renderActiveTab(tab.id));
+      groupWrap.appendChild(button);
+    }
+    nav.appendChild(groupWrap);
+  }
+  return nav;
+}
+
+export async function initApp(root = document.getElementById('app')) {
+  if (!root) throw new Error('App root #app not found');
+  await loadVisibilityRules();
+  const tabs = visibleTabs();
+  const shell = document.createElement('div');
+  shell.className = 'app-shell';
+  const nav = createNav(tabs);
+  const content = document.createElement('main');
+  content.className = 'app-content';
+  shell.append(nav, content);
+  root.innerHTML = '';
+  root.appendChild(shell);
+  appShell = { root, shell, nav, content };
+  initDevDebugWindow({ emit, on, state });
+  unsubscribeTabChange = on(RuntimeEvents.TAB_CHANGE_REQUESTED, ({ tabId } = {}) => {
+    if (tabId) renderActiveTab(tabId);
   });
-  devDebugDestroy = initDevDebugWindow?.({ state, emit, on, RuntimeEvents });
-  boot();
+  const initialTab = normalizeTabId(new URL(location.href).searchParams.get('tab') || state.activeTab || tabs[0]?.id);
+  await renderActiveTab(initialTab);
   appDestroy = () => {
-    cleanupActiveTab();
-    try { unsubscribeTabChange?.(); } catch {}
-    try { devDebugDestroy?.(); } catch {}
-    unsubscribeTabChange = null;
-    devDebugDestroy = null;
-    appDestroy = null;
+    clearActiveTab();
+    if (typeof unsubscribeTabChange === 'function') unsubscribeTabChange();
+    root.innerHTML = '';
+    appShell = null;
   };
   return appDestroy;
+}
+
+export function destroyApp() {
+  if (typeof appDestroy === 'function') appDestroy();
 }
