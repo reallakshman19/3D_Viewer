@@ -627,6 +627,26 @@ const CONVERTER_DEFS = Object.freeze({
     defaults: {},
     fields: [],
   },
+  inputxml_to_rvm: {
+    id: 'inputxml_to_rvm',
+    label: 'InputXML -> RVM',
+    group: '3D Models',
+    primaryAccept: '.xml,.XML',
+    primaryLabel: 'Input XML',
+    secondaryLabel: '',
+    secondaryAccept: '',
+    description: 'Convert CAESAR II Input XML to a binary AVEVA RVM model (exact parametric primitives) plus an optional .att attribute dump. Self-contained: uses vendored, prefixed copies and no shared pipeline modules.',
+    defaults: {
+      rvmPrecision: 3,
+      includeAtt: true,
+      includeSidecarJson: false,
+    },
+    fields: [
+      { key: 'rvmPrecision', label: 'Coordinate Precision (decimals)', type: 'number', step: '1' },
+      { key: 'includeAtt', label: 'Emit .att attribute dump', type: 'checkbox' },
+      { key: 'includeSidecarJson', label: 'Emit RVM sidecar JSON', type: 'checkbox' },
+    ],
+  },
   pcf_continuity_check: {
     id: 'pcf_continuity_check',
     label: 'PCF Continuity Check',
@@ -819,6 +839,7 @@ const CONVERTER_ORDER = Object.freeze([
   'inputxml_to_cii',
   'inputxml14_to_cii',
   'inputxml_to_cii2019',
+  'inputxml_to_rvm',
   'pcf_continuity_check',
 ]);
 
