@@ -7,6 +7,7 @@
     "expectedSha256": "d50cbce32b7a0096c9462a2503286980c4611bcca64fc688bced58caa61fe68e",
     "sourceRun": "v61"
   },
+  "lineNoSideloadUrl": "benchmarks/bm-cii/BM_CII_LINE_NO_sideload.json",
   "proceduralFallback": false,
   "candidates": [
     {
