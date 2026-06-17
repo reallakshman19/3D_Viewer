@@ -87,6 +87,37 @@ function applyLabelExportOptions(model, options = {}) {
   return stats;
 }
 
+function supportKindFromComponent(component = {}) {
+  const attrs = { ...(component.raw || {}), ...(component.attributes || {}) };
+  return text(
+    component.supportKind
+    || attrs.supportKind
+    || attrs.SUPPORT_KIND
+    || attrs.CAESAR_SUPPORT_KIND
+    || attrs.CMPSUPTYPE
+    || attrs.INPUTXML_SUPPORT_KIND
+    || attrs.kind
+  ).toUpperCase() || 'UNKNOWN';
+}
+
+function summarizeModelComponents(model = {}) {
+  const summary = {
+    componentCount: 0,
+    typeCounts: {},
+    supportKindCounts: {},
+  };
+  for (const component of model.components || []) {
+    const type = text(component.type).toUpperCase() || 'UNKNOWN';
+    summary.componentCount += 1;
+    summary.typeCounts[type] = (summary.typeCounts[type] || 0) + 1;
+    if (type === 'SUPPORT') {
+      const supportKind = supportKindFromComponent(component);
+      summary.supportKindCounts[supportKind] = (summary.supportKindCounts[supportKind] || 0) + 1;
+    }
+  }
+  return summary;
+}
+
 function bmCiiSupportAnnotationSummary(options = {}) {
   if (!options.bmCiiSupportAnnotationTool) return null;
   const isonoteText = text(options.bmCiiIsonoteSideloadText);
@@ -173,10 +204,21 @@ export async function run(ctx = {}) {
       ? { nodeLabelCount: 0, skipped: true }
       : appendInputXmlGlbNodeLabels(model, extracted.doc, stats);
     const labelOptionStats = applyLabelExportOptions(model, options);
+    const postEnrichmentModelStats = summarizeModelComponents(model);
     if (!model.components.length) throw new Error('No drawable Input XML components were found for GLB export.');
 
     stdout.push(`InputXML→GLB components: ${stats.componentCount}`);
     stdout.push(`Component types: ${JSON.stringify(stats.typeCounts)}`);
+    if (bmCiiSupportAnnotation) {
+      const preTypes = JSON.stringify(stats.typeCounts || {});
+      const postTypes = JSON.stringify(postEnrichmentModelStats.typeCounts || {});
+      if (postEnrichmentModelStats.componentCount !== stats.componentCount) {
+        stdout.push(`InputXML→GLB components (post BM_CII enrichment): ${postEnrichmentModelStats.componentCount}`);
+      }
+      if (postTypes !== preTypes) {
+        stdout.push(`Component types (post BM_CII enrichment): ${postTypes}`);
+      }
+    }
     if (nodeLabelStats.nodeLabelCount) {
       stdout.push(`Node labels added: ${nodeLabelStats.nodeLabelCount}`);
     } else if (nodeLabelStats.skipped) {
@@ -193,6 +235,13 @@ export async function run(ctx = {}) {
     }
     if (Object.keys(stats.supportKindCounts || {}).length) {
       stdout.push(`Support kinds: ${JSON.stringify(stats.supportKindCounts)}`);
+    }
+    if (bmCiiSupportAnnotation) {
+      const preSupportKinds = JSON.stringify(stats.supportKindCounts || {});
+      const postSupportKinds = JSON.stringify(postEnrichmentModelStats.supportKindCounts || {});
+      if (postSupportKinds !== preSupportKinds) {
+        stdout.push(`Support kinds (post BM_CII enrichment): ${postSupportKinds}`);
+      }
     }
 
     ctx.setStatus?.('Building 3D GLB scene...', 'running');
@@ -229,6 +278,7 @@ export async function run(ctx = {}) {
           bmCiiEnrichmentStats,
           stats: {
             ...stats,
+            postEnrichmentModelStats,
             bendMetadata,
             caesarSupportMetadata,
             nodeLabelStats,
