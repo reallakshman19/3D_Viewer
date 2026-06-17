@@ -7,6 +7,29 @@ const X_AXIS = new THREE.Vector3(1, 0, 0);
 const Y_AXIS = new THREE.Vector3(0, 1, 0);
 const Z_AXIS = new THREE.Vector3(0, 0, 1);
 
+const SEGMENTS = {
+  a: [[0.18, 0.92], [0.82, 0.92]],
+  b: [[0.86, 0.54], [0.86, 0.86]],
+  c: [[0.86, 0.14], [0.86, 0.46]],
+  d: [[0.18, 0.08], [0.82, 0.08]],
+  e: [[0.14, 0.14], [0.14, 0.46]],
+  f: [[0.14, 0.54], [0.14, 0.86]],
+  g: [[0.18, 0.50], [0.82, 0.50]],
+};
+
+const DIGIT_SEGMENTS = {
+  0: 'abcdef',
+  1: 'bc',
+  2: 'abged',
+  3: 'abgcd',
+  4: 'fgbc',
+  5: 'afgcd',
+  6: 'afgecd',
+  7: 'abc',
+  8: 'abcdefg',
+  9: 'abfgcd',
+};
+
 function text(value) {
   return String(value ?? '').trim();
 }
@@ -94,7 +117,7 @@ function material(color, emissive = color, options = {}) {
   return new THREE.MeshStandardMaterial({
     color,
     emissive,
-    emissiveIntensity: 0.18,
+    emissiveIntensity: options.emissiveIntensity ?? 0.18,
     roughness: 0.50,
     metalness: 0.02,
     side: options.side ?? THREE.FrontSide,
@@ -121,16 +144,18 @@ function orientPlaneNormal(object, faceDirection) {
   const dir = faceDirection?.clone?.().normalize?.() || Z_AXIS.clone();
   if (!dir || dir.lengthSq() < 1e-12) return;
   // THREE.PlaneGeometry has local +Z as its front normal. This is used only
-  // when a static baked plate is explicitly requested; Basic GLB/PCF uses the
-  // explicit CSS2D label anchor for readable camera-facing node text.
+  // when a static baked plate is explicitly requested.
   object.quaternion.setFromUnitVectors(Z_AXIS, dir);
 }
 
-function cylinderBetween(name, start, end, radius, color) {
+function cylinderBetween(name, start, end, radius, color, options = {}) {
   const delta = new THREE.Vector3().subVectors(end, start);
   const length = delta.length();
   if (length < 1e-9) return null;
-  const mesh = new THREE.Mesh(new THREE.CylinderGeometry(radius, radius, length, 8), material(color));
+  const mesh = new THREE.Mesh(
+    new THREE.CylinderGeometry(radius, radius, length, options.radialSegments ?? 8),
+    material(color, options.emissive ?? color, options.materialOptions || {}),
+  );
   mesh.name = name;
   mesh.position.copy(start.clone().add(delta.multiplyScalar(0.5)));
   orientFromY(mesh, new THREE.Vector3().subVectors(end, start));
@@ -192,6 +217,19 @@ function staticPlateVisible(comp = {}, attrs = {}) {
   ), false);
 }
 
+function crossBillboardTextVisible(comp = {}, attrs = {}) {
+  return bool(firstNonEmpty(
+    attrs.NODE_LABEL_CROSS_BILLBOARD_VISIBLE,
+    attrs.NODE_LABEL_3D_TEXT_VISIBLE,
+    attrs.ANNOTATION_CROSS_BILLBOARD_VISIBLE,
+    attrs.ANNOTATION_3D_TEXT_VISIBLE,
+    comp.nodeLabelCrossBillboardVisible,
+    comp.nodeLabel3dTextVisible,
+    comp.annotationCrossBillboardVisible,
+    comp.annotation3dTextVisible,
+  ), true);
+}
+
 function stampNodeAnnotation(target, comp, attrs, {
   part = 'node',
   role = 'node-annotation',
@@ -242,12 +280,10 @@ function stampNodeAnnotation(target, comp, attrs, {
     annotationFaceDirection: { x: faceVector.x, y: faceVector.y, z: faceVector.z },
     annotationFacingMode: exportLabel && labelAnchor
       ? 'runtime-css2d-camera-facing-anchor'
-      : (doubleSided ? 'fixed-axis-configurable-double-sided-static-reference' : 'fixed-axis-configurable-front-side-static-reference'),
+      : 'baked-cross-billboard-3d-stroke-text',
     labelOrientationContract: exportLabel && labelAnchor
       ? 'css2d-node-label-anchor-camera-facing-in-basic-viewer'
-      : (doubleSided
-        ? 'static-label-plane-front-normal-faces-configured-direction-default-+Z-material-double-sided'
-        : 'static-label-plane-front-normal-faces-configured-direction-default-+Z'),
+      : 'portable-glb-cross-billboard-3d-stroke-text-readable-in-external-viewers',
     bmCiiLayerSchema: LAYER_SCHEMA,
     bmCiiLayer: {
       schema: LAYER_SCHEMA,
@@ -279,6 +315,109 @@ function staggerSign(index = 0) {
   return (Number(index) || 0) % 2 === 0 ? 1 : -1;
 }
 
+function glyphStrokes(ch) {
+  if (ch === 'N') {
+    return [
+      [[0.15, 0.08], [0.15, 0.92]],
+      [[0.85, 0.08], [0.85, 0.92]],
+      [[0.15, 0.92], [0.85, 0.08]],
+    ];
+  }
+  const segments = DIGIT_SEGMENTS[ch] || '';
+  return [...segments].map((key) => SEGMENTS[key]).filter(Boolean);
+}
+
+function addStrokeTextPlane(group, comp, attrs, {
+  displayLabel,
+  center,
+  u,
+  v,
+  n,
+  width,
+  height,
+  radius,
+  color,
+  prefix,
+  faceDirectionRaw,
+  doubleSided,
+}) {
+  const chars = [...displayLabel.toUpperCase()];
+  const margin = width * 0.10;
+  const cell = (width - margin * 2) / Math.max(chars.length, 1);
+  const glyphHeight = height * 0.70;
+  const y0 = -glyphHeight * 0.5;
+  const front = n.clone().normalize().multiplyScalar(radius * 1.6);
+  chars.forEach((ch, charIndex) => {
+    const x0 = -width * 0.5 + margin + charIndex * cell;
+    glyphStrokes(ch).forEach(([[x1, y1], [x2, y2]], strokeIndex) => {
+      const p1 = center.clone()
+        .add(u.clone().multiplyScalar(x0 + x1 * cell))
+        .add(v.clone().multiplyScalar(y0 + y1 * glyphHeight))
+        .add(front);
+      const p2 = center.clone()
+        .add(u.clone().multiplyScalar(x0 + x2 * cell))
+        .add(v.clone().multiplyScalar(y0 + y2 * glyphHeight))
+        .add(front);
+      const stroke = cylinderBetween(
+        `${prefix}-stroke-${ch}-${charIndex}-${strokeIndex}`,
+        p1,
+        p2,
+        radius,
+        color,
+        { radialSegments: 8, emissive: color, materialOptions: { side: THREE.DoubleSide, emissiveIntensity: 0.30 } },
+      );
+      if (stroke) {
+        stampNodeAnnotation(stroke, comp, attrs, {
+          part: 'label',
+          role: 'node-label-cross-billboard-3d-stroke',
+          faceDirection: n,
+          faceDirectionRaw,
+          doubleSided,
+          exportLabel: false,
+        });
+        stroke.userData.NODE_LABEL_GEOMETRY_MODE = 'CROSS_BILLBOARD_3D_STROKE_TEXT';
+        stroke.userData.NODE_LABEL_TEXT_PLANE = prefix.endsWith('-x') ? '+X' : '+Z';
+        group.add(stroke);
+      }
+    });
+  });
+}
+
+function addCrossBillboardText(group, comp, attrs, {
+  labelAnchor,
+  displayLabel,
+  scale,
+  faceDirectionRaw,
+  doubleSided,
+}) {
+  const width = Math.max(scale * 2.35, scale * 0.48 * Math.max(displayLabel.length, 1));
+  const height = Math.max(scale * 0.74, 2.4);
+  const radius = Math.max(scale * 0.022, 0.10);
+  const color = 0xe0f2fe;
+
+  const planes = [
+    { suffix: 'z', u: X_AXIS.clone(), v: Y_AXIS.clone(), n: Z_AXIS.clone() },
+    { suffix: 'x', u: Z_AXIS.clone(), v: Y_AXIS.clone(), n: X_AXIS.clone() },
+  ];
+
+  planes.forEach(({ suffix, u, v, n }) => {
+    addStrokeTextPlane(group, comp, attrs, {
+      displayLabel,
+      center: labelAnchor,
+      u,
+      v,
+      n,
+      width,
+      height,
+      radius,
+      color,
+      prefix: `node-annotation-label-cross-${suffix}:${displayLabel}`,
+      faceDirectionRaw,
+      doubleSided,
+    });
+  });
+}
+
 export function buildNodeLabelObject(comp = {}) {
   const attrs = attrsOf(comp);
   const pt = point3(comp.coOrds || comp.centrePoint || comp.ep1);
@@ -293,6 +432,7 @@ export function buildNodeLabelObject(comp = {}) {
   const { raw: faceDirectionRaw, vector: faceDirectionVector } = labelFaceDirection(comp, attrs);
   const doubleSided = nodeLabelDoubleSided(comp, attrs);
   const plateVisible = staticPlateVisible(comp, attrs);
+  const bakedTextVisible = crossBillboardTextVisible(comp, attrs);
   const sideSign = staggerSign(attrs.NODE_LABEL_INDEX ?? comp.nodeLabelIndex);
   const labelAnchor = pt.clone()
     .add(top.clone().multiplyScalar(scale * 1.85))
@@ -320,10 +460,9 @@ export function buildNodeLabelObject(comp = {}) {
     group.add(leader);
   }
 
-  // Static/baked plates are omitted by default, not merely hidden. The Basic
-  // viewer layer panel can re-enable hidden meshes, so leaving hidden plates in
-  // the GLB creates blue edge-on slivers. A plate is exported only when the user
-  // explicitly opts into NODE_LABEL_STATIC_PLATE_VISIBLE / NODE_LABEL_BAKED_PLATE_VISIBLE.
+  // Static/baked plates are omitted by default, not merely hidden. A plate is
+  // exported only when the user explicitly opts into NODE_LABEL_STATIC_PLATE_VISIBLE
+  // / NODE_LABEL_BAKED_PLATE_VISIBLE.
   if (plateVisible) {
     const plate = new THREE.Mesh(new THREE.PlaneGeometry(scale * 3.0, scale * 1.05), labelMaterial(0x0f172a, 0x075985, attrs, comp));
     plate.name = `node-annotation-label:${label}`;
@@ -335,9 +474,13 @@ export function buildNodeLabelObject(comp = {}) {
     group.add(plate);
   }
 
-  // Explicit label anchor consumed by glbLabelOverlayFinal.js. This gives Basic
-  // GLB/PCF a camera-facing HTML label, so node labels stay readable in ISO,
-  // TOP, FRONT, SIDE and arbitrary orbit views.
+  // Portable GLB text. This is real 3D stroke geometry duplicated on +Z and +X
+  // text planes so external GLB viewers can read node numbers without CSS2D.
+  if (bakedTextVisible) {
+    addCrossBillboardText(group, comp, attrs, { labelAnchor, displayLabel, scale, faceDirectionRaw, doubleSided });
+  }
+
+  // Optional label anchor consumed by glbLabelOverlayFinal.js in Basic GLB/PCF.
   const overlayAnchor = new THREE.Group();
   overlayAnchor.name = `node-label:${label}`;
   overlayAnchor.position.copy(labelAnchor);
@@ -350,7 +493,7 @@ export function buildNodeLabelObject(comp = {}) {
     exportLabel: true,
     labelAnchor: true,
   });
-  overlayAnchor.userData.NOTE = `Camera-facing Basic viewer label is ${displayLabel}; static GLB plate is ${plateVisible ? 'visible' : 'not exported'} by default.`;
+  overlayAnchor.userData.NOTE = `Camera-facing Basic viewer label is ${displayLabel}; portable GLB cross-billboard 3D text is ${bakedTextVisible ? 'exported' : 'disabled'}; static plate is ${plateVisible ? 'visible' : 'not exported'} by default.`;
   group.add(overlayAnchor);
 
   stampNodeAnnotation(group, comp, attrs, { part: 'node', role: 'node-annotation-group', faceDirection: faceDirectionVector, faceDirectionRaw, doubleSided, exportLabel: false });
@@ -365,7 +508,9 @@ export function buildNodeLabelObject(comp = {}) {
     labelRuntimeOverlay: true,
     labelStaticPlateVisible: plateVisible,
     labelStaticPlateExported: plateVisible,
-    labelPlacementContract: 'node-marker-centreline-leader-no-arrow-label-offset-from-pipe-css2d-camera-facing-anchor-no-static-plate-by-default',
+    labelCrossBillboard3dTextVisible: bakedTextVisible,
+    labelGeometryMode: 'cross-billboard-3d-stroke-text-plus-optional-css2d-anchor',
+    labelPlacementContract: 'node-marker-centreline-leader-no-arrow-label-offset-from-pipe-cross-billboard-3d-text-external-viewer-safe',
   };
 
   return group;
