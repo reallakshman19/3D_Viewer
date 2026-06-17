@@ -20,7 +20,7 @@ const BM_CII_DEFAULT_LATEST_GLB_URL = '';
 
 function resolveBenchmarkUrl(url) {
   if (!url) return '';
-  if (/^https?:\/\//i.test(url)) return url;
+  if (/^(https?:|data:|blob:)/i.test(url)) return url;
   if (typeof window !== 'undefined' && window.location) {
     return new URL(url.replace(/^\/+/, ''), `${window.location.origin}${window.location.pathname.replace(/[^/]*$/, '')}`).toString();
   }
@@ -37,24 +37,55 @@ async function fetchJsonQuietly(url) {
   }
 }
 
+function normalizeCandidate(candidate) {
+  if (!candidate) return null;
+  if (typeof candidate === 'string') return { url: candidate, encoding: candidate.endsWith('.b64') ? 'base64' : 'binary' };
+  const url = candidate.url || candidate.glbUrl || candidate.base64Url || candidate.href || '';
+  if (!url) return null;
+  const encoding = candidate.encoding || candidate.format || (candidate.base64Url ? 'base64' : (url.endsWith('.b64') ? 'base64' : 'binary'));
+  return { url, encoding: String(encoding).toLowerCase(), description: candidate.description || '' };
+}
+
+function base64ToBlobUrl(base64Text) {
+  const cleaned = String(base64Text || '').replace(/^data:[^,]+,/, '').replace(/\s+/g, '');
+  const binary = atob(cleaned);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
+  const blob = new Blob([bytes], { type: 'model/gltf-binary' });
+  return URL.createObjectURL(blob);
+}
+
+async function loadCandidateGlb(candidate) {
+  const item = normalizeCandidate(candidate);
+  if (!item) throw new Error('empty candidate');
+  const url = resolveBenchmarkUrl(item.url);
+  const response = await fetch(url, { cache: 'no-store' });
+  if (!response.ok) throw new Error(`${response.status}`);
+  if (item.encoding === 'base64' || item.encoding === 'b64') {
+    return base64ToBlobUrl(await response.text());
+  }
+  const blob = await response.blob();
+  return URL.createObjectURL(blob);
+}
+
 async function loadFirstAvailableGlb(candidates = []) {
-  const unique = [...new Set(candidates.filter(Boolean))];
+  const unique = [];
+  const seen = new Set();
+  for (const candidate of candidates.map(normalizeCandidate).filter(Boolean)) {
+    const key = `${candidate.encoding}:${candidate.url}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    unique.push(candidate);
+  }
   const failures = [];
   if (unique.length === 0) {
-    throw new Error(`BM_CII latest GLB is not configured. Update ${BM_CII_LATEST_GLB_MANIFEST_URL} with a BM_CII GLB URL.`);
+    throw new Error(`BM_CII latest GLB is not configured. Update ${BM_CII_LATEST_GLB_MANIFEST_URL} with a BM_CII GLB URL or base64Url.`);
   }
   for (const candidate of unique) {
-    const url = resolveBenchmarkUrl(candidate);
     try {
-      const response = await fetch(url, { cache: 'no-store' });
-      if (!response.ok) {
-        failures.push(`${candidate}: ${response.status}`);
-        continue;
-      }
-      const blob = await response.blob();
-      return URL.createObjectURL(blob);
+      return await loadCandidateGlb(candidate);
     } catch (err) {
-      failures.push(`${candidate}: ${err?.message || err}`);
+      failures.push(`${candidate.url}: ${err?.message || err}`);
     }
   }
   throw new Error(`No BM_CII benchmark GLB found. Update ${BM_CII_LATEST_GLB_MANIFEST_URL}. ${failures.join('; ')}`);
@@ -76,11 +107,12 @@ export async function loadBmCiiLatestGlbUrl() {
   const manifest = await fetchJsonQuietly(BM_CII_LATEST_GLB_MANIFEST_URL);
   const latest = manifest?.latest || {};
   const candidates = [
-    latest.url,
-    latest.glbUrl,
-    manifest?.latestUrl,
-    ...(Array.isArray(manifest?.candidates) ? manifest.candidates.map((item) => item?.url || item?.glbUrl || item) : []),
-    BM_CII_DEFAULT_LATEST_GLB_URL,
+    { url: latest.url, encoding: latest.encoding || 'binary', description: latest.description },
+    { url: latest.glbUrl, encoding: latest.encoding || 'binary', description: latest.description },
+    { url: latest.base64Url, encoding: 'base64', description: latest.description },
+    { url: manifest?.latestUrl, encoding: manifest?.latestEncoding || 'binary' },
+    ...(Array.isArray(manifest?.candidates) ? manifest.candidates : []),
+    { url: BM_CII_DEFAULT_LATEST_GLB_URL, encoding: 'binary' },
   ];
   // Do not fall back to loadMockGlbUrl(); BM_CII review must never silently load
   // an unrelated generic GLB. Surface a clear configuration error instead.
