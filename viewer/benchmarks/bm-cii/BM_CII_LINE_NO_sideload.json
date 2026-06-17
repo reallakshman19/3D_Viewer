@@ -1,0 +1,13 @@
+{
+  "schema": "bm-cii-line-no-sideload/v1",
+  "description": "Runtime copy of BM_CII node-wise Line No sideload benchmark data for Basic GLB-PCF Viewer component properties.",
+  "records": [
+    {
+      "node": "10",
+      "lineNo": "LINE XYZ",
+      "source": "BM_CII mock line-no sideload",
+      "scope": "topology-carry-forward",
+      "appliesTo": "component-properties-only"
+    }
+  ]
+}
