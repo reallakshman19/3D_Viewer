@@ -1,0 +1,8 @@
+{
+  "schema": "bm-cii-latest-glb-manifest/v1",
+  "latest": {
+    "url": "",
+    "description": "Set this URL to a deployed BM_CII engineering GLB when available. The Basic GLB-PCF BM_CII mock button falls back to a generated GLB mock if no candidate is configured."
+  },
+  "candidates": []
+}
