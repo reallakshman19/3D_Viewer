@@ -75,6 +75,8 @@ const BADGE_COLORS = Object.freeze({
   Rejected: '#f87171',
 });
 
+const DEFAULT_OPEN_SECTIONS = new Set(['Line / Node', 'Component Data', 'Process / Analysis']);
+
 function esc(value) {
   return String(value ?? '')
     .replace(/&/g, '&amp;')
@@ -306,8 +308,9 @@ function renderSection(title, rows, options = {}) {
   const filtered = rows.filter((row) => options.showEmpty || !isUnavailable(row.value));
   if (!filtered.length && options.hideIfEmpty) return '';
   const accent = options.accent || '#38bdf8';
-  let html = `<section style="margin:0 0 10px 0; border:1px solid rgba(148,163,184,.22); border-radius:10px; overflow:hidden; background:rgba(2,6,23,.28);">`;
-  html += `<div style="display:flex; align-items:center; gap:7px; background:rgba(15,23,42,.92); color:#e2e8f0; padding:7px 9px; font-weight:800; letter-spacing:.01em;"><span style="width:3px;height:14px;background:${accent};border-radius:999px;display:inline-block;"></span>${esc(title)}</div>`;
+  const defaultOpen = options.defaultOpen ?? DEFAULT_OPEN_SECTIONS.has(title);
+  let html = `<details ${defaultOpen ? 'open' : ''} style="margin:0 0 10px 0; border:1px solid rgba(148,163,184,.22); border-radius:10px; overflow:hidden; background:rgba(2,6,23,.28);">`;
+  html += `<summary style="display:flex; align-items:center; gap:7px; background:rgba(15,23,42,.92); color:#e2e8f0; padding:7px 9px; font-weight:800; letter-spacing:.01em; cursor:pointer; user-select:none;"><span style="width:3px;height:14px;background:${accent};border-radius:999px;display:inline-block;"></span>${esc(title)}</summary>`;
   html += '<div style="padding:6px 8px;">';
   for (const row of filtered) {
     const value = isUnavailable(row.value) ? NA : row.value;
@@ -317,7 +320,7 @@ function renderSection(title, rows, options = {}) {
     html += `<div>${row.status ? statusChip(row.status) : ''}</div>`;
     html += '</div>';
   }
-  html += '</div></section>';
+  html += '</div></details>';
   return html;
 }
 
@@ -361,14 +364,34 @@ function renderDebug(meta) {
 }
 
 function renderRuleNote(supportLike) {
-  if (supportLike) {
-    return '<div style="margin:-4px 0 10px 0; padding:6px 8px; border-left:3px solid #fca5a5; background:rgba(127,29,29,.22); color:#fecaca; font-size:11px;">Carry-forward: not applicable to supports/restraints. Each restraint row is record-scoped.</div>';
+  const body = supportLike
+    ? 'Carry-forward is not applicable to supports/restraints. Each restraint row is record-scoped.'
+    : 'Component/process properties may use InputXML resolved values. Restraint properties never inherit from component context.';
+  const accent = supportLike ? '#fca5a5' : '#67e8f9';
+  const color = supportLike ? '#fecaca' : '#bae6fd';
+  return `<details style="margin:-4px 0 10px 0; border-left:3px solid ${accent}; background:rgba(15,23,42,.46); color:${color}; font-size:11px;"><summary style="cursor:pointer; padding:6px 8px; font-weight:800;">Rules / Notes</summary><div style="padding:0 8px 8px 8px;">${esc(body)}</div></details>`;
+}
+
+function configureResizablePanel(propPanel, propContent) {
+  if (propPanel?.dataset?.bmCiiResizable === '1') return;
+  if (propPanel?.style) {
+    propPanel.dataset.bmCiiResizable = '1';
+    propPanel.style.resize = 'both';
+    propPanel.style.overflow = 'auto';
+    propPanel.style.minWidth = propPanel.style.minWidth || '280px';
+    propPanel.style.minHeight = propPanel.style.minHeight || '220px';
+    propPanel.style.maxWidth = propPanel.style.maxWidth || 'min(720px, 76vw)';
+    propPanel.style.maxHeight = propPanel.style.maxHeight || 'min(720px, 82vh)';
   }
-  return '<div style="margin:-4px 0 10px 0; padding:6px 8px; border-left:3px solid #67e8f9; background:rgba(8,47,73,.22); color:#bae6fd; font-size:11px;">Component/process properties may use InputXML resolved values. Restraint properties never inherit from component context.</div>';
+  if (propContent?.style) {
+    propContent.style.maxHeight = 'none';
+    propContent.style.overflow = 'visible';
+  }
 }
 
 export function createPropertyPanel(propPanel, propContent) {
   let activeItem = null;
+  configureResizablePanel(propPanel, propContent);
 
   function lineNoForItem(item, meta, supportLike) {
     const explicit = firstLineNoValue(
@@ -417,10 +440,10 @@ export function createPropertyPanel(propPanel, propContent) {
     html += renderRuleNote(supportLike);
 
     if (supportLike) {
-      html += renderSection('Support / Restraint', rowsFromFields(meta, item, SUPPORT_DISPLAY_FIELDS, 'Record scoped'), { showEmpty: true, accent: '#fca5a5' });
+      html += renderSection('Support / Restraint', rowsFromFields(meta, item, SUPPORT_DISPLAY_FIELDS, 'Record scoped'), { showEmpty: true, accent: '#fca5a5', defaultOpen: false });
     }
 
-    html += renderSection('Identity', rowsFromFields(meta, item, IDENTITY_FIELDS), { showEmpty: true, accent: '#38bdf8' });
+    html += renderSection('Identity', rowsFromFields(meta, item, IDENTITY_FIELDS), { showEmpty: true, accent: '#38bdf8', defaultOpen: false });
 
     const lineStatus = lineNo?.value
       ? (/sideload/i.test(lineNo.source || '') ? 'Sideloaded' : 'Explicit')
@@ -432,18 +455,18 @@ export function createPropertyPanel(propPanel, propContent) {
       { label: 'Line No Scope', value: meta.LINE_NO_SCOPE || NA, status: meta.LINE_NO_SCOPE ? 'Debug' : 'Unavailable' },
       ...rowsFromFields(meta, item, LINE_NODE_FIELDS),
     ];
-    html += renderSection('Line / Node', lineRows, { showEmpty: true, accent: '#fbbf24' });
+    html += renderSection('Line / Node', lineRows, { showEmpty: true, accent: '#fbbf24', defaultOpen: true });
 
     if (isonoteLike) {
-      html += renderSection('ISONOTE Annotation', rowsFromFields(meta, item, ISONOTE_FIELDS, 'Sideloaded'), { showEmpty: true, accent: '#f59e0b' });
+      html += renderSection('ISONOTE Annotation', rowsFromFields(meta, item, ISONOTE_FIELDS, 'Sideloaded'), { showEmpty: true, accent: '#f59e0b', defaultOpen: false });
     }
 
     if (!supportLike && !isonoteLike) {
-      html += renderSection('Component Data', rowsFromFields(meta, item, COMPONENT_FIELDS), { showEmpty: true, accent: '#22c55e' });
-      html += renderSection('Process / Analysis', rowsFromFields(meta, item, PROCESS_FIELDS), { showEmpty: true, accent: '#a78bfa' });
+      html += renderSection('Component Data', rowsFromFields(meta, item, COMPONENT_FIELDS), { showEmpty: true, accent: '#22c55e', defaultOpen: true });
+      html += renderSection('Process / Analysis', rowsFromFields(meta, item, PROCESS_FIELDS), { showEmpty: true, accent: '#a78bfa', defaultOpen: true });
     }
 
-    html += renderSection('Source / Debug Summary', rowsFromFields(meta, item, SOURCE_FIELDS, 'Debug'), { hideIfEmpty: true, accent: '#94a3b8' });
+    html += renderSection('Source / Debug Summary', rowsFromFields(meta, item, SOURCE_FIELDS, 'Debug'), { hideIfEmpty: true, accent: '#94a3b8', defaultOpen: false });
     html += renderDebug(meta);
     html += '</div>';
 
