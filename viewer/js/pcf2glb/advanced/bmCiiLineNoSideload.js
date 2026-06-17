@@ -46,6 +46,8 @@ function identityText(item = {}, meta = {}) {
     meta?.supportRecordId,
     meta?.recordId,
     meta?.labelText,
+    meta?.sourceXml,
+    meta?.benchmarkName,
   ];
   let current = item?.object3D || null;
   while (current) {
@@ -90,9 +92,15 @@ function rootOf(object3D) {
 }
 
 function objectMeta(object3D) {
-  const raw = object3D?.userData && typeof object3D.userData === 'object' ? object3D.userData : {};
-  const trace = raw.bmCiiTrace && typeof raw.bmCiiTrace === 'object' ? raw.bmCiiTrace : {};
-  return { ...trace, ...raw };
+  const chain = [];
+  let current = object3D || null;
+  while (current) {
+    const raw = current?.userData && typeof current.userData === 'object' ? current.userData : {};
+    const trace = raw.bmCiiTrace && typeof raw.bmCiiTrace === 'object' ? raw.bmCiiTrace : {};
+    if (Object.keys(raw).length || Object.keys(trace).length) chain.unshift({ ...trace, ...raw });
+    current = current.parent || null;
+  }
+  return Object.assign({}, ...chain);
 }
 
 function componentKey(meta = {}, object3D = null) {
@@ -108,6 +116,13 @@ function looksLikeSupport(meta = {}, type = '') {
     || raw.includes('SUPPORT')
     || raw.includes('RESTRAINT')
     || raw.includes('BM_CII_BAKED_SUPPORT');
+}
+
+function looksLikeBmCiiComponent(item = {}, meta = {}) {
+  const pair = nodePairFromMeta(meta);
+  if (pair.from || pair.to) return true;
+  const raw = identityText(item, meta).toUpperCase();
+  return raw.includes('BM_CII') || raw.includes('INPUTXML') || raw.includes('PE_');
 }
 
 function resolveRuntimeUrl(url) {
@@ -218,14 +233,25 @@ function directLineFromNode(node) {
   };
 }
 
+function singleAnchorLineForComponent(item = {}, meta = {}) {
+  if (state.byNode.size !== 1 || !looksLikeBmCiiComponent(item, meta)) return null;
+  const detail = Array.from(state.byNode.values())[0];
+  return {
+    value: detail.lineNo,
+    source: `${detail.source}; single-anchor BM_CII component fallback`,
+    anchorNode: detail.anchorNode,
+    scope: 'single-anchor component fallback',
+    pending: false,
+  };
+}
+
 export function bmCiiLineNoFromSideload(item, meta, supportLike = false) {
   if (!state.loaded) return { value: '', pending: true };
   if (state.byNode.size === 0) return { value: '', pending: false };
 
-  // Supports/restraints are record-scoped and must not receive topology
-  // carry-forward. A direct node-wise sideload value is allowed because it is
-  // attached to the selected support node itself, not inherited from another
-  // restraint row.
+  // Supports/restraints are record-scoped and must not receive topology or
+  // single-anchor carry-forward. A direct node-wise line value is allowed only
+  // when the selected support itself is on the sideload node.
   if (supportLike) {
     return directLineFromNode(directNodeFromMeta(item, meta)) || { value: '', pending: false };
   }
@@ -239,12 +265,15 @@ export function bmCiiLineNoFromSideload(item, meta, supportLike = false) {
   const root = rootOf(item?.object3D);
   if (state.topologyRoot !== root) buildTopology(root);
   const propagated = state.componentLineByKey.get(componentKey(meta, item?.object3D));
-  if (!propagated) return { value: '', pending: false };
-  return {
-    value: propagated.lineNo,
-    source: propagated.source,
-    anchorNode: propagated.anchorNode,
-    scope: 'node-wise sideload topology carry-forward',
-    pending: false,
-  };
+  if (propagated) {
+    return {
+      value: propagated.lineNo,
+      source: propagated.source,
+      anchorNode: propagated.anchorNode,
+      scope: 'node-wise sideload topology carry-forward',
+      pending: false,
+    };
+  }
+
+  return singleAnchorLineForComponent(item, meta) || { value: '', pending: false };
 }
