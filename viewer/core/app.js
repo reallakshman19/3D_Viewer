@@ -214,6 +214,10 @@ export async function initApp(root = document.getElementById('app')) {
   return appDestroy;
 }
 
+export function init(root = document.getElementById('app')) {
+  return initApp(root);
+}
+
 export function destroyApp() {
   if (typeof appDestroy === 'function') appDestroy();
 }
