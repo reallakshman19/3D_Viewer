@@ -579,33 +579,6 @@ const CONVERTER_DEFS = {
       { key: 'headerMdbName', label: 'Header MDBName', type: 'text' },
     ],
   },
-  inputxml_to_dxf: {
-    id: 'inputxml_to_dxf',
-    label: 'InputXML→DXF',
-    primaryAccept: '.xml,.XML',
-    primaryLabel: 'Input XML (CAESAR II)',
-    secondaryLabel: '',
-    secondaryAccept: '',
-    description: 'Extract 3-D pipe geometry from CAESAR II Input XML and export selected branches as DXF.',
-    defaults: {
-      selectedBranches: '',
-      dxfScale: 1,
-      textHeight: 2.5,
-      showLabels: true,
-      includeSidecarJson: true,
-    },
-    fields: [
-      {
-        key: 'selectedBranches',
-        label: 'Branches to include (comma-separated; empty = all)',
-        type: 'text',
-      },
-      { key: 'dxfScale', label: 'Scale factor', type: 'number', step: '0.001' },
-      { key: 'textHeight', label: 'Text height', type: 'number', step: '0.001' },
-      { key: 'showLabels', label: 'Show labels', type: 'checkbox' },
-      { key: 'includeSidecarJson', label: 'Export sidecar JSON', type: 'checkbox' },
-    ],
-  },
   pcf_continuity_check: {
     id: 'pcf_continuity_check',
     label: 'PCF Continuity Check',
@@ -646,7 +619,6 @@ const CONVERTER_ORDER = [
   'inputxml_to_cii',
   'inputxml14_to_cii',
   'inputxml_to_cii2019',
-  'inputxml_to_dxf',
   'pcf_continuity_check',
 ];
 
@@ -658,7 +630,6 @@ import { run as stagedJsonToInputXmlRun } from './converters/stagedjson-to-input
 import { run as stagedJsonToCsvRun } from './converters/stagedjson-to-csv.js';
 import { run as xmlToCiiRun } from './converters/xmltocii2019_runner.js';
 import { run as inputXmlToCii2019Run } from './converters/inputxml-to-cii2019.js';
-import { run as inputXmlToDxfRun } from './converters/inputxml-to-dxf.js';
 import { run as pcfContinuityCheckRun } from './converters/pcf-continuity-check.js';
 
 const RUNNERS = {
@@ -678,7 +649,6 @@ const RUNNERS = {
   inputxml_to_cii: pythonWorkerRun,
   inputxml14_to_cii: pythonWorkerRun,
   inputxml_to_cii2019: inputXmlToCii2019Run,
-  inputxml_to_dxf: inputXmlToDxfRun,
   pcf_continuity_check: pcfContinuityCheckRun,
 };
 
