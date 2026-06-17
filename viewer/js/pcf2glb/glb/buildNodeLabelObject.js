@@ -73,7 +73,13 @@ function attrsOf(comp = {}) {
 function nodeLabelText(comp = {}, attrs = {}) {
   const raw = text(comp.label || comp.refNo || attrs.NODE_LABEL || attrs.NODE_NUMBER || attrs.NodeNumber || comp.id);
   if (!raw) return '';
-  return /^N\d+/i.test(raw) ? raw.toUpperCase() : `N${raw}`;
+  return raw.replace(/^N/i, '');
+}
+
+function nodeLabelDisplayText(label = '') {
+  const raw = text(label);
+  if (!raw) return '';
+  return /^N/i.test(raw) ? raw.toUpperCase() : `N${raw}`;
 }
 
 function material(color, emissive = color) {
@@ -145,6 +151,7 @@ function labelFaceDirection(comp = {}, attrs = {}) {
 function stampNodeAnnotation(target, comp, attrs, { part = 'node', role = 'node-annotation', faceDirection = null, faceDirectionRaw = '+Z' } = {}) {
   const node = text(attrs.NODE_NUMBER || attrs.NODE || comp.refNo || comp.label || comp.id).replace(/^N/i, '');
   const label = nodeLabelText(comp, attrs);
+  const displayLabel = nodeLabelDisplayText(label);
   const layerIds = layerIdsForPart(part);
   const faceVector = faceDirection?.clone?.().normalize?.() || Z_AXIS.clone();
   target.userData = {
@@ -161,8 +168,10 @@ function stampNodeAnnotation(target, comp, attrs, { part = 'node', role = 'node-
     TYPE: 'NODE ANNOTATION',
     NODE: node || label,
     NODE_LABEL: label,
+    NODE_LABEL_DISPLAY: displayLabel,
     SOURCE: 'InputXML',
     labelText: label,
+    labelDisplayText: displayLabel,
     sourceNode: node || label,
     connectedElements: attrs.CONNECTED_ELEMENTS || comp.connectedElements || '',
     connectedElementCount: number(attrs.CONNECTED_ELEMENT_COUNT ?? comp.connectedElementCount, 0),
@@ -207,6 +216,7 @@ export function buildNodeLabelObject(comp = {}) {
   const attrs = attrsOf(comp);
   const pt = point3(comp.coOrds || comp.centrePoint || comp.ep1);
   const label = nodeLabelText(comp, attrs);
+  const displayLabel = nodeLabelDisplayText(label);
   if (!pt || !label) return null;
 
   const bore = number(comp.bore ?? attrs.BORE ?? attrs.OutsideDiameter, 20);
@@ -246,7 +256,7 @@ export function buildNodeLabelObject(comp = {}) {
   plate.position.copy(labelAnchor);
   orientPlaneNormal(plate, faceDirectionVector);
   stampNodeAnnotation(plate, comp, attrs, { part: 'label', role: 'node-label-plate', faceDirection: faceDirectionVector, faceDirectionRaw });
-  plate.userData.NOTE = 'Visible text is available through NODE_LABEL metadata/property panel.';
+  plate.userData.NOTE = `Visible display label is ${displayLabel}; raw node label is available as NODE_LABEL.`;
   group.add(plate);
 
   stampNodeAnnotation(group, comp, attrs, { part: 'node', role: 'node-annotation-group', faceDirection: faceDirectionVector, faceDirectionRaw });
