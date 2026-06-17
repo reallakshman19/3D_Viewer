@@ -1,4 +1,5 @@
 import { renderLegacyModelConvertersTab } from './model-converters/legacy-adapter.js';
+import { installBmCiiSupportAnnotationPopup } from './model-converters/bm-cii-support-annotation-popup.js';
 import { installInputXmlDxfBranchPicker } from './model-converters/inputxml-dxf-branch-picker.js';
 import { installInputXmlDxfLegacyBridge } from './model-converters/inputxml-dxf-legacy-bridge.js';
 import { installInputXmlDxfProjectionOption } from './model-converters/inputxml-dxf-projection-option.js';
@@ -13,6 +14,7 @@ const MODEL_CONVERTER_INSTALLERS = Object.freeze([
   ['inputxml-dxf-symbol-option', installInputXmlDxfSymbolOption],
   ['inputxml-dxf-projection-option', installInputXmlDxfProjectionOption],
   ['inputxml-glb-legacy-bridge', installInputXmlGlbLegacyBridge],
+  ['bm-cii-support-annotation-popup', installBmCiiSupportAnnotationPopup],
   ['inputxml-property-transfer-popup-ui-v4', installInputXmlPropertyTransferUi],
 ]);
 
@@ -26,8 +28,6 @@ function installSafely(name, installer, container) {
 
 function installBranchPickerImmediately(container) {
   try {
-    // Keep this synchronous and explicit: the branch picker is a lightweight
-    // legacy InputXML→DXF enhancer and its static gate checks this installer call.
     installInputXmlDxfBranchPicker(container);
   } catch (error) {
     console.error('[ModelConverters] Optional installer failed: inputxml-dxf-branch-picker', error);
@@ -41,17 +41,7 @@ function scheduleInstaller(name, installer, container) {
 
 export function renderModelConvertersTab(container, ctx) {
   const result = renderLegacyModelConvertersTab(container, ctx);
-
-  // Install the branch picker immediately after legacy render so existing
-  // InputXML→DXF controls are available for tests/users, while heavier XML/CII
-  // workflow helpers remain deferred and guarded for tab responsiveness.
   installBranchPickerImmediately(container);
-
-  // Emergency responsiveness guard:
-  // keep the legacy converter UI as the only synchronous renderer. XML/CII popup
-  // is now a lightweight launcher only; heavy XML/CII observer/nesting installers
-  // are intentionally not auto-installed here.
   MODEL_CONVERTER_INSTALLERS.forEach(([name, installer]) => scheduleInstaller(name, installer, container));
-
   return result;
 }
