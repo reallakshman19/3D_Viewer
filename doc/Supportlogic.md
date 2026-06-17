@@ -1,40 +1,46 @@
-# BM_CII InputXML Basic Support / Restraint Placement Logic
+# BM_CII Support / Restraint Mapping Logic
 
 ## 1. Scope
 
-This document defines the current support and restraint placement logic for the **BM_CII InputXML Basic GLB** path.
+This document defines the locked support/restraint mapping contract for the BM_CII GLB benchmark path.
 
-The intent is to keep the benchmark path deterministic and reviewable:
+The contract applies to two sources:
 
-- Input source: **InputXML restraint records only**.
-- Do not mix ISONOTE records into this benchmark path.
-- Do not use Temp1/material heatmap variants for this benchmark review.
-- Do not apply coordinate transformation silently.
-- If transformation is required later, the converter must show a user-facing override popup and use the values selected by the user.
+1. **InputXML actual restraints** — structured `<RESTRAINT>` rows from the InputXML.
+2. **ISONOTE expected restraints** — node-wise sideloaded ISONOTE text converted into synthetic support records.
 
-The support renderer must treat each restraint row as an independent engineering record. Records at the same node must not share axis/cosine data unless an explicit user override says so.
+Both sources must route through the same support mapper and renderer. ISONOTE must not use a separate drawing path.
+
+```text
+InputXML actual restraint records ─┐
+                                  ├─> common support mapper -> engineering contact -> optional visual resolver -> GLB glyphs
+ISONOTE synthetic expected records ─┘
+```
 
 ---
 
-## 2. Core principles
+## 2. Non-negotiable rules
 
-### 2.1 Record-scoped restraint data
+1. **Restraint data is record-scoped.** Do not carry-forward restraint values.
+2. **Component/process carry-forward is separate.** It applies only to component fields such as material, pressure, temperature, wall thickness, etc.
+3. **InputXML and ISONOTE use one support engine.** Source differs; rendering contract does not.
+4. **Engineering contact is applied before visual resolver offset.**
+5. **Visual resolver offset is applied only to final symbols that are axial / parallel to the pipe.**
+6. **Line No. is node-wise sideloaded for BM_CII mock data.** Provenance/debug trace must never appear as Line No.
+
+---
+
+## 3. Record-scoped InputXML restraint data
 
 Each `<RESTRAINT>` row owns its own fields:
 
-- `NODE`
-- `TYPE`
-- `XCOSINE`
-- `YCOSINE`
-- `ZCOSINE`
-- `STIFFNESS`
-- `GAP`
-- `FRIC_COEF`
-- `CNODE`
-- `TAG`
-- `GUID`
-
-Do **not** reuse cosine from another restraint row, even if both records have the same node number.
+| Field | Rule |
+|---|---|
+| `NODE` | Source support node. |
+| `TYPE` | Source restraint type. |
+| `XCOSINE`, `YCOSINE`, `ZCOSINE` | Belongs only to this row. |
+| `GAP` | Belongs only to this row. No carry-forward. |
+| `STIFFNESS`, `FRIC_COEF`, `CNODE`, `TAG`, `GUID` | Belongs only to this row. |
 
 Example:
 
@@ -43,453 +49,356 @@ Example:
   XCOSINE="1.000000" YCOSINE="0.000000" ZCOSINE="0.000000" />
 ```
 
-This GUIDE record uses its own cosine only:
-
-```text
-GUIDE cosine = X
-```
-
-It must not use the `+Y` cosine from another restraint at node 255.
+This GUIDE record uses `X` from its own row only. It must not borrow `+Y` or any other cosine from another restraint at node 255.
 
 ---
 
-### 2.2 Separate engineering meaning from rendering implementation
+## 4. ISONOTE source contract
 
-The support data model uses separate fields:
+ISONOTE text is an expected-restraint source, not a geometry engine.
 
-| Field | Meaning |
+ISONOTE text must be parsed into normalized synthetic support records before rendering.
+
+Minimum synthetic record shape:
+
+| Field | Required value |
 |---|---|
-| `BM_CII item` | Benchmark item text such as `ANC`, `+Y`, `X`, `Z`, `LIM`, `HANGER`, `GUIDE`. |
-| `Family` | Engineering family: `ANCHOR`, `REST`, `AXIS RESTRAINT`, `LINESTOP / DIRECTIONAL STOP`, `LIMIT`, `HANGER / SPRING`, `GUIDE`. |
-| `Axis (Pipe Axis basis)` | Pipe-relative action basis: `AXIAL`, `LATERAL`, `VERTICAL`, `AXIAL / FLOW-BLOCKING`, etc. |
-| `Cosine` | Source cosine direction or semantic cosine note. |
-| `Render kind` | Internal renderer primitive. It must not override the engineering family. |
-| `Expected GLB symbol` | The visible symbol contract. |
+| `source` | `ISONOTE` |
+| `sourceMode` | `EXPECTED_RESTRAINT` or `WARNING_ISONOTE` |
+| `node` | Sideload node number |
+| `family` | `REST`, `GUIDE`, `LINE_STOP`, `LIMIT`, `HOLDDOWN`, `AXIS_RESTRAINT`, `SPRING_WARNING`, etc. |
+| `axisBasis` | `VERTICAL`, `LATERAL`, `AXIAL`, `EXPLICIT_AXIS`, or `UNRESOLVED_AXIS` |
+| `axis` | `X`, `Y`, `Z`, `PIPE_AXIAL`, or mapper-derived |
+| `sign` | `+`, `-`, `±`, or `UNKNOWN` |
+| `loadText` | Example: `28kN`, `6kN`, `15kN` |
+| `gapMm` | Explicitly parsed gap in mm, or `null` |
+| `sourceNoteName` | Full original ISONOTE text exactly as sideloaded |
+| `popupRequired` | `true` for unresolved `SINGLE AXIS` text |
+| `warningText` | Required for `SPRING_WARNING`, unresolved axis, or negation conflicts |
 
-Important:
+ISONOTE negation must be respected:
 
-```text
-Family != Render kind
-```
-
-For example, an `AXIS RESTRAINT` may internally use the axis-arrow renderer, but it must not be reported as engineering family `REST` unless the BM_CII table says it is REST.
-
----
-
-## 3. BM_CII approved support map
-
-The BM_CII InputXML Basic benchmark uses the following approved map.
-
-| Node | BM_CII item | Family | Axis (Pipe Axis basis) | Cosine | Render kind | Expected GLB symbol |
-|---:|---|---|---|---|---|---|
-| 10 | ANC | ANCHOR | AXIAL / FLOW-BLOCKING | PLANE BLOCKING THE FLOW | ANCHOR | Flat plate blocking flow |
-| 35 | +Y | REST | VERTICAL | VERTICAL AXIS | REST | Single axis arrow toward +Y |
-| 35 | X | AXIS RESTRAINT | AXIAL | X | N/A | Axis pair along X |
-| 35 | Z | AXIS RESTRAINT | AXIAL | Z | N/A | Axis pair along Z |
-| 130 | +Z | LINESTOP / DIRECTIONAL STOP | AXIAL | +Z | N/A | Single axial arrow toward +Z |
-| 190 | ANC | ANCHOR | AXIAL / FLOW-BLOCKING | PLANE BLOCKING THE FLOW | ANCHOR | Flat plate blocking flow |
-| 205 | LIM | LIMIT | AXIAL | AXIAL TO PIPE | LIMIT | Axial pair |
-| 205 | Y | REST | VERTICAL | VERTICAL AXIS | REST | Axis pair along Y |
-| 205 | HANGER | HANGER / SPRING | LATERAL / VERTICAL HANGER | VERTICAL AXIS | SPRING | Coil only, no arrow |
-| 240 | ANC | ANCHOR | AXIAL / FLOW-BLOCKING | PLANE BLOCKING THE FLOW | ANCHOR | Flat plate blocking flow |
-| 255 | GUIDE | GUIDE | LATERAL | AS PER NODE DATA | GUIDE | GUIDE lateral arrow pair |
-| 255 | +Y | REST | VERTICAL | VERTICAL AXIS | REST | Single axis arrow toward +Y |
+| Text | Effect |
+|---|---|
+| `REST NOT DEFINED` | Do not generate REST from this note. |
+| `WITHOUT GUIDE`, `NO GUIDE`, `GUIDE NOT REQUIRED` | Do not generate GUIDE from this note. |
+| `WITHOUT LINE STOP`, `NO LINE STOP` | Do not generate LINE STOP from this note. |
 
 ---
 
-## 4. Axis and cosine rules
+## 5. Approved InputXML BM_CII support map
 
-### 4.1 Positive cosine is not automatically signed
-
-A positive source cosine does not automatically mean `+X`, `+Y`, or `+Z`.
-
-Use the BM_CII type map to determine whether the restraint is directional.
-
-Examples:
-
-```text
-TYPE 3 + ZCOSINE=1.0  => Z, not +Z
-TYPE 18 + ZCOSINE=1.0 => +Z directional stop
-```
-
-### 4.2 Directional and non-directional axis labels
-
-Use this terminology:
-
-| Label form | Meaning | Symbol rule |
-|---|---|---|
-| `X`, `Y`, `Z` | Non-directional axis restraint | Two opposed arrows |
-| `+X`, `+Y`, `+Z` | Directional positive restraint | One arrow in positive direction |
-| `-X`, `-Y`, `-Z` | Directional negative restraint | One arrow in negative direction |
+| Node | BM_CII item | Family | Axis basis | Source direction/cosine | Expected symbol |
+|---:|---|---|---|---|---|
+| 10 | `ANC` | `ANCHOR` | Flow-blocking | Plane normal to pipe tangent | Flat plate blocking flow |
+| 35 | `+Y` | `REST` | Vertical | `+Y` | Single upward REST arrow |
+| 35 | `X` | `AXIS_RESTRAINT` | Axis restraint | `X` | Axis pair unless classified otherwise |
+| 35 | `Z` | `AXIS_RESTRAINT` | Axis restraint | `Z` | Axis pair unless classified otherwise |
+| 130 | `+Z` | `LINESTOP` | Axial | `+Z` | Single directional axial stop |
+| 190 | `ANC` | `ANCHOR` | Flow-blocking | Plane normal to pipe tangent | Flat plate blocking flow |
+| 205 | `LIM` | `LIMIT` | Axial | Axial to pipe | Axial `±` pair |
+| 205 | `Y` | `REST` | Vertical | `Y` | Vertical pair |
+| 205 | `HANGER` | `HANGER / SPRING` | Hanger/spring | Vertical hanger reference | Coil only |
+| 240 | `ANC` | `ANCHOR` | Flow-blocking | Plane normal to pipe tangent | Flat plate blocking flow |
+| 255 | `GUIDE` | `GUIDE` | Lateral | GUIDE row cosine only | Lateral guide pair |
+| 255 | `+Y` | `REST` | Vertical | `+Y` | Single upward REST arrow |
 
 ---
 
-## 5. Pipe geometry basis
+## 6. ISONOTE master mapping table
 
-For each support record, compute:
+| Source keyword/type | Normalized family | Axis rule | Direction/sign rule | Symbol rule |
+|---|---|---|---|---|
+| `REST(...)` | `REST` | Global vertical `Y` | Always `+Y` | Single upward arrow |
+| `+Y REST`, `+Y` as REST | `REST` | Global vertical `Y` | `+Y` | Single upward arrow |
+| `HOLDDOWN`, `HOLD DOWN` | `HOLDDOWN` | Global vertical `Y` | `±Y` | Double vertical arrows |
+| `GUIDE(...)` on horizontal pipe along X | `GUIDE` | Lateral `Z` | `±Z` | Lateral guide pair |
+| `GUIDE(...)` on horizontal pipe along Z | `GUIDE` | Lateral `X` | `±X` | Lateral guide pair |
+| `GUIDE(...)` on vertical pipe | `GUIDE` | Both lateral axes `X` and `Z` | `±X` and `±Z` | Four arrows around pipe |
+| `LINE STOP(...)` | `LINE_STOP` | Local pipe axial | `± axial` unless explicit sign exists | Axial stop pair or signed stop |
+| `LIMIT`, `LIM`, `LIMIT STOP` | `LIMIT` | Local pipe axial | Always `± axial` | Axial limit pair |
+| `SINGLE AXIS X/Y/Z` without sign | `AXIS_RESTRAINT_UNRESOLVED` | Declared axis | Unknown | Warning/popup marker only |
+| `+X`, `-X`, `+Y`, `-Y`, `+Z`, `-Z` | `AXIS_RESTRAINT` | Explicit axis | Explicit sign | Single directional axis arrow |
+| `SPRING`, `HANGER` | `SPRING` / `HANGER` | Hanger/spring family | Source-defined | Coil/hanger symbol |
+| `CAN SPRING`, `SPRING CAN`, `Can Spring` | `SPRING_WARNING` | Warning placed below pipe | Warning only | Coil warning below pipe |
+
+---
+
+## 7. Pipe basis
+
+For every support record, compute:
 
 ```text
 P = support point on pipe centreline
 T = normalized pipe tangent / pipe axis
+OD = pipe outside diameter
 R = OD / 2
 ```
 
-For the InputXML Basic benchmark:
+For the BM_CII benchmark:
 
-- Do not apply coordinate transformation.
-- Do not use transformed/cached `axisGlb` or `pipeTangentGlb` unless the user enables transformation in a popup.
-- The benchmark uses direct canvas/source axes.
-
-### 5.1 Pipe lateral basis
-
-There are always two lateral axes perpendicular to the pipe tangent.
-
-```text
-UP = [0, 1, 0]
-L1 = normalize(UP - T * dot(UP, T))
-L2 = normalize(T × L1)
-```
-
-If `UP` is nearly parallel to `T`, select another stable world axis and project it perpendicular to `T`.
+- Do not silently transform axes.
+- Do not use transformed/cached `axisGlb` or `pipeTangentGlb` unless the user enables transformation through an override popup.
+- Use direct source/canvas axes.
 
 ---
 
-## 6. OD/2 placement contract
+## 8. Engineering contact and visual resolver sequence
 
-All support and restraint symbols must be placed using pipe OD contact geometry. This is not GUIDE-only.
-
-### 6.1 Required global rule
+The mapper must follow this order:
 
 ```text
-No arrow head shall be placed on the pipe centreline unless it is a diagnostic marker.
-Arrow heads must touch or offset from an OD/2 contact point.
+1. Parse/normalize source record.
+2. Apply engineering contact/geometry.
+3. Inspect the final symbol orientation.
+4. Apply visual resolver offset only when the final symbol is axial / parallel to the pipe.
 ```
 
-The base contact points are:
-
-```text
-CIRCUM_TOP   = P + top  * R
-CIRCUM_BOT   = P - top  * R
-CIRCUM_SIDE1 = P + side * R
-CIRCUM_SIDE2 = P - side * R
-```
-
-where `top` and `side` are lateral directions perpendicular to pipe tangent.
+Do not decide resolver offset from family name alone. Decide after the engineering symbol is built.
 
 ---
 
-## 7. Independent OD/GAP placement policy
+## 9. Non-axial contact rules
 
-An independent module must check placement after the family renderer decides symbol shape.
+These are non-axial/radial/vertical symbols unless final geometry says otherwise:
 
-### 7.1 Parallel-to-pipe check
+- `REST`
+- `GUIDE`
+- `HOLDDOWN`
+- non-axial `SPRING` / `HANGER`
 
-For the applied restraint direction `A`:
+Engineering contact:
 
 ```text
-parallel = abs(dot(normalize(A), normalize(T))) >= tolerance
+contact radius = OD / 2
 ```
 
-Recommended tolerance:
+If a positive same-record gap exists:
 
 ```text
-0.92 to 0.98
+effective offset = OD / 2 + 10 × GAP
 ```
 
-If the applied restraint is parallel to the pipe, do not place arrow tips along the centreline direction. Move the restraint to any valid lateral OD/2 axis.
+Visual resolver offset:
 
 ```text
-parallel-to-pipe arrow tip = P ± selected_lateral_axis * R
-arrow direction = A
-```
-
-For current BM_CII review, use a stable lateral axis such as `CIRCUM_BOT` unless the family-specific rule gives a better axis.
-
-### 7.2 GAP offset rule
-
-If source `GAP` is positive:
-
-```text
-GAP > 0
-```
-
-then move the arrow head away from the pipe by:
-
-```text
-GAP offset = GAP * 10 mm
-```
-
-The displacement direction is away from the pipe, along the arrow-away/radial-outward direction.
-
-```text
-final_tip = od_contact_tip + outward_direction * (GAP * 10 mm)
-```
-
-For this BM_CII benchmark, current GAP values are negative sentinel values such as `-1.010100`, so no positive GAP offset is applied.
-
----
-
-## 8. Symbol family rules
-
-### 8.1 ANCHOR / ANC
-
-Engineering meaning:
-
-```text
-ANCHOR = flow-blocking / fixed plane at support node
-```
-
-Symbol:
-
-```text
-Flat plate normal to pipe tangent.
-Plate diameter/radius must cover pipe OD.
-```
-
-Placement:
-
-```text
-Plate centre = P
-Plate normal = T
-Plate size >= OD
+No OD × 2/3 resolver offset for non-axial final symbols.
 ```
 
 ---
 
-### 8.2 REST +Y / REST Y
+## 10. Axial contact and visual resolver rules
 
-Engineering meaning:
+These are axial/pipe-parallel when their final symbol is parallel to the pipe tangent:
+
+- `LINE_STOP`
+- `LIMIT` / `LIM`
+- `AXIAL_RESTRAINT`
+- resolved `SINGLE AXIS` if selected axis is pipe-parallel
+- `SPRING` only if its final coil/symbol is pipe-parallel
+
+Engineering contact:
 
 ```text
-REST = vertical support/restraint family
+No radial OD/2 contact rule.
+No positive gap: opposing axial arrow corners/tips touch.
+Positive gap: axial separation = 10 × GAP.
+```
+
+Visual resolver:
+
+```text
+If final symbol is axial / parallel to pipe:
+  apply visual resolver offset = OD × 2/3
+```
+
+Important:
+
+```text
+OD × 2/3 is not engineering gap.
+OD × 2/3 is post-contact visual staging only.
+```
+
+---
+
+## 11. GAP parsing
+
+### 11.1 InputXML GAP
+
+InputXML `GAP` belongs only to the same `<RESTRAINT>` row.
+
+| Raw value | Meaning |
+|---|---|
+| missing / blank | no gap defined |
+| negative sentinel such as `-1.010100` | no gap defined |
+| `0` | zero gap |
+| positive number | defined gap in mm |
+
+No restraint GAP carry-forward is allowed.
+
+### 11.2 ISONOTE GAP
+
+Recognize explicit gap tokens only:
+
+```text
+GAP=25
+GAP = 25
+GAP=25mm
+GAP:25
+GAP 25 mm
+```
+
+Regex concept:
+
+```text
+\bGAP\s*(?:=|:)?\s*(-?\d+(?:\.\d+)?)\s*(MM|MILLIMETER|MILLIMETERS)?\b
 ```
 
 Rules:
 
-```text
-+Y = single arrow toward +Y
-Y  = two opposed vertical arrows
-```
+- Missing unit means mm.
+- Gap attaches to the same restraint clause where written.
+- Bare `GAP=...` after a comma applies only to the immediately previous restraint token.
+- `REST(28kN)` is a load, not a gap.
+- No ISONOTE gap carry-forward is allowed.
 
-OD/2 placement:
-
-```text
-+Y arrow head touches bottom OD: CIRCUM_BOT
--Y arrow head touches top OD:    CIRCUM_TOP
-Y pair uses both CIRCUM_BOT and CIRCUM_TOP
-```
-
-Reason:
-
-A positive vertical support arrow points upward into the pipe from below, so the arrow head must touch the bottom OD.
-
----
-
-### 8.3 AXIS RESTRAINT X/Y/Z
-
-Engineering meaning:
+Examples:
 
 ```text
-Axis restraint = two opposed arrows along the given axis unless signed.
-```
-
-Rules:
-
-```text
-X/Y/Z    => axis pair
-+X/+Y/+Z => single positive direction arrow
--X/-Y/-Z => single negative direction arrow
-```
-
-OD/2 placement:
-
-- If the axis is lateral to pipe: use the OD point opposite the arrow direction for each arrow head.
-- If the axis is parallel to pipe: use the independent OD/GAP policy to move the arrow to a lateral OD/2 contact axis.
-
----
-
-### 8.4 LINESTOP / directional stop
-
-Engineering meaning:
-
-```text
-LINESTOP = pipe-axial restraint family.
-```
-
-Rules:
-
-```text
-+Z / +X / +Y = single directional axial stop if BM_CII map classifies it as signed.
-X/Y/Z        = axial pair only if classified as non-directional stop.
-```
-
-OD/2 placement:
-
-```text
-Arrow line must be offset away from centreline to a lateral OD/2 contact point.
-```
-
-For BM_CII node 130:
-
-```text
-Node 130 +Z => LINESTOP / directional stop => single axial arrow toward +Z
+LINE STOP(15kN, GAP=25mm) -> LINE_STOP.gapMm = 25
+GUIDE(6kN), GAP=10mm     -> GUIDE.gapMm = 10
+REST(28kN)               -> REST.loadText = 28kN, gapMm = null
 ```
 
 ---
 
-### 8.5 LIMIT / LIM
+## 12. Family rules
 
-Engineering meaning:
+### 12.1 REST
 
-```text
-LIMIT = axial limit family.
-```
+- REST is always global vertical `+Y` for ISONOTE.
+- InputXML `+Y` REST is a single upward arrow.
+- A `Y` pair from InputXML remains a vertical pair if classified as non-directional.
+- Engineering contact uses pipe outside surface `OD/2`.
 
-For BM_CII node 205:
+### 12.2 HOLDDOWN
 
-```text
-LIM = LIMIT
-Axis (Pipe Axis basis) = AXIAL
-Cosine = AXIAL TO PIPE
-Symbol = axial pair
-```
+- Always double vertical arrows on `±Y`.
+- Distinct from GUIDE.
+- Must not generate GUIDE.
+- Engineering contact uses pipe outside surface `OD/2`.
 
-Placement:
+### 12.3 GUIDE
 
-```text
-Use pipe tangent as arrow direction.
-Offset arrow tips to lateral OD/2 contact anchor.
-Do not use centreline as arrow tip.
-```
+InputXML GUIDE:
 
----
+- Uses the cosine from its own restraint row only.
+- Chooses the pipe-lateral axis closest to the GUIDE row cosine.
+- Does not borrow any same-node REST/HANGER/LIMIT cosine.
 
-### 8.6 GUIDE
+ISONOTE GUIDE:
 
-Engineering meaning:
+| Pipe orientation | GUIDE axis | Symbol |
+|---|---|---|
+| Horizontal pipe along X | `Z` | `±Z` pair |
+| Horizontal pipe along Z | `X` | `±X` pair |
+| Vertical pipe | `X` and `Z` | four arrows `±X`, `±Z` |
 
-```text
-GUIDE = lateral opposed-arrow pair.
-```
+### 12.4 LINE STOP
 
-Rules:
+- Axial family.
+- If no sign is explicit, default is `± axial` pair.
+- If sign is explicit, use single signed axial stop.
+- No radial OD/2 engineering contact.
+- No positive gap means opposing axial arrow corners/tips touch.
+- Positive gap means separation is `10 × GAP`.
+- Apply visual resolver `OD × 2/3` after contact if the final symbol is parallel to the pipe.
 
-```text
-GUIDE uses the COSINE AXIS OF THAT RESTRAINT ROW ONLY.
-Do not use another restraint's cosine from the same node.
-Do not use REST/HANGER/LIMIT cosine from the same node.
-```
+### 12.5 LIMIT / LIM
 
-There are always two pipe-lateral axes. GUIDE must choose the correct lateral axis by comparing the GUIDE row cosine with the two pipe-lateral axes.
+- Always `± axial`.
+- Uses the same axial contact and visual resolver rules as LINE STOP.
 
-```text
-C = normalized cosine of the GUIDE restraint row
-L1 = first pipe-lateral axis
-L2 = second pipe-lateral axis
+### 12.6 SINGLE AXIS
 
-Use L1 if abs(dot(C, L1)) >= abs(dot(C, L2))
-Use L2 otherwise
-Preserve sign by dot(C, selected_axis)
-```
+- `SINGLE AXIS X/Y/Z` without `+` or `-` is unresolved.
+- Do not assume the sign.
+- Show warning marker / popup-required metadata.
+- Only after user selects `+` or `-` should the mapper render final geometry.
 
-OD/2 placement:
+### 12.7 HANGER / SPRING / CAN SPRING
 
-```text
-tip+  = P + G * R
-tip-  = P - G * R
-```
+- InputXML `HANGER`/`SPRING` is actual support if source defines it.
+- `Can Spring`, `Spring Can`, or `CAN SPRING` in ISONOTE is a warning only.
+- Warning coil appears below the pipe.
+- Apply visual resolver `OD × 2/3` only if the final spring/coil geometry is pipe-parallel.
 
-Both guide arrows point inward and their heads touch pipe OD.
+### 12.8 ANCHOR / ANC
 
-For BM_CII node 255:
-
-```xml
-<RESTRAINT NUM="2" NODE="255.000000" TYPE="7.000000"
-  XCOSINE="1.000000" YCOSINE="0.000000" ZCOSINE="0.000000" />
-```
-
-Therefore:
-
-```text
-GUIDE cosine = X from its own row
-GUIDE axis   = canvas X lateral axis
-GUIDE tips   = P ± X * OD/2
-```
+- Flow-blocking / fixed plane at support node.
+- Flat plate normal to pipe tangent.
+- Plate centre is support point `P`.
+- Plate size must cover pipe OD.
 
 ---
 
-### 8.7 HANGER / SPRING
+## 13. ISONOTE node-wise BM_CII expected records
 
-Engineering meaning:
-
-```text
-HANGER / SPRING = vertical hanger family.
-```
-
-Symbol:
-
-```text
-Coil only. No arrow.
-```
-
-Placement:
-
-```text
-Coil starts from CIRCUM_TOP or a vertical hanger reference point above the pipe OD.
-```
+| Node | ISONOTE text | Parsed expected records |
+|---:|---|---|
+| 35 | `REST(28kN), GUIDE(6kN), LINE STOP(15kN)` | `REST +Y`, `GUIDE lateral by pipe orientation`, `LINE_STOP ± axial` |
+| 130 | `REST NOT DEFINED, SINGLE AXIS Z` | no REST, unresolved `SINGLE_AXIS_Z`, popup/warning required |
+| 255 | `REST(3kN), GUIDE(1kN)` | `REST +Y`, `GUIDE lateral by pipe orientation` |
+| 205 | `REST(10kN), HOLDDOWN, LINE STOP(6kN), Holddown without Guide Can Spring` | `REST +Y`, `HOLDDOWN ±Y`, `LINE_STOP ± axial`, no GUIDE, `SPRING_WARNING` coil below pipe |
 
 ---
 
-## 9. Transformation popup requirement
+## 14. Component panel rules
 
-The InputXML Basic benchmark must not silently transform axes.
+The property panel is an engineering review panel, not a raw metadata dump.
 
-If a future run requires transformation, show a popup before conversion with at least:
+Default expanded sections:
 
-- Enable/disable transformation.
-- Source axis basis preview.
-- Target/canvas axis basis preview.
-- Per-node single-axis restraint override.
-- Per-record cosine override.
-- Clues from ISONOTE text such as:
-  - `Single axis`
-  - `Hold down`
-  - `Holddown`
+1. `Line / Node`
+2. `Component Data`
+3. `Process / Analysis`
 
-No transformation should be applied unless the user confirms it.
+Default collapsed sections:
+
+- `Identity`
+- `Support / Restraint`
+- `ISONOTE Annotation`
+- `Source / Debug Summary`
+- `Raw / Debug Metadata`
+- `Rules / Notes`
+
+Line number rules:
+
+- `Line No.` comes only from real line-number metadata or BM_CII node-wise line-number sideload.
+- Provenance strings must never be displayed as `Line No.`.
+- BM_CII mock line-number sideload currently includes `Node 10 -> LINE XYZ`.
+- Supports/restraints must not inherit component/process context.
+
+The panel width and height should be user-adjustable for long ISONOTE/source/debug text review.
 
 ---
 
-## 10. QC checklist
+## 15. QC checklist
 
 Every generated BM_CII support GLB must pass these checks:
 
-1. Rendered support count equals expected InputXML rows.
-2. No ISONOTE records are mixed into InputXML Basic output.
-3. No Temp1/material heatmap variant is mixed into this support benchmark.
-4. Every restraint row uses its own cosine.
-5. Every arrow head is placed at or offset from OD/2 contact point.
-6. Positive GAP moves arrow head away from pipe by `GAP * 10 mm`.
-7. GUIDE uses its own row cosine and chooses one of the two pipe-lateral axes.
-8. HANGER/SPRING contains no arrow, only coil.
-9. ANCHOR appears as a flat flow-blocking plate.
-10. Metadata keeps `Family`, `Render kind`, `Axis (Pipe Axis basis)`, and `Cosine` as separate fields.
-
----
-
-## 11. Current BM_CII expected result summary
-
-```text
-10   ANC        => ANCHOR flat plate
-35   +Y         => REST vertical single +Y arrow
-35   X          => AXIS RESTRAINT pair along X
-35   Z          => AXIS RESTRAINT pair along Z, OD/2 offset if pipe-parallel
-130  +Z         => LINESTOP single axial arrow, OD/2 offset
-190  ANC        => ANCHOR flat plate
-205  LIM        => LIMIT axial pair, OD/2 offset
-205  Y          => REST vertical pair
-205  HANGER     => SPRING/HANGER coil only
-240  ANC        => ANCHOR flat plate
-255  GUIDE      => GUIDE lateral pair using its own X cosine
-255  +Y         => REST vertical single +Y arrow
-```
+1. InputXML actual supports and ISONOTE expected supports use the common mapper.
+2. ISONOTE does not use a separate glyph renderer path.
+3. Every InputXML restraint row uses its own cosine and gap.
+4. No restraint carry-forward is applied.
+5. Component/process carry-forward does not leak into support/restraint properties.
+6. REST is `+Y` upward for ISONOTE.
+7. HOLDDOWN is `±Y` double vertical.
+8. GUIDE uses correct lateral rule.
+9. LIMIT/LIM is always `± axial`.
+10. Axial contact uses corner/tip touch or `10 × GAP` separation.
+11. Visual resolver `OD × 2/3` applies only after final symbol is known to be axial/pipe-parallel.
+12. `SINGLE AXIS` without sign creates warning/popup-required state.
+13. `Can Spring` creates a below-pipe warning coil, not confirmed actual support.
+14. Layer metadata keeps InputXML actual, ISONOTE expected, and warning symbols distinguishable.
+15. Component panel defaults show only Line / Component / Process sections expanded.
