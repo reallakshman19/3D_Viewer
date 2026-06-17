@@ -1,9 +1,10 @@
 /**
  * Shared Line No. / branch metadata normalization for GLB export and display.
  *
- * Inputs are raw XML attributes, UXML component fields, or GLB userData values.
- * Outputs are stable display strings. Windows filesystem paths are reduced to
- * their basename so CAESAR JOBNAME paths do not leak into viewer metadata.
+ * Inputs are raw XML attributes, UXML component fields, GLB userData values, or
+ * node-wise sideload values. Outputs are stable display strings. Windows
+ * filesystem paths are reduced to empty values so CAESAR JOBNAME paths do not
+ * leak into viewer metadata.
  */
 
 export const LINE_NO_METADATA_KEYS = Object.freeze([
@@ -47,12 +48,21 @@ function isFilesystemPathLike(value) {
   return /^[A-Za-z]:[\\/]/.test(raw) || /^\\\\/.test(raw) || raw.includes('\\');
 }
 
+function isProvenanceTraceLike(value) {
+  const raw = stripOuterQuotes(value);
+  if (!raw) return false;
+  if (!raw.includes('->')) return false;
+  return /(input\s*xml|inputxml|isonote|sideload|glb|source|variant|benchmark|\.xml\b)/i.test(raw);
+}
+
 export function normalizeLineNoValue(value) {
   const raw = stripOuterQuotes(value);
   if (!raw || /^(null|undefined|nan)$/i.test(raw)) return '';
   if (/^-?1\.010100$/.test(raw)) return '';
   if (/^(CAESAR-INPUTXML|UNASSIGNED)$/i.test(raw)) return '';
-  return isFilesystemPathLike(raw) ? '' : raw;
+  if (isFilesystemPathLike(raw)) return '';
+  if (isProvenanceTraceLike(raw)) return '';
+  return raw;
 }
 
 export function metadataValueFromKeys(source, keys) {
