@@ -57,6 +57,14 @@ const attOut = result.outputs.find((o) => /\.att$/i.test(o.name));
 assert.ok(attOut, 'must emit an .att output when includeAtt is true');
 assert.ok(/NEW GEOMETRY/.test(attOut.text), '.att must contain a GEOMETRY group');
 
+// GLB companion: in a browser the wrapper emits a .glb (three.js exporter);
+// in Node three.js is unavailable, so it must degrade gracefully — i.e. either a
+// .glb output exists OR a "GLB companion skipped" log line is present, and the
+// RVM output is unaffected either way.
+const glbOut = result.outputs.find((o) => /\.glb$/i.test(o.name));
+const glbSkipped = (result.logs?.stdout || []).some((l) => /GLB companion skipped/.test(l));
+assert.ok(glbOut || glbSkipped, 'GLB companion must either be emitted or be cleanly skipped');
+
 // ---------------------------------------------------------------------------
 // 4. Binary RVM structural validation (rvmparser-style chunk framing):
 //    big-endian 24-byte headers, ascii tag packed at byte i*4+3, cumulative

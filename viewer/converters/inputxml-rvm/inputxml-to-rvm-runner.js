@@ -131,7 +131,10 @@ export async function run(ctx = {}) {
     }
 
     ctx.setStatus?.(`Completed: ${outputs[0].name}`, 'ok');
-    return { ok: true, outputs, logs: { stdout, stderr } };
+    // `model` and `stem` are returned so an outer orchestrator can build an
+    // optional GLB companion (for the in-browser viewer) WITHOUT this
+    // self-contained runner having to import the shared three.js exporter.
+    return { ok: true, outputs, logs: { stdout, stderr }, model, stem };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     stderr.push(message);
