@@ -1,19 +1,15 @@
 {
-  "schema": "bm-cii-latest-glb-manifest/v1",
-  "latest": {
-    "url": "test/bm-cii/latest/BM_CII_latest_engineering.glb",
-    "encoding": "binary",
-    "description": "BM_CII v63 metadata-fixed benchmark GLB. Place the generated GLB at viewer/test/bm-cii/latest/BM_CII_latest_engineering.glb so the BM_CII quick mock loads the same reviewed file.",
-    "expectedSha256": "981cca1264c750540c9528b2718569fb8eb2b6ab3d4cd8dc6b72d29b51cef755",
-    "sourceRun": "v63-component-metadata-fixed"
+  "name": "BM_CII Latest Engineering GLB",
+  "description": "Restorable overlay manifest generated from ChatGPT sandbox. Latest points to v69 ISONOTE axial resolver artifact.",
+  "glbUrl": "test/bm-cii/latest/BM_CII_latest_engineering.glb",
+  "modes": {
+    "isonoteExpected": "test/bm-cii/latest/BM_CII_latest_engineering.glb",
+    "inputxmlActual": "test/bm-cii/inputxml-actual/BM_CII_inputxml_actual_engineering.glb",
+    "componentMetadata": "test/bm-cii/component-metadata/BM_CII_component_metadata_fixed_engineering.glb"
   },
-  "lineNoSideloadUrl": "benchmarks/bm-cii/BM_CII_LINE_NO_sideload.json",
-  "proceduralFallback": false,
-  "candidates": [
-    {
-      "url": "test/bm-cii/latest/BM_CII_latest_engineering.glb",
-      "encoding": "binary",
-      "description": "BM_CII v63 component metadata fixed GLB"
-    }
+  "source": "sandbox:/mnt/data BM_CII v69/v68/v63 artifacts",
+  "notes": [
+    "Place this under viewer/benchmarks/bm-cii/latest-glb-manifest.json in a repo checkout.",
+    "BM_CII Quick Mock should load glbUrl relative to viewer root."
   ]
 }

@@ -1,16 +1,15 @@
 {
-  "schema": "bm-cii-latest-glb-manifest/v1",
-  "description": "Basic GLB-PCF BM_CII quick mock manifest. Update latest.url whenever a new generated BM_CII GLB is committed for review.",
-  "latest": {
-    "name": "BM_CII latest engineering GLB",
-    "url": "benchmarks/bm-cii/latest/BM_CII_latest_engineering.glb",
-    "source": "generated BM_CII review artifact",
-    "notes": "The Basic GLB-PCF Quick Mocks BM_CII button reads this manifest. Future generated GLBs should update this path or this manifest."
+  "name": "BM_CII Latest Engineering GLB",
+  "description": "Restorable overlay manifest generated from ChatGPT sandbox. Latest points to v69 ISONOTE axial resolver artifact.",
+  "glbUrl": "test/bm-cii/latest/BM_CII_latest_engineering.glb",
+  "modes": {
+    "isonoteExpected": "test/bm-cii/latest/BM_CII_latest_engineering.glb",
+    "inputxmlActual": "test/bm-cii/inputxml-actual/BM_CII_inputxml_actual_engineering.glb",
+    "componentMetadata": "test/bm-cii/component-metadata/BM_CII_component_metadata_fixed_engineering.glb"
   },
-  "candidates": [
-    {
-      "name": "BM_CII latest engineering GLB",
-      "url": "benchmarks/bm-cii/latest/BM_CII_latest_engineering.glb"
-    }
+  "source": "sandbox:/mnt/data BM_CII v69/v68/v63 artifacts",
+  "notes": [
+    "Place this under viewer/benchmarks/bm-cii/latest-glb-manifest.json in a repo checkout.",
+    "BM_CII Quick Mock should load glbUrl relative to viewer root."
   ]
 }

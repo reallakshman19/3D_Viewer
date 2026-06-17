@@ -77,3 +77,4 @@ Actual restraints:
 | HOLDDOWN | NEEDS_ENGINEERING_REVIEW | ISONOTE mentions HOLDDOWN; InputXML has HANGER/SPRING. Verify holddown/spring modelling basis. |
 | SPRING_WARNING | NEEDS_ENGINEERING_REVIEW | ISONOTE spring warning retained for engineering review. |
 | WARNING | NEEDS_ENGINEERING_REVIEW | ISONOTE contains spring-related warning text. Requires engineering review. |
+
