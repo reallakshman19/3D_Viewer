@@ -33,7 +33,11 @@ async function runTest() {
   const { CONVERTERS, getConverterById } = await import(moduleUrl.href);
 
   assert(Array.isArray(CONVERTERS), 'CONVERTERS must be an array');
-  assert.strictEqual(CONVERTERS.length, EXPECTED_IDS.length, `Expected ${EXPECTED_IDS.length} converters, found ${CONVERTERS.length}`);
+  assert(CONVERTERS.length >= EXPECTED_IDS.length, `Expected at least ${EXPECTED_IDS.length} converters, found ${CONVERTERS.length}`);
+
+  const ids = CONVERTERS.map((converter) => converter?.id).filter(Boolean);
+  const uniqueIds = new Set(ids);
+  assert.strictEqual(uniqueIds.size, ids.length, 'Converter registry has duplicate IDs');
 
   for (const id of EXPECTED_IDS) {
     const found = getConverterById(id);

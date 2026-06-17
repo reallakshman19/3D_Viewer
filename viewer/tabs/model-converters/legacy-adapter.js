@@ -2410,6 +2410,39 @@ function _downloadOutput(output) {
   return downloadOutput(output);
 }
 
+function _blobFromOutput(output) {
+  if (typeof output?.base64 === 'string' && output.base64.length > 0) {
+    const binary = atob(output.base64);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i += 1) {
+      bytes[i] = binary.charCodeAt(i);
+    }
+    return new Blob([bytes], { type: output.mime || 'application/octet-stream' });
+  }
+  const ext = String(output?.name || '').split('.').pop().toLowerCase();
+  const inferredMime = (ext === 'txt' || ext === 'csv')
+    ? 'text/plain;charset=utf-8'
+    : 'application/octet-stream';
+  return new Blob([output?.text || ''], { type: output?.mime || inferredMime });
+}
+
+function _openOutputInBasicViewer(output) {
+  const pending = state.modelConvertersPendingBasicOpen;
+  if (pending?.revokeOnLoad && /^blob:/i.test(_toText(pending.url))) {
+    try { URL.revokeObjectURL(pending.url); } catch {}
+  }
+  const blob = _blobFromOutput(output);
+  const url = URL.createObjectURL(blob);
+  state.modelConvertersPendingBasicOpen = {
+    url,
+    name: _toText(output?.name || 'converted.glb'),
+    revokeOnLoad: true,
+    source: 'model-converters',
+    createdAt: Date.now(),
+  };
+  emit(RuntimeEvents.TAB_CHANGE_REQUESTED, { tabId: 'basic-glb-pcf' });
+}
+
 function _arrayBufferToBase64(buffer) {
   return arrayBufferToBase64(buffer);
 }
@@ -5477,6 +5510,9 @@ export function renderModelConvertersTab(container) {
       <div class="model-converters-output-row">
         <strong>${_esc(output.name)}</strong>
         <button type="button" class="model-converters-download-btn" data-output-index="${index}">Download</button>
+        ${/\.glb$/i.test(_toText(output.name))
+          ? `<button type="button" class="model-converters-download-btn" data-output-open-basic="${index}">Open in Basic GLB-PCF</button>`
+          : ''}
       </div>
     `).join('');
     for (const button of outputEl.querySelectorAll('[data-output-index]')) {
@@ -5484,6 +5520,19 @@ export function renderModelConvertersTab(container) {
       const output = normalized[outputIndex];
       if (!output) continue;
       button.addEventListener('click', () => _downloadOutput(output));
+    }
+    for (const button of outputEl.querySelectorAll('[data-output-open-basic]')) {
+      const outputIndex = Number(button.getAttribute('data-output-open-basic'));
+      const output = normalized[outputIndex];
+      if (!output) continue;
+      button.addEventListener('click', () => {
+        try {
+          _openOutputInBasicViewer(output);
+          notify({ level: 'info', title: 'Basic GLB-PCF', message: `Opening ${output.name} in Basic GLB-PCF Viewer.` });
+        } catch (error) {
+          notify({ level: 'error', title: 'Basic GLB-PCF', message: _toText(error?.message || error) });
+        }
+      });
     }
   }
 

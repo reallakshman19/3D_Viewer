@@ -33,7 +33,20 @@ function normalizeKind(value) {
 }
 
 function normalizeKindFromRaw(raw = {}) {
-  const rawKind = firstNonEmpty(raw.kind, raw.type, raw.display, raw.supportKind, raw.restraintType, raw.CMPSUPTYPE, raw.SKEY, raw.labelText);
+  // Prefer support-specific kind fields over generic component type.
+  // Some call-sites pass raw.type='SUPPORT', which must not override GUIDE/LINESTOP/etc.
+  const rawKind = firstNonEmpty(
+    raw.kind,
+    raw.supportKind,
+    raw.restraintType,
+    raw.CMPSUPTYPE,
+    raw.SKEY,
+    raw.display,
+    raw.TYPE,
+    raw.Type,
+    raw.type,
+    raw.labelText,
+  );
   let kind = normalizeKind(rawKind);
   const displayText = upper(firstNonEmpty(raw.display, raw.Display, raw.note, raw.Note, raw.labelText, raw.name));
   const typeText = upper(firstNonEmpty(raw.TYPE, raw.Type, raw.type, raw.kind, raw.supportKind, raw.restraintType));

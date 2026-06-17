@@ -1,5 +1,8 @@
 import { run as runInputXmlToGlb } from './converters/inputxml-to-glb.js';
 import { downloadOutput } from './core/output-utils.js';
+import { state } from '../../core/state.js';
+import { emit } from '../../core/event-bus.js';
+import { RuntimeEvents } from '../../contracts/runtime-events.js';
 
 const CONVERTER_ID = 'bmcii_support_annotation_glb';
 const CONVERTER_LABEL = 'BM_CII InputXML→GLB Support + ISONOTE';
@@ -64,8 +67,41 @@ function resetOutput(root) {
     diag.innerHTML = '';
   }
   const previewMeta = root.querySelector('#model-converters-preview-meta');
-  if (previewMeta) previewMeta.textContent = 'BM_CII support/annotation GLB is download-only here; open it in the Basic GLB-PCF Viewer for visual QA.';
+  if (previewMeta) previewMeta.textContent = 'Use Open in Basic GLB-PCF on GLB outputs to inspect the exact generated file.';
   setLogs(root, []);
+}
+
+function blobFromOutput(output) {
+  if (typeof output?.base64 === 'string' && output.base64.length > 0) {
+    const binary = atob(output.base64);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i += 1) {
+      bytes[i] = binary.charCodeAt(i);
+    }
+    return new Blob([bytes], { type: output.mime || 'application/octet-stream' });
+  }
+  const ext = String(output?.name || '').split('.').pop().toLowerCase();
+  const inferredMime = (ext === 'txt' || ext === 'csv')
+    ? 'text/plain;charset=utf-8'
+    : 'application/octet-stream';
+  return new Blob([output?.text || ''], { type: output?.mime || inferredMime });
+}
+
+function openInBasicViewer(output) {
+  const pending = state.modelConvertersPendingBasicOpen;
+  if (pending?.revokeOnLoad && /^blob:/i.test(text(pending.url))) {
+    try { URL.revokeObjectURL(pending.url); } catch {}
+  }
+  const blob = blobFromOutput(output);
+  const url = URL.createObjectURL(blob);
+  state.modelConvertersPendingBasicOpen = {
+    url,
+    name: text(output?.name || 'converted.glb'),
+    revokeOnLoad: true,
+    source: CONVERTER_ID,
+    createdAt: Date.now(),
+  };
+  emit(RuntimeEvents.TAB_CHANGE_REQUESTED, { tabId: 'basic-glb-pcf' });
 }
 
 function renderOutputs(root, outputs) {
@@ -80,6 +116,9 @@ function renderOutputs(root, outputs) {
     <div class="model-converters-output-row">
       <strong>${esc(entry.name)}</strong>
       <button type="button" class="model-converters-download-btn" data-bmcii-support-output="${index}">Download</button>
+      ${/\.glb$/i.test(text(entry.name))
+        ? `<button type="button" class="model-converters-download-btn" data-bmcii-support-open-basic="${index}">Open in Basic GLB-PCF</button>`
+        : ''}
     </div>
   `).join('');
   for (const button of output.querySelectorAll('[data-bmcii-support-output]')) {
@@ -87,6 +126,20 @@ function renderOutputs(root, outputs) {
     button.addEventListener('click', () => {
       const selected = normalized[idx];
       if (selected) downloadOutput(selected);
+    });
+  }
+  for (const button of output.querySelectorAll('[data-bmcii-support-open-basic]')) {
+    const idx = Number(button.getAttribute('data-bmcii-support-open-basic'));
+    button.addEventListener('click', () => {
+      const selected = normalized[idx];
+      if (!selected) return;
+      try {
+        openInBasicViewer(selected);
+        setStatus(root, `Opening ${selected.name} in Basic GLB-PCF Viewer...`, 'ok');
+      } catch (error) {
+        const message = error?.message || String(error);
+        setStatus(root, `Failed: ${message}`, 'bad');
+      }
     });
   }
 }
@@ -432,7 +485,7 @@ function renderRulesPopup() {
 function renderRunChecklistPopup() {
   return `
     ${noteBlock('Before run', 'Select InputXML. Confirm ISONOTE sideload text. Confirm Line No. sideload. Resolve or keep warning for SINGLE AXIS cases.')}
-    ${noteBlock('Outputs', 'The converter downloads the GLB plus a BM_CII support/annotation audit JSON. Open the GLB in Basic GLB-PCF Viewer for layer/property-panel validation.')}
+    ${noteBlock('Outputs', 'The converter emits GLB plus BM_CII support/annotation audit JSON. Use Open in Basic GLB-PCF on the GLB output row for direct visual QA.')}
   `;
 }
 

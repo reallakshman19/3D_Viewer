@@ -1,4 +1,4 @@
-import { init } from './core/app.js?v=20260612-psnm-candidate-hang-fix-1';
+import { init } from './core/app.js?v=20260617-bmcii-open-basic-handoff-2';
 
 function reportStartupError(error) {
   console.error('3D Viewer failed to start', error);

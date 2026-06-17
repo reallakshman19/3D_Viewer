@@ -2,6 +2,7 @@ import { createViewerApp } from '../advanced/createViewerApp.js';
 import { loadMockPcfToGlbUrl, loadMockGlbUrl, loadPcfTextToGlbUrl, loadBmCiiLatestGlbUrl } from '../pro-editor/core/mockLoader.js';
 import { parsePcfText } from '../pcf/parsePcfText.js';
 import { normalizePcfModel } from '../pcf/normalizePcfModel.js';
+import { state } from '../../../core/state.js';
 
 const MOCK_BUTTON_LABELS = {
   pcf: 'PCF Mock',
@@ -14,6 +15,22 @@ const BASIC_GLB_SIDEBAR_COLLAPSED_KEY = 'basic-glb-sidebar-collapsed-v1';
 function setBusy(button, label, isBusy) {
   button.disabled = isBusy;
   button.textContent = isBusy ? 'Loading...' : label;
+}
+
+async function loadPendingModelConvertersGlb(viewerApp) {
+  const pending = state?.modelConvertersPendingBasicOpen;
+  if (!pending?.url) return;
+  state.modelConvertersPendingBasicOpen = null;
+  try {
+    await viewerApp.loadGLB(pending.url);
+  } catch (err) {
+    console.error('Basic GLB/PCF Viewer: pending converter GLB load error', err);
+    window.alert?.(`Could not open converted GLB in Basic Viewer. ${err?.message || err}`);
+  } finally {
+    if (pending.revokeOnLoad && /^blob:/i.test(String(pending.url || ''))) {
+      try { URL.revokeObjectURL(pending.url); } catch {}
+    }
+  }
 }
 
 export function renderBasicGlbPcfPanel(container) {
@@ -42,7 +59,7 @@ export function renderBasicGlbPcfPanel(container) {
             <button id="btn-adv-mock-glb" class="btn-secondary" title="Load generated mock GLB geometry" style="justify-content:center; padding:10px 8px; border-radius:12px; background:#1b3350; color:#dce9fb; border:1px solid rgba(144,172,208,0.35);">GLB Mock</button>
             <button id="btn-adv-mock-bm-cii" class="btn-secondary" title="Load latest BM_CII benchmark GLB from benchmarks/bm-cii/latest-glb-manifest.json" style="justify-content:center; padding:10px 8px; border-radius:12px; background:linear-gradient(135deg,#204b37,#17314d); color:#eafff3; border:1px solid rgba(122,231,183,0.45);">BM_CII</button>
           </div>
-          <div style="margin-top:8px; font-size:10px; color:#9bb6d8; line-height:1.35;">BM_CII loads the latest committed benchmark GLB manifest for fast review.</div>
+          <div style="margin-top:8px; font-size:10px; color:#9bb6d8; line-height:1.35;">BM_CII button loads a static benchmark manifest GLB. To inspect a newly generated converter GLB, use Open in Basic GLB-PCF from the converter output row.</div>
         </section>
 
         <section style="padding:16px; border-radius:16px; background:rgba(255,255,255,0.74); border:1px solid rgba(16,32,51,0.08);">
@@ -169,6 +186,7 @@ export function renderBasicGlbPcfPanel(container) {
   const viewerApp = createViewerApp(previewContainer, toolbarContainer, propPanel, propContent, debugLogs, {
     labelPanelHost,
   });
+  void loadPendingModelConvertersGlb(viewerApp);
 
   function setSidebarCollapsed(collapsed, persist) {
     if (!sidebar || !sidebarContent || !sidebarToggle) return;
