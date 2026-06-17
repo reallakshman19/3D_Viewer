@@ -11,7 +11,6 @@ import { installXmlCiiConversionWorkflowPopup } from './model-converters/xml-cii
 const MODEL_CONVERTER_INSTALLERS = Object.freeze([
   ['xml-cii-conversion-workflow-popup', installXmlCiiConversionWorkflowPopup],
   ['inputxml-dxf-legacy-bridge', installInputXmlDxfLegacyBridge],
-  ['inputxml-dxf-projection-option', installInputXmlDxfProjectionOption],
   ['inputxml-glb-legacy-bridge', installInputXmlGlbLegacyBridge],
   ['bm-cii-support-annotation-popup', installBmCiiSupportAnnotationPopup],
   ['inputxml-property-transfer-popup-ui-v4', installInputXmlPropertyTransferUi],
@@ -33,6 +32,14 @@ function installBranchPickerImmediately(container) {
   }
 }
 
+function installProjectionOptionImmediately(container) {
+  try {
+    installInputXmlDxfProjectionOption(container);
+  } catch (error) {
+    console.error('[ModelConverters] Optional installer failed: inputxml-dxf-projection-option', error);
+  }
+}
+
 function installSymbolOptionImmediately(container) {
   try {
     installInputXmlDxfSymbolOption(container);
@@ -49,6 +56,7 @@ function scheduleInstaller(name, installer, container) {
 export function renderModelConvertersTab(container, ctx) {
   const result = renderLegacyModelConvertersTab(container, ctx);
   installBranchPickerImmediately(container);
+  installProjectionOptionImmediately(container);
   installSymbolOptionImmediately(container);
   MODEL_CONVERTER_INSTALLERS.forEach(([name, installer]) => scheduleInstaller(name, installer, container));
   return result;
