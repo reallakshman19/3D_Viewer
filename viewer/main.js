@@ -1,4 +1,4 @@
-import { init } from './core/app.js?v=20260617-inputxml-rvm-1';
+import { init } from './core/app.js?v=20260617-basic-glb-1';
 
 function reportStartupError(error) {
   console.error('3D Viewer failed to start', error);

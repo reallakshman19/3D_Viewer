@@ -52,7 +52,7 @@ import {
   normalizeLineListRow as _normalizeLineListRow
 } from '../../converters/xml-cii2019-core/linelist-mapping.js';
 import { buildStagedSupportIndex, xmlCiiTypeEntriesFromSupportKind, xmlCiiTypeEntryFromExistingRestraint, applyXmlRestraints, enrichHierarchyWithMapperKinds } from '../../converters/xml-cii2019-core/support-mapping.js';
-import { CONVERTERS, getConverterById } from './converter-registry.js?v=20260617-inputxml-rvm-1';
+import { CONVERTERS, getConverterById } from './converter-registry.js?v=20260617-basic-glb-1';
 import { loadStoredState, saveStoredState } from './core/config-store.js';
 import { downloadOutput, arrayBufferToBase64, baseNameWithoutExtension, isRvmFileName, isAttOrTxtFileName, encodeTextUtf8, decodeTextUtf8, toFiniteNumber } from './core/output-utils.js';
 import { WorkflowModal } from './shared/WorkflowModal.js';
