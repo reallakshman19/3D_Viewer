@@ -5,6 +5,7 @@ import { applyInputXmlBendMetadata } from './InputXmlBendMetadata.js';
 import { applyInputXmlCaesarSupportMetadata } from './InputXmlCaesarSupportMetadata.js';
 import { appendInputXmlGlbNodeLabels } from './InputXmlGlbNodeLabels.js';
 import { adaptUxmlToGlbModel } from './UxmlToGlbModelAdapter.js';
+import { applyBmCiiSupportAnnotationEnrichment } from './BmCiiSupportAnnotationEnrichment.js';
 
 function text(value) {
   return String(value ?? '').trim();
@@ -133,6 +134,7 @@ export async function run(ctx = {}) {
   const sourceName = file?.name || 'input.xml';
   const options = ctx.options || {};
   const bmCiiSupportAnnotation = bmCiiSupportAnnotationSummary(options);
+  let bmCiiEnrichmentStats = null;
 
   try {
     if (!file) throw new Error('Select a primary Input XML file first.');
@@ -161,6 +163,10 @@ export async function run(ctx = {}) {
     }
 
     const { model, stats, diagnostics } = adaptUxmlToGlbModel(extracted.doc, options);
+    if (bmCiiSupportAnnotation) {
+      bmCiiEnrichmentStats = applyBmCiiSupportAnnotationEnrichment(model, xmlText, options);
+      stdout.push(`BM_CII model enrichment: ${JSON.stringify(bmCiiEnrichmentStats)}`);
+    }
     const nodeLabelStats = options.exportNodeLabels === false
       ? { nodeLabelCount: 0, skipped: true }
       : appendInputXmlGlbNodeLabels(model, extracted.doc, stats);
@@ -212,12 +218,14 @@ export async function run(ctx = {}) {
             exportComponentText: options.exportComponentText !== false && options.showComponentLabels !== false,
           },
           bmCiiSupportAnnotation,
+          bmCiiEnrichmentStats,
           stats: {
             ...stats,
             bendMetadata,
             caesarSupportMetadata,
             nodeLabelStats,
             labelOptionStats,
+            bmCiiEnrichmentStats,
           },
           diagnostics: [...(extracted.diagnostics || []), ...(diagnostics || [])],
         }, null, 2),
