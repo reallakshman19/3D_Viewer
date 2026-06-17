@@ -1,0 +1,13 @@
+{
+  "schema": "bm-cii-line-no-sideload/v1",
+  "description": "BM_CII node-wise Line No sideload benchmark data. Line No is not read from ISONOTE/provenance fields; it is supplied as independent node-wise data and resolved onto connected component geometry only.",
+  "records": [
+    {
+      "node": "10",
+      "lineNo": "LINE XYZ",
+      "source": "BM_CII mock line-no sideload",
+      "scope": "topology-carry-forward",
+      "appliesTo": "component-properties-only"
+    }
+  ]
+}
