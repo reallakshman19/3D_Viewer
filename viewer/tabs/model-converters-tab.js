@@ -1,4 +1,4 @@
-import { renderLegacyModelConvertersTab } from './model-converters/legacy-adapter.js?v=20260617-basic-glb-1';
+import { renderLegacyModelConvertersTab } from './model-converters/legacy-adapter.js?v=20260617-basic-glb-2';
 import { installBmCiiSupportAnnotationPopup } from './model-converters/bm-cii-support-annotation-popup.js?v=20260617-bmcii-open-basic-handoff-2';
 import { installInputXmlPropertyTransferUi } from './model-converters/inputxml-property-transfer-popup-ui-v4.js?v=20260615-inputxml-property-transfer-popup-host-hide-1';
 import { installXmlCiiConversionWorkflowPopup } from './model-converters/xml-cii-conversion-workflow-popup.js';

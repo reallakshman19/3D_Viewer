@@ -1,147 +1,361 @@
 import * as THREE from 'three';
+import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
+import { parseInputXml, parseIsonoteExpectedRecords } from './InputXmlBasicParser.js';
+import {
+  COLORS,
+  mat,
+  vectorFrom,
+  cylinderBetween,
+  coneArrow,
+  arrowToward,
+  createTextPlane,
+  createNodeLabel,
+  createWarningTriangle,
+  createSpringCoil,
+  orthogonal,
+  dominantAxis,
+  axisVector
+} from './InputXmlBasicGeometry.js';
 
-const Y_AXIS = new THREE.Vector3(0, 1, 0);
-const Z_AXIS = new THREE.Vector3(0, 0, 1);
-const EPS = 1e-9;
-function num(value, fallback = 0) { const n = Number(value); return Number.isFinite(n) ? n : fallback; }
-function vector(point) { return new THREE.Vector3(num(point?.x), num(point?.y), num(point?.z)); }
+const SCALE = 0.01;
+const pipeMat = mat(COLORS.pipe);
+const rigidMat = mat(COLORS.rigid);
+const bendMat = mat(COLORS.bend);
+const restMat = mat(COLORS.rest, { emissive: 0x063244, emissiveIntensity: 0.08 });
+const guideMat = mat(COLORS.guide, { emissive: 0x063322, emissiveIntensity: 0.08 });
+const lineMat = mat(COLORS.lineStop, { emissive: 0x3a2500, emissiveIntensity: 0.08 });
+const holdMat = mat(COLORS.holddown, { emissive: 0x330026, emissiveIntensity: 0.08 });
+const springMat = mat(COLORS.spring, { emissive: 0x331021, emissiveIntensity: 0.16 });
 
-export function caesarPointToGlb(point) {
-  const p = vector(point);
-  return new THREE.Vector3(p.x, p.z, -p.y);
+export async function convertInputXmlToGlb(xmlText, options = {}) {
+  const model = parseInputXml(xmlText, options);
+  const scene = new THREE.Scene();
+  scene.name = 'InputXML_GLTF_SCENE';
+  scene.userData = {
+    app: 'inputxml-glb-standalone',
+    converterVersion: '1.0.0',
+    sourceMode: options.supportMode || 'compare',
+    generatedAt: new Date().toISOString()
+  };
+
+  const root = new THREE.Group();
+  root.name = 'INPUTXML_GLB_ROOT';
+  scene.add(root);
+
+  const nodesGroup = new THREE.Group(); nodesGroup.name = 'nodes';
+  const pipesGroup = new THREE.Group(); pipesGroup.name = 'plant.geometry';
+  const supportGroup = new THREE.Group(); supportGroup.name = 'supports.restraints';
+  const annGroup = new THREE.Group(); annGroup.name = 'annotations';
+  root.add(pipesGroup, supportGroup, annGroup, nodesGroup);
+
+  const elementByNode = buildElementIndex(model);
+  const audit = {
+    componentCount: model.elements.length,
+    nodeCount: model.nodes.size,
+    inputXmlRestraints: model.restraints.length,
+    isonoteRecords: 0,
+    supportSymbols: [],
+    componentMetadataUpdated: model.elements.length,
+    options: { ...options }
+  };
+
+  for (const element of model.elements) {
+    createElementGeometry(element, pipesGroup, options);
+  }
+
+  if (options.nodeLabels !== false) {
+    for (const node of model.nodes.values()) {
+      const p = vectorFrom(node, SCALE);
+      const sphere = new THREE.Mesh(new THREE.SphereGeometry(0.08, 16, 8), mat(COLORS.node));
+      sphere.name = `NODE_MARKER_${node.id}`;
+      sphere.position.copy(p);
+      sphere.userData = { type: 'NODE', node: node.id };
+      const label = createNodeLabel(`N${node.id}`, p.clone().add(new THREE.Vector3(0.25, 0.35, 0.25)), 0.44);
+      label.lookAt(new THREE.Vector3(0, 0, 0));
+      nodesGroup.add(sphere, label);
+    }
+  }
+
+  if (options.isonoteBoards !== false) {
+    createIsonoteBoards(model, annGroup, elementByNode);
+  }
+
+  const mode = options.supportMode || 'compare';
+  if (mode === 'inputxml-actual' || mode === 'compare') {
+    for (const rec of normalizeInputXmlRestraints(model)) {
+      const symbols = createSupportSymbols(model, rec, elementByNode, 'actual');
+      symbols.forEach(s => { supportGroup.add(s); audit.supportSymbols.push(s.userData); });
+    }
+  }
+  if (mode === 'isonote-expected' || mode === 'compare') {
+    const isonoteRecords = parseIsonoteExpectedRecords(model, options);
+    audit.isonoteRecords = isonoteRecords.length;
+    for (const rec of isonoteRecords) {
+      const symbols = createSupportSymbols(model, rec, elementByNode, 'expected');
+      symbols.forEach(s => { supportGroup.add(s); audit.supportSymbols.push(s.userData); });
+    }
+  }
+
+  frameScene(scene);
+  const glb = await exportSceneToGlb(scene);
+  return { scene, glb, audit, model };
 }
 
-function material(name, color, options = {}) {
-  const mat = new THREE.MeshStandardMaterial({ color, roughness: options.roughness ?? 0.72, metalness: 0, emissive: options.emissive ?? 0x000000, emissiveIntensity: options.emissiveIntensity ?? 0 });
-  mat.name = name;
-  return mat;
+function createElementGeometry(element, group, options) {
+  const a = vectorFrom(element.from, SCALE);
+  const b = vectorFrom(element.to, SCALE);
+  const od = Number(element.props.bore || 100) * SCALE;
+  const radius = Math.max(0.04, (od / 2));
+  const isRigid = element.rawType && element.rawType !== 'PIPE' && element.rawType !== 'BEND';
+  const material = isRigid ? rigidMat : element.type === 'BEND' ? bendMat : pipeMat;
+  const cyl = cylinderBetween(a, b, radius, material, options.compactMode === false ? 24 : 14, element.id);
+  cyl.userData = buildComponentUserData(element);
+  group.add(cyl);
+
+  if (isRigid) {
+    const dir = b.clone().sub(a).normalize();
+    const mid = a.clone().add(b).multiplyScalar(0.5);
+    const collar1 = cylinderBetween(mid.clone().sub(dir.clone().multiplyScalar(0.18)), mid.clone().add(dir.clone().multiplyScalar(0.18)), radius * 1.35, rigidMat, 18, `${element.id}_RIGID_MARKER`);
+    collar1.userData = { ...cyl.userData, meshRole: 'RIGID_MARKER' };
+    group.add(collar1);
+  }
+
+  if (element.type.includes('BEND') || element.props.bendRadius) {
+    const bendNode = new THREE.Mesh(new THREE.SphereGeometry(radius * 1.18, 16, 10), bendMat);
+    bendNode.name = `${element.id}_BEND_NODE`;
+    bendNode.position.copy(b);
+    bendNode.userData = { ...cyl.userData, meshRole: 'BEND_MARKER' };
+    group.add(bendNode);
+  }
 }
-function makeMaterials() {
-  return Object.freeze({
-    pipe: material('IXB_PIPE_GREY', 0xd9dee7), bend: material('IXB_BEND_GREY', 0xf2f5f8),
-    valve: material('IXB_VALVE_GREEN', 0x1f9d55, { emissive: 0x103b1c, emissiveIntensity: 0.12 }),
-    flange: material('IXB_FLANGE_GREEN', 0x21c15a), tee: material('IXB_TEE_GREEN', 0x26d064),
-    node: material('IXB_NODE_BLUE', 0x2979ff, { emissive: 0x0b2355, emissiveIntensity: 0.18 }),
-    rest: material('IXB_SUPPORT_GREEN', 0x30d158, { emissive: 0x0b4518, emissiveIntensity: 0.2 }),
-    anchor: material('IXB_SUPPORT_RED', 0xff453a, { emissive: 0x4a0905, emissiveIntensity: 0.2 }),
-    hanger: material('IXB_SUPPORT_PURPLE', 0xbf5af2, { emissive: 0x360a55, emissiveIntensity: 0.2 }),
-    unknown: material('IXB_SUPPORT_GREY', 0x8e8e93),
+
+function buildComponentUserData(element) {
+  const p = element.props;
+  const resolved = (x) => typeof x === 'object' && x ? x.value : x;
+  const source = (x) => typeof x === 'object' && x ? x.source : 'explicit';
+  return {
+    TYPE: 'COMPONENT',
+    ID: p.id,
+    id: p.id,
+    refNo: p.refNo,
+    engineeringType: p.type,
+    meshRole: p.meshRole,
+    lineNo: p.lineNo,
+    lineNoSource: p.lineNoSource,
+    fromNode: p.fromNode,
+    toNode: p.toNode,
+    bore: p.bore,
+    wallThickness: resolved(p.wallThickness),
+    wallThicknessSource: source(p.wallThickness),
+    materialThickness: resolved(p.materialThickness),
+    materialThicknessSource: source(p.materialThickness),
+    material: resolved(p.material),
+    materialSource: source(p.material),
+    pressure: resolved(p.pressure),
+    pressureSource: source(p.pressure),
+    hydroPressure: resolved(p.hydroPressure),
+    hydroPressureSource: source(p.hydroPressure),
+    temp1: resolved(p.temp1),
+    temp1Source: source(p.temp1),
+    temp2: resolved(p.temp2),
+    temp2Source: source(p.temp2),
+    temp3: resolved(p.temp3),
+    temp3Source: source(p.temp3),
+    rigidType: p.rigidType,
+    rigidWeight: p.rigidWeight,
+    bendRadius: p.bendRadius,
+    bendAngle: p.bendAngle,
+    source: p.source
+  };
+}
+
+function buildElementIndex(model) {
+  const index = new Map();
+  for (const el of model.elements) {
+    for (const n of [el.fromNode, el.toNode]) {
+      if (!index.has(n)) index.set(n, []);
+      index.get(n).push(el);
+    }
+  }
+  return index;
+}
+
+function createIsonoteBoards(model, group, elementByNode) {
+  for (const [node, note] of model.isonoteMap.entries()) {
+    const pos = nodePosition(model, node);
+    if (!pos) continue;
+    const p = vectorFrom(pos, SCALE);
+    const tangent = localTangent(elementByNode, node);
+    const lateral = orthogonal(tangent);
+    const vertical = new THREE.Vector3(0, 1, 0);
+    const boardPos = p.clone().add(lateral.clone().multiplyScalar(1.8)).add(vertical.clone().multiplyScalar(1.25));
+    const board = createTextPlane(note, { width: 720, height: 230, fontSize: 28, scale: 0.78, name: `ISONOTE_BOARD_NODE_${node}` });
+    board.position.copy(boardPos);
+    board.lookAt(p.clone().add(new THREE.Vector3(0, 0.2, 0)));
+    board.userData = { TYPE: 'ISONOTE_NAME_PLATE', node, sourceNoteName: note, source: 'ISONOTE SIDELOAD' };
+    const leader = cylinderBetween(p, boardPos, 0.015, mat(0xffcf7a), 8, `ISONOTE_LEADER_NODE_${node}`);
+    leader.userData = { TYPE: 'ISONOTE_LEADER', node, sourceNoteName: note };
+    group.add(leader, board);
+  }
+}
+
+function normalizeInputXmlRestraints(model) {
+  return model.restraints.map((r) => {
+    const family = classifyByTypeCode(r.typeCode);
+    return {
+      ...r,
+      family,
+      sourceMode: 'ACTUAL_INPUTXML',
+      source: 'InputXML',
+      axis: axisFromCosines(r) || 'PIPE_AXIAL_±',
+      sourceNoteName: ''
+    };
   });
 }
 
-function cylinderBetween(start, end, radius, mat, name, radialSegments = 18) {
-  const dir = end.clone().sub(start);
-  const length = dir.length();
-  if (length < EPS) return null;
-  const mesh = new THREE.Mesh(new THREE.CylinderGeometry(radius, radius, length, radialSegments, 1, false), mat);
-  mesh.name = name;
-  mesh.position.copy(start).add(end).multiplyScalar(0.5);
-  mesh.quaternion.setFromUnitVectors(Y_AXIS, dir.normalize());
-  return mesh;
+function classifyByTypeCode(typeCode) {
+  const t = String(typeCode || '').trim().toUpperCase();
+  if (t === '7' || t.includes('GUIDE')) return 'GUIDE';
+  if (t === '1' || t.includes('ANCHOR')) return 'ANCHOR';
+  if (t.includes('HANGER') || t.includes('SPRING')) return 'SPRING';
+  if (t.includes('LIM') || t.includes('LIMIT')) return 'LIMIT';
+  if (t.includes('STOP') || t === '3') return 'LINE_STOP';
+  return 'AXIS_RESTRAINT';
 }
 
-function coneArrow(start, direction, length, radius, mat, name) {
-  const group = new THREE.Group();
-  group.name = name;
-  const dir = direction.clone().length() < EPS ? Y_AXIS.clone() : direction.clone().normalize();
-  const shaftEnd = start.clone().addScaledVector(dir, length * 0.72);
-  const tip = start.clone().addScaledVector(dir, length);
-  const shaft = cylinderBetween(start, shaftEnd, radius, mat, `${name}-shaft`, 8);
-  if (shaft) group.add(shaft);
-  const cone = new THREE.Mesh(new THREE.ConeGeometry(radius * 3, length * 0.28, 12), mat);
-  cone.name = `${name}-head`;
-  cone.position.copy(shaftEnd).add(tip).multiplyScalar(0.5);
-  cone.quaternion.setFromUnitVectors(Y_AXIS, dir);
-  group.add(cone);
-  return group;
+function axisFromCosines(r) {
+  const axes = [ ['X', Math.abs(r.xCos || 0)], ['Y', Math.abs(r.yCos || 0)], ['Z', Math.abs(r.zCos || 0)] ];
+  axes.sort((a, b) => b[1] - a[1]);
+  if (axes[0][1] > 0.2) return `${(r[`${axes[0][0].toLowerCase()}Cos`] || 1) >= 0 ? '+' : '-'}${axes[0][0]}`;
+  return null;
 }
-function componentAxis(element) {
-  const a = caesarPointToGlb(element.start), b = caesarPointToGlb(element.end);
-  const dir = b.clone().sub(a);
-  return dir.length() < EPS ? new THREE.Vector3(1, 0, 0) : dir.normalize();
-}
-function addPipeLike(root, element, mats) {
-  const a = caesarPointToGlb(element.start), b = caesarPointToGlb(element.end);
-  const mesh = cylinderBetween(a, b, Math.max(element.diameter * 0.5, 2), element.type === 'BEND' ? mats.bend : mats.pipe, element.id, 20);
-  if (!mesh) return null;
-  mesh.userData = { glbShape: element.type === 'BEND' ? 'basic-bend-as-cylinder' : 'basic-pipe-cylinder', inputXmlBasic: true, elementType: element.type, fromNode: element.fromNode, toNode: element.toNode, diameter: element.diameter, sourceElementIndex: element.index };
-  root.add(mesh);
-  return mesh;
-}
-function addValve(root, element, mats) {
-  addPipeLike(root, element, mats);
-  const a = caesarPointToGlb(element.start), b = caesarPointToGlb(element.end), mid = a.clone().add(b).multiplyScalar(0.5), axis = componentAxis(element);
-  const radius = Math.max(element.diameter * 0.62, 4);
-  const box = new THREE.Mesh(new THREE.BoxGeometry(radius * 2.3, radius * 1.45, radius * 1.45), mats.valve);
-  box.name = `${element.id}-valve-body`; box.position.copy(mid); box.quaternion.setFromUnitVectors(new THREE.Vector3(1, 0, 0), axis);
-  box.userData = { inputXmlBasic: true, glbShape: 'basic-valve-box', elementType: 'VALVE', sourceElementIndex: element.index };
-  root.add(box); return box;
-}
-function addFlange(root, element, mats) {
-  addPipeLike(root, element, mats);
-  const a = caesarPointToGlb(element.start), b = caesarPointToGlb(element.end), mid = a.clone().add(b).multiplyScalar(0.5), axis = componentAxis(element);
-  const torus = new THREE.Mesh(new THREE.TorusGeometry(Math.max(element.diameter * 0.7, 4), Math.max(element.diameter * 0.08, 1.4), 10, 32), mats.flange);
-  torus.name = `${element.id}-flange-ring`; torus.position.copy(mid); torus.quaternion.setFromUnitVectors(Z_AXIS, axis);
-  torus.userData = { inputXmlBasic: true, glbShape: 'basic-flange-ring', elementType: 'FLANGE', sourceElementIndex: element.index };
-  root.add(torus); return torus;
-}
-function addTeeOrOlet(root, element, mats) {
-  addPipeLike(root, element, mats);
-  const marker = new THREE.Mesh(new THREE.SphereGeometry(Math.max(element.diameter * 0.62, 4), 16, 12), element.type === 'TEE' ? mats.tee : mats.flange);
-  marker.name = `${element.id}-${element.type.toLowerCase()}-marker`; marker.position.copy(caesarPointToGlb(element.start));
-  marker.userData = { inputXmlBasic: true, glbShape: `basic-${element.type.toLowerCase()}-sphere`, elementType: element.type, sourceElementIndex: element.index };
-  root.add(marker); return marker;
-}
-function supportMaterial(kind, mats) { return kind === 'ANCHOR' ? mats.anchor : kind === 'HANGER' ? mats.hanger : kind === 'UNKNOWN' ? mats.unknown : mats.rest; }
-function supportDirection(support) {
-  const x = Number(support.xcosine), y = Number(support.ycosine), z = Number(support.zcosine);
-  if (Number.isFinite(x) || Number.isFinite(y) || Number.isFinite(z)) {
-    const d = caesarPointToGlb({ x: Number.isFinite(x) ? x : 0, y: Number.isFinite(y) ? y : 0, z: Number.isFinite(z) ? z : 0 });
-    if (d.length() > EPS) return d.normalize();
+
+function createSupportSymbols(model, rec, elementByNode, sourceClass) {
+  const pos = nodePosition(model, rec.node);
+  if (!pos) return [];
+  const p = vectorFrom(pos, SCALE);
+  const tangent = localTangent(elementByNode, rec.node).normalize();
+  const od = localOd(elementByNode, rec.node) * SCALE;
+  const contactRadius = od / 2;
+  const visualLane = od * 2 / 3;
+  const gap = Number.isFinite(rec.gapMm) ? rec.gapMm * SCALE * 10 : 0;
+  const family = rec.family;
+  const prefix = `${sourceClass.toUpperCase()}_${rec.node}_${family}`;
+  const out = [];
+  const addMeta = (obj, extra = {}) => {
+    obj.userData = {
+      TYPE: 'SUPPORT_RESTRAINT',
+      sourceClass,
+      source: rec.source,
+      sourceMode: rec.sourceMode,
+      node: rec.node,
+      family,
+      axis: rec.axis,
+      sign: rec.sign,
+      loadText: rec.loadText,
+      gapMm: rec.gapMm,
+      sourceNoteName: rec.sourceNoteName,
+      mappingContract: 'common-support-mapper-standalone',
+      ...extra
+    };
+    return obj;
+  };
+
+  if (family === 'REST') {
+    const start = p.clone().add(new THREE.Vector3(0, -contactRadius - gap - 0.55, 0));
+    out.push(addMeta(coneArrow(start, new THREE.Vector3(0, 1, 0), 0.8, 0.16, restMat, `${prefix}_REST_PLUS_Y`), { engineeringContact: 'OD/2', visualResolverApplied: false }));
+  } else if (family === 'HOLDDOWN') {
+    const upTip = p.clone().add(new THREE.Vector3(0, contactRadius + gap, 0));
+    const downTip = p.clone().add(new THREE.Vector3(0, -contactRadius - gap, 0));
+    const g = new THREE.Group(); g.name = `${prefix}_HOLDDOWN_PM_Y`;
+    g.add(arrowToward(upTip, new THREE.Vector3(0, -1, 0), 0.6, 0.14, holdMat, 'holddown_down'));
+    g.add(arrowToward(downTip, new THREE.Vector3(0, 1, 0), 0.6, 0.14, holdMat, 'holddown_up'));
+    out.push(addMeta(g, { engineeringContact: 'OD/2', visualResolverApplied: false }));
+  } else if (family === 'GUIDE') {
+    const guideAxes = guideAxesForTangent(tangent);
+    const g = new THREE.Group(); g.name = `${prefix}_GUIDE`;
+    for (const ax of guideAxes) {
+      const d = axisVector(`+${ax}`);
+      const tipPlus = p.clone().add(d.clone().multiplyScalar(contactRadius + gap));
+      const tipMinus = p.clone().add(d.clone().multiplyScalar(-contactRadius - gap));
+      g.add(arrowToward(tipPlus, d.clone().multiplyScalar(-1), 0.62, 0.13, guideMat, `guide_plus_${ax}`));
+      g.add(arrowToward(tipMinus, d, 0.62, 0.13, guideMat, `guide_minus_${ax}`));
+    }
+    out.push(addMeta(g, { engineeringContact: 'OD/2', guideAxes, visualResolverApplied: false }));
+  } else if (family === 'LINE_STOP' || family === 'LIMIT') {
+    const lane = orthogonal(tangent).multiplyScalar(visualLane);
+    const center = p.clone().add(lane);
+    const separation = gap > 0 ? gap : 0.0;
+    const tipA = center.clone().add(tangent.clone().multiplyScalar(separation / 2));
+    const tipB = center.clone().add(tangent.clone().multiplyScalar(-separation / 2));
+    const g = new THREE.Group(); g.name = `${prefix}_${family}_AXIAL_PM`;
+    g.add(arrowToward(tipA, tangent.clone().multiplyScalar(-1), 0.72, 0.13, lineMat, `${family}_a`));
+    g.add(arrowToward(tipB, tangent, 0.72, 0.13, lineMat, `${family}_b`));
+    out.push(addMeta(g, { engineeringContact: 'axial-corner-touch', visualResolverApplied: true, visualResolver: 'OD*2/3', axialGapVisual: gap }));
+  } else if (family === 'AXIS_RESTRAINT_UNRESOLVED') {
+    const marker = createWarningTriangle('!', 0.35);
+    marker.name = `${prefix}_UNRESOLVED_WARNING`;
+    marker.position.copy(p.clone().add(new THREE.Vector3(0.0, Math.max(0.85, od), 0.65)));
+    out.push(addMeta(marker, { popupRequired: true, warningText: rec.warningText || 'Axis sign required' }));
+  } else if (family === 'AXIS_RESTRAINT') {
+    const d = axisVector(rec.axis || '+X');
+    const lane = Math.abs(d.dot(tangent)) > 0.85 ? orthogonal(tangent).multiplyScalar(visualLane) : new THREE.Vector3();
+    const start = p.clone().add(lane).sub(d.clone().multiplyScalar(0.1));
+    out.push(addMeta(coneArrow(start, d, 0.75, 0.13, lineMat, `${prefix}_AXIS_${rec.axis}`), { visualResolverApplied: lane.length() > 0 }));
+  } else if (family === 'SPRING_WARNING' || family === 'SPRING') {
+    const below = p.clone().add(new THREE.Vector3(0, -contactRadius - 0.85 - gap, 0));
+    out.push(addMeta(createSpringCoil(below, tangent, 0.16, 0.9, springMat, `${prefix}_SPRING_COIL_BELOW_PIPE`), { warningText: rec.warningText || 'Spring / hanger', engineeringContact: 'below-pipe-clearance' }));
   }
-  if (support.kind === 'GUIDE') return new THREE.Vector3(0, 0, 1);
-  if (support.kind === 'LINESTOP') return new THREE.Vector3(1, 0, 0);
-  if (support.kind === 'HOLDDOWN') return new THREE.Vector3(0, -1, 0);
-  return new THREE.Vector3(0, 1, 0);
-}
-function addSupport(root, support, nodePoint, mats, index) {
-  if (!nodePoint) return null;
-  const base = caesarPointToGlb(nodePoint), dir = supportDirection(support), mat = supportMaterial(support.kind, mats);
-  const group = new THREE.Group(); group.name = `IXB-SUPPORT-${String(index).padStart(3, '0')}-${support.kind}-${support.node}`; group.position.copy(base);
-  group.userData = { inputXmlBasic: true, glbShape: 'basic-support-arrow', supportKind: support.kind, node: support.node, rawTag: support.rawTag };
-  if (support.kind === 'ANCHOR') {
-    group.add(coneArrow(new THREE.Vector3(), new THREE.Vector3(1, 0, 0), 70, 4, mats.anchor, `${group.name}-x`));
-    group.add(coneArrow(new THREE.Vector3(), new THREE.Vector3(0, 1, 0), 70, 4, mats.anchor, `${group.name}-y`));
-    group.add(coneArrow(new THREE.Vector3(), new THREE.Vector3(0, 0, 1), 70, 4, mats.anchor, `${group.name}-z`));
-  } else if (support.kind === 'GUIDE' || support.kind === 'LINESTOP') {
-    group.add(coneArrow(new THREE.Vector3(), dir, 55, 4, mat, `${group.name}-plus`));
-    group.add(coneArrow(new THREE.Vector3(), dir.clone().negate(), 55, 4, mat, `${group.name}-minus`));
-  } else group.add(coneArrow(new THREE.Vector3(), dir, 65, 4, mat, `${group.name}-arrow`));
-  root.add(group); return group;
-}
-function addNodeMarkers(root, nodes, mats) {
-  for (const [node, rawPoint] of Object.entries(nodes || {})) {
-    const marker = new THREE.Mesh(new THREE.SphereGeometry(8, 10, 8), mats.node);
-    marker.name = `IXB-NODE-${node}`; marker.position.copy(caesarPointToGlb(rawPoint)); marker.userData = { inputXmlBasic: true, glbShape: 'basic-node-dot', node };
-    root.add(marker);
+
+  if (sourceClass === 'expected' && out.length) {
+    out.forEach(o => o.traverse?.(child => { if (child.material?.color) child.material.opacity = 0.96; }));
   }
+  return out;
 }
-export function buildInputXmlBasicScene(model, options = {}) {
-  const scene = new THREE.Scene(); scene.name = 'InputXML Basic GLB';
-  const root = new THREE.Group(); root.name = 'INPUTXML_BASIC_GLB_ROOT';
-  root.userData = { schema: 'inputxml-basic-glb-scene/v1', source: model.source, stats: model.stats, converter: 'Model converter > InputXML -> Basic GLB', independentPath: true };
-  scene.add(root);
-  const mats = makeMaterials();
-  scene.add(new THREE.AmbientLight(0xffffff, 0.72));
-  const directional = new THREE.DirectionalLight(0xffffff, 1.15); directional.name = 'IXB-DIRECTIONAL-LIGHT'; directional.position.set(1200, 2200, 1700); scene.add(directional);
-  for (const element of model.elements || []) {
-    if (!element.start || !element.end) continue;
-    if (element.type === 'VALVE') addValve(root, element, mats);
-    else if (element.type === 'FLANGE') addFlange(root, element, mats);
-    else if (element.type === 'TEE' || element.type === 'OLET') addTeeOrOlet(root, element, mats);
-    else addPipeLike(root, element, mats);
-  }
-  if (options.includeNodeMarkers !== false) addNodeMarkers(root, model.nodes, mats);
-  if (options.includeSupports !== false) (model.supports || []).forEach((s, i) => addSupport(root, s, model.nodes?.[s.node], mats, i + 1));
-  return scene;
+
+function guideAxesForTangent(tangent) {
+  const dom = dominantAxis(tangent);
+  if (dom === 'X') return ['Z'];
+  if (dom === 'Z') return ['X'];
+  return ['X', 'Z'];
+}
+
+function nodePosition(model, nodeId) {
+  return model.nodes.get(String(Number(nodeId))) || null;
+}
+
+function localTangent(elementByNode, nodeId) {
+  const els = elementByNode.get(String(Number(nodeId))) || [];
+  if (!els.length) return new THREE.Vector3(1, 0, 0);
+  const e = els[0];
+  const v = new THREE.Vector3(e.dx, e.dy, e.dz);
+  if (v.lengthSq() < 1e-8) return new THREE.Vector3(1, 0, 0);
+  return v.normalize();
+}
+
+function localOd(elementByNode, nodeId) {
+  const els = elementByNode.get(String(Number(nodeId))) || [];
+  if (!els.length) return 100;
+  return Number(els[0].props.bore || 100);
+}
+
+function frameScene(scene) {
+  const box = new THREE.Box3().setFromObject(scene);
+  const center = box.getCenter(new THREE.Vector3());
+  scene.position.sub(center);
+}
+
+export function exportSceneToGlb(scene) {
+  const exporter = new GLTFExporter();
+  return new Promise((resolve, reject) => {
+    exporter.parse(
+      scene,
+      (result) => {
+        if (result instanceof ArrayBuffer) resolve(result);
+        else resolve(new TextEncoder().encode(JSON.stringify(result)).buffer);
+      },
+      (err) => reject(err),
+      { binary: true, includeCustomExtensions: false, trs: false, onlyVisible: true }
+    );
+  });
 }
