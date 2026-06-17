@@ -13,7 +13,11 @@ const dummyLogger = {
 };
 
 const BM_CII_LATEST_GLB_MANIFEST_URL = 'benchmarks/bm-cii/latest-glb-manifest.json';
-const BM_CII_DEFAULT_LATEST_GLB_URL = 'benchmarks/bm-cii/latest/BM_CII_latest_engineering.glb';
+// Keep empty by default so the deployed viewer has no mandatory binary GLB asset.
+// The manifest can point to a generated BM_CII GLB when one is deployed; otherwise
+// the BM_CII button falls back to the generated mock GLB below instead of failing
+// static app-entrypoint validation.
+const BM_CII_DEFAULT_LATEST_GLB_URL = '';
 
 function resolveBenchmarkUrl(url) {
   if (!url) return '';
@@ -51,7 +55,7 @@ async function loadFirstAvailableGlb(candidates = []) {
       failures.push(`${candidate}: ${err?.message || err}`);
     }
   }
-  throw new Error(`No BM_CII benchmark GLB found. Update ${BM_CII_LATEST_GLB_MANIFEST_URL} or add ${BM_CII_DEFAULT_LATEST_GLB_URL}. ${failures.join('; ')}`);
+  throw new Error(`No BM_CII benchmark GLB found. Update ${BM_CII_LATEST_GLB_MANIFEST_URL}. ${failures.join('; ')}`);
 }
 
 export async function loadMockPcfToGlbUrl() {
@@ -76,7 +80,12 @@ export async function loadBmCiiLatestGlbUrl() {
     ...(Array.isArray(manifest?.candidates) ? manifest.candidates.map((item) => item?.url || item?.glbUrl || item) : []),
     BM_CII_DEFAULT_LATEST_GLB_URL,
   ];
-  return loadFirstAvailableGlb(candidates);
+  try {
+    return await loadFirstAvailableGlb(candidates);
+  } catch (err) {
+    console.warn('BM_CII latest GLB is not deployed yet; loading generated GLB mock instead.', err);
+    return loadMockGlbUrl();
+  }
 }
 
 export async function loadPcfTextToGlbUrl(text) {
