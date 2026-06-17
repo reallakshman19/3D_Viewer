@@ -36,12 +36,20 @@ function categoryFromTrace(trace = {}, extra = {}) {
   return lower(trace.semanticCategory || trace.category || extra.category || 'other');
 }
 
+function annotationKindFromTrace(trace = {}, extra = {}) {
+  return lower(trace.annotationKind || trace.annotationType || extra.annotationKind || extra.annotationType || '');
+}
+
+function annotationRoleFromTrace(trace = {}, extra = {}) {
+  return lower(trace.annotationRole || trace.nodeAnnotationPart || extra.annotationRole || extra.nodeAnnotationPart || '');
+}
+
 function sourceForLayer(trace = {}, extra = {}) {
   const entity = lower(trace.entity || extra.entity);
   const category = categoryFromTrace(trace, extra);
 
   if (entity === 'annotation' || category === 'annotation') {
-    return lower(trace.source || extra.source || 'isonote');
+    return lower(trace.source || extra.source || 'inputxml');
   }
 
   if (category === 'support') {
@@ -82,7 +90,17 @@ export function layerIdsForTrace(trace = {}, extra = {}) {
   const ids = [];
 
   if (entity === 'annotation' || category === 'annotation') {
-    ids.push('annotation.all', 'annotation.callout');
+    ids.push('plant.annotations', 'annotation.all');
+    const annotationKind = annotationKindFromTrace(trace, extra);
+    const annotationRole = annotationRoleFromTrace(trace, extra);
+    if (annotationKind.includes('node')) {
+      ids.push('annotation.node');
+      if (annotationRole.includes('marker')) ids.push('annotation.node_marker');
+      else if (annotationRole.includes('leader')) ids.push('annotation.node_leader');
+      else if (annotationRole.includes('label')) ids.push('annotation.node_label');
+    } else {
+      ids.push('annotation.callout');
+    }
     if (source) ids.push(`annotation.${cleanLayerId(source)}`);
     if (source) ids.push(`source.${cleanLayerId(source)}`);
     return unique(ids);
@@ -113,13 +131,17 @@ export function layerMetadataFromTrace(trace = {}, extra = {}) {
   const source = sourceForLayer(trace, extra);
   const supportKind = category === 'support' ? supportKindFromTrace(trace, extra) : '';
   const axis = category === 'support' ? supportAxisFromTrace(trace, extra) : '';
-  const visibleDefault = extra.visibleDefault !== false && supportKind !== 'UNKNOWN' && supportKind !== 'TYPE0';
+  const visibleDefault = category === 'annotation'
+    ? false
+    : extra.visibleDefault !== false && supportKind !== 'UNKNOWN' && supportKind !== 'TYPE0';
   return {
     schema: BM_CII_LAYER_SCHEMA,
     category,
     source,
     supportKind,
     axis,
+    annotationKind: category === 'annotation' ? annotationKindFromTrace(trace, extra) : '',
+    annotationRole: category === 'annotation' ? annotationRoleFromTrace(trace, extra) : '',
     gap: text(trace.gap || trace.restraintGap || extra.gap || ''),
     visibleDefault,
     layerIds: layerIdsForTrace(trace, extra),
@@ -190,9 +212,15 @@ export function buildDefaultBmCiiLayerManifest({ supportSource = '' } = {}) {
       layer('axis.y', 'Y Axis', 'Direction / Axis'),
       layer('axis.z', 'Z Axis', 'Direction / Axis'),
 
-      layer('annotation.all', 'Annotations', 'Annotations'),
-      layer('annotation.callout', 'Callouts', 'Annotations'),
-      layer('annotation.isonote', 'ISONOTE Callouts', 'Annotations'),
+      layer('plant.annotations', 'Annotations', 'Annotations', false),
+      layer('annotation.all', 'All Annotations', 'Annotations', false),
+      layer('annotation.node', 'Node Annotations', 'Annotations', false),
+      layer('annotation.node_marker', 'Node Markers', 'Annotations', false),
+      layer('annotation.node_leader', 'Node Leaders', 'Annotations', false),
+      layer('annotation.node_label', 'Node Labels', 'Annotations', false),
+      layer('annotation.callout', 'Callouts', 'Annotations', false),
+      layer('annotation.isonote', 'ISONOTE Callouts', 'Annotations', false),
+      layer('annotation.inputxml', 'InputXML Annotations', 'Annotations', false),
 
       layer('source.inputxml', 'Source: InputXML', 'Source'),
       layer('source.isonote', 'Source: ISONOTE', 'Source'),

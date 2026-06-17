@@ -44,6 +44,7 @@ const BARE_PLANT_LAYER_ALIASES = new Map([
   ['cap', 'plant.cap'],
   ['caps', 'plant.cap'],
   ['terminal', 'plant.cap'],
+  ['annotations', 'plant.annotations'],
 ]);
 
 const BARE_RESTRAINT_LAYER_ALIASES = new Map([
@@ -68,6 +69,23 @@ const BARE_RESTRAINT_LAYER_ALIASES = new Map([
   ['type0', 'restraints.unknown'],
 ]);
 
+const BARE_ANNOTATION_LAYER_ALIASES = new Map([
+  ['annotation', 'annotation.all'],
+  ['annotations', 'annotation.all'],
+  ['node', 'annotation.node'],
+  ['nodes', 'annotation.node'],
+  ['node.annotation', 'annotation.node'],
+  ['node.annotations', 'annotation.node'],
+  ['node.marker', 'annotation.node_marker'],
+  ['node.markers', 'annotation.node_marker'],
+  ['node.leader', 'annotation.node_leader'],
+  ['node.leaders', 'annotation.node_leader'],
+  ['node.label', 'annotation.node_label'],
+  ['node.labels', 'annotation.node_label'],
+  ['callout', 'annotation.callout'],
+  ['callouts', 'annotation.callout'],
+]);
+
 function canonicalLayerId(rawId = '') {
   const id = String(rawId || '').trim();
   if (!id) return '';
@@ -82,6 +100,7 @@ function canonicalLayerId(rawId = '') {
 
   if (BARE_PLANT_LAYER_ALIASES.has(key)) return BARE_PLANT_LAYER_ALIASES.get(key);
   if (BARE_RESTRAINT_LAYER_ALIASES.has(key)) return BARE_RESTRAINT_LAYER_ALIASES.get(key);
+  if (BARE_ANNOTATION_LAYER_ALIASES.has(key)) return BARE_ANNOTATION_LAYER_ALIASES.get(key);
 
   return id;
 }
@@ -292,10 +311,15 @@ export function labelFromLayerId(id = '') {
   if (value === 'plant.flange_pair') return 'Flange Pair';
   if (value === 'plant.valve_flanged') return 'Valve Flanged';
   if (value === 'plant.rigid_unspecified') return 'Rigid Unspecified';
-  if (value === 'plant.tee_olet') return 'Tee / Olet';
   if (value === 'restraints.inputxml') return 'InputXML';
   if (value === 'restraints.isonote') return 'ISONOTE';
   if (value === 'restraints.linestop') return 'LINESTOP';
+  if (value === 'plant.annotations') return 'Annotations';
+  if (value === 'annotation.all') return 'All Annotations';
+  if (value === 'annotation.node') return 'Node Annotations';
+  if (value === 'annotation.node_marker') return 'Node Markers';
+  if (value === 'annotation.node_leader') return 'Node Leaders';
+  if (value === 'annotation.node_label') return 'Node Labels';
   const tail = String(value).split('.').pop() || value;
   return tail
     .replace(/_/g, ' ')
@@ -338,89 +362,60 @@ function escapeHtml(value) {
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
+    .replace(/"/g, '&quot;');
 }
 
-function sortGroupLayers(groupLayers = []) {
-  const order = [
-    'plant.pipe', 'plant.bend', 'plant.pipe_trimmed_for_bend', 'plant.valve', 'plant.valve_flanged', 'plant.flange', 'plant.flange_pair', 'plant.tee_olet', 'plant.rigid', 'plant.rigid_unspecified', 'plant.olet', 'plant.reducer', 'plant.cap', 'plant.other',
-    'plant.restraints', 'restraints.inputxml', 'restraints.isonote', 'restraints.rest', 'restraints.guide', 'restraints.linestop', 'restraints.limit', 'restraints.anchor', 'restraints.hanger', 'restraints.spring', 'restraints.unknown',
-    'plant.annotations', 'annotation.all', 'annotation.callout', 'annotation.node_labels', 'annotation.isonote',
-    'axis.x', 'axis.y', 'axis.z',
-  ];
-  const weight = (id) => {
-    const canonical = canonicalLayerId(id);
-    const idx = order.indexOf(canonical);
-    return idx >= 0 ? idx : order.length + String(canonical).localeCompare('');
-  };
-  return [...groupLayers].sort((a, b) => weight(a.id) - weight(b.id));
+function checkboxId(layerId) {
+  return `glb-layer-${String(layerId).replace(/[^a-z0-9_-]+/gi, '-')}`;
 }
 
-export function buildLayerPanelHtml(manifest = {}) {
+export function renderLayerControls(manifest = {}, state = {}, onToggle = () => {}) {
   const layers = normalizeLayerManifest(manifest).layers || [];
-  if (!layers.length) {
-    return `
-      <div class="bm-cii-layer-panel" style="padding:12px; border-radius:14px; background:rgba(19,34,53,0.92); color:#d8ecff; border:1px solid rgba(119,196,255,0.18); box-shadow:0 10px 26px rgba(0,0,0,0.22);">
-        <div style="font-weight:800; font-size:12px; letter-spacing:.08em; text-transform:uppercase; color:#9fd4ff; margin-bottom:6px;">Layers</div>
-        <div style="font-size:11px; line-height:1.45; color:#b7c9dc;">No <code>bmCiiLayer</code> metadata found. All objects remain visible.</div>
-      </div>`;
-  }
+  if (!layers.length) return null;
 
+  const container = document.createElement('div');
+  container.className = 'glb-layer-controls';
   const byGroup = new Map();
   for (const layer of layers) {
-    const group = groupFromLayerId(layer.id, layer.group || 'Layers');
+    const group = layer.group || groupFromLayerId(layer.id);
     if (!byGroup.has(group)) byGroup.set(group, []);
     byGroup.get(group).push(layer);
   }
 
-  let html = `
-    <div class="bm-cii-layer-panel" style="padding:12px; border-radius:14px; background:rgba(19,34,53,0.94); color:#e8f3ff; border:1px solid rgba(119,196,255,0.18); box-shadow:0 10px 26px rgba(0,0,0,0.24);">
-      <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:8px;">
-        <div style="font-weight:800; font-size:12px; letter-spacing:.08em; text-transform:uppercase; color:#9fd4ff;">Layers</div>
-        <button type="button" data-layer-action="all" style="font-size:10px; padding:3px 7px; border-radius:8px; border:1px solid rgba(159,212,255,.32); background:rgba(31,53,81,.8); color:#d8ecff; cursor:pointer;">All</button>
-      </div>`;
-  const orderedGroups = [...byGroup.entries()].sort(([a], [b]) => groupWeight(a) - groupWeight(b));
-  for (const [group, groupLayers] of orderedGroups) {
-    html += `<div class="bm-cii-layer-group" style="margin:10px 0 8px;"><div class="bm-cii-layer-group-title" style="font-size:10px; text-transform:uppercase; letter-spacing:.10em; color:#90acd0; margin-bottom:5px;">${escapeHtml(group)}</div>`;
-    for (const layer of sortGroupLayers(groupLayers)) {
-      const checked = layer.defaultVisible === false ? '' : ' checked';
-      html += `<label class="bm-cii-layer-row" style="display:flex; align-items:center; gap:7px; font-size:11px; line-height:1.35; margin:4px 0; cursor:pointer;"><input type="checkbox" data-layer-id="${escapeHtml(layer.id)}"${checked} style="accent-color:#4a9eff;"> <span>${escapeHtml(layer.label || labelFromLayerId(layer.id))}</span></label>`;
-    }
-    html += '</div>';
-  }
-  html += '</div>';
-  return html;
-}
+  Array.from(byGroup.entries())
+    .sort(([a], [b]) => groupWeight(a) - groupWeight(b))
+    .forEach(([group, groupLayers]) => {
+      const section = document.createElement('details');
+      section.className = 'glb-layer-group';
+      section.open = ['Plant Geometry', 'Supports / Restraints', 'Annotations'].includes(group);
+      const summary = document.createElement('summary');
+      summary.textContent = group;
+      section.appendChild(summary);
 
-export function mountLayerPanel(container, scene, manifest = layerManifestOf(scene), { onChange } = {}) {
-  if (!container) return null;
-  const normalizedManifest = normalizeLayerManifest(manifest);
-  const state = createLayerStateFromManifest(normalizedManifest);
-  container.innerHTML = buildLayerPanelHtml(normalizedManifest);
-  container.style.display = 'block';
+      groupLayers
+        .sort((a, b) => String(a.label || a.id).localeCompare(String(b.label || b.id)))
+        .forEach((layer) => {
+          const id = checkboxId(layer.id);
+          const label = document.createElement('label');
+          label.className = 'glb-layer-row';
+          label.setAttribute('for', id);
 
-  const apply = () => applyLayerState(scene, state);
-  container.querySelectorAll('input[data-layer-id]').forEach((input) => {
-    input.addEventListener('change', () => {
-      state[input.dataset.layerId] = input.checked;
-      apply();
-      onChange?.({ layerId: input.dataset.layerId, checked: input.checked, state: { ...state } });
+          const input = document.createElement('input');
+          input.type = 'checkbox';
+          input.id = id;
+          input.checked = state[layer.id] !== false;
+          input.addEventListener('change', () => onToggle(layer.id, input.checked));
+
+          const span = document.createElement('span');
+          span.textContent = layer.label || labelFromLayerId(layer.id);
+
+          label.appendChild(input);
+          label.appendChild(span);
+          section.appendChild(label);
+        });
+
+      container.appendChild(section);
     });
-  });
 
-  const allBtn = container.querySelector('[data-layer-action="all"]');
-  allBtn?.addEventListener('click', () => {
-    const inputs = Array.from(container.querySelectorAll('input[data-layer-id]'));
-    const next = inputs.some((input) => !input.checked);
-    inputs.forEach((input) => {
-      input.checked = next;
-      state[input.dataset.layerId] = next;
-    });
-    apply();
-    onChange?.({ layerId: '*', checked: next, state: { ...state } });
-  });
-
-  apply();
-  return { state, apply, manifest: normalizedManifest };
+  return container;
 }
