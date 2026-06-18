@@ -24,6 +24,10 @@ const TAB_ID_ALIASES = new Map([
   ['psnm-utility', 'psnm-utility'],
 ]);
 
+let activeTabDestroy = null;
+let appDestroy = null;
+const tabRendererCache = new Map();
+
 function pickRenderer(module, exportName, tabId) {
   const renderer = module?.[exportName];
   if (typeof renderer !== 'function') {
@@ -133,31 +137,78 @@ function renderNav(nav, tabs, content) {
   }
 }
 
+function cleanupActiveTab() {
+  if (typeof activeTabDestroy !== 'function') {
+    activeTabDestroy = null;
+    return;
+  }
+  const destroy = activeTabDestroy;
+  activeTabDestroy = null;
+  try {
+    destroy();
+  } catch (error) {
+    console.warn('[app] active tab cleanup failed', error);
+  }
+}
+
+function renderTabError(content, error) {
+  const message = error?.message || String(error || 'Unknown tab error');
+  content.innerHTML = `<div class="tab-error">${escapeHtml(message)}</div>`;
+}
+
+function escapeHtml(value) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
+async function loadTabRenderer(tab) {
+  if (!tabRendererCache.has(tab.id)) {
+    tabRendererCache.set(tab.id, Promise.resolve().then(() => tab.load()));
+  }
+  return tabRendererCache.get(tab.id);
+}
+
 async function activateTab(tabId, tabs, nav, content) {
   const alias = TAB_ID_ALIASES.get(tabId) || tabId;
   const tab = tabs.find((item) => item.id === alias) || tabs[0];
   if (!tab) return;
+  cleanupActiveTab();
   setActiveTab(tab.id);
   nav.querySelectorAll('button[data-tab-id]').forEach((button) => {
     button.classList.toggle('active', button.dataset.tabId === tab.id);
   });
   content.innerHTML = '<div class="tab-loading">Loading…</div>';
   try {
-    const render = await tab.load();
+    const render = await loadTabRenderer(tab);
     content.innerHTML = '';
-    render(content, { RuntimeEvents, emit, on, state });
+    const destroy = render(content, { RuntimeEvents, emit, on, state });
+    activeTabDestroy = typeof destroy === 'function' ? destroy : null;
   } catch (error) {
     console.error(error);
-    content.innerHTML = `<div class="tab-error">${error.message || String(error)}</div>`;
+    activeTabDestroy = null;
+    renderTabError(content, error);
   }
 }
 
 export async function bootstrapApp(root = document.getElementById('app-layout')) {
+  if (typeof appDestroy === 'function') {
+    appDestroy();
+  }
   initDevDebugWindow();
   const tabs = await visibleTabs();
   loadStickyState();
   const { nav, content } = createAppShell(root);
   renderNav(nav, tabs, content);
+  appDestroy = () => {
+    cleanupActiveTab();
+    if (root) root.innerHTML = '';
+    appDestroy = null;
+  };
   const preferred = TAB_ID_ALIASES.get(state.activeTab) || state.activeTab || tabs[0]?.id;
   await activateTab(preferred, tabs, nav, content);
+  return appDestroy;
 }
