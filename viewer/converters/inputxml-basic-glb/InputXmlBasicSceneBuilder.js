@@ -29,7 +29,8 @@ const springMat = mat(COLORS.spring, { emissive: 0x331021, emissiveIntensity: 0.
 const leaderMat = new THREE.MeshBasicMaterial({ color: COLORS.isonote, toneMapped: false });
 const nodeLeaderMat = new THREE.MeshBasicMaterial({ color: COLORS.node, toneMapped: false });
 
-const KEY_NODE_LABELS = Object.freeze(['10', '20', '30', '35', '70', '80', '83', '86', '90', '100', '110', '113', '116', '120', '130', '140', '150', '160', '170', '180', '190', '200', '205', '210', '220', '230', '233', '236', '240', '250', '255', '260', '270', '280', '290', '300', '310', '320', '330', '340']);
+// Keep default node text intentionally sparse. Full node labels are opt-in via nodeLabelMode='all'.
+const KEY_NODE_LABELS = Object.freeze(['10', '35', '130', '205', '255', '340']);
 const ISONOTE_OFFSETS = Object.freeze({
   '35': [-1.55, 1.18, 0.78],
   '130': [1.35, -0.58, 0.72],
@@ -40,13 +41,15 @@ const ISONOTE_OFFSETS = Object.freeze({
 export async function convertInputXmlToGlb(xmlText, options = {}) {
   const model = parseInputXml(xmlText, options);
   const scene = new THREE.Scene();
+  const requestedSupportMode = options.supportMode || 'inputxml-actual';
+  const supportMode = requestedSupportMode === 'compare' && options.enableExpectedIsonoteSupports !== true ? 'inputxml-actual' : requestedSupportMode;
   scene.name = 'InputXML_GLTF_SCENE';
   scene.userData = {
     app: 'inputxml-glb-standalone',
-    converterVersion: '1.2.3-bend-evidence-single-axis-annotations',
-    sourceMode: options.supportMode || 'compare',
+    converterVersion: '1.2.4-clean-default-view',
+    sourceMode: supportMode,
     lineNoMode: options.lineNoMode || 'sideload-first',
-    annotationRenderer: 'transparent-texture-single-axis-readable',
+    annotationRenderer: 'single-texture-plane-clean-default',
     generatedAt: new Date().toISOString()
   };
 
@@ -71,6 +74,8 @@ export async function convertInputXmlToGlb(xmlText, options = {}) {
     nodeAnnotations: 0,
     isonoteAnnotations: 0,
     componentMetadataUpdated: model.elements.length,
+    defaultSupportMode: 'inputxml-actual',
+    inferredElbowsDefault: 'disabled',
     options: { ...options }
   };
 
@@ -88,23 +93,22 @@ export async function convertInputXmlToGlb(xmlText, options = {}) {
       nodesGroup.add(dot);
       if (labels.has(String(node.id))) {
         const labelPos = p.clone().add(nodeLabelOffset(elementByNode, node.id));
-        const labelScale = String(node.id).length > 2 ? 1.25 : 1.4;
         const label = createReadableText(`N${node.id}`, {
-          width: 220,
-          height: 92,
-          fontSize: 64,
+          width: 140,
+          height: 58,
+          fontSize: 40,
           fg: '#ffe45c',
           bg: 'rgba(0,0,0,0)',
           border: 'rgba(0,0,0,0)',
           align: 'center',
-          scale: labelScale,
+          scale: 0.72,
           name: `NODE_ANNOTATION_${node.id}`,
           maxLineLength: 12
         });
         label.position.copy(labelPos);
-        label.userData = { TYPE: 'NODE_ANNOTATION', node: node.id, label: `N${node.id}`, source: 'InputXML node annotation', colorRole: 'node-yellow', annotationRenderer: 'single-axis-readable' };
-        const leader = cylinderBetween(p, labelPos, 0.018, nodeLeaderMat, 8, `NODE_ANNOTATION_LEADER_${node.id}`);
-        leader.userData = { TYPE: 'NODE_ANNOTATION_LEADER', node: node.id, annotationRenderer: 'single-axis-readable' };
+        label.userData = { TYPE: 'NODE_ANNOTATION', node: node.id, label: `N${node.id}`, source: 'InputXML node annotation', colorRole: 'node-yellow', annotationRenderer: 'single-plane-clean' };
+        const leader = cylinderBetween(p, labelPos, 0.012, nodeLeaderMat, 8, `NODE_ANNOTATION_LEADER_${node.id}`);
+        leader.userData = { TYPE: 'NODE_ANNOTATION_LEADER', node: node.id, annotationRenderer: 'single-plane-clean' };
         nodesGroup.add(leader, label);
         audit.nodeAnnotations += 1;
       }
@@ -113,14 +117,13 @@ export async function convertInputXmlToGlb(xmlText, options = {}) {
 
   if (options.isonoteBoards !== false) audit.isonoteAnnotations = createIsonoteAnnotations(model, annGroup, elementByNode);
 
-  const mode = options.supportMode || 'compare';
-  if (mode === 'inputxml-actual' || mode === 'compare') {
+  if (supportMode === 'inputxml-actual' || supportMode === 'compare') {
     for (const rec of normalizeInputXmlRestraints(model)) {
       const symbols = createSupportSymbols(model, rec, elementByNode, 'actual');
       symbols.forEach(s => { supportGroup.add(s); audit.supportSymbols.push(s.userData); });
     }
   }
-  if (mode === 'isonote-expected' || mode === 'compare') {
+  if (supportMode === 'isonote-expected' || supportMode === 'compare') {
     const isonoteRecords = parseIsonoteExpectedRecords(model, options);
     audit.isonoteRecords = isonoteRecords.length;
     for (const rec of isonoteRecords) {
@@ -174,6 +177,7 @@ function hasBendEvidence(element) {
 }
 
 function createCornerElbows(model, group, elementByNode, options = {}) {
+  if (options.enableInferredElbows !== true && options.elbowMode !== 'bend-evidence-corners') return 0;
   let count = 0;
   const radialSegments = options.compactMode === false ? 18 : 14;
   const tubularSegments = options.compactMode === false ? 42 : 30;
@@ -200,7 +204,7 @@ function createCornerElbows(model, group, elementByNode, options = {}) {
     const curve = new THREE.QuadraticBezierCurve3(start, p, end);
     const mesh = new THREE.Mesh(new THREE.TubeGeometry(curve, tubularSegments, pipeRadius, radialSegments, false), bendMat);
     mesh.name = `BEND_1P5D_NODE_${nodeId}_${count + 1}`;
-    mesh.userData = { TYPE: 'COMPONENT', ID: mesh.name, id: mesh.name, engineeringType: 'BEND_1P5D_CORNER', meshRole: 'BEND_1P5D_CORNER', node: nodeId, bendRadius: '1.5D', source: 'InputXML BEND evidence two-leg corner', fromElement: a.element.id, toElement: b.element.id };
+    mesh.userData = { TYPE: 'COMPONENT', ID: mesh.name, id: mesh.name, engineeringType: 'BEND_1P5D_CORNER', meshRole: 'BEND_1P5D_CORNER', node: nodeId, bendRadius: '1.5D', source: 'InputXML BEND evidence two-leg corner opt-in', fromElement: a.element.id, toElement: b.element.id };
     group.add(mesh);
     count += 1;
   }
@@ -315,8 +319,8 @@ function nodeLabelsToRender(model, options = {}) {
 function nodeLabelOffset(elementByNode, nodeId) {
   const tangent = localTangent(elementByNode, nodeId);
   const lateral = orthogonal(tangent);
-  const lift = ['205', '255'].includes(String(nodeId)) ? 1.0 : 0.75;
-  return lateral.multiplyScalar(1.15).add(new THREE.Vector3(0, lift, 0.52));
+  const lift = ['205', '255'].includes(String(nodeId)) ? 0.74 : 0.56;
+  return lateral.multiplyScalar(0.74).add(new THREE.Vector3(0, lift, 0.36));
 }
 
 function createIsonoteAnnotations(model, group, elementByNode) {
@@ -334,10 +338,10 @@ function createIsonoteAnnotations(model, group, elementByNode) {
     const summary = summarizeIsonote(note);
     const long = node === '205';
     const label = createReadableText(summary, {
-      width: long ? 980 : 780,
-      height: long ? 340 : 260,
-      fontSize: long ? 86 : 78,
-      scale: long ? 1.55 : 1.35,
+      width: long ? 900 : 700,
+      height: long ? 300 : 230,
+      fontSize: long ? 76 : 66,
+      scale: long ? 1.04 : 0.92,
       fg: '#e36af2',
       bg: 'rgba(0,0,0,0)',
       border: 'rgba(0,0,0,0)',
@@ -346,10 +350,10 @@ function createIsonoteAnnotations(model, group, elementByNode) {
       maxLineLength: long ? 30 : 28
     });
     label.position.copy(labelPos);
-    label.userData = { TYPE: 'ISONOTE_ANNOTATION', node, source: 'ISONOTE SIDELOAD', sideloaded: true, sourceNoteName: note, summary, colorRole: 'isonote-magenta', annotationRenderer: 'single-axis-readable' };
-    const leaderEnd = labelPos.clone().add(new THREE.Vector3(-0.22, -0.18, 0));
-    const leader = cylinderBetween(p, leaderEnd, 0.035, leaderMat, 8, `ISONOTE_ANNOTATION_LEADER_NODE_${node}`);
-    leader.userData = { TYPE: 'ISONOTE_LEADER', node, sourceNoteName: note, colorRole: 'isonote-magenta', annotationRenderer: 'single-axis-readable' };
+    label.userData = { TYPE: 'ISONOTE_ANNOTATION', node, source: 'ISONOTE SIDELOAD', sideloaded: true, sourceNoteName: note, summary, colorRole: 'isonote-magenta', annotationRenderer: 'single-plane-clean' };
+    const leaderEnd = labelPos.clone().add(new THREE.Vector3(-0.16, -0.14, 0));
+    const leader = cylinderBetween(p, leaderEnd, 0.024, leaderMat, 8, `ISONOTE_ANNOTATION_LEADER_NODE_${node}`);
+    leader.userData = { TYPE: 'ISONOTE_LEADER', node, sourceNoteName: note, colorRole: 'isonote-magenta', annotationRenderer: 'single-plane-clean' };
     group.add(leader, label);
     count += 1;
   }
@@ -357,16 +361,16 @@ function createIsonoteAnnotations(model, group, elementByNode) {
 }
 
 function createReadableText(text, options = {}) {
-  const plane = createTextPlane(text, options);
+  const plane = createTextPlane(text, { ...options, side: THREE.FrontSide });
   plane.name = options.name || 'READABLE_TEXT';
-  plane.userData = { TYPE: 'TEXT_ANNOTATION', text: String(text || ''), singleAxisReadable: true };
+  plane.userData = { TYPE: 'TEXT_ANNOTATION', text: String(text || ''), singleAxisReadable: true, singlePlane: true };
   return plane;
 }
 
 function autoIsonoteOffset(elementByNode, nodeId) {
   const tangent = localTangent(elementByNode, nodeId);
   const lateral = orthogonal(tangent);
-  return lateral.multiplyScalar(1.55).add(new THREE.Vector3(0, 1.18, 0.68));
+  return lateral.multiplyScalar(1.25).add(new THREE.Vector3(0, 0.94, 0.58));
 }
 
 function summarizeIsonote(note) {
