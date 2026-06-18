@@ -9,7 +9,6 @@ import {
   coneArrow,
   arrowToward,
   createTextPlane,
-  createNodeLabel,
   createWarningTriangle,
   createSpringCoil,
   orthogonal,
@@ -20,6 +19,7 @@ import {
 const SCALE = 0.01;
 const ANNOTATION_TEXT_SCALE = 5;
 const RESTRAINT_VISUAL_SCALE = 5;
+const CONTACT_SCALE = 1;
 const pipeMat = mat(COLORS.pipe);
 const rigidMat = mat(COLORS.rigid, { emissive: 0x00352f, emissiveIntensity: 0.05 });
 const bendMat = mat(COLORS.bend);
@@ -45,10 +45,10 @@ export async function convertInputXmlToGlb(xmlText, options = {}) {
   scene.name = 'InputXML_GLTF_SCENE';
   scene.userData = {
     app: 'inputxml-glb-standalone',
-    converterVersion: '1.2.1-corner-elbows-large-annotations',
+    converterVersion: '1.2.2-corner-elbows-stable-restraints-multiview-annotations',
     sourceMode: options.supportMode || 'compare',
     lineNoMode: options.lineNoMode || 'sideload-first',
-    annotationRenderer: 'transparent-texture-two-sided-readable',
+    annotationRenderer: 'transparent-texture-multi-view-readable',
     generatedAt: new Date().toISOString()
   };
 
@@ -90,12 +90,23 @@ export async function convertInputXmlToGlb(xmlText, options = {}) {
       nodesGroup.add(dot);
       if (labels.has(String(node.id))) {
         const labelPos = p.clone().add(nodeLabelOffset(elementByNode, node.id));
-        const labelScale = (String(node.id).length > 2 ? 0.24 : 0.28) * ANNOTATION_TEXT_SCALE;
-        const label = createNodeLabel(`N${node.id}`, labelPos, labelScale);
-        label.name = `NODE_ANNOTATION_${node.id}`;
-        label.userData = { TYPE: 'NODE_ANNOTATION', node: node.id, label: `N${node.id}`, source: 'InputXML node annotation', colorRole: 'node-yellow', annotationScale: `${ANNOTATION_TEXT_SCALE}x` };
-        const leader = cylinderBetween(p, labelPos, 0.01 * ANNOTATION_TEXT_SCALE, nodeLeaderMat, 8, `NODE_ANNOTATION_LEADER_${node.id}`);
-        leader.userData = { TYPE: 'NODE_ANNOTATION_LEADER', node: node.id, annotationScale: `${ANNOTATION_TEXT_SCALE}x` };
+        const labelScale = String(node.id).length > 2 ? 2.0 : 2.2;
+        const label = createMultiViewText(`N${node.id}`, {
+          width: 260,
+          height: 112,
+          fontSize: 72,
+          fg: '#ffe45c',
+          bg: 'rgba(0,0,0,0)',
+          border: 'rgba(0,0,0,0)',
+          align: 'center',
+          scale: labelScale,
+          name: `NODE_ANNOTATION_${node.id}`,
+          maxLineLength: 12
+        });
+        label.position.copy(labelPos);
+        label.userData = { TYPE: 'NODE_ANNOTATION', node: node.id, label: `N${node.id}`, source: 'InputXML node annotation', colorRole: 'node-yellow', annotationScale: 'large-readable' };
+        const leader = cylinderBetween(p, labelPos, 0.025, nodeLeaderMat, 8, `NODE_ANNOTATION_LEADER_${node.id}`);
+        leader.userData = { TYPE: 'NODE_ANNOTATION_LEADER', node: node.id, annotationScale: 'large-readable' };
         nodesGroup.add(leader, label);
         audit.nodeAnnotations += 1;
       }
@@ -146,29 +157,19 @@ function createElementGeometry(element, group, options) {
   const userData = buildComponentUserData(element);
   const rawType = String(element.rawType || element.type || 'PIPE').toUpperCase();
 
-  if (rawType.includes('VALVE')) {
-    group.add(createValveGeometry(a, b, radius, element, userData, rawType));
-    return;
-  }
-
-  if (rawType.includes('FLANGE PAIR')) {
-    group.add(createFlangePairGeometry(a, b, radius, element, userData));
-    return;
-  }
-
-  if (rawType.includes('FLANGE')) {
-    group.add(createFlangeGeometry(a, b, radius, element, userData));
-    return;
-  }
-
-  if (rawType !== 'PIPE' && rawType !== 'BEND') {
-    group.add(createRigidMarkerGeometry(a, b, radius, element, userData));
-    return;
-  }
+  if (rawType.includes('VALVE')) { group.add(createValveGeometry(a, b, radius, element, userData, rawType)); return; }
+  if (rawType.includes('FLANGE PAIR')) { group.add(createFlangePairGeometry(a, b, radius, element, userData)); return; }
+  if (rawType.includes('FLANGE')) { group.add(createFlangeGeometry(a, b, radius, element, userData)); return; }
+  if (rawType !== 'PIPE' && rawType !== 'BEND') { group.add(createRigidMarkerGeometry(a, b, radius, element, userData)); return; }
 
   const cyl = cylinderBetween(a, b, radius, pipeMat, options.compactMode === false ? 28 : 20, element.id);
   cyl.userData = { ...userData, meshRole: rawType === 'BEND' ? 'BEND_CENTERLINE_PIPE' : userData.meshRole };
   group.add(cyl);
+}
+
+function isPipeLikeElement(element) {
+  const raw = String(element.rawType || element.type || 'PIPE').toUpperCase();
+  return raw === 'PIPE' || raw === 'BEND';
 }
 
 function createCornerElbows(model, group, elementByNode, options = {}) {
@@ -178,40 +179,28 @@ function createCornerElbows(model, group, elementByNode, options = {}) {
   for (const node of model.nodes.values()) {
     const nodeId = String(node.id);
     const connected = (elementByNode.get(nodeId) || [])
+      .filter(isPipeLikeElement)
       .map((element) => ({ element, dir: directionAwayFromNode(element, nodeId), pipeRadius: Math.max(0.05, resolvedBoreMm(element, 100) * SCALE / 2) }))
       .filter((item) => item.dir && item.dir.lengthSq() > 1e-8);
-    if (connected.length < 2) continue;
+
+    if (connected.length !== 2) continue;
+
+    const [a, b] = connected;
+    const dot = THREE.MathUtils.clamp(a.dir.dot(b.dir), -1, 1);
+    const angleDeg = THREE.MathUtils.radToDeg(Math.acos(dot));
+    if (angleDeg < 45 || angleDeg > 135) continue;
+
     const p = vectorFrom(node, SCALE);
-    for (let i = 0; i < connected.length; i += 1) {
-      for (let j = i + 1; j < connected.length; j += 1) {
-        const a = connected[i];
-        const b = connected[j];
-        const dot = THREE.MathUtils.clamp(a.dir.dot(b.dir), -1, 1);
-        const angleDeg = THREE.MathUtils.radToDeg(Math.acos(dot));
-        if (angleDeg < 35 || angleDeg > 145) continue;
-        const pipeRadius = Math.max(a.pipeRadius, b.pipeRadius);
-        const elbowRadius = Math.max(pipeRadius * 3.0, 0.22);
-        const start = p.clone().add(a.dir.clone().multiplyScalar(elbowRadius));
-        const end = p.clone().add(b.dir.clone().multiplyScalar(elbowRadius));
-        const curve = new THREE.QuadraticBezierCurve3(start, p, end);
-        const mesh = new THREE.Mesh(new THREE.TubeGeometry(curve, tubularSegments, pipeRadius, radialSegments, false), bendMat);
-        mesh.name = `CORNER_ELBOW_1P5D_NODE_${nodeId}_${count + 1}`;
-        mesh.userData = {
-          TYPE: 'COMPONENT',
-          ID: mesh.name,
-          id: mesh.name,
-          engineeringType: 'BEND_1P5D_CORNER',
-          meshRole: 'CORNER_ELBOW_1P5D',
-          node: nodeId,
-          bendRadius: '1.5D',
-          source: 'InputXML inferred corner',
-          fromElement: a.element.id,
-          toElement: b.element.id
-        };
-        group.add(mesh);
-        count += 1;
-      }
-    }
+    const pipeRadius = Math.max(a.pipeRadius, b.pipeRadius);
+    const elbowRadius = Math.max(pipeRadius * 3.0, 0.22);
+    const start = p.clone().add(a.dir.clone().multiplyScalar(elbowRadius));
+    const end = p.clone().add(b.dir.clone().multiplyScalar(elbowRadius));
+    const curve = new THREE.QuadraticBezierCurve3(start, p, end);
+    const mesh = new THREE.Mesh(new THREE.TubeGeometry(curve, tubularSegments, pipeRadius, radialSegments, false), bendMat);
+    mesh.name = `CORNER_ELBOW_1P5D_NODE_${nodeId}_${count + 1}`;
+    mesh.userData = { TYPE: 'COMPONENT', ID: mesh.name, id: mesh.name, engineeringType: 'BEND_1P5D_CORNER', meshRole: 'CORNER_ELBOW_1P5D', node: nodeId, bendRadius: '1.5D', source: 'InputXML inferred two-leg corner', fromElement: a.element.id, toElement: b.element.id };
+    group.add(mesh);
+    count += 1;
   }
   return count;
 }
@@ -229,8 +218,7 @@ function directionAwayFromNode(element, nodeId) {
 }
 
 function createValveGeometry(a, b, radius, element, userData, rawType) {
-  const group = new THREE.Group();
-  group.name = element.id;
+  const group = new THREE.Group(); group.name = element.id;
   group.userData = { ...userData, meshRole: rawType.includes('FLANGED') ? 'VALVE_FLANGED_GROUP' : 'VALVE_GROUP' };
   const dir = b.clone().sub(a).normalize();
   const length = a.distanceTo(b);
@@ -252,56 +240,38 @@ function createValveGeometry(a, b, radius, element, userData, rawType) {
   const stem = cylinderBetween(stemStart, stemEnd, radius * 0.13, rigidMat, 12, `${element.id}_stem`);
   stem.userData = { ...userData, meshRole: 'VALVE_STEM' };
   const wheel = new THREE.Mesh(new THREE.TorusGeometry(radius * 0.62, radius * 0.045, 8, 32), rigidMat);
-  wheel.name = `${element.id}_handwheel`;
-  wheel.position.copy(stemEnd);
-  wheel.lookAt(stemEnd.clone().add(dir));
+  wheel.name = `${element.id}_handwheel`; wheel.position.copy(stemEnd); wheel.lookAt(stemEnd.clone().add(dir));
   wheel.userData = { ...userData, meshRole: 'VALVE_HANDWHEEL' };
   group.add(stem, wheel);
   return group;
 }
 
 function createFlangePairGeometry(a, b, radius, element, userData) {
-  const group = new THREE.Group();
-  group.name = element.id;
-  group.userData = { ...userData, meshRole: 'FLANGE_PAIR_GROUP' };
-  const dir = b.clone().sub(a).normalize();
-  const length = a.distanceTo(b);
-  const center = a.clone().add(b).multiplyScalar(0.5);
-  const core = cylinderBetween(a, b, radius * 0.82, rigidMat, 20, `${element.id}_pipe-core`);
-  core.userData = { ...userData, meshRole: 'FLANGE_PAIR_PIPE_CORE' };
+  const group = new THREE.Group(); group.name = element.id; group.userData = { ...userData, meshRole: 'FLANGE_PAIR_GROUP' };
+  const dir = b.clone().sub(a).normalize(); const length = a.distanceTo(b); const center = a.clone().add(b).multiplyScalar(0.5);
+  const core = cylinderBetween(a, b, radius * 0.82, rigidMat, 20, `${element.id}_pipe-core`); core.userData = { ...userData, meshRole: 'FLANGE_PAIR_PIPE_CORE' };
   const offset = Math.max(radius * 0.55, Math.min(length * 0.28, radius * 1.2));
   addFlangeDisc(group, center.clone().sub(dir.clone().multiplyScalar(offset)), dir, radius * 1.55, radius * 0.23, `${element.id}_flange-a`, userData);
   addFlangeDisc(group, center.clone().add(dir.clone().multiplyScalar(offset)), dir, radius * 1.55, radius * 0.23, `${element.id}_flange-b`, userData);
-  group.add(core);
-  return group;
+  group.add(core); return group;
 }
 
 function createFlangeGeometry(a, b, radius, element, userData) {
-  const group = new THREE.Group();
-  group.name = element.id;
-  group.userData = { ...userData, meshRole: 'FLANGE_GROUP' };
-  const dir = b.clone().sub(a).normalize();
-  const center = a.clone().add(b).multiplyScalar(0.5);
-  const core = cylinderBetween(a, b, radius * 0.82, rigidMat, 20, `${element.id}_pipe-core`);
-  core.userData = { ...userData, meshRole: 'FLANGE_PIPE_CORE' };
+  const group = new THREE.Group(); group.name = element.id; group.userData = { ...userData, meshRole: 'FLANGE_GROUP' };
+  const dir = b.clone().sub(a).normalize(); const center = a.clone().add(b).multiplyScalar(0.5);
+  const core = cylinderBetween(a, b, radius * 0.82, rigidMat, 20, `${element.id}_pipe-core`); core.userData = { ...userData, meshRole: 'FLANGE_PIPE_CORE' };
   addFlangeDisc(group, center, dir, radius * 1.62, radius * 0.28, `${element.id}_flange`, userData);
-  group.add(core);
-  return group;
+  group.add(core); return group;
 }
 
 function createRigidMarkerGeometry(a, b, radius, element, userData) {
-  const group = new THREE.Group();
-  group.name = element.id;
-  group.userData = { ...userData, meshRole: 'RIGID_GROUP' };
-  const dir = b.clone().sub(a).normalize();
-  const center = a.clone().add(b).multiplyScalar(0.5);
-  const core = cylinderBetween(a, b, radius * 0.86, rigidMat, 20, `${element.id}_pipe-core`);
-  core.userData = { ...userData, meshRole: 'RIGID_PIPE_CORE' };
+  const group = new THREE.Group(); group.name = element.id; group.userData = { ...userData, meshRole: 'RIGID_GROUP' };
+  const dir = b.clone().sub(a).normalize(); const center = a.clone().add(b).multiplyScalar(0.5);
+  const core = cylinderBetween(a, b, radius * 0.86, rigidMat, 20, `${element.id}_pipe-core`); core.userData = { ...userData, meshRole: 'RIGID_PIPE_CORE' };
   const markerHalf = Math.min(a.distanceTo(b) * 0.22, Math.max(radius * 1.1, 0.22));
   const marker = cylinderBetween(center.clone().sub(dir.clone().multiplyScalar(markerHalf)), center.clone().add(dir.clone().multiplyScalar(markerHalf)), radius * 1.28, rigidMat, 22, `${element.id}_rigid-marker`);
   marker.userData = { ...userData, meshRole: 'RIGID_MARKER' };
-  group.add(core, marker);
-  return group;
+  group.add(core, marker); return group;
 }
 
 function addFlangeDisc(group, center, dir, discRadius, thickness, name, userData) {
@@ -316,41 +286,7 @@ function buildComponentUserData(element) {
   const p = element.props;
   const resolved = (x) => typeof x === 'object' && x ? x.value : x;
   const source = (x) => typeof x === 'object' && x ? x.source : 'explicit';
-  return {
-    TYPE: 'COMPONENT',
-    ID: p.id,
-    id: p.id,
-    refNo: p.refNo,
-    engineeringType: p.type,
-    meshRole: p.meshRole,
-    lineNo: p.lineNo,
-    lineNoSource: p.lineNoSource,
-    fromNode: p.fromNode,
-    toNode: p.toNode,
-    bore: resolved(p.bore),
-    boreSource: source(p.bore),
-    boreMm: p.boreMm,
-    wallThickness: resolved(p.wallThickness),
-    wallThicknessSource: source(p.wallThickness),
-    materialThickness: resolved(p.materialThickness),
-    materialThicknessSource: source(p.materialThickness),
-    material: resolved(p.material),
-    materialSource: source(p.material),
-    pressure: resolved(p.pressure),
-    pressureSource: source(p.pressure),
-    hydroPressure: resolved(p.hydroPressure),
-    hydroPressureSource: source(p.hydroPressure),
-    temp1: resolved(p.temp1),
-    temp1Source: source(p.temp1),
-    temp2: resolved(p.temp2),
-    temp2Source: source(p.temp2),
-    temp3: resolved(p.temp3),
-    rigidType: p.rigidType,
-    rigidWeight: p.rigidWeight,
-    bendRadius: p.bendRadius,
-    bendAngle: p.bendAngle,
-    source: p.source
-  };
+  return { TYPE: 'COMPONENT', ID: p.id, id: p.id, refNo: p.refNo, engineeringType: p.type, meshRole: p.meshRole, lineNo: p.lineNo, lineNoSource: p.lineNoSource, fromNode: p.fromNode, toNode: p.toNode, bore: resolved(p.bore), boreSource: source(p.bore), boreMm: p.boreMm, wallThickness: resolved(p.wallThickness), wallThicknessSource: source(p.wallThickness), materialThickness: resolved(p.materialThickness), materialThicknessSource: source(p.materialThickness), material: resolved(p.material), materialSource: source(p.material), pressure: resolved(p.pressure), pressureSource: source(p.pressure), hydroPressure: resolved(p.hydroPressure), hydroPressureSource: source(p.hydroPressure), temp1: resolved(p.temp1), temp1Source: source(p.temp1), temp2: resolved(p.temp2), temp2Source: source(p.temp2), temp3: resolved(p.temp3), rigidType: p.rigidType, rigidWeight: p.rigidWeight, bendRadius: p.bendRadius, bendAngle: p.bendAngle, source: p.source };
 }
 
 function buildElementIndex(model) {
@@ -375,8 +311,8 @@ function nodeLabelsToRender(model, options = {}) {
 function nodeLabelOffset(elementByNode, nodeId) {
   const tangent = localTangent(elementByNode, nodeId);
   const lateral = orthogonal(tangent);
-  const lift = ['205', '255'].includes(String(nodeId)) ? 0.44 : 0.30;
-  return lateral.multiplyScalar(0.48 * ANNOTATION_TEXT_SCALE).add(new THREE.Vector3(0, lift * ANNOTATION_TEXT_SCALE, 0.24 * ANNOTATION_TEXT_SCALE));
+  const lift = ['205', '255'].includes(String(nodeId)) ? 1.0 : 0.75;
+  return lateral.multiplyScalar(1.15).add(new THREE.Vector3(0, lift, 0.52));
 }
 
 function createIsonoteAnnotations(model, group, elementByNode) {
@@ -388,17 +324,15 @@ function createIsonoteAnnotations(model, group, elementByNode) {
     const pos = nodePosition(model, node);
     if (!pos) continue;
     const p = vectorFrom(pos, SCALE);
-    const offset = ISONOTE_OFFSETS[node]
-      ? new THREE.Vector3(...ISONOTE_OFFSETS[node]).multiplyScalar(ANNOTATION_TEXT_SCALE)
-      : autoIsonoteOffset(elementByNode, node);
+    const offset = ISONOTE_OFFSETS[node] ? new THREE.Vector3(...ISONOTE_OFFSETS[node]) : autoIsonoteOffset(elementByNode, node);
     const labelPos = p.clone().add(offset);
     const summary = summarizeIsonote(note);
     const long = node === '205';
-    const label = createTextPlane(summary, {
-      width: (long ? 920 : 700) * ANNOTATION_TEXT_SCALE,
-      height: (long ? 300 : 220) * ANNOTATION_TEXT_SCALE,
-      fontSize: (long ? 54 : 48) * ANNOTATION_TEXT_SCALE,
-      scale: long ? 0.66 : 0.58,
+    const label = createMultiViewText(summary, {
+      width: long ? 980 : 780,
+      height: long ? 340 : 260,
+      fontSize: long ? 86 : 78,
+      scale: long ? 1.55 : 1.35,
       fg: '#e36af2',
       bg: 'rgba(0,0,0,0)',
       border: 'rgba(0,0,0,0)',
@@ -407,30 +341,38 @@ function createIsonoteAnnotations(model, group, elementByNode) {
       maxLineLength: long ? 30 : 28
     });
     label.position.copy(labelPos);
-    label.userData = {
-      TYPE: 'ISONOTE_ANNOTATION',
-      node,
-      source: 'ISONOTE SIDELOAD',
-      sideloaded: true,
-      sourceNoteName: note,
-      summary,
-      colorRole: 'isonote-magenta',
-      annotationScale: `${ANNOTATION_TEXT_SCALE}x`,
-      annotationRenderer: 'transparent-texture-two-sided-readable'
-    };
-    const leaderEnd = labelPos.clone().add(new THREE.Vector3(-0.16, -0.12, 0).multiplyScalar(ANNOTATION_TEXT_SCALE));
-    const leader = cylinderBetween(p, leaderEnd, 0.016 * ANNOTATION_TEXT_SCALE, leaderMat, 8, `ISONOTE_ANNOTATION_LEADER_NODE_${node}`);
-    leader.userData = { TYPE: 'ISONOTE_LEADER', node, sourceNoteName: note, colorRole: 'isonote-magenta', annotationScale: `${ANNOTATION_TEXT_SCALE}x` };
+    label.userData = { TYPE: 'ISONOTE_ANNOTATION', node, source: 'ISONOTE SIDELOAD', sideloaded: true, sourceNoteName: note, summary, colorRole: 'isonote-magenta', annotationScale: 'large-readable', annotationRenderer: 'transparent-texture-multi-view-readable' };
+    const leaderEnd = labelPos.clone().add(new THREE.Vector3(-0.22, -0.18, 0));
+    const leader = cylinderBetween(p, leaderEnd, 0.035, leaderMat, 8, `ISONOTE_ANNOTATION_LEADER_NODE_${node}`);
+    leader.userData = { TYPE: 'ISONOTE_LEADER', node, sourceNoteName: note, colorRole: 'isonote-magenta', annotationScale: 'large-readable' };
     group.add(leader, label);
     count += 1;
   }
   return count;
 }
 
+function createMultiViewText(text, options = {}) {
+  const group = new THREE.Group();
+  group.name = options.name || 'MULTI_VIEW_TEXT';
+  const views = [
+    { suffix: 'xy', rotation: [0, 0, 0] },
+    { suffix: 'yz', rotation: [0, Math.PI / 2, 0] },
+    { suffix: 'xz', rotation: [Math.PI / 2, 0, 0] }
+  ];
+  for (const view of views) {
+    const plane = createTextPlane(text, { ...options, name: `${group.name}_${view.suffix}` });
+    plane.rotation.set(...view.rotation);
+    plane.userData = { TYPE: 'TEXT_ANNOTATION_VIEW', text: String(text || ''), orientation: view.suffix };
+    group.add(plane);
+  }
+  group.userData = { TYPE: 'TEXT_ANNOTATION', text: String(text || ''), multiViewReadable: true };
+  return group;
+}
+
 function autoIsonoteOffset(elementByNode, nodeId) {
   const tangent = localTangent(elementByNode, nodeId);
   const lateral = orthogonal(tangent);
-  return lateral.multiplyScalar(1.55 * ANNOTATION_TEXT_SCALE).add(new THREE.Vector3(0, 1.18 * ANNOTATION_TEXT_SCALE, 0.68 * ANNOTATION_TEXT_SCALE));
+  return lateral.multiplyScalar(1.55).add(new THREE.Vector3(0, 1.18, 0.68));
 }
 
 function summarizeIsonote(note) {
@@ -457,14 +399,7 @@ function summarizeIsonote(note) {
 function normalizeInputXmlRestraints(model) {
   return model.restraints.map((r) => {
     const family = classifyByTypeCode(r.typeCode);
-    return {
-      ...r,
-      family,
-      sourceMode: 'ACTUAL_INPUTXML',
-      source: 'InputXML',
-      axis: axisFromCosines(r) || 'PIPE_AXIAL_±',
-      sourceNoteName: ''
-    };
+    return { ...r, family, sourceMode: 'ACTUAL_INPUTXML', source: 'InputXML', axis: axisFromCosines(r) || 'PIPE_AXIAL_±', sourceNoteName: '' };
   });
 }
 
@@ -479,7 +414,7 @@ function classifyByTypeCode(typeCode) {
 }
 
 function axisFromCosines(r) {
-  const axes = [ ['X', Math.abs(r.xCos || 0)], ['Y', Math.abs(r.yCos || 0)], ['Z', Math.abs(r.zCos || 0)] ];
+  const axes = [['X', Math.abs(r.xCos || 0)], ['Y', Math.abs(r.yCos || 0)], ['Z', Math.abs(r.zCos || 0)]];
   axes.sort((a, b) => b[1] - a[1]);
   if (axes[0][1] > 0.2) return `${(r[`${axes[0][0].toLowerCase()}Cos`] || 1) >= 0 ? '+' : '-'}${axes[0][0]}`;
   return null;
@@ -491,35 +426,20 @@ function createSupportSymbols(model, rec, elementByNode, sourceClass) {
   const p = vectorFrom(pos, SCALE);
   const tangent = localTangent(elementByNode, rec.node).normalize();
   const od = localOd(elementByNode, rec.node) * SCALE;
-  const contactRadius = od / 2;
-  const visualLane = od * 2 / 3 * RESTRAINT_VISUAL_SCALE;
+  const contactRadius = od / 2 * CONTACT_SCALE;
+  const visualLane = od * 2 / 3 * CONTACT_SCALE;
   const gap = Number.isFinite(rec.gapMm) ? rec.gapMm * SCALE * 10 : 0;
   const family = rec.family;
   const prefix = `${sourceClass.toUpperCase()}_${rec.node}_${family}`;
   const out = [];
   const addMeta = (obj, extra = {}) => {
-    obj.userData = {
-      TYPE: 'SUPPORT_RESTRAINT',
-      sourceClass,
-      source: rec.source,
-      sourceMode: rec.sourceMode,
-      node: rec.node,
-      family,
-      axis: rec.axis,
-      sign: rec.sign,
-      loadText: rec.loadText,
-      gapMm: rec.gapMm,
-      sourceNoteName: rec.sourceNoteName,
-      mappingContract: 'common-support-mapper-standalone',
-      visualScale: `${RESTRAINT_VISUAL_SCALE}x`,
-      ...extra
-    };
+    obj.userData = { TYPE: 'SUPPORT_RESTRAINT', sourceClass, source: rec.source, sourceMode: rec.sourceMode, node: rec.node, family, axis: rec.axis, sign: rec.sign, loadText: rec.loadText, gapMm: rec.gapMm, sourceNoteName: rec.sourceNoteName, mappingContract: 'common-support-mapper-standalone', visualScale: `${RESTRAINT_VISUAL_SCALE}x`, engineeringContactScale: '1x', ...extra };
     return obj;
   };
 
   if (family === 'REST') {
-    const start = p.clone().add(new THREE.Vector3(0, -contactRadius - gap - 0.55 * RESTRAINT_VISUAL_SCALE, 0));
-    out.push(addMeta(coneArrow(start, new THREE.Vector3(0, 1, 0), 0.8 * RESTRAINT_VISUAL_SCALE, 0.16 * RESTRAINT_VISUAL_SCALE, restMat, `${prefix}_REST_PLUS_Y`), { engineeringContact: 'OD/2', visualResolverApplied: false }));
+    const tip = p.clone().add(new THREE.Vector3(0, -contactRadius - gap, 0));
+    out.push(addMeta(arrowToward(tip, new THREE.Vector3(0, 1, 0), 0.8 * RESTRAINT_VISUAL_SCALE, 0.16 * RESTRAINT_VISUAL_SCALE, restMat, `${prefix}_REST_PLUS_Y`), { engineeringContact: 'OD/2', visualResolverApplied: false }));
   } else if (family === 'HOLDDOWN') {
     const upTip = p.clone().add(new THREE.Vector3(0, contactRadius + gap, 0));
     const downTip = p.clone().add(new THREE.Vector3(0, -contactRadius - gap, 0));
@@ -551,16 +471,16 @@ function createSupportSymbols(model, rec, elementByNode, sourceClass) {
   } else if (family === 'AXIS_RESTRAINT_UNRESOLVED') {
     const marker = createWarningTriangle('!', 0.35 * RESTRAINT_VISUAL_SCALE);
     marker.name = `${prefix}_UNRESOLVED_WARNING`;
-    marker.position.copy(p.clone().add(new THREE.Vector3(0.0, Math.max(0.85, od) * RESTRAINT_VISUAL_SCALE, 0.65 * RESTRAINT_VISUAL_SCALE)));
+    marker.position.copy(p.clone().add(new THREE.Vector3(0.0, Math.max(0.85, od), 0.65 * RESTRAINT_VISUAL_SCALE)));
     out.push(addMeta(marker, { popupRequired: true, warningText: rec.warningText || 'Axis sign required' }));
   } else if (family === 'AXIS_RESTRAINT') {
     const d = axisVector(rec.axis || '+X');
     const lane = Math.abs(d.dot(tangent)) > 0.85 ? orthogonal(tangent).multiplyScalar(visualLane) : new THREE.Vector3();
-    const start = p.clone().add(lane).sub(d.clone().multiplyScalar(0.1 * RESTRAINT_VISUAL_SCALE));
-    out.push(addMeta(coneArrow(start, d, 0.75 * RESTRAINT_VISUAL_SCALE, 0.13 * RESTRAINT_VISUAL_SCALE, lineMat, `${prefix}_AXIS_${rec.axis}`), { visualResolverApplied: lane.length() > 0 }));
+    const tip = p.clone().add(lane);
+    out.push(addMeta(arrowToward(tip, d, 0.75 * RESTRAINT_VISUAL_SCALE, 0.13 * RESTRAINT_VISUAL_SCALE, lineMat, `${prefix}_AXIS_${rec.axis}`), { visualResolverApplied: lane.length() > 0 }));
   } else if (family === 'SPRING_WARNING' || family === 'SPRING') {
-    const below = p.clone().add(new THREE.Vector3(0, -contactRadius - 0.85 * RESTRAINT_VISUAL_SCALE - gap, 0));
-    out.push(addMeta(createSpringCoil(below, tangent, 0.16 * RESTRAINT_VISUAL_SCALE, 0.9 * RESTRAINT_VISUAL_SCALE, springMat, `${prefix}_SPRING_COIL_BELOW_PIPE`), { warningText: rec.warningText || 'Spring / hanger', engineeringContact: 'below-pipe-clearance' }));
+    const below = p.clone().add(new THREE.Vector3(0, -contactRadius - 0.85 - gap, 0));
+    out.push(addMeta(createSpringCoil(below, new THREE.Vector3(0, 1, 0), 0.16 * RESTRAINT_VISUAL_SCALE, 0.9 * RESTRAINT_VISUAL_SCALE, springMat, `${prefix}_SPRING_COIL_VERTICAL_BELOW_PIPE`), { warningText: rec.warningText || 'Spring / hanger', engineeringContact: 'below-pipe-clearance', springAxis: 'vertical-Y' }));
   }
 
   if (sourceClass === 'expected' && out.length) {
@@ -576,9 +496,7 @@ function guideAxesForTangent(tangent) {
   return ['X', 'Z'];
 }
 
-function nodePosition(model, nodeId) {
-  return model.nodes.get(String(Number(nodeId))) || null;
-}
+function nodePosition(model, nodeId) { return model.nodes.get(String(Number(nodeId))) || null; }
 
 function localTangent(elementByNode, nodeId) {
   const els = elementByNode.get(String(Number(nodeId))) || [];
@@ -604,14 +522,9 @@ function frameScene(scene) {
 export function exportSceneToGlb(scene) {
   const exporter = new GLTFExporter();
   return new Promise((resolve, reject) => {
-    exporter.parse(
-      scene,
-      (result) => {
-        if (result instanceof ArrayBuffer) resolve(result);
-        else resolve(new TextEncoder().encode(JSON.stringify(result)).buffer);
-      },
-      (err) => reject(err),
-      { binary: true, includeCustomExtensions: false, trs: false, onlyVisible: true }
-    );
+    exporter.parse(scene, (result) => {
+      if (result instanceof ArrayBuffer) resolve(result);
+      else resolve(new TextEncoder().encode(JSON.stringify(result)).buffer);
+    }, (err) => reject(err), { binary: true, includeCustomExtensions: false, trs: false, onlyVisible: true });
   });
 }
