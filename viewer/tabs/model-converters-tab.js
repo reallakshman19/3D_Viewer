@@ -13,5 +13,5 @@
  * keeps the legacy entrypoint discoverable without duplicating runtime install
  * logic.
  */
-export { renderModelConvertersTab } from './model-converters/index.js';
+export { renderModelConvertersTab } from './model-converters/index.js?v=20260618-rvmattr-uxml-addon-1';
 export { installXmlCiiConversionWorkflowPopup } from './model-converters/xml-cii-conversion-workflow-popup.js';
