@@ -4,7 +4,8 @@ import {
   renderXmlCiiWorkflowProcessEnrichmentPanel,
 } from './xml-cii-conversion-workflow-direct-panels.js';
 
-const FLAG = '__xmlCiiConversionWorkflowPopup_direct_v5';
+const FLAG = '__xmlCiiConversionWorkflowPopup_direct_v6';
+const ROOT_ATTR = 'data-xml-cii-workflow-root';
 const ACTIVE_TAB_KEY = 'xmlCii2019.conversionWorkflow.activeTab.v2';
 const DIRECT_RUN_FLAG = '__xmlCiiConversionWorkflowAllowDirectRun';
 const XML_CII_CONVERTER_IDS = new Set(['xml_to_cii', 'inputxml_to_cii2019', 'xml_to_cii2019']);
@@ -30,6 +31,47 @@ function writeStored(key, value) {
   try {
     window.localStorage.setItem(key, value);
   } catch {}
+}
+
+function runtime() {
+  if (!window[FLAG]) {
+    window[FLAG] = {
+      documentClickInstalled: false,
+      stateByRoot: new WeakMap(),
+    };
+  }
+  return window[FLAG];
+}
+
+function rootElement(root = document) {
+  return root && root.nodeType === 1 ? root : document;
+}
+
+function markRoot(root) {
+  const element = rootElement(root);
+  if (element !== document) element.setAttribute(ROOT_ATTR, 'true');
+  return element;
+}
+
+function rootForNode(node) {
+  return node?.closest?.(`[${ROOT_ATTR}]`) || document;
+}
+
+function stateForRoot(root = document) {
+  const element = rootElement(root);
+  const rt = runtime();
+  let state = rt.stateByRoot.get(element);
+  if (!state) {
+    state = {
+      modal: null,
+      body: null,
+      activeTab: 'xml-model-data',
+      selectElement: null,
+      refreshButton: null,
+    };
+    rt.stateByRoot.set(element, state);
+  }
+  return state;
 }
 
 function activeConverterId(root = document) {
@@ -140,7 +182,7 @@ function renderActiveTab(root, state) {
   }
 }
 
-function openConversionWorkflow(root = document, state) {
+function openConversionWorkflow(root = document, state = stateForRoot(root)) {
   if (!browserReady()) return;
 
   if (state.modal) {
@@ -178,7 +220,7 @@ function applyWorkflowButtonVisibility(quickButton, xmlActive) {
   quickButton.setAttribute('aria-hidden', xmlActive ? 'false' : 'true');
 }
 
-function ensureWorkflowButton(root, state) {
+function ensureWorkflowButton(root, state = stateForRoot(root)) {
   const runButton = root.querySelector?.('#model-converters-run');
   if (!runButton) return;
 
@@ -201,28 +243,43 @@ function ensureWorkflowButton(root, state) {
   applyWorkflowButtonVisibility(quickButton, xmlActive);
 }
 
-export function installXmlCiiConversionWorkflowPopup(container = document) {
-  if (!browserReady() || window[FLAG]) return;
-
-  window[FLAG] = true;
-  const root = container || document;
-  const state = { modal: null, body: null, activeTab: 'xml-model-data' };
+function installDocumentRunIntercept() {
+  const rt = runtime();
+  if (rt.documentClickInstalled) return;
 
   const interceptRun = (event) => {
     const runButton = event.target?.closest?.('#model-converters-run');
     if (!runButton) return;
     if (window[DIRECT_RUN_FLAG]) return;
+
+    const root = rootForNode(runButton);
     if (!isXmlCiiActive(root)) return;
 
     event.preventDefault();
     event.stopPropagation();
     event.stopImmediatePropagation?.();
-    openConversionWorkflow(root, state);
+    openConversionWorkflow(root, stateForRoot(root));
   };
 
-  const refreshButton = () => setTimeout(() => ensureWorkflowButton(root, state), 0);
-
   document.addEventListener('click', interceptRun, true);
+  rt.documentClickInstalled = true;
+}
+
+export function installXmlCiiConversionWorkflowPopup(container = document) {
+  if (!browserReady()) return;
+
+  const root = markRoot(container || document);
+  const state = stateForRoot(root);
+  installDocumentRunIntercept();
+
+  const refreshButton = () => setTimeout(() => ensureWorkflowButton(root, state), 0);
+  const select = root.querySelector?.('#model-converters-select');
+  if (state.selectElement !== select) {
+    state.selectElement?.removeEventListener?.('change', state.refreshButton);
+    state.selectElement = select || null;
+    state.refreshButton = refreshButton;
+    select?.addEventListener('change', refreshButton);
+  }
+
   ensureWorkflowButton(root, state);
-  root.querySelector?.('#model-converters-select')?.addEventListener('change', refreshButton);
 }
