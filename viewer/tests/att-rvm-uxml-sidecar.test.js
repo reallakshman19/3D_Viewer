@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { runRvmAttrToXmlWithUxml, installRvmAttrUxmlAddon } from '../tabs/model-converters/rvmattr-uxml-addon.js';
-import { getConverterById } from '../tabs/model-converters/converter-registry.js';
+import { getConverterById } from '../tabs/model-converters/converter-registry.js?v=20260617-basic-glb-2';
 
 const attText = `
 NEW BRAN PE00001-BRANCH-001
@@ -58,6 +58,6 @@ assert.ok(
 
 installRvmAttrUxmlAddon();
 const converter = getConverterById('rvmattr_to_xml');
-assert.equal(converter.__rvmAttrUxmlAddonInstalled, true, 'UI addon should patch the existing converter object');
+assert.equal(converter.__rvmAttrUxmlAddonInstalled, true, 'UI addon should patch the active cache-keyed converter object');
 
 console.log('✅ att-rvm-uxml-sidecar.test.js passed');
