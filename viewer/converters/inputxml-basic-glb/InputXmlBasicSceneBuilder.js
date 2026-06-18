@@ -16,8 +16,22 @@ import {
 } from './InputXmlBasicGeometry.js';
 
 const SCALE = 0.01;
-const RESTRAINT_VISUAL_SCALE = 1.0;
 const CONTACT_SCALE = 1;
+const NATIVE_RESTRAINT_ARROW = Object.freeze({
+  restLength: 0.8,
+  restRadius: 0.16,
+  holdLength: 0.6,
+  holdRadius: 0.14,
+  guideLength: 0.62,
+  guideRadius: 0.13,
+  lineStopLength: 0.72,
+  lineStopRadius: 0.13,
+  axisLength: 0.75,
+  axisRadius: 0.13,
+  warningSize: 0.35,
+  springRadius: 0.16,
+  springHeight: 0.9
+});
 const pipeMat = mat(COLORS.pipe);
 const rigidMat = mat(COLORS.rigid, { emissive: 0x00352f, emissiveIntensity: 0.05 });
 const bendMat = mat(COLORS.bend);
@@ -41,12 +55,12 @@ const ISONOTE_OFFSETS = Object.freeze({
 export async function convertInputXmlToGlb(xmlText, options = {}) {
   const model = parseInputXml(xmlText, options);
   const scene = new THREE.Scene();
-  const requestedSupportMode = options.supportMode || 'inputxml-actual';
-  const supportMode = requestedSupportMode === 'compare' && options.enableExpectedIsonoteSupports !== true ? 'inputxml-actual' : requestedSupportMode;
+  const requestedSupportMode = options.supportMode || 'compare';
+  const supportMode = requestedSupportMode;
   scene.name = 'InputXML_GLTF_SCENE';
   scene.userData = {
     app: 'inputxml-glb-standalone',
-    converterVersion: '1.2.6-restored-restraints-node-elbows',
+    converterVersion: '1.2.7-restraint-logic-restored-no-scale',
     sourceMode: supportMode,
     lineNoMode: options.lineNoMode || 'sideload-first',
     annotationRenderer: 'stable-nameplate-texture-plane',
@@ -74,7 +88,8 @@ export async function convertInputXmlToGlb(xmlText, options = {}) {
     nodeAnnotations: 0,
     isonoteAnnotations: 0,
     componentMetadataUpdated: model.elements.length,
-    defaultSupportMode: 'inputxml-actual',
+    defaultSupportMode: 'compare',
+    restraintLogic: 'native-size-no-scale-actual-and-expected',
     inferredElbowsDefault: 'bend-evidence-corners',
     options: { ...options }
   };
@@ -403,12 +418,27 @@ function normalizeInputXmlRestraints(model) {
 
 function classifyByTypeCode(typeCode) {
   const t = String(typeCode || '').trim().toUpperCase();
+  if (!t || t === '-1.010100' || t === '-1.0101') return 'AXIS_RESTRAINT';
+  if (t.includes('ANCHOR') || t === '0') return 'ANCHOR';
+  if (t === '17' || t === '2' || t.includes('REST')) return 'REST';
   if (t === '7' || t.includes('GUIDE')) return 'GUIDE';
-  if (t === '1' || t.includes('ANCHOR')) return 'ANCHOR';
+  if (t === '10' || t.includes('STOP')) return 'LINE_STOP';
   if (t.includes('HANGER') || t.includes('SPRING')) return 'SPRING';
   if (t.includes('LIM') || t.includes('LIMIT')) return 'LIMIT';
-  if (t.includes('STOP') || t === '3') return 'LINE_STOP';
   return 'AXIS_RESTRAINT';
+}
+
+function actualRestraintFamily(rec, tangent) {
+  if (rec.source !== 'InputXML') return rec.family;
+  const t = String(rec.typeCode || '').trim().toUpperCase();
+  if (rec.family === 'ANCHOR') return 'ANCHOR';
+  if (rec.family === 'REST' || rec.family === 'GUIDE' || rec.family === 'LINE_STOP' || rec.family === 'LIMIT' || rec.family === 'SPRING') return rec.family;
+  const axis = axisVector(axisFromCosines(rec) || rec.axis || '+X');
+  const vertical = Math.abs(axis.y) > 0.75;
+  if (vertical) return 'REST';
+  const axial = Math.abs(axis.dot(tangent)) > 0.72;
+  if (axial || t === '10') return 'LINE_STOP';
+  return 'GUIDE';
 }
 
 function axisFromCosines(r) {
@@ -427,23 +457,34 @@ function createSupportSymbols(model, rec, elementByNode, sourceClass) {
   const contactRadius = od / 2 * CONTACT_SCALE;
   const visualLane = od * 2 / 3 * CONTACT_SCALE;
   const gap = Number.isFinite(rec.gapMm) ? rec.gapMm * SCALE * 10 : 0;
-  const family = rec.family;
+  const family = actualRestraintFamily(rec, tangent);
   const prefix = `${sourceClass.toUpperCase()}_${rec.node}_${family}`;
   const out = [];
   const addMeta = (obj, extra = {}) => {
-    obj.userData = { TYPE: 'SUPPORT_RESTRAINT', sourceClass, source: rec.source, sourceMode: rec.sourceMode, node: rec.node, family, axis: rec.axis, sign: rec.sign, loadText: rec.loadText, gapMm: rec.gapMm, sourceNoteName: rec.sourceNoteName, mappingContract: 'common-support-mapper-standalone', visualScale: `${RESTRAINT_VISUAL_SCALE}x`, engineeringContactScale: '1x', ...extra };
+    obj.userData = { TYPE: 'SUPPORT_RESTRAINT', sourceClass, source: rec.source, sourceMode: rec.sourceMode, node: rec.node, family, axis: rec.axis, sign: rec.sign, loadText: rec.loadText, gapMm: rec.gapMm, sourceNoteName: rec.sourceNoteName, mappingContract: 'common-support-mapper-standalone', visualScale: 'native', engineeringContactScale: '1x', ...extra };
     return obj;
   };
 
-  if (family === 'REST') {
+  if (family === 'ANCHOR') {
+    const g = new THREE.Group(); g.name = `${prefix}_ANCHOR_XYZ`;
+    for (const axisName of ['X', 'Y', 'Z']) {
+      const d = axisVector(`+${axisName}`);
+      const lane = axisName === 'Y' ? new THREE.Vector3() : orthogonal(tangent).multiplyScalar(visualLane * 0.35);
+      const plus = p.clone().add(lane).add(d.clone().multiplyScalar(contactRadius + gap));
+      const minus = p.clone().add(lane).add(d.clone().multiplyScalar(-contactRadius - gap));
+      g.add(arrowToward(plus, d.clone().multiplyScalar(-1), NATIVE_RESTRAINT_ARROW.guideLength, NATIVE_RESTRAINT_ARROW.guideRadius, guideMat, `anchor_plus_${axisName}`));
+      g.add(arrowToward(minus, d, NATIVE_RESTRAINT_ARROW.guideLength, NATIVE_RESTRAINT_ARROW.guideRadius, guideMat, `anchor_minus_${axisName}`));
+    }
+    out.push(addMeta(g, { engineeringContact: 'OD/2', anchorAxes: ['X', 'Y', 'Z'], visualResolverApplied: false }));
+  } else if (family === 'REST') {
     const tip = p.clone().add(new THREE.Vector3(0, -contactRadius - gap, 0));
-    out.push(addMeta(arrowToward(tip, new THREE.Vector3(0, 1, 0), 0.8 * RESTRAINT_VISUAL_SCALE, 0.16 * RESTRAINT_VISUAL_SCALE, restMat, `${prefix}_REST_PLUS_Y`), { engineeringContact: 'OD/2', visualResolverApplied: false }));
+    out.push(addMeta(arrowToward(tip, new THREE.Vector3(0, 1, 0), NATIVE_RESTRAINT_ARROW.restLength, NATIVE_RESTRAINT_ARROW.restRadius, restMat, `${prefix}_REST_PLUS_Y`), { engineeringContact: 'OD/2', visualResolverApplied: false }));
   } else if (family === 'HOLDDOWN') {
     const upTip = p.clone().add(new THREE.Vector3(0, contactRadius + gap, 0));
     const downTip = p.clone().add(new THREE.Vector3(0, -contactRadius - gap, 0));
     const g = new THREE.Group(); g.name = `${prefix}_HOLDDOWN_PM_Y`;
-    g.add(arrowToward(upTip, new THREE.Vector3(0, -1, 0), 0.6 * RESTRAINT_VISUAL_SCALE, 0.14 * RESTRAINT_VISUAL_SCALE, holdMat, 'holddown_down'));
-    g.add(arrowToward(downTip, new THREE.Vector3(0, 1, 0), 0.6 * RESTRAINT_VISUAL_SCALE, 0.14 * RESTRAINT_VISUAL_SCALE, holdMat, 'holddown_up'));
+    g.add(arrowToward(upTip, new THREE.Vector3(0, -1, 0), NATIVE_RESTRAINT_ARROW.holdLength, NATIVE_RESTRAINT_ARROW.holdRadius, holdMat, 'holddown_down'));
+    g.add(arrowToward(downTip, new THREE.Vector3(0, 1, 0), NATIVE_RESTRAINT_ARROW.holdLength, NATIVE_RESTRAINT_ARROW.holdRadius, holdMat, 'holddown_up'));
     out.push(addMeta(g, { engineeringContact: 'OD/2', visualResolverApplied: false }));
   } else if (family === 'GUIDE') {
     const guideAxes = guideAxesForTangent(tangent);
@@ -452,8 +493,8 @@ function createSupportSymbols(model, rec, elementByNode, sourceClass) {
       const d = axisVector(`+${ax}`);
       const tipPlus = p.clone().add(d.clone().multiplyScalar(contactRadius + gap));
       const tipMinus = p.clone().add(d.clone().multiplyScalar(-contactRadius - gap));
-      g.add(arrowToward(tipPlus, d.clone().multiplyScalar(-1), 0.62 * RESTRAINT_VISUAL_SCALE, 0.13 * RESTRAINT_VISUAL_SCALE, guideMat, `guide_plus_${ax}`));
-      g.add(arrowToward(tipMinus, d, 0.62 * RESTRAINT_VISUAL_SCALE, 0.13 * RESTRAINT_VISUAL_SCALE, guideMat, `guide_minus_${ax}`));
+      g.add(arrowToward(tipPlus, d.clone().multiplyScalar(-1), NATIVE_RESTRAINT_ARROW.guideLength, NATIVE_RESTRAINT_ARROW.guideRadius, guideMat, `guide_plus_${ax}`));
+      g.add(arrowToward(tipMinus, d, NATIVE_RESTRAINT_ARROW.guideLength, NATIVE_RESTRAINT_ARROW.guideRadius, guideMat, `guide_minus_${ax}`));
     }
     out.push(addMeta(g, { engineeringContact: 'OD/2', guideAxes, visualResolverApplied: false }));
   } else if (family === 'LINE_STOP' || family === 'LIMIT') {
@@ -463,22 +504,22 @@ function createSupportSymbols(model, rec, elementByNode, sourceClass) {
     const tipA = center.clone().add(tangent.clone().multiplyScalar(separation / 2));
     const tipB = center.clone().add(tangent.clone().multiplyScalar(-separation / 2));
     const g = new THREE.Group(); g.name = `${prefix}_${family}_AXIAL_PM`;
-    g.add(arrowToward(tipA, tangent.clone().multiplyScalar(-1), 0.72 * RESTRAINT_VISUAL_SCALE, 0.13 * RESTRAINT_VISUAL_SCALE, lineMat, `${family}_a`));
-    g.add(arrowToward(tipB, tangent, 0.72 * RESTRAINT_VISUAL_SCALE, 0.13 * RESTRAINT_VISUAL_SCALE, lineMat, `${family}_b`));
+    g.add(arrowToward(tipA, tangent.clone().multiplyScalar(-1), NATIVE_RESTRAINT_ARROW.lineStopLength, NATIVE_RESTRAINT_ARROW.lineStopRadius, lineMat, `${family}_a`));
+    g.add(arrowToward(tipB, tangent, NATIVE_RESTRAINT_ARROW.lineStopLength, NATIVE_RESTRAINT_ARROW.lineStopRadius, lineMat, `${family}_b`));
     out.push(addMeta(g, { engineeringContact: 'axial-corner-touch', visualResolverApplied: true, visualResolver: 'OD*2/3', axialGapVisual: gap }));
   } else if (family === 'AXIS_RESTRAINT_UNRESOLVED') {
-    const marker = createWarningTriangle('!', 0.35 * RESTRAINT_VISUAL_SCALE);
+    const marker = createWarningTriangle('!', NATIVE_RESTRAINT_ARROW.warningSize);
     marker.name = `${prefix}_UNRESOLVED_WARNING`;
-    marker.position.copy(p.clone().add(new THREE.Vector3(0.0, Math.max(0.85, od), 0.65 * RESTRAINT_VISUAL_SCALE)));
+    marker.position.copy(p.clone().add(new THREE.Vector3(0.0, Math.max(0.85, od), 0.65)));
     out.push(addMeta(marker, { popupRequired: true, warningText: rec.warningText || 'Axis sign required' }));
   } else if (family === 'AXIS_RESTRAINT') {
     const d = axisVector(rec.axis || '+X');
     const lane = Math.abs(d.dot(tangent)) > 0.85 ? orthogonal(tangent).multiplyScalar(visualLane) : new THREE.Vector3();
     const tip = p.clone().add(lane);
-    out.push(addMeta(arrowToward(tip, d, 0.75 * RESTRAINT_VISUAL_SCALE, 0.13 * RESTRAINT_VISUAL_SCALE, lineMat, `${prefix}_AXIS_${rec.axis}`), { visualResolverApplied: lane.length() > 0 }));
+    out.push(addMeta(arrowToward(tip, d, NATIVE_RESTRAINT_ARROW.axisLength, NATIVE_RESTRAINT_ARROW.axisRadius, lineMat, `${prefix}_AXIS_${rec.axis}`), { visualResolverApplied: lane.length() > 0 }));
   } else if (family === 'SPRING_WARNING' || family === 'SPRING') {
     const below = p.clone().add(new THREE.Vector3(0, -contactRadius - 0.85 - gap, 0));
-    out.push(addMeta(createSpringCoil(below, new THREE.Vector3(0, 1, 0), 0.16 * RESTRAINT_VISUAL_SCALE, 0.9 * RESTRAINT_VISUAL_SCALE, springMat, `${prefix}_SPRING_COIL_VERTICAL_BELOW_PIPE`), { warningText: rec.warningText || 'Spring / hanger', engineeringContact: 'below-pipe-clearance', springAxis: 'vertical-Y' }));
+    out.push(addMeta(createSpringCoil(below, new THREE.Vector3(0, 1, 0), NATIVE_RESTRAINT_ARROW.springRadius, NATIVE_RESTRAINT_ARROW.springHeight, springMat, `${prefix}_SPRING_COIL_VERTICAL_BELOW_PIPE`), { warningText: rec.warningText || 'Spring / hanger', engineeringContact: 'below-pipe-clearance', springAxis: 'vertical-Y' }));
   }
 
   if (sourceClass === 'expected' && out.length) out.forEach(o => o.traverse?.(child => { if (child.material?.color) child.material.opacity = 0.96; }));
