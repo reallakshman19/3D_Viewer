@@ -165,6 +165,14 @@ function makeTextCanvas(text, options = {}) {
   return canvas;
 }
 
+function mirroredPlaneGeometry(width, height) {
+  const geom = new THREE.PlaneGeometry(width, height);
+  const uv = geom.attributes.uv;
+  for (let i = 0; i < uv.count; i += 1) uv.setX(i, 1 - uv.getX(i));
+  uv.needsUpdate = true;
+  return geom;
+}
+
 export function createTextPlane(text, options = {}) {
   const {
     width = 512,
@@ -184,11 +192,6 @@ export function createTextPlane(text, options = {}) {
   const group = new THREE.Group();
   group.name = name;
 
-  // Nameplates must remain readable when the model is orbited.
-  // Use a single DoubleSide texture plane rather than duplicate front/back meshes;
-  // this avoids missing labels without reintroducing doubled/ghosted text.
-  const materialSide = THREE.DoubleSide;
-
   if (!hasCanvas()) {
     const fallback = new THREE.Mesh(
       new THREE.PlaneGeometry(w, h),
@@ -196,7 +199,7 @@ export function createTextPlane(text, options = {}) {
         color: Number(options.fallbackColor || 0xffffff),
         transparent: true,
         opacity: 0.0,
-        side: materialSide
+        side: THREE.FrontSide
       })
     );
     fallback.name = `${name}_fallback_no_canvas`;
@@ -212,22 +215,29 @@ export function createTextPlane(text, options = {}) {
   tex.magFilter = THREE.LinearFilter;
   tex.anisotropy = 4;
 
-  const material = new THREE.MeshBasicMaterial({
+  const makeMaterial = () => new THREE.MeshBasicMaterial({
     map: tex,
     transparent: true,
     alphaTest: 0.02,
     depthWrite,
     toneMapped: false,
-    side: materialSide
+    side: THREE.FrontSide
   });
-  const plane = new THREE.Mesh(new THREE.PlaneGeometry(w, h), material);
-  plane.name = `${name}_plane`;
-  group.add(plane);
+
+  const front = new THREE.Mesh(new THREE.PlaneGeometry(w, h), makeMaterial());
+  front.name = `${name}_front_readable`;
+  front.position.z = 0.001;
+  const back = new THREE.Mesh(mirroredPlaneGeometry(w, h), makeMaterial());
+  back.name = `${name}_back_readable`;
+  back.rotation.y = Math.PI;
+  back.position.z = -0.001;
+  group.add(front, back);
   group.userData = {
     TYPE: 'TEXT_ANNOTATION',
     text: String(text || ''),
-    textureSinglePlane: true,
-    doubleSidedNameplate: true,
+    stableNameplate: true,
+    twoReadableFaces: true,
+    mirroredBackUv: true,
     billboardCandidate: true
   };
   return group;
