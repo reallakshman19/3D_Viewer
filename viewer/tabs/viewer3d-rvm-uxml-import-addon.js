@@ -7,7 +7,7 @@ import {
   isUxmlDocument,
 } from '../rvm/UxmlToAvevaJsonAdapter.js?v=20260618-rvm-uxml-olet-bore-alias-1';
 
-const FLAG = '__RVM_UXML_IMPORT_ADDON_INSTALLED__';
+const FLAG = '__RVM_UXML_IMPORT_ADDON_OLET_BORE_ALIAS_V2__';
 
 function lowerName(fileOrName = '') {
   return String(fileOrName?.name || fileOrName || '').toLowerCase();
@@ -174,24 +174,6 @@ async function loadUxmlDocument(doc, fileName) {
   });
 }
 
-async function loadUxml(file) {
-  const text = await file.text();
-  const parsed = JSON.parse(text);
-  const doc = unwrapUxmlDocument(parsed);
-  if (!doc) throw new Error(`${file.name} is not a UXML topology document.`);
-  await loadUxmlDocument(doc, file.name);
-}
-
-function emitStandardJsonImport(fileName, json) {
-  const isBundleManifest = Boolean(json) && typeof json === 'object' && json.schemaVersion === 'rvm-bundle/v1';
-  emit(RuntimeEvents.FILE_LOADED, {
-    name: fileName,
-    source: 'rvm-tab',
-    payload: json,
-    kind: isBundleManifest ? 'bundle' : 'aveva-json',
-  });
-}
-
 async function importJsonLikeFiles(files = []) {
   let uxmlCount = 0;
   let passthroughCount = 0;
@@ -205,7 +187,13 @@ async function importJsonLikeFiles(files = []) {
       await loadUxmlDocument(doc, file.name);
     } else {
       passthroughCount += 1;
-      emitStandardJsonImport(file.name, parsed);
+      const isBundleManifest = Boolean(parsed) && typeof parsed === 'object' && parsed.schemaVersion === 'rvm-bundle/v1';
+      emit(RuntimeEvents.FILE_LOADED, {
+        name: file.name,
+        source: 'rvm-tab',
+        payload: parsed,
+        kind: isBundleManifest ? 'bundle' : 'aveva-json',
+      });
     }
   }
 
@@ -215,15 +203,14 @@ async function importJsonLikeFiles(files = []) {
 }
 
 function installInputHook() {
-  document.addEventListener('change', async (event) => {
+  window.addEventListener('change', async (event) => {
     const input = event.target?.closest?.('#rvm-universal-file-input');
     if (!input) return;
     const files = Array.from(input.files || []);
     const jsonLikeFiles = files.filter((file) => isJsonLikeName(file.name) || isUxmlName(file.name));
     if (!jsonLikeFiles.length) return;
 
-    // Capture JSON/UXML before the generic RVM tab handler. Without content sniffing,
-    // a renamed UXML sidecar can fall through as generic JSON and render as Node-1.
+    // Capture at window phase before older document-level JSON/UXML hooks can run.
     event.preventDefault();
     event.stopPropagation();
     event.stopImmediatePropagation?.();
