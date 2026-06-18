@@ -7,8 +7,11 @@ import {
 import {
   applyRvmSupportSymbolSettings,
   getRvmSupportSymbolSettings,
-} from '../rvm-viewer/RvmSupportSymbols.js?v=20260618-support-polish-1';
+} from '../rvm-viewer/RvmSupportSymbols.js?v=20260618-support-css-1';
 import '../rvm-viewer/RvmSupportIndexAttributeBridge.js?v=20260618-support-index-attrs-1';
+
+const SUPPORT_DEFAULT_SCALE = 1.0;
+const SUPPORT_MAX_LABELS = 16;
 
 function escapeHtml(value) {
   return String(value ?? '')
@@ -17,6 +20,19 @@ function escapeHtml(value) {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#039;');
+}
+
+function normalizeUiSupportScale(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return SUPPORT_DEFAULT_SCALE;
+  return Math.max(0.25, Math.min(2.0, n));
+}
+
+function initialSupportScale() {
+  const saved = Number(getRvmSupportSymbolSettings().scaleMultiplier);
+  // Old builds saved 3.00x, which floods the model. Reset only oversized saved values.
+  if (!Number.isFinite(saved) || saved > 2.0) return SUPPORT_DEFAULT_SCALE;
+  return normalizeUiSupportScale(saved);
 }
 
 function makeAsyncSession(statusEl) {
@@ -51,40 +67,197 @@ function parseJsonSource(text, fileName = '') {
   return doc;
 }
 
-async function loadJsonOrUxmlFile(file, viewer, statusEl) {
+function supportOptions(scaleMultiplier, labelsVisible) {
+  return {
+    scaleMultiplier: normalizeUiSupportScale(scaleMultiplier),
+    labelsVisible: Boolean(labelsVisible),
+    maxVisibleLabels: labelsVisible ? SUPPORT_MAX_LABELS : 0,
+    labelGridFactor: 2.2,
+  };
+}
+
+async function loadJsonOrUxmlFile(file, viewer, statusEl, scaleMultiplier, labelsVisible) {
   const text = await file.text();
   const source = parseJsonSource(text, file.name);
   const loader = new AvevaJsonLoader();
   const payload = await loader.load(source, {}, makeAsyncSession(statusEl));
   if (!payload?.gltf?.scene) throw new Error('RVM/AVEVA JSON loader produced no scene.');
   viewer.setModel(payload.gltf.scene, payload.manifest?.runtime?.upAxis || 'Z');
-  applyRvmSupportSymbolSettings(viewer, viewer.supportSymbolOptions || {});
+  applyRvmSupportSymbolSettings(viewer, supportOptions(scaleMultiplier, labelsVisible));
   return payload;
 }
 
 function renderShell(container) {
-  const scale = getRvmSupportSymbolSettings().scaleMultiplier;
+  const scale = initialSupportScale();
   container.innerHTML = `
-    <div class="rvm-viewer-root geo-theme-navisdark" data-rvm-viewer>
-      <div class="rvm-ribbon" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
-        <div class="rvm-ribbon-title" style="display:flex;align-items:center;gap:8px;min-width:260px;white-space:nowrap;">
-          <strong>3D RVM Viewer</strong>
-          <span style="opacity:.78;font-size:12px;">RVM / JSON / UXML</span>
+    <style>
+      .rvm-viewer-root {
+        height: calc(100vh - 48px);
+        min-height: 620px;
+        display: grid;
+        grid-template-rows: auto 1fr;
+        background: #07111d;
+        color: #dbeafe;
+        font: 12px/1.35 Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        overflow: hidden;
+      }
+      .rvm-topbar {
+        display: grid;
+        grid-template-columns: minmax(230px, auto) 1fr auto;
+        gap: 10px;
+        align-items: center;
+        padding: 8px 10px;
+        border-bottom: 1px solid rgba(96, 165, 250, .22);
+        background: linear-gradient(180deg, rgba(15, 33, 54, .98), rgba(6, 18, 31, .98));
+        box-shadow: 0 6px 18px rgba(0, 0, 0, .28);
+        position: relative;
+        z-index: 4;
+      }
+      .rvm-title {
+        display: flex;
+        align-items: baseline;
+        gap: 9px;
+        white-space: nowrap;
+        min-width: 0;
+      }
+      .rvm-title strong {
+        font-size: 13px;
+        font-weight: 800;
+        letter-spacing: .02em;
+        color: #f8fbff;
+      }
+      .rvm-title span {
+        color: #93a9c7;
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: .08em;
+        text-transform: uppercase;
+      }
+      .rvm-controls,
+      .rvm-actions {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex-wrap: wrap;
+        min-width: 0;
+      }
+      .rvm-actions { justify-content: flex-end; }
+      .rvm-chip,
+      .rvm-tool-btn,
+      .rvm-secondary-btn,
+      .rvm-file-btn {
+        height: 30px;
+        border-radius: 9px;
+        border: 1px solid rgba(93, 156, 220, .42);
+        background: rgba(16, 39, 65, .88);
+        color: #eaf4ff;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 0 10px;
+        font-weight: 750;
+        box-shadow: inset 0 1px 0 rgba(255,255,255,.08);
+      }
+      .rvm-tool-btn.is-active,
+      .rvm-secondary-btn.is-on {
+        background: linear-gradient(180deg, #2d8ee8, #176ab3);
+        border-color: rgba(125, 200, 255, .76);
+      }
+      .rvm-file-btn input {
+        max-width: 185px;
+        color: #dbeafe;
+        font-size: 11px;
+      }
+      .rvm-support-scale {
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
+        min-width: 238px;
+      }
+      .rvm-support-scale input { width: 112px; accent-color: #38bdf8; }
+      .rvm-support-scale output {
+        min-width: 44px;
+        text-align: right;
+        color: #f8fbff;
+        font-variant-numeric: tabular-nums;
+      }
+      .rvm-status {
+        min-width: min(720px, 52vw);
+        max-width: 100%;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        color: #b9d7ff;
+        font-weight: 650;
+      }
+      .rvm-canvas-shell {
+        position: relative;
+        min-height: 0;
+        overflow: hidden;
+        background: #050d18;
+      }
+      .rvm-canvas {
+        position: absolute;
+        inset: 0;
+      }
+      .rvm-side-panel {
+        position: absolute;
+        left: 12px;
+        bottom: 12px;
+        z-index: 3;
+        min-width: 210px;
+        max-width: 360px;
+        padding: 10px 12px;
+        border: 1px solid rgba(90, 145, 210, .32);
+        border-radius: 12px;
+        background: rgba(5, 13, 24, .78);
+        box-shadow: 0 10px 26px rgba(0,0,0,.34);
+      }
+      .rvm-side-panel h3 {
+        margin: 0 0 4px;
+        font-size: 11px;
+        letter-spacing: .08em;
+        text-transform: uppercase;
+        color: #93c5fd;
+      }
+      .rvm-side-panel pre {
+        margin: 0;
+        white-space: pre-wrap;
+        color: #dbeafe;
+        max-height: 160px;
+        overflow: auto;
+      }
+      .rvm-viewer-root.rvm-support-labels-off .rvm-support-symbol-label {
+        display: none !important;
+      }
+      .rvm-support-symbol-label {
+        pointer-events: none;
+        filter: drop-shadow(0 3px 8px rgba(0,0,0,.45));
+      }
+      @media (max-width: 1100px) {
+        .rvm-topbar { grid-template-columns: 1fr; }
+        .rvm-actions { justify-content: flex-start; }
+        .rvm-status { min-width: 0; }
+      }
+    </style>
+    <div class="rvm-viewer-root geo-theme-navisdark rvm-support-labels-off" data-rvm-viewer>
+      <div class="rvm-topbar">
+        <div class="rvm-title"><strong>3D RVM Viewer</strong><span>RVM / JSON / UXML</span></div>
+        <div class="rvm-controls" aria-label="RVM viewer controls">
+          <button class="rvm-tool-btn is-active" type="button">Orbit</button>
+          <button class="rvm-tool-btn" id="rvm-fit-all" type="button">Fit All</button>
+          <label class="rvm-file-btn">
+            <span>Load</span>
+            <input id="rvm-file-input" type="file" accept=".json,.uxml,.uxml.json" />
+          </label>
+          <label class="rvm-chip rvm-support-scale" title="Support symbol size multiplier">
+            <span>Support</span>
+            <input id="rvm-support-scale" type="range" min="0.25" max="2" step="0.25" value="${escapeHtml(scale)}" />
+            <output id="rvm-support-scale-value">${Number(scale).toFixed(2)}×</output>
+          </label>
+          <button id="rvm-support-labels" type="button" class="rvm-secondary-btn" aria-pressed="false">Labels Off</button>
         </div>
-        <div class="rvm-ribbon-section rvm-tool-group"><span class="rvm-ribbon-label">Navigate</span><div class="rvm-ribbon-button-row"><button class="rvm-tool-btn is-active" type="button">Orbit</button><button class="rvm-tool-btn" id="rvm-fit-all" type="button">Fit All</button></div></div>
-      </div>
-      <div class="rvm-toolbar" aria-label="RVM inputs" style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
-        <label class="rvm-file-btn">
-          <span>Load JSON/UXML</span>
-          <input id="rvm-file-input" type="file" accept=".json,.uxml,.uxml.json" />
-        </label>
-        <label class="support-scale-control" title="Support symbol size multiplier" style="display:flex;align-items:center;gap:6px;">
-          <span>Support scale</span>
-          <input id="rvm-support-scale" type="range" min="0.25" max="4" step="0.25" value="${escapeHtml(scale)}" />
-          <output id="rvm-support-scale-value">${Number(scale).toFixed(2)}×</output>
-        </label>
-        <button id="rvm-support-labels" type="button" class="rvm-secondary-btn" aria-pressed="false">Labels: Smart</button>
-        <div class="rvm-toolbar-status" id="rvm-status">Ready</div>
+        <div class="rvm-actions"><div class="rvm-status" id="rvm-status">Ready</div></div>
       </div>
       <div class="rvm-canvas-shell">
         <div id="rvm-canvas" class="rvm-canvas"></div>
@@ -97,6 +270,7 @@ function renderShell(container) {
 export function renderViewer3DRvm(container, ctx = {}) {
   renderShell(container);
 
+  const root = container.querySelector('[data-rvm-viewer]');
   const canvas = container.querySelector('#rvm-canvas');
   const statusEl = container.querySelector('#rvm-status');
   const fileInput = container.querySelector('#rvm-file-input');
@@ -109,15 +283,20 @@ export function renderViewer3DRvm(container, ctx = {}) {
   let labelsVisible = false;
   statusEl.textContent = 'Ready';
 
+  const currentScale = () => normalizeUiSupportScale(scaleInput.value);
+  const currentSupportOptions = () => supportOptions(currentScale(), labelsVisible);
+
   const refreshLabelButton = () => {
-    labelsBtn.textContent = labelsVisible ? 'Labels: Smart On' : 'Labels: Smart';
+    labelsBtn.textContent = labelsVisible ? `Labels Smart (${SUPPORT_MAX_LABELS})` : 'Labels Off';
+    labelsBtn.classList.toggle('is-on', labelsVisible);
     labelsBtn.setAttribute('aria-pressed', String(labelsVisible));
+    root.classList.toggle('rvm-support-labels-off', !labelsVisible);
   };
 
   const updateStatusWithDiagnostics = (fileName = '') => {
     const supportDiag = viewer.supportSymbolDiagnostics || {};
     const prefix = fileName ? `Loaded ${fileName}` : 'Supports updated';
-    statusEl.textContent = `${prefix}; supports=${supportDiag.created ?? 0}; labels=${supportDiag.labelCount ?? 0}/${supportDiag.maxVisibleLabels ?? 0}; indexAttrs=${viewer.supportIndexAttributeBridgeDiagnostics?.injected ?? 0}`;
+    statusEl.textContent = `${prefix}; supports=${supportDiag.created ?? 0}; labels=${labelsVisible ? `${supportDiag.labelCount ?? 0}/${supportDiag.maxVisibleLabels ?? 0}` : 'off'}; indexAttrs=${viewer.supportIndexAttributeBridgeDiagnostics?.injected ?? 0}`;
   };
 
   const onFile = async (event) => {
@@ -125,8 +304,8 @@ export function renderViewer3DRvm(container, ctx = {}) {
     if (!file) return;
     try {
       statusEl.textContent = `Loading ${file.name}`;
-      const payload = await loadJsonOrUxmlFile(file, viewer, statusEl);
-      applyRvmSupportSymbolSettings(viewer, { labelsVisible });
+      const payload = await loadJsonOrUxmlFile(file, viewer, statusEl, currentScale(), labelsVisible);
+      applyRvmSupportSymbolSettings(viewer, currentSupportOptions());
       updateStatusWithDiagnostics(file.name);
       ctx.emit?.('rvm-model-loaded', payload);
     } catch (error) {
@@ -136,16 +315,16 @@ export function renderViewer3DRvm(container, ctx = {}) {
   };
 
   const onScale = () => {
-    const value = Number(scaleInput.value);
+    const value = currentScale();
     scaleValue.textContent = `${value.toFixed(2)}×`;
-    applyRvmSupportSymbolSettings(viewer, { scaleMultiplier: value, labelsVisible });
+    applyRvmSupportSymbolSettings(viewer, currentSupportOptions());
     updateStatusWithDiagnostics();
   };
 
   const onLabels = () => {
     labelsVisible = !labelsVisible;
     refreshLabelButton();
-    applyRvmSupportSymbolSettings(viewer, { labelsVisible });
+    applyRvmSupportSymbolSettings(viewer, currentSupportOptions());
     updateStatusWithDiagnostics();
   };
 
