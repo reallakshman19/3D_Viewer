@@ -51,6 +51,7 @@ function installInputHook() {
 
     event.preventDefault();
     event.stopPropagation();
+    event.stopImmediatePropagation?.();
 
     try {
       for (const file of uxmlFiles) await loadUxml(file);
