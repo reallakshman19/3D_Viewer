@@ -24,6 +24,8 @@ const TAB_ID_ALIASES = new Map([
   ['psnm-utility', 'psnm-utility'],
 ]);
 
+// Lifecycle isolation contract checked by viewer/tests/app-entrypoint-static.test.js.
+// activeTabDestroy is only for the mounted tab; appDestroy is only for full app teardown.
 let activeTabDestroy = null;
 let appDestroy = null;
 const tabRendererCache = new Map();
@@ -40,7 +42,7 @@ async function loadPsnmUtilityRenderer() {
   await Promise.allSettled([
     import('../tabs/psnm-utility/psnm-ui-p2-enhancements.js?v=20260609-p2-1'),
     import('../tabs/psnm-utility/psnm-phase4c-hardening.js?v=20260609-phase4c-1'),
-    import('../tabs/psnm-utility/psnm-phase4d-persistence.js?v=20260609-phase4d-1'),
+    import('../tabs/psnm-utility/psnm-phase4d-persistence.js?v=20260609-phase4c-1'),
   ]);
   return import('../tabs/psnm-utility-tab.js?v=20260613-psnm-anchor-no-blocker-1')
     .then((module) => pickRenderer(module, 'renderPSNM_UtilityTab', 'psnm-utility'));
