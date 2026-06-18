@@ -16,7 +16,7 @@ import {
 } from './InputXmlBasicGeometry.js';
 
 const SCALE = 0.01;
-const RESTRAINT_VISUAL_SCALE = 1.2;
+const RESTRAINT_VISUAL_SCALE = 1.0;
 const CONTACT_SCALE = 1;
 const pipeMat = mat(COLORS.pipe);
 const rigidMat = mat(COLORS.rigid, { emissive: 0x00352f, emissiveIntensity: 0.05 });
@@ -46,7 +46,7 @@ export async function convertInputXmlToGlb(xmlText, options = {}) {
   scene.name = 'InputXML_GLTF_SCENE';
   scene.userData = {
     app: 'inputxml-glb-standalone',
-    converterVersion: '1.2.5-restored-restraints-nameplates',
+    converterVersion: '1.2.6-restored-restraints-node-elbows',
     sourceMode: supportMode,
     lineNoMode: options.lineNoMode || 'sideload-first',
     annotationRenderer: 'stable-nameplate-texture-plane',
@@ -75,12 +75,12 @@ export async function convertInputXmlToGlb(xmlText, options = {}) {
     isonoteAnnotations: 0,
     componentMetadataUpdated: model.elements.length,
     defaultSupportMode: 'inputxml-actual',
-    inferredElbowsDefault: 'disabled',
+    inferredElbowsDefault: 'bend-evidence-corners',
     options: { ...options }
   };
 
   for (const element of model.elements) createElementGeometry(element, pipesGroup, options);
-  audit.cornerElbows = createCornerElbows(model, pipesGroup, elementByNode, options);
+  audit.cornerElbows = createCornerElbows(model, pipesGroup, elementByNode, { ...options, elbowMode: options.elbowMode || 'bend-evidence-corners' });
 
   if (options.nodeLabels !== false) {
     const labels = nodeLabelsToRender(model, options);
@@ -93,15 +93,15 @@ export async function convertInputXmlToGlb(xmlText, options = {}) {
       nodesGroup.add(dot);
       if (labels.has(String(node.id))) {
         const labelPos = p.clone().add(nodeLabelOffset(elementByNode, node.id));
-        const label = createReadableText(`N${node.id}`, {
-          width: 140,
-          height: 58,
-          fontSize: 40,
+        const label = createReadableText(`NODE\n${node.id}`, {
+          width: 190,
+          height: 92,
+          fontSize: 42,
           fg: '#ffe45c',
-          bg: 'rgba(18,18,10,0.72)',
-          border: 'rgba(255,228,92,0.95)',
+          bg: 'rgba(8,14,24,0.84)',
+          border: '#ffe45c',
           align: 'center',
-          scale: 0.72,
+          scale: 0.90,
           name: `NODE_ANNOTATION_${node.id}`,
           maxLineLength: 12
         });
@@ -177,7 +177,7 @@ function hasBendEvidence(element) {
 }
 
 function createCornerElbows(model, group, elementByNode, options = {}) {
-  if (options.enableInferredElbows !== true && options.elbowMode !== 'bend-evidence-corners') return 0;
+  if (options.enableInferredElbows === false || options.elbowMode === 'off') return 0;
   let count = 0;
   const radialSegments = options.compactMode === false ? 18 : 14;
   const tubularSegments = options.compactMode === false ? 42 : 30;
@@ -204,7 +204,7 @@ function createCornerElbows(model, group, elementByNode, options = {}) {
     const curve = new THREE.QuadraticBezierCurve3(start, p, end);
     const mesh = new THREE.Mesh(new THREE.TubeGeometry(curve, tubularSegments, pipeRadius, radialSegments, false), bendMat);
     mesh.name = `BEND_1P5D_NODE_${nodeId}_${count + 1}`;
-    mesh.userData = { TYPE: 'COMPONENT', ID: mesh.name, id: mesh.name, engineeringType: 'BEND_1P5D_CORNER', meshRole: 'BEND_1P5D_CORNER', node: nodeId, bendRadius: '1.5D', source: 'InputXML BEND evidence two-leg corner opt-in', fromElement: a.element.id, toElement: b.element.id };
+    mesh.userData = { TYPE: 'COMPONENT', ID: mesh.name, id: mesh.name, engineeringType: 'BEND_1P5D_CORNER', meshRole: 'BEND_1P5D_CORNER', node: nodeId, bendRadius: '1.5D', source: 'InputXML BEND evidence two-leg corner default', fromElement: a.element.id, toElement: b.element.id };
     group.add(mesh);
     count += 1;
   }
