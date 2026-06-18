@@ -18,6 +18,8 @@ import {
 } from './InputXmlBasicGeometry.js';
 
 const SCALE = 0.01;
+const ANNOTATION_TEXT_SCALE = 5;
+const RESTRAINT_VISUAL_SCALE = 5;
 const pipeMat = mat(COLORS.pipe);
 const rigidMat = mat(COLORS.rigid, { emissive: 0x00352f, emissiveIntensity: 0.05 });
 const bendMat = mat(COLORS.bend);
@@ -43,7 +45,7 @@ export async function convertInputXmlToGlb(xmlText, options = {}) {
   scene.name = 'InputXML_GLTF_SCENE';
   scene.userData = {
     app: 'inputxml-glb-standalone',
-    converterVersion: '1.2.0-recovered-geometry-annotations',
+    converterVersion: '1.2.1-corner-elbows-large-annotations',
     sourceMode: options.supportMode || 'compare',
     lineNoMode: options.lineNoMode || 'sideload-first',
     annotationRenderer: 'transparent-texture-two-sided-readable',
@@ -67,6 +69,7 @@ export async function convertInputXmlToGlb(xmlText, options = {}) {
     inputXmlRestraints: model.restraints.length,
     isonoteRecords: 0,
     supportSymbols: [],
+    cornerElbows: 0,
     nodeAnnotations: 0,
     isonoteAnnotations: 0,
     componentMetadataUpdated: model.elements.length,
@@ -74,6 +77,7 @@ export async function convertInputXmlToGlb(xmlText, options = {}) {
   };
 
   for (const element of model.elements) createElementGeometry(element, pipesGroup, options);
+  audit.cornerElbows = createCornerElbows(model, pipesGroup, elementByNode, options);
 
   if (options.nodeLabels !== false) {
     const labels = nodeLabelsToRender(model, options);
@@ -86,12 +90,12 @@ export async function convertInputXmlToGlb(xmlText, options = {}) {
       nodesGroup.add(dot);
       if (labels.has(String(node.id))) {
         const labelPos = p.clone().add(nodeLabelOffset(elementByNode, node.id));
-        const labelScale = String(node.id).length > 2 ? 0.24 : 0.28;
+        const labelScale = (String(node.id).length > 2 ? 0.24 : 0.28) * ANNOTATION_TEXT_SCALE;
         const label = createNodeLabel(`N${node.id}`, labelPos, labelScale);
         label.name = `NODE_ANNOTATION_${node.id}`;
-        label.userData = { TYPE: 'NODE_ANNOTATION', node: node.id, label: `N${node.id}`, source: 'InputXML node annotation', colorRole: 'node-yellow' };
-        const leader = cylinderBetween(p, labelPos, 0.01, nodeLeaderMat, 8, `NODE_ANNOTATION_LEADER_${node.id}`);
-        leader.userData = { TYPE: 'NODE_ANNOTATION_LEADER', node: node.id };
+        label.userData = { TYPE: 'NODE_ANNOTATION', node: node.id, label: `N${node.id}`, source: 'InputXML node annotation', colorRole: 'node-yellow', annotationScale: `${ANNOTATION_TEXT_SCALE}x` };
+        const leader = cylinderBetween(p, labelPos, 0.01 * ANNOTATION_TEXT_SCALE, nodeLeaderMat, 8, `NODE_ANNOTATION_LEADER_${node.id}`);
+        leader.userData = { TYPE: 'NODE_ANNOTATION_LEADER', node: node.id, annotationScale: `${ANNOTATION_TEXT_SCALE}x` };
         nodesGroup.add(leader, label);
         audit.nodeAnnotations += 1;
       }
@@ -142,12 +146,6 @@ function createElementGeometry(element, group, options) {
   const userData = buildComponentUserData(element);
   const rawType = String(element.rawType || element.type || 'PIPE').toUpperCase();
 
-  if (element.type.includes('BEND') || element.props.bendRadius) {
-    const bend = createBendGeometry(a, b, radius, element, userData, options);
-    group.add(bend);
-    return;
-  }
-
   if (rawType.includes('VALVE')) {
     group.add(createValveGeometry(a, b, radius, element, userData, rawType));
     return;
@@ -169,32 +167,65 @@ function createElementGeometry(element, group, options) {
   }
 
   const cyl = cylinderBetween(a, b, radius, pipeMat, options.compactMode === false ? 28 : 20, element.id);
-  cyl.userData = userData;
+  cyl.userData = { ...userData, meshRole: rawType === 'BEND' ? 'BEND_CENTERLINE_PIPE' : userData.meshRole };
   group.add(cyl);
 }
 
-function createBendGeometry(a, b, radius, element, userData, options) {
-  const group = new THREE.Group();
-  group.name = element.id;
-  group.userData = { ...userData, meshRole: 'BEND_GROUP' };
-  const delta = b.clone().sub(a);
-  const length = delta.length();
-  if (length < 1e-6) return group;
-  const dir = delta.clone().normalize();
-  const lateral = orthogonal(dir);
-  const declaredRadius = numeric(element.props.bendRadius, radius / SCALE) * SCALE;
-  const bulge = Math.max(radius * 1.6, Math.min(length * 0.35, declaredRadius * 0.32));
-  const control = a.clone().add(b).multiplyScalar(0.5).add(lateral.multiplyScalar(bulge));
-  const curve = new THREE.QuadraticBezierCurve3(a, control, b);
-  const tube = new THREE.Mesh(new THREE.TubeGeometry(curve, options.compactMode === false ? 48 : 32, radius, options.compactMode === false ? 18 : 14, false), bendMat);
-  tube.name = `${element.id}_BEND_ARC`;
-  tube.userData = { ...userData, meshRole: 'BEND_ARC', bendRadius: element.props.bendRadius, bendAngle: element.props.bendAngle };
-  const marker = new THREE.Mesh(new THREE.SphereGeometry(radius * 1.05, 18, 12), bendMat);
-  marker.name = `${element.id}_BEND_NODE`;
-  marker.position.copy(b);
-  marker.userData = { ...userData, meshRole: 'BEND_MARKER' };
-  group.add(tube, marker);
-  return group;
+function createCornerElbows(model, group, elementByNode, options = {}) {
+  let count = 0;
+  const radialSegments = options.compactMode === false ? 18 : 14;
+  const tubularSegments = options.compactMode === false ? 42 : 30;
+  for (const node of model.nodes.values()) {
+    const nodeId = String(node.id);
+    const connected = (elementByNode.get(nodeId) || [])
+      .map((element) => ({ element, dir: directionAwayFromNode(element, nodeId), pipeRadius: Math.max(0.05, resolvedBoreMm(element, 100) * SCALE / 2) }))
+      .filter((item) => item.dir && item.dir.lengthSq() > 1e-8);
+    if (connected.length < 2) continue;
+    const p = vectorFrom(node, SCALE);
+    for (let i = 0; i < connected.length; i += 1) {
+      for (let j = i + 1; j < connected.length; j += 1) {
+        const a = connected[i];
+        const b = connected[j];
+        const dot = THREE.MathUtils.clamp(a.dir.dot(b.dir), -1, 1);
+        const angleDeg = THREE.MathUtils.radToDeg(Math.acos(dot));
+        if (angleDeg < 35 || angleDeg > 145) continue;
+        const pipeRadius = Math.max(a.pipeRadius, b.pipeRadius);
+        const elbowRadius = Math.max(pipeRadius * 3.0, 0.22);
+        const start = p.clone().add(a.dir.clone().multiplyScalar(elbowRadius));
+        const end = p.clone().add(b.dir.clone().multiplyScalar(elbowRadius));
+        const curve = new THREE.QuadraticBezierCurve3(start, p, end);
+        const mesh = new THREE.Mesh(new THREE.TubeGeometry(curve, tubularSegments, pipeRadius, radialSegments, false), bendMat);
+        mesh.name = `CORNER_ELBOW_1P5D_NODE_${nodeId}_${count + 1}`;
+        mesh.userData = {
+          TYPE: 'COMPONENT',
+          ID: mesh.name,
+          id: mesh.name,
+          engineeringType: 'BEND_1P5D_CORNER',
+          meshRole: 'CORNER_ELBOW_1P5D',
+          node: nodeId,
+          bendRadius: '1.5D',
+          source: 'InputXML inferred corner',
+          fromElement: a.element.id,
+          toElement: b.element.id
+        };
+        group.add(mesh);
+        count += 1;
+      }
+    }
+  }
+  return count;
+}
+
+function directionAwayFromNode(element, nodeId) {
+  const node = String(Number(nodeId));
+  const fromNode = String(Number(element.fromNode));
+  const toNode = String(Number(element.toNode));
+  if (node !== fromNode && node !== toNode) return null;
+  const here = vectorFrom(node === fromNode ? element.from : element.to, SCALE);
+  const other = vectorFrom(node === fromNode ? element.to : element.from, SCALE);
+  const dir = other.sub(here);
+  if (dir.lengthSq() < 1e-8) return null;
+  return dir.normalize();
 }
 
 function createValveGeometry(a, b, radius, element, userData, rawType) {
@@ -314,7 +345,6 @@ function buildComponentUserData(element) {
     temp2: resolved(p.temp2),
     temp2Source: source(p.temp2),
     temp3: resolved(p.temp3),
-    temp3Source: source(p.temp3),
     rigidType: p.rigidType,
     rigidWeight: p.rigidWeight,
     bendRadius: p.bendRadius,
@@ -346,7 +376,7 @@ function nodeLabelOffset(elementByNode, nodeId) {
   const tangent = localTangent(elementByNode, nodeId);
   const lateral = orthogonal(tangent);
   const lift = ['205', '255'].includes(String(nodeId)) ? 0.44 : 0.30;
-  return lateral.multiplyScalar(0.48).add(new THREE.Vector3(0, lift, 0.24));
+  return lateral.multiplyScalar(0.48 * ANNOTATION_TEXT_SCALE).add(new THREE.Vector3(0, lift * ANNOTATION_TEXT_SCALE, 0.24 * ANNOTATION_TEXT_SCALE));
 }
 
 function createIsonoteAnnotations(model, group, elementByNode) {
@@ -359,15 +389,15 @@ function createIsonoteAnnotations(model, group, elementByNode) {
     if (!pos) continue;
     const p = vectorFrom(pos, SCALE);
     const offset = ISONOTE_OFFSETS[node]
-      ? new THREE.Vector3(...ISONOTE_OFFSETS[node])
+      ? new THREE.Vector3(...ISONOTE_OFFSETS[node]).multiplyScalar(ANNOTATION_TEXT_SCALE)
       : autoIsonoteOffset(elementByNode, node);
     const labelPos = p.clone().add(offset);
     const summary = summarizeIsonote(note);
     const long = node === '205';
     const label = createTextPlane(summary, {
-      width: long ? 920 : 700,
-      height: long ? 300 : 220,
-      fontSize: long ? 54 : 48,
+      width: (long ? 920 : 700) * ANNOTATION_TEXT_SCALE,
+      height: (long ? 300 : 220) * ANNOTATION_TEXT_SCALE,
+      fontSize: (long ? 54 : 48) * ANNOTATION_TEXT_SCALE,
       scale: long ? 0.66 : 0.58,
       fg: '#e36af2',
       bg: 'rgba(0,0,0,0)',
@@ -385,11 +415,12 @@ function createIsonoteAnnotations(model, group, elementByNode) {
       sourceNoteName: note,
       summary,
       colorRole: 'isonote-magenta',
+      annotationScale: `${ANNOTATION_TEXT_SCALE}x`,
       annotationRenderer: 'transparent-texture-two-sided-readable'
     };
-    const leaderEnd = labelPos.clone().add(new THREE.Vector3(-0.16, -0.12, 0));
-    const leader = cylinderBetween(p, leaderEnd, 0.016, leaderMat, 8, `ISONOTE_ANNOTATION_LEADER_NODE_${node}`);
-    leader.userData = { TYPE: 'ISONOTE_LEADER', node, sourceNoteName: note, colorRole: 'isonote-magenta' };
+    const leaderEnd = labelPos.clone().add(new THREE.Vector3(-0.16, -0.12, 0).multiplyScalar(ANNOTATION_TEXT_SCALE));
+    const leader = cylinderBetween(p, leaderEnd, 0.016 * ANNOTATION_TEXT_SCALE, leaderMat, 8, `ISONOTE_ANNOTATION_LEADER_NODE_${node}`);
+    leader.userData = { TYPE: 'ISONOTE_LEADER', node, sourceNoteName: note, colorRole: 'isonote-magenta', annotationScale: `${ANNOTATION_TEXT_SCALE}x` };
     group.add(leader, label);
     count += 1;
   }
@@ -399,7 +430,7 @@ function createIsonoteAnnotations(model, group, elementByNode) {
 function autoIsonoteOffset(elementByNode, nodeId) {
   const tangent = localTangent(elementByNode, nodeId);
   const lateral = orthogonal(tangent);
-  return lateral.multiplyScalar(1.55).add(new THREE.Vector3(0, 1.18, 0.68));
+  return lateral.multiplyScalar(1.55 * ANNOTATION_TEXT_SCALE).add(new THREE.Vector3(0, 1.18 * ANNOTATION_TEXT_SCALE, 0.68 * ANNOTATION_TEXT_SCALE));
 }
 
 function summarizeIsonote(note) {
@@ -461,7 +492,7 @@ function createSupportSymbols(model, rec, elementByNode, sourceClass) {
   const tangent = localTangent(elementByNode, rec.node).normalize();
   const od = localOd(elementByNode, rec.node) * SCALE;
   const contactRadius = od / 2;
-  const visualLane = od * 2 / 3;
+  const visualLane = od * 2 / 3 * RESTRAINT_VISUAL_SCALE;
   const gap = Number.isFinite(rec.gapMm) ? rec.gapMm * SCALE * 10 : 0;
   const family = rec.family;
   const prefix = `${sourceClass.toUpperCase()}_${rec.node}_${family}`;
@@ -480,20 +511,21 @@ function createSupportSymbols(model, rec, elementByNode, sourceClass) {
       gapMm: rec.gapMm,
       sourceNoteName: rec.sourceNoteName,
       mappingContract: 'common-support-mapper-standalone',
+      visualScale: `${RESTRAINT_VISUAL_SCALE}x`,
       ...extra
     };
     return obj;
   };
 
   if (family === 'REST') {
-    const start = p.clone().add(new THREE.Vector3(0, -contactRadius - gap - 0.55, 0));
-    out.push(addMeta(coneArrow(start, new THREE.Vector3(0, 1, 0), 0.8, 0.16, restMat, `${prefix}_REST_PLUS_Y`), { engineeringContact: 'OD/2', visualResolverApplied: false }));
+    const start = p.clone().add(new THREE.Vector3(0, -contactRadius - gap - 0.55 * RESTRAINT_VISUAL_SCALE, 0));
+    out.push(addMeta(coneArrow(start, new THREE.Vector3(0, 1, 0), 0.8 * RESTRAINT_VISUAL_SCALE, 0.16 * RESTRAINT_VISUAL_SCALE, restMat, `${prefix}_REST_PLUS_Y`), { engineeringContact: 'OD/2', visualResolverApplied: false }));
   } else if (family === 'HOLDDOWN') {
     const upTip = p.clone().add(new THREE.Vector3(0, contactRadius + gap, 0));
     const downTip = p.clone().add(new THREE.Vector3(0, -contactRadius - gap, 0));
     const g = new THREE.Group(); g.name = `${prefix}_HOLDDOWN_PM_Y`;
-    g.add(arrowToward(upTip, new THREE.Vector3(0, -1, 0), 0.6, 0.14, holdMat, 'holddown_down'));
-    g.add(arrowToward(downTip, new THREE.Vector3(0, 1, 0), 0.6, 0.14, holdMat, 'holddown_up'));
+    g.add(arrowToward(upTip, new THREE.Vector3(0, -1, 0), 0.6 * RESTRAINT_VISUAL_SCALE, 0.14 * RESTRAINT_VISUAL_SCALE, holdMat, 'holddown_down'));
+    g.add(arrowToward(downTip, new THREE.Vector3(0, 1, 0), 0.6 * RESTRAINT_VISUAL_SCALE, 0.14 * RESTRAINT_VISUAL_SCALE, holdMat, 'holddown_up'));
     out.push(addMeta(g, { engineeringContact: 'OD/2', visualResolverApplied: false }));
   } else if (family === 'GUIDE') {
     const guideAxes = guideAxesForTangent(tangent);
@@ -502,8 +534,8 @@ function createSupportSymbols(model, rec, elementByNode, sourceClass) {
       const d = axisVector(`+${ax}`);
       const tipPlus = p.clone().add(d.clone().multiplyScalar(contactRadius + gap));
       const tipMinus = p.clone().add(d.clone().multiplyScalar(-contactRadius - gap));
-      g.add(arrowToward(tipPlus, d.clone().multiplyScalar(-1), 0.62, 0.13, guideMat, `guide_plus_${ax}`));
-      g.add(arrowToward(tipMinus, d, 0.62, 0.13, guideMat, `guide_minus_${ax}`));
+      g.add(arrowToward(tipPlus, d.clone().multiplyScalar(-1), 0.62 * RESTRAINT_VISUAL_SCALE, 0.13 * RESTRAINT_VISUAL_SCALE, guideMat, `guide_plus_${ax}`));
+      g.add(arrowToward(tipMinus, d, 0.62 * RESTRAINT_VISUAL_SCALE, 0.13 * RESTRAINT_VISUAL_SCALE, guideMat, `guide_minus_${ax}`));
     }
     out.push(addMeta(g, { engineeringContact: 'OD/2', guideAxes, visualResolverApplied: false }));
   } else if (family === 'LINE_STOP' || family === 'LIMIT') {
@@ -513,22 +545,22 @@ function createSupportSymbols(model, rec, elementByNode, sourceClass) {
     const tipA = center.clone().add(tangent.clone().multiplyScalar(separation / 2));
     const tipB = center.clone().add(tangent.clone().multiplyScalar(-separation / 2));
     const g = new THREE.Group(); g.name = `${prefix}_${family}_AXIAL_PM`;
-    g.add(arrowToward(tipA, tangent.clone().multiplyScalar(-1), 0.72, 0.13, lineMat, `${family}_a`));
-    g.add(arrowToward(tipB, tangent, 0.72, 0.13, lineMat, `${family}_b`));
+    g.add(arrowToward(tipA, tangent.clone().multiplyScalar(-1), 0.72 * RESTRAINT_VISUAL_SCALE, 0.13 * RESTRAINT_VISUAL_SCALE, lineMat, `${family}_a`));
+    g.add(arrowToward(tipB, tangent, 0.72 * RESTRAINT_VISUAL_SCALE, 0.13 * RESTRAINT_VISUAL_SCALE, lineMat, `${family}_b`));
     out.push(addMeta(g, { engineeringContact: 'axial-corner-touch', visualResolverApplied: true, visualResolver: 'OD*2/3', axialGapVisual: gap }));
   } else if (family === 'AXIS_RESTRAINT_UNRESOLVED') {
-    const marker = createWarningTriangle('!', 0.35);
+    const marker = createWarningTriangle('!', 0.35 * RESTRAINT_VISUAL_SCALE);
     marker.name = `${prefix}_UNRESOLVED_WARNING`;
-    marker.position.copy(p.clone().add(new THREE.Vector3(0.0, Math.max(0.85, od), 0.65)));
+    marker.position.copy(p.clone().add(new THREE.Vector3(0.0, Math.max(0.85, od) * RESTRAINT_VISUAL_SCALE, 0.65 * RESTRAINT_VISUAL_SCALE)));
     out.push(addMeta(marker, { popupRequired: true, warningText: rec.warningText || 'Axis sign required' }));
   } else if (family === 'AXIS_RESTRAINT') {
     const d = axisVector(rec.axis || '+X');
     const lane = Math.abs(d.dot(tangent)) > 0.85 ? orthogonal(tangent).multiplyScalar(visualLane) : new THREE.Vector3();
-    const start = p.clone().add(lane).sub(d.clone().multiplyScalar(0.1));
-    out.push(addMeta(coneArrow(start, d, 0.75, 0.13, lineMat, `${prefix}_AXIS_${rec.axis}`), { visualResolverApplied: lane.length() > 0 }));
+    const start = p.clone().add(lane).sub(d.clone().multiplyScalar(0.1 * RESTRAINT_VISUAL_SCALE));
+    out.push(addMeta(coneArrow(start, d, 0.75 * RESTRAINT_VISUAL_SCALE, 0.13 * RESTRAINT_VISUAL_SCALE, lineMat, `${prefix}_AXIS_${rec.axis}`), { visualResolverApplied: lane.length() > 0 }));
   } else if (family === 'SPRING_WARNING' || family === 'SPRING') {
-    const below = p.clone().add(new THREE.Vector3(0, -contactRadius - 0.85 - gap, 0));
-    out.push(addMeta(createSpringCoil(below, tangent, 0.16, 0.9, springMat, `${prefix}_SPRING_COIL_BELOW_PIPE`), { warningText: rec.warningText || 'Spring / hanger', engineeringContact: 'below-pipe-clearance' }));
+    const below = p.clone().add(new THREE.Vector3(0, -contactRadius - 0.85 * RESTRAINT_VISUAL_SCALE - gap, 0));
+    out.push(addMeta(createSpringCoil(below, tangent, 0.16 * RESTRAINT_VISUAL_SCALE, 0.9 * RESTRAINT_VISUAL_SCALE, springMat, `${prefix}_SPRING_COIL_BELOW_PIPE`), { warningText: rec.warningText || 'Spring / hanger', engineeringContact: 'below-pipe-clearance' }));
   }
 
   if (sourceClass === 'expected' && out.length) {
