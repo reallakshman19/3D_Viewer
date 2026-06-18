@@ -165,14 +165,6 @@ function makeTextCanvas(text, options = {}) {
   return canvas;
 }
 
-function flipU(geometry) {
-  const uv = geometry.getAttribute('uv');
-  if (!uv) return geometry;
-  for (let i = 0; i < uv.count; i += 1) uv.setX(i, 1 - uv.getX(i));
-  uv.needsUpdate = true;
-  return geometry;
-}
-
 export function createTextPlane(text, options = {}) {
   const {
     width = 512,
@@ -184,7 +176,8 @@ export function createTextPlane(text, options = {}) {
     border = 'rgba(0,0,0,0)',
     fontSize = 42,
     align = 'left',
-    depthWrite = false
+    depthWrite = false,
+    side = THREE.FrontSide
   } = options;
 
   const w = (width / 120) * scale;
@@ -193,7 +186,7 @@ export function createTextPlane(text, options = {}) {
   group.name = name;
 
   if (!hasCanvas()) {
-    const fallback = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshBasicMaterial({ color: Number(options.fallbackColor || 0xffffff), transparent: true, opacity: 0.0, side: THREE.DoubleSide }));
+    const fallback = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshBasicMaterial({ color: Number(options.fallbackColor || 0xffffff), transparent: true, opacity: 0.0, side }));
     fallback.name = `${name}_fallback_no_canvas`;
     group.add(fallback);
     return group;
@@ -207,13 +200,11 @@ export function createTextPlane(text, options = {}) {
   tex.magFilter = THREE.LinearFilter;
   tex.anisotropy = 4;
 
-  const baseMat = { map: tex, transparent: true, alphaTest: 0.02, depthWrite, toneMapped: false };
-  const front = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshBasicMaterial({ ...baseMat, side: THREE.FrontSide }));
-  front.name = `${name}_front`;
-  const back = new THREE.Mesh(flipU(new THREE.PlaneGeometry(w, h)), new THREE.MeshBasicMaterial({ ...baseMat, side: THREE.BackSide }));
-  back.name = `${name}_back`;
-  group.add(front, back);
-  group.userData = { TYPE: 'TEXT_ANNOTATION', text: String(text || ''), textureTwoSidedReadable: true };
+  const material = new THREE.MeshBasicMaterial({ map: tex, transparent: true, alphaTest: 0.02, depthWrite, toneMapped: false, side });
+  const plane = new THREE.Mesh(new THREE.PlaneGeometry(w, h), material);
+  plane.name = `${name}_plane`;
+  group.add(plane);
+  group.userData = { TYPE: 'TEXT_ANNOTATION', text: String(text || ''), textureSinglePlane: true, billboardCandidate: true };
   return group;
 }
 
