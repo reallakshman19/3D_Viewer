@@ -7,9 +7,12 @@ export const DEFAULT_ISONOTE = `NODE,ISONOTE
 export const DEFAULT_LINE_NO = `NODE,LINE_NO
 10,LINE XYZ`;
 
+const CAESAR_UNSET = -1.0101;
+
+function text(value) { return String(value ?? '').trim(); }
 function num(value, fallback = 0) {
   if (value == null || value === '') return fallback;
-  const n = Number(String(value).trim());
+  const n = Number(String(value).replace(/,/g, '').trim());
   return Number.isFinite(n) ? n : fallback;
 }
 
@@ -17,10 +20,25 @@ function attr(el, name, fallback = '') {
   return el.getAttribute(name) ?? el.getAttribute(name.toLowerCase()) ?? fallback;
 }
 
+function isCaesarUnsetNumber(value) {
+  if (value == null || value === '') return true;
+  const n = Number(String(value).replace(/,/g, '').trim());
+  return Number.isFinite(n) && Math.abs(n - CAESAR_UNSET) < 0.0002;
+}
+
 function isSentinel(value) {
   if (value == null || value === '') return true;
-  const n = Number(value);
-  return Number.isFinite(n) && n < 0;
+  return isCaesarUnsetNumber(value);
+}
+
+function deltaValue(raw) {
+  return isCaesarUnsetNumber(raw) ? 0 : num(raw, 0);
+}
+
+function resolvedNumber(field, fallback = 100) {
+  const value = typeof field === 'object' && field ? field.value : field;
+  const n = Number(String(value ?? '').replace(/,/g, '').trim());
+  return Number.isFinite(n) && n > 0 ? n : fallback;
 }
 
 function resolveField(raw, key, ctx) {
@@ -32,24 +50,55 @@ function resolveField(raw, key, ctx) {
   return { value: 'N/A', source: 'unavailable' };
 }
 
-export function parseLineNoSideload(text = '') {
+function csvCells(row) {
+  const out = [];
+  let cell = '';
+  let quote = '';
+  for (let i = 0; i < row.length; i += 1) {
+    const ch = row[i];
+    if (quote) {
+      if (ch === quote && row[i + 1] === quote) { cell += ch; i += 1; }
+      else if (ch === quote) quote = '';
+      else cell += ch;
+    } else if (ch === '"' || ch === "'") {
+      quote = ch;
+    } else if (ch === ',') {
+      out.push(cell.trim());
+      cell = '';
+    } else {
+      cell += ch;
+    }
+  }
+  out.push(cell.trim());
+  return out;
+}
+
+function stripQuotes(value) {
+  return text(value).replace(/^[\'"]|[\'"]$/g, '');
+}
+
+export function parseLineNoSideload(raw = '') {
   const out = new Map();
-  const rows = String(text || '').split(/\r?\n/).map(s => s.trim()).filter(Boolean);
+  const rows = String(raw || '').split(/\r?\n/).map(s => s.trim()).filter(Boolean);
   for (const row of rows) {
-    if (/^node\s*,/i.test(row)) continue;
-    const m = row.match(/^\s*(\d+)\s*,\s*(.+?)\s*$/);
-    if (m) out.set(String(Number(m[1])), m[2].trim().replace(/^['"]|['"]$/g, ''));
+    const cells = csvCells(row);
+    if (!cells.length || /^node$/i.test(cells[0])) continue;
+    const node = String(Number(cells[0]));
+    const lineNo = stripQuotes(cells[1] || '');
+    if (node !== 'NaN' && lineNo) out.set(node, lineNo);
   }
   return out;
 }
 
-export function parseIsonoteSideload(text = '') {
+export function parseIsonoteSideload(raw = '') {
   const out = new Map();
-  const rows = String(text || '').split(/\r?\n/).map(s => s.trim()).filter(Boolean);
+  const rows = String(raw || '').split(/\r?\n/).map(s => s.trim()).filter(Boolean);
   for (const row of rows) {
-    if (/^node\s*,/i.test(row)) continue;
-    const m = row.match(/^\s*(\d+)\s*,\s*(.+?)\s*$/);
-    if (m) out.set(String(Number(m[1])), m[2].trim().replace(/^"|"$/g, ''));
+    const cells = csvCells(row);
+    if (!cells.length || /^node$/i.test(cells[0])) continue;
+    const node = String(Number(cells[0]));
+    const note = stripQuotes(cells.slice(1).join(',').trim());
+    if (node !== 'NaN' && note) out.set(node, note);
   }
   return out;
 }
@@ -59,7 +108,8 @@ export function parseInputXml(xmlText, sideloads = {}) {
   const err = doc.querySelector('parsererror');
   if (err) throw new Error(`Invalid XML: ${err.textContent.slice(0, 220)}`);
 
-  const lineMap = parseLineNoSideload(sideloads.lineNoText || DEFAULT_LINE_NO);
+  const lineNoMode = sideloads.lineNoMode || 'sideload-first';
+  const lineMap = lineNoMode === 'none' ? new Map() : parseLineNoSideload(sideloads.lineNoText || DEFAULT_LINE_NO);
   const isonoteMap = parseIsonoteSideload(sideloads.isonoteText || DEFAULT_ISONOTE);
   for (const tag of Array.from(doc.getElementsByTagName('ISONOTE'))) {
     const node = attr(tag, 'NODE', '');
@@ -80,13 +130,23 @@ export function parseInputXml(xmlText, sideloads = {}) {
     return nodes.get(key);
   }
 
+  function inheritedLine(fromNode, toNode) {
+    const explicit = lineMap.get(fromNode) || lineMap.get(toNode) || null;
+    if (explicit) return { value: explicit, source: 'node-wise sideload' };
+    if (lineNoMode === 'single-fallback' || lineNoMode === 'sideload-first') {
+      const first = lineMap.values().next().value;
+      if (first) return { value: first, source: 'single-anchor sideload fallback' };
+    }
+    return { value: 'N/A', source: 'unavailable' };
+  }
+
   for (let i = 0; i < pipingElements.length; i += 1) {
     const el = pipingElements[i];
     const fromNode = String(Number(attr(el, 'FROM_NODE', String(i * 10 + 10))));
     const toNode = String(Number(attr(el, 'TO_NODE', String(i * 10 + 20))));
-    const dx = num(attr(el, 'DELTA_X', '0'));
-    const dy = num(attr(el, 'DELTA_Y', '0'));
-    const dz = num(attr(el, 'DELTA_Z', '0'));
+    const dx = deltaValue(attr(el, 'DELTA_X', '0'));
+    const dy = deltaValue(attr(el, 'DELTA_Y', '0'));
+    const dz = deltaValue(attr(el, 'DELTA_Z', '0'));
     const from = nodes.get(fromNode) || ensureNode(fromNode, fallbackCursor);
     const to = ensureNode(toNode, { x: from.x + dx, y: from.y + dy, z: from.z + dz });
     fallbackCursor = { x: to.x, y: to.y, z: to.z };
@@ -96,8 +156,8 @@ export function parseInputXml(xmlText, sideloads = {}) {
     const rawType = rigid ? attr(rigid, 'TYPE', 'Rigid') : bend ? 'BEND' : 'PIPE';
     const cleanType = rawType.toUpperCase().replace(/\s+/g, '_');
     const id = `PE_${String(i + 1).padStart(3, '0')}_${cleanType}_${fromNode}_TO_${toNode}`;
-    const explicitLine = lineMap.get(fromNode) || lineMap.get(toNode) || null;
-    const lineNo = explicitLine || lineMap.values().next().value || 'N/A';
+    const lineNo = inheritedLine(fromNode, toNode);
+    const bore = resolveField(attr(el, 'DIAMETER', ''), 'bore', compCtx);
 
     const props = {
       id,
@@ -106,9 +166,10 @@ export function parseInputXml(xmlText, sideloads = {}) {
       meshRole: rawType,
       fromNode,
       toNode,
-      lineNo,
-      lineNoSource: explicitLine ? 'node-wise sideload' : lineMap.size ? 'single-anchor sideload fallback' : 'N/A',
-      bore: attr(el, 'DIAMETER', 'N/A'),
+      lineNo: lineNo.value,
+      lineNoSource: lineNo.source,
+      bore,
+      boreMm: resolvedNumber(bore, 100),
       wallThickness: resolveField(attr(el, 'WALL_THICK', ''), 'wallThickness', compCtx),
       materialThickness: resolveField(attr(el, 'WALL_THICK', ''), 'materialThickness', compCtx),
       material: resolveField(attr(el, 'MATERIAL_NAME', ''), 'material', compCtx),
@@ -134,23 +195,24 @@ export function parseInputXml(xmlText, sideloads = {}) {
     typeCode: attr(r, 'TYPE', ''),
     rawType: attr(r, 'TYPE', ''),
     gapMm: parseGapValue(attr(r, 'GAP', '')),
-    xCos: num(attr(r, 'XCOSINE', '0')),
-    yCos: num(attr(r, 'YCOSINE', '0')),
-    zCos: num(attr(r, 'ZCOSINE', '0'))
-  }));
+    xCos: deltaValue(attr(r, 'XCOSINE', '0')),
+    yCos: deltaValue(attr(r, 'YCOSINE', '0')),
+    zCos: deltaValue(attr(r, 'ZCOSINE', '0'))
+  })).filter((r) => r.node !== '0' && r.node !== 'NaN' && text(r.typeCode));
 
   return { doc, elements, nodes, restraints, lineMap, isonoteMap };
 }
 
 export function parseGapValue(raw) {
   if (raw == null || raw === '') return null;
+  if (isCaesarUnsetNumber(raw)) return null;
   const n = Number(String(raw).trim());
   if (!Number.isFinite(n) || n < 0) return null;
   return n;
 }
 
-export function parseGapFromText(text) {
-  const m = String(text || '').match(/\bGAP\s*(?:=|:)?\s*(-?\d+(?:\.\d+)?)\s*(?:MM|MILLIMETER|MILLIMETERS)?\b/i);
+export function parseGapFromText(textValue) {
+  const m = String(textValue || '').match(/\bGAP\s*(?:=|:)?\s*(-?\d+(?:\.\d+)?)\s*(?:MM|MILLIMETER|MILLIMETERS)?\b/i);
   return m ? parseGapValue(m[1]) : null;
 }
 
@@ -173,31 +235,16 @@ export function parseIsonoteExpectedRecords(model, options = {}) {
     for (const clause of clauses) {
       const c = clause.toUpperCase();
       const gapMm = parseGapFromText(clause);
-      if (/REST\s*\(/.test(c) && !negRest) {
-        records.push(baseRec(node, note, 'REST', '+Y', loadFromClause(clause), gapMm));
-      }
-      if (/\bGUIDE\b/.test(c) && !negGuide) {
-        records.push(baseRec(node, note, 'GUIDE', 'LATERAL_DERIVED', loadFromClause(clause), gapMm));
-      }
-      if (/LINE\s*STOP/.test(c) && !negLineStop) {
-        records.push(baseRec(node, note, 'LINE_STOP', 'PIPE_AXIAL_±', loadFromClause(clause), gapMm));
-      }
-      if (/\bLIM\b|\bLIMIT\b/.test(c)) {
-        records.push(baseRec(node, note, 'LIMIT', 'PIPE_AXIAL_±', loadFromClause(clause), gapMm));
-      }
-      if (/HOLD\s*DOWN|HOLDDOWN/.test(c)) {
-        records.push(baseRec(node, note, 'HOLDDOWN', '±Y', loadFromClause(clause), gapMm));
-      }
-      if (/CAN\s+SPRING|SPRING\s+CAN/.test(c)) {
-        records.push({ ...baseRec(node, note, 'SPRING_WARNING', 'BELOW_PIPE', null, gapMm), sourceMode: 'WARNING_ISONOTE', warningText: 'Can Spring / Spring Can' });
-      }
+      if (/REST\s*\(/.test(c) && !negRest) records.push(baseRec(node, note, 'REST', '+Y', loadFromClause(clause), gapMm));
+      if (/\bGUIDE\b/.test(c) && !negGuide) records.push(baseRec(node, note, 'GUIDE', 'LATERAL_DERIVED', loadFromClause(clause), gapMm));
+      if (/LINE\s*STOP/.test(c) && !negLineStop) records.push(baseRec(node, note, 'LINE_STOP', 'PIPE_AXIAL_±', loadFromClause(clause), gapMm));
+      if (/\bLIM\b|\bLIMIT\b/.test(c)) records.push(baseRec(node, note, 'LIMIT', 'PIPE_AXIAL_±', loadFromClause(clause), gapMm));
+      if (/HOLD\s*DOWN|HOLDDOWN/.test(c)) records.push(baseRec(node, note, 'HOLDDOWN', '±Y', loadFromClause(clause), gapMm));
+      if (/CAN\s+SPRING|SPRING\s+CAN/.test(c)) records.push({ ...baseRec(node, note, 'SPRING_WARNING', 'BELOW_PIPE', null, gapMm), sourceMode: 'WARNING_ISONOTE', warningText: 'Can Spring / Spring Can' });
       const single = c.match(/SINGLE\s+AXIS\s+([XYZ])/);
       if (single) {
-        if (decision === 'warning') {
-          records.push({ ...baseRec(node, note, 'AXIS_RESTRAINT_UNRESOLVED', single[1], null, gapMm), popupRequired: true, warningText: `SINGLE AXIS ${single[1]} requires + or - sign` });
-        } else {
-          records.push({ ...baseRec(node, note, 'AXIS_RESTRAINT', `${decision}${single[1]}`, null, gapMm), popupRequired: false });
-        }
+        if (decision === 'warning') records.push({ ...baseRec(node, note, 'AXIS_RESTRAINT_UNRESOLVED', single[1], null, gapMm), popupRequired: true, warningText: `SINGLE AXIS ${single[1]} requires + or - sign` });
+        else records.push({ ...baseRec(node, note, 'AXIS_RESTRAINT', `${decision}${single[1]}`, null, gapMm), popupRequired: false });
       }
     }
   }
@@ -205,8 +252,9 @@ export function parseIsonoteExpectedRecords(model, options = {}) {
 }
 
 function baseRec(node, note, family, axis, loadText, gapMm) {
+  const key = `${node}_${family}_${axis}_${loadText || ''}_${gapMm ?? ''}`.replace(/[^a-z0-9_+-]+/gi, '_');
   return {
-    id: `ISONOTE_${node}_${family}_${Math.random().toString(36).slice(2, 8)}`,
+    id: `ISONOTE_${key}`,
     source: 'ISONOTE',
     sourceMode: 'EXPECTED_RESTRAINT',
     node: String(Number(node)),
