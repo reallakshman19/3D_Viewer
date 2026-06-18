@@ -51,10 +51,10 @@ async function loadPsnmUtilityRenderer() {
 async function loadRvmViewerRenderer() {
   await import('../rvm/RvmFileLoadedBridge.js?v=20260618-modular-rvm-file-loaded-1');
   await import('../rvm/AvevaJsonVisibleFallbackPatch.js?v=20260618-staged-visible-fallback-1');
-  await import('../rvm-viewer/RvmSupportSymbols.js?v=20260618-rvm-rich-ui-support-kind-1');
-  await import('../rvm-viewer/RvmSupportIndexAttributeBridge.js?v=20260618-rvm-rich-ui-support-kind-1');
-  await import('../tabs/viewer3d-rvm-uxml-import-addon.js?v=20260618-rvm-rich-ui-support-kind-1');
-  return import('../tabs/viewer3d-rvm-tab.js?v=20260618-rvm-rich-ui-support-kind-1')
+  await import('../rvm-viewer/RvmSupportSymbols.js?v=20260618-support-kind-authority-1');
+  await import('../rvm-viewer/RvmSupportIndexAttributeBridge.js?v=20260618-support-kind-authority-1');
+  await import('../tabs/viewer3d-rvm-uxml-import-addon.js?v=20260618-support-kind-authority-1');
+  return import('../tabs/viewer3d-rvm-tab.js?v=20260618-support-kind-authority-1')
     .then((module) => pickRenderer(module, 'renderViewer3DRvm', 'viewer3d-rvm'));
 }
 
