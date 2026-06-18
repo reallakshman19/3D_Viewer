@@ -16,7 +16,7 @@ import {
 } from './InputXmlBasicGeometry.js';
 
 const SCALE = 0.01;
-const RESTRAINT_VISUAL_SCALE = 5;
+const RESTRAINT_VISUAL_SCALE = 1.2;
 const CONTACT_SCALE = 1;
 const pipeMat = mat(COLORS.pipe);
 const rigidMat = mat(COLORS.rigid, { emissive: 0x00352f, emissiveIntensity: 0.05 });
@@ -46,10 +46,10 @@ export async function convertInputXmlToGlb(xmlText, options = {}) {
   scene.name = 'InputXML_GLTF_SCENE';
   scene.userData = {
     app: 'inputxml-glb-standalone',
-    converterVersion: '1.2.4-clean-default-view',
+    converterVersion: '1.2.5-restored-restraints-nameplates',
     sourceMode: supportMode,
     lineNoMode: options.lineNoMode || 'sideload-first',
-    annotationRenderer: 'single-texture-plane-clean-default',
+    annotationRenderer: 'stable-nameplate-texture-plane',
     generatedAt: new Date().toISOString()
   };
 
@@ -98,17 +98,17 @@ export async function convertInputXmlToGlb(xmlText, options = {}) {
           height: 58,
           fontSize: 40,
           fg: '#ffe45c',
-          bg: 'rgba(0,0,0,0)',
-          border: 'rgba(0,0,0,0)',
+          bg: 'rgba(18,18,10,0.72)',
+          border: 'rgba(255,228,92,0.95)',
           align: 'center',
           scale: 0.72,
           name: `NODE_ANNOTATION_${node.id}`,
           maxLineLength: 12
         });
         label.position.copy(labelPos);
-        label.userData = { TYPE: 'NODE_ANNOTATION', node: node.id, label: `N${node.id}`, source: 'InputXML node annotation', colorRole: 'node-yellow', annotationRenderer: 'single-plane-clean' };
+        label.userData = { TYPE: 'NODE_ANNOTATION', node: node.id, label: `N${node.id}`, source: 'InputXML node annotation', colorRole: 'node-yellow', annotationRenderer: 'stable-nameplate-texture-plane' };
         const leader = cylinderBetween(p, labelPos, 0.012, nodeLeaderMat, 8, `NODE_ANNOTATION_LEADER_${node.id}`);
-        leader.userData = { TYPE: 'NODE_ANNOTATION_LEADER', node: node.id, annotationRenderer: 'single-plane-clean' };
+        leader.userData = { TYPE: 'NODE_ANNOTATION_LEADER', node: node.id, annotationRenderer: 'stable-nameplate-texture-plane' };
         nodesGroup.add(leader, label);
         audit.nodeAnnotations += 1;
       }
@@ -343,17 +343,17 @@ function createIsonoteAnnotations(model, group, elementByNode) {
       fontSize: long ? 76 : 66,
       scale: long ? 1.04 : 0.92,
       fg: '#e36af2',
-      bg: 'rgba(0,0,0,0)',
-      border: 'rgba(0,0,0,0)',
+      bg: 'rgba(20,8,24,0.74)',
+      border: 'rgba(227,106,242,0.95)',
       align: 'left',
       name: `ISONOTE_ANNOTATION_NODE_${node}`,
       maxLineLength: long ? 30 : 28
     });
     label.position.copy(labelPos);
-    label.userData = { TYPE: 'ISONOTE_ANNOTATION', node, source: 'ISONOTE SIDELOAD', sideloaded: true, sourceNoteName: note, summary, colorRole: 'isonote-magenta', annotationRenderer: 'single-plane-clean' };
+    label.userData = { TYPE: 'ISONOTE_ANNOTATION', node, source: 'ISONOTE SIDELOAD', sideloaded: true, sourceNoteName: note, summary, colorRole: 'isonote-magenta', annotationRenderer: 'stable-nameplate-texture-plane' };
     const leaderEnd = labelPos.clone().add(new THREE.Vector3(-0.16, -0.14, 0));
     const leader = cylinderBetween(p, leaderEnd, 0.024, leaderMat, 8, `ISONOTE_ANNOTATION_LEADER_NODE_${node}`);
-    leader.userData = { TYPE: 'ISONOTE_LEADER', node, sourceNoteName: note, colorRole: 'isonote-magenta', annotationRenderer: 'single-plane-clean' };
+    leader.userData = { TYPE: 'ISONOTE_LEADER', node, sourceNoteName: note, colorRole: 'isonote-magenta', annotationRenderer: 'stable-nameplate-texture-plane' };
     group.add(leader, label);
     count += 1;
   }
