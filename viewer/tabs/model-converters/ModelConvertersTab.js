@@ -57,16 +57,25 @@ function removeDeprecatedConverterOptions(container) {
   else trace('deprecated rich GLB option absent', { selects: selects.length });
 }
 
+function installSafely(name, installer, container) {
+  try {
+    trace('install start', { installer: name });
+    installer(container);
+    trace('install done', { installer: name });
+  } catch (error) {
+    console.warn(`Optional installer failed: ${name}`, error);
+    trace('install failed', { installer: name, error: error?.message || String(error) });
+  }
+}
+
+function scheduleInstaller(name, installer, container) {
+  const run = () => installSafely(name, installer, container);
+  setTimeout(run, 0);
+}
+
 function runInstallers(container) {
   for (const [name, installer] of MODEL_CONVERTER_INSTALLERS) {
-    try {
-      trace('install start', { installer: name });
-      installer(container);
-      trace('install done', { installer: name });
-    } catch (err) {
-      console.warn(`Model converter installer failed: ${name}`, err);
-      trace('install failed', { installer: name, error: err?.message || String(err) });
-    }
+    scheduleInstaller(name, installer, container);
   }
 }
 
