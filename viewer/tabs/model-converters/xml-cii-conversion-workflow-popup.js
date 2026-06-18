@@ -4,11 +4,11 @@ import {
   renderXmlCiiWorkflowProcessEnrichmentPanel,
 } from './xml-cii-conversion-workflow-direct-panels.js';
 
-const FLAG = '__xmlCiiConversionWorkflowPopup_direct_v6';
+const FLAG = '__xmlCiiConversionWorkflowPopup_direct_v7';
 const ROOT_ATTR = 'data-xml-cii-workflow-root';
 const ACTIVE_TAB_KEY = 'xmlCii2019.conversionWorkflow.activeTab.v2';
 const DIRECT_RUN_FLAG = '__xmlCiiConversionWorkflowAllowDirectRun';
-const XML_CII_CONVERTER_IDS = new Set(['xml_to_cii', 'inputxml_to_cii2019', 'xml_to_cii2019']);
+const XML_CII_CONVERTER_IDS = new Set(['xml_to_cii', 'inputxml_to_cii2019', 'xml_to_cii2019', 'inputxml_to_cii_2019', 'xml-cii-2019']);
 
 const WORKFLOW_TABS = Object.freeze([
   { id: 'xml-model-data', label: 'XML - Model Data', state: 'Model' },
@@ -74,12 +74,29 @@ function stateForRoot(root = document) {
   return state;
 }
 
+function activeConverterSelect(root = document) {
+  return root.querySelector?.('#model-converters-select') || document.querySelector('#model-converters-select');
+}
+
+function normalizeConverterToken(value) {
+  return String(value || '').trim().toLowerCase().replace(/[\s→]+/g, '').replace(/[-_]+/g, '_');
+}
+
 function activeConverterId(root = document) {
-  return root.querySelector?.('#model-converters-select')?.value || '';
+  return activeConverterSelect(root)?.value || '';
+}
+
+function activeConverterText(root = document) {
+  const select = activeConverterSelect(root);
+  const option = select?.selectedOptions?.[0];
+  return `${select?.value || ''} ${option?.textContent || ''}`;
 }
 
 function isXmlCiiActive(root = document) {
-  return XML_CII_CONVERTER_IDS.has(activeConverterId(root));
+  const id = activeConverterId(root);
+  if (XML_CII_CONVERTER_IDS.has(id)) return true;
+  const normalized = normalizeConverterToken(activeConverterText(root));
+  return normalized.includes('xml') && normalized.includes('cii') && normalized.includes('2019');
 }
 
 function safeScrollTo(node) {
@@ -273,7 +290,7 @@ export function installXmlCiiConversionWorkflowPopup(container = document) {
   installDocumentRunIntercept();
 
   const refreshButton = () => setTimeout(() => ensureWorkflowButton(root, state), 0);
-  const select = root.querySelector?.('#model-converters-select');
+  const select = activeConverterSelect(root);
   if (state.selectElement !== select) {
     state.selectElement?.removeEventListener?.('change', state.refreshButton);
     state.selectElement = select || null;
@@ -282,4 +299,6 @@ export function installXmlCiiConversionWorkflowPopup(container = document) {
   }
 
   ensureWorkflowButton(root, state);
+  setTimeout(() => ensureWorkflowButton(root, state), 0);
+  setTimeout(() => ensureWorkflowButton(root, state), 150);
 }
