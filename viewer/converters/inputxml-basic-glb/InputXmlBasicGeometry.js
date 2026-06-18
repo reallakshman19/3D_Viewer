@@ -176,8 +176,7 @@ export function createTextPlane(text, options = {}) {
     border = 'rgba(0,0,0,0)',
     fontSize = 42,
     align = 'left',
-    depthWrite = false,
-    side = THREE.FrontSide
+    depthWrite = false
   } = options;
 
   const w = (width / 120) * scale;
@@ -185,8 +184,21 @@ export function createTextPlane(text, options = {}) {
   const group = new THREE.Group();
   group.name = name;
 
+  // Nameplates must remain readable when the model is orbited.
+  // Use a single DoubleSide texture plane rather than duplicate front/back meshes;
+  // this avoids missing labels without reintroducing doubled/ghosted text.
+  const materialSide = THREE.DoubleSide;
+
   if (!hasCanvas()) {
-    const fallback = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshBasicMaterial({ color: Number(options.fallbackColor || 0xffffff), transparent: true, opacity: 0.0, side }));
+    const fallback = new THREE.Mesh(
+      new THREE.PlaneGeometry(w, h),
+      new THREE.MeshBasicMaterial({
+        color: Number(options.fallbackColor || 0xffffff),
+        transparent: true,
+        opacity: 0.0,
+        side: materialSide
+      })
+    );
     fallback.name = `${name}_fallback_no_canvas`;
     group.add(fallback);
     return group;
@@ -200,11 +212,24 @@ export function createTextPlane(text, options = {}) {
   tex.magFilter = THREE.LinearFilter;
   tex.anisotropy = 4;
 
-  const material = new THREE.MeshBasicMaterial({ map: tex, transparent: true, alphaTest: 0.02, depthWrite, toneMapped: false, side });
+  const material = new THREE.MeshBasicMaterial({
+    map: tex,
+    transparent: true,
+    alphaTest: 0.02,
+    depthWrite,
+    toneMapped: false,
+    side: materialSide
+  });
   const plane = new THREE.Mesh(new THREE.PlaneGeometry(w, h), material);
   plane.name = `${name}_plane`;
   group.add(plane);
-  group.userData = { TYPE: 'TEXT_ANNOTATION', text: String(text || ''), textureSinglePlane: true, billboardCandidate: true };
+  group.userData = {
+    TYPE: 'TEXT_ANNOTATION',
+    text: String(text || ''),
+    textureSinglePlane: true,
+    doubleSidedNameplate: true,
+    billboardCandidate: true
+  };
   return group;
 }
 
