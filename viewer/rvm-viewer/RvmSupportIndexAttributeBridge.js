@@ -1,6 +1,6 @@
 import { RvmViewer3D } from './RvmViewer3D.js?v=20260518-statusbar-theme-12';
 import { state } from '../core/state.js';
-import { applyRvmSupportSymbolSettings } from './RvmSupportSymbols.js?v=20260618-uxml-support-lbop-1';
+import { applyRvmSupportSymbolSettings } from './RvmSupportSymbols.js?v=20260618-support-index-attrs-1';
 
 const PATCH_FLAG = Symbol.for('pcf-glb-rvm-support-index-attribute-bridge-v1');
 
