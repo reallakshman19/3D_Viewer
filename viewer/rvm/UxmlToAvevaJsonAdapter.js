@@ -1,3 +1,5 @@
+import { resolveKindDescriptor } from '../support/SupportKindResolver.js';
+
 const SUPPORT_TYPES = new Set(['SUPPORT', 'PIPE_SUPPORT', 'PIPESUPPORT', 'ATTA', 'ANCI']);
 const BORE_FIELD_BY_ROLE = Object.freeze({
   START: 'ABORE',
@@ -29,6 +31,11 @@ function isObject(value) {
 function finiteNumber(value) {
   const n = Number(value);
   return Number.isFinite(n) ? n : null;
+}
+
+function boreNumber(value) {
+  const n = Number.parseFloat(String(value ?? '').replace(/mm\b/gi, '').trim());
+  return Number.isFinite(n) && n > 0 ? n : null;
 }
 
 function clonePoint(point) {
@@ -174,21 +181,31 @@ function resolveComponentGeometry(component, indexes) {
   return { apos, lpos, bpos, cpos, pos, segment: fromSegment.segment };
 }
 
+function normalizeSupportKindForViewer(kind) {
+  const k = upper(kind).replace(/[\s_\-]+/g, '');
+  if (k === 'LINESTOP' || k === 'LIMITSTOP' || k === 'STOPPER' || k === 'STOP') return 'LINESTOP';
+  if (k === 'REST' || k === 'GUIDE' || k === 'LIMIT' || k === 'ANCHOR' || k === 'SPRING') return k;
+  return '';
+}
+
 function mapSupportKind(component = {}, uxml = {}) {
   const support = uxml.supportByComponentId?.get?.(String(component.id || '')) || null;
   const text = [
     support?.type,
     support?.skey,
     component?.rawAttributes?.CMPSUPTYPE,
+    component?.rawAttributes?.MDSSUPPTYPE,
     component?.rawAttributes?.DTXR,
     component?.rawAttributes?.SKEY,
+    component?.rawAttributes?.SPRE,
     component?.name,
   ].map((value) => clean(value).toUpperCase()).join(' ');
   if (/GUIDE/.test(text)) return 'GUIDE';
-  if (/LINE\s*STOP|LINESTOP|LIMIT|STOPPER|\bSTOP\b/.test(text)) return 'LINE_STOP';
+  if (/LINE\s*STOP|LINESTOP|LIMIT|STOPPER|\bSTOP\b/.test(text)) return 'LINESTOP';
   if (/ANCHOR|FIXED/.test(text)) return 'ANCHOR';
-  if (/REST|SHOE|BASE\s*PLATE|\bBP\b/.test(text)) return 'REST';
-  return clean(support?.type || component?.type || 'SUPPORT');
+  if (/SPRING|HANGER/.test(text)) return 'SPRING';
+  if (/REST|SHOE|BASE\s*PLATE|BEARING\s*PLATE|WEAR\s*PAD|\bBP\b|\bWP\b|ANCI/.test(text)) return 'REST';
+  return normalizeSupportKindForViewer(support?.type || component?.type || '') || '';
 }
 
 function sourceTypeForComponent(component, normType, rawAttrs = {}) {
@@ -199,7 +216,7 @@ function sourceTypeForComponent(component, normType, rawAttrs = {}) {
 }
 
 function formatBore(value) {
-  const n = finiteNumber(value);
+  const n = boreNumber(value);
   if (n == null || n <= 0) return '';
   return `${Number.isInteger(n) ? n : Number(n.toFixed(3))}mm`;
 }
@@ -256,10 +273,186 @@ function applyUxmlBoreContract(attrs, component, indexes) {
   applyPortBores(attrs, component, indexes);
   applySegmentBores(attrs, component, indexes);
 
-  const scalarBore = finiteNumber(component.bore);
+  const scalarBore = boreNumber(component.bore);
   if (scalarBore != null && scalarBore > 0 && !attrs.BORE) attrs.BORE = scalarBore;
-  const branchBore = finiteNumber(component.branchBore);
+  const branchBore = boreNumber(component.branchBore);
   if (branchBore != null && branchBore > 0) setBoreIfMissing(attrs, 'BBORE', branchBore);
+}
+
+function pointDistanceToSegment(point, start, end) {
+  if (!point || !start || !end) return Number.POSITIVE_INFINITY;
+  const vx = end.x - start.x;
+  const vy = end.y - start.y;
+  const vz = end.z - start.z;
+  const wx = point.x - start.x;
+  const wy = point.y - start.y;
+  const wz = point.z - start.z;
+  const lenSq = (vx * vx) + (vy * vy) + (vz * vz);
+  if (lenSq <= 1e-9) {
+    const dx = point.x - start.x;
+    const dy = point.y - start.y;
+    const dz = point.z - start.z;
+    return Math.sqrt((dx * dx) + (dy * dy) + (dz * dz));
+  }
+  const t = Math.max(0, Math.min(1, ((wx * vx) + (wy * vy) + (wz * vz)) / lenSq));
+  const px = start.x + (t * vx);
+  const py = start.y + (t * vy);
+  const pz = start.z + (t * vz);
+  const dx = point.x - px;
+  const dy = point.y - py;
+  const dz = point.z - pz;
+  return Math.sqrt((dx * dx) + (dy * dy) + (dz * dz));
+}
+
+function dominantAxisName(start, end) {
+  if (!start || !end) return '';
+  const dx = end.x - start.x;
+  const dy = end.y - start.y;
+  const dz = end.z - start.z;
+  const ax = Math.abs(dx);
+  const ay = Math.abs(dy);
+  const az = Math.abs(dz);
+  if (ax >= ay && ax >= az && ax > 1e-9) return 'X';
+  if (ay >= ax && ay >= az && ay > 1e-9) return 'Y';
+  if (az > 1e-9) return 'Z';
+  return '';
+}
+
+function segmentBoreForHost(component, segment, attrs = {}) {
+  return boreNumber(segment?.bore)
+    ?? boreNumber(segment?.startBore)
+    ?? boreNumber(segment?.endBore)
+    ?? boreNumber(attrs.ABORE)
+    ?? boreNumber(attrs.HBOR)
+    ?? boreNumber(attrs.BORE)
+    ?? boreNumber(component?.bore)
+    ?? boreNumber(component?.branchBore)
+    ?? null;
+}
+
+function segmentInfosForComponent(component, indexes) {
+  const attrs = isObject(component?.rawAttributes) ? component.rawAttributes : {};
+  const out = [];
+  for (const id of Array.isArray(component?.segmentIds) ? component.segmentIds : []) {
+    const segment = indexes.segmentById.get(String(id));
+    if (!segment) continue;
+    const start = pointFromAnchor(indexes.anchorById.get(String(segment.startAnchorId || '')));
+    const end = pointFromAnchor(indexes.anchorById.get(String(segment.endAnchorId || '')));
+    if (!start || !end) continue;
+    out.push({
+      component,
+      segment,
+      start,
+      end,
+      bore: segmentBoreForHost(component, segment, attrs),
+    });
+  }
+  return out;
+}
+
+function supportPoint(component, support, geom, indexes) {
+  const fromSupport = pointFromAnchor(indexes.anchorById.get(String(support?.supportAnchorId || '')));
+  return fromSupport || geom?.pos || firstAnyPoint(component, indexes.portById, indexes.anchorById);
+}
+
+function nearestHostSegmentForSupport(component, support, geom, indexes, uxml) {
+  const point = supportPoint(component, support, geom, indexes);
+  if (!point) return null;
+
+  const hostIds = new Set();
+  for (const candidate of Array.isArray(support?.hostCandidates) ? support.hostCandidates : []) {
+    const id = clean(candidate?.componentId || candidate?.id || candidate);
+    if (id) hostIds.add(id);
+  }
+
+  let best = null;
+  const samePipeline = clean(component.pipelineRef || component.lineKey);
+  for (const candidate of Array.isArray(uxml.components) ? uxml.components : []) {
+    if (!candidate || candidate === component) continue;
+    const norm = normalizeType(candidate.normalizedType || candidate.type);
+    if (norm === 'SUPPORT') continue;
+    if (hostIds.size && !hostIds.has(clean(candidate.id))) continue;
+    if (!hostIds.size && samePipeline && clean(candidate.pipelineRef || candidate.lineKey) !== samePipeline) continue;
+
+    for (const info of segmentInfosForComponent(candidate, indexes)) {
+      const distance = pointDistanceToSegment(point, info.start, info.end);
+      if (!best || distance < best.distance) best = { ...info, distance, point };
+    }
+  }
+
+  return best;
+}
+
+function supportTag(component, support, attrs) {
+  return firstNonEmpty(
+    attrs.SUPPORT_TAG,
+    attrs.CMPSUPREFN,
+    attrs.TAG,
+    attrs.TAGNO,
+    support?.tag,
+    support?.id,
+    component.refNo,
+    component.name,
+    component.id,
+  );
+}
+
+function applyUxmlSupportParity(attrs, component, geom, indexes, uxml) {
+  const support = uxml.supportByComponentId?.get?.(String(component.id || '')) || null;
+  const supportRaw = isObject(support?.rawAttributes) ? support.rawAttributes : {};
+  const resolverAttrs = {
+    ...supportRaw,
+    ...attrs,
+    TYPE: attrs.TYPE || component.type || 'SUPPORT',
+    SUPPORT_TYPE: support?.type || attrs.SUPPORT_TYPE || component.type || 'SUPPORT',
+    SUPPORT_KIND: attrs.SUPPORT_KIND || support?.kind || support?.type || attrs.CMPSUPTYPE,
+    SUPPORT_MAPPER_KIND: attrs.SUPPORT_MAPPER_KIND || attrs.SUPPORT_KIND || support?.type || attrs.CMPSUPTYPE,
+    SKEY: firstNonEmpty(attrs.SKEY, support?.skey),
+    SPRE: firstNonEmpty(attrs.SPRE, support?.spre),
+    DTXR: firstNonEmpty(attrs.DTXR, support?.dtxr),
+    NAME: firstNonEmpty(attrs.NAME, support?.name, component.name),
+    DESCRIPTION: firstNonEmpty(attrs.DESCRIPTION, support?.description),
+  };
+
+  const descriptor = resolveKindDescriptor(resolverAttrs, { defaultKind: 'REST' });
+  const kind = normalizeSupportKindForViewer(descriptor.primaryKind)
+    || normalizeSupportKindForViewer(mapSupportKind(component, uxml))
+    || 'REST';
+
+  attrs.SUPPORT_KIND = kind;
+  attrs.SUPPORT_MAPPER_KIND = kind;
+  attrs.CMPSUPTYPE = attrs.CMPSUPTYPE || kind;
+  attrs.SUPPORT_TYPE = attrs.SUPPORT_TYPE || kind;
+  attrs.SUPPORT_TAG = supportTag(component, support, attrs);
+  attrs.UXML_SUPPORT_PARITY = 'true';
+  attrs.UXML_SUPPORT_KIND_DESCRIPTOR = descriptor.kinds?.join('+') || kind;
+  attrs.UXML_SUPPORT_DOFS = descriptor.dofs ? Object.keys(descriptor.dofs).filter((key) => descriptor.dofs[key]).join(',') : '';
+
+  const point = supportPoint(component, support, geom, indexes);
+  if (point) {
+    attrs.SUPPORTCOORD = attrs.SUPPORTCOORD || point;
+    attrs.SUPPORT_COORD = attrs.SUPPORT_COORD || point;
+    attrs.POS = attrs.POS || point;
+  }
+
+  const host = nearestHostSegmentForSupport(component, support, geom, indexes, uxml);
+  if (host) {
+    attrs.ATTACHED_COMPONENT_ID = clean(host.component?.id);
+    attrs.ATTACHED_PIPE_SEGMENT_ID = clean(host.segment?.id);
+    attrs.ATTACHED_PIPE_DISTANCE_MM = Number(host.distance.toFixed(3));
+    attrs.APOS = attrs.APOS || host.start;
+    attrs.LPOS = attrs.LPOS || host.end;
+    attrs.PIPE_AXIS = attrs.PIPE_AXIS || dominantAxisName(host.start, host.end);
+    attrs.ROUTE_AXIS = attrs.ROUTE_AXIS || attrs.PIPE_AXIS;
+    if (host.bore) {
+      const boreText = formatBore(host.bore);
+      attrs.ATTACHED_PIPE_BORE = attrs.ATTACHED_PIPE_BORE || boreText;
+      attrs.ATTACHED_PIPE_OD = attrs.ATTACHED_PIPE_OD || boreText;
+    }
+  }
+
+  const gap = boreNumber(attrs.GAP_MM ?? attrs.SUPPORT_GAP_MM ?? support?.gapMm ?? support?.gap);
+  if (gap != null) attrs.SUPPORT_GAP_MM = gap;
 }
 
 function buildComponentNode(component, branchName, indexes, uxml) {
@@ -290,9 +483,7 @@ function buildComponentNode(component, branchName, indexes, uxml) {
   applyUxmlBoreContract(attrs, component, indexes);
 
   if (normType === 'SUPPORT') {
-    attrs.CMPSUPTYPE = attrs.CMPSUPTYPE || mapSupportKind(component, uxml);
-    attrs.SUPPORT_KIND = attrs.SUPPORT_KIND || attrs.CMPSUPTYPE;
-    attrs.SUPPORT_MAPPER_KIND = attrs.SUPPORT_MAPPER_KIND || attrs.CMPSUPTYPE;
+    applyUxmlSupportParity(attrs, component, geom, indexes, uxml);
   }
 
   return {
@@ -360,8 +551,9 @@ export function convertUxmlDocumentToAvevaHierarchy(doc, options = {}) {
   }
 
   const indexes = { anchorById, portById, segmentById };
-  const uxmlContext = { supportByComponentId };
   const components = Array.isArray(doc.components) ? doc.components.filter(isObject) : [];
+  const componentById = new Map(components.map((component) => [String(component.id || ''), component]));
+  const uxmlContext = { supportByComponentId, componentById, components };
   const grouped = new Map();
   const fallbackPipeline = 'uxml:default-pipeline';
 
