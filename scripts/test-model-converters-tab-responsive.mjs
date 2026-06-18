@@ -3,10 +3,12 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 const repoRoot = process.cwd();
-const tabPath = path.join(repoRoot, 'viewer/tabs/model-converters-tab.js');
+const legacyTabPath = path.join(repoRoot, 'viewer/tabs/model-converters-tab.js');
+const canonicalTabPath = path.join(repoRoot, 'viewer/tabs/model-converters/ModelConvertersTab.js');
 const popupPath = path.join(repoRoot, 'viewer/tabs/model-converters/xml-cii-conversion-workflow-popup.js');
 
-const tabSource = fs.readFileSync(tabPath, 'utf8');
+const legacyTabSource = fs.readFileSync(legacyTabPath, 'utf8');
+const tabSource = fs.readFileSync(canonicalTabPath, 'utf8');
 const popupSource = fs.readFileSync(popupPath, 'utf8');
 
 function assert(condition, message) {
@@ -16,7 +18,8 @@ function assert(condition, message) {
   }
 }
 
-assert(/renderLegacyModelConvertersTab\(container, ctx\)/.test(tabSource), 'legacy model converter tab must render first');
+assert(/export \{ renderModelConvertersTab \} from '\.\/model-converters\/index\.js'/.test(legacyTabSource), 'legacy shim must delegate renderModelConvertersTab to canonical model-converters entrypoint');
+assert(/renderLegacyModelConvertersTab\(container, ctx\)/.test(tabSource), 'canonical model converter tab must render legacy adapter first');
 assert(/scheduleInstaller\(/.test(tabSource), 'optional installers must be scheduled/deferred');
 assert(/installSafely\(/.test(tabSource), 'optional installers must be guarded');
 assert(/catch \(error\)/.test(tabSource), 'installer failures must be caught and logged');
@@ -29,5 +32,8 @@ assert(/setTimeout\(run, 0\)/.test(tabSource), 'deferred installer scheduler mus
 assert(!/new MutationObserver/.test(popupSource), 'lean popup launcher must not install MutationObserver');
 assert(!/mountExistingPanel/.test(popupSource), 'lean popup launcher must not move live panels by DOM portal');
 assert(/document\.addEventListener\('click', interceptRun, true\)/.test(popupSource), 'lean popup must intercept XML→CII run click through a single capture listener');
+assert(/data-xml-cii-workflow-root/.test(popupSource), 'lean popup must scope installer state to the current model-converters root');
+assert(/stateByRoot: new WeakMap\(\)/.test(popupSource), 'lean popup must keep independent modal state per rendered root');
+assert(!/if \(!browserReady\(\) \|\| window\[FLAG\]\) return/.test(popupSource), 'lean popup must not use a stale global singleton guard that blocks re-render install');
 
 console.log('✅ model converters tab lean responsiveness static test passed');
