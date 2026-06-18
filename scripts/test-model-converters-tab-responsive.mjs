@@ -18,7 +18,7 @@ function assert(condition, message) {
   }
 }
 
-assert(/export \{ renderModelConvertersTab \} from '\.\/model-converters\/index\.js'/.test(legacyTabSource), 'legacy shim must delegate renderModelConvertersTab to canonical model-converters entrypoint');
+assert(/export\s*\{\s*renderModelConvertersTab\s*\}\s*from\s*['"]\.\/model-converters\/index\.js(?:\?[^'"]*)?['"]/.test(legacyTabSource), 'legacy shim must delegate renderModelConvertersTab to canonical model-converters entrypoint');
 assert(/renderLegacyModelConvertersTab\(container, ctx\)/.test(tabSource), 'canonical model converter tab must render legacy adapter first');
 assert(/scheduleInstaller\(/.test(tabSource), 'optional installers must be scheduled/deferred');
 assert(/installSafely\(/.test(tabSource), 'optional installers must be guarded');
