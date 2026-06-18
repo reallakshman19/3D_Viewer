@@ -45,7 +45,7 @@ const doc = {
       anchorIds: ['a:support:pos'],
       portIds: ['p:support:pos'],
       segmentIds: [],
-      rawAttributes: { TYPE: 'SUPPORT', NAME: 'PS-TEST GUIDE', CMPSUPTYPE: 'GUIDE', SKEY: 'CA100' },
+      rawAttributes: { TYPE: 'SUPPORT', NAME: 'PS-TEST GUIDE', CMPSUPTYPE: 'GUIDE' },
     },
   ],
   supports: [
@@ -53,7 +53,7 @@ const doc = {
       id: 'sup:test:00001',
       componentId: 'cmp:support:00002',
       type: 'GUIDE',
-      skey: 'CA100',
+      skey: '',
       supportAnchorId: 'a:support:pos',
       hostCandidates: [],
       restraints: [],
