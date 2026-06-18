@@ -5,7 +5,7 @@ import { AvevaJsonLoader } from '../rvm/AvevaJsonLoader.js';
 import {
   convertUxmlDocumentToAvevaHierarchy,
   isUxmlDocument,
-} from '../rvm/UxmlToAvevaJsonAdapter.js';
+} from '../rvm/UxmlToAvevaJsonAdapter.js?v=20260618-uxml-source-order-1';
 
 const FLAG = '__RVM_UXML_IMPORT_ADDON_INSTALLED__';
 
