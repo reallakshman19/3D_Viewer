@@ -386,7 +386,13 @@ export function convertUxmlDocumentToAvevaHierarchy(doc, options = {}) {
       TYPE: firstNonEmpty(rawPipelineAttrs.TYPE, 'BRAN'),
       NAME: firstNonEmpty(rawPipelineAttrs.NAME, branchName),
       OWNER: firstNonEmpty(rawPipelineAttrs.OWNER, pipeline?.system, pipeline?.area, doc.header?.modelId, options.fileName, 'UXML'),
-      SOURCE_FORMAT: 'UXML',
+      // UXML sidecars already preserve the staged route-bearing PIPE entries.
+      // Mark the branch as pre-routed so AvevaJsonLoader does not discard those
+      // pipes and regenerate connectors using upstream fitting bores (the OLET
+      // parent-bore regression).
+      SOURCE_FORMAT: 'REV_XML',
+      UXML_SOURCE_FORMAT: 'UXML',
+      UXML_ROUTE_PRESERVE: 'true',
       UXML_PIPELINE_ID: clean(pipeline?.id || pipelineRef),
       UXML_LINE_KEY: clean(pipeline?.lineKey || pipelineRef),
       SOURCE_FILE: clean(options.fileName || ''),
