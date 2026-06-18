@@ -43,7 +43,7 @@ async function loadPsnmUtilityRenderer() {
 }
 
 async function loadRvmViewerRenderer() {
-  await import('../tabs/viewer3d-rvm-uxml-import-addon.js?v=20260618-rvm-uxml-import-1');
+  await import('../tabs/viewer3d-rvm-uxml-import-addon.js?v=20260618-rvm-uxml-direct-render-1');
   return import('../tabs/viewer3d-rvm-tab.js?v=20260618-rvm-uxml-import-1')
     .then((module) => pickRenderer(module, 'renderViewer3DRvm', 'viewer3d-rvm'));
 }
