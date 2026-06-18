@@ -29,12 +29,12 @@ const springMat = mat(COLORS.spring, { emissive: 0x331021, emissiveIntensity: 0.
 const leaderMat = new THREE.MeshBasicMaterial({ color: COLORS.isonote, toneMapped: false });
 const nodeLeaderMat = new THREE.MeshBasicMaterial({ color: COLORS.node, toneMapped: false });
 
-const KEY_NODE_LABELS = Object.freeze(['10', '35', '130', '205', '240', '255', '270']);
+const KEY_NODE_LABELS = Object.freeze(['10', '20', '30', '35', '70', '80', '83', '86', '90', '100', '110', '113', '116', '120', '130', '140', '150', '160', '170', '180', '190', '200', '205', '210', '220', '230', '233', '236', '240', '250', '255', '260', '270', '280', '290', '300', '310', '320', '330', '340']);
 const ISONOTE_OFFSETS = Object.freeze({
-  '35': [1.35, 1.08, -1.00],
-  '130': [1.20, -0.55, 0.65],
-  '205': [-2.20, 1.75, -0.90],
-  '255': [1.05, 1.10, 0.75]
+  '35': [-1.55, 1.18, 0.78],
+  '130': [1.35, -0.58, 0.72],
+  '205': [-2.55, 1.95, -1.05],
+  '255': [1.20, 1.18, 0.82]
 });
 
 export async function convertInputXmlToGlb(xmlText, options = {}) {
@@ -43,7 +43,7 @@ export async function convertInputXmlToGlb(xmlText, options = {}) {
   scene.name = 'InputXML_GLTF_SCENE';
   scene.userData = {
     app: 'inputxml-glb-standalone',
-    converterVersion: '1.1.0-recovered',
+    converterVersion: '1.2.0-recovered-geometry-annotations',
     sourceMode: options.supportMode || 'compare',
     lineNoMode: options.lineNoMode || 'sideload-first',
     annotationRenderer: 'transparent-texture-two-sided-readable',
@@ -79,17 +79,18 @@ export async function convertInputXmlToGlb(xmlText, options = {}) {
     const labels = nodeLabelsToRender(model, options);
     for (const node of model.nodes.values()) {
       const p = vectorFrom(node, SCALE);
-      const sphere = new THREE.Mesh(new THREE.SphereGeometry(0.045, 12, 8), mat(COLORS.guide));
-      sphere.name = `NODE_DOT_${node.id}`;
-      sphere.position.copy(p);
-      sphere.userData = { TYPE: 'NODE', type: 'NODE', node: node.id, source: 'InputXML' };
-      nodesGroup.add(sphere);
+      const dot = new THREE.Mesh(new THREE.SphereGeometry(0.045, 12, 8), mat(COLORS.guide));
+      dot.name = `NODE_DOT_${node.id}`;
+      dot.position.copy(p);
+      dot.userData = { TYPE: 'NODE', type: 'NODE', node: node.id, source: 'InputXML' };
+      nodesGroup.add(dot);
       if (labels.has(String(node.id))) {
         const labelPos = p.clone().add(nodeLabelOffset(elementByNode, node.id));
-        const label = createNodeLabel(`N${node.id}`, labelPos, 0.36);
+        const labelScale = String(node.id).length > 2 ? 0.24 : 0.28;
+        const label = createNodeLabel(`N${node.id}`, labelPos, labelScale);
         label.name = `NODE_ANNOTATION_${node.id}`;
         label.userData = { TYPE: 'NODE_ANNOTATION', node: node.id, label: `N${node.id}`, source: 'InputXML node annotation', colorRole: 'node-yellow' };
-        const leader = cylinderBetween(p, labelPos, 0.012, nodeLeaderMat, 8, `NODE_ANNOTATION_LEADER_${node.id}`);
+        const leader = cylinderBetween(p, labelPos, 0.01, nodeLeaderMat, 8, `NODE_ANNOTATION_LEADER_${node.id}`);
         leader.userData = { TYPE: 'NODE_ANNOTATION_LEADER', node: node.id };
         nodesGroup.add(leader, label);
         audit.nodeAnnotations += 1;
@@ -128,32 +129,156 @@ function numeric(value, fallback = 0) {
   return Number.isFinite(n) ? n : fallback;
 }
 
+function resolvedBoreMm(element, fallback = 100) {
+  const n = numeric(element.props.bore, element.props.boreMm || fallback);
+  return Number.isFinite(n) && n > 0 ? n : fallback;
+}
+
 function createElementGeometry(element, group, options) {
   const a = vectorFrom(element.from, SCALE);
   const b = vectorFrom(element.to, SCALE);
-  const od = numeric(element.props.bore, element.props.boreMm || 100) * SCALE;
+  const od = resolvedBoreMm(element, 100) * SCALE;
   const radius = Math.max(0.05, od / 2);
-  const isRigid = element.rawType && element.rawType !== 'PIPE' && element.rawType !== 'BEND';
-  const material = isRigid ? rigidMat : element.type === 'BEND' ? bendMat : pipeMat;
-  const cyl = cylinderBetween(a, b, radius, material, options.compactMode === false ? 24 : 18, element.id);
-  cyl.userData = buildComponentUserData(element);
-  group.add(cyl);
-
-  if (isRigid) {
-    const dir = b.clone().sub(a).normalize();
-    const mid = a.clone().add(b).multiplyScalar(0.5);
-    const collarA = cylinderBetween(mid.clone().sub(dir.clone().multiplyScalar(0.22)), mid.clone().add(dir.clone().multiplyScalar(0.22)), radius * 1.35, rigidMat, 18, `${element.id}_RIGID_MARKER`);
-    collarA.userData = { ...cyl.userData, meshRole: 'RIGID_MARKER' };
-    group.add(collarA);
-  }
+  const userData = buildComponentUserData(element);
+  const rawType = String(element.rawType || element.type || 'PIPE').toUpperCase();
 
   if (element.type.includes('BEND') || element.props.bendRadius) {
-    const bendNode = new THREE.Mesh(new THREE.SphereGeometry(radius * 1.08, 16, 10), bendMat);
-    bendNode.name = `${element.id}_BEND_NODE`;
-    bendNode.position.copy(b);
-    bendNode.userData = { ...cyl.userData, meshRole: 'BEND_MARKER' };
-    group.add(bendNode);
+    const bend = createBendGeometry(a, b, radius, element, userData, options);
+    group.add(bend);
+    return;
   }
+
+  if (rawType.includes('VALVE')) {
+    group.add(createValveGeometry(a, b, radius, element, userData, rawType));
+    return;
+  }
+
+  if (rawType.includes('FLANGE PAIR')) {
+    group.add(createFlangePairGeometry(a, b, radius, element, userData));
+    return;
+  }
+
+  if (rawType.includes('FLANGE')) {
+    group.add(createFlangeGeometry(a, b, radius, element, userData));
+    return;
+  }
+
+  if (rawType !== 'PIPE' && rawType !== 'BEND') {
+    group.add(createRigidMarkerGeometry(a, b, radius, element, userData));
+    return;
+  }
+
+  const cyl = cylinderBetween(a, b, radius, pipeMat, options.compactMode === false ? 28 : 20, element.id);
+  cyl.userData = userData;
+  group.add(cyl);
+}
+
+function createBendGeometry(a, b, radius, element, userData, options) {
+  const group = new THREE.Group();
+  group.name = element.id;
+  group.userData = { ...userData, meshRole: 'BEND_GROUP' };
+  const delta = b.clone().sub(a);
+  const length = delta.length();
+  if (length < 1e-6) return group;
+  const dir = delta.clone().normalize();
+  const lateral = orthogonal(dir);
+  const declaredRadius = numeric(element.props.bendRadius, radius / SCALE) * SCALE;
+  const bulge = Math.max(radius * 1.6, Math.min(length * 0.35, declaredRadius * 0.32));
+  const control = a.clone().add(b).multiplyScalar(0.5).add(lateral.multiplyScalar(bulge));
+  const curve = new THREE.QuadraticBezierCurve3(a, control, b);
+  const tube = new THREE.Mesh(new THREE.TubeGeometry(curve, options.compactMode === false ? 48 : 32, radius, options.compactMode === false ? 18 : 14, false), bendMat);
+  tube.name = `${element.id}_BEND_ARC`;
+  tube.userData = { ...userData, meshRole: 'BEND_ARC', bendRadius: element.props.bendRadius, bendAngle: element.props.bendAngle };
+  const marker = new THREE.Mesh(new THREE.SphereGeometry(radius * 1.05, 18, 12), bendMat);
+  marker.name = `${element.id}_BEND_NODE`;
+  marker.position.copy(b);
+  marker.userData = { ...userData, meshRole: 'BEND_MARKER' };
+  group.add(tube, marker);
+  return group;
+}
+
+function createValveGeometry(a, b, radius, element, userData, rawType) {
+  const group = new THREE.Group();
+  group.name = element.id;
+  group.userData = { ...userData, meshRole: rawType.includes('FLANGED') ? 'VALVE_FLANGED_GROUP' : 'VALVE_GROUP' };
+  const dir = b.clone().sub(a).normalize();
+  const length = a.distanceTo(b);
+  const center = a.clone().add(b).multiplyScalar(0.5);
+  const core = cylinderBetween(a, b, radius * 0.86, rigidMat, 22, `${element.id}_pipe-core`);
+  core.userData = { ...userData, meshRole: 'VALVE_PIPE_CORE' };
+  const bodyHalf = Math.min(length * 0.28, Math.max(radius * 1.6, 0.32));
+  const body = cylinderBetween(center.clone().sub(dir.clone().multiplyScalar(bodyHalf)), center.clone().add(dir.clone().multiplyScalar(bodyHalf)), radius * 1.42, rigidMat, 28, `${element.id}_body`);
+  body.userData = { ...userData, meshRole: 'VALVE_BODY' };
+  group.add(core, body);
+  if (rawType.includes('FLANGED')) {
+    const flangeOffset = Math.min(length * 0.42, bodyHalf + radius * 0.75);
+    addFlangeDisc(group, center.clone().sub(dir.clone().multiplyScalar(flangeOffset)), dir, radius * 1.7, radius * 0.24, `${element.id}_flange-a`, userData);
+    addFlangeDisc(group, center.clone().add(dir.clone().multiplyScalar(flangeOffset)), dir, radius * 1.7, radius * 0.24, `${element.id}_flange-b`, userData);
+  }
+  const up = Math.abs(dir.y) < 0.9 ? new THREE.Vector3(0, 1, 0) : orthogonal(dir);
+  const stemStart = center.clone().add(up.clone().multiplyScalar(radius * 1.2));
+  const stemEnd = center.clone().add(up.clone().multiplyScalar(radius * 2.7));
+  const stem = cylinderBetween(stemStart, stemEnd, radius * 0.13, rigidMat, 12, `${element.id}_stem`);
+  stem.userData = { ...userData, meshRole: 'VALVE_STEM' };
+  const wheel = new THREE.Mesh(new THREE.TorusGeometry(radius * 0.62, radius * 0.045, 8, 32), rigidMat);
+  wheel.name = `${element.id}_handwheel`;
+  wheel.position.copy(stemEnd);
+  wheel.lookAt(stemEnd.clone().add(dir));
+  wheel.userData = { ...userData, meshRole: 'VALVE_HANDWHEEL' };
+  group.add(stem, wheel);
+  return group;
+}
+
+function createFlangePairGeometry(a, b, radius, element, userData) {
+  const group = new THREE.Group();
+  group.name = element.id;
+  group.userData = { ...userData, meshRole: 'FLANGE_PAIR_GROUP' };
+  const dir = b.clone().sub(a).normalize();
+  const length = a.distanceTo(b);
+  const center = a.clone().add(b).multiplyScalar(0.5);
+  const core = cylinderBetween(a, b, radius * 0.82, rigidMat, 20, `${element.id}_pipe-core`);
+  core.userData = { ...userData, meshRole: 'FLANGE_PAIR_PIPE_CORE' };
+  const offset = Math.max(radius * 0.55, Math.min(length * 0.28, radius * 1.2));
+  addFlangeDisc(group, center.clone().sub(dir.clone().multiplyScalar(offset)), dir, radius * 1.55, radius * 0.23, `${element.id}_flange-a`, userData);
+  addFlangeDisc(group, center.clone().add(dir.clone().multiplyScalar(offset)), dir, radius * 1.55, radius * 0.23, `${element.id}_flange-b`, userData);
+  group.add(core);
+  return group;
+}
+
+function createFlangeGeometry(a, b, radius, element, userData) {
+  const group = new THREE.Group();
+  group.name = element.id;
+  group.userData = { ...userData, meshRole: 'FLANGE_GROUP' };
+  const dir = b.clone().sub(a).normalize();
+  const center = a.clone().add(b).multiplyScalar(0.5);
+  const core = cylinderBetween(a, b, radius * 0.82, rigidMat, 20, `${element.id}_pipe-core`);
+  core.userData = { ...userData, meshRole: 'FLANGE_PIPE_CORE' };
+  addFlangeDisc(group, center, dir, radius * 1.62, radius * 0.28, `${element.id}_flange`, userData);
+  group.add(core);
+  return group;
+}
+
+function createRigidMarkerGeometry(a, b, radius, element, userData) {
+  const group = new THREE.Group();
+  group.name = element.id;
+  group.userData = { ...userData, meshRole: 'RIGID_GROUP' };
+  const dir = b.clone().sub(a).normalize();
+  const center = a.clone().add(b).multiplyScalar(0.5);
+  const core = cylinderBetween(a, b, radius * 0.86, rigidMat, 20, `${element.id}_pipe-core`);
+  core.userData = { ...userData, meshRole: 'RIGID_PIPE_CORE' };
+  const markerHalf = Math.min(a.distanceTo(b) * 0.22, Math.max(radius * 1.1, 0.22));
+  const marker = cylinderBetween(center.clone().sub(dir.clone().multiplyScalar(markerHalf)), center.clone().add(dir.clone().multiplyScalar(markerHalf)), radius * 1.28, rigidMat, 22, `${element.id}_rigid-marker`);
+  marker.userData = { ...userData, meshRole: 'RIGID_MARKER' };
+  group.add(core, marker);
+  return group;
+}
+
+function addFlangeDisc(group, center, dir, discRadius, thickness, name, userData) {
+  const start = center.clone().sub(dir.clone().multiplyScalar(thickness / 2));
+  const end = center.clone().add(dir.clone().multiplyScalar(thickness / 2));
+  const disc = cylinderBetween(start, end, discRadius, rigidMat, 32, name);
+  disc.userData = { ...userData, meshRole: 'FLANGE_DISC' };
+  group.add(disc);
 }
 
 function buildComponentUserData(element) {
@@ -220,12 +345,16 @@ function nodeLabelsToRender(model, options = {}) {
 function nodeLabelOffset(elementByNode, nodeId) {
   const tangent = localTangent(elementByNode, nodeId);
   const lateral = orthogonal(tangent);
-  return lateral.multiplyScalar(0.42).add(new THREE.Vector3(0, 0.30, 0.22));
+  const lift = ['205', '255'].includes(String(nodeId)) ? 0.44 : 0.30;
+  return lateral.multiplyScalar(0.48).add(new THREE.Vector3(0, lift, 0.24));
 }
 
 function createIsonoteAnnotations(model, group, elementByNode) {
   let count = 0;
+  const seen = new Set();
   for (const [node, note] of model.isonoteMap.entries()) {
+    if (seen.has(String(node))) continue;
+    seen.add(String(node));
     const pos = nodePosition(model, node);
     if (!pos) continue;
     const p = vectorFrom(pos, SCALE);
@@ -234,17 +363,18 @@ function createIsonoteAnnotations(model, group, elementByNode) {
       : autoIsonoteOffset(elementByNode, node);
     const labelPos = p.clone().add(offset);
     const summary = summarizeIsonote(note);
+    const long = node === '205';
     const label = createTextPlane(summary, {
-      width: node === '205' ? 760 : 560,
-      height: node === '205' ? 250 : 180,
-      fontSize: node === '205' ? 40 : 34,
-      scale: node === '205' ? 0.44 : 0.36,
+      width: long ? 920 : 700,
+      height: long ? 300 : 220,
+      fontSize: long ? 54 : 48,
+      scale: long ? 0.66 : 0.58,
       fg: '#e36af2',
       bg: 'rgba(0,0,0,0)',
       border: 'rgba(0,0,0,0)',
       align: 'left',
       name: `ISONOTE_ANNOTATION_NODE_${node}`,
-      maxLineLength: node === '205' ? 30 : 26
+      maxLineLength: long ? 30 : 28
     });
     label.position.copy(labelPos);
     label.userData = {
@@ -257,8 +387,8 @@ function createIsonoteAnnotations(model, group, elementByNode) {
       colorRole: 'isonote-magenta',
       annotationRenderer: 'transparent-texture-two-sided-readable'
     };
-    const leaderEnd = labelPos.clone().add(new THREE.Vector3(-0.12, -0.08, 0));
-    const leader = cylinderBetween(p, leaderEnd, 0.018, leaderMat, 8, `ISONOTE_ANNOTATION_LEADER_NODE_${node}`);
+    const leaderEnd = labelPos.clone().add(new THREE.Vector3(-0.16, -0.12, 0));
+    const leader = cylinderBetween(p, leaderEnd, 0.016, leaderMat, 8, `ISONOTE_ANNOTATION_LEADER_NODE_${node}`);
     leader.userData = { TYPE: 'ISONOTE_LEADER', node, sourceNoteName: note, colorRole: 'isonote-magenta' };
     group.add(leader, label);
     count += 1;
@@ -269,7 +399,7 @@ function createIsonoteAnnotations(model, group, elementByNode) {
 function autoIsonoteOffset(elementByNode, nodeId) {
   const tangent = localTangent(elementByNode, nodeId);
   const lateral = orthogonal(tangent);
-  return lateral.multiplyScalar(1.25).add(new THREE.Vector3(0, 1.0, 0.55));
+  return lateral.multiplyScalar(1.55).add(new THREE.Vector3(0, 1.18, 0.68));
 }
 
 function summarizeIsonote(note) {
@@ -284,13 +414,12 @@ function summarizeIsonote(note) {
   const guide = upper.match(/GUIDE\s*\((\d+(?:\.\d+)?)\s*KN\)/i);
   if (guide) lines.push(`GUIDE ${guide[1]}kN`);
   if (/NO\s+GUIDE|WITHOUT\s+GUIDE/.test(upper)) lines.push('NO GUIDE');
-  const ls = upper.match(/LINE\s*STOP\s*\((\d+(?:\.\d+)?)\s*KN\)/i);
-  if (ls) lines.push(`LS ${ls[1]}kN`);
-  else if (/LINE\s*STOP/.test(upper)) lines.push('LINE STOP');
+  const lineStop = upper.match(/LINE\s*STOP\s*\((\d+(?:\.\d+)?)\s*KN\)/i);
+  if (lineStop) lines.push(`LS ${lineStop[1]}kN`);
   if (/HOLD\s*DOWN|HOLDDOWN/.test(upper)) lines.push('HOLD');
-  const single = upper.match(/SINGLE\s+AXIS\s+([XYZ])/);
-  if (single) lines.push(`SINGLE AXIS ${single[1]}`);
-  if (/CAN\s+SPRING|SPRING\s+CAN/.test(upper)) lines.push('SPRING WARN');
+  if (/SPRING|CAN\s+SPRING/.test(upper)) lines.push('SPRING WARN');
+  const singleAxis = upper.match(/SINGLE\s+AXIS\s+([XYZ])/);
+  if (singleAxis) lines.push(`SINGLE AXIS ${singleAxis[1]}`);
   return lines.join('\n');
 }
 
@@ -401,6 +530,10 @@ function createSupportSymbols(model, rec, elementByNode, sourceClass) {
     const below = p.clone().add(new THREE.Vector3(0, -contactRadius - 0.85 - gap, 0));
     out.push(addMeta(createSpringCoil(below, tangent, 0.16, 0.9, springMat, `${prefix}_SPRING_COIL_BELOW_PIPE`), { warningText: rec.warningText || 'Spring / hanger', engineeringContact: 'below-pipe-clearance' }));
   }
+
+  if (sourceClass === 'expected' && out.length) {
+    out.forEach(o => o.traverse?.(child => { if (child.material?.color) child.material.opacity = 0.96; }));
+  }
   return out;
 }
 
@@ -420,20 +553,14 @@ function localTangent(elementByNode, nodeId) {
   if (!els.length) return new THREE.Vector3(1, 0, 0);
   const e = els[0];
   const v = new THREE.Vector3(e.dx, e.dy, e.dz);
-  if (v.lengthSq() < 1e-8) {
-    const a = vectorFrom(e.from, 1);
-    const b = vectorFrom(e.to, 1);
-    const fallback = b.sub(a);
-    if (fallback.lengthSq() > 1e-8) return fallback.normalize();
-    return new THREE.Vector3(1, 0, 0);
-  }
+  if (v.lengthSq() < 1e-8) return new THREE.Vector3(1, 0, 0);
   return v.normalize();
 }
 
 function localOd(elementByNode, nodeId) {
   const els = elementByNode.get(String(Number(nodeId))) || [];
   if (!els.length) return 100;
-  return numeric(els[0].props.bore, els[0].props.boreMm || 100);
+  return resolvedBoreMm(els[0], 100);
 }
 
 function frameScene(scene) {
