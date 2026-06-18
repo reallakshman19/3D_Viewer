@@ -15,6 +15,9 @@ export const COLORS = {
   text: 0xffffff
 };
 
+const MAX_TEXT_TEXTURE_SIZE = 2048;
+const TRANSPARENT_PNG_BASE64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAFgwJ/l9G9TQAAAABJRU5ErkJggg==';
+
 export function mat(color, opts = {}) {
   return new THREE.MeshStandardMaterial({ color, roughness: 0.72, metalness: 0.04, side: THREE.DoubleSide, ...opts });
 }
@@ -77,37 +80,78 @@ function textLines(value, maxLineLength = 34) {
   return out.slice(0, 6);
 }
 
+function blobFromBase64(base64, mime = 'image/png') {
+  const binary = typeof atob === 'function' ? atob(base64) : '';
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
+  return new Blob([bytes], { type: mime });
+}
+
+function blobFromDataUrl(dataUrl, mime = 'image/png') {
+  const encoded = String(dataUrl || '').split(',')[1] || TRANSPARENT_PNG_BASE64;
+  return blobFromBase64(encoded, mime);
+}
+
+function installSafeToBlob(canvas) {
+  if (!canvas || typeof Blob === 'undefined') return canvas;
+  const nativeToBlob = typeof canvas.toBlob === 'function' ? canvas.toBlob.bind(canvas) : null;
+  canvas.toBlob = (callback, type = 'image/png', quality) => {
+    const done = (blob) => {
+      if (blob instanceof Blob) { callback(blob); return; }
+      try {
+        if (typeof canvas.toDataURL === 'function') callback(blobFromDataUrl(canvas.toDataURL(type || 'image/png', quality), type || 'image/png'));
+        else callback(blobFromBase64(TRANSPARENT_PNG_BASE64, type || 'image/png'));
+      } catch {
+        callback(blobFromBase64(TRANSPARENT_PNG_BASE64, type || 'image/png'));
+      }
+    };
+    if (nativeToBlob) {
+      try { nativeToBlob(done, type, quality); return; } catch {}
+    }
+    done(null);
+  };
+  return canvas;
+}
+
 function makeTextCanvas(text, options = {}) {
   const {
-    width = 512,
-    height = 192,
-    fontSize = 46,
+    width: requestedWidth = 512,
+    height: requestedHeight = 192,
+    fontSize: requestedFontSize = 46,
     fg = '#ffffff',
     bg = 'rgba(0,0,0,0)',
     border = 'rgba(0,0,0,0)',
     font = 'Arial, Helvetica, sans-serif',
-    padding = 18,
+    padding: requestedPadding = 18,
     align = 'left',
     lineHeight = 1.18,
     maxLineLength = 34
   } = options;
-  const canvas = document.createElement('canvas');
+  const rawWidth = Math.max(16, Number(requestedWidth) || 512);
+  const rawHeight = Math.max(16, Number(requestedHeight) || 192);
+  const textureScale = Math.min(1, MAX_TEXT_TEXTURE_SIZE / rawWidth, MAX_TEXT_TEXTURE_SIZE / rawHeight);
+  const width = Math.max(16, Math.round(rawWidth * textureScale));
+  const height = Math.max(16, Math.round(rawHeight * textureScale));
+  const fontSize = Math.max(8, Number(requestedFontSize || 46) * textureScale);
+  const padding = Math.max(2, Number(requestedPadding || 18) * textureScale);
+  const canvas = installSafeToBlob(document.createElement('canvas'));
   canvas.width = width;
   canvas.height = height;
   const ctx = canvas.getContext('2d');
+  if (!ctx) return canvas;
   ctx.clearRect(0, 0, width, height);
   if (bg && bg !== 'transparent' && bg !== 'rgba(0,0,0,0)') {
     ctx.fillStyle = bg;
-    roundRect(ctx, 4, 4, width - 8, height - 8, 18, bg, border, 3);
+    roundRect(ctx, 4, 4, width - 8, height - 8, Math.max(4, 18 * textureScale), bg, border, Math.max(1, 3 * textureScale));
   } else if (border && border !== 'transparent' && border !== 'rgba(0,0,0,0)') {
-    roundRect(ctx, 4, 4, width - 8, height - 8, 18, 'rgba(0,0,0,0)', border, 3);
+    roundRect(ctx, 4, 4, width - 8, height - 8, Math.max(4, 18 * textureScale), 'rgba(0,0,0,0)', border, Math.max(1, 3 * textureScale));
   }
   ctx.imageSmoothingEnabled = true;
   ctx.textBaseline = 'top';
   ctx.font = `800 ${fontSize}px ${font}`;
   ctx.fillStyle = fg;
   ctx.strokeStyle = 'rgba(0,0,0,0.30)';
-  ctx.lineWidth = Math.max(2, fontSize * 0.05);
+  ctx.lineWidth = Math.max(1.5, fontSize * 0.05);
   const lines = textLines(text, maxLineLength);
   const total = lines.length * fontSize * lineHeight;
   let y = Math.max(padding, (height - total) / 2);
@@ -158,10 +202,10 @@ export function createTextPlane(text, options = {}) {
   const canvas = makeTextCanvas(text, { width, height, fg, bg, border, fontSize, align, maxLineLength: options.maxLineLength, padding: options.padding, lineHeight: options.lineHeight });
   const tex = new THREE.CanvasTexture(canvas);
   tex.colorSpace = THREE.SRGBColorSpace;
-  tex.generateMipmaps = true;
-  tex.minFilter = THREE.LinearMipmapLinearFilter;
+  tex.generateMipmaps = false;
+  tex.minFilter = THREE.LinearFilter;
   tex.magFilter = THREE.LinearFilter;
-  tex.anisotropy = 8;
+  tex.anisotropy = 4;
 
   const baseMat = { map: tex, transparent: true, alphaTest: 0.02, depthWrite, toneMapped: false };
   const front = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshBasicMaterial({ ...baseMat, side: THREE.FrontSide }));
