@@ -46,6 +46,32 @@ function clonePoint(point) {
   return x == null || y == null || z == null ? null : { x, y, z };
 }
 
+function parseCoordinateText(value) {
+  const text = clean(value);
+  if (!text) return null;
+  const tokens = text.split(/\s+/g);
+  const p = { x: null, y: null, z: null };
+  let parsed = false;
+  for (let i = 0; i < tokens.length - 1; i += 2) {
+    const axis = upper(tokens[i]);
+    const n = Number.parseFloat(String(tokens[i + 1]).replace(/mm\b/gi, ''));
+    if (!Number.isFinite(n)) continue;
+    if (axis === 'E') { p.x = n; parsed = true; }
+    else if (axis === 'W') { p.x = -n; parsed = true; }
+    else if (axis === 'N') { p.y = n; parsed = true; }
+    else if (axis === 'S') { p.y = -n; parsed = true; }
+    else if (axis === 'U') { p.z = n; parsed = true; }
+    else if (axis === 'D') { p.z = -n; parsed = true; }
+  }
+  if (parsed && [p.x, p.y, p.z].every((n) => Number.isFinite(n))) return p;
+  const nums = text.match(/-?\d+(?:\.\d+)?/g)?.map(Number).filter(Number.isFinite) || [];
+  return nums.length >= 3 ? { x: nums[0], y: nums[1], z: nums[2] } : null;
+}
+
+function pointFromValue(value) {
+  return clonePoint(value) || parseCoordinateText(value);
+}
+
 function midpoint(a, b) {
   if (!a || !b) return null;
   return {
@@ -350,7 +376,19 @@ function segmentInfosForComponent(component, indexes) {
   return out;
 }
 
+function supportPointFromAttributes(attrs) {
+  for (const key of ['SUPPORTCOORD', 'SUPPORT_COORD', 'SCOORD', 'SUPPORT_POINT', 'SUPPORT_POS', 'LBOP', 'LBOS', 'LBOPOS', 'LBOPOINT', 'POS', 'BPOS', 'APOS', 'LPOS']) {
+    const p = pointFromValue(attrs?.[key]);
+    if (p) return p;
+  }
+  return null;
+}
+
 function supportPoint(component, support, geom, indexes) {
+  const rawAttrs = isObject(component?.rawAttributes) ? component.rawAttributes : {};
+  const supportRaw = isObject(support?.rawAttributes) ? support.rawAttributes : {};
+  const fromAttributes = supportPointFromAttributes({ ...rawAttrs, ...supportRaw });
+  if (fromAttributes) return fromAttributes;
   const fromSupport = pointFromAnchor(indexes.anchorById.get(String(support?.supportAnchorId || '')));
   return fromSupport || geom?.pos || firstAnyPoint(component, indexes.portById, indexes.anchorById);
 }
@@ -404,6 +442,7 @@ function applyUxmlSupportParity(attrs, component, geom, indexes, uxml) {
     ...supportRaw,
     ...attrs,
     TYPE: attrs.TYPE || component.type || 'SUPPORT',
+    RAW_TYPE: attrs.RAW_TYPE || component.rawAttributes?.RAW_TYPE,
     SUPPORT_TYPE: support?.type || attrs.SUPPORT_TYPE || component.type || 'SUPPORT',
     SUPPORT_KIND: attrs.SUPPORT_KIND || support?.kind || support?.type || attrs.CMPSUPTYPE,
     SUPPORT_MAPPER_KIND: attrs.SUPPORT_MAPPER_KIND || attrs.SUPPORT_KIND || support?.type || attrs.CMPSUPTYPE,
@@ -551,9 +590,8 @@ export function convertUxmlDocumentToAvevaHierarchy(doc, options = {}) {
   }
 
   const indexes = { anchorById, portById, segmentById };
+  const uxmlContext = { supportByComponentId, components: doc.components };
   const components = Array.isArray(doc.components) ? doc.components.filter(isObject) : [];
-  const componentById = new Map(components.map((component) => [String(component.id || ''), component]));
-  const uxmlContext = { supportByComponentId, componentById, components };
   const grouped = new Map();
   const fallbackPipeline = 'uxml:default-pipeline';
 
