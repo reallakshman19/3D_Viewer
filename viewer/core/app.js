@@ -42,7 +42,7 @@ async function loadPsnmUtilityRenderer() {
   await Promise.allSettled([
     import('../tabs/psnm-utility/psnm-ui-p2-enhancements.js?v=20260609-p2-1'),
     import('../tabs/psnm-utility/psnm-phase4c-hardening.js?v=20260609-phase4c-1'),
-    import('../tabs/psnm-utility/psnm-phase4d-persistence.js?v=20260609-phase4c-1'),
+    import('../tabs/psnm-utility/psnm-phase4d-persistence.js?v=20260609-phase4d-1'),
   ]);
   return import('../tabs/psnm-utility-tab.js?v=20260613-psnm-anchor-no-blocker-1')
     .then((module) => pickRenderer(module, 'renderPSNM_UtilityTab', 'psnm-utility'));
@@ -213,4 +213,8 @@ export async function bootstrapApp(root = document.getElementById('app-layout'))
   const preferred = TAB_ID_ALIASES.get(state.activeTab) || state.activeTab || tabs[0]?.id;
   await activateTab(preferred, tabs, nav, content);
   return appDestroy;
+}
+
+export function init(root = document.getElementById('app-layout')) {
+  return bootstrapApp(root);
 }
