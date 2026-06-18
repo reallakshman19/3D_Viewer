@@ -1,17 +1,17 @@
 import * as THREE from 'three';
 
 export const COLORS = {
-  pipe: 0xbcc7d5,
-  rigid: 0x89a7c7,
-  bend: 0xa7cfff,
-  rest: 0x48d1ff,
-  guide: 0x62e0a9,
-  lineStop: 0xffd166,
-  holddown: 0xff8ad8,
-  spring: 0xff6fae,
+  pipe: 0xd7dce1,
+  rigid: 0x12bfae,
+  bend: 0xe2e5e8,
+  rest: 0xf2c744,
+  guide: 0x00b8b2,
+  lineStop: 0x1ec9c3,
+  holddown: 0xd76fe9,
+  spring: 0xd76fe9,
   warning: 0xff9bb2,
-  isonote: 0x211b2e,
-  node: 0x66c8ff,
+  isonote: 0xe36af2,
+  node: 0xffe45c,
   text: 0xffffff
 };
 
@@ -20,7 +20,7 @@ export function mat(color, opts = {}) {
 }
 
 export function vectorFrom(p, scale = 0.01) {
-  return new THREE.Vector3(p.x * scale, p.y * scale, p.z * scale);
+  return new THREE.Vector3((p?.x || 0) * scale, (p?.y || 0) * scale, (p?.z || 0) * scale);
 }
 
 export function cylinderBetween(a, b, radius, material, radialSegments = 16, name = 'cylinder') {
@@ -32,7 +32,7 @@ export function cylinderBetween(a, b, radius, material, radialSegments = 16, nam
   const mesh = new THREE.Mesh(geom, material);
   mesh.name = name;
   mesh.position.copy(start).add(end).multiplyScalar(0.5);
-  mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), delta.clone().normalize());
+  if (length > 1e-8) mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), delta.clone().normalize());
   return mesh;
 }
 
@@ -57,41 +57,137 @@ export function arrowToward(tip, dirTowardTip, length, radius, material, name = 
   return coneArrow(start, d, length, radius, material, name);
 }
 
-export function createTextPlane(text, options = {}) {
+function hasCanvas() {
+  return typeof document !== 'undefined' && typeof document.createElement === 'function';
+}
+
+function textLines(value, maxLineLength = 34) {
+  const raw = String(value || '').replace(/\r\n?/g, '\n').split('\n').map((s) => s.trim()).filter(Boolean);
+  const out = [];
+  for (const line of raw.length ? raw : ['']) {
+    if (line.length <= maxLineLength) { out.push(line); continue; }
+    let current = '';
+    for (const word of line.split(/\s+/)) {
+      const trial = current ? `${current} ${word}` : word;
+      if (trial.length <= maxLineLength || !current) current = trial;
+      else { out.push(current); current = word; }
+    }
+    if (current) out.push(current);
+  }
+  return out.slice(0, 6);
+}
+
+function makeTextCanvas(text, options = {}) {
   const {
     width = 512,
     height = 192,
-    fontSize = 34,
-    bg = 'rgba(20,18,32,0.90)',
+    fontSize = 46,
     fg = '#ffffff',
-    border = '#ffc56e',
-    lineHeight = 1.18,
+    bg = 'rgba(0,0,0,0)',
+    border = 'rgba(0,0,0,0)',
+    font = 'Arial, Helvetica, sans-serif',
     padding = 18,
-    scale = 1,
-    name = 'text-plane'
+    align = 'left',
+    lineHeight = 1.18,
+    maxLineLength = 34
   } = options;
   const canvas = document.createElement('canvas');
   canvas.width = width;
   canvas.height = height;
   const ctx = canvas.getContext('2d');
   ctx.clearRect(0, 0, width, height);
-  roundRect(ctx, 5, 5, width - 10, height - 10, 18, bg, border, 4);
-  ctx.font = `700 ${fontSize}px Arial, sans-serif`;
-  ctx.fillStyle = fg;
+  if (bg && bg !== 'transparent' && bg !== 'rgba(0,0,0,0)') {
+    ctx.fillStyle = bg;
+    roundRect(ctx, 4, 4, width - 8, height - 8, 18, bg, border, 3);
+  } else if (border && border !== 'transparent' && border !== 'rgba(0,0,0,0)') {
+    roundRect(ctx, 4, 4, width - 8, height - 8, 18, 'rgba(0,0,0,0)', border, 3);
+  }
+  ctx.imageSmoothingEnabled = true;
   ctx.textBaseline = 'top';
-  const lines = wrapText(ctx, String(text || ''), width - padding * 2, 5);
-  const y0 = Math.max(padding, (height - lines.length * fontSize * lineHeight) / 2);
-  lines.forEach((line, i) => ctx.fillText(line, padding, y0 + i * fontSize * lineHeight));
-  const tex = new THREE.CanvasTexture(canvas);
-  tex.colorSpace = THREE.SRGBColorSpace;
-  const mesh = new THREE.Mesh(new THREE.PlaneGeometry((width / 120) * scale, (height / 120) * scale), new THREE.MeshBasicMaterial({ map: tex, transparent: true, side: THREE.DoubleSide }));
-  mesh.name = name;
-  return mesh;
+  ctx.font = `800 ${fontSize}px ${font}`;
+  ctx.fillStyle = fg;
+  ctx.strokeStyle = 'rgba(0,0,0,0.30)';
+  ctx.lineWidth = Math.max(2, fontSize * 0.05);
+  const lines = textLines(text, maxLineLength);
+  const total = lines.length * fontSize * lineHeight;
+  let y = Math.max(padding, (height - total) / 2);
+  for (const line of lines) {
+    const metrics = ctx.measureText(line);
+    const x = align === 'center' ? (width - metrics.width) / 2 : padding;
+    ctx.strokeText(line, x, y);
+    ctx.fillText(line, x, y);
+    y += fontSize * lineHeight;
+  }
+  return canvas;
 }
 
-export function createNodeLabel(label, position, scale = 0.55) {
-  const plane = createTextPlane(label, { width: 170, height: 78, fontSize: 34, bg: 'rgba(8,21,33,0.94)', border: '#7cc7ff', fg: '#eaffff', scale, name: `NODE_LABEL_${label}` });
+function flipU(geometry) {
+  const uv = geometry.getAttribute('uv');
+  if (!uv) return geometry;
+  for (let i = 0; i < uv.count; i += 1) uv.setX(i, 1 - uv.getX(i));
+  uv.needsUpdate = true;
+  return geometry;
+}
+
+export function createTextPlane(text, options = {}) {
+  const {
+    width = 512,
+    height = 192,
+    scale = 1,
+    name = 'text-plane',
+    fg = '#ffffff',
+    bg = 'rgba(0,0,0,0)',
+    border = 'rgba(0,0,0,0)',
+    fontSize = 42,
+    align = 'left',
+    depthWrite = false
+  } = options;
+
+  const w = (width / 120) * scale;
+  const h = (height / 120) * scale;
+  const group = new THREE.Group();
+  group.name = name;
+
+  if (!hasCanvas()) {
+    const fallback = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshBasicMaterial({ color: Number(options.fallbackColor || 0xffffff), transparent: true, opacity: 0.0, side: THREE.DoubleSide }));
+    fallback.name = `${name}_fallback_no_canvas`;
+    group.add(fallback);
+    return group;
+  }
+
+  const canvas = makeTextCanvas(text, { width, height, fg, bg, border, fontSize, align, maxLineLength: options.maxLineLength, padding: options.padding, lineHeight: options.lineHeight });
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.generateMipmaps = true;
+  tex.minFilter = THREE.LinearMipmapLinearFilter;
+  tex.magFilter = THREE.LinearFilter;
+  tex.anisotropy = 8;
+
+  const baseMat = { map: tex, transparent: true, alphaTest: 0.02, depthWrite, toneMapped: false };
+  const front = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshBasicMaterial({ ...baseMat, side: THREE.FrontSide }));
+  front.name = `${name}_front`;
+  const back = new THREE.Mesh(flipU(new THREE.PlaneGeometry(w, h)), new THREE.MeshBasicMaterial({ ...baseMat, side: THREE.BackSide }));
+  back.name = `${name}_back`;
+  group.add(front, back);
+  group.userData = { TYPE: 'TEXT_ANNOTATION', text: String(text || ''), textureTwoSidedReadable: true };
+  return group;
+}
+
+export function createNodeLabel(label, position, scale = 0.42) {
+  const plane = createTextPlane(label, {
+    width: 190,
+    height: 86,
+    fontSize: 38,
+    bg: 'rgba(0,0,0,0)',
+    border: 'rgba(0,0,0,0)',
+    fg: '#ffe45c',
+    scale,
+    align: 'center',
+    name: `NODE_LABEL_${label}`,
+    maxLineLength: 12
+  });
   plane.position.copy(position);
+  plane.userData = { TYPE: 'NODE_ANNOTATION', label, node: String(label).replace(/^N/i, ''), source: 'InputXML node annotation' };
   return plane;
 }
 
@@ -104,7 +200,7 @@ export function createWarningTriangle(label = '!', scale = 0.8) {
   const tri = new THREE.Mesh(new THREE.ShapeGeometry(shape), mat(COLORS.warning, { emissive: 0x330010, emissiveIntensity: 0.2 }));
   tri.name = 'warning_triangle';
   tri.scale.setScalar(scale);
-  const txt = createTextPlane(label, { width: 96, height: 96, fontSize: 66, bg: 'rgba(0,0,0,0)', border: 'rgba(0,0,0,0)', fg: '#2b0010', scale: 0.42, name: 'warning_triangle_text' });
+  const txt = createTextPlane(label, { width: 96, height: 96, fontSize: 66, bg: 'rgba(0,0,0,0)', border: 'rgba(0,0,0,0)', fg: '#2b0010', scale: 0.42, align: 'center', name: 'warning_triangle_text' });
   txt.position.z = 0.02;
   const g = new THREE.Group();
   g.name = 'warning_marker';
@@ -162,32 +258,13 @@ function roundRect(ctx, x, y, w, h, r, fill, stroke, lineWidth) {
   ctx.arcTo(x, y + h, x, y, r);
   ctx.arcTo(x, y, x + w, y, r);
   ctx.closePath();
-  ctx.fillStyle = fill;
-  ctx.fill();
-  if (stroke) {
+  if (fill && fill !== 'transparent' && fill !== 'rgba(0,0,0,0)') {
+    ctx.fillStyle = fill;
+    ctx.fill();
+  }
+  if (stroke && stroke !== 'transparent' && stroke !== 'rgba(0,0,0,0)') {
     ctx.lineWidth = lineWidth;
     ctx.strokeStyle = stroke;
     ctx.stroke();
   }
-}
-
-function wrapText(ctx, text, maxWidth, maxLines) {
-  const words = String(text).replace(/\s+/g, ' ').trim().split(' ');
-  const lines = [];
-  let line = '';
-  for (const word of words) {
-    const trial = line ? `${line} ${word}` : word;
-    if (ctx.measureText(trial).width <= maxWidth || !line) {
-      line = trial;
-    } else {
-      lines.push(line);
-      line = word;
-      if (lines.length >= maxLines - 1) break;
-    }
-  }
-  if (line && lines.length < maxLines) lines.push(line);
-  if (words.length && lines.length === maxLines && words.join(' ').length > lines.join(' ').length) {
-    lines[maxLines - 1] = `${lines[maxLines - 1].replace(/\s+\S+$/, '')} …`;
-  }
-  return lines;
 }
