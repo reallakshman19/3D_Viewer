@@ -45,7 +45,7 @@ async function loadPsnmUtilityRenderer() {
 async function loadRvmViewerRenderer() {
   await import('../rvm/RvmFileLoadedBridge.js?v=20260618-modular-rvm-file-loaded-1');
   await import('../rvm/AvevaJsonVisibleFallbackPatch.js?v=20260618-staged-visible-fallback-1');
-  await import('../tabs/viewer3d-rvm-uxml-import-addon.js?v=20260618-rvm-uxml-standard-pipeline-1');
+  await import('../tabs/viewer3d-rvm-uxml-import-addon.js?v=20260618-rvm-uxml-source-order-1');
   return import('../tabs/viewer3d-rvm-tab.js?v=20260618-rvm-uxml-import-1')
     .then((module) => pickRenderer(module, 'renderViewer3DRvm', 'viewer3d-rvm'));
 }
