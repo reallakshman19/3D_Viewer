@@ -15,6 +15,15 @@ import {
 const PORT_KEYS = Object.freeze(['APOS', 'LPOS', 'BPOS', 'HPOS', 'TPOS', 'POS']);
 const SUPPORT_TYPES = new Set(['SUPPORT', 'SUPP', 'SUPC', 'ATTA', 'ANCI', 'PIPE_SUPPORT', 'PIPESUPPORT']);
 const BRANCH_TYPES = new Set(['BRAN', 'BRANCH']);
+const BORE_FIELDS = Object.freeze(['HBOR', 'TBOR', 'ABORE', 'LBORE', 'BBORE', 'BORE', 'NBORE', 'DBOR']);
+const PORT_BORE_FIELD = Object.freeze({
+  APOS: 'ABORE',
+  LPOS: 'LBORE',
+  BPOS: 'BBORE',
+  HPOS: 'HBOR',
+  TPOS: 'TBOR',
+  POS: 'BORE',
+});
 
 function clean(value) {
   return String(value ?? '').trim();
@@ -75,12 +84,29 @@ function parseBore(value) {
   return Number.isFinite(n) && n > 0 ? n : null;
 }
 
+function boreInfo(attrs = {}, key = '') {
+  const n = parseBore(attrs[key]);
+  return n ? { value: n, field: key, raw: attrs[key] } : null;
+}
+
 function firstBore(attrs = {}) {
-  for (const key of ['HBOR', 'TBOR', 'ABORE', 'LBORE', 'BBORE', 'BORE', 'NBORE', 'DBOR']) {
-    const n = parseBore(attrs[key]);
-    if (n) return { value: n, field: key, raw: attrs[key] };
+  for (const key of BORE_FIELDS) {
+    const info = boreInfo(attrs, key);
+    if (info) return info;
   }
   return null;
+}
+
+function parseSizePair(attrs = {}) {
+  const text = [attrs.SPRE, attrs.DTXR, attrs.DESCRIPTION, attrs.DESC, attrs.NAME, attrs.TYPE]
+    .map(clean)
+    .filter(Boolean)
+    .join(' ');
+  const match = text.match(/(\d+(?:\.\d+)?)\s*(?:mm)?\s*[xX]\s*(\d+(?:\.\d+)?)/);
+  if (!match) return null;
+  const run = parseBore(match[1]);
+  const branch = parseBore(match[2]);
+  return run && branch ? { run, branch, raw: match[0] } : null;
 }
 
 function lineKeyFromBranch(branch = {}) {
@@ -158,9 +184,67 @@ function lengthBetween(a, b) {
   return Number.isFinite(len) ? len : null;
 }
 
+function makeBranchBoreIndex(branches = []) {
+  const index = new Map();
+  for (const branch of branches) {
+    const attrs = branch.attributes || {};
+    const bore = firstBore(attrs);
+    for (const key of [branch.name, attrs.NAME, attrs.OWNER].map(clean).filter(Boolean)) {
+      index.set(key, bore);
+    }
+  }
+  return index;
+}
+
+function resolveChildBranchBore(attrs = {}, branchBoreByName = new Map()) {
+  const cref = clean(attrs.CREF || attrs.BRANCH_REF || attrs.BRANCHREF || '');
+  const fromCref = cref ? branchBoreByName.get(cref) : null;
+  if (fromCref) return { ...fromCref, source: 'CREF_BRANCH_HBOR' };
+
+  const pair = parseSizePair(attrs);
+  if (pair?.branch) return { value: pair.branch, field: 'SIZE_PAIR_BRANCH', raw: pair.raw, source: 'SIZE_PAIR' };
+  return null;
+}
+
+function endpointBoreMap(attrs = {}, componentBore = null, childBranchBore = null) {
+  const map = {};
+  for (const [portKey, field] of Object.entries(PORT_BORE_FIELD)) {
+    const explicit = boreInfo(attrs, field);
+    if (explicit) map[portKey] = explicit;
+  }
+
+  const pair = parseSizePair(attrs);
+  if (pair?.run) {
+    if (!map.APOS) map.APOS = { value: pair.run, field: 'SIZE_PAIR_RUN', raw: pair.raw, source: 'SIZE_PAIR' };
+    if (!map.LPOS) map.LPOS = { value: pair.run, field: 'SIZE_PAIR_RUN', raw: pair.raw, source: 'SIZE_PAIR' };
+  }
+  if (childBranchBore?.value && !map.BPOS) {
+    map.BPOS = { ...childBranchBore, field: childBranchBore.field || 'BRANCH_BORE' };
+  } else if (pair?.branch && !map.BPOS) {
+    map.BPOS = { value: pair.branch, field: 'SIZE_PAIR_BRANCH', raw: pair.raw, source: 'SIZE_PAIR' };
+  }
+
+  if (componentBore?.value) {
+    for (const key of ['APOS', 'LPOS', 'HPOS', 'TPOS', 'POS']) {
+      if (!map[key]) map[key] = { ...componentBore, source: componentBore.source || 'COMPONENT_BORE' };
+    }
+  }
+  return map;
+}
+
+function serializeEndpointBores(map = {}) {
+  return Object.fromEntries(Object.entries(map).map(([key, info]) => [key, {
+    value: info?.value ?? null,
+    field: info?.field || '',
+    raw: clean(info?.raw ?? ''),
+    source: clean(info?.source || 'STAGED_ATTRIBUTE'),
+  }]));
+}
+
 export function buildUxmlFromStagedHierarchy(hierarchy = [], options = {}) {
   const stem = safeId(options.stem || options.inputName || 'RMSS_ATTRIBUTE', 'RMSS_ATTRIBUTE');
   const branches = Array.isArray(hierarchy) ? hierarchy.filter(isBranch) : [];
+  const branchBoreByName = makeBranchBoreIndex(branches);
   const doc = createUxmlDocument({
     header: createUxmlHeader({
       projectId: clean(options.projectId || ''),
@@ -219,7 +303,9 @@ export function buildUxmlFromStagedHierarchy(hierarchy = [], options = {}) {
       const normType = normalizedComponentType(rawType);
       const name = clean(child.name || cAttrs.NAME || `${normType}-${componentIndex + 1}`);
       const sourceRef = clean(cAttrs.DBREF || cAttrs.REF || cAttrs.NAME || name);
-      const bore = firstBore(cAttrs) || branchBore;
+      const componentBore = firstBore(cAttrs) || branchBore;
+      const childBranchBore = resolveChildBranchBore(cAttrs, branchBoreByName);
+      const endpointBores = endpointBoreMap(cAttrs, componentBore, childBranchBore);
       const componentId = `cmp:${safeId(name || sourceRef || `${normType}-${++componentIndex}`)}:${String(++componentIndex).padStart(5, '0')}`;
 
       const component = createUxmlComponent({
@@ -231,10 +317,15 @@ export function buildUxmlFromStagedHierarchy(hierarchy = [], options = {}) {
         lineKey,
         refNo: sourceRef,
         name,
-        bore: bore?.value ?? null,
+        bore: componentBore?.value ?? null,
+        branchBore: childBranchBore?.value ?? null,
         boreUnit: 'MM',
-        sizeRaw: bore?.raw ? clean(bore.raw) : '',
+        sizeRaw: componentBore?.raw ? clean(componentBore.raw) : '',
         rawAttributes: { ...cAttrs },
+        derived: {
+          endpointBores: serializeEndpointBores(endpointBores),
+          branchBoreSource: childBranchBore?.source || '',
+        },
         confidence: 'DERIVED_FROM_ATT_MANAGED_STAGE',
       });
 
@@ -269,14 +360,18 @@ export function buildUxmlFromStagedHierarchy(hierarchy = [], options = {}) {
           confidence: 'EXPLICIT_ATT_PORT',
         }));
         const portId = `prt:${safeId(name)}:${key}:${String(++portIndex).padStart(5, '0')}`;
+        const portBore = endpointBores[key] || componentBore || null;
         doc.ports.push(createUxmlPort({
           id: portId,
           componentId,
           anchorId,
           role: portRole(key),
           point,
-          bore: bore?.value ?? null,
-          branchBore: branchBore?.value ?? null,
+          bore: portBore?.value ?? null,
+          boreField: portBore?.field || PORT_BORE_FIELD[key] || '',
+          boreRaw: clean(portBore?.raw ?? ''),
+          branchBore: key === 'BPOS' ? (childBranchBore?.value ?? portBore?.value ?? null) : (childBranchBore?.value ?? null),
+          branchBoreField: key === 'BPOS' ? (childBranchBore?.field || 'BBORE') : '',
           connectsTo: key === 'BPOS' ? 'BRANCH' : 'ENDPOINT',
         }));
         component.anchorIds.push(anchorId);
@@ -287,6 +382,8 @@ export function buildUxmlFromStagedHierarchy(hierarchy = [], options = {}) {
         const from = anchorByKey[fromKey];
         const to = anchorByKey[toKey];
         if (!from || !to) continue;
+        const startBore = endpointBores[fromKey] || componentBore || null;
+        const endBore = endpointBores[toKey] || startBore || null;
         const segmentId = `seg:${safeId(name)}:${String(++segmentIndex).padStart(5, '0')}`;
         doc.segments.push(createUxmlSegment({
           id: segmentId,
@@ -294,7 +391,12 @@ export function buildUxmlFromStagedHierarchy(hierarchy = [], options = {}) {
           type: segType,
           startAnchorId: from.id,
           endAnchorId: to.id,
-          bore: bore?.value ?? null,
+          bore: startBore?.value ?? componentBore?.value ?? null,
+          startBore: startBore?.value ?? null,
+          startBoreField: startBore?.field || PORT_BORE_FIELD[fromKey] || '',
+          endBore: endBore?.value ?? null,
+          endBoreField: endBore?.field || PORT_BORE_FIELD[toKey] || '',
+          branchBore: segType === 'BRANCH' ? (childBranchBore?.value ?? endBore?.value ?? null) : null,
           length: lengthBetween(from.point, to.point),
           lengthUnit: 'MM',
         }));

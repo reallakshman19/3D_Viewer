@@ -5,13 +5,109 @@ import { AvevaJsonLoader } from '../rvm/AvevaJsonLoader.js';
 import {
   convertUxmlDocumentToAvevaHierarchy,
   isUxmlDocument,
-} from '../rvm/UxmlToAvevaJsonAdapter.js?v=20260618-uxml-source-order-1';
+} from '../rvm/UxmlToAvevaJsonAdapter.js?v=20260618-uxml-preserve-routed-pipes-1';
 
 const FLAG = '__RVM_UXML_IMPORT_ADDON_INSTALLED__';
 
+function lowerName(fileOrName = '') {
+  return String(fileOrName?.name || fileOrName || '').toLowerCase();
+}
+
 function isUxmlName(name = '') {
-  const lower = String(name || '').toLowerCase();
+  const lower = lowerName(name);
   return lower.endsWith('.uxml') || lower.endsWith('.uxml.json') || lower.includes('.uxml.');
+}
+
+function isJsonLikeName(name = '') {
+  const lower = lowerName(name);
+  return lower.endsWith('.json') || lower.endsWith('.uxml') || lower.includes('.uxml.');
+}
+
+function clean(value) {
+  return String(value ?? '').trim();
+}
+
+function upper(value) {
+  return clean(value).toUpperCase();
+}
+
+function boreNumber(value) {
+  const n = Number.parseFloat(String(value ?? '').replace(/mm\b/gi, '').trim());
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+
+function formattedBore(value) {
+  const n = boreNumber(value);
+  if (n == null) return '';
+  return `${Number.isInteger(n) ? n : Number(n.toFixed(3))}mm`;
+}
+
+function firstBoreField(attrs, fields) {
+  for (const field of fields) {
+    const raw = attrs?.[field];
+    const n = boreNumber(raw);
+    if (n != null) return { field, value: n, raw: clean(raw) || formattedBore(n) };
+  }
+  return null;
+}
+
+function chooseRunBoreForRender(attrs = {}) {
+  const normType = upper(attrs.UXML_NORMALIZED_TYPE || attrs.TYPE);
+
+  // TEE/OLET visual run/header diameter must come from the run side only.
+  // Branch/outlet bores belong in BBORE/BRBORE/OUTLET_BORE and must never drive
+  // the header pipe radius.
+  if (normType === 'OLET' || normType === 'TEE') {
+    return firstBoreField(attrs, ['ABORE', 'HBOR', 'BORE', 'LBORE']);
+  }
+
+  // Reducers render from the inlet/run side; the outlet/end bore is used by the
+  // reducer taper logic, not by the upstream pipe/header radius.
+  if (normType === 'REDUCER' || normType === 'REDU') {
+    return firstBoreField(attrs, ['ABORE', 'HBOR', 'BORE', 'LBORE', 'TBOR']);
+  }
+
+  // Generic UXML components: prefer start/run bore, then scalar bore, then end.
+  // BBORE is intentionally excluded because it is outlet-only.
+  return firstBoreField(attrs, ['ABORE', 'HBOR', 'BORE', 'LBORE', 'TBOR']);
+}
+
+function applyUxmlRenderBoreGuardToNode(node, branchAttrs = {}) {
+  if (!node || typeof node !== 'object') return;
+  const attrs = node.attributes && typeof node.attributes === 'object' ? node.attributes : null;
+  if (attrs && upper(attrs.SOURCE_FORMAT) === 'UXML') {
+    let bore = chooseRunBoreForRender(attrs);
+
+    // If a UXML PIPE came through with only an end bore, use the owning branch
+    // bore as the run/header fallback before allowing the end bore to drive the
+    // whole pipe. This prevents child-branch LBORE leaking into parent/header runs.
+    if (upper(attrs.TYPE) === 'PIPE' && bore?.field === 'LBORE') {
+      const branchBore = firstBoreField(branchAttrs, ['ABORE', 'HBOR', 'BORE', 'TBOR', 'LBORE']);
+      if (branchBore) bore = branchBore;
+    }
+
+    if (bore) {
+      attrs.RVM_RENDER_BORE = formattedBore(bore.value);
+      attrs.RVM_RENDER_BORE_SOURCE = bore.field;
+      // AvevaJsonLoader currently picks HBOR first. For UXML imports only, use
+      // HBOR as a render alias so branch/end LBORE cannot be selected first.
+      attrs.HBOR = attrs.RVM_RENDER_BORE;
+      attrs.UXML_RENDER_BORE_GUARD = 'true';
+    }
+  }
+  if (Array.isArray(node.children)) {
+    const nextBranchAttrs = upper(node.type || attrs?.TYPE) === 'BRANCH'
+      ? (attrs || branchAttrs)
+      : branchAttrs;
+    for (const child of node.children) applyUxmlRenderBoreGuardToNode(child, nextBranchAttrs);
+  }
+}
+
+function applyUxmlRenderBoreGuard(hierarchy = []) {
+  for (const root of Array.isArray(hierarchy) ? hierarchy : []) {
+    applyUxmlRenderBoreGuardToNode(root, root?.attributes || {});
+  }
+  return hierarchy;
 }
 
 function patchFileInput() {
@@ -38,14 +134,23 @@ function setStatusText(message) {
   if (bottom) bottom.textContent = message;
 }
 
-async function loadUxml(file) {
-  const text = await file.text();
-  const doc = JSON.parse(text);
-  if (!isUxmlDocument(doc)) throw new Error(`${file.name} is not a UXML topology document.`);
-  const hierarchy = convertUxmlDocumentToAvevaHierarchy(doc, { fileName: file.name });
+function unwrapUxmlDocument(value) {
+  if (isUxmlDocument(value)) return value;
+  const candidates = [
+    value?.uxml,
+    value?.uxmlDocument,
+    value?.document,
+    value?.data,
+    value?.payload,
+  ];
+  return candidates.find((candidate) => isUxmlDocument(candidate)) || null;
+}
+
+async function loadUxmlDocument(doc, fileName) {
+  const hierarchy = applyUxmlRenderBoreGuard(convertUxmlDocumentToAvevaHierarchy(doc, { fileName }));
 
   emit(RuntimeEvents.FILE_LOADED, {
-    name: `${file.name}.aveva-json`,
+    name: `${fileName}.aveva-json`,
     source: 'rvm-uxml-import-addon',
     payload: hierarchy,
     kind: 'aveva-json',
@@ -56,7 +161,7 @@ async function loadUxml(file) {
   // Use the same loader/event contract as managed_stage.json. AvevaJsonLoader.load()
   // emits RVM_MODEL_LOADED, and the active 3D RVM tab owns setModel/tree/search/status.
   const loader = new AvevaJsonLoader();
-  await loader.load(hierarchy, { sourceKind: 'uxml', fileName: file.name }, makeSession());
+  await loader.load(hierarchy, { sourceKind: 'uxml', fileName }, makeSession());
 
   const componentCount = Array.isArray(doc.components) ? doc.components.length : 0;
   setStatusText(`UXML loaded | Branches ${hierarchy.length.toLocaleString()} | Components ${componentCount.toLocaleString()}`);
@@ -66,24 +171,66 @@ async function loadUxml(file) {
   });
 }
 
+async function loadUxml(file) {
+  const text = await file.text();
+  const parsed = JSON.parse(text);
+  const doc = unwrapUxmlDocument(parsed);
+  if (!doc) throw new Error(`${file.name} is not a UXML topology document.`);
+  await loadUxmlDocument(doc, file.name);
+}
+
+function emitStandardJsonImport(fileName, json) {
+  const isBundleManifest = Boolean(json) && typeof json === 'object' && json.schemaVersion === 'rvm-bundle/v1';
+  emit(RuntimeEvents.FILE_LOADED, {
+    name: fileName,
+    source: 'rvm-tab',
+    payload: json,
+    kind: isBundleManifest ? 'bundle' : 'aveva-json',
+  });
+}
+
+async function importJsonLikeFiles(files = []) {
+  let uxmlCount = 0;
+  let passthroughCount = 0;
+
+  for (const file of files) {
+    const text = await file.text();
+    const parsed = JSON.parse(text);
+    const doc = unwrapUxmlDocument(parsed);
+    if (doc) {
+      uxmlCount += 1;
+      await loadUxmlDocument(doc, file.name);
+    } else {
+      passthroughCount += 1;
+      emitStandardJsonImport(file.name, parsed);
+    }
+  }
+
+  if (uxmlCount && passthroughCount) {
+    notify({ type: 'warning', message: 'Imported UXML and passed through non-UXML JSON file(s).' });
+  }
+}
+
 function installInputHook() {
   document.addEventListener('change', async (event) => {
     const input = event.target?.closest?.('#rvm-universal-file-input');
     if (!input) return;
     const files = Array.from(input.files || []);
-    const uxmlFiles = files.filter((file) => isUxmlName(file.name));
-    if (!uxmlFiles.length) return;
+    const jsonLikeFiles = files.filter((file) => isJsonLikeName(file.name) || isUxmlName(file.name));
+    if (!jsonLikeFiles.length) return;
 
+    // Capture JSON/UXML before the generic RVM tab handler. Without content sniffing,
+    // a renamed UXML sidecar can fall through as generic JSON and render as Node-1.
     event.preventDefault();
     event.stopPropagation();
     event.stopImmediatePropagation?.();
 
     try {
-      for (const file of uxmlFiles) await loadUxml(file);
-      const skipped = files.length - uxmlFiles.length;
-      if (skipped > 0) notify({ type: 'warning', message: 'Import UXML separately from non-UXML files.' });
+      await importJsonLikeFiles(jsonLikeFiles);
+      const skipped = files.length - jsonLikeFiles.length;
+      if (skipped > 0) notify({ type: 'warning', message: 'Import UXML/JSON separately from RVM/GLB/STP files.' });
     } catch (err) {
-      notify({ type: 'error', message: `UXML import failed: ${err.message || err}` });
+      notify({ type: 'error', message: `UXML/JSON import failed: ${err.message || err}` });
     } finally {
       input.value = '';
     }

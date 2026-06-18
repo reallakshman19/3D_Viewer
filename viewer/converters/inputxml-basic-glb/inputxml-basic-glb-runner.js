@@ -41,7 +41,7 @@ export async function run(ctx = {}) {
       const glbBuffer = result.glb instanceof ArrayBuffer ? result.glb : await result.glb?.arrayBuffer?.() ?? result.glb;
       if (!glbBuffer) throw new Error('GLB exporter returned no binary data.');
       outputs.push({ name: `${stem}.glb`, base64: arrayBufferToBase64(glbBuffer), mime: 'model/gltf-binary' });
-      stdout.push(`Converted: components=${result.audit.componentCount}, nodes=${result.audit.nodeCount}, supportSymbols=${result.audit.supportSymbols.length}, isonoteRecords=${result.audit.isonoteRecords}`);
+      stdout.push(`Converted: components=${result.audit.componentCount}, nodes=${result.audit.nodeCount}, supportSymbols=${result.audit.supportSymbols.length}, isonoteRecords=${result.audit.isonoteRecords}, postRestraintMeshes=${postProcess.restraintMeshesScaled}, compactNodeLabels=${postProcess.nodeLabelsCreated}`);
       if (options.includeSidecarJson !== false) {
         outputs.push({ name: `${stem}-inputxml-glb-sidecar.json`, text: JSON.stringify({ schema: 'inputxml-glb-sidecar/v1', source: sourceName, converter: 'INPUTXML->GLB', ...result.audit }, null, 2), mime: 'application/json' });
       }

@@ -14,7 +14,7 @@
 import { renderLegacyModelConvertersTab } from './legacy-adapter.js?v=20260617-basic-glb-2';
 import { installBmCiiSupportAnnotationPopup } from './bm-cii-support-annotation-popup.js?v=20260617-bmcii-open-basic-handoff-2';
 import { installInputXmlPropertyTransferUi } from './inputxml-property-transfer-popup-ui-v4.js?v=20260615-inputxml-property-transfer-popup-host-hide-1';
-import { installRvmAttrUxmlAddon } from './rvmattr-uxml-addon.js?v=20260618-active-registry-uxml-1';
+import { installRvmAttrUxmlAddon } from './rvmattr-uxml-addon.js?v=20260618-port-bore-contract-1';
 import { installXmlCiiConversionWorkflowPopup } from './xml-cii-conversion-workflow-popup.js';
 import { installInputXmlBasicGlbBridge } from './inputxml-basic-glb-bridge.js';
 
@@ -40,50 +40,31 @@ function trace(message, payload = {}) {
   } catch {}
 }
 
-/**
- * Remove the deprecated rich GLB option from the converter select element.
- * Called immediately after render and again after 0 ms and 250 ms to survive
- * any deferred DOM writes by the legacy adapter.
- *
- * @param {HTMLElement} container
- */
-function removeDeprecatedRichGlbOption(container) {
-  const select = container?.querySelector?.('#model-converters-select');
-  if (!select) return;
-  const richOption = select.querySelector('option[value="inputxml_to_glb"]');
-  if (!richOption) {
-    trace('deprecated rich GLB option absent', { selectValue: select.value });
-    return;
-  }
-  const wasSelected = select.value === 'inputxml_to_glb';
-  richOption.remove();
-  if (wasSelected) {
-    const bmCii = select.querySelector('option[value="bmcii_support_annotation_glb"]');
-    if (bmCii) {
-      select.value = 'bmcii_support_annotation_glb';
-      select.dispatchEvent(new Event('change', { bubbles: true }));
+function removeDeprecatedConverterOptions(container) {
+  const root = container instanceof Element ? container : document;
+  const selects = Array.from(root.querySelectorAll('select'));
+  const removed = [];
+  for (const select of selects) {
+    for (const option of Array.from(select.options || [])) {
+      const text = `${option.textContent || ''} ${option.value || ''}`.toLowerCase();
+      if (text.includes('rich glb') || text.includes('bm_cii rich') || text.includes('bm-cii rich')) {
+        removed.push({ text: option.textContent, value: option.value });
+        option.remove();
+      }
     }
   }
-  trace('removed deprecated rich GLB option', {
-    wasSelected,
-    newValue: select.value,
-    options: Array.from(select.options || []).map((option) => option.value),
-  });
+  if (removed.length) trace('removed deprecated rich GLB option', { removed });
+  else trace('deprecated rich GLB option absent', { selects: selects.length });
 }
 
 function installSafely(name, installer, container) {
   try {
-    trace('install start', { name });
+    trace('install start', { installer: name });
     installer(container);
-    trace('install done', {
-      name,
-      selectValue: container?.querySelector?.('#model-converters-select')?.value || '',
-      options: Array.from(
-        container?.querySelectorAll?.('#model-converters-select option') || [],
-      ).map((option) => option.value),
-    });
+    trace('install done', { installer: name });
   } catch (error) {
-    console.error(`[ModelConvertersTab] Optional installer failed: ${name}`, error);
+    console.warn(`Optional installer failed: ${name}`, error);
+    trace('install failed', { installer: name, error: error?.message || String(error) });
   }
 }
 
@@ -92,30 +73,17 @@ function scheduleInstaller(name, installer, container) {
   setTimeout(run, 0);
 }
 
-/**
- * Render the Model Converters tab into `container`.
- *
- * Returns the cleanup function produced by the legacy adapter (dispose worker
- * runtime and preview renderer).
- *
- * @param {HTMLElement} container
- * @param {Object} [ctx]  - Tab context forwarded from the viewer shell.
- * @returns {Function|undefined}  Cleanup / dispose function.
- */
-export function renderModelConvertersTab(container, ctx) {
-  trace('render start', { ctxKeys: Object.keys(ctx || {}) });
-  const result = renderLegacyModelConvertersTab(container, ctx);
-  removeDeprecatedRichGlbOption(container);
-  MODEL_CONVERTER_INSTALLERS.forEach(([name, installer]) =>
-    scheduleInstaller(name, installer, container),
-  );
-  setTimeout(() => removeDeprecatedRichGlbOption(container), 0);
-  setTimeout(() => removeDeprecatedRichGlbOption(container), 250);
-  trace('render done', {
-    selectValue: container?.querySelector?.('#model-converters-select')?.value || '',
-    options: Array.from(
-      container?.querySelectorAll?.('#model-converters-select option') || [],
-    ).map((option) => option.value),
-  });
-  return result;
+function runInstallers(container) {
+  for (const [name, installer] of MODEL_CONVERTER_INSTALLERS) {
+    scheduleInstaller(name, installer, container);
+  }
+}
+
+export function renderModelConvertersTab(container, ctx = {}) {
+  trace('render start', { containerPresent: Boolean(container) });
+  const destroy = renderLegacyModelConvertersTab(container, ctx);
+  removeDeprecatedConverterOptions(container);
+  runInstallers(container);
+  trace('render done', { installers: MODEL_CONVERTER_INSTALLERS.map(([name]) => name) });
+  return destroy;
 }

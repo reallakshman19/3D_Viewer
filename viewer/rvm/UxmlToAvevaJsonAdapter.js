@@ -1,4 +1,18 @@
 const SUPPORT_TYPES = new Set(['SUPPORT', 'PIPE_SUPPORT', 'PIPESUPPORT', 'ATTA', 'ANCI']);
+const BORE_FIELD_BY_ROLE = Object.freeze({
+  START: 'ABORE',
+  APOS: 'ABORE',
+  HEAD: 'HBOR',
+  HPOS: 'HBOR',
+  END: 'LBORE',
+  LPOS: 'LBORE',
+  TAIL: 'TBOR',
+  TPOS: 'TBOR',
+  BRANCH: 'BBORE',
+  BPOS: 'BBORE',
+  CENTER: 'BORE',
+  POS: 'BORE',
+});
 
 function clean(value) {
   return String(value ?? '').trim();
@@ -184,6 +198,70 @@ function sourceTypeForComponent(component, normType, rawAttrs = {}) {
   return firstNonEmpty(rawAttrs.TYPE, rawAttrs.RAW_TYPE, component.type, normType) || normType;
 }
 
+function formatBore(value) {
+  const n = finiteNumber(value);
+  if (n == null || n <= 0) return '';
+  return `${Number.isInteger(n) ? n : Number(n.toFixed(3))}mm`;
+}
+
+function boreFieldForRole(role, fallback = '') {
+  const normalized = upper(role);
+  return BORE_FIELD_BY_ROLE[normalized] || fallback || '';
+}
+
+function setBoreIfMissing(attrs, field, value) {
+  if (!field || attrs[field] != null && clean(attrs[field]) !== '') return;
+  const text = formatBore(value);
+  if (text) attrs[field] = text;
+}
+
+function applyDerivedEndpointBores(attrs, component) {
+  const endpointBores = component?.derived?.endpointBores;
+  if (!isObject(endpointBores)) return;
+  for (const [portKey, info] of Object.entries(endpointBores)) {
+    const field = clean(info?.field) || BORE_FIELD_BY_ROLE[upper(portKey)] || '';
+    setBoreIfMissing(attrs, field, info?.value);
+  }
+}
+
+function applyPortBores(attrs, component, indexes) {
+  const ports = collectComponentPorts(component, indexes.portById);
+  for (const port of ports) {
+    const role = upper(port.role);
+    const field = clean(port.boreField) || boreFieldForRole(role);
+    setBoreIfMissing(attrs, field, port.bore);
+    if (roleLooksLikeBranch(role)) {
+      setBoreIfMissing(attrs, clean(port.branchBoreField) || 'BBORE', port.branchBore ?? port.bore);
+    }
+  }
+}
+
+function applySegmentBores(attrs, component, indexes) {
+  const segmentIds = Array.isArray(component?.segmentIds) ? component.segmentIds : [];
+  for (const id of segmentIds) {
+    const segment = indexes.segmentById.get(String(id));
+    if (!segment) continue;
+    setBoreIfMissing(attrs, clean(segment.startBoreField) || 'ABORE', segment.startBore);
+    setBoreIfMissing(attrs, clean(segment.endBoreField) || 'LBORE', segment.endBore);
+    if (segment.type === 'BRANCH') setBoreIfMissing(attrs, 'BBORE', segment.branchBore ?? segment.endBore);
+  }
+}
+
+function applyUxmlBoreContract(attrs, component, indexes) {
+  // Preserve raw AVEVA fields first. Only restore fields that UXML explicitly
+  // carries on ports/segments/derived endpoint metadata. Never expand a single
+  // component.bore into HBOR/TBOR/ABORE/LBORE, because OLET/TEE/reducer branch
+  // components use different run and branch/end bores.
+  applyDerivedEndpointBores(attrs, component);
+  applyPortBores(attrs, component, indexes);
+  applySegmentBores(attrs, component, indexes);
+
+  const scalarBore = finiteNumber(component.bore);
+  if (scalarBore != null && scalarBore > 0 && !attrs.BORE) attrs.BORE = scalarBore;
+  const branchBore = finiteNumber(component.branchBore);
+  if (branchBore != null && branchBore > 0) setBoreIfMissing(attrs, 'BBORE', branchBore);
+}
+
 function buildComponentNode(component, branchName, indexes, uxml) {
   const normType = normalizeType(component.normalizedType || component.type);
   const geom = resolveComponentGeometry(component, indexes);
@@ -209,14 +287,7 @@ function buildComponentNode(component, branchName, indexes, uxml) {
   if (geom.cpos) attrs.CPOS = geom.cpos;
   if (geom.pos) attrs.POS = geom.pos;
 
-  const bore = finiteNumber(component.bore) ?? finiteNumber(geom.segment?.bore);
-  if (bore != null && bore > 0) {
-    attrs.BORE = bore;
-    attrs.ABORE = attrs.ABORE || `${bore}mm`;
-    attrs.HBOR = attrs.HBOR || `${bore}mm`;
-    attrs.LBORE = attrs.LBORE || `${bore}mm`;
-    attrs.TBOR = attrs.TBOR || `${bore}mm`;
-  }
+  applyUxmlBoreContract(attrs, component, indexes);
 
   if (normType === 'SUPPORT') {
     attrs.CMPSUPTYPE = attrs.CMPSUPTYPE || mapSupportKind(component, uxml);
@@ -315,7 +386,13 @@ export function convertUxmlDocumentToAvevaHierarchy(doc, options = {}) {
       TYPE: firstNonEmpty(rawPipelineAttrs.TYPE, 'BRAN'),
       NAME: firstNonEmpty(rawPipelineAttrs.NAME, branchName),
       OWNER: firstNonEmpty(rawPipelineAttrs.OWNER, pipeline?.system, pipeline?.area, doc.header?.modelId, options.fileName, 'UXML'),
-      SOURCE_FORMAT: 'UXML',
+      // UXML sidecars already preserve the staged route-bearing PIPE entries.
+      // Mark the branch as pre-routed so AvevaJsonLoader does not discard those
+      // pipes and regenerate connectors using upstream fitting bores (the OLET
+      // parent-bore regression).
+      SOURCE_FORMAT: 'REV_XML',
+      UXML_SOURCE_FORMAT: 'UXML',
+      UXML_ROUTE_PRESERVE: 'true',
       UXML_PIPELINE_ID: clean(pipeline?.id || pipelineRef),
       UXML_LINE_KEY: clean(pipeline?.lineKey || pipelineRef),
       SOURCE_FILE: clean(options.fileName || ''),
