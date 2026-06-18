@@ -16,6 +16,42 @@ export function resolveInspectableObject(obj) {
   return obj;
 }
 
+function cloneMaterialForHighlight(material) {
+  if (!material || typeof material.clone !== 'function') return material;
+  const cloned = material.clone();
+  if (cloned.emissive?.setHex) {
+    cloned.emissive.setHex(0x3b82f6);
+    cloned.emissiveIntensity = Math.max(0.8, Number(cloned.emissiveIntensity || 0));
+  } else if (cloned.color?.setHex) {
+    cloned.color.setHex(0x3b82f6);
+  }
+  cloned.needsUpdate = true;
+  return cloned;
+}
+
+function highlightObject(object) {
+  object.traverse((node) => {
+    if (!node.isMesh || !node.material) return;
+    if (node.userData.originalSelectionMaterial === undefined) node.userData.originalSelectionMaterial = node.material;
+    if (Array.isArray(node.material)) node.material = node.material.map(cloneMaterialForHighlight);
+    else node.material = cloneMaterialForHighlight(node.material);
+  });
+}
+
+function restoreHighlightObject(object) {
+  object.traverse((node) => {
+    if (!node.isMesh || node.userData.originalSelectionMaterial === undefined) return;
+    const highlighted = node.material;
+    node.material = node.userData.originalSelectionMaterial;
+    delete node.userData.originalSelectionMaterial;
+    const disposeOne = (mat) => {
+      if (mat && mat !== node.material && typeof mat.dispose === 'function') mat.dispose();
+    };
+    if (Array.isArray(highlighted)) highlighted.forEach(disposeOne);
+    else disposeOne(highlighted);
+  });
+}
+
 export function createSelection(getCamera, scene, domElement) {
   const raycaster = new THREE.Raycaster();
   const mouse = new THREE.Vector2();
@@ -34,45 +70,17 @@ export function createSelection(getCamera, scene, domElement) {
 
     let clickedObject = null;
     for (const intersect of intersects) {
-        // Skip helpers (assuming helpers don't have userData.pcfId and are not Meshes we care about)
-        
-        if (intersect.object.type === 'Mesh') {
-            clickedObject = resolveInspectableObject(intersect.object);
-            if (clickedObject) {
-                break;
-            }
-        }
+      if (intersect.object.type === 'Mesh') {
+        clickedObject = resolveInspectableObject(intersect.object);
+        if (clickedObject) break;
+      }
     }
 
-    // Un-highlight previous
-    if (activeHighlightObject && activeHighlightObject !== clickedObject) {
-        activeHighlightObject.traverse((node) => {
-            if (node.isMesh && node.material && node.userData.originalEmissive !== undefined) {
-                node.material.emissive.setHex(node.userData.originalEmissive);
-                node.material.emissiveIntensity = node.userData.originalIntensity;
-            }
-        });
-    }
+    if (activeHighlightObject && activeHighlightObject !== clickedObject) restoreHighlightObject(activeHighlightObject);
+    if (clickedObject && activeHighlightObject !== clickedObject) highlightObject(clickedObject);
 
-    // Highlight new
-    if (clickedObject && activeHighlightObject !== clickedObject) {
-        clickedObject.traverse((node) => {
-            if (node.isMesh && node.material) {
-                if (node.userData.originalEmissive === undefined) {
-                    node.userData.originalEmissive = node.material.emissive.getHex();
-                    node.userData.originalIntensity = node.material.emissiveIntensity || 0;
-                }
-                node.material = node.material.clone(); // ensure unique material to not highlight instances globally
-                node.material.emissive.setHex(0x3b82f6); // Neon Blue
-                node.material.emissiveIntensity = 0.8;
-            }
-        });
-    }
-    
     activeHighlightObject = clickedObject;
-    if (selectionCallback) {
-      selectionCallback(clickedObject);
-    }
+    if (selectionCallback) selectionCallback(clickedObject);
   };
 
   const onPointerDown = (event) => {
@@ -88,7 +96,11 @@ export function createSelection(getCamera, scene, domElement) {
     const distance = Math.hypot(event.clientX - pointerStart.x, event.clientY - pointerStart.y);
     pointerStart = null;
     if (distance > 4) return;
-    selectAt(event);
+    try {
+      selectAt(event);
+    } catch (error) {
+      console.error('Selection failed. Please check the browser console for the full error.', error);
+    }
   };
 
   domElement.addEventListener('pointerdown', onPointerDown);
@@ -97,6 +109,7 @@ export function createSelection(getCamera, scene, domElement) {
   return {
     onSelect: (fn) => { selectionCallback = fn; },
     dispose: () => {
+      if (activeHighlightObject) restoreHighlightObject(activeHighlightObject);
       domElement.removeEventListener('pointerdown', onPointerDown);
       domElement.removeEventListener('pointerup', onPointerUp);
     }
