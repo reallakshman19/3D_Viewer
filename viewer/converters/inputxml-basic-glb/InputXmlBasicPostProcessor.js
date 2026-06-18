@@ -15,6 +15,7 @@ const NODE_NAMEPLATE_SCALE = 0.72;
 const KEY_NODE_LABELS = Object.freeze(['10', '35', '130', '205', '255', '340']);
 const nodeLeaderMat = new THREE.MeshBasicMaterial({ color: COLORS.node, toneMapped: false });
 const isonoteLeaderMat = new THREE.MeshBasicMaterial({ color: COLORS.isonote, toneMapped: false });
+const handwheelMat = mat(COLORS.rigid, { emissive: 0x00352f, emissiveIntensity: 0.06 });
 
 const ISONOTE_POST_OFFSETS = Object.freeze({
   '35': [-1.30, 1.46, 0.66],
@@ -25,7 +26,7 @@ const ISONOTE_POST_OFFSETS = Object.freeze({
 
 export function applyInputXmlGlbPostFixes(scene, model, options = {}) {
   const stats = {
-    version: '1.1.1-readable-node-labels',
+    version: '1.2.0-handwheel-and-readable-node-labels',
     restraintVisualScale: RESTRAINT_SYMBOL_VISUAL_SCALE,
     engineeringContactScale: 1,
     nodeNameplateScale: NODE_NAMEPLATE_SCALE,
@@ -34,12 +35,14 @@ export function applyInputXmlGlbPostFixes(scene, model, options = {}) {
     nodeLabelsCreated: 0,
     isonoteNameplatesAdjusted: 0,
     isonoteLeadersRebuilt: 0,
+    valveHandwheelsEnhanced: 0,
     nodeLabelMode: options.nodeLabelMode || 'key'
   };
 
   if (!scene || !model) return stats;
 
   stats.restraintMeshesScaled = scaleRestraintVisualMeshes(scene, RESTRAINT_SYMBOL_VISUAL_SCALE);
+  stats.valveHandwheelsEnhanced = enhanceValveHandwheels(scene);
   const isonoteStats = adjustIsonoteNameplates(scene, model, options);
   stats.isonoteNameplatesAdjusted = isonoteStats.nameplates;
   stats.isonoteLeadersRebuilt = isonoteStats.leaders;
@@ -57,6 +60,7 @@ export function applyInputXmlGlbPostFixes(scene, model, options = {}) {
     compactNodeNameplates: true,
     nodeNameplateScale: NODE_NAMEPLATE_SCALE,
     isonoteNameplateScale: ISONOTE_NAMEPLATE_SCALE,
+    valveHandwheelGraphic: 'spoked-wheel-with-hub',
     annotationLayout: 'post-offset-from-pipe-surface'
   };
 
@@ -90,6 +94,64 @@ function scaleRestraintVisualMeshes(scene, scale) {
     };
   }
   return count;
+}
+
+function enhanceValveHandwheels(scene) {
+  let count = 0;
+  const wheels = [];
+  scene.traverse((obj) => {
+    if (obj?.userData?.meshRole === 'VALVE_HANDWHEEL' && !obj.userData.postHandwheelEnhanced) wheels.push(obj);
+  });
+
+  for (const wheel of wheels) {
+    const parent = wheel.parent || scene;
+    const radius = estimateWheelRadius(wheel);
+    const group = new THREE.Group();
+    group.name = `${wheel.name || 'VALVE_HANDWHEEL'}_SPOKED_GRAPHIC`;
+    group.position.copy(wheel.position);
+    group.quaternion.copy(wheel.quaternion);
+    group.userData = {
+      ...(wheel.userData || {}),
+      TYPE: wheel.userData?.TYPE || 'COMPONENT',
+      meshRole: 'VALVE_HANDWHEEL_SPOKED',
+      handwheelGraphic: 'ring-hub-four-spokes',
+      postHandwheelEnhanced: true
+    };
+
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(radius, Math.max(radius * 0.055, 0.018), 10, 44), handwheelMat);
+    ring.name = `${group.name}_ring`;
+    ring.userData = { ...(wheel.userData || {}), meshRole: 'VALVE_HANDWHEEL_RING' };
+    group.add(ring);
+
+    const spokeRadius = Math.max(radius * 0.030, 0.012);
+    for (const angle of [0, Math.PI / 2, Math.PI, Math.PI * 1.5]) {
+      const dir = new THREE.Vector3(Math.cos(angle), Math.sin(angle), 0);
+      const start = dir.clone().multiplyScalar(radius * 0.16);
+      const end = dir.clone().multiplyScalar(radius * 0.88);
+      const spoke = cylinderBetween(start, end, spokeRadius, handwheelMat, 8, `${group.name}_spoke_${Math.round(angle * 1000)}`);
+      spoke.userData = { ...(wheel.userData || {}), meshRole: 'VALVE_HANDWHEEL_SPOKE' };
+      group.add(spoke);
+    }
+
+    const hub = new THREE.Mesh(new THREE.SphereGeometry(Math.max(radius * 0.17, 0.045), 14, 10), handwheelMat);
+    hub.name = `${group.name}_hub`;
+    hub.userData = { ...(wheel.userData || {}), meshRole: 'VALVE_HANDWHEEL_HUB' };
+    group.add(hub);
+
+    wheel.visible = false;
+    wheel.userData = { ...(wheel.userData || {}), postHandwheelEnhanced: true, replacedBy: group.name };
+    parent.add(group);
+    count += 1;
+  }
+
+  return count;
+}
+
+function estimateWheelRadius(wheel) {
+  const box = new THREE.Box3().setFromObject(wheel);
+  const size = box.getSize(new THREE.Vector3());
+  const r = Math.max(size.x, size.y, size.z) / 2;
+  return Number.isFinite(r) && r > 0.02 ? r : 0.35;
 }
 
 function removeOldNodeAnnotations(scene) {
