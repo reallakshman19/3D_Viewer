@@ -30,8 +30,14 @@ export async function run(ctx = {}) {
     const stem = baseName(sourceName);
     ctx.setStatus?.('Building INPUTXML->GLB scene...', 'running');
     try {
-      const { convertInputXmlToGlb } = await import('./InputXmlBasicSceneBuilder.js');
+      const { convertInputXmlToGlb, exportSceneToGlb } = await import('./InputXmlBasicSceneBuilder.js');
+      const { applyInputXmlRestraintShapeFixes } =
+        await import('./InputXmlBasicRestraintShapeFixes.js');
       const result = await convertInputXmlToGlb(xmlText, options);
+      const restraintShapeFix =
+        applyInputXmlRestraintShapeFixes(result.scene, result.model, options);
+      result.audit.restraintShapeFix = restraintShapeFix;
+      result.glb = await exportSceneToGlb(result.scene);
       const glbBuffer = result.glb instanceof ArrayBuffer ? result.glb : await result.glb?.arrayBuffer?.() ?? result.glb;
       if (!glbBuffer) throw new Error('GLB exporter returned no binary data.');
       outputs.push({ name: `${stem}.glb`, base64: arrayBufferToBase64(glbBuffer), mime: 'model/gltf-binary' });
