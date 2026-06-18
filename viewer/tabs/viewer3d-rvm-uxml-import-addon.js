@@ -23,6 +23,93 @@ function isJsonLikeName(name = '') {
   return lower.endsWith('.json') || lower.endsWith('.uxml') || lower.includes('.uxml.');
 }
 
+function clean(value) {
+  return String(value ?? '').trim();
+}
+
+function upper(value) {
+  return clean(value).toUpperCase();
+}
+
+function boreNumber(value) {
+  const n = Number.parseFloat(String(value ?? '').replace(/mm\b/gi, '').trim());
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+
+function formattedBore(value) {
+  const n = boreNumber(value);
+  if (n == null) return '';
+  return `${Number.isInteger(n) ? n : Number(n.toFixed(3))}mm`;
+}
+
+function firstBoreField(attrs, fields) {
+  for (const field of fields) {
+    const raw = attrs?.[field];
+    const n = boreNumber(raw);
+    if (n != null) return { field, value: n, raw: clean(raw) || formattedBore(n) };
+  }
+  return null;
+}
+
+function chooseRunBoreForRender(attrs = {}) {
+  const normType = upper(attrs.UXML_NORMALIZED_TYPE || attrs.TYPE);
+
+  // TEE/OLET visual run/header diameter must come from the run side only.
+  // Branch/outlet bores belong in BBORE/BRBORE/OUTLET_BORE and must never drive
+  // the header pipe radius.
+  if (normType === 'OLET' || normType === 'TEE') {
+    return firstBoreField(attrs, ['ABORE', 'HBOR', 'BORE', 'LBORE']);
+  }
+
+  // Reducers render from the inlet/run side; the outlet/end bore is used by the
+  // reducer taper logic, not by the upstream pipe/header radius.
+  if (normType === 'REDUCER' || normType === 'REDU') {
+    return firstBoreField(attrs, ['ABORE', 'HBOR', 'BORE', 'LBORE', 'TBOR']);
+  }
+
+  // Generic UXML components: prefer start/run bore, then scalar bore, then end.
+  // BBORE is intentionally excluded because it is outlet-only.
+  return firstBoreField(attrs, ['ABORE', 'HBOR', 'BORE', 'LBORE', 'TBOR']);
+}
+
+function applyUxmlRenderBoreGuardToNode(node, branchAttrs = {}) {
+  if (!node || typeof node !== 'object') return;
+  const attrs = node.attributes && typeof node.attributes === 'object' ? node.attributes : null;
+  if (attrs && upper(attrs.SOURCE_FORMAT) === 'UXML') {
+    let bore = chooseRunBoreForRender(attrs);
+
+    // If a UXML PIPE came through with only an end bore, use the owning branch
+    // bore as the run/header fallback before allowing the end bore to drive the
+    // whole pipe. This prevents child-branch LBORE leaking into parent/header runs.
+    if (upper(attrs.TYPE) === 'PIPE' && bore?.field === 'LBORE') {
+      const branchBore = firstBoreField(branchAttrs, ['ABORE', 'HBOR', 'BORE', 'TBOR', 'LBORE']);
+      if (branchBore) bore = branchBore;
+    }
+
+    if (bore) {
+      attrs.RVM_RENDER_BORE = formattedBore(bore.value);
+      attrs.RVM_RENDER_BORE_SOURCE = bore.field;
+      // AvevaJsonLoader currently picks HBOR first. For UXML imports only, use
+      // HBOR as a render alias so branch/end LBORE cannot be selected first.
+      attrs.HBOR = attrs.RVM_RENDER_BORE;
+      attrs.UXML_RENDER_BORE_GUARD = 'true';
+    }
+  }
+  if (Array.isArray(node.children)) {
+    const nextBranchAttrs = upper(node.type || attrs?.TYPE) === 'BRANCH'
+      ? (attrs || branchAttrs)
+      : branchAttrs;
+    for (const child of node.children) applyUxmlRenderBoreGuardToNode(child, nextBranchAttrs);
+  }
+}
+
+function applyUxmlRenderBoreGuard(hierarchy = []) {
+  for (const root of Array.isArray(hierarchy) ? hierarchy : []) {
+    applyUxmlRenderBoreGuardToNode(root, root?.attributes || {});
+  }
+  return hierarchy;
+}
+
 function patchFileInput() {
   const input = document.querySelector('#rvm-universal-file-input');
   if (!input) return;
@@ -60,7 +147,7 @@ function unwrapUxmlDocument(value) {
 }
 
 async function loadUxmlDocument(doc, fileName) {
-  const hierarchy = convertUxmlDocumentToAvevaHierarchy(doc, { fileName });
+  const hierarchy = applyUxmlRenderBoreGuard(convertUxmlDocumentToAvevaHierarchy(doc, { fileName }));
 
   emit(RuntimeEvents.FILE_LOADED, {
     name: `${fileName}.aveva-json`,
