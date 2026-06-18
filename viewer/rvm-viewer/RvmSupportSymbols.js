@@ -157,7 +157,7 @@ function getAttrs(obj) {
   return out;
 }
 function supportSearchText(obj, attrs) {
-  return [obj?.name, obj?.userData?.name, obj?.userData?.type, obj?.userData?.kind, obj?.userData?.canonicalObjectId, attrs.TYPE, attrs.STYP, attrs.DTXR, attrs.SUPPORT_TYPE, attrs.SUPPORT_KIND, attrs.SUPPORT_MAPPER_KIND, attrs.CMPSUPTYPE, attrs.CMPSUPREFN, attrs.SUPPORT_TAG, attrs.NAME, attrs.TAG, attrs.TAGNO, attrs.SKEY, attrs.SPRE, attrs.DESCRIPTION, attrs.DESC, attrs.CONNECTIONTYPE].map(asText).join(' ');
+  return [obj?.name, obj?.userData?.name, obj?.userData?.type, obj?.userData?.kind, obj?.userData?.canonicalObjectId, attrs.TYPE, attrs.STYP, attrs.RAW_TYPE, attrs.DTXR, attrs.SUPPORT_TYPE, attrs.SUPPORT_KIND, attrs.SUPPORT_MAPPER_KIND, attrs.CMPSUPTYPE, attrs.CMPSUPREFN, attrs.SUPPORT_TAG, attrs.NAME, attrs.TAG, attrs.TAGNO, attrs.SKEY, attrs.SPRE, attrs.DESCRIPTION, attrs.DESC, attrs.CONNECTIONTYPE].map(asText).join(' ');
 }
 function normalizeSupportKind(text) {
   const s = String(text || '').toUpperCase();
@@ -183,7 +183,7 @@ function supportTag(obj, attrs) {
 }
 function isSupportObject(obj, attrs) {
   const text = supportSearchText(obj, attrs);
-  const typeText = String(attrs.TYPE || obj?.userData?.type || obj?.userData?.kind || '').toUpperCase();
+  const typeText = String(attrs.TYPE || attrs.RAW_TYPE || obj?.userData?.type || obj?.userData?.kind || '').toUpperCase();
   if (typeText === 'PIPE' || typeText === 'BRANCH') return false;
   return !!(
     resolveKindFromAttrs(attrs) ||
@@ -195,7 +195,11 @@ function isSupportObject(obj, attrs) {
   );
 }
 function rawPosition(attrs) {
-  for (const key of ['SUPPORTCOORD', 'SUPPORT_COORD', 'SCOORD', 'POS', 'POSITION', 'COORDS', 'CO_ORDS', 'CO_ORD', 'BPOS', 'BP', 'APOS', 'LPOS']) {
+  for (const key of [
+    'SUPPORTCOORD', 'SUPPORT_COORD', 'SCOORD', 'SUPPORT_POINT', 'SUPPORT_POS',
+    'LBOP', 'LBOS', 'LBOPOS', 'LBOPOINT',
+    'POS', 'POSITION', 'COORDS', 'CO_ORDS', 'CO_ORD', 'BPOS', 'BP', 'APOS', 'LPOS'
+  ]) {
     const p = normalizeCoord(attrs[key]);
     if (p) return p;
   }
@@ -210,7 +214,8 @@ function getSymbolPosition(obj, attrs, viewer) {
   // UXML support parity supplies the engineering support coordinate explicitly.
   // Use it before object-center fallback, otherwise support symbol overlays can
   // drift to the center of the generated support mesh rather than the pipe contact
-  // node used by XML->GLB support rendering.
+  // node used by XML->GLB support rendering. Some AVEVA ATTA records store the
+  // support point as LBOP/LBOS, so rawPosition intentionally includes those aliases.
   if (String(attrs.UXML_SUPPORT_PARITY || '').toLowerCase() === 'true') {
     const p = rawPosition(attrs);
     if (p) return viewer?.modelGroup ? viewer.modelGroup.localToWorld(p.clone()) : p;
