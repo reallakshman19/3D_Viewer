@@ -1,4 +1,4 @@
-import { getConverterById } from './converter-registry.js';
+import { getConverterById } from './converter-registry.js?v=20260617-basic-glb-2';
 import { run as runBaseRvmAttrToXml } from './converters/rvmattr-to-xml.js';
 import { buildUxmlTextFromStagedHierarchy } from './converters/rvmattr-stagedjson-to-uxml.js';
 
