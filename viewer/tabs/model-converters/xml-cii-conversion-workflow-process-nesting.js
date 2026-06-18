@@ -1,3 +1,11 @@
+/**
+ * @deprecated This module installs a MutationObserver on document.body to inject
+ * a process-nesting shortcuts panel.  It has no active callers as of Phase 6
+ * refactor (2026-06-18).  The XML→CII workflow phases are now defined in
+ * WorkflowShell.js and rendered directly by legacy-adapter.js.
+ * DO NOT import or re-activate installXmlCiiConversionWorkflowProcessNesting().
+ */
+
 const FLAG = '__xmlCiiWorkflowProcessEnrichmentNesting_v1';
 const ACTIVE_STEP_KEY = 'xmlCii2019.processEnrichment.activeStep.v1';
 

@@ -716,3 +716,37 @@ export function getConverterById(id) {
   return CONVERTERS.find(c => c.id === id) || null;
 }
 
+// ---------------------------------------------------------------------------
+// Startup integrity guard — fires at module import time.
+// Catches duplicate IDs and order/defs mismatches before any UI is rendered.
+// ---------------------------------------------------------------------------
+(function _assertRegistryIntegrity() {
+  const defIds = Object.keys(CONVERTER_DEFS);
+  const orderIds = CONVERTER_ORDER;
+
+  // No duplicate keys in CONVERTER_DEFS (JS object keys are unique, but
+  // CONVERTER_ORDER could list the same id twice).
+  const orderSeen = new Set();
+  for (const id of orderIds) {
+    if (orderSeen.has(id)) {
+      throw new Error(`[ConverterRegistry] Duplicate converter ID in CONVERTER_ORDER: "${id}"`);
+    }
+    orderSeen.add(id);
+  }
+
+  // Every id in CONVERTER_ORDER must exist in CONVERTER_DEFS.
+  for (const id of orderIds) {
+    if (!CONVERTER_DEFS[id]) {
+      throw new Error(`[ConverterRegistry] CONVERTER_ORDER references unknown converter: "${id}"`);
+    }
+  }
+
+  // Every id in CONVERTER_DEFS must appear in CONVERTER_ORDER (warn, not throw,
+  // to handle future staged additions).
+  for (const id of defIds) {
+    if (!orderSeen.has(id)) {
+      console.warn(`[ConverterRegistry] CONVERTER_DEFS has unordered converter: "${id}" (not in CONVERTER_ORDER)`);
+    }
+  }
+})();
+

@@ -53,6 +53,7 @@ import {
 } from '../../converters/xml-cii2019-core/linelist-mapping.js';
 import { buildStagedSupportIndex, xmlCiiTypeEntriesFromSupportKind, xmlCiiTypeEntryFromExistingRestraint, applyXmlRestraints, enrichHierarchyWithMapperKinds } from '../../converters/xml-cii2019-core/support-mapping.js';
 import { CONVERTERS, getConverterById } from './converter-registry.js?v=20260617-basic-glb-2';
+import { XML_CII_WORKFLOW_PHASES } from './WorkflowShell.js';
 import { loadStoredState, saveStoredState } from './core/config-store.js';
 import { downloadOutput, arrayBufferToBase64, baseNameWithoutExtension, isRvmFileName, isAttOrTxtFileName, encodeTextUtf8, decodeTextUtf8, toFiniteNumber } from './core/output-utils.js';
 import { WorkflowModal } from './shared/WorkflowModal.js';
@@ -110,16 +111,7 @@ const INPUTXML2019_SAFE_UNITS = Object.freeze({
   ]),
 });
 
-const XML_CII_WORKFLOW_PHASES = Object.freeze([
-  { id: 'regex',          label: '1 Regex',         summary: 'Derive line key, piping class, and size from XML Branchname tokens or regex.', state: 'Current' },
-  { id: 'import-masters', label: '2 Import Masters', summary: 'Load line list, piping class, material map, and valve weight sources.', state: 'Current' },
-  { id: 'preview',        label: '3 Preview',        summary: 'Dry-run enrichment preview per branch \u2014 inspect and override approximate matches.', state: 'Current' },
-  { id: 'diagnostics',    label: '4 Diagnostics',    summary: 'Run Dry Run to inspect enrichment data before committing to the full run.', state: 'Current' },
-  { id: 'weight-match',   label: '4A Weight Match',  summary: 'Review approximate component weights matched by bore, rating, and length, then Finalize and Run.', state: 'Current' },
-  { id: 'run',            label: '5 Run',            summary: 'Run the conversion \u2014 generates enriched XML and final CII output.', state: 'Current' },
-  { id: 'support-mapper', label: '6 Support Types',  summary: 'Map ATT/RVM fields to CII support kinds for enrichment and 3D symbol rendering.', state: 'Current' },
-  { id: 'config',         label: '7 Config',         summary: 'Edit all enrichment configuration fields and export/import the JSON config.', state: 'Current' },
-]);
+// XML_CII_WORKFLOW_PHASES is the canonical source from WorkflowShell.js (imported above).
 
 
 const XML_CII_MASTER_DEFS = Object.freeze({

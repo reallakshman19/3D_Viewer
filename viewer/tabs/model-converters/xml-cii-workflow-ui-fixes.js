@@ -1,3 +1,11 @@
+/**
+ * @deprecated This module's MutationObserver-based patches are no longer needed.
+ * The core workflow (WorkflowShell.js + legacy-adapter.js) renders phases in the
+ * correct order and phase order is enforced at import time by WorkflowShell.js.
+ * This file has no active callers as of Phase 6 refactor (2026-06-18).
+ * DO NOT import or re-activate installXmlCiiWorkflowUiFixes().
+ */
+
 const PHASE_LABELS = {
   regex: '1 Regex',
   'import-masters': '2 Import Masters',
