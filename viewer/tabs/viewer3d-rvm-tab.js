@@ -3,7 +3,7 @@ import { AvevaJsonLoader } from '../rvm/AvevaJsonLoader.js';
 import {
   convertUxmlDocumentToAvevaHierarchy,
   isUxmlDocument,
-} from '../rvm/UxmlToAvevaJsonAdapter.js?v=20260618-rvm-uxml-olet-bore-alias-1';
+} from '../rvm/UxmlToAvevaJsonAdapter.js?v=20260618-support-index-attrs-1';
 import {
   applyRvmSupportSymbolSettings,
   getRvmSupportSymbolSettings,
