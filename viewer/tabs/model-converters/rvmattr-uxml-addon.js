@@ -1,6 +1,6 @@
 import { getConverterById } from './converter-registry.js?v=20260617-basic-glb-2';
 import { run as runBaseRvmAttrToXml } from './converters/rvmattr-to-xml.js';
-import { buildUxmlTextFromStagedHierarchy } from './converters/rvmattr-stagedjson-to-uxml.js';
+import { buildUxmlTextFromStagedHierarchy } from './converters/rvmattr-stagedjson-to-uxml.js?v=20260618-port-bore-contract-1';
 
 function clean(value) {
   return String(value ?? '').trim();
