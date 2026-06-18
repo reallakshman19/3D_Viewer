@@ -53,17 +53,10 @@ async function loadUxml(file) {
     uxml: doc,
   });
 
-  // Use the same loader/event contract as managed_stage.json. The loader emits
-  // RVM_MODEL_LOADED, and the active 3D RVM tab owns setModel/tree/search/status.
+  // Use the same loader/event contract as managed_stage.json. AvevaJsonLoader.load()
+  // emits RVM_MODEL_LOADED, and the active 3D RVM tab owns setModel/tree/search/status.
   const loader = new AvevaJsonLoader();
-  const payload = await loader.load(hierarchy, { sourceKind: 'uxml', fileName: file.name }, makeSession());
-  emit(RuntimeEvents.RVM_MODEL_LOADED, {
-    ...payload,
-    source: 'rvm-uxml-import-addon',
-    sourceKind: 'uxml',
-    uxml: doc,
-    fileName: file.name,
-  });
+  await loader.load(hierarchy, { sourceKind: 'uxml', fileName: file.name }, makeSession());
 
   const componentCount = Array.isArray(doc.components) ? doc.components.length : 0;
   setStatusText(`UXML loaded | Branches ${hierarchy.length.toLocaleString()} | Components ${componentCount.toLocaleString()}`);
