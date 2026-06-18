@@ -90,12 +90,14 @@ export async function convertInputXmlToGlb(xmlText, options = {}) {
     componentMetadataUpdated: model.elements.length,
     defaultSupportMode: 'compare',
     restraintLogic: 'native-size-no-scale-actual-and-expected',
-    inferredElbowsDefault: 'bend-evidence-corners',
+    bendTrimLogic: 'adjacent-pipes-trimmed-to-1.5D-centerline-radius',
     options: { ...options }
   };
 
-  for (const element of model.elements) createElementGeometry(element, pipesGroup, options);
-  audit.cornerElbows = createCornerElbows(model, pipesGroup, elementByNode, { ...options, elbowMode: options.elbowMode || 'bend-evidence-corners' });
+  const bendCorners = resolveBendCorners(model, elementByNode, { ...options, elbowMode: options.elbowMode || 'bend-evidence-corners' });
+  const bendTrimMap = buildBendTrimMap(bendCorners);
+  for (const element of model.elements) createElementGeometry(element, pipesGroup, options, bendTrimMap);
+  audit.cornerElbows = createCornerElbowsFromSpecs(bendCorners, pipesGroup, options);
 
   if (options.nodeLabels !== false) {
     const labels = nodeLabelsToRender(model, options);
@@ -163,9 +165,16 @@ function resolvedBoreMm(element, fallback = 100) {
   return Number.isFinite(n) && n > 0 ? n : fallback;
 }
 
-function createElementGeometry(element, group, options) {
-  const a = vectorFrom(element.from, SCALE);
-  const b = vectorFrom(element.to, SCALE);
+function endpointKey(element, nodeId) {
+  return `${element.id}::${String(Number(nodeId))}`;
+}
+
+function createElementGeometry(element, group, options, bendTrimMap = new Map()) {
+  const a0 = vectorFrom(element.from, SCALE);
+  const b0 = vectorFrom(element.to, SCALE);
+  const a = bendTrimMap.get(endpointKey(element, element.fromNode)) || a0;
+  const b = bendTrimMap.get(endpointKey(element, element.toNode)) || b0;
+  if (a.distanceTo(b) < 0.015) return;
   const od = resolvedBoreMm(element, 100) * SCALE;
   const radius = Math.max(0.05, od / 2);
   const userData = buildComponentUserData(element);
@@ -177,7 +186,11 @@ function createElementGeometry(element, group, options) {
   if (rawType !== 'PIPE' && rawType !== 'BEND') { group.add(createRigidMarkerGeometry(a, b, radius, element, userData)); return; }
 
   const cyl = cylinderBetween(a, b, radius, pipeMat, options.compactMode === false ? 28 : 20, element.id);
-  cyl.userData = { ...userData, meshRole: rawType === 'BEND' ? 'BEND_CENTERLINE_PIPE' : userData.meshRole };
+  cyl.userData = {
+    ...userData,
+    meshRole: rawType === 'BEND' ? 'BEND_TRIMMED_TANGENT_PIPE' : userData.meshRole,
+    bendTrimApplied: bendTrimMap.has(endpointKey(element, element.fromNode)) || bendTrimMap.has(endpointKey(element, element.toNode))
+  };
   group.add(cyl);
 }
 
@@ -191,11 +204,9 @@ function hasBendEvidence(element) {
   return raw === 'BEND' || !!element.props?.bendRadius || !!element.props?.bendAngle;
 }
 
-function createCornerElbows(model, group, elementByNode, options = {}) {
-  if (options.enableInferredElbows === false || options.elbowMode === 'off') return 0;
-  let count = 0;
-  const radialSegments = options.compactMode === false ? 18 : 14;
-  const tubularSegments = options.compactMode === false ? 42 : 30;
+function resolveBendCorners(model, elementByNode, options = {}) {
+  if (options.enableInferredElbows === false || options.elbowMode === 'off') return [];
+  const corners = [];
   for (const node of model.nodes.values()) {
     const nodeId = String(node.id);
     const connected = (elementByNode.get(nodeId) || [])
@@ -209,17 +220,36 @@ function createCornerElbows(model, group, elementByNode, options = {}) {
     const [a, b] = connected;
     const dot = THREE.MathUtils.clamp(a.dir.dot(b.dir), -1, 1);
     const angleDeg = THREE.MathUtils.radToDeg(Math.acos(dot));
-    if (angleDeg < 70 || angleDeg > 115) continue;
+    if (angleDeg < 35 || angleDeg > 125) continue;
 
     const p = vectorFrom(node, SCALE);
     const pipeRadius = Math.max(a.pipeRadius, b.pipeRadius);
     const elbowRadius = Math.max(pipeRadius * 3.0, 0.22);
     const start = p.clone().add(a.dir.clone().multiplyScalar(elbowRadius));
     const end = p.clone().add(b.dir.clone().multiplyScalar(elbowRadius));
-    const curve = new THREE.QuadraticBezierCurve3(start, p, end);
-    const mesh = new THREE.Mesh(new THREE.TubeGeometry(curve, tubularSegments, pipeRadius, radialSegments, false), bendMat);
-    mesh.name = `BEND_1P5D_NODE_${nodeId}_${count + 1}`;
-    mesh.userData = { TYPE: 'COMPONENT', ID: mesh.name, id: mesh.name, engineeringType: 'BEND_1P5D_CORNER', meshRole: 'BEND_1P5D_CORNER', node: nodeId, bendRadius: '1.5D', source: 'InputXML BEND evidence two-leg corner default', fromElement: a.element.id, toElement: b.element.id };
+    corners.push({ nodeId, p, a, b, start, end, pipeRadius, elbowRadius, angleDeg });
+  }
+  return corners;
+}
+
+function buildBendTrimMap(corners) {
+  const map = new Map();
+  for (const corner of corners) {
+    map.set(endpointKey(corner.a.element, corner.nodeId), corner.start.clone());
+    map.set(endpointKey(corner.b.element, corner.nodeId), corner.end.clone());
+  }
+  return map;
+}
+
+function createCornerElbowsFromSpecs(corners, group, options = {}) {
+  let count = 0;
+  const radialSegments = options.compactMode === false ? 18 : 14;
+  const tubularSegments = options.compactMode === false ? 42 : 30;
+  for (const corner of corners) {
+    const curve = new THREE.QuadraticBezierCurve3(corner.start, corner.p, corner.end);
+    const mesh = new THREE.Mesh(new THREE.TubeGeometry(curve, tubularSegments, corner.pipeRadius, radialSegments, false), bendMat);
+    mesh.name = `BEND_1P5D_TRIMMED_NODE_${corner.nodeId}_${count + 1}`;
+    mesh.userData = { TYPE: 'COMPONENT', ID: mesh.name, id: mesh.name, engineeringType: 'BEND_1P5D_TRIMMED_CORNER', meshRole: 'BEND_1P5D_TRIMMED_CORNER', node: corner.nodeId, bendRadius: '1.5D', bendAngleDeg: Number(corner.angleDeg.toFixed(3)), source: 'InputXML BEND evidence with adjacent pipe trim', trimLogic: 'adjacent-centerlines-trimmed-by-1.5D-centerline-radius', fromElement: corner.a.element.id, toElement: corner.b.element.id };
     group.add(mesh);
     count += 1;
   }
