@@ -11,6 +11,7 @@ import {
 const SCALE = 0.01;
 const RESTRAINT_SYMBOL_VISUAL_SCALE = 1.5;
 const ISONOTE_NAMEPLATE_SCALE = 0.78;
+const NODE_NAMEPLATE_SCALE = 0.72;
 const KEY_NODE_LABELS = Object.freeze(['10', '35', '130', '205', '255', '340']);
 const nodeLeaderMat = new THREE.MeshBasicMaterial({ color: COLORS.node, toneMapped: false });
 const isonoteLeaderMat = new THREE.MeshBasicMaterial({ color: COLORS.isonote, toneMapped: false });
@@ -24,9 +25,10 @@ const ISONOTE_POST_OFFSETS = Object.freeze({
 
 export function applyInputXmlGlbPostFixes(scene, model, options = {}) {
   const stats = {
-    version: '1.1.0-layout-tuned-nameplates-restraints-1p5x',
+    version: '1.1.1-readable-node-labels',
     restraintVisualScale: RESTRAINT_SYMBOL_VISUAL_SCALE,
     engineeringContactScale: 1,
+    nodeNameplateScale: NODE_NAMEPLATE_SCALE,
     restraintMeshesScaled: 0,
     nodeLabelsRemoved: 0,
     nodeLabelsCreated: 0,
@@ -53,6 +55,7 @@ export function applyInputXmlGlbPostFixes(scene, model, options = {}) {
     restraintVisualScale: '1.5x-symbol-only',
     engineeringContactScale: '1x',
     compactNodeNameplates: true,
+    nodeNameplateScale: NODE_NAMEPLATE_SCALE,
     isonoteNameplateScale: ISONOTE_NAMEPLATE_SCALE,
     annotationLayout: 'post-offset-from-pipe-surface'
   };
@@ -165,21 +168,21 @@ function createCompactNodeNameplates(scene, model, options = {}) {
     const p = vectorFrom(node, SCALE);
     const labelPos = p.clone().add(compactNodeOffset(elementByNode, nodeId));
     const label = createTextPlane(`N${nodeId}`, {
-      width: 112,
-      height: 54,
-      fontSize: 34,
+      width: 148,
+      height: 68,
+      fontSize: 46,
       fg: '#ffe45c',
-      bg: 'rgba(8,14,24,0.90)',
+      bg: 'rgba(8,14,24,0.92)',
       border: '#ffe45c',
       align: 'center',
-      scale: 0.46,
+      scale: NODE_NAMEPLATE_SCALE,
       name: `NODE_ANNOTATION_COMPACT_${nodeId}`,
       maxLineLength: 10,
       autoSize: true,
-      minWidth: 70,
-      maxWidth: 138,
-      minHeight: 38,
-      maxHeight: 66
+      minWidth: 96,
+      maxWidth: 176,
+      minHeight: 48,
+      maxHeight: 82
     });
     label.position.copy(labelPos);
     label.userData = {
@@ -188,10 +191,11 @@ function createCompactNodeNameplates(scene, model, options = {}) {
       label: `N${nodeId}`,
       source: 'InputXML post-processed compact node annotation',
       colorRole: 'node-yellow',
-      annotationRenderer: 'compact-stable-nameplate-texture-plane'
+      annotationRenderer: 'compact-stable-nameplate-texture-plane',
+      postNodeNameplateScale: NODE_NAMEPLATE_SCALE
     };
 
-    const leader = cylinderBetween(p, labelPos, 0.008, nodeLeaderMat, 8, `NODE_ANNOTATION_LEADER_COMPACT_${nodeId}`);
+    const leader = cylinderBetween(p, labelPos, 0.010, nodeLeaderMat, 8, `NODE_ANNOTATION_LEADER_COMPACT_${nodeId}`);
     leader.userData = {
       TYPE: 'NODE_ANNOTATION_LEADER',
       node: String(nodeId),
