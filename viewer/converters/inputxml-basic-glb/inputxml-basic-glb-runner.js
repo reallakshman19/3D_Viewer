@@ -31,17 +31,21 @@ export async function run(ctx = {}) {
     ctx.setStatus?.('Building INPUTXML->GLB scene...', 'running');
     try {
       const { convertInputXmlToGlb, exportSceneToGlb } = await import('./InputXmlBasicSceneBuilder.js');
-      const { applyInputXmlRestraintShapeFixes } =
-        await import('./InputXmlBasicRestraintShapeFixes.js');
+      const { applyInputXmlGlbPostFixes } = await import('./InputXmlBasicPostProcessor.js');
+      const { applyInputXmlRestraintShapeFixes } = await import('./InputXmlBasicRestraintShapeFixes.js');
+
       const result = await convertInputXmlToGlb(xmlText, options);
-      const restraintShapeFix =
-        applyInputXmlRestraintShapeFixes(result.scene, result.model, options);
+      const postProcess = applyInputXmlGlbPostFixes(result.scene, result.model, options);
+      const restraintShapeFix = applyInputXmlRestraintShapeFixes(result.scene, result.model, options);
+
+      result.audit.postProcess = postProcess;
       result.audit.restraintShapeFix = restraintShapeFix;
       result.glb = await exportSceneToGlb(result.scene);
+
       const glbBuffer = result.glb instanceof ArrayBuffer ? result.glb : await result.glb?.arrayBuffer?.() ?? result.glb;
       if (!glbBuffer) throw new Error('GLB exporter returned no binary data.');
       outputs.push({ name: `${stem}.glb`, base64: arrayBufferToBase64(glbBuffer), mime: 'model/gltf-binary' });
-      stdout.push(`Converted: components=${result.audit.componentCount}, nodes=${result.audit.nodeCount}, supportSymbols=${result.audit.supportSymbols.length}, isonoteRecords=${result.audit.isonoteRecords}, postRestraintMeshes=${postProcess.restraintMeshesScaled}, compactNodeLabels=${postProcess.nodeLabelsCreated}`);
+      stdout.push(`Converted: components=${result.audit.componentCount}, nodes=${result.audit.nodeCount}, supportSymbols=${result.audit.supportSymbols.length}, isonoteRecords=${result.audit.isonoteRecords}, postRestraintMeshes=${postProcess.restraintMeshesScaled}, compactNodeLabels=${postProcess.nodeLabelsCreated}, anchorBlocks=${restraintShapeFix.anchorBlocksCreated}, unknownCrosses=${restraintShapeFix.unknownCrossesCreated}`);
       if (options.includeSidecarJson !== false) {
         outputs.push({ name: `${stem}-inputxml-glb-sidecar.json`, text: JSON.stringify({ schema: 'inputxml-glb-sidecar/v1', source: sourceName, converter: 'INPUTXML->GLB', ...result.audit }, null, 2), mime: 'application/json' });
       }
