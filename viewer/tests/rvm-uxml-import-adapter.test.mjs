@@ -9,17 +9,33 @@ const uxml = {
   profile: 'UXML-TOPOLOGY-FULL',
   header: { modelId: 'UNIT-RVM-UXML' },
   pipelines: [
-    { id: 'pipe:P-1001', pipelineRef: 'P-1001', lineKey: 'P1001', lineNo: 'P-1001' },
+    {
+      id: 'pipe:P-1001',
+      pipelineRef: 'P-1001',
+      lineKey: 'P1001',
+      lineNo: 'P-1001',
+      rawAttributes: {
+        NAME: 'P-1001/B1',
+        OWNER: 'P-1001',
+        HPOS: { x: 0, y: 0, z: 0 },
+        TPOS: { x: 1000, y: 0, z: 0 },
+        HREF: '=HEAD',
+        TREF: '=TAIL',
+      },
+    },
   ],
   components: [
     {
-      id: 'cmp:pipe-001',
+      // Name intentionally sorts after the elbow. The adapter must preserve
+      // staged/source order from the :00001 id suffix, otherwise the RVM
+      // loader's sequential topology connects the wrong adjacent components.
+      id: 'cmp:ZZZ-PIPE-001:00001',
       type: 'PIPE',
       normalizedType: 'PIPE',
       pipelineRef: 'pipe:P-1001',
       lineKey: 'P1001',
       refNo: 'PIPE-001',
-      name: 'PIPE 001',
+      name: 'ZZZ PIPE 001',
       bore: 100,
       anchorIds: ['anc:pipe-001:APOS', 'anc:pipe-001:LPOS'],
       portIds: ['prt:pipe-001:APOS', 'prt:pipe-001:LPOS'],
@@ -27,7 +43,22 @@ const uxml = {
       rawAttributes: { SPRE: 'PIPE-SPEC' },
     },
     {
-      id: 'cmp:support-001',
+      // Name intentionally sorts before the pipe. It should still remain second.
+      id: 'cmp:AAA-ELBO-001:00002',
+      type: 'ELBO',
+      normalizedType: 'ELBOW',
+      pipelineRef: 'pipe:P-1001',
+      lineKey: 'P1001',
+      refNo: '=ELBO-001',
+      name: 'AAA ELBO 001',
+      bore: 100,
+      anchorIds: ['anc:elbo-001:APOS', 'anc:elbo-001:LPOS'],
+      portIds: ['prt:elbo-001:APOS', 'prt:elbo-001:LPOS'],
+      segmentIds: ['seg:elbo-001'],
+      rawAttributes: { TYPE: 'ELBO', NAME: '=ELBO-001', REF: '=ELBO-001' },
+    },
+    {
+      id: 'cmp:support-001:00003',
       type: 'SUPPORT',
       normalizedType: 'SUPPORT',
       pipelineRef: 'pipe:P-1001',
@@ -41,20 +72,25 @@ const uxml = {
     },
   ],
   anchors: [
-    { id: 'anc:pipe-001:APOS', componentId: 'cmp:pipe-001', role: 'START', point: { x: 0, y: 0, z: 0 } },
-    { id: 'anc:pipe-001:LPOS', componentId: 'cmp:pipe-001', role: 'END', point: { x: 1000, y: 0, z: 0 } },
-    { id: 'anc:support-001:POS', componentId: 'cmp:support-001', role: 'CENTER', point: { x: 500, y: 0, z: 0 } },
+    { id: 'anc:pipe-001:APOS', componentId: 'cmp:ZZZ-PIPE-001:00001', role: 'START', point: { x: 0, y: 0, z: 0 } },
+    { id: 'anc:pipe-001:LPOS', componentId: 'cmp:ZZZ-PIPE-001:00001', role: 'END', point: { x: 1000, y: 0, z: 0 } },
+    { id: 'anc:elbo-001:APOS', componentId: 'cmp:AAA-ELBO-001:00002', role: 'START', point: { x: 1000, y: 0, z: 0 } },
+    { id: 'anc:elbo-001:LPOS', componentId: 'cmp:AAA-ELBO-001:00002', role: 'END', point: { x: 1000, y: 250, z: 0 } },
+    { id: 'anc:support-001:POS', componentId: 'cmp:support-001:00003', role: 'CENTER', point: { x: 500, y: 0, z: 0 } },
   ],
   ports: [
-    { id: 'prt:pipe-001:APOS', componentId: 'cmp:pipe-001', anchorId: 'anc:pipe-001:APOS', role: 'START' },
-    { id: 'prt:pipe-001:LPOS', componentId: 'cmp:pipe-001', anchorId: 'anc:pipe-001:LPOS', role: 'END' },
-    { id: 'prt:support-001:POS', componentId: 'cmp:support-001', anchorId: 'anc:support-001:POS', role: 'CENTER' },
+    { id: 'prt:pipe-001:APOS', componentId: 'cmp:ZZZ-PIPE-001:00001', anchorId: 'anc:pipe-001:APOS', role: 'START' },
+    { id: 'prt:pipe-001:LPOS', componentId: 'cmp:ZZZ-PIPE-001:00001', anchorId: 'anc:pipe-001:LPOS', role: 'END' },
+    { id: 'prt:elbo-001:APOS', componentId: 'cmp:AAA-ELBO-001:00002', anchorId: 'anc:elbo-001:APOS', role: 'START' },
+    { id: 'prt:elbo-001:LPOS', componentId: 'cmp:AAA-ELBO-001:00002', anchorId: 'anc:elbo-001:LPOS', role: 'END' },
+    { id: 'prt:support-001:POS', componentId: 'cmp:support-001:00003', anchorId: 'anc:support-001:POS', role: 'CENTER' },
   ],
   segments: [
-    { id: 'seg:pipe-001', componentId: 'cmp:pipe-001', startAnchorId: 'anc:pipe-001:APOS', endAnchorId: 'anc:pipe-001:LPOS', bore: 100 },
+    { id: 'seg:pipe-001', componentId: 'cmp:ZZZ-PIPE-001:00001', startAnchorId: 'anc:pipe-001:APOS', endAnchorId: 'anc:pipe-001:LPOS', bore: 100 },
+    { id: 'seg:elbo-001', componentId: 'cmp:AAA-ELBO-001:00002', startAnchorId: 'anc:elbo-001:APOS', endAnchorId: 'anc:elbo-001:LPOS', bore: 100 },
   ],
   supports: [
-    { id: 'sup:001', componentId: 'cmp:support-001', type: 'GUIDE', supportAnchorId: 'anc:support-001:POS' },
+    { id: 'sup:001', componentId: 'cmp:support-001:00003', type: 'GUIDE', supportAnchorId: 'anc:support-001:POS' },
   ],
 };
 
@@ -63,7 +99,14 @@ assert.equal(isUxmlDocument(uxml), true);
 const hierarchy = convertUxmlDocumentToAvevaHierarchy(uxml, { fileName: 'unit.managed_stage.uxml.json' });
 assert.equal(hierarchy.length, 1);
 assert.equal(hierarchy[0].type, 'BRANCH');
-assert.equal(hierarchy[0].children.length, 2);
+assert.equal(hierarchy[0].children.length, 3);
+assert.deepEqual(hierarchy[0].attributes.HPOS, { x: 0, y: 0, z: 0 });
+assert.deepEqual(hierarchy[0].attributes.TPOS, { x: 1000, y: 0, z: 0 });
+assert.equal(hierarchy[0].attributes.HREF, '=HEAD');
+assert.equal(hierarchy[0].attributes.TREF, '=TAIL');
+
+assert.equal(hierarchy[0].children[0].name, 'ZZZ PIPE 001', 'UXML adapter must preserve source/staged order from id suffix, not alphabetic name order');
+assert.equal(hierarchy[0].children[1].name, 'AAA ELBO 001', 'ELBO must remain after the preceding pipe per source order');
 
 const pipe = hierarchy[0].children.find((child) => child.type === 'PIPE');
 assert.ok(pipe, 'PIPE component should be mapped');
@@ -71,7 +114,15 @@ assert.deepEqual(pipe.attributes.APOS, { x: 0, y: 0, z: 0 });
 assert.deepEqual(pipe.attributes.LPOS, { x: 1000, y: 0, z: 0 });
 assert.equal(pipe.attributes.BORE, 100);
 assert.equal(pipe.attributes.SOURCE_FORMAT, 'UXML');
-assert.equal(pipe.attributes.UXML_COMPONENT_ID, 'cmp:pipe-001');
+assert.equal(pipe.attributes.UXML_COMPONENT_ID, 'cmp:ZZZ-PIPE-001:00001');
+
+const elbow = hierarchy[0].children.find((child) => child.name === 'AAA ELBO 001');
+assert.ok(elbow, 'ELBO component should be mapped');
+assert.equal(elbow.type, 'ELBO', 'UXML adapter must preserve staged short type names for RVM loader parity');
+assert.equal(elbow.attributes.TYPE, 'ELBO');
+assert.equal(elbow.attributes.UXML_NORMALIZED_TYPE, 'ELBOW');
+assert.equal(elbow.attributes.NAME, '=ELBO-001');
+assert.equal(elbow.attributes.REF, '=ELBO-001');
 
 const support = hierarchy[0].children.find((child) => child.type === 'SUPPORT');
 assert.ok(support, 'SUPPORT component should be mapped');
