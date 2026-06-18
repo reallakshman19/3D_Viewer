@@ -8,6 +8,14 @@ const SUPPORT_SYMBOL_GROUP_NAME = '__RVM_SUPPORT_SYMBOLS__';
 const SUPPORT_KIND_RX = /\b(GUIDE|LINE\s*STOP|LINESTOP|LIMIT\s*STOP|LIMIT|RESTING|REST|SHOE|BP|BASE\s*PLATE|ANCHOR|FIXED|STOPPER|STOP)\b/i;
 const SUPPORT_TAG_RX = /\bPS[-_\s]?[A-Z0-9][A-Z0-9._/\-]*\b/i;
 const SUPPORT_SYMBOL_COLOR = 0x60c864;
+const SUPPORT_KIND_COLORS = Object.freeze({
+  REST: 0x5ee56a,
+  GUIDE: 0x42d7ff,
+  LINESTOP: 0xffb347,
+  LIMIT: 0xffb347,
+  ANCHOR: 0xf266ff,
+  SPRING: 0xff6fae,
+});
 
 const SUPPORT_SYMBOL_SETTINGS_STORAGE_KEY = 'rvm_support_symbol_settings_v1';
 
@@ -26,6 +34,11 @@ const DEFAULTS = Object.freeze({
   maxScale: 180,
 
   belowPipeFactor: 0.72,
+
+  // Label-density guard: when labels are enabled, show a readable subset rather
+  // than every support tag on top of the model. Symbols remain fully rendered.
+  maxVisibleLabels: 28,
+  labelGridFactor: 1.45,
 });
 
 function asText(value) {
@@ -261,6 +274,9 @@ function chooseLateralAxis(pipeAxis, verticalAxis) {
 function createMaterial(color, opacity = 1) {
   return new THREE.MeshBasicMaterial({ color, transparent: opacity < 1, opacity, depthTest: true });
 }
+function colorForKind(kind) {
+  return SUPPORT_KIND_COLORS[kind] || SUPPORT_SYMBOL_COLOR;
+}
 function orientAlongY(mesh, direction) {
   const dir = direction.clone().normalize();
   mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir);
@@ -285,21 +301,39 @@ function makeArrow(start, end, color, radius) {
 }
 function makePlate(center, lateral, pipeAxis, vertical, size, color) {
   const geo = new THREE.BoxGeometry(size * 1.15, size * 0.14, size * 0.65);
-  const mesh = new THREE.Mesh(geo, createMaterial(color, 0.92));
+  const mesh = new THREE.Mesh(geo, createMaterial(color, 0.88));
   mesh.position.copy(center.clone().add(vertical.clone().multiplyScalar(-size * 0.12)));
   const basis = new THREE.Matrix4().makeBasis(pipeAxis.clone().normalize(), vertical.clone().normalize(), lateral.clone().normalize());
   mesh.quaternion.setFromRotationMatrix(basis);
   return mesh;
 }
-function addLabel(group, text, at, size, visible) {
+function makeStopBlock(center, axis, lateral, vertical, size, color, name = 'STOP_BLOCK') {
+  const geo = new THREE.BoxGeometry(size * 0.18, size * 0.72, size * 0.9);
+  const mesh = new THREE.Mesh(geo, createMaterial(color, 0.9));
+  mesh.name = name;
+  mesh.position.copy(center);
+  const basis = new THREE.Matrix4().makeBasis(axis.clone().normalize(), vertical.clone().normalize(), lateral.clone().normalize());
+  mesh.quaternion.setFromRotationMatrix(basis);
+  return mesh;
+}
+function makeAnchorCube(center, pipeAxis, lateral, vertical, size, color) {
+  const geo = new THREE.BoxGeometry(size * 0.45, size * 0.45, size * 0.45);
+  const mesh = new THREE.Mesh(geo, createMaterial(color, 0.92));
+  mesh.position.copy(center);
+  const basis = new THREE.Matrix4().makeBasis(pipeAxis.clone().normalize(), vertical.clone().normalize(), lateral.clone().normalize());
+  mesh.quaternion.setFromRotationMatrix(basis);
+  return mesh;
+}
+function addLabel(group, text, at, size, visible, eligible) {
   if (typeof document === 'undefined') return;
   const div = document.createElement('div');
   div.className = 'rvm-support-symbol-label';
   div.textContent = text;
-  div.style.cssText = `font:600 10px/1.2 system-ui,sans-serif;padding:2px 6px;border-radius:10px;background:rgba(8,16,28,.82);color:#e8f3ff;border:1px solid rgba(128,190,255,.45);white-space:nowrap;display:${visible ? 'block' : 'none'};`;
+  div.style.cssText = `font:600 10px/1.2 system-ui,sans-serif;padding:2px 6px;border-radius:10px;background:rgba(8,16,28,.82);color:#e8f3ff;border:1px solid rgba(128,190,255,.45);white-space:nowrap;display:${visible && eligible ? 'block' : 'none'};`;
   const label = new CSS2DObject(div);
   label.name = `${group.name}_LABEL`;
   label.userData.supportSymbolLabel = true;
+  label.userData.supportSymbolLabelEligible = Boolean(eligible);
   label.position.copy(at.clone().add(new THREE.Vector3(0, size * 0.45, 0)));
   group.add(label);
 }
@@ -312,6 +346,31 @@ function supportContactMetrics(attrs, scale, opts) {
   const plateSize = attachedOd && attachedOd > 0 ? Math.max(attachedOd * 0.68, scale * 0.45) : scale;
   const radius = Math.max(Math.min(contactRadius * 0.16, scale * 0.055), 0.35);
   return { attachedOd, gap, contactRadius, belowOffset, visualLane, plateSize, radius };
+}
+function labelText(tag, kind) {
+  if (!tag) return kind;
+  return kind === 'REST' ? tag : `${tag} ${kind}`;
+}
+function makeLabelState(scale, opts) {
+  return {
+    count: 0,
+    max: Math.max(0, Number(opts.maxVisibleLabels ?? DEFAULTS.maxVisibleLabels) || 0),
+    grid: new Set(),
+    cell: Math.max(scale * (opts.labelGridFactor || DEFAULTS.labelGridFactor), 120),
+  };
+}
+function labelGridKey(pos, state) {
+  const cell = state.cell || 1;
+  return `${Math.round(pos.x / cell)}:${Math.round(pos.y / cell)}:${Math.round(pos.z / cell)}`;
+}
+function shouldShowLabel(kind, tag, pos, state) {
+  if (!state || state.max <= 0) return false;
+  if (state.count >= state.max) return false;
+  const key = labelGridKey(pos, state);
+  if (state.grid.has(key)) return false;
+  state.grid.add(key);
+  state.count += 1;
+  return Boolean(tag) || kind !== 'REST';
 }
 function buildSymbol(kind, position, attrs, obj, scale, viewer, opts) {
   const vertical = new THREE.Vector3(0, 1, 0);
@@ -327,28 +386,33 @@ function buildSymbol(kind, position, attrs, obj, scale, viewer, opts) {
   const radius = metrics.radius;
   const plateSize = metrics.plateSize;
   const lane = metrics.visualLane;
-  const label = `${tag || 'SUPPORT'} ${kind}`.trim();
-  const color = SUPPORT_SYMBOL_COLOR;
+  const label = labelText(tag, kind);
+  const color = colorForKind(kind);
   if (kind === 'REST') {
     group.add(makePlate(base, lateral, pipeAxis, vertical, plateSize, color));
     group.add(makeArrow(base.clone().add(vertical.clone().multiplyScalar(-plateSize * 0.45)), target, color, radius));
   } else if (kind === 'GUIDE') {
     group.add(makePlate(base, lateral, pipeAxis, vertical, plateSize, color));
+    group.add(makeStopBlock(base.clone().add(lateral.clone().multiplyScalar(-plateSize * 0.48)), pipeAxis, lateral, vertical, plateSize * 0.82, color, 'GUIDE_BLOCK_MINUS'));
+    group.add(makeStopBlock(base.clone().add(lateral.clone().multiplyScalar(plateSize * 0.48)), pipeAxis, lateral, vertical, plateSize * 0.82, color, 'GUIDE_BLOCK_PLUS'));
     group.add(makeArrow(base.clone().add(lateral.clone().multiplyScalar(-lane)), base.clone().add(lateral.clone().multiplyScalar(-Math.max(lane * 0.18, plateSize * 0.16))), color, radius));
     group.add(makeArrow(base.clone().add(lateral.clone().multiplyScalar(lane)), base.clone().add(lateral.clone().multiplyScalar(Math.max(lane * 0.18, plateSize * 0.16))), color, radius));
   } else if (kind === 'LINESTOP' || kind === 'LIMIT') {
     group.add(makePlate(base, lateral, pipeAxis, vertical, plateSize, color));
+    group.add(makeStopBlock(base.clone().add(pipeAxis.clone().multiplyScalar(-plateSize * 0.50)), pipeAxis, lateral, vertical, plateSize * 0.95, color, `${kind}_BLOCK_A`));
+    group.add(makeStopBlock(base.clone().add(pipeAxis.clone().multiplyScalar(plateSize * 0.50)), pipeAxis, lateral, vertical, plateSize * 0.95, color, `${kind}_BLOCK_B`));
     group.add(makeArrow(base.clone().add(pipeAxis.clone().multiplyScalar(-lane)), base.clone().add(pipeAxis.clone().multiplyScalar(-Math.max(lane * 0.18, plateSize * 0.16))), color, radius));
     group.add(makeArrow(base.clone().add(pipeAxis.clone().multiplyScalar(lane)), base.clone().add(pipeAxis.clone().multiplyScalar(Math.max(lane * 0.18, plateSize * 0.16))), color, radius));
   } else if (kind === 'ANCHOR') {
     group.add(makePlate(base, lateral, pipeAxis, vertical, plateSize, color));
+    group.add(makeAnchorCube(base.clone().add(vertical.clone().multiplyScalar(plateSize * 0.18)), pipeAxis, lateral, vertical, plateSize, color));
     group.add(makeArrow(base.clone().add(vertical.clone().multiplyScalar(-plateSize * 0.45)), target, color, radius));
     group.add(makeArrow(base.clone().add(pipeAxis.clone().multiplyScalar(-lane)), base, color, radius));
     group.add(makeArrow(base.clone().add(pipeAxis.clone().multiplyScalar(lane)), base, color, radius));
   } else {
     group.add(makePlate(base, lateral, pipeAxis, vertical, plateSize, color));
   }
-  addLabel(group, label, base, scale, opts.labelsVisible);
+  addLabel(group, label, base, scale, opts.labelsVisible, opts.labelEligible !== false);
   return group;
 }
 function dedupeKey(obj, attrs, pos) {
@@ -370,7 +434,10 @@ export function setRvmSupportSymbolLabelsVisible(viewer, visible) {
   const root = viewer?.scene?.getObjectByName(SUPPORT_SYMBOL_GROUP_NAME);
   if (!root) return;
   root.traverse((obj) => {
-    if (obj.userData?.supportSymbolLabel && obj.element) obj.element.style.display = visible ? 'block' : 'none';
+    if (obj.userData?.supportSymbolLabel && obj.element) {
+      const eligible = obj.userData.supportSymbolLabelEligible !== false;
+      obj.element.style.display = visible && eligible ? 'block' : 'none';
+    }
   });
 }
 export function addRvmSupportSymbols(viewer, options = {}) {
@@ -393,6 +460,7 @@ export function addRvmSupportSymbols(viewer, options = {}) {
   const baseScale = Math.max(opts.minScale, Math.min(opts.maxScale, rawScale));
   const scale = baseScale * opts.scaleMultiplier;
   const seen = new Set();
+  const labelState = makeLabelState(scale, opts);
   let scanned = 0;
   viewer.modelGroup.updateMatrixWorld(true);
   viewer.modelGroup.traverse((obj) => {
@@ -407,7 +475,9 @@ export function addRvmSupportSymbols(viewer, options = {}) {
     if (seen.has(key)) return;
     seen.add(key);
     scanned += 1;
-    symbolRoot.add(buildSymbol(kind, pos, attrs, obj, scale, viewer, opts));
+    const tag = supportTag(obj, attrs);
+    const labelEligible = shouldShowLabel(kind, tag, pos, labelState);
+    symbolRoot.add(buildSymbol(kind, pos, attrs, obj, scale, viewer, { ...opts, labelEligible }));
   });
   const created = symbolRoot.children.length;
 
@@ -423,6 +493,8 @@ export function addRvmSupportSymbols(viewer, options = {}) {
       created,
       scanned,
       labelsVisible: opts.labelsVisible,
+      labelCount: labelState.count,
+      maxVisibleLabels: labelState.max,
       scale,
       scaleMultiplier: opts.scaleMultiplier,
       minScale: opts.minScale,
@@ -443,6 +515,8 @@ export function addRvmSupportSymbols(viewer, options = {}) {
       created: existing.children?.length || 0,
       scanned,
       labelsVisible: opts.labelsVisible,
+      labelCount: labelState.count,
+      maxVisibleLabels: labelState.max,
       scale,
       scaleMultiplier: opts.scaleMultiplier,
       minScale: opts.minScale,
@@ -456,6 +530,8 @@ export function addRvmSupportSymbols(viewer, options = {}) {
     created: 0,
     scanned,
     labelsVisible: opts.labelsVisible,
+    labelCount: labelState.count,
+    maxVisibleLabels: labelState.max,
     scale,
     scaleMultiplier: opts.scaleMultiplier,
     minScale: opts.minScale,
