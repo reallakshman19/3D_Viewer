@@ -6,7 +6,6 @@ import {
   mat,
   vectorFrom,
   cylinderBetween,
-  coneArrow,
   arrowToward,
   createTextPlane,
   createWarningTriangle,
@@ -17,7 +16,6 @@ import {
 } from './InputXmlBasicGeometry.js';
 
 const SCALE = 0.01;
-const ANNOTATION_TEXT_SCALE = 5;
 const RESTRAINT_VISUAL_SCALE = 5;
 const CONTACT_SCALE = 1;
 const pipeMat = mat(COLORS.pipe);
@@ -45,10 +43,10 @@ export async function convertInputXmlToGlb(xmlText, options = {}) {
   scene.name = 'InputXML_GLTF_SCENE';
   scene.userData = {
     app: 'inputxml-glb-standalone',
-    converterVersion: '1.2.2-corner-elbows-stable-restraints-multiview-annotations',
+    converterVersion: '1.2.3-bend-evidence-single-axis-annotations',
     sourceMode: options.supportMode || 'compare',
     lineNoMode: options.lineNoMode || 'sideload-first',
-    annotationRenderer: 'transparent-texture-multi-view-readable',
+    annotationRenderer: 'transparent-texture-single-axis-readable',
     generatedAt: new Date().toISOString()
   };
 
@@ -90,11 +88,11 @@ export async function convertInputXmlToGlb(xmlText, options = {}) {
       nodesGroup.add(dot);
       if (labels.has(String(node.id))) {
         const labelPos = p.clone().add(nodeLabelOffset(elementByNode, node.id));
-        const labelScale = String(node.id).length > 2 ? 2.0 : 2.2;
-        const label = createMultiViewText(`N${node.id}`, {
-          width: 260,
-          height: 112,
-          fontSize: 72,
+        const labelScale = String(node.id).length > 2 ? 1.25 : 1.4;
+        const label = createReadableText(`N${node.id}`, {
+          width: 220,
+          height: 92,
+          fontSize: 64,
           fg: '#ffe45c',
           bg: 'rgba(0,0,0,0)',
           border: 'rgba(0,0,0,0)',
@@ -104,18 +102,16 @@ export async function convertInputXmlToGlb(xmlText, options = {}) {
           maxLineLength: 12
         });
         label.position.copy(labelPos);
-        label.userData = { TYPE: 'NODE_ANNOTATION', node: node.id, label: `N${node.id}`, source: 'InputXML node annotation', colorRole: 'node-yellow', annotationScale: 'large-readable' };
-        const leader = cylinderBetween(p, labelPos, 0.025, nodeLeaderMat, 8, `NODE_ANNOTATION_LEADER_${node.id}`);
-        leader.userData = { TYPE: 'NODE_ANNOTATION_LEADER', node: node.id, annotationScale: 'large-readable' };
+        label.userData = { TYPE: 'NODE_ANNOTATION', node: node.id, label: `N${node.id}`, source: 'InputXML node annotation', colorRole: 'node-yellow', annotationRenderer: 'single-axis-readable' };
+        const leader = cylinderBetween(p, labelPos, 0.018, nodeLeaderMat, 8, `NODE_ANNOTATION_LEADER_${node.id}`);
+        leader.userData = { TYPE: 'NODE_ANNOTATION_LEADER', node: node.id, annotationRenderer: 'single-axis-readable' };
         nodesGroup.add(leader, label);
         audit.nodeAnnotations += 1;
       }
     }
   }
 
-  if (options.isonoteBoards !== false) {
-    audit.isonoteAnnotations = createIsonoteAnnotations(model, annGroup, elementByNode);
-  }
+  if (options.isonoteBoards !== false) audit.isonoteAnnotations = createIsonoteAnnotations(model, annGroup, elementByNode);
 
   const mode = options.supportMode || 'compare';
   if (mode === 'inputxml-actual' || mode === 'compare') {
@@ -172,6 +168,11 @@ function isPipeLikeElement(element) {
   return raw === 'PIPE' || raw === 'BEND';
 }
 
+function hasBendEvidence(element) {
+  const raw = String(element.rawType || element.type || '').toUpperCase();
+  return raw === 'BEND' || !!element.props?.bendRadius || !!element.props?.bendAngle;
+}
+
 function createCornerElbows(model, group, elementByNode, options = {}) {
   let count = 0;
   const radialSegments = options.compactMode === false ? 18 : 14;
@@ -184,11 +185,12 @@ function createCornerElbows(model, group, elementByNode, options = {}) {
       .filter((item) => item.dir && item.dir.lengthSq() > 1e-8);
 
     if (connected.length !== 2) continue;
+    if (!connected.some((item) => hasBendEvidence(item.element))) continue;
 
     const [a, b] = connected;
     const dot = THREE.MathUtils.clamp(a.dir.dot(b.dir), -1, 1);
     const angleDeg = THREE.MathUtils.radToDeg(Math.acos(dot));
-    if (angleDeg < 45 || angleDeg > 135) continue;
+    if (angleDeg < 70 || angleDeg > 115) continue;
 
     const p = vectorFrom(node, SCALE);
     const pipeRadius = Math.max(a.pipeRadius, b.pipeRadius);
@@ -197,8 +199,8 @@ function createCornerElbows(model, group, elementByNode, options = {}) {
     const end = p.clone().add(b.dir.clone().multiplyScalar(elbowRadius));
     const curve = new THREE.QuadraticBezierCurve3(start, p, end);
     const mesh = new THREE.Mesh(new THREE.TubeGeometry(curve, tubularSegments, pipeRadius, radialSegments, false), bendMat);
-    mesh.name = `CORNER_ELBOW_1P5D_NODE_${nodeId}_${count + 1}`;
-    mesh.userData = { TYPE: 'COMPONENT', ID: mesh.name, id: mesh.name, engineeringType: 'BEND_1P5D_CORNER', meshRole: 'CORNER_ELBOW_1P5D', node: nodeId, bendRadius: '1.5D', source: 'InputXML inferred two-leg corner', fromElement: a.element.id, toElement: b.element.id };
+    mesh.name = `BEND_1P5D_NODE_${nodeId}_${count + 1}`;
+    mesh.userData = { TYPE: 'COMPONENT', ID: mesh.name, id: mesh.name, engineeringType: 'BEND_1P5D_CORNER', meshRole: 'BEND_1P5D_CORNER', node: nodeId, bendRadius: '1.5D', source: 'InputXML BEND evidence two-leg corner', fromElement: a.element.id, toElement: b.element.id };
     group.add(mesh);
     count += 1;
   }
@@ -240,7 +242,9 @@ function createValveGeometry(a, b, radius, element, userData, rawType) {
   const stem = cylinderBetween(stemStart, stemEnd, radius * 0.13, rigidMat, 12, `${element.id}_stem`);
   stem.userData = { ...userData, meshRole: 'VALVE_STEM' };
   const wheel = new THREE.Mesh(new THREE.TorusGeometry(radius * 0.62, radius * 0.045, 8, 32), rigidMat);
-  wheel.name = `${element.id}_handwheel`; wheel.position.copy(stemEnd); wheel.lookAt(stemEnd.clone().add(dir));
+  wheel.name = `${element.id}_handwheel`;
+  wheel.position.copy(stemEnd);
+  wheel.lookAt(stemEnd.clone().add(dir));
   wheel.userData = { ...userData, meshRole: 'VALVE_HANDWHEEL' };
   group.add(stem, wheel);
   return group;
@@ -319,8 +323,9 @@ function createIsonoteAnnotations(model, group, elementByNode) {
   let count = 0;
   const seen = new Set();
   for (const [node, note] of model.isonoteMap.entries()) {
-    if (seen.has(String(node))) continue;
-    seen.add(String(node));
+    const key = String(node);
+    if (seen.has(key)) continue;
+    seen.add(key);
     const pos = nodePosition(model, node);
     if (!pos) continue;
     const p = vectorFrom(pos, SCALE);
@@ -328,7 +333,7 @@ function createIsonoteAnnotations(model, group, elementByNode) {
     const labelPos = p.clone().add(offset);
     const summary = summarizeIsonote(note);
     const long = node === '205';
-    const label = createMultiViewText(summary, {
+    const label = createReadableText(summary, {
       width: long ? 980 : 780,
       height: long ? 340 : 260,
       fontSize: long ? 86 : 78,
@@ -341,32 +346,21 @@ function createIsonoteAnnotations(model, group, elementByNode) {
       maxLineLength: long ? 30 : 28
     });
     label.position.copy(labelPos);
-    label.userData = { TYPE: 'ISONOTE_ANNOTATION', node, source: 'ISONOTE SIDELOAD', sideloaded: true, sourceNoteName: note, summary, colorRole: 'isonote-magenta', annotationScale: 'large-readable', annotationRenderer: 'transparent-texture-multi-view-readable' };
+    label.userData = { TYPE: 'ISONOTE_ANNOTATION', node, source: 'ISONOTE SIDELOAD', sideloaded: true, sourceNoteName: note, summary, colorRole: 'isonote-magenta', annotationRenderer: 'single-axis-readable' };
     const leaderEnd = labelPos.clone().add(new THREE.Vector3(-0.22, -0.18, 0));
     const leader = cylinderBetween(p, leaderEnd, 0.035, leaderMat, 8, `ISONOTE_ANNOTATION_LEADER_NODE_${node}`);
-    leader.userData = { TYPE: 'ISONOTE_LEADER', node, sourceNoteName: note, colorRole: 'isonote-magenta', annotationScale: 'large-readable' };
+    leader.userData = { TYPE: 'ISONOTE_LEADER', node, sourceNoteName: note, colorRole: 'isonote-magenta', annotationRenderer: 'single-axis-readable' };
     group.add(leader, label);
     count += 1;
   }
   return count;
 }
 
-function createMultiViewText(text, options = {}) {
-  const group = new THREE.Group();
-  group.name = options.name || 'MULTI_VIEW_TEXT';
-  const views = [
-    { suffix: 'xy', rotation: [0, 0, 0] },
-    { suffix: 'yz', rotation: [0, Math.PI / 2, 0] },
-    { suffix: 'xz', rotation: [Math.PI / 2, 0, 0] }
-  ];
-  for (const view of views) {
-    const plane = createTextPlane(text, { ...options, name: `${group.name}_${view.suffix}` });
-    plane.rotation.set(...view.rotation);
-    plane.userData = { TYPE: 'TEXT_ANNOTATION_VIEW', text: String(text || ''), orientation: view.suffix };
-    group.add(plane);
-  }
-  group.userData = { TYPE: 'TEXT_ANNOTATION', text: String(text || ''), multiViewReadable: true };
-  return group;
+function createReadableText(text, options = {}) {
+  const plane = createTextPlane(text, options);
+  plane.name = options.name || 'READABLE_TEXT';
+  plane.userData = { TYPE: 'TEXT_ANNOTATION', text: String(text || ''), singleAxisReadable: true };
+  return plane;
 }
 
 function autoIsonoteOffset(elementByNode, nodeId) {
@@ -483,9 +477,7 @@ function createSupportSymbols(model, rec, elementByNode, sourceClass) {
     out.push(addMeta(createSpringCoil(below, new THREE.Vector3(0, 1, 0), 0.16 * RESTRAINT_VISUAL_SCALE, 0.9 * RESTRAINT_VISUAL_SCALE, springMat, `${prefix}_SPRING_COIL_VERTICAL_BELOW_PIPE`), { warningText: rec.warningText || 'Spring / hanger', engineeringContact: 'below-pipe-clearance', springAxis: 'vertical-Y' }));
   }
 
-  if (sourceClass === 'expected' && out.length) {
-    out.forEach(o => o.traverse?.(child => { if (child.material?.color) child.material.opacity = 0.96; }));
-  }
+  if (sourceClass === 'expected' && out.length) out.forEach(o => o.traverse?.(child => { if (child.material?.color) child.material.opacity = 0.96; }));
   return out;
 }
 
