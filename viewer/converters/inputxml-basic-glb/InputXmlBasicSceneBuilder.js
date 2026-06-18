@@ -19,13 +19,23 @@ import {
 
 const SCALE = 0.01;
 const pipeMat = mat(COLORS.pipe);
-const rigidMat = mat(COLORS.rigid);
+const rigidMat = mat(COLORS.rigid, { emissive: 0x00352f, emissiveIntensity: 0.05 });
 const bendMat = mat(COLORS.bend);
-const restMat = mat(COLORS.rest, { emissive: 0x063244, emissiveIntensity: 0.08 });
-const guideMat = mat(COLORS.guide, { emissive: 0x063322, emissiveIntensity: 0.08 });
-const lineMat = mat(COLORS.lineStop, { emissive: 0x3a2500, emissiveIntensity: 0.08 });
+const restMat = mat(COLORS.rest, { emissive: 0x3a2d00, emissiveIntensity: 0.08 });
+const guideMat = mat(COLORS.guide, { emissive: 0x003322, emissiveIntensity: 0.08 });
+const lineMat = mat(COLORS.lineStop, { emissive: 0x003332, emissiveIntensity: 0.08 });
 const holdMat = mat(COLORS.holddown, { emissive: 0x330026, emissiveIntensity: 0.08 });
 const springMat = mat(COLORS.spring, { emissive: 0x331021, emissiveIntensity: 0.16 });
+const leaderMat = new THREE.MeshBasicMaterial({ color: COLORS.isonote, toneMapped: false });
+const nodeLeaderMat = new THREE.MeshBasicMaterial({ color: COLORS.node, toneMapped: false });
+
+const KEY_NODE_LABELS = Object.freeze(['10', '35', '130', '205', '240', '255', '270']);
+const ISONOTE_OFFSETS = Object.freeze({
+  '35': [1.35, 1.08, -1.00],
+  '130': [1.20, -0.55, 0.65],
+  '205': [-2.20, 1.75, -0.90],
+  '255': [1.05, 1.10, 0.75]
+});
 
 export async function convertInputXmlToGlb(xmlText, options = {}) {
   const model = parseInputXml(xmlText, options);
@@ -33,8 +43,10 @@ export async function convertInputXmlToGlb(xmlText, options = {}) {
   scene.name = 'InputXML_GLTF_SCENE';
   scene.userData = {
     app: 'inputxml-glb-standalone',
-    converterVersion: '1.0.0',
+    converterVersion: '1.1.0-recovered',
     sourceMode: options.supportMode || 'compare',
+    lineNoMode: options.lineNoMode || 'sideload-first',
+    annotationRenderer: 'transparent-texture-two-sided-readable',
     generatedAt: new Date().toISOString()
   };
 
@@ -55,29 +67,38 @@ export async function convertInputXmlToGlb(xmlText, options = {}) {
     inputXmlRestraints: model.restraints.length,
     isonoteRecords: 0,
     supportSymbols: [],
+    nodeAnnotations: 0,
+    isonoteAnnotations: 0,
     componentMetadataUpdated: model.elements.length,
     options: { ...options }
   };
 
-  for (const element of model.elements) {
-    createElementGeometry(element, pipesGroup, options);
-  }
+  for (const element of model.elements) createElementGeometry(element, pipesGroup, options);
 
   if (options.nodeLabels !== false) {
+    const labels = nodeLabelsToRender(model, options);
     for (const node of model.nodes.values()) {
       const p = vectorFrom(node, SCALE);
-      const sphere = new THREE.Mesh(new THREE.SphereGeometry(0.08, 16, 8), mat(COLORS.node));
-      sphere.name = `NODE_MARKER_${node.id}`;
+      const sphere = new THREE.Mesh(new THREE.SphereGeometry(0.045, 12, 8), mat(COLORS.guide));
+      sphere.name = `NODE_DOT_${node.id}`;
       sphere.position.copy(p);
-      sphere.userData = { type: 'NODE', node: node.id };
-      const label = createNodeLabel(`N${node.id}`, p.clone().add(new THREE.Vector3(0.25, 0.35, 0.25)), 0.44);
-      label.lookAt(new THREE.Vector3(0, 0, 0));
-      nodesGroup.add(sphere, label);
+      sphere.userData = { TYPE: 'NODE', type: 'NODE', node: node.id, source: 'InputXML' };
+      nodesGroup.add(sphere);
+      if (labels.has(String(node.id))) {
+        const labelPos = p.clone().add(nodeLabelOffset(elementByNode, node.id));
+        const label = createNodeLabel(`N${node.id}`, labelPos, 0.36);
+        label.name = `NODE_ANNOTATION_${node.id}`;
+        label.userData = { TYPE: 'NODE_ANNOTATION', node: node.id, label: `N${node.id}`, source: 'InputXML node annotation', colorRole: 'node-yellow' };
+        const leader = cylinderBetween(p, labelPos, 0.012, nodeLeaderMat, 8, `NODE_ANNOTATION_LEADER_${node.id}`);
+        leader.userData = { TYPE: 'NODE_ANNOTATION_LEADER', node: node.id };
+        nodesGroup.add(leader, label);
+        audit.nodeAnnotations += 1;
+      }
     }
   }
 
   if (options.isonoteBoards !== false) {
-    createIsonoteBoards(model, annGroup, elementByNode);
+    audit.isonoteAnnotations = createIsonoteAnnotations(model, annGroup, elementByNode);
   }
 
   const mode = options.supportMode || 'compare';
@@ -101,27 +122,33 @@ export async function convertInputXmlToGlb(xmlText, options = {}) {
   return { scene, glb, audit, model };
 }
 
+function numeric(value, fallback = 0) {
+  const raw = typeof value === 'object' && value ? value.value : value;
+  const n = Number(String(raw ?? '').replace(/,/g, '').trim());
+  return Number.isFinite(n) ? n : fallback;
+}
+
 function createElementGeometry(element, group, options) {
   const a = vectorFrom(element.from, SCALE);
   const b = vectorFrom(element.to, SCALE);
-  const od = Number(element.props.bore || 100) * SCALE;
-  const radius = Math.max(0.04, (od / 2));
+  const od = numeric(element.props.bore, element.props.boreMm || 100) * SCALE;
+  const radius = Math.max(0.05, od / 2);
   const isRigid = element.rawType && element.rawType !== 'PIPE' && element.rawType !== 'BEND';
   const material = isRigid ? rigidMat : element.type === 'BEND' ? bendMat : pipeMat;
-  const cyl = cylinderBetween(a, b, radius, material, options.compactMode === false ? 24 : 14, element.id);
+  const cyl = cylinderBetween(a, b, radius, material, options.compactMode === false ? 24 : 18, element.id);
   cyl.userData = buildComponentUserData(element);
   group.add(cyl);
 
   if (isRigid) {
     const dir = b.clone().sub(a).normalize();
     const mid = a.clone().add(b).multiplyScalar(0.5);
-    const collar1 = cylinderBetween(mid.clone().sub(dir.clone().multiplyScalar(0.18)), mid.clone().add(dir.clone().multiplyScalar(0.18)), radius * 1.35, rigidMat, 18, `${element.id}_RIGID_MARKER`);
-    collar1.userData = { ...cyl.userData, meshRole: 'RIGID_MARKER' };
-    group.add(collar1);
+    const collarA = cylinderBetween(mid.clone().sub(dir.clone().multiplyScalar(0.22)), mid.clone().add(dir.clone().multiplyScalar(0.22)), radius * 1.35, rigidMat, 18, `${element.id}_RIGID_MARKER`);
+    collarA.userData = { ...cyl.userData, meshRole: 'RIGID_MARKER' };
+    group.add(collarA);
   }
 
   if (element.type.includes('BEND') || element.props.bendRadius) {
-    const bendNode = new THREE.Mesh(new THREE.SphereGeometry(radius * 1.18, 16, 10), bendMat);
+    const bendNode = new THREE.Mesh(new THREE.SphereGeometry(radius * 1.08, 16, 10), bendMat);
     bendNode.name = `${element.id}_BEND_NODE`;
     bendNode.position.copy(b);
     bendNode.userData = { ...cyl.userData, meshRole: 'BEND_MARKER' };
@@ -144,7 +171,9 @@ function buildComponentUserData(element) {
     lineNoSource: p.lineNoSource,
     fromNode: p.fromNode,
     toNode: p.toNode,
-    bore: p.bore,
+    bore: resolved(p.bore),
+    boreSource: source(p.bore),
+    boreMm: p.boreMm,
     wallThickness: resolved(p.wallThickness),
     wallThicknessSource: source(p.wallThickness),
     materialThickness: resolved(p.materialThickness),
@@ -180,23 +209,89 @@ function buildElementIndex(model) {
   return index;
 }
 
-function createIsonoteBoards(model, group, elementByNode) {
+function nodeLabelsToRender(model, options = {}) {
+  if (options.nodeLabelMode === 'all') return new Set(Array.from(model.nodes.keys()));
+  if (Array.isArray(options.nodeLabelsList) && options.nodeLabelsList.length) return new Set(options.nodeLabelsList.map(String));
+  const out = new Set(KEY_NODE_LABELS.filter((node) => model.nodes.has(node)));
+  for (const node of model.isonoteMap.keys()) if (model.nodes.has(node)) out.add(node);
+  return out;
+}
+
+function nodeLabelOffset(elementByNode, nodeId) {
+  const tangent = localTangent(elementByNode, nodeId);
+  const lateral = orthogonal(tangent);
+  return lateral.multiplyScalar(0.42).add(new THREE.Vector3(0, 0.30, 0.22));
+}
+
+function createIsonoteAnnotations(model, group, elementByNode) {
+  let count = 0;
   for (const [node, note] of model.isonoteMap.entries()) {
     const pos = nodePosition(model, node);
     if (!pos) continue;
     const p = vectorFrom(pos, SCALE);
-    const tangent = localTangent(elementByNode, node);
-    const lateral = orthogonal(tangent);
-    const vertical = new THREE.Vector3(0, 1, 0);
-    const boardPos = p.clone().add(lateral.clone().multiplyScalar(1.8)).add(vertical.clone().multiplyScalar(1.25));
-    const board = createTextPlane(note, { width: 720, height: 230, fontSize: 28, scale: 0.78, name: `ISONOTE_BOARD_NODE_${node}` });
-    board.position.copy(boardPos);
-    board.lookAt(p.clone().add(new THREE.Vector3(0, 0.2, 0)));
-    board.userData = { TYPE: 'ISONOTE_NAME_PLATE', node, sourceNoteName: note, source: 'ISONOTE SIDELOAD' };
-    const leader = cylinderBetween(p, boardPos, 0.015, mat(0xffcf7a), 8, `ISONOTE_LEADER_NODE_${node}`);
-    leader.userData = { TYPE: 'ISONOTE_LEADER', node, sourceNoteName: note };
-    group.add(leader, board);
+    const offset = ISONOTE_OFFSETS[node]
+      ? new THREE.Vector3(...ISONOTE_OFFSETS[node])
+      : autoIsonoteOffset(elementByNode, node);
+    const labelPos = p.clone().add(offset);
+    const summary = summarizeIsonote(note);
+    const label = createTextPlane(summary, {
+      width: node === '205' ? 760 : 560,
+      height: node === '205' ? 250 : 180,
+      fontSize: node === '205' ? 40 : 34,
+      scale: node === '205' ? 0.44 : 0.36,
+      fg: '#e36af2',
+      bg: 'rgba(0,0,0,0)',
+      border: 'rgba(0,0,0,0)',
+      align: 'left',
+      name: `ISONOTE_ANNOTATION_NODE_${node}`,
+      maxLineLength: node === '205' ? 30 : 26
+    });
+    label.position.copy(labelPos);
+    label.userData = {
+      TYPE: 'ISONOTE_ANNOTATION',
+      node,
+      source: 'ISONOTE SIDELOAD',
+      sideloaded: true,
+      sourceNoteName: note,
+      summary,
+      colorRole: 'isonote-magenta',
+      annotationRenderer: 'transparent-texture-two-sided-readable'
+    };
+    const leaderEnd = labelPos.clone().add(new THREE.Vector3(-0.12, -0.08, 0));
+    const leader = cylinderBetween(p, leaderEnd, 0.018, leaderMat, 8, `ISONOTE_ANNOTATION_LEADER_NODE_${node}`);
+    leader.userData = { TYPE: 'ISONOTE_LEADER', node, sourceNoteName: note, colorRole: 'isonote-magenta' };
+    group.add(leader, label);
+    count += 1;
   }
+  return count;
+}
+
+function autoIsonoteOffset(elementByNode, nodeId) {
+  const tangent = localTangent(elementByNode, nodeId);
+  const lateral = orthogonal(tangent);
+  return lateral.multiplyScalar(1.25).add(new THREE.Vector3(0, 1.0, 0.55));
+}
+
+function summarizeIsonote(note) {
+  const upper = String(note || '').toUpperCase();
+  const lines = [];
+  const ps = String(note || '').match(/PS-?\d+/i)?.[0]?.toUpperCase();
+  if (ps) lines.push(ps.replace('PS', 'PS-').replace('--', '-'));
+  else lines.push('ISONOTE');
+  if (/REST\s+NOT\s+DEFINED|NO\s+REST/.test(upper)) lines.push('REST NOT DEFINED');
+  const rest = upper.match(/REST\s*\((\d+(?:\.\d+)?)\s*KN\)/i);
+  if (rest) lines.push(`REST ${rest[1]}kN`);
+  const guide = upper.match(/GUIDE\s*\((\d+(?:\.\d+)?)\s*KN\)/i);
+  if (guide) lines.push(`GUIDE ${guide[1]}kN`);
+  if (/NO\s+GUIDE|WITHOUT\s+GUIDE/.test(upper)) lines.push('NO GUIDE');
+  const ls = upper.match(/LINE\s*STOP\s*\((\d+(?:\.\d+)?)\s*KN\)/i);
+  if (ls) lines.push(`LS ${ls[1]}kN`);
+  else if (/LINE\s*STOP/.test(upper)) lines.push('LINE STOP');
+  if (/HOLD\s*DOWN|HOLDDOWN/.test(upper)) lines.push('HOLD');
+  const single = upper.match(/SINGLE\s+AXIS\s+([XYZ])/);
+  if (single) lines.push(`SINGLE AXIS ${single[1]}`);
+  if (/CAN\s+SPRING|SPRING\s+CAN/.test(upper)) lines.push('SPRING WARN');
+  return lines.join('\n');
 }
 
 function normalizeInputXmlRestraints(model) {
@@ -306,10 +401,6 @@ function createSupportSymbols(model, rec, elementByNode, sourceClass) {
     const below = p.clone().add(new THREE.Vector3(0, -contactRadius - 0.85 - gap, 0));
     out.push(addMeta(createSpringCoil(below, tangent, 0.16, 0.9, springMat, `${prefix}_SPRING_COIL_BELOW_PIPE`), { warningText: rec.warningText || 'Spring / hanger', engineeringContact: 'below-pipe-clearance' }));
   }
-
-  if (sourceClass === 'expected' && out.length) {
-    out.forEach(o => o.traverse?.(child => { if (child.material?.color) child.material.opacity = 0.96; }));
-  }
   return out;
 }
 
@@ -329,14 +420,20 @@ function localTangent(elementByNode, nodeId) {
   if (!els.length) return new THREE.Vector3(1, 0, 0);
   const e = els[0];
   const v = new THREE.Vector3(e.dx, e.dy, e.dz);
-  if (v.lengthSq() < 1e-8) return new THREE.Vector3(1, 0, 0);
+  if (v.lengthSq() < 1e-8) {
+    const a = vectorFrom(e.from, 1);
+    const b = vectorFrom(e.to, 1);
+    const fallback = b.sub(a);
+    if (fallback.lengthSq() > 1e-8) return fallback.normalize();
+    return new THREE.Vector3(1, 0, 0);
+  }
   return v.normalize();
 }
 
 function localOd(elementByNode, nodeId) {
   const els = elementByNode.get(String(Number(nodeId))) || [];
   if (!els.length) return 100;
-  return Number(els[0].props.bore || 100);
+  return numeric(els[0].props.bore, els[0].props.boreMm || 100);
 }
 
 function frameScene(scene) {
