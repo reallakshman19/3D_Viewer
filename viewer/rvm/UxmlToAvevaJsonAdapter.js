@@ -177,21 +177,30 @@ function mapSupportKind(component = {}, uxml = {}) {
   return clean(support?.type || component?.type || 'SUPPORT');
 }
 
+function sourceTypeForComponent(component, normType, rawAttrs = {}) {
+  // managed_stage.json consumers are sensitive to AVEVA short type names
+  // (ELBO/FLAN/REDU/VALV). Preserve the staged source type and carry the
+  // canonical UXML type separately instead of replacing the existing contract.
+  return firstNonEmpty(rawAttrs.TYPE, rawAttrs.RAW_TYPE, component.type, normType) || normType;
+}
+
 function buildComponentNode(component, branchName, indexes, uxml) {
   const normType = normalizeType(component.normalizedType || component.type);
   const geom = resolveComponentGeometry(component, indexes);
   const name = safeName(component.name || component.refNo || component.id, `${normType} ${component.id || ''}`);
   const rawAttrs = isObject(component.rawAttributes) ? { ...component.rawAttributes } : {};
+  const sourceType = sourceTypeForComponent(component, normType, rawAttrs);
   const attrs = {
     ...rawAttrs,
-    TYPE: normType,
-    NAME: name,
-    REF: firstNonEmpty(component.refNo, component.seqNo, component.id, name),
+    TYPE: sourceType,
+    NAME: firstNonEmpty(rawAttrs.NAME, component.refNo, name),
+    REF: firstNonEmpty(rawAttrs.REF, component.refNo, component.seqNo, component.id, name),
     OWNER: branchName,
     SOURCE_FORMAT: 'UXML',
     UXML_COMPONENT_ID: clean(component.id),
     UXML_PIPELINE_REF: clean(component.pipelineRef),
     UXML_LINE_KEY: clean(component.lineKey),
+    UXML_NORMALIZED_TYPE: normType,
   };
 
   if (geom.apos) attrs.APOS = geom.apos;
@@ -203,7 +212,7 @@ function buildComponentNode(component, branchName, indexes, uxml) {
   const bore = finiteNumber(component.bore) ?? finiteNumber(geom.segment?.bore);
   if (bore != null && bore > 0) {
     attrs.BORE = bore;
-    attrs.ABORE = `${bore}mm`;
+    attrs.ABORE = attrs.ABORE || `${bore}mm`;
     attrs.HBOR = attrs.HBOR || `${bore}mm`;
     attrs.LBORE = attrs.LBORE || `${bore}mm`;
     attrs.TBOR = attrs.TBOR || `${bore}mm`;
@@ -217,7 +226,7 @@ function buildComponentNode(component, branchName, indexes, uxml) {
 
   return {
     name,
-    type: normType,
+    type: sourceType,
     attributes: attrs,
   };
 }
@@ -229,11 +238,31 @@ function pipelineName(pipeline, fallback) {
   );
 }
 
+function parseTrailingOrderToken(value) {
+  const text = clean(value);
+  if (!text) return null;
+  const match = text.match(/(?:^|:)(\d{1,9})$/);
+  return match ? finiteNumber(match[1]) : null;
+}
+
+function sourceOrder(component) {
+  return finiteNumber(component?.seqNo)
+    ?? finiteNumber(component?.rawAttributes?.SEQ)
+    ?? finiteNumber(component?.rawAttributes?.SEQUENCE)
+    ?? finiteNumber(component?.rawAttributes?.SOURCE_INDEX)
+    ?? finiteNumber(component?.rawAttributes?.UXML_SOURCE_INDEX)
+    ?? parseTrailingOrderToken(component?.id)
+    ?? parseTrailingOrderToken(component?.sourceRefs?.[0]?.id)
+    ?? null;
+}
+
 function compareBySourceOrder(a, b) {
-  const aSeq = finiteNumber(a.seqNo) ?? finiteNumber(a.rawAttributes?.SEQ) ?? finiteNumber(a.rawAttributes?.SEQUENCE);
-  const bSeq = finiteNumber(b.seqNo) ?? finiteNumber(b.rawAttributes?.SEQ) ?? finiteNumber(b.rawAttributes?.SEQUENCE);
+  const aSeq = sourceOrder(a);
+  const bSeq = sourceOrder(b);
   if (aSeq != null && bSeq != null && aSeq !== bSeq) return aSeq - bSeq;
-  return String(a.name || a.id || '').localeCompare(String(b.name || b.id || ''));
+  if (aSeq != null && bSeq == null) return -1;
+  if (aSeq == null && bSeq != null) return 1;
+  return 0;
 }
 
 export function isUxmlDocument(value) {
@@ -280,10 +309,12 @@ export function convertUxmlDocumentToAvevaHierarchy(doc, options = {}) {
     const sorted = [...groupComponents].sort(compareBySourceOrder);
     const children = sorted.map((component) => buildComponentNode(component, branchName, indexes, uxmlContext));
 
+    const rawPipelineAttrs = isObject(pipeline?.rawAttributes) ? { ...pipeline.rawAttributes } : {};
     const branchAttrs = {
-      TYPE: 'BRAN',
-      NAME: branchName,
-      OWNER: clean(pipeline?.system || pipeline?.area || doc.header?.modelId || options.fileName || 'UXML'),
+      ...rawPipelineAttrs,
+      TYPE: firstNonEmpty(rawPipelineAttrs.TYPE, 'BRAN'),
+      NAME: firstNonEmpty(rawPipelineAttrs.NAME, branchName),
+      OWNER: firstNonEmpty(rawPipelineAttrs.OWNER, pipeline?.system, pipeline?.area, doc.header?.modelId, options.fileName, 'UXML'),
       SOURCE_FORMAT: 'UXML',
       UXML_PIPELINE_ID: clean(pipeline?.id || pipelineRef),
       UXML_LINE_KEY: clean(pipeline?.lineKey || pipelineRef),
@@ -292,8 +323,8 @@ export function convertUxmlDocumentToAvevaHierarchy(doc, options = {}) {
 
     const first = children.find((child) => child?.attributes?.APOS || child?.attributes?.POS);
     const last = [...children].reverse().find((child) => child?.attributes?.LPOS || child?.attributes?.POS);
-    if (first?.attributes?.APOS || first?.attributes?.POS) branchAttrs.HPOS = first.attributes.APOS || first.attributes.POS;
-    if (last?.attributes?.LPOS || last?.attributes?.POS) branchAttrs.TPOS = last.attributes.LPOS || last.attributes.POS;
+    if (!branchAttrs.HPOS && (first?.attributes?.APOS || first?.attributes?.POS)) branchAttrs.HPOS = first.attributes.APOS || first.attributes.POS;
+    if (!branchAttrs.TPOS && (last?.attributes?.LPOS || last?.attributes?.POS)) branchAttrs.TPOS = last.attributes.LPOS || last.attributes.POS;
 
     hierarchy.push({
       name: branchName,
