@@ -5,7 +5,7 @@ import { AvevaJsonLoader } from '../rvm/AvevaJsonLoader.js';
 import {
   convertUxmlDocumentToAvevaHierarchy,
   isUxmlDocument,
-} from '../rvm/UxmlToAvevaJsonAdapter.js?v=20260618-uxml-preserve-routed-pipes-1';
+} from '../rvm/UxmlToAvevaJsonAdapter.js?v=20260618-rvm-uxml-olet-bore-alias-1';
 
 const FLAG = '__RVM_UXML_IMPORT_ADDON_INSTALLED__';
 
@@ -58,18 +58,18 @@ function chooseRunBoreForRender(attrs = {}) {
   // Branch/outlet bores belong in BBORE/BRBORE/OUTLET_BORE and must never drive
   // the header pipe radius.
   if (normType === 'OLET' || normType === 'TEE') {
-    return firstBoreField(attrs, ['ABORE', 'HBOR', 'BORE', 'LBORE']);
+    return firstBoreField(attrs, ['ABORE', 'BORE', 'LBORE']);
   }
 
   // Reducers render from the inlet/run side; the outlet/end bore is used by the
   // reducer taper logic, not by the upstream pipe/header radius.
   if (normType === 'REDUCER' || normType === 'REDU') {
-    return firstBoreField(attrs, ['ABORE', 'HBOR', 'BORE', 'LBORE', 'TBOR']);
+    return firstBoreField(attrs, ['ABORE', 'BORE', 'LBORE', 'TBOR']);
   }
 
   // Generic UXML components: prefer start/run bore, then scalar bore, then end.
   // BBORE is intentionally excluded because it is outlet-only.
-  return firstBoreField(attrs, ['ABORE', 'HBOR', 'BORE', 'LBORE', 'TBOR']);
+  return firstBoreField(attrs, ['ABORE', 'BORE', 'LBORE', 'TBOR']);
 }
 
 function applyUxmlRenderBoreGuardToNode(node, branchAttrs = {}) {
@@ -89,9 +89,12 @@ function applyUxmlRenderBoreGuardToNode(node, branchAttrs = {}) {
     if (bore) {
       attrs.RVM_RENDER_BORE = formattedBore(bore.value);
       attrs.RVM_RENDER_BORE_SOURCE = bore.field;
-      // AvevaJsonLoader currently picks HBOR first. For UXML imports only, use
-      // HBOR as a render alias so branch/end LBORE cannot be selected first.
-      attrs.HBOR = attrs.RVM_RENDER_BORE;
+      // AvevaJsonLoader picks the first available run-bore field. Use ABORE as a
+      // UXML-only render alias because OLET/TEE branch-radius logic deliberately
+      // reads HBOR/TBOR/BBORE. Using HBOR here makes OLET outlet nozzles inherit
+      // the parent/header size. ABORE drives main run radius without polluting
+      // outlet/branch bore resolution.
+      attrs.ABORE = attrs.RVM_RENDER_BORE;
       attrs.UXML_RENDER_BORE_GUARD = 'true';
     }
   }
