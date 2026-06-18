@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import { convertUxmlDocumentToAvevaHierarchy } from '../rvm/UxmlToAvevaJsonAdapter.js';
 
 const doc = {
@@ -47,6 +48,29 @@ const doc = {
       segmentIds: [],
       rawAttributes: { TYPE: 'SUPPORT', NAME: 'PS-TEST GUIDE', CMPSUPTYPE: 'GUIDE' },
     },
+    {
+      id: 'cmp:support:lbop:00003',
+      type: 'SUPPORT',
+      normalizedType: 'SUPPORT',
+      pipelineRef: 'pipe:main',
+      lineKey: 'TEST-LINE',
+      name: 'PS-171007 REST',
+      anchorIds: [],
+      portIds: [],
+      segmentIds: [],
+      rawAttributes: {
+        RAW_TYPE: 'ATTA',
+        TYPE: 'ATTA',
+        SUPPORT_TAG: 'PS-171007',
+        SUPPORT_TYPE: 'REST',
+        SUPPORT_KIND: 'REST',
+        SUPPORT_MAPPER_KIND: 'REST',
+        LBOP: 'E 500mm N -120mm U 0mm',
+        BPOS: null,
+        HPOS: null,
+        TPOS: null,
+      },
+    },
   ],
   supports: [
     {
@@ -55,6 +79,14 @@ const doc = {
       type: 'GUIDE',
       skey: '',
       supportAnchorId: 'a:support:pos',
+      hostCandidates: [],
+      restraints: [],
+    },
+    {
+      id: 'sup:test:lbop:00002',
+      componentId: 'cmp:support:lbop:00003',
+      type: 'REST',
+      skey: '',
       hostCandidates: [],
       restraints: [],
     },
@@ -75,5 +107,16 @@ assert.equal(attrs.ATTACHED_PIPE_SEGMENT_ID, 'seg:pipe:00001');
 assert.equal(attrs.PIPE_AXIS, 'X');
 assert.equal(attrs.ATTACHED_PIPE_BORE, '250mm');
 assert.equal(attrs.ATTACHED_PIPE_OD, '250mm');
+
+const lbopSupport = hierarchy[0].children.find((child) => child.attributes?.UXML_COMPONENT_ID === 'cmp:support:lbop:00003');
+assert.ok(lbopSupport, 'LBOP-only ATTA support component should be converted');
+assert.equal(lbopSupport.attributes.SUPPORT_KIND, 'REST');
+assert.equal(lbopSupport.attributes.SUPPORT_TAG, 'PS-171007');
+assert.deepEqual(lbopSupport.attributes.SUPPORTCOORD, { x: 500, y: -120, z: 0 });
+assert.equal(lbopSupport.attributes.ATTACHED_COMPONENT_ID, 'cmp:pipe:00001');
+
+const supportSymbolsSource = fs.readFileSync('viewer/rvm-viewer/RvmSupportSymbols.js', 'utf8');
+assert.match(supportSymbolsSource, /'LBOP'/, 'RVM support symbol renderer must search LBOP as a coordinate alias');
+assert.match(supportSymbolsSource, /RAW_TYPE/, 'RVM support symbol renderer must include RAW_TYPE in support detection');
 
 console.log('✅ UXML support parity contract passed.');
