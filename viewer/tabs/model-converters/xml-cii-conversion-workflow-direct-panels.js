@@ -12,7 +12,7 @@ const MODEL_SUBTABS = Object.freeze([
   ['matched-audit', 'Matched Audit'],
 ]);
 
-const OLD_XML_CII_WORKFLOW_PHASES = Object.freeze([
+export const OLD_XML_CII_WORKFLOW_PHASES = Object.freeze([
   { id: 'regex', label: '1 Regex', summary: 'Derive line key, piping class, and size from XML Branchname tokens or regex.', state: 'Current' },
   { id: 'import-masters', label: '2 Import Masters', summary: 'Load line list, piping class, material map, and valve weight sources.', state: 'Current' },
   { id: 'preview', label: '3 Preview', summary: 'Dry-run enrichment preview per branch — inspect and override approximate matches.', state: 'Current' },
@@ -211,7 +211,7 @@ function openPhaseButton(id, label = 'Open existing phase') {
   return button(label, `data-direct-process-phase="${esc(id)}"`);
 }
 
-function oldPhaseDetailHtml(phaseId, dataRoot) {
+export function oldPhaseDetailHtml(phaseId, dataRoot) {
   const payload = normalizePreviewPayload(readStored());
   const support = parseSupportConfig(dataRoot);
   const phase = oldPhase(phaseId);
