@@ -5,6 +5,7 @@ if (!RvmViewer3D.prototype.__inputXmlSupportGraphicsSetModelBridge) {
   const setModelOriginal = RvmViewer3D.prototype.setModel;
   RvmViewer3D.prototype.setModel = function setModelWithInputXmlSupportGraphics(...args) {
     const result = setModelOriginal.apply(this, args);
+    window.__rvmInputXmlSupportGraphicsViewer = this;
     setTimeout(() => {
       const root = document.querySelector('[data-rvm-viewer]');
       const scale = Number(root?.querySelector?.('#rvm-support-scale')?.value);
