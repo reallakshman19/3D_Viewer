@@ -30,6 +30,17 @@ let activeTabDestroy = null;
 let appDestroy = null;
 const tabRendererCache = new Map();
 
+function cleanupActiveTab() {
+  if (!activeTabDestroy) return;
+  try {
+    activeTabDestroy();
+  } catch (error) {
+    console.warn('Tab cleanup failed', error);
+  } finally {
+    activeTabDestroy = null;
+  }
+}
+
 function pickRenderer(module, exportName, tabId) {
   const renderer = module?.[exportName];
   if (typeof renderer !== 'function') {
@@ -156,6 +167,17 @@ function renderNav(nav, tabs, content) {
   });
 }
 
+function renderTabError(content, tab, error) {
+  console.error(`Failed to render tab ${tab?.id || ''}`, error);
+  content.innerHTML = `
+    <section class="tab-error-boundary">
+      <h2>Unable to open ${String(tab?.label || 'tab')}</h2>
+      <p>The tab failed to load, but navigation is still available.</p>
+      <pre>${String(error?.stack || error?.message || error)}</pre>
+    </section>
+  `;
+}
+
 async function activateTab(tabId, tabs, nav, content) {
   const resolvedTabId = TAB_ID_ALIASES.get(tabId) || tabId;
   const fallbackId = tabs[0]?.id;
@@ -163,22 +185,24 @@ async function activateTab(tabId, tabs, nav, content) {
   if (!tab) return;
 
   if (state.activeTab === tab.id && content.firstChild) return;
-  if (activeTabDestroy) {
-    try { activeTabDestroy(); } catch (error) { console.warn('Tab cleanup failed', error); }
-    activeTabDestroy = null;
-  }
+  cleanupActiveTab();
   content.innerHTML = '';
   state.activeTab = tab.id;
   nav.querySelectorAll('.app-nav-button').forEach((button) => {
     button.classList.toggle('is-active', button.dataset.tabId === tab.id);
   });
 
-  let renderer = tabRendererCache.get(tab.id);
-  if (!renderer) {
-    renderer = await tab.load();
-    tabRendererCache.set(tab.id, renderer);
+  try {
+    let renderer = tabRendererCache.get(tab.id);
+    if (!renderer) {
+      renderer = await tab.load();
+      tabRendererCache.set(tab.id, renderer);
+    }
+    activeTabDestroy = renderer(content, { emit, on }) || null;
+  } catch (error) {
+    activeTabDestroy = null;
+    renderTabError(content, tab, error);
   }
-  activeTabDestroy = renderer(content, { emit, on }) || null;
 }
 
 export async function init() {
@@ -195,10 +219,7 @@ export async function init() {
   await activateTab(initialTab, tabs, nav, content);
 
   appDestroy = () => {
-    if (activeTabDestroy) {
-      try { activeTabDestroy(); } catch {}
-      activeTabDestroy = null;
-    }
+    cleanupActiveTab();
     root.innerHTML = '';
   };
 
