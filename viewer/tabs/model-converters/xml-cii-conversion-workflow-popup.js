@@ -1,6 +1,6 @@
 import { WorkflowModal } from './shared/WorkflowModal.js';
 import { OLD_XML_CII_WORKFLOW_PHASES, oldPhaseDetailHtml } from './xml-cii-conversion-workflow-direct-panels.js';
-import { getXmlCiiPhaseBridge } from './legacy-adapter.js?v=20260619-phase-bridge-1';
+import { getXmlCiiPhaseBridge } from './legacy-adapter.js?v=20260619-phase-bridge-2';
 
 const FLAG = '__xmlCiiConversionWorkflowPopup_direct_v9';
 const ROOT_ATTR = 'data-xml-cii-workflow-root';
@@ -149,18 +149,35 @@ function bindPhaseActions(body, root, state) {
   });
 }
 
+function renderStaticFallback(root, state, phaseId) {
+  try {
+    state.body.innerHTML = oldPhaseDetailHtml(phaseId, root);
+    bindPhaseActions(state.body, root, state);
+  } catch (err) {
+    console.warn('XML→CII workflow: static fallback render failed', err);
+    state.body.innerHTML = '<div class="model-converters-workflow-detail-text" style="padding:16px;">Unable to render this phase. Use the inline workflow on the Model Converters tab.</div>';
+  }
+}
+
 function renderActiveTab(root, state) {
   if (!state.body) return;
 
   const phaseId = state.activeTab || OLD_XML_CII_WORKFLOW_PHASES[0].id;
   const bridge = getXmlCiiPhaseBridge();
-  if (bridge) {
-    bridge.renderPhaseInto(state.body, phaseId);
-  } else {
-    // Fallback: static summary (bridge not ready — model converters tab not yet mounted)
-    state.body.innerHTML = oldPhaseDetailHtml(phaseId, root);
-    bindPhaseActions(state.body, root, state);
+
+  // Use the live interactive bridge when the model-converters tab is mounted, but
+  // never let a phase renderer throw — a throw mid-open would leave an empty,
+  // scroll-locked modal that looks like the app is hung. Degrade to static.
+  if (bridge && typeof bridge.renderPhaseInto === 'function') {
+    try {
+      bridge.renderPhaseInto(state.body, phaseId);
+      return;
+    } catch (err) {
+      console.warn('XML→CII workflow: interactive phase render failed, using static panel', err);
+    }
   }
+
+  renderStaticFallback(root, state, phaseId);
 }
 
 function openConversionWorkflow(root = document, state = stateForRoot(root)) {

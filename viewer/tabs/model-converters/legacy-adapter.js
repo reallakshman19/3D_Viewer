@@ -7554,6 +7554,8 @@ export function renderModelConvertersTab(container) {
         querySelector: (sel) => target.querySelector(sel),
       };
 
+      // HTML generation — if this throws, let it propagate so the popup can
+      // degrade to the static panel instead of showing a broken empty modal.
       let html = '';
       if (phaseId === 'regex') html = xmlCiiRenderRegexPhase();
       else if (phaseId === 'import-masters') html = xmlCiiRenderImportMastersPhase(proxyRoot);
@@ -7565,41 +7567,47 @@ export function renderModelConvertersTab(container) {
       else if (phaseId === 'config') html = xmlCiiRenderConfigPhase();
       target.innerHTML = html;
 
-      // Regex: bind interactive live-preview (re-renders into popup on change)
-      if (phaseId === 'regex') {
-        target.querySelectorAll('[data-xml-cii-regex-path]').forEach((input) => {
-          const save = () => {
-            const path = input.getAttribute('data-xml-cii-regex-path') || '';
-            const config = _parseXmlCiiEnrichmentConfig(activeValues().supportConfigJson);
-            const val = input.type === 'number'
-              ? (Number.isFinite(Number(input.value)) ? Number(input.value) : 0)
-              : input.value;
-            _setValueAtPath(config, path, val);
-            xmlCiiSaveConfig(config);
-          };
-          input.addEventListener('input', save);
-          input.addEventListener('change', () => { save(); rerender(); });
-        });
-      }
-
-      // Import Masters: master-tab navigation stays in popup; file/import actions
-      // use standard binding (config changes persist even if re-render targets main page).
-      if (phaseId === 'import-masters') {
-        target.querySelectorAll('[data-xml-cii-master-tab]').forEach((btn) => {
-          btn.addEventListener('click', () => {
-            target.dataset.xmlCiiActiveMaster = btn.getAttribute('data-xml-cii-master-tab') || 'linelist';
-            rerender();
+      // Event binding is best-effort: the content is already visible, so a bind
+      // failure must never bubble up and freeze the modal. Log and continue.
+      try {
+        // Regex: bind interactive live-preview (re-renders into popup on change)
+        if (phaseId === 'regex') {
+          target.querySelectorAll('[data-xml-cii-regex-path]').forEach((input) => {
+            const save = () => {
+              const path = input.getAttribute('data-xml-cii-regex-path') || '';
+              const config = _parseXmlCiiEnrichmentConfig(activeValues().supportConfigJson);
+              const val = input.type === 'number'
+                ? (Number.isFinite(Number(input.value)) ? Number(input.value) : 0)
+                : input.value;
+              _setValueAtPath(config, path, val);
+              xmlCiiSaveConfig(config);
+            };
+            input.addEventListener('input', save);
+            input.addEventListener('change', () => { save(); rerender(); });
           });
-        });
-        bindXmlCiiImportMastersPhase(target);
-      }
+        }
 
-      if (phaseId === 'run') bindXmlCiiRunPhase(target);
-      if (phaseId === 'weight-match') bindXmlCiiWeightMatchPhase(target, target);
-      if (phaseId === 'preview') bindXmlCiiPreviewPhase(target);
-      if (phaseId === 'diagnostics') bindXmlCiiDiagnosticsPhase(target, target);
-      if (phaseId === 'support-mapper') bindXmlCiiSupportMapperPhase(target);
-      if (phaseId === 'config') bindXmlCiiConfigPhase(target);
+        // Import Masters: master-tab navigation stays in popup; file/import actions
+        // use standard binding (config changes persist even if re-render targets main page).
+        if (phaseId === 'import-masters') {
+          target.querySelectorAll('[data-xml-cii-master-tab]').forEach((btn) => {
+            btn.addEventListener('click', () => {
+              target.dataset.xmlCiiActiveMaster = btn.getAttribute('data-xml-cii-master-tab') || 'linelist';
+              rerender();
+            });
+          });
+          bindXmlCiiImportMastersPhase(target);
+        }
+
+        if (phaseId === 'run') bindXmlCiiRunPhase(target);
+        if (phaseId === 'weight-match') bindXmlCiiWeightMatchPhase(target, target);
+        if (phaseId === 'preview') bindXmlCiiPreviewPhase(target);
+        if (phaseId === 'diagnostics') bindXmlCiiDiagnosticsPhase(target, target);
+        if (phaseId === 'support-mapper') bindXmlCiiSupportMapperPhase(target);
+        if (phaseId === 'config') bindXmlCiiConfigPhase(target);
+      } catch (bindErr) {
+        console.warn(`XML→CII workflow: binding for phase "${phaseId}" failed (content still shown)`, bindErr);
+      }
     },
   };
 

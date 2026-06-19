@@ -11,11 +11,11 @@
  * orchestrator.
  */
 
-import { renderLegacyModelConvertersTab } from './legacy-adapter.js?v=20260619-phase-bridge-1';
+import { renderLegacyModelConvertersTab } from './legacy-adapter.js?v=20260619-phase-bridge-2';
 import { installBmCiiSupportAnnotationPopup } from './bm-cii-support-annotation-popup.js?v=20260617-bmcii-open-basic-handoff-2';
 import { installInputXmlPropertyTransferUi } from './inputxml-property-transfer-popup-ui-v4.js?v=20260615-inputxml-property-transfer-popup-host-hide-1';
 import { installRvmAttrUxmlAddon } from './rvmattr-uxml-addon.js?v=20260618-port-bore-contract-1';
-import { installXmlCiiConversionWorkflowPopup } from './xml-cii-conversion-workflow-popup.js?v=20260619-phase-tabs-bridge-1';
+import { installXmlCiiConversionWorkflowPopup } from './xml-cii-conversion-workflow-popup.js?v=20260619-phase-tabs-bridge-2';
 import { installXmlCiiBranchSampleSync } from './xml-cii-branch-sample-sync.js?v=20260619-xml-cii-branch-sample-1';
 import { installInputXmlBasicGlbBridge } from './inputxml-basic-glb-bridge.js';
 
