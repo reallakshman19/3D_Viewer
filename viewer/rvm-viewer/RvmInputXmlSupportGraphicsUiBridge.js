@@ -1,8 +1,9 @@
-import { applyInputXmlSupportGraphicsOverlay } from './RvmInputXmlSupportGraphics.js?v=20260619-inputxml-support-summary-1';
-import { refreshInputXmlGraphics } from './RvmInputXmlAutoBendGraphics.js?v=20260619-inputxml-node-graph-1';
+import { applyInputXmlSupportGraphicsOverlay } from './RvmInputXmlSupportGraphics.js?v=20260619-inputxml-selectable-pipe-only-1';
+import { refreshInputXmlGraphics } from './RvmInputXmlAutoBendGraphics.js?v=20260619-inputxml-selectable-pipe-only-1';
 
 const PANEL_KEY_LEFT = 'rvm.panel.left.width.v2';
 const PANEL_KEY_RIGHT = 'rvm.panel.right.width.v2';
+const INPUTXML_SCALE_DEFAULT = 3;
 
 function findViewer() {
   return window.__rvmInputXmlSupportGraphicsViewer || null;
@@ -25,13 +26,19 @@ function writeBool(key, value) {
   try { localStorage.setItem(key, value ? 'on' : 'off'); } catch {}
 }
 
+function normalizeScale(value) {
+  const n = Number(value);
+  return Number.isFinite(n) ? Math.max(0.25, Math.min(4, n)) : INPUTXML_SCALE_DEFAULT;
+}
+
 function optionsFromUi() {
   const r = root();
-  const scale = Number(r?.querySelector?.('#rvm-support-scale')?.value);
+  const scaleEl = r?.querySelector?.('#rvm-support-scale');
+  const scale = normalizeScale(scaleEl?.value);
   const labelsVisible = r?.querySelector?.('#rvm-support-labels')?.getAttribute?.('aria-pressed') === 'true';
   const autoBendEnabled = r?.querySelector?.('#rvm-inputxml-auto-bend')?.checked ?? readBool('rvm.inputxml.autoBend', true);
   return {
-    scaleMultiplier: Number.isFinite(scale) ? scale : 1,
+    scaleMultiplier: scale,
     labelsVisible,
     autoBendEnabled,
   };
@@ -40,8 +47,8 @@ function optionsFromUi() {
 function refresh() {
   const viewer = findViewer();
   if (!viewer) return;
-  const options = optionsFromUi();
   setTimeout(() => {
+    const options = optionsFromUi();
     refreshInputXmlGraphics(viewer, options);
     applyInputXmlSupportGraphicsOverlay(viewer, options);
   }, 0);
@@ -58,9 +65,34 @@ function currentAxis(key, fallback) {
   } catch { return fallback; }
 }
 
+function ensureSupportScaleDefaults(r) {
+  const scale = r?.querySelector?.('#rvm-support-scale');
+  const value = r?.querySelector?.('#rvm-support-scale-value');
+  if (!scale) return;
+  scale.max = '4';
+  scale.step = '0.25';
+  if (r.dataset.inputXmlScaleDefaultApplied !== 'true') {
+    const current = Number(scale.value);
+    // Earlier test builds persisted 0.75/1.00 as the default. Normalize those to the requested 3x.
+    if (!Number.isFinite(current) || current <= 1.0) scale.value = String(INPUTXML_SCALE_DEFAULT);
+    r.dataset.inputXmlScaleDefaultApplied = 'true';
+  }
+  const normalized = normalizeScale(scale.value);
+  scale.value = String(normalized);
+  if (value) value.textContent = `${normalized.toFixed(2)}×`;
+}
+
+function removeStaleModeChip(r) {
+  const chip = r?.querySelector?.('#rvm-mode-chip');
+  if (chip) chip.remove();
+}
+
 function injectControls() {
   const r = root();
-  if (!r || r.querySelector('#rvm-inputxml-graphics-controls')) return;
+  if (!r) return;
+  ensureSupportScaleDefaults(r);
+  removeStaleModeChip(r);
+  if (r.querySelector('#rvm-inputxml-graphics-controls')) return;
   const ribbon = r.querySelector('.geo-top-ribbon');
   if (!ribbon) return;
   const host = document.createElement('div');
