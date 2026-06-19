@@ -71,6 +71,13 @@ function stateForRoot(root = document) {
     };
     rt.stateByRoot.set(element, state);
   }
+  // Auto-heal: cleanupBodyLevelWorkflowOverlays removes the overlay from the
+  // DOM without calling modal.close(), leaving a stale state.modal reference.
+  // Detect this by checking isConnected and reset so the next click opens fresh.
+  if (state.modal && !state.modal.overlayEl?.isConnected) {
+    state.modal = null;
+    state.body = null;
+  }
   return state;
 }
 
