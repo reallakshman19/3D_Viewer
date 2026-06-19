@@ -428,7 +428,6 @@ export function saveStickyState() {
 // -- State Mutation Discipline (A1) --
 
 export function setActiveTab(tabId) {
-  state.activeTab = tabId;
   emit(RuntimeEvents.TAB_CHANGED, { tabId });
 }
 
