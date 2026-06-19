@@ -22,7 +22,7 @@ import { installInputXmlBasicGlbBridge } from './inputxml-basic-glb-bridge.js';
 const TRACE_PREFIX = '[BM_CII_CONVERTER_TRACE]';
 
 /**
- * Ordered installer pairs.  Each entry is [debugName, installerFn].
+ * Ordered installer pairs. Each entry is [debugName, installerFn].
  * Adding a new popup/bridge: append one entry here — no other changes needed.
  *
  * @type {ReadonlyArray<[string, (container: HTMLElement) => void]>}
@@ -83,11 +83,20 @@ function runInstallers(container) {
   }
 }
 
+function cleanupBodyLevelWorkflowOverlays() {
+  document.querySelectorAll('.model-converters-workflow-popup-overlay').forEach((el) => el.remove());
+  document.querySelectorAll('[data-xml-cii-finalise-run-guard], [data-xml-cii-workflow-button-guard]').forEach((el) => el.remove());
+  if (document.body.style.overflow === 'hidden') document.body.style.overflow = '';
+}
+
 export function renderModelConvertersTab(container, ctx = {}) {
   trace('render start', { containerPresent: Boolean(container) });
   const destroy = renderLegacyModelConvertersTab(container, ctx);
   removeDeprecatedConverterOptions(container);
   runInstallers(container);
   trace('render done', { installers: MODEL_CONVERTER_INSTALLERS.map(([name]) => name) });
-  return destroy;
+  return () => {
+    cleanupBodyLevelWorkflowOverlays();
+    if (typeof destroy === 'function') destroy();
+  };
 }
