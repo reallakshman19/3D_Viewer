@@ -14,7 +14,7 @@
 }
 
 .rvm-viewport {
-  min-width: 0;
+  min-width: 240px;
   min-height: 0;
   isolation: isolate;
 }
@@ -43,4 +43,34 @@
 
 .rvm-tab-root .viewer-statusbar {
   flex-shrink: 0;
+}
+
+/* UX: keep Load as the left-most ribbon control. */
+.rvm-tab-root .rvm-ribbon-load {
+  order: -100;
+}
+
+.rvm-tab-root .rvm-ribbon-load .rvm-btn-file {
+  min-width: 64px;
+  justify-content: center;
+  background: linear-gradient(180deg, rgba(74, 158, 255, 0.22), rgba(74, 158, 255, 0.10));
+  border-color: rgba(126, 182, 246, 0.70);
+}
+
+/* UX: CSS-native resizable hierarchy/properties panels. */
+.rvm-tab-root .rvm-left-panel,
+.rvm-tab-root .rvm-right-panel {
+  resize: horizontal;
+  overflow: auto;
+  scrollbar-gutter: stable;
+}
+
+.rvm-tab-root .rvm-left-panel {
+  min-width: 160px;
+  max-width: 520px;
+}
+
+.rvm-tab-root .rvm-right-panel {
+  min-width: 190px;
+  max-width: 720px;
 }
