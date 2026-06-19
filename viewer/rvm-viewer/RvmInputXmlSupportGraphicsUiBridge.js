@@ -1,5 +1,5 @@
-import { applyInputXmlSupportGraphicsOverlay } from './RvmInputXmlSupportGraphics.js?v=20260619-inputxml-selectable-pipe-only-1';
-import { refreshInputXmlGraphics } from './RvmInputXmlAutoBendGraphics.js?v=20260619-inputxml-selectable-pipe-only-1';
+import { applyInputXmlSupportGraphicsOverlay } from './RvmInputXmlSupportGraphics.js?v=20260619-source-bend-collapse-1';
+import { refreshInputXmlGraphics } from './RvmInputXmlAutoBendGraphics.js?v=20260619-source-bend-collapse-1';
 
 const PANEL_KEY_LEFT = 'rvm.panel.left.width.v2';
 const PANEL_KEY_RIGHT = 'rvm.panel.right.width.v2';
