@@ -6163,11 +6163,14 @@ export function renderModelConvertersTab(container) {
           </label>
         </div>
       </div>
-      <div style="margin-top:12px;">
+      <div style="margin-top:12px;display:flex;flex-direction:column;gap:8px;">
         <button type="button" class="model-converters-run-btn" data-xml-cii-run-from-workflow style="width:100%;padding:12px;">
           ▶ Run — Review Weight Matches
         </button>
-        <div class="model-converters-workflow-detail-note" style="margin-top:6px;">Opens <strong>4A Weight Match</strong> to review approximate weights, then Finalize and Run.</div>
+        <div class="model-converters-workflow-detail-note">Opens <strong>4A Weight Match</strong> to review approximate weights before running.</div>
+        <button type="button" class="model-converters-download-btn" data-xml-cii-finalize-run style="width:100%;padding:10px;margin-top:4px;">
+          ⚡ Finalise and Run (skip weight review)
+        </button>
       </div>
     `;
   }
