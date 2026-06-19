@@ -223,9 +223,14 @@ export function installXmlCiiBranchSampleSync(container = document) {
   syncLoadedXmlBranchSample(root).catch(() => {});
 
   if (!window[FLAG].observer) {
+    let _observerDebounceTimer = null;
     window[FLAG].observer = new MutationObserver(() => {
-      document.querySelectorAll?.(`[${ROOT_ATTR}]`).forEach((markedRoot) => applyBranchSample(markedRoot));
-      applyBranchSample(document);
+      if (_observerDebounceTimer) return;
+      _observerDebounceTimer = setTimeout(() => {
+        _observerDebounceTimer = null;
+        document.querySelectorAll?.(`[${ROOT_ATTR}]`).forEach((markedRoot) => applyBranchSample(markedRoot));
+        applyBranchSample(document);
+      }, 200);
     });
     window[FLAG].observer.observe(document.body, { childList: true, subtree: true });
   }

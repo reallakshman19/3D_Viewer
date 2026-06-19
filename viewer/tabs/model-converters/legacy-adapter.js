@@ -7570,7 +7570,9 @@ export function renderModelConvertersTab(container) {
       // Event binding is best-effort: the content is already visible, so a bind
       // failure must never bubble up and freeze the modal. Log and continue.
       try {
-        // Regex: bind interactive live-preview (re-renders into popup on change)
+        // Regex: bind interactive live-preview (re-renders into popup on change).
+        // Guard with isTrusted so synthetic events from branch-sample-sync's
+        // applyBranchSample don't trigger save→renderAdvanced→observer loops.
         if (phaseId === 'regex') {
           target.querySelectorAll('[data-xml-cii-regex-path]').forEach((input) => {
             const save = () => {
@@ -7582,8 +7584,8 @@ export function renderModelConvertersTab(container) {
               _setValueAtPath(config, path, val);
               xmlCiiSaveConfig(config);
             };
-            input.addEventListener('input', save);
-            input.addEventListener('change', () => { save(); rerender(); });
+            input.addEventListener('input', (event) => { if (event.isTrusted) save(); });
+            input.addEventListener('change', (event) => { if (event.isTrusted) { save(); rerender(); } });
           });
         }
 
