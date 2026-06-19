@@ -207,7 +207,7 @@
   outline: none;
 }
 
-.app-nav button[data-tab-id].active {
+.app-nav button[data-tab-id].is-active {
   color: #ffffff;
   background: rgba(255,255,255,0.08);
   border-bottom-color: var(--color-accent);

@@ -430,7 +430,7 @@ export function saveStickyState() {
 
 export function setActiveTab(tabId) {
   state.activeTab = tabId;
-  emit(RuntimeEvents.TAB_CHANGED, tabId);
+  emit(RuntimeEvents.TAB_CHANGED, { tabId });
 }
 
 export function updateViewer3DConfig(patch, reason = 'update') {
