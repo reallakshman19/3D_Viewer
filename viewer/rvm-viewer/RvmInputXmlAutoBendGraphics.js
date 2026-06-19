@@ -1,11 +1,14 @@
 import * as THREE from 'three';
 import { state } from '../core/state.js';
 
-const ROOT_NAME = '__RVM_INPUTXML_AUTO_BEND_GRAPHICS__';
-const AXIS_NAME = '__RVM_CANVAS_AXIS_TRIAD__';
+export const INPUTXML_AUTO_BEND_ROOT = '__RVM_INPUTXML_AUTO_BEND_GRAPHICS__';
+export const INPUTXML_AXIS_ROOT = '__RVM_CANVAS_AXIS_TRIAD__';
+export const INPUTXML_NODE_GRAPH_KEY = '__RVM_INPUTXML_NODE_GRAPH__';
+
 const PIPE_MAT = new THREE.MeshStandardMaterial({ color: 0x2f6fb8, roughness: 0.62, metalness: 0.08 });
 const BEND_MAT = new THREE.MeshStandardMaterial({ color: 0x9c4c9f, roughness: 0.6, metalness: 0.06 });
 const NODE_MAT = new THREE.MeshStandardMaterial({ color: 0x2f6fb8, roughness: 0.7, metalness: 0.04 });
+const SOURCE_BEND_MAT = new THREE.MeshStandardMaterial({ color: 0x8b5fc9, roughness: 0.62, metalness: 0.06 });
 const TOL = 1e-3;
 
 function s(v) { return v == null ? '' : String(v); }
@@ -14,6 +17,60 @@ function n(v, fallback = NaN) {
   const x = Number.parseFloat(s(v).replace(/mm/ig, '').replace(/,/g, '').trim());
   return Number.isFinite(x) ? x : fallback;
 }
+
+function axisConfig() {
+  let verticalAxis = 'Y';
+  let northAxis = 'X';
+  try { verticalAxis = up(localStorage.getItem('rvm.inputxml.verticalAxis') || 'Y') || 'Y'; } catch {}
+  try { northAxis = up(localStorage.getItem('rvm.inputxml.northAxis') || 'X') || 'X'; } catch {}
+  if (!['X', 'Y', 'Z'].includes(verticalAxis)) verticalAxis = 'Y';
+  if (!['X', 'Y', 'Z'].includes(northAxis) || northAxis === verticalAxis) northAxis = verticalAxis === 'X' ? 'Y' : 'X';
+  const eastAxis = ['X', 'Y', 'Z'].find((axis) => axis !== verticalAxis && axis !== northAxis) || 'Z';
+  return { verticalAxis, northAxis, eastAxis };
+}
+function putAxis(out, axisName, value) {
+  if (axisName === 'X') out.x = value;
+  else if (axisName === 'Y') out.y = value;
+  else out.z = value;
+}
+function mapNamedCoord(text) {
+  const parts = s(text).trim().split(/\s+/g);
+  const map = axisConfig();
+  const out = { x: 0, y: 0, z: 0 };
+  let ok = false;
+  for (let i = 0; i < parts.length - 1; i += 2) {
+    const axis = up(parts[i]);
+    const value = n(parts[i + 1]);
+    if (!Number.isFinite(value)) continue;
+    if (axis === 'E') { putAxis(out, map.eastAxis, value); ok = true; }
+    else if (axis === 'W') { putAxis(out, map.eastAxis, -value); ok = true; }
+    else if (axis === 'N') { putAxis(out, map.northAxis, value); ok = true; }
+    else if (axis === 'S') { putAxis(out, map.northAxis, -value); ok = true; }
+    else if (axis === 'U') { putAxis(out, map.verticalAxis, value); ok = true; }
+    else if (axis === 'D') { putAxis(out, map.verticalAxis, -value); ok = true; }
+  }
+  return ok ? new THREE.Vector3(out.x, out.y, out.z) : null;
+}
+
+export function inputXmlPoint(v) {
+  if (!v && v !== 0) return null;
+  if (typeof v === 'string') {
+    const named = mapNamedCoord(v);
+    if (named) return named;
+    const vals = s(v).match(/-?\d+(?:\.\d+)?/g)?.map(Number).filter(Number.isFinite) || [];
+    return vals.length >= 3 ? new THREE.Vector3(vals[0], vals[1], vals[2]) : null;
+  }
+  if (Array.isArray(v) && v.length >= 3) {
+    const p = new THREE.Vector3(n(v[0]), n(v[1]), n(v[2]));
+    return [p.x, p.y, p.z].every(Number.isFinite) ? p : null;
+  }
+  if (typeof v === 'object') {
+    const p = new THREE.Vector3(n(v.x ?? v.X), n(v.y ?? v.Y), n(v.z ?? v.Z));
+    return [p.x, p.y, p.z].every(Number.isFinite) ? p : null;
+  }
+  return null;
+}
+
 function isInputXmlNode(node) {
   const a = node?.attributes || {};
   return /INPUTXML/i.test([node?.name, node?.canonicalObjectId, a.SOURCE_FORMAT, a.SOURCE_CONVERTER, a.SOURCE_FILE, a.NAME, a.REF].map(s).join(' '));
@@ -27,19 +84,6 @@ function hasInputXmlNodeEdge(node) {
   const a = node?.attributes || {};
   return Boolean(s(a.FROM_NODE).trim() && s(a.TO_NODE).trim());
 }
-function point(v) {
-  if (!v && v !== 0) return null;
-  if (Array.isArray(v) && v.length >= 3) {
-    const p = new THREE.Vector3(n(v[0]), n(v[1]), n(v[2]));
-    return [p.x, p.y, p.z].every(Number.isFinite) ? p : null;
-  }
-  if (typeof v === 'object') {
-    const p = new THREE.Vector3(n(v.x ?? v.X), n(v.y ?? v.Y), n(v.z ?? v.Z));
-    return [p.x, p.y, p.z].every(Number.isFinite) ? p : null;
-  }
-  const vals = s(v).match(/-?\d+(?:\.\d+)?/g)?.map(Number).filter(Number.isFinite) || [];
-  return vals.length >= 3 ? new THREE.Vector3(vals[0], vals[1], vals[2]) : null;
-}
 function bore(a) {
   return Math.max(n(a.BORE ?? a.ABORE ?? a.LBORE ?? a.DIAMETER ?? a.ATTACHED_PIPE_OD, 100), 1);
 }
@@ -50,6 +94,14 @@ function nodeKey(value, fallback) {
   const text = s(value).trim();
   return text || fallback || '';
 }
+function isSourceBend(seg) {
+  return ['BEND', 'ELBO', 'ELBOW'].includes(up(seg?.sourceType));
+}
+
+function allIndexNodes() {
+  return Array.isArray(state?.rvm?.index?.nodes) ? state.rvm.index.nodes : [];
+}
+
 function cylinderBetween(a, b, radius, material, name, sourceAttrs = {}) {
   const dir = b.clone().sub(a);
   const len = dir.length();
@@ -97,8 +149,9 @@ function makeArc(fromDir, toDir, corner, radius, pipeRadius, material, name, max
 
   const p1 = corner.clone().add(d1.clone().multiplyScalar(safeTrim));
   const p2 = corner.clone().add(d2.clone().multiplyScalar(safeTrim));
-  const bisector = d1.clone().add(d2).normalize();
+  const bisector = d1.clone().add(d2);
   if (bisector.lengthSq() < 1e-10) return null;
+  bisector.normalize();
   const centerDistance = radius / Math.sin(angle / 2);
   const center = corner.clone().add(bisector.multiplyScalar(centerDistance));
 
@@ -117,48 +170,7 @@ function makeArc(fromDir, toDir, corner, radius, pipeRadius, material, name, max
   mesh.userData = { inputXmlAutoBend: true, kind: 'BEND', attributes: { TYPE: 'PIPE', RAW_TYPE: 'PIPE', AUTO_BEND: '1.5D', AUTO_BEND_TRIM_MM: safeTrim.toFixed(3), LABEL_POLICY: 'PIPE_ONLY' } };
   return { mesh, p1, p2, trim: safeTrim };
 }
-function nodes() {
-  return Array.isArray(state?.rvm?.index?.nodes) ? state.rvm.index.nodes : [];
-}
-function segments() {
-  const all = nodes().filter((node) => isInputXmlNode(node) && !isSupportNode(node));
-  const route = [];
-  let skippedNoNodeEdge = 0;
-  let skippedNoGeometry = 0;
-  all.forEach((node, index) => {
-    const a = node.attributes || {};
-    if (!hasInputXmlNodeEdge(node)) {
-      skippedNoNodeEdge += 1;
-      return;
-    }
-    const p0 = point(a.APOS || a.HPOS || a.POS);
-    const p1 = point(a.LPOS || a.TPOS || a.POS2);
-    if (!p0 || !p1 || p0.distanceTo(p1) < 1e-6) {
-      skippedNoGeometry += 1;
-      return;
-    }
-    const d = bore(a);
-    const fromNode = nodeKey(a.FROM_NODE, `P0:${key(p0)}`);
-    const toNode = nodeKey(a.TO_NODE, `P1:${key(p1)}`);
-    route.push({
-      node,
-      attrs: a,
-      index,
-      p0,
-      p1,
-      fromNode,
-      toNode,
-      diameter: d,
-      radius: d * 0.5,
-      length: p0.distanceTo(p1),
-      sourceType: up(a.TYPE || a.RAW_TYPE || node.type),
-    });
-  });
-  route.skippedNoNodeEdge = skippedNoNodeEdge;
-  route.skippedNoGeometry = skippedNoGeometry;
-  route.totalInputXmlComponents = all.length;
-  return route;
-}
+
 function removeRoot(scene, name) {
   const old = scene?.getObjectByName(name);
   if (!old) return;
@@ -181,8 +193,9 @@ function autoBendEnabled() {
 function axisVisible() {
   try { return localStorage.getItem('rvm.canvasAxis.visible') !== 'off'; } catch { return true; }
 }
+
 export function isInputXmlRvmModel() {
-  return nodes().some(isInputXmlNode);
+  return allIndexNodes().some(isInputXmlNode);
 }
 function addEndpoint(map, id, seg, endName, p) {
   if (!id) return;
@@ -202,35 +215,114 @@ function sameNodePoint(items) {
   if (maxDist > Math.max(...items.map((item) => item.seg.diameter)) * 4) return null;
   return items.reduce((acc, item) => acc.add(item.p), new THREE.Vector3()).multiplyScalar(1 / items.length);
 }
+
+export function buildInputXmlNodeGraph() {
+  const all = allIndexNodes().filter((node) => isInputXmlNode(node));
+  const components = all.filter((node) => !isSupportNode(node));
+  const supports = all.filter(isSupportNode);
+  const edges = [];
+  let skippedNoNodeEdge = 0;
+  let skippedNoGeometry = 0;
+
+  components.forEach((node, index) => {
+    const a = node.attributes || {};
+    if (!hasInputXmlNodeEdge(node)) {
+      skippedNoNodeEdge += 1;
+      return;
+    }
+    const p0 = inputXmlPoint(a.APOS || a.HPOS || a.POS || a.LBOP);
+    const p1 = inputXmlPoint(a.LPOS || a.TPOS || a.POS2 || a.LBOS);
+    if (!p0 || !p1 || p0.distanceTo(p1) < 1e-6) {
+      skippedNoGeometry += 1;
+      return;
+    }
+    const d = bore(a);
+    const fromNode = nodeKey(a.FROM_NODE, `P0:${key(p0)}`);
+    const toNode = nodeKey(a.TO_NODE, `P1:${key(p1)}`);
+    edges.push({
+      node,
+      attrs: a,
+      index,
+      p0,
+      p1,
+      fromNode,
+      toNode,
+      diameter: d,
+      radius: d * 0.5,
+      length: p0.distanceTo(p1),
+      sourceType: up(a.TYPE || a.RAW_TYPE || node.type),
+      sourceBend: ['BEND', 'ELBO', 'ELBOW'].includes(up(a.TYPE || a.RAW_TYPE || node.type)),
+    });
+  });
+
+  const byNode = new Map();
+  const nodePoints = new Map();
+  edges.forEach((seg) => {
+    addEndpoint(byNode, seg.fromNode, seg, 'p0', seg.p0);
+    addEndpoint(byNode, seg.toNode, seg, 'p1', seg.p1);
+  });
+  byNode.forEach((items, id) => {
+    const p = sameNodePoint(items) || items[0]?.p?.clone?.() || null;
+    if (p) nodePoints.set(id, p);
+  });
+
+  const graph = {
+    kind: 'INPUTXML_NODE_GRAPH_V1',
+    edges,
+    supports,
+    byNode,
+    nodePoints,
+    stats: {
+      totalInputXmlComponents: components.length,
+      totalInputXmlSupports: supports.length,
+      routeSegments: edges.length,
+      skippedNoNodeEdge,
+      skippedNoGeometry,
+    },
+  };
+  try { state.rvm[INPUTXML_NODE_GRAPH_KEY] = graph; } catch {}
+  return graph;
+}
+
+export function currentInputXmlNodeGraph() {
+  return state?.rvm?.[INPUTXML_NODE_GRAPH_KEY] || buildInputXmlNodeGraph();
+}
+
+function shouldGenerateBendAtNode(items) {
+  if (items.length !== 2) return false;
+  const [a, b] = items;
+  if (a.seg === b.seg) return false;
+  // Source BEND/ELBOW edges already represent the bend intent. Do not create one at both ends.
+  if (isSourceBend(a.seg) || isSourceBend(b.seg)) return false;
+  return true;
+}
+
 export function applyInputXmlAutoBendGraphics(viewer, options = {}) {
   if (!viewer?.scene || !viewer?.modelGroup || !isInputXmlRvmModel()) return null;
   const enabled = options.autoBendEnabled ?? autoBendEnabled();
-  removeRoot(viewer.scene, ROOT_NAME);
+  removeRoot(viewer.scene, INPUTXML_AUTO_BEND_ROOT);
   if (!enabled) {
     hideOriginalInputXmlModel(viewer, false);
     return { enabled: false, created: 0 };
   }
-  const segs = segments();
+  const graph = buildInputXmlNodeGraph();
+  const segs = graph.edges;
   const root = new THREE.Group();
-  root.name = ROOT_NAME;
+  root.name = INPUTXML_AUTO_BEND_ROOT;
   root.userData.inputXmlAutoBendGraphics = true;
-
-  const byNode = new Map();
-  segs.forEach((seg) => {
-    addEndpoint(byNode, seg.fromNode, seg, 'p0', seg.p0);
-    addEndpoint(byNode, seg.toNode, seg, 'p1', seg.p1);
-  });
 
   const trimStart = new Map();
   const trimEnd = new Map();
   let bends = 0;
+  let sourceBendEdges = 0;
   let skippedJunctions = 0;
   let skippedRemoteNode = 0;
   let skippedUnsafeTrim = 0;
+  let skippedSourceBendAdjacency = 0;
   let nodeMarkers = 0;
 
-  byNode.forEach((items, id) => {
-    const corner = sameNodePoint(items);
+  graph.byNode.forEach((items, id) => {
+    const corner = graph.nodePoints.get(id) || sameNodePoint(items);
     if (items.length !== 2) {
       skippedJunctions += items.length > 2 ? 1 : 0;
       if (corner && items.length > 2) {
@@ -240,8 +332,11 @@ export function applyInputXmlAutoBendGraphics(viewer, options = {}) {
       }
       return;
     }
+    if (!shouldGenerateBendAtNode(items)) {
+      if (items.some((item) => isSourceBend(item.seg))) skippedSourceBendAdjacency += 1;
+      return;
+    }
     const [a, b] = items;
-    if (a.seg === b.seg) return;
     if (!corner) {
       skippedRemoteNode += 1;
       return;
@@ -272,7 +367,9 @@ export function applyInputXmlAutoBendGraphics(viewer, options = {}) {
     const a = trimStart.get(seg) || seg.p0;
     const b = trimEnd.get(seg) || seg.p1;
     if (a.distanceTo(b) < 1e-3) continue;
-    const mesh = cylinderBetween(a, b, Math.max(seg.radius, 1), PIPE_MAT, `INPUTXML_PIPE_${seg.fromNode}_TO_${seg.toNode}`, seg.attrs);
+    const material = isSourceBend(seg) ? SOURCE_BEND_MAT : PIPE_MAT;
+    if (isSourceBend(seg)) sourceBendEdges += 1;
+    const mesh = cylinderBetween(a, b, Math.max(seg.radius, 1), material, `INPUTXML_PIPE_${seg.fromNode}_TO_${seg.toNode}`, seg.attrs);
     if (mesh) { root.add(mesh); pipes += 1; }
   }
   viewer.scene.add(root);
@@ -282,17 +379,21 @@ export function applyInputXmlAutoBendGraphics(viewer, options = {}) {
     pipes,
     bends,
     routeSegments: segs.length,
-    skippedNoNodeEdge: segs.skippedNoNodeEdge || 0,
-    skippedNoGeometry: segs.skippedNoGeometry || 0,
-    totalInputXmlComponents: segs.totalInputXmlComponents || segs.length,
+    sourceBendEdges,
+    skippedNoNodeEdge: graph.stats.skippedNoNodeEdge || 0,
+    skippedNoGeometry: graph.stats.skippedNoGeometry || 0,
+    totalInputXmlComponents: graph.stats.totalInputXmlComponents || segs.length,
+    totalInputXmlSupports: graph.stats.totalInputXmlSupports || 0,
     skippedJunctions,
     skippedRemoteNode,
     skippedUnsafeTrim,
+    skippedSourceBendAdjacency,
     nodeMarkers,
-    labelPolicy: 'PIPE_ONLY_NODE_WISE_LENGTH_LIMITED_TRIM',
+    labelPolicy: 'PIPE_ONLY_NODE_GRAPH_SOURCE_BEND_SAFE',
   };
   return viewer.inputXmlAutoBendDiagnostics;
 }
+
 function makeAxisLabel(text, color, p) {
   const canvas = document.createElement('canvas');
   canvas.width = 64; canvas.height = 32;
@@ -306,9 +407,9 @@ function makeAxisLabel(text, color, p) {
 }
 export function applyCanvasAxisTriad(viewer) {
   if (!viewer?.scene) return null;
-  removeRoot(viewer.scene, AXIS_NAME);
+  removeRoot(viewer.scene, INPUTXML_AXIS_ROOT);
   if (!axisVisible()) return null;
-  const root = new THREE.Group(); root.name = AXIS_NAME; root.userData.canvasAxisTriad = true;
+  const root = new THREE.Group(); root.name = INPUTXML_AXIS_ROOT; root.userData.canvasAxisTriad = true;
   const len = 320;
   const origin = new THREE.Vector3(0, 0, 0);
   const axes = [
