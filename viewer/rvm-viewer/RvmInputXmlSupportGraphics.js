@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
 import { state } from '../core/state.js';
-import { currentInputXmlNodeGraph, inputXmlPoint } from './RvmInputXmlAutoBendGraphics.js?v=20260619-inputxml-selectable-pipe-only-1';
+import { currentInputXmlNodeGraph, inputXmlPoint } from './RvmInputXmlAutoBendGraphics.js?v=20260619-source-bend-collapse-1';
 
 const ROOT_NAME = '__RVM_SUPPORT_SYMBOLS__';
 const TRUE_SUPPORT_TYPES = new Set(['ATTA', 'ANCI', 'SUPPORT', 'PIPE_SUPPORT', 'PIPESUPPORT']);
@@ -52,10 +52,10 @@ function edgeAxisAtNode(edgeItem) {
   return vectorLen(edgeItem.seg.p0.clone().sub(edgeItem.seg.p1));
 }
 function axis(v) {
-  const s = up(v).replace(/[^A-Z+-]/g, '');
-  if (s.includes('X')) return new THREE.Vector3(1, 0, 0);
-  if (s.includes('Y')) return new THREE.Vector3(0, 1, 0);
-  if (s.includes('Z')) return new THREE.Vector3(0, 0, 1);
+  const text = up(v).replace(/[^A-Z+-]/g, '');
+  if (text.includes('X')) return new THREE.Vector3(1, 0, 0);
+  if (text.includes('Y')) return new THREE.Vector3(0, 1, 0);
+  if (text.includes('Z')) return new THREE.Vector3(0, 0, 1);
   return null;
 }
 function supportAxis(a, placement) {
@@ -86,36 +86,72 @@ function guideAxes(t) {
 function sourceRestraintKind(a) {
   const raw = Number.parseFloat(String(a.SOURCE_RESTRAINT_TYPE ?? '').trim());
   if (!Number.isFinite(raw)) return '';
-  const n = Math.round(raw);
-  if ([0, 2, 17].includes(n)) return 'REST';
-  if ([1, 7].includes(n)) return 'GUIDE';
-  if ([3, 10, 18].includes(n)) return 'LINESTOP';
-  if ([4, 5, 6, 8, 9].includes(n)) return 'LIMIT';
-  if ([11, 12, 13, 14, 15, 16].includes(n)) return 'SPRING';
+  const rounded = Math.round(raw);
+  if ([0, 2, 17].includes(rounded)) return 'REST';
+  if ([1, 7].includes(rounded)) return 'GUIDE';
+  if ([3, 10, 18].includes(rounded)) return 'LINESTOP';
+  if ([4, 5, 6, 8, 9].includes(rounded)) return 'LIMIT';
+  if ([11, 12, 13, 14, 15, 16].includes(rounded)) return 'SPRING';
+  return '';
+}
+function rawIntentText(a) {
+  return [
+    a.UXML_RAW_SUPPORT_KIND,
+    a.RAW_SUPPORT_KIND,
+    a.RAW_SUPPORT_TYPE,
+    a.SOURCE_SUPPORT_KIND,
+    a.SOURCE_SUPPORT_TYPE,
+    a.SKEY,
+    a.SPRE,
+    a.DTXR,
+    a.DESCRIPTION,
+    a.DESC,
+    a.NAME,
+    a.SUPPORT_TAG,
+    a.SUPPORT_DIRECTION,
+    a.SOURCE_RESTRAINT_LABEL,
+    a.SOURCE_RESTRAINT_NAME,
+  ].map(up).join(' ');
+}
+function classifyText(txt) {
+  if (/HANGER|\bHANG\b/.test(txt)) return 'HANGER';
+  if (/SPRING/.test(txt)) return 'SPRING';
+  if (/GUIDE|\bGDE\b|\bGUI\b|\bPG[-_ ]|\bGT0[1-4]\b/.test(txt)) return 'GUIDE';
+  if (/LINE\s*STOP|LINESTOP|STOPPER|\bLS[-_ ]|\bST0[6-8]\b/.test(txt)) return 'LINESTOP';
+  if (/\bLIM\b|LIMIT/.test(txt)) return 'LIMIT';
+  if (/ANCHOR|FIXED/.test(txt)) return 'ANCHOR';
+  if (/\bX\b|\+X|-X|PIPE_AXIS_X/.test(txt)) return 'X';
+  if (/\bY\b|\+Y|-Y|PIPE_AXIS_Y/.test(txt)) return 'Y';
+  if (/\bZ\b|\+Z|-Z|PIPE_AXIS_Z/.test(txt)) return 'Z';
+  if (/REST|SHOE|WEAR\s*PLATE|W\.?\s*PAD|BASE\s*PLATE/.test(txt)) return 'REST';
   return '';
 }
 function kind(a) {
   const direct = up(a.SUPPORT_KIND || a.SUPPORT_MAPPER_KIND || a.SUPPORT_TYPE || a.CMPSUPTYPE || a.MDSSUPPTYPE);
+  const sourceKind = sourceRestraintKind(a);
+  const rawTextKind = classifyText(rawIntentText(a));
+
   if (/^(X|\+X|-X|XONLY|XSTOP)$/.test(direct)) return 'X';
   if (/^(Y|\+Y|-Y|YONLY|YSTOP)$/.test(direct)) return 'Y';
   if (/^(Z|\+Z|-Z|ZONLY|ZSTOP)$/.test(direct)) return 'Z';
   if (/^(LIM|LIMIT)$/.test(direct)) return 'LIMIT';
   if (/^(LINESTOP|LINE_STOP)$/.test(direct)) return 'LINESTOP';
-  if (/^(SPRING|HANGER|HANG)$/.test(direct)) return 'SPRING';
+  if (/^(HANGER|HANG)$/.test(direct)) return 'HANGER';
+  if (/^SPRING$/.test(direct)) return 'SPRING';
   if (/^(ANCHOR|FIXED)$/.test(direct)) return 'ANCHOR';
   if (/^GUIDE$/.test(direct)) return 'GUIDE';
-  if (/^REST$/.test(direct)) return 'REST';
-  const txt = [a.SUPPORT_KIND, a.SUPPORT_MAPPER_KIND, a.SUPPORT_TYPE, a.CMPSUPTYPE, a.MDSSUPPTYPE, a.SKEY, a.SPRE, a.DTXR, a.NAME, a.SUPPORT_TAG, a.SUPPORT_DIRECTION].map(up).join(' ');
-  if (/GUIDE|\bGDE\b|\bGUI\b|\bPG[-_ ]|\bGT0[1-4]\b/.test(txt)) return 'GUIDE';
-  if (/LINE\s*STOP|LINESTOP|STOPPER|\bLS[-_ ]|\bST0[6-8]\b/.test(txt)) return 'LINESTOP';
-  if (/\bLIM\b|LIMIT/.test(txt)) return 'LIMIT';
-  if (/ANCHOR|FIXED/.test(txt)) return 'ANCHOR';
-  if (/SPRING|HANGER|\bHANG\b/.test(txt)) return 'SPRING';
-  if (/\bX\b|\+X|-X|PIPE_AXIS_X/.test(txt)) return 'X';
-  if (/\bY\b|\+Y|-Y|PIPE_AXIS_Y/.test(txt)) return 'Y';
-  if (/\bZ\b|\+Z|-Z|PIPE_AXIS_Z/.test(txt)) return 'Z';
-  if (/REST|SHOE|WEAR\s*PLATE|W\.?\s*PAD|BASE\s*PLATE/.test(txt)) return 'REST';
-  return sourceRestraintKind(a) || 'UNRESOLVED';
+
+  // SUPPORT_KIND can be auto-normalized to REST before this overlay runs.
+  // Do not accept that as a blind fallback; use raw/source intent first.
+  if (/^REST$/.test(direct)) {
+    if (rawTextKind) return rawTextKind;
+    if (sourceKind) return sourceKind;
+    return 'UNRESOLVED';
+  }
+
+  if (rawTextKind) return rawTextKind;
+  if (sourceKind) return sourceKind;
+  return 'UNRESOLVED';
 }
 function isInputXmlSupport(n) {
   const a = n?.attributes || {};
@@ -214,7 +250,7 @@ function makePickable(group, renderId, attrs, supportKind) {
       inputXmlSupportGraphics: true,
       supportKind,
       kind: 'SUPPORT',
-      attributes: { ...attrs },
+      attributes: { ...attrs, SUPPORT_KIND_RESOLVED: supportKind },
     };
   });
 }
@@ -255,7 +291,7 @@ function makeSymbol(node, index, viewer, options) {
     g.add(arrow(c.clone().add(t.clone().multiplyScalar(gap * 0.5)), t, len, rad, color, `${tag}_${k}_A`));
     g.add(arrow(c.clone().add(t.clone().multiplyScalar(-gap * 0.5)), t.clone().multiplyScalar(-1), len, rad, color, `${tag}_${k}_B`));
   } else if (k === 'SPRING' || k === 'HANGER') {
-    g.add(springSymbol(p.clone().add(new THREE.Vector3(0, -cr - gap, 0)), len, rad, color, `${tag}_SPRING`));
+    g.add(springSymbol(p.clone().add(new THREE.Vector3(0, -cr - gap, 0)), len, rad, color, `${tag}_${k}`));
   } else if (singleAxis) {
     g.add(arrow(p.clone().add(singleAxis.clone().multiplyScalar(cr + gap)), singleAxis, len, rad, color, `${tag}_${k}_PLUS`));
     g.add(arrow(p.clone().add(singleAxis.clone().multiplyScalar(-cr - gap)), singleAxis.clone().multiplyScalar(-1), len, rad, color, `${tag}_${k}_MINUS`));
@@ -300,7 +336,7 @@ export function applyInputXmlSupportGraphicsOverlay(viewer, options = {}) {
   root.name = ROOT_NAME;
   root.userData.supportSymbolRoot = true;
   root.userData.inputXmlSupportGraphics = true;
-  supports.forEach((n, i) => { const s = makeSymbol(n, i, viewer, options); if (s) root.add(s); });
+  supports.forEach((supportNode, index) => { const symbol = makeSymbol(supportNode, index, viewer, options); if (symbol) root.add(symbol); });
   if (viewer.modelGroup) {
     viewer.modelGroup.add(root);
     viewer.modelGroup.updateMatrixWorld(true);
@@ -310,10 +346,10 @@ export function applyInputXmlSupportGraphicsOverlay(viewer, options = {}) {
   }
   const counts = {};
   let nodeSnapped = 0;
-  root.children.forEach((c) => {
-    const k = c.userData?.supportKind || 'SUPPORT';
-    counts[k] = (counts[k] || 0) + 1;
-    if (c.userData?.supportPlacementSource === 'NODE_GRAPH') nodeSnapped += 1;
+  root.children.forEach((child) => {
+    const supportKind = child.userData?.supportKind || 'SUPPORT';
+    counts[supportKind] = (counts[supportKind] || 0) + 1;
+    if (child.userData?.supportPlacementSource === 'NODE_GRAPH') nodeSnapped += 1;
   });
   viewer.supportSymbolDiagnostics = { created: root.children.length, scanned: supports.length, inputXmlSupportGraphics: true, inputXmlNodeGraphSnap: true, nodeSnapped, kindCounts: counts, labelsVisible: Boolean(options.labelsVisible), scaleMultiplier: options.scaleMultiplier };
   updateRvmSupportSummaryDom(viewer, viewer.supportSymbolDiagnostics);
