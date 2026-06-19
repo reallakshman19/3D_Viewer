@@ -7536,12 +7536,85 @@ export function renderModelConvertersTab(container) {
   resetOutput();
   renderAll();
 
+  // Populate popup bridge so the XML→CII workflow popup can render each phase
+  // interactively using the same closed-over helpers that the inline workflow uses.
+  _xmlCiiPhaseBridge = {
+    renderPhaseInto(target, phaseId) {
+      if (!target) return;
+      if (!target.dataset.xmlCiiActiveMaster) target.dataset.xmlCiiActiveMaster = 'linelist';
+
+      const self = this;
+      const rerender = () => self.renderPhaseInto(target, phaseId);
+
+      // Proxy root so render helpers that read rootEl.dataset.activeMaster work
+      // when given the popup body as rootEl.
+      const proxyRoot = {
+        dataset: { activeMaster: target.dataset.xmlCiiActiveMaster },
+        querySelectorAll: (sel) => target.querySelectorAll(sel),
+        querySelector: (sel) => target.querySelector(sel),
+      };
+
+      let html = '';
+      if (phaseId === 'regex') html = xmlCiiRenderRegexPhase();
+      else if (phaseId === 'import-masters') html = xmlCiiRenderImportMastersPhase(proxyRoot);
+      else if (phaseId === 'run') html = xmlCiiRenderRunPhase();
+      else if (phaseId === 'weight-match') html = xmlCiiRenderWeightMatchPhase();
+      else if (phaseId === 'preview') html = xmlCiiRenderPreviewPhase(proxyRoot);
+      else if (phaseId === 'diagnostics') html = xmlCiiRenderDiagnosticsPhase();
+      else if (phaseId === 'support-mapper') html = xmlCiiRenderSupportMapperPhase();
+      else if (phaseId === 'config') html = xmlCiiRenderConfigPhase();
+      target.innerHTML = html;
+
+      // Regex: bind interactive live-preview (re-renders into popup on change)
+      if (phaseId === 'regex') {
+        target.querySelectorAll('[data-xml-cii-regex-path]').forEach((input) => {
+          const save = () => {
+            const path = input.getAttribute('data-xml-cii-regex-path') || '';
+            const config = _parseXmlCiiEnrichmentConfig(activeValues().supportConfigJson);
+            const val = input.type === 'number'
+              ? (Number.isFinite(Number(input.value)) ? Number(input.value) : 0)
+              : input.value;
+            _setValueAtPath(config, path, val);
+            xmlCiiSaveConfig(config);
+          };
+          input.addEventListener('input', save);
+          input.addEventListener('change', () => { save(); rerender(); });
+        });
+      }
+
+      // Import Masters: master-tab navigation stays in popup; file/import actions
+      // use standard binding (config changes persist even if re-render targets main page).
+      if (phaseId === 'import-masters') {
+        target.querySelectorAll('[data-xml-cii-master-tab]').forEach((btn) => {
+          btn.addEventListener('click', () => {
+            target.dataset.xmlCiiActiveMaster = btn.getAttribute('data-xml-cii-master-tab') || 'linelist';
+            rerender();
+          });
+        });
+        bindXmlCiiImportMastersPhase(target);
+      }
+
+      if (phaseId === 'run') bindXmlCiiRunPhase(target);
+      if (phaseId === 'weight-match') bindXmlCiiWeightMatchPhase(target, target);
+      if (phaseId === 'preview') bindXmlCiiPreviewPhase(target);
+      if (phaseId === 'diagnostics') bindXmlCiiDiagnosticsPhase(target, target);
+      if (phaseId === 'support-mapper') bindXmlCiiSupportMapperPhase(target);
+      if (phaseId === 'config') bindXmlCiiConfigPhase(target);
+    },
+  };
+
   return () => {
     disposed = true;
+    _xmlCiiPhaseBridge = null;
     try { runtime?.dispose(); } catch {}
     try { previewRenderer?._3DModelConv_destroy?.(); } catch {}
   };
 }
 
 export { renderModelConvertersTab as renderLegacyModelConvertersTab };
+
+// Bridge exposed so popup can render the same interactive phase panels inline.
+// Populated by renderModelConvertersTab; null until the tab is first mounted.
+let _xmlCiiPhaseBridge = null;
+export function getXmlCiiPhaseBridge() { return _xmlCiiPhaseBridge; }
 

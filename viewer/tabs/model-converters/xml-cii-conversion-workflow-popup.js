@@ -1,5 +1,6 @@
 import { WorkflowModal } from './shared/WorkflowModal.js';
 import { OLD_XML_CII_WORKFLOW_PHASES, oldPhaseDetailHtml } from './xml-cii-conversion-workflow-direct-panels.js';
+import { getXmlCiiPhaseBridge } from './legacy-adapter.js?v=20260619-phase-bridge-1';
 
 const FLAG = '__xmlCiiConversionWorkflowPopup_direct_v9';
 const ROOT_ATTR = 'data-xml-cii-workflow-root';
@@ -152,8 +153,14 @@ function renderActiveTab(root, state) {
   if (!state.body) return;
 
   const phaseId = state.activeTab || OLD_XML_CII_WORKFLOW_PHASES[0].id;
-  state.body.innerHTML = oldPhaseDetailHtml(phaseId, root);
-  bindPhaseActions(state.body, root, state);
+  const bridge = getXmlCiiPhaseBridge();
+  if (bridge) {
+    bridge.renderPhaseInto(state.body, phaseId);
+  } else {
+    // Fallback: static summary (bridge not ready — model converters tab not yet mounted)
+    state.body.innerHTML = oldPhaseDetailHtml(phaseId, root);
+    bindPhaseActions(state.body, root, state);
+  }
 }
 
 function openConversionWorkflow(root = document, state = stateForRoot(root)) {
