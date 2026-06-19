@@ -24,6 +24,7 @@ function str(v) { if (v == null) return ''; if (typeof v === 'string') return v;
 function up(v) { return str(v).trim().toUpperCase(); }
 function num(v, f = null) { const n = Number.parseFloat(String(v ?? '').replace(/mm/gi, '').replace(/,/g, '').trim()); return Number.isFinite(n) ? n : f; }
 function vectorLen(v) { return v?.lengthSq?.() > 1e-10 ? v.clone().normalize() : null; }
+function html(v) { return str(v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;'); }
 
 function supportNodeId(a = {}) {
   return str(a.NODE || a.SUPPORT_NODE || a.SOURCE_NODE || a.SOURCE_RESTRAINT_NODE || a.FROM_NODE || a.TO_NODE).trim();
@@ -254,6 +255,29 @@ function makeSymbol(node, index, viewer, options) {
   return g;
 }
 
+function updateRvmSupportSummaryDom(viewer, diagnostics) {
+  if (typeof document === 'undefined' || !diagnostics?.inputXmlSupportGraphics) return;
+  const root = document.querySelector('[data-rvm-viewer]');
+  if (!root) return;
+  const counts = diagnostics.kindCounts || {};
+  const entries = Object.entries(counts).sort((a, b) => a[0].localeCompare(b[0]));
+  const summary = root.querySelector('#rvm-support-summary');
+  if (summary) {
+    summary.innerHTML = entries.length
+      ? entries.map(([k, v]) => `<div class="rvm-tag-item"><span class="rvm-tag-text">${html(k)}</span><strong>${html(v)}</strong></div>`).join('')
+      : '<div class="rvm-empty-state">No InputXML support symbols found.</div>';
+  }
+  const supportChip = root.querySelector('[data-rvm-status-chip="supports"]');
+  if (supportChip) supportChip.textContent = `Supports: ${Number(diagnostics.created || 0).toLocaleString()}`;
+  const kindChip = root.querySelector('[data-rvm-status-chip="kind"]');
+  if (kindChip) kindChip.textContent = `Kinds: ${entries.map(([k, v]) => `${k}:${v}`).join(' ') || '-'}`;
+  const msg = root.querySelector('#rvm-sb-msg');
+  if (msg && /indexAttrs|Loaded|Ready/i.test(msg.textContent || '')) {
+    msg.textContent = `${msg.textContent || 'Loaded'}; InputXML supports=${diagnostics.created}; nodeSnapped=${diagnostics.nodeSnapped}/${diagnostics.created}`;
+  }
+  viewer.__inputXmlSupportSummaryDomUpdated = true;
+}
+
 export function applyInputXmlSupportGraphicsOverlay(viewer, options = {}) {
   if (!viewer?.scene || !hasInputXmlModel()) return null;
   const supports = inputXmlSupportNodes();
@@ -272,5 +296,6 @@ export function applyInputXmlSupportGraphicsOverlay(viewer, options = {}) {
     if (c.userData?.supportPlacementSource === 'NODE_GRAPH') nodeSnapped += 1;
   });
   viewer.supportSymbolDiagnostics = { created: root.children.length, scanned: supports.length, inputXmlSupportGraphics: true, inputXmlNodeGraphSnap: true, nodeSnapped, kindCounts: counts, labelsVisible: Boolean(options.labelsVisible), scaleMultiplier: options.scaleMultiplier };
+  updateRvmSupportSummaryDom(viewer, viewer.supportSymbolDiagnostics);
   return viewer.supportSymbolDiagnostics;
 }
