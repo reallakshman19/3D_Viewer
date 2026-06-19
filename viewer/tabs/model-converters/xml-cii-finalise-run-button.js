@@ -117,6 +117,11 @@ function ensureFinaliseButton(root = document) {
   host.insertBefore(button, host.firstChild || null);
 }
 
+function isModelConvertersTabVisible() {
+  return !!(document.querySelector('[data-model-converters-root], .model-converters-tab') ||
+            document.querySelector('#model-converters-select'));
+}
+
 function install() {
   if (!ready()) return;
   if (window[FLAG]) return;
@@ -126,7 +131,6 @@ function install() {
   setTimeout(tick, 0);
   setTimeout(tick, 150);
   setTimeout(tick, 600);
-  setInterval(tick, 1000);
 
   document.addEventListener('change', (event) => {
     if (event.target?.matches?.('#model-converters-select')) setTimeout(tick, 0);
@@ -146,6 +150,14 @@ function install() {
     event.preventDefault();
     event.stopPropagation();
     directRun(document);
+  }, true);
+
+  // Re-run after tab navigation brings the model-converters tab back into view.
+  // Only tick when the tab is actually mounted; skip silently otherwise.
+  document.addEventListener('click', (event) => {
+    const navBtn = event.target?.closest?.('[data-tab-id]');
+    if (!navBtn) return;
+    setTimeout(() => { if (isModelConvertersTabVisible()) tick(); }, 200);
   }, true);
 }
 

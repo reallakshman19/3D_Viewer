@@ -220,8 +220,9 @@ function openConversionWorkflow(root = document, state = stateForRoot(root)) {
     return;
   }
 
-  const active = readStored(ACTIVE_TAB_KEY, 'xml-model-data');
-  state.activeTab = WORKFLOW_TABS.some((tab) => tab.id === active) ? active : 'xml-model-data';
+  // Always start on the data tab — the process-enrichment tab shows legacy phase
+  // links that confuse users who expect the current workflow UI.
+  state.activeTab = 'xml-model-data';
 
   state.modal = new WorkflowModal({
     title: 'XML → CII (2019) Conversion Workflow',
