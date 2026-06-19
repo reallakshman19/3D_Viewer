@@ -352,7 +352,6 @@ export function resetParsedState() {
 }
 
 export function loadStickyState() {
-  _ensureAppMountElement();
   try {
     const savedSticky = localStorage.getItem('concise-viewer-sticky');
     if (savedSticky) {
@@ -430,7 +429,7 @@ export function saveStickyState() {
 
 export function setActiveTab(tabId) {
   state.activeTab = tabId;
-  emit(RuntimeEvents.TAB_CHANGED, tabId);
+  emit(RuntimeEvents.TAB_CHANGED, { tabId });
 }
 
 export function updateViewer3DConfig(patch, reason = 'update') {
