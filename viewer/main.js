@@ -1,7 +1,7 @@
 import './rvm/AvevaJsonAutoConnectOverride.js?v=20260618-inputxml-auto-connect-1';
-import './rvm-viewer/RvmInputXmlSupportGraphicsSetModelBridge.js?v=20260619-inputxml-support-summary-1';
-import './rvm-viewer/RvmInputXmlSupportGraphicsUiBridge.js?v=20260619-inputxml-support-summary-1';
-import { init } from './core/app.js?v=20260619-inputxml-node-graph-1';
+import './rvm-viewer/RvmInputXmlSupportGraphicsSetModelBridge.js?v=20260619-inputxml-selectable-pipe-only-1';
+import './rvm-viewer/RvmInputXmlSupportGraphicsUiBridge.js?v=20260619-inputxml-selectable-pipe-only-1';
+import { init } from './core/app.js?v=20260619-inputxml-selectable-pipe-only-1';
 
 function reportStartupError(error) {
   console.error('3D Viewer failed to start', error);
