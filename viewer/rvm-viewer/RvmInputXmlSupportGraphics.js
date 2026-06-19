@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
 import { state } from '../core/state.js';
+import { currentInputXmlNodeGraph, inputXmlPoint } from './RvmInputXmlAutoBendGraphics.js?v=20260619-inputxml-node-graph-1';
 
 const ROOT_NAME = '__RVM_SUPPORT_SYMBOLS__';
 const TRUE_SUPPORT_TYPES = new Set(['ATTA', 'ANCI', 'SUPPORT', 'PIPE_SUPPORT', 'PIPESUPPORT']);
@@ -22,58 +23,35 @@ const KIND_COLORS = {
 function str(v) { if (v == null) return ''; if (typeof v === 'string') return v; try { return JSON.stringify(v); } catch { return String(v); } }
 function up(v) { return str(v).trim().toUpperCase(); }
 function num(v, f = null) { const n = Number.parseFloat(String(v ?? '').replace(/mm/gi, '').replace(/,/g, '').trim()); return Number.isFinite(n) ? n : f; }
+function vectorLen(v) { return v?.lengthSq?.() > 1e-10 ? v.clone().normalize() : null; }
 
-function axisConfig() {
-  let verticalAxis = 'Y';
-  let northAxis = 'X';
-  try { verticalAxis = up(localStorage.getItem('rvm.inputxml.verticalAxis') || 'Y') || 'Y'; } catch {}
-  try { northAxis = up(localStorage.getItem('rvm.inputxml.northAxis') || 'X') || 'X'; } catch {}
-  if (!['X', 'Y', 'Z'].includes(verticalAxis)) verticalAxis = 'Y';
-  if (!['X', 'Y', 'Z'].includes(northAxis) || northAxis === verticalAxis) northAxis = verticalAxis === 'X' ? 'Y' : 'X';
-  const eastAxis = ['X', 'Y', 'Z'].find((axis) => axis !== verticalAxis && axis !== northAxis) || 'Z';
-  return { verticalAxis, northAxis, eastAxis };
+function supportNodeId(a = {}) {
+  return str(a.NODE || a.SUPPORT_NODE || a.SOURCE_NODE || a.SOURCE_RESTRAINT_NODE || a.FROM_NODE || a.TO_NODE).trim();
 }
 
-function putAxis(out, axisName, value) {
-  if (axisName === 'X') out.x = value;
-  else if (axisName === 'Y') out.y = value;
-  else out.z = value;
-}
-
-function coord(v) {
-  if (!v && v !== 0) return null;
-  if (Array.isArray(v) && v.length >= 3) {
-    const p = new THREE.Vector3(num(v[0]), num(v[1]), num(v[2]));
-    return [p.x, p.y, p.z].every(Number.isFinite) ? p : null;
-  }
-  if (typeof v === 'object') {
-    const p = new THREE.Vector3(num(v.x ?? v.X), num(v.y ?? v.Y), num(v.z ?? v.Z));
-    return [p.x, p.y, p.z].every(Number.isFinite) ? p : null;
-  }
-  const t = String(v || '').trim().split(/\s+/g);
-  const map = axisConfig();
-  const out = { x: 0, y: 0, z: 0 };
-  let ok = false;
-  for (let i = 0; i < t.length - 1; i += 2) {
-    const a = t[i].toUpperCase(); const n = num(t[i + 1]);
-    if (!Number.isFinite(n)) continue;
-    if (a === 'E') { putAxis(out, map.eastAxis, n); ok = true; }
-    else if (a === 'W') { putAxis(out, map.eastAxis, -n); ok = true; }
-    else if (a === 'N') { putAxis(out, map.northAxis, n); ok = true; }
-    else if (a === 'S') { putAxis(out, map.northAxis, -n); ok = true; }
-    else if (a === 'U') { putAxis(out, map.verticalAxis, n); ok = true; }
-    else if (a === 'D') { putAxis(out, map.verticalAxis, -n); ok = true; }
-  }
-  if (ok) return new THREE.Vector3(out.x, out.y, out.z);
-  const vals = String(v || '').match(/-?\d+(?:\.\d+)?/g)?.map(Number).filter(Number.isFinite) || [];
-  return vals.length >= 3 ? new THREE.Vector3(vals[0], vals[1], vals[2]) : null;
-}
-
-function supportPoint(a) {
+function supportPointFromAttrs(a) {
   for (const k of ['SUPPORTCOORD', 'SUPPORT_COORD', 'SCOORD', 'SUPPORT_POINT', 'SUPPORT_POS', 'LBOP', 'LBOS', 'POS', 'POSITION']) {
-    const p = coord(a[k]); if (p) return p;
+    const p = inputXmlPoint(a[k]); if (p) return p;
   }
   return null;
+}
+
+function supportPlacement(a) {
+  const graph = currentInputXmlNodeGraph();
+  const id = supportNodeId(a);
+  if (id && graph?.nodePoints?.has(id)) {
+    const p = graph.nodePoints.get(id).clone();
+    const edges = graph.byNode?.get(id) || [];
+    return { point: p, nodeId: id, edges, source: 'NODE_GRAPH' };
+  }
+  const fallback = supportPointFromAttrs(a);
+  return fallback ? { point: fallback, nodeId: id, edges: [], source: 'COORD_FALLBACK' } : null;
+}
+
+function edgeAxisAtNode(edgeItem) {
+  if (!edgeItem?.seg) return null;
+  if (edgeItem.endName === 'p0') return vectorLen(edgeItem.seg.p1.clone().sub(edgeItem.seg.p0));
+  return vectorLen(edgeItem.seg.p0.clone().sub(edgeItem.seg.p1));
 }
 
 function axis(v) {
@@ -81,7 +59,18 @@ function axis(v) {
   if (s.includes('X')) return new THREE.Vector3(1, 0, 0);
   if (s.includes('Y')) return new THREE.Vector3(0, 1, 0);
   if (s.includes('Z')) return new THREE.Vector3(0, 0, 1);
-  return new THREE.Vector3(1, 0, 0);
+  return null;
+}
+
+function supportAxis(a, placement) {
+  const graphAxis = placement?.edges?.map(edgeAxisAtNode).find(Boolean);
+  if (graphAxis) return graphAxis;
+  return axis(a.PIPE_AXIS || a.ROUTE_AXIS || a.SUPPORT_DIRECTION) || new THREE.Vector3(1, 0, 0);
+}
+
+function attachedOd(a, placement) {
+  const graphOd = placement?.edges?.map((e) => e?.seg?.diameter).find((v) => Number.isFinite(v) && v > 0);
+  return Math.max(num(a.ATTACHED_PIPE_OD || a.ATTACHED_PIPE_BORE || a.BORE, graphOd || 100), 1);
 }
 
 function axisNameFromKind(k) {
@@ -90,31 +79,27 @@ function axisNameFromKind(k) {
   if (k === 'Z') return new THREE.Vector3(0, 0, 1);
   return null;
 }
-
 function ortho(t) {
   const c = new THREE.Vector3().crossVectors(t, new THREE.Vector3(0, 1, 0));
   return c.lengthSq() > 1e-8 ? c.normalize() : new THREE.Vector3(0, 0, 1);
 }
-
 function guideAxes(t) {
   const ax = Math.abs(t.x), ay = Math.abs(t.y), az = Math.abs(t.z);
   if (ax >= ay && ax >= az) return [new THREE.Vector3(0, 0, 1)];
   if (az >= ax && az >= ay) return [new THREE.Vector3(1, 0, 0)];
   return [new THREE.Vector3(1, 0, 0), new THREE.Vector3(0, 0, 1)];
 }
-
 function sourceRestraintKind(a) {
   const raw = Number.parseFloat(String(a.SOURCE_RESTRAINT_TYPE ?? '').trim());
   if (!Number.isFinite(raw)) return '';
   const n = Math.round(raw);
-  // Conservative CAESAR/InputXML-style fallback. Descriptive fields still win in kind().
   if ([0, 2, 17].includes(n)) return 'REST';
   if ([1, 7].includes(n)) return 'GUIDE';
   if ([3, 10, 18].includes(n)) return 'LINESTOP';
   if ([4, 5, 6, 8, 9].includes(n)) return 'LIMIT';
+  if ([11, 12, 13, 14, 15, 16].includes(n)) return 'SPRING';
   return '';
 }
-
 function kind(a) {
   const direct = up(a.SUPPORT_KIND || a.SUPPORT_MAPPER_KIND || a.SUPPORT_TYPE || a.CMPSUPTYPE || a.MDSSUPPTYPE);
   if (/^(X|\+X|-X|XONLY|XSTOP)$/.test(direct)) return 'X';
@@ -123,6 +108,9 @@ function kind(a) {
   if (/^(LIM|LIMIT)$/.test(direct)) return 'LIMIT';
   if (/^(LINESTOP|LINE_STOP)$/.test(direct)) return 'LINESTOP';
   if (/^(SPRING|HANGER|HANG)$/.test(direct)) return 'SPRING';
+  if (/^(ANCHOR|FIXED)$/.test(direct)) return 'ANCHOR';
+  if (/^GUIDE$/.test(direct)) return 'GUIDE';
+  if (/^REST$/.test(direct)) return 'REST';
   const txt = [a.SUPPORT_KIND, a.SUPPORT_MAPPER_KIND, a.SUPPORT_TYPE, a.CMPSUPTYPE, a.MDSSUPPTYPE, a.SKEY, a.SPRE, a.DTXR, a.NAME, a.SUPPORT_TAG, a.SUPPORT_DIRECTION].map(up).join(' ');
   if (/GUIDE|\bGDE\b|\bGUI\b|\bPG[-_ ]|\bGT0[1-4]\b/.test(txt)) return 'GUIDE';
   if (/LINE\s*STOP|LINESTOP|STOPPER|\bLS[-_ ]|\bST0[6-8]\b/.test(txt)) return 'LINESTOP';
@@ -135,19 +123,16 @@ function kind(a) {
   if (/REST|SHOE|WEAR\s*PLATE|W\.?\s*PAD|BASE\s*PLATE/.test(txt)) return 'REST';
   return sourceRestraintKind(a) || 'UNRESOLVED';
 }
-
 function isInputXmlSupport(n) {
   const a = n?.attributes || {};
   const type = up(n?.type || n?.kind || a.TYPE || a.RAW_TYPE);
   if (!TRUE_SUPPORT_TYPES.has(type)) return false;
   return /INPUTXML/i.test([n?.name, n?.canonicalObjectId, a.SOURCE_FORMAT, a.SOURCE_CONVERTER, a.SOURCE_FILE, a.SOURCE_RESTRAINT_ID, a.NAME, a.SUPPORT_TAG].map(str).join(' ')) || Boolean(a.SOURCE_RESTRAINT_ID);
 }
-
 function inputXmlSupportNodes() {
   const nodes = Array.isArray(state?.rvm?.index?.nodes) ? state.rvm.index.nodes : [];
   return nodes.filter(isInputXmlSupport);
 }
-
 function hasInputXmlModel() {
   const nodes = Array.isArray(state?.rvm?.index?.nodes) ? state.rvm.index.nodes : [];
   return nodes.some((n) => /INPUTXML/i.test([n?.name, n?.canonicalObjectId, n?.attributes?.SOURCE_FORMAT, n?.attributes?.SOURCE_CONVERTER, n?.attributes?.SOURCE_FILE].map(str).join(' ')));
@@ -155,7 +140,6 @@ function hasInputXmlModel() {
 
 function mat(color) { return new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.98, depthTest: true }); }
 function orientY(mesh, dir) { mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir.clone().normalize()); }
-
 function arrow(tip, away, len, r, color, name) {
   const dir = away.clone().normalize();
   const g = new THREE.Group(); g.name = name;
@@ -171,7 +155,6 @@ function arrow(tip, away, len, r, color, name) {
   g.add(shaft, head);
   return g;
 }
-
 function addLabel(g, label, p, len, visible) {
   if (!visible || typeof document === 'undefined') return;
   const div = document.createElement('div');
@@ -184,7 +167,6 @@ function addLabel(g, label, p, len, visible) {
   css.position.copy(p.clone().add(new THREE.Vector3(0, len * 0.55, 0)));
   g.add(css);
 }
-
 function removeOld(viewer) {
   const old = viewer?.scene?.getObjectByName(ROOT_NAME);
   if (!old) return;
@@ -195,7 +177,6 @@ function removeOld(viewer) {
     if (o.element?.parentNode) o.element.parentNode.removeChild(o.element);
   });
 }
-
 function crossSymbol(p, len, r, color, name) {
   const g = new THREE.Group();
   g.name = name;
@@ -208,7 +189,6 @@ function crossSymbol(p, len, r, color, name) {
   }
   return g;
 }
-
 function springSymbol(p, len, r, color, name) {
   const g = new THREE.Group();
   g.name = name;
@@ -228,12 +208,13 @@ function springSymbol(p, len, r, color, name) {
 
 function makeSymbol(node, index, viewer, options) {
   const a = node.attributes || {};
-  const local = supportPoint(a); if (!local) return null;
-  const p = viewer?.modelGroup ? viewer.modelGroup.localToWorld(local.clone()) : local;
+  const placement = supportPlacement(a);
+  if (!placement?.point) return null;
+  const p = placement.point;
   const k = kind(a);
   const tag = str(a.SUPPORT_TAG || a.CMPSUPREFN || a.NAME || a.REF || `SUPPORT-${index + 1}`);
-  const t = axis(a.PIPE_AXIS || a.ROUTE_AXIS || a.SUPPORT_DIRECTION).normalize();
-  const od = Math.max(num(a.ATTACHED_PIPE_OD || a.ATTACHED_PIPE_BORE || a.BORE, 100), 1);
+  const t = supportAxis(a, placement).normalize();
+  const od = attachedOd(a, placement);
   const gap = Math.max(num(a.SUPPORT_GAP_MM ?? a.GAP_MM ?? a.GAP, 0), 0);
   const mul = Math.max(0.25, Math.min(2, Number(options?.scaleMultiplier || 1)));
   const cr = od * 0.5;
@@ -243,7 +224,7 @@ function makeSymbol(node, index, viewer, options) {
   const color = KIND_COLORS[k] || KIND_COLORS.UNRESOLVED;
   const g = new THREE.Group();
   g.name = `SUPPORT_SYMBOL_${tag}`;
-  g.userData = { supportSymbol: true, supportKind: k, supportTag: tag, inputXmlSupportGraphics: true, attributes: { ...a } };
+  g.userData = { supportSymbol: true, supportKind: k, supportTag: tag, inputXmlSupportGraphics: true, supportPlacementSource: placement.source, supportNodeId: placement.nodeId, attributes: { ...a } };
   const singleAxis = axisNameFromKind(k);
   if (k === 'ANCHOR') {
     for (const ax of [new THREE.Vector3(1, 0, 0), new THREE.Vector3(0, 1, 0), new THREE.Vector3(0, 0, 1)]) {
@@ -274,7 +255,7 @@ function makeSymbol(node, index, viewer, options) {
 }
 
 export function applyInputXmlSupportGraphicsOverlay(viewer, options = {}) {
-  if (!viewer?.scene || !viewer?.modelGroup || !hasInputXmlModel()) return null;
+  if (!viewer?.scene || !hasInputXmlModel()) return null;
   const supports = inputXmlSupportNodes();
   removeOld(viewer);
   const root = new THREE.Group();
@@ -284,7 +265,12 @@ export function applyInputXmlSupportGraphicsOverlay(viewer, options = {}) {
   supports.forEach((n, i) => { const s = makeSymbol(n, i, viewer, options); if (s) root.add(s); });
   viewer.scene.add(root);
   const counts = {};
-  root.children.forEach((c) => { const k = c.userData?.supportKind || 'SUPPORT'; counts[k] = (counts[k] || 0) + 1; });
-  viewer.supportSymbolDiagnostics = { created: root.children.length, scanned: supports.length, inputXmlSupportGraphics: true, kindCounts: counts, labelsVisible: Boolean(options.labelsVisible), scaleMultiplier: options.scaleMultiplier };
+  let nodeSnapped = 0;
+  root.children.forEach((c) => {
+    const k = c.userData?.supportKind || 'SUPPORT';
+    counts[k] = (counts[k] || 0) + 1;
+    if (c.userData?.supportPlacementSource === 'NODE_GRAPH') nodeSnapped += 1;
+  });
+  viewer.supportSymbolDiagnostics = { created: root.children.length, scanned: supports.length, inputXmlSupportGraphics: true, inputXmlNodeGraphSnap: true, nodeSnapped, kindCounts: counts, labelsVisible: Boolean(options.labelsVisible), scaleMultiplier: options.scaleMultiplier };
   return viewer.supportSymbolDiagnostics;
 }
