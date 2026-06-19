@@ -94,11 +94,12 @@ function nodeKey(value, fallback) {
   const text = s(value).trim();
   return text || fallback || '';
 }
-
+function isSourceBendType(type) {
+  return ['BEND', 'ELBO', 'ELBOW'].includes(up(type));
+}
 function allIndexNodes() {
   return Array.isArray(state?.rvm?.index?.nodes) ? state.rvm.index.nodes : [];
 }
-
 function renderIdFor(sourceAttrs = {}, fallbackName = '') {
   return s(sourceAttrs.CANONICAL_OBJECT_ID || sourceAttrs.canonicalObjectId || sourceAttrs.SOURCE_CANONICAL_ID || sourceAttrs.SOURCE_ELEMENT_ID || sourceAttrs.REF || sourceAttrs.NAME || fallbackName).trim() || fallbackName;
 }
@@ -237,12 +238,40 @@ function sameNodePoint(items) {
   if (maxDist > Math.max(...items.map((item) => item.seg.diameter)) * 4) return null;
   return items.reduce((acc, item) => acc.add(item.p), new THREE.Vector3()).multiplyScalar(1 / items.length);
 }
+function closestLinePoint(a, da, b, db) {
+  const d1 = da.clone().normalize();
+  const d2 = db.clone().normalize();
+  const r = a.clone().sub(b);
+  const A = d1.dot(d1);
+  const B = d1.dot(d2);
+  const C = d2.dot(d2);
+  const D = d1.dot(r);
+  const E = d2.dot(r);
+  const denom = A * C - B * B;
+  if (Math.abs(denom) < 1e-9) return a.clone().add(b).multiplyScalar(0.5);
+  const t = (B * E - C * D) / denom;
+  const u = (A * E - B * D) / denom;
+  const p1 = a.clone().add(d1.multiplyScalar(t));
+  const p2 = b.clone().add(d2.multiplyScalar(u));
+  return p1.add(p2).multiplyScalar(0.5);
+}
+function findAdjacentStraight(items = [], excludeSeg = null) {
+  const candidates = items.filter((item) => item?.seg && item.seg !== excludeSeg && !item.seg.sourceBend);
+  if (candidates.length === 1) return candidates[0];
+  if (candidates.length > 1) return candidates.sort((a, b) => (b.seg.length || 0) - (a.seg.length || 0))[0];
+  return null;
+}
+function setTrimForItem(item, trimMapStart, trimMapEnd, p) {
+  if (!item?.seg || !p) return;
+  if (item.endName === 'p0') trimMapStart.set(item.seg, p);
+  else trimMapEnd.set(item.seg, p);
+}
 
 export function buildInputXmlNodeGraph() {
   const all = allIndexNodes().filter((node) => isInputXmlNode(node));
   const components = all.filter((node) => !isSupportNode(node));
   const supports = all.filter(isSupportNode);
-  const edges = [];
+  const allEdges = [];
   let skippedNoNodeEdge = 0;
   let skippedNoGeometry = 0;
 
@@ -261,7 +290,8 @@ export function buildInputXmlNodeGraph() {
     const d = bore(a);
     const fromNode = nodeKey(a.FROM_NODE, `P0:${key(p0)}`);
     const toNode = nodeKey(a.TO_NODE, `P1:${key(p1)}`);
-    edges.push({
+    const sourceType = up(a.TYPE || a.RAW_TYPE || node.type);
+    allEdges.push({
       node,
       attrs: { ...a, canonicalObjectId: node.canonicalObjectId, CANONICAL_OBJECT_ID: node.canonicalObjectId },
       index,
@@ -272,11 +302,13 @@ export function buildInputXmlNodeGraph() {
       diameter: d,
       radius: d * 0.5,
       length: p0.distanceTo(p1),
-      sourceType: up(a.TYPE || a.RAW_TYPE || node.type),
-      sourceBend: false,
+      sourceType,
+      sourceBend: isSourceBendType(sourceType),
     });
   });
 
+  const edges = allEdges.filter((seg) => !seg.sourceBend);
+  const bendEdges = allEdges.filter((seg) => seg.sourceBend);
   const byNode = new Map();
   const nodePoints = new Map();
   edges.forEach((seg) => {
@@ -287,10 +319,18 @@ export function buildInputXmlNodeGraph() {
     const p = sameNodePoint(items) || items[0]?.p?.clone?.() || null;
     if (p) nodePoints.set(id, p);
   });
+  // Preserve node locations from bend placeholders for support snapping, but do not
+  // let those placeholder edges participate in generic node-bend generation.
+  bendEdges.forEach((seg) => {
+    if (!nodePoints.has(seg.fromNode)) nodePoints.set(seg.fromNode, seg.p0.clone());
+    if (!nodePoints.has(seg.toNode)) nodePoints.set(seg.toNode, seg.p1.clone());
+  });
 
   const graph = {
-    kind: 'INPUTXML_NODE_GRAPH_V2_PIPE_ONLY',
+    kind: 'INPUTXML_NODE_GRAPH_V3_SOURCE_BEND_COLLAPSE',
     edges,
+    bendEdges,
+    allEdges,
     supports,
     byNode,
     nodePoints,
@@ -298,6 +338,7 @@ export function buildInputXmlNodeGraph() {
       totalInputXmlComponents: components.length,
       totalInputXmlSupports: supports.length,
       routeSegments: edges.length,
+      sourceBendEdges: bendEdges.length,
       skippedNoNodeEdge,
       skippedNoGeometry,
     },
@@ -309,12 +350,61 @@ export function buildInputXmlNodeGraph() {
 export function currentInputXmlNodeGraph() {
   return state?.rvm?.[INPUTXML_NODE_GRAPH_KEY] || buildInputXmlNodeGraph();
 }
-
-function shouldGenerateBendAtNode(items) {
+function shouldGenerateBendAtNode(items, id, sourceBendNodeIds) {
+  if (sourceBendNodeIds?.has(id)) return false;
   if (items.length !== 2) return false;
   const [a, b] = items;
   if (a.seg === b.seg) return false;
   return true;
+}
+function addSourceBendCollapse(root, graph, trimStart, trimEnd) {
+  let created = 0;
+  let fallbackPipe = 0;
+  let skipped = 0;
+  const sourceBendNodeIds = new Set();
+
+  for (const bendSeg of graph.bendEdges || []) {
+    sourceBendNodeIds.add(bendSeg.fromNode);
+    sourceBendNodeIds.add(bendSeg.toNode);
+    const fromItems = graph.byNode.get(bendSeg.fromNode) || [];
+    const toItems = graph.byNode.get(bendSeg.toNode) || [];
+    const aItem = findAdjacentStraight(fromItems, bendSeg);
+    const bItem = findAdjacentStraight(toItems, bendSeg);
+
+    if (!aItem || !bItem || aItem.seg === bItem.seg) {
+      const mesh = cylinderBetween(bendSeg.p0, bendSeg.p1, Math.max(bendSeg.radius, 1), PIPE_MAT, `INPUTXML_PIPE_SOURCE_BEND_PLACEHOLDER_${bendSeg.fromNode}_TO_${bendSeg.toNode}`, bendSeg.attrs);
+      if (mesh) { root.add(mesh); fallbackPipe += 1; }
+      else skipped += 1;
+      continue;
+    }
+
+    const da = outwardDirection(aItem);
+    const db = outwardDirection(bItem);
+    if (Math.abs(da.dot(db)) > 0.985) {
+      const mesh = cylinderBetween(bendSeg.p0, bendSeg.p1, Math.max(bendSeg.radius, 1), PIPE_MAT, `INPUTXML_PIPE_SOURCE_BEND_STRAIGHT_${bendSeg.fromNode}_TO_${bendSeg.toNode}`, bendSeg.attrs);
+      if (mesh) { root.add(mesh); fallbackPipe += 1; }
+      else skipped += 1;
+      continue;
+    }
+
+    const corner = closestLinePoint(bendSeg.p0, da, bendSeg.p1, db);
+    const dia = Math.min(aItem.seg.diameter, bItem.seg.diameter, bendSeg.diameter);
+    const pipeR = Math.max(dia * 0.5, 1);
+    const bendRadius = Math.max(dia * 1.5, dia * 0.75);
+    const maxTrimA = Math.max(aItem.seg.length * 0.42, pipeR * 0.5);
+    const maxTrimB = Math.max(bItem.seg.length * 0.42, pipeR * 0.5);
+    const bend = makeArc(da, db, corner, bendRadius, pipeR, BEND_MAT, `INPUTXML_AUTO_BEND_SOURCE_${bendSeg.fromNode}_TO_${bendSeg.toNode}`, maxTrimA, maxTrimB);
+    if (!bend) {
+      root.add(makeNodeMarker(corner, pipeR, `INPUTXML_SOURCE_BEND_MITER_${bendSeg.fromNode}_TO_${bendSeg.toNode}`));
+      skipped += 1;
+      continue;
+    }
+    root.add(bend.mesh);
+    setTrimForItem(aItem, trimStart, trimEnd, bend.p1);
+    setTrimForItem(bItem, trimStart, trimEnd, bend.p2);
+    created += 1;
+  }
+  return { created, fallbackPipe, skipped, sourceBendNodeIds };
 }
 
 export function applyInputXmlAutoBendGraphics(viewer, options = {}) {
@@ -333,7 +423,8 @@ export function applyInputXmlAutoBendGraphics(viewer, options = {}) {
 
   const trimStart = new Map();
   const trimEnd = new Map();
-  let bends = 0;
+  const sourceCollapse = addSourceBendCollapse(root, graph, trimStart, trimEnd);
+  let bends = sourceCollapse.created;
   let skippedJunctions = 0;
   let skippedRemoteNode = 0;
   let skippedUnsafeTrim = 0;
@@ -350,7 +441,7 @@ export function applyInputXmlAutoBendGraphics(viewer, options = {}) {
       }
       return;
     }
-    if (!shouldGenerateBendAtNode(items)) return;
+    if (!shouldGenerateBendAtNode(items, id, sourceCollapse.sourceBendNodeIds)) return;
     const [a, b] = items;
     if (!corner) {
       skippedRemoteNode += 1;
@@ -373,8 +464,8 @@ export function applyInputXmlAutoBendGraphics(viewer, options = {}) {
     }
     bends += 1;
     root.add(bend.mesh);
-    if (a.endName === 'p0') trimStart.set(a.seg, bend.p1); else trimEnd.set(a.seg, bend.p1);
-    if (b.endName === 'p0') trimStart.set(b.seg, bend.p2); else trimEnd.set(b.seg, bend.p2);
+    setTrimForItem(a, trimStart, trimEnd, bend.p1);
+    setTrimForItem(b, trimStart, trimEnd, bend.p2);
   });
 
   let pipes = 0;
@@ -394,7 +485,9 @@ export function applyInputXmlAutoBendGraphics(viewer, options = {}) {
     pipes,
     bends,
     routeSegments: segs.length,
-    sourceBendEdges: 0,
+    sourceBendEdges: graph.stats.sourceBendEdges || 0,
+    sourceBendCollapsed: sourceCollapse.created,
+    sourceBendFallbackPipe: sourceCollapse.fallbackPipe,
     skippedNoNodeEdge: graph.stats.skippedNoNodeEdge || 0,
     skippedNoGeometry: graph.stats.skippedNoGeometry || 0,
     totalInputXmlComponents: graph.stats.totalInputXmlComponents || segs.length,
@@ -402,9 +495,9 @@ export function applyInputXmlAutoBendGraphics(viewer, options = {}) {
     skippedJunctions,
     skippedRemoteNode,
     skippedUnsafeTrim,
-    skippedSourceBendAdjacency: 0,
+    skippedSourceBendCollapse: sourceCollapse.skipped,
     nodeMarkers,
-    labelPolicy: 'PIPE_ONLY_NODE_GRAPH_SELECTABLE',
+    labelPolicy: 'PIPE_ONLY_NODE_GRAPH_SOURCE_BEND_COLLAPSE_SELECTABLE',
   };
   return viewer.inputXmlAutoBendDiagnostics;
 }
