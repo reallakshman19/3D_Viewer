@@ -1,4 +1,5 @@
-import { init } from './core/app.js?v=20260617-basic-glb-2';
+import './rvm/AvevaJsonAutoConnectOverride.js?v=20260618-inputxml-auto-connect-1';
+import { init } from './core/app.js?v=20260618-inputxml-auto-connect-1';
 
 function reportStartupError(error) {
   console.error('3D Viewer failed to start', error);
@@ -20,16 +21,11 @@ function reportStartupError(error) {
   }
 }
 
-window.addEventListener('error', (event) => {
-  reportStartupError(event.error || event.message || event);
-});
-
-window.addEventListener('unhandledrejection', (event) => {
-  reportStartupError(event.reason || event);
-});
-
 try {
-  init();
+  const maybePromise = init();
+  if (maybePromise && typeof maybePromise.then === 'function') {
+    maybePromise.catch(reportStartupError);
+  }
 } catch (error) {
   reportStartupError(error);
 }
