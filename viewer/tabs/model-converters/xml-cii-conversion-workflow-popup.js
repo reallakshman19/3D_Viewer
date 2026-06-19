@@ -1,18 +1,30 @@
+/**
+ * Installs the XML->CII(2019) workflow popup shown from Model Converters.
+ *
+ * Inputs: a rendered Model Converters container with the converter select and
+ * run button. Output: the required phase-tab modal (`1 Regex` through
+ * `7 Config`) with popup-native phase bodies backed by XML->CII bridge data
+ * and action methods. Fallback: if the bridge is unavailable, an explicit
+ * backend-unavailable panel is shown; legacy inline workflow HTML is never
+ * rendered inside this popup.
+ */
 import { WorkflowModal } from './shared/WorkflowModal.js';
-import { OLD_XML_CII_WORKFLOW_PHASES, oldPhaseDetailHtml } from './xml-cii-conversion-workflow-direct-panels.js';
-import { getXmlCiiPhaseBridge } from './legacy-adapter.js?v=20260619-phase-bridge-2';
+import { getXmlCiiPhaseBridge } from './legacy-adapter.js?v=20260619-git-ss-adapt-8';
+import { renderXmlCiiPopupNativePhase } from './xml-cii-popup-native-panels.js?v=20260619-git-ss-adapt-1';
+import { XML_CII_WORKFLOW_PHASES, normalizeWorkflowPhaseId } from './WorkflowShell.js';
 
-const FLAG = '__xmlCiiConversionWorkflowPopup_direct_v9';
+const FLAG = '__xmlCiiConversionWorkflowPopup_phaseTabs_v1';
 const ROOT_ATTR = 'data-xml-cii-workflow-root';
-const ACTIVE_TAB_KEY = 'xmlCii2019.conversionWorkflow.activePhase.v3';
+const ACTIVE_PHASE_KEY = 'xmlCii2019.conversionWorkflow.activePhase.v4';
+const LEGACY_ACTIVE_PHASE_KEY = 'xmlCii2019.conversionWorkflow.activePhase.v3';
 const DIRECT_RUN_FLAG = '__xmlCiiConversionWorkflowAllowDirectRun';
-const XML_CII_CONVERTER_IDS = new Set(['xml_to_cii', 'inputxml_to_cii2019', 'xml_to_cii2019', 'inputxml_to_cii_2019', 'xml-cii-2019']);
+const XML_CII_CONVERTER_IDS = new Set(['xml_to_cii', 'xml_to_cii2019', 'xml-cii-2019']);
 
 function browserReady() {
   return typeof window !== 'undefined' && typeof document !== 'undefined';
 }
 
-function readStored(key, fallback = '') {
+function readStored(key, fallback) {
   try {
     return window.localStorage.getItem(key) ?? fallback;
   } catch {
@@ -36,7 +48,7 @@ function runtime() {
   return window[FLAG];
 }
 
-function rootElement(root = document) {
+function rootElement(root) {
   return root && root.nodeType === 1 ? root : document;
 }
 
@@ -50,7 +62,13 @@ function rootForNode(node) {
   return node?.closest?.(`[${ROOT_ATTR}]`) || document;
 }
 
-function stateForRoot(root = document) {
+function initialPhaseId() {
+  const current = readStored(ACTIVE_PHASE_KEY, '');
+  if (current) return normalizeWorkflowPhaseId(current);
+  return normalizeWorkflowPhaseId(readStored(LEGACY_ACTIVE_PHASE_KEY, XML_CII_WORKFLOW_PHASES[0].id));
+}
+
+function stateForRoot(root) {
   const element = rootElement(root);
   const rt = runtime();
   let state = rt.stateByRoot.get(element);
@@ -58,15 +76,23 @@ function stateForRoot(root = document) {
     state = {
       modal: null,
       body: null,
-      activeTab: OLD_XML_CII_WORKFLOW_PHASES[0].id,
+      activePhase: XML_CII_WORKFLOW_PHASES[0].id,
+      activeMaster: 'linelist',
+      defaultMastersPromise: null,
       selectElement: null,
       refreshButton: null,
+      previewRows: [],
+      previewStatus: '',
+      diagnosticsRows: [],
+      diagnosticsStatus: '',
+      weightRows: [],
+      weightStatus: '',
+      configText: null,
+      configStatus: '',
     };
     rt.stateByRoot.set(element, state);
   }
-  // Auto-heal: cleanupBodyLevelWorkflowOverlays removes the overlay from the
-  // DOM without calling modal.close(), leaving a stale state.modal reference.
-  // Detect this by checking isConnected and reset so the next click opens fresh.
+
   if (state.modal && !state.modal.overlayEl?.isConnected) {
     state.modal = null;
     state.body = null;
@@ -74,19 +100,24 @@ function stateForRoot(root = document) {
   return state;
 }
 
-function activeConverterSelect(root = document) {
+function activeConverterSelect(root) {
   return root.querySelector?.('#model-converters-select') || document.querySelector('#model-converters-select');
 }
 
 function normalizeConverterToken(value) {
-  return String(value || '').trim().toLowerCase().replace(/[\s→]+/g, '').replace(/[-_]+/g, '_');
+  return String(value || '')
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, '')
+    .replace(/[>\u2192]+/g, '')
+    .replace(/[-_]+/g, '_');
 }
 
-function activeConverterId(root = document) {
+function activeConverterId(root) {
   return activeConverterSelect(root)?.value || '';
 }
 
-function isXmlCiiActive(root = document) {
+function isXmlCiiActive(root) {
   const select = activeConverterSelect(root);
   if (!select) return false;
 
@@ -96,134 +127,333 @@ function isXmlCiiActive(root = document) {
 
   const optionText = select.selectedOptions?.[0]?.textContent || '';
   const normalized = normalizeConverterToken(`${id} ${optionText}`);
+  if (normalized.includes('inputxml')) return false;
   return normalized.includes('xml') && normalized.includes('cii') && normalized.includes('2019');
 }
 
-function safeScrollTo(node) {
-  try {
-    node?.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
-  } catch {
-    node?.scrollIntoView?.();
-  }
-}
-
-function openExistingXmlCiiPhase(root, phaseId) {
-  const workflow =
-    root.querySelector?.('#model-converters-xml-cii-workflow') ||
-    document.querySelector('#model-converters-xml-cii-workflow');
-
-  if (!workflow) return false;
-
-  workflow.dataset.selectedPhase = phaseId || 'regex';
-  const details = workflow.tagName === 'DETAILS' ? workflow : workflow.closest?.('details');
-  if (details) details.open = true;
-  safeScrollTo(workflow);
-  return true;
+function armDirectRunGuard() {
+  window[DIRECT_RUN_FLAG] = true;
+  setTimeout(() => {
+    window[DIRECT_RUN_FLAG] = false;
+  }, 0);
 }
 
 function dispatchDirectRun(root) {
   const runButton = root.querySelector?.('#model-converters-run') || document.querySelector('#model-converters-run');
   if (!runButton) return false;
 
-  window[DIRECT_RUN_FLAG] = true;
-  try {
-    runButton.click();
-  } finally {
-    setTimeout(() => {
-      window[DIRECT_RUN_FLAG] = false;
-    }, 0);
-  }
+  armDirectRunGuard();
+  runButton.click();
   return true;
 }
 
-function bindPhaseActions(body, root, state) {
-  body.querySelectorAll('[data-direct-process-phase]').forEach((btn) => {
-    btn.addEventListener('click', () => {
-      openExistingXmlCiiPhase(root, btn.getAttribute('data-direct-process-phase') || 'regex');
-    });
-  });
-  body.querySelectorAll('[data-direct-run-conversion]').forEach((btn) => {
-    btn.addEventListener('click', () => {
-      if (dispatchDirectRun(root)) state.modal?.close();
-    });
-  });
+function downloadTextFile(filename, text, mimeType) {
+  const blob = new Blob([text], { type: mimeType });
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(blob);
+  link.download = filename;
+  link.click();
+  URL.revokeObjectURL(link.href);
 }
 
-function renderStaticFallback(root, state, phaseId) {
-  try {
-    state.body.innerHTML = oldPhaseDetailHtml(phaseId, root);
-    bindPhaseActions(state.body, root, state);
-  } catch (err) {
-    console.warn('XML→CII workflow: static fallback render failed', err);
-    state.body.innerHTML = '<div class="model-converters-workflow-detail-text" style="padding:16px;">Unable to render this phase. Use the inline workflow on the Model Converters tab.</div>';
+function configBoolsFromBody(body) {
+  const out = {};
+  body.querySelectorAll('[data-native-config-bool]').forEach((input) => {
+    out[input.getAttribute('data-native-config-bool')] = !!input.checked;
+  });
+  return out;
+}
+
+function bindNativePhaseActions(root, state, bridge, phaseId) {
+  const body = state.body;
+  if (!body) return;
+  const rerender = () => renderPhase(root, state);
+
+  body.querySelectorAll('[data-native-regex-path]').forEach((input) => {
+    const save = () => {
+      bridge.setPopupConfigValue?.(input.getAttribute('data-native-regex-path') || '', input.value, input.type);
+      rerender();
+    };
+    input.addEventListener('change', save);
+  });
+
+  body.querySelectorAll('[data-native-master-tab]').forEach((button) => {
+    button.addEventListener('click', () => {
+      state.activeMaster = button.getAttribute('data-native-master-tab') || 'linelist';
+      body.dataset.xmlCiiActiveMaster = state.activeMaster;
+      rerender();
+    });
+  });
+
+  body.querySelectorAll('[data-native-import-master]').forEach((input) => {
+    input.addEventListener('change', async () => {
+      const file = input.files?.[0];
+      if (!file) return;
+      const masterKey = input.getAttribute('data-native-import-master') || 'linelist';
+      try {
+        await bridge.importPopupMasterFile?.(masterKey, file);
+      } catch (err) {
+        console.warn('XML->CII workflow: master import failed', err);
+      } finally {
+        input.value = '';
+        rerender();
+      }
+    });
+  });
+
+  body.querySelectorAll('[data-native-load-default]').forEach((button) => {
+    button.addEventListener('click', async () => {
+      const masterKey = button.getAttribute('data-native-load-default') || '';
+      button.disabled = true;
+      try {
+        await bridge.loadPopupDefaultMaster?.(masterKey);
+      } catch (err) {
+        console.warn('XML->CII workflow: default master load failed', err);
+      } finally {
+        rerender();
+      }
+    });
+  });
+
+  body.querySelectorAll('[data-native-auto-map]').forEach((button) => {
+    button.addEventListener('click', () => {
+      bridge.autoMapPopupMaster?.(button.getAttribute('data-native-auto-map') || 'linelist');
+      rerender();
+    });
+  });
+
+  body.querySelectorAll('[data-native-field-map]').forEach((select) => {
+    select.addEventListener('change', () => {
+      bridge.setPopupMasterField?.(
+        select.getAttribute('data-native-master-key') || state.activeMaster || 'linelist',
+        select.getAttribute('data-native-field-map') || '',
+        select.value,
+      );
+      rerender();
+    });
+  });
+
+  body.querySelectorAll('[data-native-save-master]').forEach((button) => {
+    button.addEventListener('click', () => {
+      bridge.savePopupMaster?.(button.getAttribute('data-native-save-master') || 'linelist');
+      rerender();
+    });
+  });
+
+  body.querySelectorAll('[data-native-clear-master]').forEach((button) => {
+    button.addEventListener('click', () => {
+      bridge.clearPopupMaster?.(button.getAttribute('data-native-clear-master') || 'linelist');
+      rerender();
+    });
+  });
+
+  body.querySelector('[data-native-build-preview]')?.addEventListener('click', async () => {
+    state.previewStatus = 'Building preview...';
+    try {
+      const rows = await bridge.buildPopupPreviewRows?.();
+      state.previewRows = Array.isArray(rows) ? rows : [];
+      state.previewStatus = `${state.previewRows.length} branch row(s)`;
+    } catch (err) {
+      state.previewRows = [];
+      state.previewStatus = String(err?.message || err);
+    } finally {
+      rerender();
+    }
+  });
+
+  body.querySelector('[data-native-dry-run]')?.addEventListener('click', async () => {
+    state.diagnosticsStatus = 'Running...';
+    try {
+      const rows = await bridge.runPopupDiagnostics?.();
+      state.diagnosticsRows = Array.isArray(rows) ? rows : [];
+      state.diagnosticsStatus = `Done - ${state.diagnosticsRows.length} row(s)`;
+    } catch (err) {
+      state.diagnosticsRows = [];
+      state.diagnosticsStatus = String(err?.message || err);
+    } finally {
+      rerender();
+    }
+  });
+
+  body.querySelector('[data-native-compute-weights]')?.addEventListener('click', async () => {
+    state.weightStatus = 'Computing...';
+    try {
+      const rows = await bridge.computePopupWeightRows?.();
+      state.weightRows = Array.isArray(rows) ? rows : [];
+      state.weightStatus = `${state.weightRows.length} weight candidate row(s)`;
+    } catch (err) {
+      state.weightRows = [];
+      state.weightStatus = String(err?.message || err);
+    } finally {
+      rerender();
+    }
+  });
+
+  body.querySelector('[data-native-apply-preferred-weights]')?.addEventListener('click', () => {
+    bridge.applyPopupPreferredWeights?.(state.weightRows || []);
+    state.weightStatus = 'Preferred weights applied';
+    rerender();
+  });
+
+  body.querySelector('[data-native-skip-weight-review]')?.addEventListener('click', () => {
+    if (dispatchDirectRun(root)) state.modal?.close();
+  });
+
+  body.querySelectorAll('[data-native-run-option]').forEach((input) => {
+    input.addEventListener('change', () => {
+      bridge.setPopupRunOption?.(
+        input.getAttribute('data-native-run-option') || '',
+        input.type === 'checkbox' ? input.checked : input.value,
+        input.type,
+      );
+      rerender();
+    });
+  });
+
+  body.querySelector('[data-native-review-weights]')?.addEventListener('click', () => openPhase(root, state, 'weight-match'));
+  body.querySelector('[data-native-finalise-run]')?.addEventListener('click', () => {
+    if (dispatchDirectRun(root)) state.modal?.close();
+  });
+
+  body.querySelector('[data-native-open-support-table]')?.addEventListener('click', () => {
+    bridge.renderPopupSupportTable?.(body.querySelector('[data-native-support-host]'));
+  });
+
+  const configText = body.querySelector('[data-native-config-text]');
+  if (configText) {
+    configText.addEventListener('input', () => {
+      state.configText = configText.value;
+      state.configStatus = 'Unsaved changes';
+    });
+  }
+
+  body.querySelector('[data-native-save-config]')?.addEventListener('click', () => {
+    try {
+      const nextText = bridge.savePopupConfigText?.(configText?.value || '{}', configBoolsFromBody(body));
+      state.configText = nextText || null;
+      state.configStatus = 'Saved';
+    } catch (err) {
+      state.configStatus = `JSON error: ${String(err?.message || err)}`;
+    } finally {
+      rerender();
+    }
+  });
+
+  body.querySelector('[data-native-export-config]')?.addEventListener('click', () => {
+    downloadTextFile('cii-enrichment-config.json', bridge.exportPopupConfigText?.() || '{}', 'application/json');
+  });
+
+  body.querySelector('[data-native-import-config]')?.addEventListener('change', async (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    try {
+      bridge.importPopupConfigText?.(await file.text());
+      state.configText = null;
+      state.configStatus = `Imported ${file.name}`;
+    } catch (err) {
+      state.configStatus = `Import failed: ${String(err?.message || err)}`;
+    } finally {
+      event.target.value = '';
+      rerender();
+    }
+  });
+
+  if (phaseId !== 'config') {
+    state.configText = null;
+    state.configStatus = '';
   }
 }
 
-function renderActiveTab(root, state) {
+function renderPhase(root, state) {
   if (!state.body) return;
 
-  const phaseId = state.activeTab || OLD_XML_CII_WORKFLOW_PHASES[0].id;
+  const phaseId = normalizeWorkflowPhaseId(state.activePhase);
+  state.activePhase = phaseId;
   const bridge = getXmlCiiPhaseBridge();
 
-  // Use the live interactive bridge when the model-converters tab is mounted, but
-  // never let a phase renderer throw — a throw mid-open would leave an empty,
-  // scroll-locked modal that looks like the app is hung. Degrade to static.
-  if (bridge && typeof bridge.renderPhaseInto === 'function') {
-    try {
-      bridge.renderPhaseInto(state.body, phaseId);
-      return;
-    } catch (err) {
-      console.warn('XML→CII workflow: interactive phase render failed, using static panel', err);
-    }
+  if (!bridge || typeof bridge.getPopupSnapshot !== 'function') {
+    state.body.innerHTML = `
+      <div class="model-converters-workflow-detail-title">Workflow backend unavailable</div>
+      <div class="model-converters-workflow-detail-note">Open the Model Converters tab once, then reopen XML-&gt;CII Workflow.</div>`;
+    return;
   }
 
-  renderStaticFallback(root, state, phaseId);
+  try {
+    state.body.dataset.xmlCiiActiveMaster = state.activeMaster || 'linelist';
+    const snapshot = bridge.getPopupSnapshot(state.body);
+    state.body.innerHTML = renderXmlCiiPopupNativePhase(phaseId, snapshot, state);
+    bindNativePhaseActions(root, state, bridge, phaseId);
+  } catch (err) {
+    console.warn('XML->CII workflow: popup-native render failed', err);
+    state.body.innerHTML = `<div class="model-converters-workflow-detail-note">Unable to render this phase: ${String(err?.message || err)}</div>`;
+  }
+}
+
+function preloadDefaultMasters(root, state) {
+  const bridge = getXmlCiiPhaseBridge();
+  if (!bridge || typeof bridge.ensureDefaultMastersLoaded !== 'function') return;
+  if (state.defaultMastersPromise) return;
+
+  const preloadTarget = state.modal?.overlayEl || root;
+  state.defaultMastersPromise = Promise.resolve(bridge.ensureDefaultMastersLoaded(preloadTarget))
+    .catch((err) => {
+      console.warn('XML->CII workflow: default master preload failed', err);
+    })
+    .finally(() => {
+      state.defaultMastersPromise = null;
+      if (state.modal) renderPhase(root, state);
+    });
+}
+
+function openPhase(root, state, phaseId) {
+  state.activePhase = normalizeWorkflowPhaseId(phaseId);
+  writeStored(ACTIVE_PHASE_KEY, state.activePhase);
+  state.modal?.setActiveTab(state.activePhase);
+  renderPhase(root, state);
 }
 
 function openConversionWorkflow(root = document, state = stateForRoot(root)) {
   if (!browserReady() || !isXmlCiiActive(root)) return;
 
   if (state.modal) {
-    renderActiveTab(root, state);
+    renderPhase(root, state);
     return;
   }
 
-  const stored = readStored(ACTIVE_TAB_KEY, OLD_XML_CII_WORKFLOW_PHASES[0].id);
-  const validPhase = OLD_XML_CII_WORKFLOW_PHASES.some((p) => p.id === stored);
-  state.activeTab = validPhase ? stored : OLD_XML_CII_WORKFLOW_PHASES[0].id;
+  state.activePhase = initialPhaseId();
 
   state.modal = new WorkflowModal({
-    title: 'XML→CII(2019) Workflow',
-    tabs: OLD_XML_CII_WORKFLOW_PHASES,
-    activeTabId: state.activeTab,
-    onTabChange: (tabId) => {
-      state.activeTab = tabId;
-      writeStored(ACTIVE_TAB_KEY, tabId);
-      renderActiveTab(root, state);
-    },
+    title: 'XML->CII(2019) Workflow',
+    subtitle: 'Import masters, map fields, and maintain manual overrides in a standalone-ready config.',
+    tabs: XML_CII_WORKFLOW_PHASES,
+    activeTabId: state.activePhase,
+    onTabChange: (tabId) => openPhase(root, state, tabId),
     onClose: () => {
-      const b = getXmlCiiPhaseBridge();
-      if (b) { b.switchPhase = null; b.closePopup = null; }
+      const bridge = getXmlCiiPhaseBridge();
+      if (bridge) {
+        bridge.switchPhase = null;
+        bridge.closePopup = null;
+      }
       state.modal = null;
       state.body = null;
     },
   });
 
   state.body = state.modal.open();
-  renderActiveTab(root, state);
+  renderPhase(root, state);
+  preloadDefaultMasters(root, state);
 
-  // Wire bridge callbacks so the Run and Weight-Match phases can switch tabs
-  // and close the popup without referencing the modal directly.
   const bridge = getXmlCiiPhaseBridge();
   if (bridge) {
     bridge.switchPhase = (phaseId) => {
       if (!state.modal) return;
-      state.activeTab = phaseId;
-      writeStored(ACTIVE_TAB_KEY, phaseId);
-      state.modal.setActiveTab(phaseId);
-      renderActiveTab(root, state);
+      openPhase(root, state, phaseId);
     };
-    bridge.closePopup = () => state.modal?.close();
+    bridge.closePopup = () => {
+      // The bridge closes the popup immediately before re-clicking Run.
+      armDirectRunGuard();
+      state.modal?.close();
+    };
   }
 }
 
@@ -238,7 +468,7 @@ function applyWorkflowButtonVisibility(quickButton, xmlActive) {
   quickButton.setAttribute('aria-hidden', xmlActive ? 'false' : 'true');
 }
 
-function ensureWorkflowButton(root, state = stateForRoot(root)) {
+function ensureWorkflowButton(root, state) {
   const runButton = root.querySelector?.('#model-converters-run');
   if (!runButton) return;
 
@@ -256,7 +486,7 @@ function ensureWorkflowButton(root, state = stateForRoot(root)) {
     quickButton.type = 'button';
     quickButton.className = 'model-converters-download-btn';
     quickButton.dataset.xmlCiiOpenConversionWorkflow = 'true';
-    quickButton.textContent = 'Open XML→CII Workflow';
+    quickButton.textContent = 'XML->CII Simple Workflow';
     quickButton.style.cssText = 'width:100%;padding:10px;margin-top:6px;';
     quickButton.addEventListener('click', () => {
       if (isXmlCiiActive(root)) openConversionWorkflow(root, state);

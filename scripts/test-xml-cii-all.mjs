@@ -45,5 +45,5 @@ for (const script of scripts) {
 
 console.log('\n✅ XML CII aggregate test runner passed', {
   scripts: results.length,
-  workflowMode: 'lean-popup',
+  workflowMode: 'phase-tabs',
 });

@@ -56,9 +56,9 @@ function _percentText(confidence) { const numeric = Number(confidence); return N
 export function xmlCiiRenderPreviewPhase(xmlFile, config) {
   const llRows = Array.isArray(config.linelist?.masterRows) ? config.linelist.masterRows.length : 0;
   const pcRows = Array.isArray(config.pipingClass?.masterRows) ? config.pipingClass.masterRows.length : 0;
-  if (!xmlFile) return `<div class="model-converters-workflow-detail-title">4 Preview</div><div class="model-converters-workflow-detail-note">⚠ Load an XML file in the sidebar first, then return here to preview enrichment.</div>`;
-  if (!llRows && !pcRows) return `<div class="model-converters-workflow-detail-title">4 Preview</div><div class="model-converters-workflow-detail-note">⚠ Import at least one master in 2 Import Masters, then return here.</div>`;
-  return `<div class="model-converters-workflow-detail-title">4 Preview</div><div class="model-converters-workflow-detail-text">Dry-run enrichment preview per branch — inspect and override approximate matches.</div><div id="mc-preview-table-host"><div class="model-converters-workflow-detail-note" style="text-align:center;padding:18px;">Loading preview...</div></div>`;
+  if (!xmlFile) return `<div class="model-converters-workflow-detail-title">3 Preview</div><div class="model-converters-workflow-detail-note">⚠ Load an XML file in the sidebar first, then return here to preview enrichment.</div>`;
+  if (!llRows && !pcRows) return `<div class="model-converters-workflow-detail-title">3 Preview</div><div class="model-converters-workflow-detail-note">⚠ Import at least one master in 2 Import Masters, then return here.</div>`;
+  return `<div class="model-converters-workflow-detail-title">3 Preview</div><div class="model-converters-workflow-detail-text">Dry-run enrichment preview per branch — inspect and override approximate matches.</div><div id="mc-preview-table-host"><div class="model-converters-workflow-detail-note" style="text-align:center;padding:18px;">Loading preview...</div></div>`;
 }
 
 export function xmlCiiDryRunPreview(xmlText, config, stagedJsonText) {

@@ -13,5 +13,5 @@
  * keeps the legacy entrypoint discoverable without duplicating runtime install
  * logic.
  */
-export { renderModelConvertersTab } from './model-converters/index.js?v=20260619-xml-cii-branch-sample-1';
-export { installXmlCiiConversionWorkflowPopup } from './model-converters/xml-cii-conversion-workflow-popup.js?v=20260619-phase-tabs-bridge-2';
+export { renderModelConvertersTab } from './model-converters/index.js?v=20260619-git-ss-adapt-8';
+export { installXmlCiiConversionWorkflowPopup } from './model-converters/xml-cii-conversion-workflow-popup.js?v=20260619-git-ss-adapt-8';

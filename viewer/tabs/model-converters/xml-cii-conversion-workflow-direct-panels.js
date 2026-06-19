@@ -624,7 +624,7 @@ export function renderXmlCiiWorkflowProcessEnrichmentPanel(target, dataRoot = do
     if (!opened) renderXmlCiiWorkflowProcessEnrichmentFallback(target, dataRoot, callbacks);
   });
 
-  if (scheduleExactOldWorkflow(target, dataRoot, callbacks)) return;
+  if (callbacks.autoOpenLegacyWorkflow === true && scheduleExactOldWorkflow(target, dataRoot, callbacks)) return;
 
   renderXmlCiiWorkflowProcessEnrichmentFallback(target, dataRoot, callbacks);
 }

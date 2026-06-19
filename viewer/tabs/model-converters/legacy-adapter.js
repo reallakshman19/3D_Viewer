@@ -31,6 +31,7 @@ import {
   scoreXmlCiiWeightCandidates,
   buildStagedComponentIndex,
   stagedComponentForXmlNode,
+  collectXmlCiiWeightMatchRows,
 } from '../../converters/xml-cii2019-core/weight-match-model.js';
 import {
   FIELD_RULES as _FIELD_RULES,
@@ -60,7 +61,7 @@ import { WorkflowModal } from './shared/WorkflowModal.js';
 import { FileInputCard } from './shared/FileInputCard.js';
 import { FieldMappingTable } from './shared/FieldMappingTable.js';
 import { EditablePreviewTable } from './shared/EditablePreviewTable.js';
-import { xmlCiiRenderPreviewPhase as xmlCiiRenderPreviewPhaseImported, xmlCiiBuildAndRenderPreview as xmlCiiBuildAndRenderPreviewImported } from './converters/xmltocii2019_helper/preview-renderer.js';
+import { xmlCiiRenderPreviewPhase as xmlCiiRenderPreviewPhaseImported, xmlCiiBuildAndRenderPreview as xmlCiiBuildAndRenderPreviewImported, xmlCiiDryRunPreview } from './converters/xmltocii2019_helper/preview-renderer.js';
 import { xmlCiiRenderWeightMatchPhase as xmlCiiRenderWeightMatchPhaseImported, bindXmlCiiWeightMatchPhase as bindXmlCiiWeightMatchPhaseImported } from './converters/xmltocii2019_helper/weight-match-renderer.js';
 import { xmlCiiRenderSupportMapperPhase as xmlCiiRenderSupportMapperPhaseImported, bindXmlCiiSupportMapperPhase as bindXmlCiiSupportMapperPhaseImported } from './converters/xmltocii2019_helper/support-types-panel.js';
 import { extractXmlCiiBranchSample as _extractXmlCiiBranchSample } from './xml-cii-branch-sample-sync.js';
@@ -5259,18 +5260,12 @@ export function renderModelConvertersTab(container) {
           <div id="model-converters-advanced-fields" class="model-converters-advanced-fields"></div>
         </details>
 
-        <details id="model-converters-xml-cii-workflow" class="model-converters-workflow">
-          <summary>XML->CII(2019) workflow</summary>
-          <div class="model-converters-workflow-phase-list">
-            ${XML_CII_WORKFLOW_PHASES.map((phase) => `
-              <button type="button" class="model-converters-workflow-phase" data-xml-cii-phase="${_esc(phase.id)}">
-                <span>${_esc(phase.label)}</span>
-                <small>${_esc(phase.state)}</small>
-              </button>
-            `).join('')}
-          </div>
+        <div id="model-converters-xml-cii-workflow" class="model-converters-workflow" hidden>
+          <button type="button" id="model-converters-xml-cii-rich-btn" class="model-converters-run-btn" style="width:100%;padding:10px;margin-bottom:4px;">
+            XML-&gt;CII Rich Workflow
+          </button>
           <div id="model-converters-xml-cii-workflow-detail" class="model-converters-workflow-detail"></div>
-        </details>
+        </div>
 
         <details id="model-converters-support-mapper" class="model-converters-advanced">
           <summary>Support type mapper</summary>
@@ -5318,6 +5313,10 @@ export function renderModelConvertersTab(container) {
   let xmlCiiWorkflowPopupEl = null;
   let xmlCiiWorkflowPopupDetailEl = null;
   let xmlCiiMasterStorageWarningShown = false;
+  // Tracks which loaded XML file the regex sampleBranchName was auto-derived from.
+  // A newly chosen file refreshes the branch once; manual edits afterward stick
+  // because the file key still matches and we skip re-deriving.
+  let xmlCiiAutoBranchFileKey = '';
   const supportMapperWrapEl = container.querySelector('#model-converters-support-mapper');
   const supportMapperPanelEl = container.querySelector('#model-converters-support-mapper-panel');
   const runBtnEl = container.querySelector('#model-converters-run');
@@ -5718,6 +5717,41 @@ export function renderModelConvertersTab(container) {
     _xmlCiiSyncConfigTextarea();
   }
 
+  function xmlCiiConfigWithLoadedMasterRows(contextLabel) {
+    const values = activeValues();
+    const config = _parseXmlCiiEnrichmentConfig(values.supportConfigJson);
+    let hydrated = false;
+
+    for (const masterKey of XML_CII_MASTER_ORDER) {
+      const masterDef = XML_CII_MASTER_DEFS[masterKey];
+      const savedRows = _xmlCiiMasterRowsFromConfig(config, masterDef);
+      if (savedRows.length) continue;
+
+      const local = xmlCiiLocalMasterState(masterKey);
+      if (!local.rawRows.length) continue;
+
+      const rows = _xmlCiiMapRowsWithFieldMap(local.rawRows, local.fieldMap, masterKey);
+      if (!rows.length) continue;
+
+      if (!config[masterDef.sectionKey] || typeof config[masterDef.sectionKey] !== 'object') {
+        config[masterDef.sectionKey] = {};
+      }
+      config[masterDef.sectionKey][masterDef.rowsKey] = rows;
+      config[masterDef.sectionKey][masterDef.fieldMapKey] = local.fieldMap && typeof local.fieldMap === 'object'
+        ? local.fieldMap
+        : {};
+      hydrated = true;
+    }
+
+    if (hydrated) {
+      values.supportConfigJson = JSON.stringify(config, null, 2);
+      _xmlCiiSyncConfigTextarea();
+      xmlCiiPersistLargeConfigChange(contextLabel);
+    }
+
+    return config;
+  }
+
   function xmlCiiPersistLargeConfigChange(contextLabel) {
     // persist() never throws; it returns 'trimmed' when imported masters were
     // too large for localStorage and were dropped from the persisted copy.
@@ -6079,9 +6113,10 @@ export function renderModelConvertersTab(container) {
     const overrideCount = Object.keys(overrides.pipingClass || {}).length + Object.keys(overrides.material || {}).length;
     const summary = XML_CII_MASTER_ORDER.map((masterKey) => {
       const masterDef = XML_CII_MASTER_DEFS[masterKey];
+      const local = xmlCiiLocalMasterState(masterKey);
       return {
         masterKey,
-        rows: _xmlCiiMasterRowsFromConfig(config, masterDef).length,
+        rows: _xmlCiiMasterRowsFromConfig(config, masterDef).length || local.rawRows.length,
       };
     });
 
@@ -6110,7 +6145,7 @@ export function renderModelConvertersTab(container) {
   // 3 Run Phase
   // -------------------------------------------------------------------------
   function xmlCiiRenderRunPhase() {
-    const config = _parseXmlCiiEnrichmentConfig(activeValues().supportConfigJson);
+    const config = xmlCiiConfigWithLoadedMasterRows('XML->CII run-phase');
     const values = activeValues();
     const linelistRows = Array.isArray(config.linelist?.masterRows) ? config.linelist.masterRows.length : 0;
     const pcRows = Array.isArray(config.pipingClass?.masterRows) ? config.pipingClass.masterRows.length : 0;
@@ -6163,13 +6198,13 @@ export function renderModelConvertersTab(container) {
           </label>
         </div>
       </div>
-      <div style="margin-top:12px;display:flex;flex-direction:column;gap:8px;">
+      <div style="margin-top:12px;display:flex;gap:8px;flex-direction:column;">
         <button type="button" class="model-converters-run-btn" data-xml-cii-run-from-workflow style="width:100%;padding:12px;">
           ▶ Run — Review Weight Matches
         </button>
-        <div class="model-converters-workflow-detail-note">Opens <strong>4A Weight Match</strong> to review approximate weights before running.</div>
-        <button type="button" class="model-converters-download-btn" data-xml-cii-finalize-run style="width:100%;padding:10px;margin-top:4px;">
-          ⚡ Finalise and Run (skip weight review)
+        <div class="model-converters-workflow-detail-note">Opens <strong>4A Weight Match</strong> to review approximate weights, then Finalize and Run.</div>
+        <button type="button" class="model-converters-download-btn" data-xml-cii-finalize-run style="width:100%;padding:12px;">
+          Finalise and Run
         </button>
       </div>
     `;
@@ -6189,10 +6224,16 @@ export function renderModelConvertersTab(container) {
     });
     rootEl.querySelectorAll('[data-xml-cii-run-from-workflow]').forEach((btn) => {
       btn.addEventListener('click', () => {
-        // Two-step run: review approximate weight matches in 4A first, then the
-        // user clicks "Finalize and Run" there to launch the conversion.
         rootEl.dataset.selectedPhase = 'weight-match';
         xmlCiiRenderWorkflowRoot(rootEl, xmlCiiWorkflowDetailForRoot(rootEl));
+      });
+    });
+    rootEl.querySelectorAll('[data-xml-cii-finalize-run]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        xmlCiiCloseWorkflowPopup();
+        window['__xmlCiiConversionWorkflowAllowDirectRun'] = true;
+        setTimeout(() => { window['__xmlCiiConversionWorkflowAllowDirectRun'] = false; }, 0);
+        runBtnEl?.click();
       });
     });
   }
@@ -6224,6 +6265,8 @@ export function renderModelConvertersTab(container) {
       ensureOverrides: xmlCiiEnsureOverrides,
       onFinalize: () => {
         xmlCiiCloseWorkflowPopup();
+        window['__xmlCiiConversionWorkflowAllowDirectRun'] = true;
+        setTimeout(() => { window['__xmlCiiConversionWorkflowAllowDirectRun'] = false; }, 0);
         runBtnEl?.click();
       }
     });
@@ -6241,28 +6284,41 @@ export function renderModelConvertersTab(container) {
 
   function xmlCiiRenderPreviewPhase(rootEl) {
     const xmlFile = primaryInputEl?.files?.[0] || primaryFile;
-    const config = _parseXmlCiiEnrichmentConfig(activeValues().supportConfigJson);
+    const config = xmlCiiConfigWithLoadedMasterRows('XML->CII preview');
     return xmlCiiRenderPreviewPhaseImported(xmlFile, config);
   }
 
   function bindXmlCiiPreviewPhase(rootEl) {
     if (!rootEl) return;
-    xmlCiiBuildAndRenderPreview(rootEl).catch(() => {});
+    xmlCiiBuildAndRenderPreview(rootEl);
   }
 
   async function xmlCiiBuildAndRenderPreview(rootEl) {
+    const findHost = () => rootEl?.querySelector('#mc-preview-table-host');
+    const showHostMessage = (msg) => {
+      const h = findHost();
+      if (h) h.innerHTML = `<div class="model-converters-workflow-detail-note">${msg}</div>`;
+    };
     const xmlFile = primaryInputEl?.files?.[0] || primaryFile;
-    if (!xmlFile) return;
-    const xmlText = await xmlFile.text();
-    const secondaryBytes = secondaryFile ? await secondaryFile.arrayBuffer() : null;
-    const stagedJsonText = secondaryBytes ? _decodeTextUtf8(secondaryBytes) : (activeValues().stagedAttributesJson || '');
-    const config = _parseXmlCiiEnrichmentConfig(activeValues().supportConfigJson);
-    await xmlCiiBuildAndRenderPreviewImported(rootEl, xmlText, config, {
-      onSaveConfig: (newCfg) => xmlCiiSaveConfig(newCfg),
-      openOverridePopup: _xmlCiiOpenPreviewOverridePopup,
-      ensureOverrides: xmlCiiEnsureOverrides,
-      stagedJsonText: stagedJsonText
-    });
+    if (!xmlFile) {
+      showHostMessage('⚠ Load an XML file in the sidebar first, then return here to preview enrichment.');
+      return;
+    }
+    try {
+      const xmlText = await xmlFile.text();
+      const secondaryBytes = secondaryFile ? await secondaryFile.arrayBuffer() : null;
+      const stagedJsonText = secondaryBytes ? _decodeTextUtf8(secondaryBytes) : (activeValues().stagedAttributesJson || '');
+      const config = xmlCiiConfigWithLoadedMasterRows('XML->CII preview');
+      await xmlCiiBuildAndRenderPreviewImported(rootEl, xmlText, config, {
+        onSaveConfig: (newCfg) => xmlCiiSaveConfig(newCfg),
+        openOverridePopup: _xmlCiiOpenPreviewOverridePopup,
+        ensureOverrides: xmlCiiEnsureOverrides,
+        stagedJsonText: stagedJsonText,
+      });
+    } catch (err) {
+      console.error('[XML->CII preview]', err);
+      showHostMessage(`⚠ Preview failed: ${_esc(String(err?.message || err))}`);
+    }
   }
 
   function _xmlCiiOpenPreviewOverridePopup({ editType, derivedKey, currentVal, config, onSave }) {
@@ -6729,21 +6785,60 @@ export function renderModelConvertersTab(container) {
   function bindXmlCiiRegexFields(rootEl) {
     if (!rootEl) return;
     const detailEl = xmlCiiWorkflowDetailForRoot(rootEl);
-    rootEl.querySelectorAll('[data-xml-cii-regex-path]').forEach((input) => {
-      const saveRegexValue = () => {
-        const path = input.getAttribute('data-xml-cii-regex-path') || '';
-        const config = _parseXmlCiiEnrichmentConfig(activeValues().supportConfigJson);
-        const value = input.type === 'number'
-          ? (Number.isFinite(Number(input.value)) ? Number(input.value) : 0)
-          : input.value;
-        _setValueAtPath(config, path, value);
-        xmlCiiSaveConfig(config);
-      };
-      input.addEventListener('input', saveRegexValue);
-      input.addEventListener('change', () => {
-        saveRegexValue();
+    if (!detailEl || detailEl.dataset.regexEventsBound === 'true') return;
+
+    const readInputValue = (input) => input.type === 'number'
+      ? (Number.isFinite(Number(input.value)) ? Number(input.value) : 0)
+      : input.value;
+
+    detailEl.addEventListener('input', (event) => {
+      const input = event.target.closest('[data-xml-cii-regex-path]');
+      if (!input) return;
+      const config = _parseXmlCiiEnrichmentConfig(activeValues().supportConfigJson);
+      _setValueAtPath(config, input.getAttribute('data-xml-cii-regex-path') || '', readInputValue(input));
+      xmlCiiSaveConfig(config);
+    });
+
+    detailEl.addEventListener('change', (event) => {
+      const input = event.target.closest('[data-xml-cii-regex-path]');
+      if (!input) return;
+      const config = _parseXmlCiiEnrichmentConfig(activeValues().supportConfigJson);
+      _setValueAtPath(config, input.getAttribute('data-xml-cii-regex-path') || '', readInputValue(input));
+      xmlCiiSaveConfig(config);
+      xmlCiiRenderWorkflowRoot(rootEl, detailEl);
+    });
+
+    detailEl.dataset.regexEventsBound = 'true';
+  }
+
+  // Auto-load the regex Sample Branchname from the currently loaded XML file.
+  // Derives once per distinct file (tracked via xmlCiiAutoBranchFileKey) so a
+  // newly chosen file refreshes the field, while later manual edits are kept.
+  // Re-renders the regex phase in-place once the branch is applied.
+  function xmlCiiAutoloadBranchFromXml(rootEl, detailEl) {
+    const xmlFile = primaryInputEl?.files?.[0] || primaryFile;
+    if (!xmlFile) return;
+    const fileKey = `${xmlFile.name}|${xmlFile.size}|${xmlFile.lastModified}`;
+    if (fileKey === xmlCiiAutoBranchFileKey) return;
+    // Mark this file as handled immediately so re-entrant renders don't refetch.
+    xmlCiiAutoBranchFileKey = fileKey;
+    xmlFile.text().then((xmlText) => {
+      const branchName = _extractXmlCiiBranchSample(xmlText);
+      if (!branchName) {
+        console.warn('[XML->CII] Branch auto-load: no Branchname found in', xmlFile.name);
+        return;
+      }
+      const config = _parseXmlCiiEnrichmentConfig(activeValues().supportConfigJson);
+      if (!config.linelist) config.linelist = {};
+      if (config.linelist.sampleBranchName === branchName) return;
+      config.linelist.sampleBranchName = branchName;
+      xmlCiiSaveConfig(config);
+      if (rootEl && detailEl && (rootEl.dataset.selectedPhase || 'regex') === 'regex') {
         xmlCiiRenderWorkflowRoot(rootEl, detailEl);
-      });
+      }
+    }).catch((err) => {
+      console.warn('[XML->CII] Branch auto-load failed:', err);
+      xmlCiiAutoBranchFileKey = '';
     });
   }
 
@@ -6772,7 +6867,10 @@ export function renderModelConvertersTab(container) {
       bindXmlCiiImportMastersPhase(rootEl);
       bindXmlCiiRegexFields(rootEl);
     }
-    if (selectedPhase.id === 'regex') bindXmlCiiRegexFields(rootEl);
+    if (selectedPhase.id === 'regex') {
+      bindXmlCiiRegexFields(rootEl);
+      xmlCiiAutoloadBranchFromXml(rootEl, detailEl);
+    }
     if (selectedPhase.id === 'run') bindXmlCiiRunPhase(rootEl);
     if (selectedPhase.id === 'weight-match') bindXmlCiiWeightMatchPhase(detailEl, rootEl);
     if (selectedPhase.id === 'preview') bindXmlCiiPreviewPhase(rootEl);
@@ -7227,6 +7325,303 @@ export function renderModelConvertersTab(container) {
     }
   }
 
+  function xmlCiiCurrentPrimaryFile() {
+    return primaryInputEl?.files?.[0] || primaryFile || null;
+  }
+
+  async function xmlCiiCurrentStagedJsonText() {
+    if (secondaryFile) {
+      const bytes = await secondaryFile.arrayBuffer();
+      return _decodeTextUtf8(bytes);
+    }
+    return activeValues().stagedAttributesJson || '';
+  }
+
+  function xmlCiiPopupMasterSnapshot(masterKey, config) {
+    const masterDef = XML_CII_MASTER_DEFS[masterKey];
+    const local = xmlCiiLocalMasterState(masterKey);
+    const savedRows = _xmlCiiMasterRowsFromConfig(config, masterDef);
+    const savedFieldMap = _xmlCiiMasterFieldMapFromConfig(config, masterDef);
+    const fieldMap = Object.keys(local.fieldMap || {}).length ? local.fieldMap : savedFieldMap;
+    const sourceRows = local.rawRows.length ? local.rawRows : savedRows;
+    const headers = _xmlCiiHeadersFromRows(sourceRows).filter((header) => header !== '_raw' && header !== '_rowIndex');
+    const previewMap = _xmlCiiBuildColumnPreviewMap(sourceRows, headers);
+    const fields = Object.keys(masterDef.aliases || {}).map((fieldName) => ({
+      name: fieldName,
+      label: masterDef.fieldLabels?.[fieldName] || fieldName,
+      required: masterDef.requiredFields.includes(fieldName),
+      selected: fieldMap?.[fieldName] || '',
+      options: headers.map((header) => ({ value: header, label: previewMap[header] || header })),
+    }));
+    const previewColumns = headers.slice(0, 6).map((header) => ({ key: header, label: header }));
+    const previewRows = sourceRows.slice(0, 8).map((row) => {
+      const out = {};
+      for (const header of headers.slice(0, 6)) out[header] = row?.[header] ?? '';
+      return out;
+    });
+
+    return {
+      key: masterKey,
+      title: masterDef.title,
+      description: masterDef.description,
+      rows: savedRows.length || local.rawRows.length,
+      rawRows: local.rawRows.length,
+      sourceName: local.sourceName || '',
+      hasDefault: !!masterDef.defaultUrl,
+      fields,
+      previewColumns,
+      previewRows,
+    };
+  }
+
+  function xmlCiiPopupOverrideSnapshot(config) {
+    const overrides = xmlCiiEnsureOverrides(config);
+    const groups = [
+      ['pipingClass', 'Piping Class'],
+      ['material', 'Material'],
+      ['materialCode', 'Material Code'],
+      ['processData', 'Process Data'],
+      ['rigidWeight', 'Rigid Weight'],
+    ].map(([key, label]) => ({
+      key,
+      label,
+      entries: Object.entries(overrides[key] || {}).slice(0, 100).map(([source, target]) => ({
+        source,
+        target: typeof target === 'object' ? JSON.stringify(target) : _toText(target),
+      })),
+    }));
+    return {
+      count: groups.reduce((sum, group) => sum + group.entries.length, 0),
+      groups,
+    };
+  }
+
+  function xmlCiiGetPopupSnapshot(target) {
+    const config = xmlCiiConfigWithLoadedMasterRows('XML->CII popup');
+    const values = activeValues();
+    const sampleBranch = _toText(config.linelist?.sampleBranchName || '/ASIM-1885-10"-S8810101-91261M7-HC/B1');
+    const compact = _xmlCiiCompactConfigForEditor(values.supportConfigJson || '{}');
+    const fullKb = Math.round(((values.supportConfigJson || '').length / 1024) * 10) / 10;
+    const supportMapping = config.supportMapping && typeof config.supportMapping === 'object' ? config.supportMapping : {};
+    const supportPreviewRows = Object.entries(config.supportKindToXmlType || {}).slice(0, 20).map(([source, target]) => ({
+      source,
+      target,
+      status: 'Configured',
+    }));
+
+    return {
+      activeMaster: target?.dataset?.xmlCiiActiveMaster || target?.dataset?.activeMaster || 'linelist',
+      files: {
+        hasXml: !!xmlCiiCurrentPrimaryFile(),
+        xmlName: xmlCiiCurrentPrimaryFile()?.name || '',
+        hasStagedJson: !!secondaryFile || !!_toText(values.stagedAttributesJson).trim(),
+      },
+      regex: {
+        sampleBranch,
+        tokenDelimiter: config.linelist?.tokenDelimiter || '-',
+        lineKeyJoiner: config.linelist?.lineKeyJoiner || '',
+        lineKeyPositions: config.linelist?.lineKeyTokenPositions || '4',
+        pipingClassPosition: config.rating?.pipingClassTokenIndex || 5,
+        sizePosition: config.weight?.boreTokenIndex || 3,
+        lineKey: _deriveBranchLineKey(sampleBranch, config),
+        pipingClass: _derivePipingClassFromBranchName(sampleBranch, config),
+        sizeToken: _deriveXmlCiiSizeTokenFromBranchName(sampleBranch, config),
+        tokens: _branchTokens(sampleBranch, config.linelist?.tokenDelimiter || '-'),
+        pipingClassRegex: config.rating?.pipingClassRegex || '',
+        pipingClassGroup: config.rating?.pipingClassGroup || 1,
+        sizeRegex: config.weight?.boreRegex || '',
+        sizeGroup: config.weight?.boreGroup || 1,
+        branchNameRegex: config.linelist?.branchNameRegex || '',
+        lineNoGroup: config.linelist?.lineNoGroup || 1,
+      },
+      masters: XML_CII_MASTER_ORDER.map((masterKey) => xmlCiiPopupMasterSnapshot(masterKey, config)),
+      overrides: xmlCiiPopupOverrideSnapshot(config),
+      run: {
+        counts: {
+          linelist: Array.isArray(config.linelist?.masterRows) ? config.linelist.masterRows.length : 0,
+          pipingClass: Array.isArray(config.pipingClass?.masterRows) ? config.pipingClass.masterRows.length : 0,
+          material: Array.isArray(config.material?.mapRows) ? config.material.mapRows.length : 0,
+          weight: Array.isArray(config.weight?.masterRows) ? config.weight.masterRows.length : 0,
+        },
+        lineKey: _deriveBranchLineKey(sampleBranch, config),
+        sampleBranch,
+        options: {
+          coordsMode: _toText(values.coordsMode || 'first'),
+          createEnrichedXml: !!values.createEnrichedXml,
+          kgToNewton: values.kgToNewton !== false,
+        },
+      },
+      diagnostics: {
+        rows: _xmlCiiLastDiagnosticRows.slice(0, 500),
+        status: _xmlCiiLastDiagnosticError || _xmlCiiLastDiagnosticStatus || '',
+      },
+      support: {
+        ruleCount: Object.keys(supportMapping).length,
+        kindCount: Object.keys(config.supportKindToXmlType || {}).length,
+        previewRows: supportPreviewRows,
+      },
+      config: {
+        compactText: compact.text,
+        hiddenRows: compact.hiddenRows,
+        compactKb: Math.round((compact.text.length / 1024) * 10) / 10,
+        fullKb,
+        useFrictionSentinel: config.useFrictionSentinelForNonYSupports !== false,
+        convertDensity: config.convertDensityKgM3ToKgCm3 !== false,
+        disableCiiSupportTag: config.disableCiiSupportTagPopulation === true,
+      },
+    };
+  }
+
+  function xmlCiiSetPopupConfigValue(path, value, type) {
+    const config = _parseXmlCiiEnrichmentConfig(activeValues().supportConfigJson);
+    const nextValue = type === 'number'
+      ? (Number.isFinite(Number(value)) ? Number(value) : 0)
+      : value;
+    _setValueAtPath(config, path, nextValue);
+    xmlCiiSaveConfig(config);
+  }
+
+  function xmlCiiSetPopupRunOption(key, value, type) {
+    const values = activeValues();
+    values[key] = type === 'checkbox' ? !!value : value;
+    persist();
+    renderAdvanced();
+  }
+
+  async function xmlCiiImportPopupMasterFile(masterKey, file) {
+    if (!file) return;
+    const readResult = masterKey === 'material' && /\.(txt|map)$/i.test(file.name || '')
+      ? { sheetNames: [], selectedSheet: '', sheets: {}, rows: _xmlCiiParseMaterialMapText(await file.text()) }
+      : await _xmlCiiReadMasterFile(file);
+    await xmlCiiLoadRowsIntoMaster(masterKey, readResult, file.name);
+    xmlCiiSaveMasterRows(masterKey);
+  }
+
+  async function xmlCiiLoadPopupDefaultMaster(masterKey) {
+    await xmlCiiLoadDefaultMaster(masterKey, true);
+  }
+
+  function xmlCiiAutoMapPopupMaster(masterKey) {
+    const local = xmlCiiLocalMasterState(masterKey);
+    if (masterKey === 'linelist') {
+      const config = _parseXmlCiiEnrichmentConfig(activeValues().supportConfigJson);
+      local.fieldMap = _detectLineListFieldMap(local.rawRows, local.fieldMap, config);
+    } else {
+      local.fieldMap = _xmlCiiAutoMapFields(_xmlCiiHeadersFromRows(local.rawRows), XML_CII_MASTER_DEFS[masterKey], local.rawRows);
+    }
+    if (local.rawRows.length) xmlCiiSaveMasterRows(masterKey);
+  }
+
+  function xmlCiiSetPopupMasterField(masterKey, fieldName, value) {
+    xmlCiiLocalMasterState(masterKey).fieldMap[fieldName] = value;
+    if (xmlCiiLocalMasterState(masterKey).rawRows.length) xmlCiiSaveMasterRows(masterKey);
+  }
+
+  function xmlCiiSavePopupMaster(masterKey) {
+    if (masterKey === 'linelist') xmlCiiSaveDynamicMappedFields(masterKey);
+    xmlCiiSaveMasterRows(masterKey);
+  }
+
+  async function xmlCiiBuildPopupPreviewRows() {
+    const xmlFile = xmlCiiCurrentPrimaryFile();
+    if (!xmlFile) throw new Error('Load an XML file first.');
+    const config = xmlCiiConfigWithLoadedMasterRows('XML->CII preview');
+    const xmlText = await xmlFile.text();
+    const stagedJsonText = await xmlCiiCurrentStagedJsonText();
+    const result = xmlCiiDryRunPreview(xmlText, config, stagedJsonText);
+    return (result.branchRows || []).slice(0, 500).map((row) => ({
+      branchName: row.branchName || '',
+      lineKey: row.lineKey || '',
+      pipingClass: row.pipingClass || row.pipingClassDerived || '',
+      material: row.material || row.materialCode || '',
+      rating: row.rating || '',
+    }));
+  }
+
+  async function xmlCiiRunPopupDiagnostics() {
+    const xmlFile = xmlCiiCurrentPrimaryFile();
+    if (!xmlFile) throw new Error('No XML source loaded. Import an XML file first.');
+    const values = activeValues();
+    const xmlText = _decodeTextUtf8(await xmlFile.arrayBuffer());
+    const stagedJsonText = await xmlCiiCurrentStagedJsonText();
+    const config = xmlCiiConfigWithLoadedMasterRows('XML->CII diagnostics');
+    const diagnostics = [];
+    const enriched = await _enrichXmlForCii2019(xmlText, stagedJsonText, {
+      ...values,
+      supportConfigJson: JSON.stringify(config),
+      dryRun: true,
+      _diagOut: diagnostics,
+    });
+    const diagnosticSource = Array.isArray(enriched?.diagnostics) ? enriched.diagnostics : diagnostics;
+    const rows = _diagnosticRowsForTable(diagnosticSource);
+    setDiagnosticRows(rows);
+    setLogs([
+      `Dry run completed: ${rows.length} diagnostic row(s).`,
+      `Branches annotated: ${enriched?.stats?.branchLineKeys || 0}; weights annotated: ${enriched?.stats?.weightAnnotations || 0}.`,
+    ]);
+    _xmlCiiLastDiagnosticStatus = `Done - ${rows.length} rows`;
+    _xmlCiiLastDiagnosticError = '';
+    return rows.slice(0, 500);
+  }
+
+  async function xmlCiiComputePopupWeightRows() {
+    const xmlFile = xmlCiiCurrentPrimaryFile();
+    if (!xmlFile) throw new Error('Load an XML file first.');
+    const xmlText = await xmlFile.text();
+    const stagedJsonText = await xmlCiiCurrentStagedJsonText();
+    const config = xmlCiiConfigWithLoadedMasterRows('XML->CII weight match');
+    return collectXmlCiiWeightMatchRows(xmlText, stagedJsonText, config).slice(0, 500).map((row) => {
+      const best = row.candidates?.[0] || row.weightMatch || null;
+      const weight = row.weight || best?.selectedWeight || best?.suggestedWeight || best?.weight || '';
+      return {
+        key: row.key || xmlCiiRigidWeightOverrideKey(row.branchName, row.nodeNumber),
+        branchName: row.branchName || '',
+        nodeNumber: row.nodeNumber || '',
+        componentType: row.componentType || '',
+        boreMm: row.boreMm == null ? '' : `${Number(row.boreMm).toFixed(0)} mm`,
+        rating: row.rating || '',
+        weight: weight ? `${weight} kg` : '',
+        numericWeight: Number(weight) || 0,
+      };
+    });
+  }
+
+  function xmlCiiApplyPopupPreferredWeights(rows) {
+    const config = _parseXmlCiiEnrichmentConfig(activeValues().supportConfigJson);
+    const overrides = xmlCiiEnsureOverrides(config);
+    overrides.rigidWeight = { ...(overrides.rigidWeight || {}) };
+    for (const row of Array.isArray(rows) ? rows : []) {
+      const numeric = Number(row?.numericWeight);
+      if (!row?.key || !Number.isFinite(numeric) || numeric <= 0) continue;
+      overrides.rigidWeight[row.key] = numeric;
+    }
+    xmlCiiSaveConfig(config);
+  }
+
+  function xmlCiiSavePopupConfigText(editedText, bools) {
+    const merged = _xmlCiiMergeEditedConfig(editedText, activeValues().supportConfigJson || '{}');
+    const config = JSON.parse(merged);
+    if (bools && typeof bools === 'object') {
+      if ('useFrictionSentinelForNonYSupports' in bools) config.useFrictionSentinelForNonYSupports = !!bools.useFrictionSentinelForNonYSupports;
+      if ('convertDensityKgM3ToKgCm3' in bools) config.convertDensityKgM3ToKgCm3 = !!bools.convertDensityKgM3ToKgCm3;
+      if ('disableCiiSupportTagPopulation' in bools) config.disableCiiSupportTagPopulation = !!bools.disableCiiSupportTagPopulation;
+    }
+    xmlCiiSaveConfig(config);
+    return _xmlCiiCompactConfigForEditor(activeValues().supportConfigJson || '{}').text;
+  }
+
+  function xmlCiiImportPopupConfigText(text) {
+    const parsed = JSON.parse(text);
+    xmlCiiSaveConfig(parsed);
+  }
+
+  function xmlCiiRenderPopupSupportTable(host) {
+    if (!host) return;
+    const config = _parseXmlCiiEnrichmentConfig(activeValues().supportConfigJson);
+    host.innerHTML = xmlCiiRenderSupportMapperPhaseImported();
+    bindXmlCiiSupportMapperPhaseImported(host, { config, onSaveConfig: xmlCiiSaveConfig });
+  }
+
   let workflowModalInstance = null;
 
   function xmlCiiCloseWorkflowPopup() {
@@ -7277,8 +7672,9 @@ export function renderModelConvertersTab(container) {
 
   function renderXmlCiiWorkflowShell() {
     if (!xmlCiiWorkflowEl || !xmlCiiWorkflowDetailEl) return;
-    const isXmlCiiConverter = activeDef().id === 'xml_to_cii';
-    xmlCiiWorkflowEl.hidden = !isXmlCiiConverter;
+    const defId = activeDef().id;
+    const isXmlCiiConverter = defId === 'xml_to_cii';
+    xmlCiiWorkflowEl.style.display = isXmlCiiConverter ? 'block' : 'none';
     if (!isXmlCiiConverter) {
       xmlCiiCloseWorkflowPopup();
       return;
@@ -7286,17 +7682,10 @@ export function renderModelConvertersTab(container) {
 
     const phaseListEl = xmlCiiWorkflowEl.querySelector('.model-converters-workflow-phase-list');
     if (phaseListEl) phaseListEl.hidden = true;
-    xmlCiiWorkflowDetailEl.innerHTML = `
-      <div class="model-converters-workflow-detail-title">Open Master Workflow</div>
-      <div class="model-converters-workflow-detail-text">
-        Click the XML-&gt;CII(2019) workflow header to load master tabs and manual overrides in a popup window.
-      </div>
-    `;
+    xmlCiiWorkflowDetailEl.innerHTML = '';
 
     if (xmlCiiWorkflowEl.dataset.bound === 'true') return;
-    xmlCiiWorkflowEl.querySelector('summary')?.addEventListener('click', (event) => {
-      event.preventDefault();
-      xmlCiiWorkflowEl.open = false;
+    xmlCiiWorkflowEl.querySelector('#model-converters-xml-cii-rich-btn')?.addEventListener('click', () => {
       xmlCiiOpenWorkflowPopup();
     });
     xmlCiiWorkflowEl.dataset.bound = 'true';
@@ -7358,6 +7747,12 @@ export function renderModelConvertersTab(container) {
   primaryInputEl.addEventListener('change', () => {
     primaryFile = primaryInputEl.files?.[0] || null;
     primaryNameEl.textContent = primaryFile ? primaryFile.name : 'No file selected.';
+    // A new file may carry a different branch — force the next auto-load to
+    // re-derive, then apply immediately if the Rich Workflow popup is open.
+    xmlCiiAutoBranchFileKey = '';
+    if (activeDef().id === 'xml_to_cii' && primaryFile && xmlCiiWorkflowPopupEl && xmlCiiWorkflowPopupDetailEl) {
+      xmlCiiAutoloadBranchFromXml(xmlCiiWorkflowPopupEl, xmlCiiWorkflowPopupDetailEl);
+    }
   });
 
   secondaryInputEl.addEventListener('change', () => {
@@ -7564,6 +7959,78 @@ export function renderModelConvertersTab(container) {
     switchPhase: null,
     // Wired by the popup so "Finalize and Run" can close it before running.
     closePopup: null,
+
+    getPopupSnapshot(target) {
+      return xmlCiiGetPopupSnapshot(target);
+    },
+
+    setPopupConfigValue(path, value, type) {
+      return xmlCiiSetPopupConfigValue(path, value, type);
+    },
+
+    setPopupRunOption(key, value, type) {
+      return xmlCiiSetPopupRunOption(key, value, type);
+    },
+
+    importPopupMasterFile(masterKey, file) {
+      return xmlCiiImportPopupMasterFile(masterKey, file);
+    },
+
+    loadPopupDefaultMaster(masterKey) {
+      return xmlCiiLoadPopupDefaultMaster(masterKey);
+    },
+
+    autoMapPopupMaster(masterKey) {
+      return xmlCiiAutoMapPopupMaster(masterKey);
+    },
+
+    setPopupMasterField(masterKey, fieldName, value) {
+      return xmlCiiSetPopupMasterField(masterKey, fieldName, value);
+    },
+
+    savePopupMaster(masterKey) {
+      return xmlCiiSavePopupMaster(masterKey);
+    },
+
+    clearPopupMaster(masterKey) {
+      return xmlCiiClearMasterRows(masterKey);
+    },
+
+    buildPopupPreviewRows() {
+      return xmlCiiBuildPopupPreviewRows();
+    },
+
+    runPopupDiagnostics() {
+      return xmlCiiRunPopupDiagnostics();
+    },
+
+    computePopupWeightRows() {
+      return xmlCiiComputePopupWeightRows();
+    },
+
+    applyPopupPreferredWeights(rows) {
+      return xmlCiiApplyPopupPreferredWeights(rows);
+    },
+
+    savePopupConfigText(editedText, bools) {
+      return xmlCiiSavePopupConfigText(editedText, bools);
+    },
+
+    importPopupConfigText(text) {
+      return xmlCiiImportPopupConfigText(text);
+    },
+
+    exportPopupConfigText() {
+      return activeValues().supportConfigJson || '{}';
+    },
+
+    renderPopupSupportTable(host) {
+      return xmlCiiRenderPopupSupportTable(host);
+    },
+
+    ensureDefaultMastersLoaded(target) {
+      return xmlCiiEnsureDefaultMastersLoaded(target || container);
+    },
 
     renderPhaseInto(target, phaseId) {
       if (!target) return;
@@ -7821,4 +8288,3 @@ export { renderModelConvertersTab as renderLegacyModelConvertersTab };
 // Populated by renderModelConvertersTab; null until the tab is first mounted.
 let _xmlCiiPhaseBridge = null;
 export function getXmlCiiPhaseBridge() { return _xmlCiiPhaseBridge; }
-

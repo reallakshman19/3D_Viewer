@@ -3,52 +3,99 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 const root = process.cwd();
-function read(rel) { return fs.readFileSync(path.join(root, rel), 'utf8'); }
-function assert(condition, message) { if (!condition) { console.error(`❌ ${message}`); process.exit(1); } }
 
-const popup = read('viewer/tabs/model-converters/xml-cii-conversion-workflow-popup.js');
-const directPanels = read('viewer/tabs/model-converters/xml-cii-conversion-workflow-direct-panels.js');
-const tab = read('viewer/tabs/model-converters-tab.js');
+function read(rel) {
+  return fs.readFileSync(path.join(root, rel), 'utf8');
+}
 
-assert(fs.existsSync(path.join(root, 'viewer/tabs/model-converters/xml-cii-conversion-workflow-popup.js')), 'workflow popup module must exist');
-assert(fs.existsSync(path.join(root, 'viewer/tabs/model-converters/xml-cii-conversion-workflow-direct-panels.js')), 'workflow direct panels module must exist');
+function assert(condition, message) {
+  if (!condition) {
+    console.error(`❌ ${message}`);
+    process.exit(1);
+  }
+}
+
+const popupPath = 'viewer/tabs/model-converters/xml-cii-conversion-workflow-popup.js';
+const nativePanelsPath = 'viewer/tabs/model-converters/xml-cii-popup-native-panels.js';
+const workflowShellPath = 'viewer/tabs/model-converters/WorkflowShell.js';
+const legacyAdapterPath = 'viewer/tabs/model-converters/legacy-adapter.js';
+const canonicalTabPath = 'viewer/tabs/model-converters/ModelConvertersTab.js';
+const tabPath = 'viewer/tabs/model-converters-tab.js';
+const tabCssPath = 'viewer/tabs/model-converters-tab.css';
+const popup = read(popupPath);
+const nativePanels = read(nativePanelsPath);
+const workflowShell = read(workflowShellPath);
+const legacyAdapter = read(legacyAdapterPath);
+const canonicalTab = read(canonicalTabPath);
+const tab = read(tabPath);
+const tabCss = read(tabCssPath);
+
+assert(fs.existsSync(path.join(root, popupPath)), 'workflow popup module must exist');
+assert(fs.existsSync(path.join(root, nativePanelsPath)), 'popup-native panel module must exist');
+assert(fs.existsSync(path.join(root, workflowShellPath)), 'canonical WorkflowShell module must exist');
 assert(popup.includes("import { WorkflowModal } from './shared/WorkflowModal.js'"), 'popup must reuse existing WorkflowModal');
-assert(tab.includes('installXmlCiiConversionWorkflowPopup'), 'model-converters-tab must install workflow popup');
+assert(popup.includes("import { renderXmlCiiPopupNativePhase } from './xml-cii-popup-native-panels.js'"), 'popup must render popup-native phase bodies');
+assert(popup.includes("import { XML_CII_WORKFLOW_PHASES, normalizeWorkflowPhaseId } from './WorkflowShell.js'"), 'popup must use canonical XML CII phase registry');
+assert(tab.includes('installXmlCiiConversionWorkflowPopup'), 'model-converters-tab must expose workflow popup installer');
 
-assert(popup.includes('XML - Model Data'), 'popup must include XML - Model Data as a main tab');
-assert(popup.includes('Process / Piping Class / Wt. Enrichment'), 'popup must include Process / Piping Class / Wt. Enrichment as a main tab');
+assert(popup.includes("tabs: XML_CII_WORKFLOW_PHASES"), 'popup must render XML->CII phases as top-level tabs');
+assert(popup.includes("title: 'XML->CII(2019) Workflow'"), 'popup title must match required workflow popup');
+assert(popup.includes('Import masters, map fields, and maintain manual overrides'), 'popup subtitle must describe master/config workflow');
+
+for (const phase of [
+  "'1 Regex'",
+  "'2 Import Masters'",
+  "'3 Preview'",
+  "'4 Diagnostics'",
+  "'4A Weight Match'",
+  "'5 Run'",
+  "'6 Support Types'",
+  "'7 Config'",
+]) {
+  assert(workflowShell.includes(phase), `canonical workflow phase missing: ${phase}`);
+}
+
+assert(workflowShell.indexOf("id: 'weight-match'") < workflowShell.indexOf("id: 'run'"), 'Weight Match must appear before Run');
+assert(workflowShell.indexOf("id: 'run'") < workflowShell.indexOf("id: 'support-mapper'"), 'Run must appear before Support Types');
+assert(workflowShell.indexOf("id: 'support-mapper'") < workflowShell.indexOf("id: 'config'"), 'Support Types must appear before Config');
+
 assert(!popup.includes("{ id: 'matched-audit'"), 'Matched Audit must not be a top-level workflow tab');
 assert(!popup.includes("{ id: 'output-run'"), 'Output / Run Conversion must not be a top-level workflow tab');
+assert(!popup.includes('XML - Model Data'), 'XML - Model Data must not replace the required phase tabs');
+assert(!popup.includes('Process / Piping Class / Wt. Enrichment'), 'Process enrichment must not replace the required phase tabs');
+assert(!popup.includes('oldPhaseDetailHtml'), 'popup must not render old direct-panel phase HTML');
+assert(!popup.includes('bridge.renderPhaseInto'), 'popup must not render legacy-adapter phase HTML into the modal');
+assert(popup.includes('bridge.getPopupSnapshot'), 'popup must use bridge data snapshots for native bodies');
+assert(nativePanels.includes('renderXmlCiiPopupNativePhase'), 'native panel module must expose the popup-native renderer');
+assert(nativePanels.includes('data-native-finalise-run'), 'native Run phase must own Finalise and Run action');
+assert(nativePanels.includes('data-native-build-preview'), 'native Preview phase must own Build Preview action');
+assert(nativePanels.includes('data-native-dry-run'), 'native Diagnostics phase must own Dry Run action');
 
-for (const name of ['Json', 'Manual Restraints', 'Sideload JSON Config', 'Resolved Data', 'Output / Run Conversion', 'Matched Audit']) {
-  assert(directPanels.includes(name), `XML - Model Data must render subtab: ${name}`);
-}
-assert(directPanels.includes('data-model-subtab'), 'XML - Model Data must render subtab buttons');
-assert(directPanels.includes('data-model-subtab-body'), 'XML - Model Data must render a subtab body');
-
-for (const oldPhase of ['1 Regex', '2 Import Masters', '3 Preview', '4 Diagnostics', '4A Weight Match', '5 Run', '6 Support Types', '7 Config']) {
-  assert(directPanels.includes(oldPhase), `second tab must replicate old workflow phase: ${oldPhase}`);
-}
-for (const oldConcept of ['Old XML→CII workflow popup', 'XML->CII(2019) workflow', 'Regex Tester', 'Masters', 'Diagnostics Log', 'Support Type Mapper', 'Line List', 'Piping Class', 'Material Map', 'Weights / Valve CA8']) {
-  assert(directPanels.includes(oldConcept), `second tab must include old workflow concept: ${oldConcept}`);
-}
-assert(directPanels.includes('OLD_XML_CII_WORKFLOW_PHASES'), 'second tab must use old workflow phase registry');
-assert(directPanels.includes('data-old-xml-cii-phase'), 'second tab must render old workflow phase buttons');
-assert(directPanels.includes('data-old-xml-cii-phase-body'), 'second tab must render old workflow detail body');
-
-for (const fn of ['renderXmlCiiWorkflowModelDataPanel', 'renderXmlCiiWorkflowProcessEnrichmentPanel', 'renderXmlCiiWorkflowMatchedAuditPanel', 'renderXmlCiiWorkflowOutputRunPanel']) {
-  assert(directPanels.includes(`export function ${fn}`), `direct panels module must export: ${fn}`);
-}
-assert(directPanels.includes('mc-preview-node-table'), 'direct panels must contain real table markup');
-assert(directPanels.includes('data-direct-preview-filter'), 'matched audit must contain filter input');
-assert(directPanels.includes('data-direct-diagnostics-file'), 'matched audit must allow diagnostics JSON import');
 assert(!popup.includes('mountExistingPanel'), 'popup must not move live DOM panels by portal');
-assert(!directPanels.includes('mountExistingPanel'), 'direct panels must not move live DOM panels by portal');
 assert(!popup.includes('new MutationObserver'), 'popup must not install MutationObserver');
-assert(!directPanels.includes('new MutationObserver'), 'direct panels must not install MutationObserver');
+assert(popup.includes("document.addEventListener('click', interceptRun, true)"), 'popup must intercept XML->CII run click through one capture listener');
+assert(popup.includes('stateByRoot: new WeakMap()'), 'popup must keep independent modal state per rendered root');
+assert(popup.includes('renderPhase(root, state)'), 'popup must render the active phase through the live bridge/fallback path');
+assert(popup.includes('preloadDefaultMasters(root, state)'), 'popup must preload default masters after opening');
+assert(popup.includes('bridge.ensureDefaultMastersLoaded'), 'popup must use the legacy default-master preload bridge');
+assert(popup.includes('function armDirectRunGuard()'), 'popup must expose a one-tick direct-run guard');
+assert(popup.includes('armDirectRunGuard();\n      state.modal?.close();'), 'bridge close handoff must arm direct-run before closing');
+assert(legacyAdapter.includes('ensureDefaultMastersLoaded(target)'), 'legacy phase bridge must expose default-master preload');
+assert(legacyAdapter.includes('getPopupSnapshot(target)'), 'legacy phase bridge must expose popup snapshot data');
+assert(legacyAdapter.includes('buildPopupPreviewRows()'), 'legacy phase bridge must expose popup preview data action');
+assert(legacyAdapter.includes('runPopupDiagnostics()'), 'legacy phase bridge must expose popup diagnostics action');
+assert(legacyAdapter.includes('computePopupWeightRows()'), 'legacy phase bridge must expose popup weight action');
+assert(legacyAdapter.includes('xmlCiiConfigWithLoadedMasterRows'), 'Preview must hydrate config from loaded local master rows');
+assert(legacyAdapter.includes("const config = xmlCiiConfigWithLoadedMasterRows('XML->CII preview');"), 'Preview render/build must use hydrated master config');
+assert(legacyAdapter.includes('model-converters-workflow-run-actions'), 'Run phase must use popup-native action layout instead of inline legacy button styles');
+assert(tabCss.includes('.model-converters-workflow-regex-field select'), 'Run phase select controls must use workflow field styling');
+assert(tabCss.includes('span:not(.model-converters-workflow-run-status-icon)'), 'Run status row layout must not flex the icon column as the label');
 
-console.log('✅ XML CII two-tab conversion workflow popup static test passed', {
-  topLevelTabs: 2,
-  xmlModelDataSubtabs: 6,
-  oldWorkflowPhases: 8,
+const popupBridgeImport = popup.match(/legacy-adapter\.js\?v=([^'"]+)/)?.[1] || '';
+const tabBridgeImport = canonicalTab.match(/legacy-adapter\.js\?v=([^'"]+)/)?.[1] || '';
+assert(popupBridgeImport && popupBridgeImport === tabBridgeImport, 'popup and ModelConvertersTab must import the same legacy-adapter module URL');
+
+console.log('✅ XML CII phase-tab workflow popup static test passed', {
+  topLevelTabs: 8,
+  workflowMode: 'phase-tabs',
 });
