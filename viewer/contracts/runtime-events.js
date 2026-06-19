@@ -1,4 +1,5 @@
 export const RuntimeEvents = Object.freeze({
+  APP_READY: 'app-ready',
   TAB_CHANGED: 'tab-changed',
   TAB_CHANGE_REQUESTED: 'tab-change-requested',
   TAB_RENDERED: 'tab-rendered',
