@@ -1,4 +1,4 @@
-import { applyInputXmlSupportGraphicsOverlay } from './RvmInputXmlSupportGraphics.js?v=20260619-inputxml-node-graph-1';
+import { applyInputXmlSupportGraphicsOverlay } from './RvmInputXmlSupportGraphics.js?v=20260619-inputxml-support-summary-1';
 import { refreshInputXmlGraphics } from './RvmInputXmlAutoBendGraphics.js?v=20260619-inputxml-node-graph-1';
 
 const PANEL_KEY_LEFT = 'rvm.panel.left.width.v2';
