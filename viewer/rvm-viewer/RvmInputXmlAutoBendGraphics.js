@@ -8,8 +8,8 @@ export const INPUTXML_NODE_GRAPH_KEY = '__RVM_INPUTXML_NODE_GRAPH__';
 const PIPE_MAT = new THREE.MeshStandardMaterial({ color: 0x2f6fb8, roughness: 0.62, metalness: 0.08 });
 const BEND_MAT = new THREE.MeshStandardMaterial({ color: 0x9c4c9f, roughness: 0.6, metalness: 0.06 });
 const NODE_MAT = new THREE.MeshStandardMaterial({ color: 0x2f6fb8, roughness: 0.7, metalness: 0.04 });
-const SOURCE_BEND_MAT = new THREE.MeshStandardMaterial({ color: 0x8b5fc9, roughness: 0.62, metalness: 0.06 });
 const TOL = 1e-3;
+const SUPPORT_ROOT_NAME = '__RVM_SUPPORT_SYMBOLS__';
 
 function s(v) { return v == null ? '' : String(v); }
 function up(v) { return s(v).trim().toUpperCase(); }
@@ -94,12 +94,13 @@ function nodeKey(value, fallback) {
   const text = s(value).trim();
   return text || fallback || '';
 }
-function isSourceBend(seg) {
-  return ['BEND', 'ELBO', 'ELBOW'].includes(up(seg?.sourceType));
-}
 
 function allIndexNodes() {
   return Array.isArray(state?.rvm?.index?.nodes) ? state.rvm.index.nodes : [];
+}
+
+function renderIdFor(sourceAttrs = {}, fallbackName = '') {
+  return s(sourceAttrs.CANONICAL_OBJECT_ID || sourceAttrs.canonicalObjectId || sourceAttrs.SOURCE_CANONICAL_ID || sourceAttrs.SOURCE_ELEMENT_ID || sourceAttrs.REF || sourceAttrs.NAME || fallbackName).trim() || fallbackName;
 }
 
 function cylinderBetween(a, b, radius, material, name, sourceAttrs = {}) {
@@ -107,13 +108,19 @@ function cylinderBetween(a, b, radius, material, name, sourceAttrs = {}) {
   const len = dir.length();
   if (len < 1e-6) return null;
   const mesh = new THREE.Mesh(new THREE.CylinderGeometry(radius, radius, len, 24), material);
-  mesh.name = name || 'INPUTXML_PIPE';
+  const renderId = renderIdFor(sourceAttrs, name || 'INPUTXML_PIPE');
+  mesh.name = renderId;
   mesh.position.copy(a.clone().add(b).multiplyScalar(0.5));
   mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir.normalize());
   mesh.userData = {
+    name: renderId,
+    canonicalObjectId: renderId,
+    sourceObjectId: sourceAttrs.SOURCE_ELEMENT_ID || sourceAttrs.REF || sourceAttrs.NAME || renderId,
     inputXmlAutoBend: true,
+    selectable: true,
     kind: 'PIPE',
     attributes: {
+      ...sourceAttrs,
       TYPE: 'PIPE',
       RAW_TYPE: 'PIPE',
       AUTO_BEND_GRAPHICS: 'true',
@@ -167,23 +174,38 @@ function makeArc(fromDir, toDir, corner, radius, pipeRadius, material, name, max
   const curve = new THREE.CatmullRomCurve3(pts);
   const mesh = new THREE.Mesh(new THREE.TubeGeometry(curve, steps * 2, pipeRadius, 18, false), material);
   mesh.name = name || 'INPUTXML_AUTO_BEND_1_5D';
-  mesh.userData = { inputXmlAutoBend: true, kind: 'BEND', attributes: { TYPE: 'PIPE', RAW_TYPE: 'PIPE', AUTO_BEND: '1.5D', AUTO_BEND_TRIM_MM: safeTrim.toFixed(3), LABEL_POLICY: 'PIPE_ONLY' } };
+  mesh.userData = {
+    name: mesh.name,
+    canonicalObjectId: mesh.name,
+    inputXmlAutoBend: true,
+    selectable: true,
+    kind: 'BEND',
+    attributes: { TYPE: 'PIPE', RAW_TYPE: 'PIPE', AUTO_BEND: '1.5D', AUTO_BEND_TRIM_MM: safeTrim.toFixed(3), LABEL_POLICY: 'PIPE_ONLY' },
+  };
   return { mesh, p1, p2, trim: safeTrim };
 }
 
 function removeRoot(scene, name) {
   const old = scene?.getObjectByName(name);
   if (!old) return;
-  scene.remove(old);
+  old.parent?.remove?.(old);
   old.traverse((o) => {
     o.geometry?.dispose?.();
     if (o.material) (Array.isArray(o.material) ? o.material : [o.material]).forEach((m) => m?.dispose?.());
     if (o.element?.parentNode) o.element.parentNode.removeChild(o.element);
   });
 }
+function setTreeVisible(root, visible) {
+  root.traverse?.((obj) => { obj.visible = visible; });
+  root.visible = visible;
+}
 function hideOriginalInputXmlModel(viewer, hide) {
   if (!viewer?.modelGroup) return;
-  viewer.modelGroup.visible = !hide;
+  viewer.modelGroup.visible = true;
+  for (const child of viewer.modelGroup.children || []) {
+    const keep = child.name === INPUTXML_AUTO_BEND_ROOT || child.name === SUPPORT_ROOT_NAME || child.userData?.inputXmlAutoBendGraphics || child.userData?.inputXmlSupportGraphics;
+    if (!keep) setTreeVisible(child, !hide);
+  }
   viewer.userData = viewer.userData || {};
   viewer.userData.inputXmlAutoBendHidesOriginal = Boolean(hide);
 }
@@ -241,7 +263,7 @@ export function buildInputXmlNodeGraph() {
     const toNode = nodeKey(a.TO_NODE, `P1:${key(p1)}`);
     edges.push({
       node,
-      attrs: a,
+      attrs: { ...a, canonicalObjectId: node.canonicalObjectId, CANONICAL_OBJECT_ID: node.canonicalObjectId },
       index,
       p0,
       p1,
@@ -251,7 +273,7 @@ export function buildInputXmlNodeGraph() {
       radius: d * 0.5,
       length: p0.distanceTo(p1),
       sourceType: up(a.TYPE || a.RAW_TYPE || node.type),
-      sourceBend: ['BEND', 'ELBO', 'ELBOW'].includes(up(a.TYPE || a.RAW_TYPE || node.type)),
+      sourceBend: false,
     });
   });
 
@@ -267,7 +289,7 @@ export function buildInputXmlNodeGraph() {
   });
 
   const graph = {
-    kind: 'INPUTXML_NODE_GRAPH_V1',
+    kind: 'INPUTXML_NODE_GRAPH_V2_PIPE_ONLY',
     edges,
     supports,
     byNode,
@@ -292,8 +314,6 @@ function shouldGenerateBendAtNode(items) {
   if (items.length !== 2) return false;
   const [a, b] = items;
   if (a.seg === b.seg) return false;
-  // Source BEND/ELBOW edges already represent the bend intent. Do not create one at both ends.
-  if (isSourceBend(a.seg) || isSourceBend(b.seg)) return false;
   return true;
 }
 
@@ -314,11 +334,9 @@ export function applyInputXmlAutoBendGraphics(viewer, options = {}) {
   const trimStart = new Map();
   const trimEnd = new Map();
   let bends = 0;
-  let sourceBendEdges = 0;
   let skippedJunctions = 0;
   let skippedRemoteNode = 0;
   let skippedUnsafeTrim = 0;
-  let skippedSourceBendAdjacency = 0;
   let nodeMarkers = 0;
 
   graph.byNode.forEach((items, id) => {
@@ -332,10 +350,7 @@ export function applyInputXmlAutoBendGraphics(viewer, options = {}) {
       }
       return;
     }
-    if (!shouldGenerateBendAtNode(items)) {
-      if (items.some((item) => isSourceBend(item.seg))) skippedSourceBendAdjacency += 1;
-      return;
-    }
+    if (!shouldGenerateBendAtNode(items)) return;
     const [a, b] = items;
     if (!corner) {
       skippedRemoteNode += 1;
@@ -349,7 +364,7 @@ export function applyInputXmlAutoBendGraphics(viewer, options = {}) {
     const pipeR = Math.max(dia * 0.5, 1);
     const maxTrimA = Math.max(a.seg.length * 0.42, pipeR * 0.5);
     const maxTrimB = Math.max(b.seg.length * 0.42, pipeR * 0.5);
-    const bend = makeArc(da, db, corner, bendRadius, pipeR, BEND_MAT, `INPUTXML_AUTO_BEND_${bends + 1}`, maxTrimA, maxTrimB);
+    const bend = makeArc(da, db, corner, bendRadius, pipeR, BEND_MAT, `INPUTXML_AUTO_BEND_${id}`, maxTrimA, maxTrimB);
     if (!bend) {
       skippedUnsafeTrim += 1;
       root.add(makeNodeMarker(corner, pipeR, `INPUTXML_MITER_NODE_${id}`));
@@ -367,19 +382,19 @@ export function applyInputXmlAutoBendGraphics(viewer, options = {}) {
     const a = trimStart.get(seg) || seg.p0;
     const b = trimEnd.get(seg) || seg.p1;
     if (a.distanceTo(b) < 1e-3) continue;
-    const material = isSourceBend(seg) ? SOURCE_BEND_MAT : PIPE_MAT;
-    if (isSourceBend(seg)) sourceBendEdges += 1;
-    const mesh = cylinderBetween(a, b, Math.max(seg.radius, 1), material, `INPUTXML_PIPE_${seg.fromNode}_TO_${seg.toNode}`, seg.attrs);
+    const mesh = cylinderBetween(a, b, Math.max(seg.radius, 1), PIPE_MAT, `INPUTXML_PIPE_${seg.fromNode}_TO_${seg.toNode}`, seg.attrs);
     if (mesh) { root.add(mesh); pipes += 1; }
   }
-  viewer.scene.add(root);
+  viewer.modelGroup.add(root);
+  viewer.modelGroup.updateMatrixWorld(true);
+  viewer.selection?.updateModelGroup?.(viewer.modelGroup);
   hideOriginalInputXmlModel(viewer, true);
   viewer.inputXmlAutoBendDiagnostics = {
     enabled: true,
     pipes,
     bends,
     routeSegments: segs.length,
-    sourceBendEdges,
+    sourceBendEdges: 0,
     skippedNoNodeEdge: graph.stats.skippedNoNodeEdge || 0,
     skippedNoGeometry: graph.stats.skippedNoGeometry || 0,
     totalInputXmlComponents: graph.stats.totalInputXmlComponents || segs.length,
@@ -387,9 +402,9 @@ export function applyInputXmlAutoBendGraphics(viewer, options = {}) {
     skippedJunctions,
     skippedRemoteNode,
     skippedUnsafeTrim,
-    skippedSourceBendAdjacency,
+    skippedSourceBendAdjacency: 0,
     nodeMarkers,
-    labelPolicy: 'PIPE_ONLY_NODE_GRAPH_SOURCE_BEND_SAFE',
+    labelPolicy: 'PIPE_ONLY_NODE_GRAPH_SELECTABLE',
   };
   return viewer.inputXmlAutoBendDiagnostics;
 }
