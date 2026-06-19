@@ -1,6 +1,7 @@
-const FLAG = '__xmlCiiFinaliseRunButton_v1';
+const FLAG = '__xmlCiiFinaliseRunButton_v2';
 const DIRECT_RUN_FLAG = '__xmlCiiConversionWorkflowAllowDirectRun';
 const BUTTON_TEXT = 'Finalise and Run';
+const XML_CII_CONVERTER_IDS = new Set(['xml_to_cii', 'inputxml_to_cii2019', 'xml_to_cii2019', 'inputxml_to_cii_2019', 'xml-cii-2019']);
 
 function ready() {
   return typeof window !== 'undefined' && typeof document !== 'undefined';
@@ -10,12 +11,35 @@ function text(node) {
   return String(node?.textContent || '').replace(/\s+/g, ' ').trim();
 }
 
+function normalizeConverterToken(value) {
+  return String(value || '').trim().toLowerCase().replace(/[\s→]+/g, '').replace(/[-_]+/g, '_');
+}
+
+function activeConverterSelect(root = document) {
+  return root.querySelector?.('#model-converters-select') || document.querySelector('#model-converters-select');
+}
+
+function isXmlCiiActive(root = document) {
+  const select = activeConverterSelect(root);
+  if (!select) return false;
+  const id = select.value || '';
+  if (XML_CII_CONVERTER_IDS.has(id) || XML_CII_CONVERTER_IDS.has(normalizeConverterToken(id))) return true;
+  const optionText = select.selectedOptions?.[0]?.textContent || '';
+  const normalized = normalizeConverterToken(`${id} ${optionText}`);
+  return normalized.includes('xml') && normalized.includes('cii') && normalized.includes('2019');
+}
+
 function isWorkflowArea(node) {
   const areaText = text(node);
   return /XML\s*[→-]\s*CII|XML-&gt;CII|CII\s*\(2019\)|Output\s*\/\s*Run|\bRun\b/i.test(areaText);
 }
 
+function removeFinaliseButtons(root = document) {
+  root.querySelectorAll?.('[data-xml-cii-finalise-run]').forEach((button) => button.remove());
+}
+
 function directRun(root = document) {
+  if (!isXmlCiiActive(root)) return false;
   const runButton = root.querySelector?.('#model-converters-run') || document.querySelector('#model-converters-run');
   if (!runButton) return false;
 
@@ -46,6 +70,10 @@ function makeFinaliseButton(root = document) {
 }
 
 function normaliseExistingButtons(root = document) {
+  if (!isXmlCiiActive(root)) {
+    removeFinaliseButtons(root);
+    return;
+  }
   root.querySelectorAll?.('[data-direct-run-conversion], [data-xml-cii-finalise-run]').forEach((button) => {
     if (!(button instanceof HTMLButtonElement)) return;
     button.textContent = BUTTON_TEXT;
@@ -65,7 +93,7 @@ function findRunActionsHost(root = document) {
     if (card) return card;
   }
 
-  const body = root.querySelector?.('[data-model-subtab-body], [data-old-xml-cii-phase-body]');
+  const body = root.querySelector?.('[data-xml-cii-workflow-root], .workflow-modal, [data-model-subtab-body], [data-old-xml-cii-phase-body]');
   if (body && isWorkflowArea(body)) return body;
 
   return null;
@@ -73,6 +101,11 @@ function findRunActionsHost(root = document) {
 
 function ensureFinaliseButton(root = document) {
   if (!ready()) return;
+  const modelRoot = root?.querySelector?.('[data-model-converters-root], .model-converters-tab') || root || document;
+  if (!isXmlCiiActive(modelRoot)) {
+    removeFinaliseButtons(root || document);
+    return;
+  }
   const scope = root?.querySelector?.('[data-xml-cii-workflow-root], .workflow-modal, [data-model-subtab-body], [data-old-xml-cii-phase-body]') || root || document;
   normaliseExistingButtons(scope);
 
@@ -80,7 +113,7 @@ function ensureFinaliseButton(root = document) {
   if (!host) return;
   if (host.querySelector?.('[data-xml-cii-finalise-run]')) return;
 
-  const button = makeFinaliseButton(root);
+  const button = makeFinaliseButton(modelRoot);
   host.insertBefore(button, host.firstChild || null);
 }
 
@@ -94,6 +127,10 @@ function install() {
   setTimeout(tick, 150);
   setTimeout(tick, 600);
   setInterval(tick, 1000);
+
+  document.addEventListener('change', (event) => {
+    if (event.target?.matches?.('#model-converters-select')) setTimeout(tick, 0);
+  }, true);
 
   document.addEventListener('click', (event) => {
     const tab = event.target?.closest?.('[data-model-subtab], [data-old-xml-cii-phase]');
