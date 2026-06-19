@@ -63,6 +63,7 @@ import { EditablePreviewTable } from './shared/EditablePreviewTable.js';
 import { xmlCiiRenderPreviewPhase as xmlCiiRenderPreviewPhaseImported, xmlCiiBuildAndRenderPreview as xmlCiiBuildAndRenderPreviewImported } from './converters/xmltocii2019_helper/preview-renderer.js';
 import { xmlCiiRenderWeightMatchPhase as xmlCiiRenderWeightMatchPhaseImported, bindXmlCiiWeightMatchPhase as bindXmlCiiWeightMatchPhaseImported } from './converters/xmltocii2019_helper/weight-match-renderer.js';
 import { xmlCiiRenderSupportMapperPhase as xmlCiiRenderSupportMapperPhaseImported, bindXmlCiiSupportMapperPhase as bindXmlCiiSupportMapperPhaseImported } from './converters/xmltocii2019_helper/support-types-panel.js';
+import { extractXmlCiiBranchSample as _extractXmlCiiBranchSample } from './xml-cii-branch-sample-sync.js';
 
 
 const STORAGE_KEY = 'model-converters.defaults.v1';
@@ -113,6 +114,9 @@ const INPUTXML2019_SAFE_UNITS = Object.freeze({
 
 // XML_CII_WORKFLOW_PHASES is the canonical source from WorkflowShell.js (imported above).
 
+// Compute absolute URLs for default master files so fetch() resolves correctly
+// regardless of the current page URL (avoids issues when the page is not at /viewer/).
+const _xmlCiiMasterBaseUrl = new URL('../../../docs/Masters/', import.meta.url).href;
 
 const XML_CII_MASTER_DEFS = Object.freeze({
   linelist: Object.freeze({
@@ -171,7 +175,7 @@ const XML_CII_MASTER_DEFS = Object.freeze({
     sectionKey: 'pipingClass',
     rowsKey: 'masterRows',
     fieldMapKey: 'fieldMap',
-    defaultUrl: '../docs/Masters/Piping_class_master.json',
+    defaultUrl: `${_xmlCiiMasterBaseUrl}Piping_class_master.json`,
     requiredFields: Object.freeze(['pipingClass', 'convertedBore']),
     aliases: Object.freeze({
       pipingClass: Object.freeze(['Piping Class', 'PIPING_CLASS', 'Class', 'SPEC', 'Spec']),
@@ -192,7 +196,7 @@ const XML_CII_MASTER_DEFS = Object.freeze({
     sectionKey: 'material',
     rowsKey: 'mapRows',
     fieldMapKey: 'fieldMap',
-    defaultUrl: '../docs/Masters/PCF_MAT_MAP.TXT',
+    defaultUrl: `${_xmlCiiMasterBaseUrl}PCF_MAT_MAP.TXT`,
     requiredFields: Object.freeze([]),
     aliases: Object.freeze({
       code: Object.freeze(['Code', 'Material Code', 'MATERIAL_CODE', 'CA3']),
@@ -207,7 +211,7 @@ const XML_CII_MASTER_DEFS = Object.freeze({
     sectionKey: 'weight',
     rowsKey: 'masterRows',
     fieldMapKey: 'fieldMap',
-    defaultUrl: '../docs/Masters/wtValveweights.json',
+    defaultUrl: `${_xmlCiiMasterBaseUrl}wtValveweights.json`,
     requiredFields: Object.freeze(['bore', 'rating', 'length', 'weight']),
     aliases: Object.freeze({
       bore: Object.freeze(['convertedBore', 'Converted Bore', 'Size (NPS)', 'Size', 'NPS', 'DN', 'NB', 'Bore']),
@@ -5697,10 +5701,21 @@ export function renderModelConvertersTab(container) {
     return xmlCiiWorkflowDetailEl;
   }
 
+  // Sync the hidden supportConfigJson textarea in the main-tab UI so that
+  // writeSupportConfigBranchSample (in branch-sample-sync) never reads stale
+  // data for configs that exceed the 250 KB renderAdvanced threshold.
+  function _xmlCiiSyncConfigTextarea() {
+    try {
+      const el = document.querySelector('[data-option-key="supportConfigJson"]');
+      if (el && 'value' in el) el.value = activeValues().supportConfigJson || '';
+    } catch {}
+  }
+
   function xmlCiiSaveConfig(config) {
     activeValues().supportConfigJson = JSON.stringify(config, null, 2);
     xmlCiiPersistLargeConfigChange('XML->CII config');
     xmlCiiRenderAdvancedWhenConfigFits();
+    _xmlCiiSyncConfigTextarea();
   }
 
   function xmlCiiPersistLargeConfigChange(contextLabel) {
@@ -6148,11 +6163,14 @@ export function renderModelConvertersTab(container) {
           </label>
         </div>
       </div>
-      <div style="margin-top:12px;">
+      <div style="margin-top:12px;display:flex;flex-direction:column;gap:8px;">
         <button type="button" class="model-converters-run-btn" data-xml-cii-run-from-workflow style="width:100%;padding:12px;">
           ▶ Run — Review Weight Matches
         </button>
-        <div class="model-converters-workflow-detail-note" style="margin-top:6px;">Opens <strong>4A Weight Match</strong> to review approximate weights, then Finalize and Run.</div>
+        <div class="model-converters-workflow-detail-note">Opens <strong>4A Weight Match</strong> to review approximate weights before running.</div>
+        <button type="button" class="model-converters-download-btn" data-xml-cii-finalize-run style="width:100%;padding:10px;margin-top:4px;">
+          ⚡ Finalise and Run (skip weight review)
+        </button>
       </div>
     `;
   }
@@ -6521,6 +6539,7 @@ export function renderModelConvertersTab(container) {
     }
 
     _xmlCiiSaveMasterToConfig(activeValues(), masterDef, rows, local.fieldMap);
+    _xmlCiiSyncConfigTextarea();
     xmlCiiPersistLargeConfigChange(masterDef.title);
     xmlCiiRenderAdvancedWhenConfigFits();
     xmlCiiRenderActiveWorkflow();
@@ -6545,6 +6564,7 @@ export function renderModelConvertersTab(container) {
     }
 
     _xmlCiiSaveMasterToConfig(activeValues(), masterDef, [], {});
+    _xmlCiiSyncConfigTextarea();
     xmlCiiPersistLargeConfigChange(masterDef.title);
     xmlCiiRenderAdvancedWhenConfigFits();
     xmlCiiRenderActiveWorkflow();
@@ -7595,6 +7615,28 @@ export function renderModelConvertersTab(container) {
             input.addEventListener('input', (event) => { if (event.isTrusted) save(); });
             input.addEventListener('change', (event) => { if (event.isTrusted) { save(); rerender(); } });
           });
+
+          // Auto-populate sampleBranchName from the loaded XML file when it is
+          // still the factory default — lets the token table immediately show real data.
+          setTimeout(async () => {
+            if (!target.isConnected) return;
+            const cfg = _parseXmlCiiEnrichmentConfig(activeValues().supportConfigJson);
+            const current = cfg.linelist?.sampleBranchName || '';
+            const isPlaceholder = !current || current === '/ASIM-1885-10"-S8810101-91261M7-HC/B1';
+            if (!isPlaceholder) return;
+            const xmlFile = primaryInputEl?.files?.[0] || primaryFile;
+            if (!xmlFile) return;
+            try {
+              const xmlText = await xmlFile.text();
+              const sample = _extractXmlCiiBranchSample(xmlText);
+              if (!sample) return;
+              const latestCfg = _parseXmlCiiEnrichmentConfig(activeValues().supportConfigJson);
+              if (!latestCfg.linelist) latestCfg.linelist = {};
+              latestCfg.linelist.sampleBranchName = sample;
+              xmlCiiSaveConfig(latestCfg);
+              if (target.isConnected) rerender();
+            } catch {}
+          }, 0);
         }
 
         // Import Masters: fully popup-aware binding using rerender() for refresh.
