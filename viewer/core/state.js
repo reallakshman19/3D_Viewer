@@ -352,7 +352,6 @@ export function resetParsedState() {
 }
 
 export function loadStickyState() {
-  _ensureAppMountElement();
   try {
     const savedSticky = localStorage.getItem('concise-viewer-sticky');
     if (savedSticky) {
