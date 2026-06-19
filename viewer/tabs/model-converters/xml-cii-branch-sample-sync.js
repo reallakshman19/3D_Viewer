@@ -136,12 +136,17 @@ function findLabelBoundControl(label) {
   return label.querySelector?.('input,textarea,[contenteditable="true"]') || null;
 }
 
+function isInsideWorkflowPopup(node) {
+  return Boolean(node?.closest?.('.model-converters-workflow-popup-overlay'));
+}
+
 function branchSampleTargets(root) {
   const scope = root?.querySelectorAll ? root : document;
   const targets = new Set();
   scope.querySelectorAll?.('[data-option-key="branchNameSample"], [name="branchNameSample"], #branchNameSample, #xml-cii-branchname-sample, #xml-cii-branch-name-sample')
-    .forEach((node) => targets.add(node));
+    .forEach((node) => { if (!isInsideWorkflowPopup(node)) targets.add(node); });
   scope.querySelectorAll?.('label').forEach((label) => {
+    if (isInsideWorkflowPopup(label)) return;
     const control = findLabelBoundControl(label);
     if (control) targets.add(control);
   });

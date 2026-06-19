@@ -202,6 +202,8 @@ function openConversionWorkflow(root = document, state = stateForRoot(root)) {
       renderActiveTab(root, state);
     },
     onClose: () => {
+      const b = getXmlCiiPhaseBridge();
+      if (b) { b.switchPhase = null; b.closePopup = null; }
       state.modal = null;
       state.body = null;
     },
@@ -209,6 +211,20 @@ function openConversionWorkflow(root = document, state = stateForRoot(root)) {
 
   state.body = state.modal.open();
   renderActiveTab(root, state);
+
+  // Wire bridge callbacks so the Run and Weight-Match phases can switch tabs
+  // and close the popup without referencing the modal directly.
+  const bridge = getXmlCiiPhaseBridge();
+  if (bridge) {
+    bridge.switchPhase = (phaseId) => {
+      if (!state.modal) return;
+      state.activeTab = phaseId;
+      writeStored(ACTIVE_TAB_KEY, phaseId);
+      state.modal.setActiveTab(phaseId);
+      renderActiveTab(root, state);
+    };
+    bridge.closePopup = () => state.modal?.close();
+  }
 }
 
 function removeWorkflowButton(root) {

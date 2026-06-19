@@ -7539,9 +7539,17 @@ export function renderModelConvertersTab(container) {
   // Populate popup bridge so the XML→CII workflow popup can render each phase
   // interactively using the same closed-over helpers that the inline workflow uses.
   _xmlCiiPhaseBridge = {
+    // Wired by the popup after it opens so phase-switch actions in the Run tab
+    // can change the active WorkflowModal tab without touching the main page.
+    switchPhase: null,
+    // Wired by the popup so "Finalize and Run" can close it before running.
+    closePopup: null,
+
     renderPhaseInto(target, phaseId) {
       if (!target) return;
       if (!target.dataset.xmlCiiActiveMaster) target.dataset.xmlCiiActiveMaster = 'linelist';
+      // Keep dataset.activeMaster in sync so legacy helpers that read it work.
+      target.dataset.activeMaster = target.dataset.xmlCiiActiveMaster;
 
       const self = this;
       const rerender = () => self.renderPhaseInto(target, phaseId);
@@ -7589,19 +7597,163 @@ export function renderModelConvertersTab(container) {
           });
         }
 
-        // Import Masters: master-tab navigation stays in popup; file/import actions
-        // use standard binding (config changes persist even if re-render targets main page).
+        // Import Masters: fully popup-aware binding using rerender() for refresh.
+        // Does NOT call bindXmlCiiImportMastersPhase which targets the main tab workflow.
         if (phaseId === 'import-masters') {
+          // Master sub-tab navigation
           target.querySelectorAll('[data-xml-cii-master-tab]').forEach((btn) => {
             btn.addEventListener('click', () => {
-              target.dataset.xmlCiiActiveMaster = btn.getAttribute('data-xml-cii-master-tab') || 'linelist';
+              const key = btn.getAttribute('data-xml-cii-master-tab') || 'linelist';
+              target.dataset.xmlCiiActiveMaster = key;
+              target.dataset.activeMaster = key;
               rerender();
             });
           });
-          bindXmlCiiImportMastersPhase(target);
+
+          // File import
+          target.querySelectorAll('[data-xml-cii-import-master]').forEach((input) => {
+            input.addEventListener('change', async () => {
+              const masterKey = input.getAttribute('data-xml-cii-import-master') || 'linelist';
+              const file = input.files?.[0];
+              if (!file) return;
+              try {
+                const readResult = masterKey === 'material' && /\.(txt|map)$/i.test(file.name || '')
+                  ? { sheetNames: [], selectedSheet: '', sheets: {}, rows: _xmlCiiParseMaterialMapText(await file.text()) }
+                  : await _xmlCiiReadMasterFile(file);
+                await xmlCiiLoadRowsIntoMaster(masterKey, readResult, file.name);
+                xmlCiiSaveMasterRows(masterKey);
+                notify({ level: 'success', title: 'XML->CII Masters', message: `Imported ${file.name}.` });
+              } catch (err) {
+                notify({ level: 'error', title: 'XML->CII Masters', message: _toText(err?.message || err) });
+              } finally {
+                input.value = '';
+                if (target.isConnected) rerender();
+              }
+            });
+          });
+
+          // Load Default
+          target.querySelectorAll('[data-xml-cii-load-default]').forEach((button) => {
+            button.addEventListener('click', async () => {
+              const masterKey = button.getAttribute('data-xml-cii-load-default') || '';
+              const origText = button.textContent;
+              try {
+                button.disabled = true;
+                button.textContent = 'Loading…';
+                await xmlCiiLoadDefaultMaster(masterKey, true);
+                notify({ level: 'success', title: 'XML->CII Masters', message: `Loaded ${XML_CII_MASTER_DEFS[masterKey]?.title || masterKey}.` });
+              } catch (err) {
+                notify({ level: 'error', title: 'XML->CII Masters', message: _toText(err?.message || err) });
+              } finally {
+                if (target.isConnected) rerender();
+                else { button.disabled = false; button.textContent = origText; }
+              }
+            });
+          });
+
+          // Auto Map Fields
+          target.querySelectorAll('[data-xml-cii-auto-map]').forEach((button) => {
+            button.addEventListener('click', () => {
+              const masterKey = button.getAttribute('data-xml-cii-auto-map') || 'linelist';
+              const local = xmlCiiLocalMasterState(masterKey);
+              if (masterKey === 'linelist') {
+                const config = _parseXmlCiiEnrichmentConfig(activeValues().supportConfigJson);
+                local.fieldMap = _detectLineListFieldMap(local.rawRows, local.fieldMap, config);
+              } else {
+                local.fieldMap = _xmlCiiAutoMapFields(_xmlCiiHeadersFromRows(local.rawRows), XML_CII_MASTER_DEFS[masterKey], local.rawRows);
+              }
+              if (local.rawRows.length) xmlCiiSaveMasterRows(masterKey);
+              rerender();
+            });
+          });
+
+          // Column field-map dropdowns
+          target.querySelectorAll('[data-xml-cii-field-map]').forEach((select) => {
+            select.addEventListener('change', (event) => {
+              if (!event.isTrusted) return;
+              const masterKey = target.dataset.xmlCiiActiveMaster || 'linelist';
+              const fieldName = select.getAttribute('data-xml-cii-field-map') || '';
+              xmlCiiLocalMasterState(masterKey).fieldMap[fieldName] = select.value;
+              if (xmlCiiLocalMasterState(masterKey).rawRows.length) xmlCiiSaveMasterRows(masterKey);
+              else rerender();
+            });
+          });
+
+          // Dynamic mapped fields
+          target.querySelectorAll('[data-xml-cii-dynamic-map]').forEach((button) => {
+            button.addEventListener('click', () => {
+              const masterKey = button.getAttribute('data-xml-cii-dynamic-map') || 'linelist';
+              xmlCiiSaveDynamicMappedFields(masterKey);
+              notify({ level: 'success', title: 'Dynamic Mapping', message: 'Dynamic mapped fields saved.' });
+            });
+          });
+
+          // Save Mapped Rows
+          target.querySelectorAll('[data-xml-cii-save-master]').forEach((button) => {
+            button.addEventListener('click', () => {
+              const masterKey = button.getAttribute('data-xml-cii-save-master') || 'linelist';
+              if (masterKey === 'linelist') xmlCiiSaveDynamicMappedFields(masterKey);
+              xmlCiiSaveMasterRows(masterKey);
+              rerender();
+            });
+          });
+
+          // Clear
+          target.querySelectorAll('[data-xml-cii-clear-master]').forEach((button) => {
+            button.addEventListener('click', () => {
+              xmlCiiClearMasterRows(button.getAttribute('data-xml-cii-clear-master') || 'linelist');
+              rerender();
+            });
+          });
+
+          // Auto-load defaults on first open if no rows are saved yet
+          setTimeout(async () => {
+            if (!target.isConnected) return;
+            const config = _parseXmlCiiEnrichmentConfig(activeValues().supportConfigJson);
+            let loaded = false;
+            for (const masterKey of XML_CII_MASTER_ORDER) {
+              const masterDef = XML_CII_MASTER_DEFS[masterKey];
+              if (!masterDef.defaultUrl) continue;
+              const savedRows = _xmlCiiMasterRowsFromConfig(config, masterDef);
+              if (savedRows.length || xmlCiiLocalMasterState(masterKey).rawRows.length) continue;
+              try {
+                await xmlCiiLoadDefaultMaster(masterKey, true);
+                loaded = true;
+              } catch (err) {
+                console.warn(`XML→CII popup: auto-load default failed for ${masterKey}`, err);
+              }
+            }
+            if (loaded && target.isConnected) rerender();
+          }, 0);
         }
 
-        if (phaseId === 'run') bindXmlCiiRunPhase(target);
+        // Run phase: bind options and override "Review Weight Matches" to switch
+        // the popup tab instead of re-rendering the main tab workflow.
+        if (phaseId === 'run') {
+          target.querySelectorAll('[data-xml-cii-run-option]').forEach((el) => {
+            el.addEventListener('change', (event) => {
+              if (!event.isTrusted) return;
+              const key = el.getAttribute('data-xml-cii-run-option') || '';
+              const values = activeValues();
+              if (el.type === 'checkbox') values[key] = el.checked;
+              else values[key] = el.value;
+              persist();
+              renderAdvanced();
+            });
+          });
+          target.querySelectorAll('[data-xml-cii-run-from-workflow]').forEach((btn) => {
+            btn.addEventListener('click', () => {
+              if (typeof self.switchPhase === 'function') self.switchPhase('weight-match');
+            });
+          });
+          target.querySelectorAll('[data-xml-cii-finalize-run]').forEach((btn) => {
+            btn.addEventListener('click', () => {
+              if (typeof self.closePopup === 'function') self.closePopup();
+              document.querySelector('#model-converters-run')?.click();
+            });
+          });
+        }
+
         if (phaseId === 'weight-match') bindXmlCiiWeightMatchPhase(target, target);
         if (phaseId === 'preview') bindXmlCiiPreviewPhase(target);
         if (phaseId === 'diagnostics') bindXmlCiiDiagnosticsPhase(target, target);
