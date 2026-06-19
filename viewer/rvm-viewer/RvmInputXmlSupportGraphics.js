@@ -4,11 +4,41 @@ import { state } from '../core/state.js';
 
 const ROOT_NAME = '__RVM_SUPPORT_SYMBOLS__';
 const TRUE_SUPPORT_TYPES = new Set(['ATTA', 'ANCI', 'SUPPORT', 'PIPE_SUPPORT', 'PIPESUPPORT']);
-const KIND_COLORS = { REST: 0x5ee56a, GUIDE: 0x42d7ff, LINESTOP: 0xffb347, LIMIT: 0xffb347, ANCHOR: 0xf266ff, SPRING: 0xff6fae };
+const KIND_COLORS = {
+  REST: 0x5ee56a,
+  GUIDE: 0x42d7ff,
+  LINESTOP: 0xffb347,
+  LIMIT: 0xffb347,
+  LIM: 0xffb347,
+  ANCHOR: 0xf266ff,
+  SPRING: 0xff6fae,
+  HANGER: 0xff6fae,
+  X: 0x7dd3fc,
+  Y: 0x86efac,
+  Z: 0xfca5a5,
+  UNRESOLVED: 0xff4d4d,
+};
 
 function str(v) { if (v == null) return ''; if (typeof v === 'string') return v; try { return JSON.stringify(v); } catch { return String(v); } }
 function up(v) { return str(v).trim().toUpperCase(); }
 function num(v, f = null) { const n = Number.parseFloat(String(v ?? '').replace(/mm/gi, '').replace(/,/g, '').trim()); return Number.isFinite(n) ? n : f; }
+
+function axisConfig() {
+  let verticalAxis = 'Y';
+  let northAxis = 'X';
+  try { verticalAxis = up(localStorage.getItem('rvm.inputxml.verticalAxis') || 'Y') || 'Y'; } catch {}
+  try { northAxis = up(localStorage.getItem('rvm.inputxml.northAxis') || 'X') || 'X'; } catch {}
+  if (!['X', 'Y', 'Z'].includes(verticalAxis)) verticalAxis = 'Y';
+  if (!['X', 'Y', 'Z'].includes(northAxis) || northAxis === verticalAxis) northAxis = verticalAxis === 'X' ? 'Y' : 'X';
+  const eastAxis = ['X', 'Y', 'Z'].find((axis) => axis !== verticalAxis && axis !== northAxis) || 'Z';
+  return { verticalAxis, northAxis, eastAxis };
+}
+
+function putAxis(out, axisName, value) {
+  if (axisName === 'X') out.x = value;
+  else if (axisName === 'Y') out.y = value;
+  else out.z = value;
+}
 
 function coord(v) {
   if (!v && v !== 0) return null;
@@ -21,19 +51,20 @@ function coord(v) {
     return [p.x, p.y, p.z].every(Number.isFinite) ? p : null;
   }
   const t = String(v || '').trim().split(/\s+/g);
-  const d = new THREE.Vector3(0, 0, 0);
+  const map = axisConfig();
+  const out = { x: 0, y: 0, z: 0 };
   let ok = false;
   for (let i = 0; i < t.length - 1; i += 2) {
     const a = t[i].toUpperCase(); const n = num(t[i + 1]);
     if (!Number.isFinite(n)) continue;
-    if (a === 'E') { d.x = n; ok = true; }
-    else if (a === 'W') { d.x = -n; ok = true; }
-    else if (a === 'N') { d.y = n; ok = true; }
-    else if (a === 'S') { d.y = -n; ok = true; }
-    else if (a === 'U') { d.z = n; ok = true; }
-    else if (a === 'D') { d.z = -n; ok = true; }
+    if (a === 'E') { putAxis(out, map.eastAxis, n); ok = true; }
+    else if (a === 'W') { putAxis(out, map.eastAxis, -n); ok = true; }
+    else if (a === 'N') { putAxis(out, map.northAxis, n); ok = true; }
+    else if (a === 'S') { putAxis(out, map.northAxis, -n); ok = true; }
+    else if (a === 'U') { putAxis(out, map.verticalAxis, n); ok = true; }
+    else if (a === 'D') { putAxis(out, map.verticalAxis, -n); ok = true; }
   }
-  if (ok) return d;
+  if (ok) return new THREE.Vector3(out.x, out.y, out.z);
   const vals = String(v || '').match(/-?\d+(?:\.\d+)?/g)?.map(Number).filter(Number.isFinite) || [];
   return vals.length >= 3 ? new THREE.Vector3(vals[0], vals[1], vals[2]) : null;
 }
@@ -46,11 +77,18 @@ function supportPoint(a) {
 }
 
 function axis(v) {
-  const s = up(v).replace(/[^A-Z]/g, '');
+  const s = up(v).replace(/[^A-Z+-]/g, '');
   if (s.includes('X')) return new THREE.Vector3(1, 0, 0);
   if (s.includes('Y')) return new THREE.Vector3(0, 1, 0);
   if (s.includes('Z')) return new THREE.Vector3(0, 0, 1);
   return new THREE.Vector3(1, 0, 0);
+}
+
+function axisNameFromKind(k) {
+  if (k === 'X') return new THREE.Vector3(1, 0, 0);
+  if (k === 'Y') return new THREE.Vector3(0, 1, 0);
+  if (k === 'Z') return new THREE.Vector3(0, 0, 1);
+  return null;
 }
 
 function ortho(t) {
@@ -65,14 +103,37 @@ function guideAxes(t) {
   return [new THREE.Vector3(1, 0, 0), new THREE.Vector3(0, 0, 1)];
 }
 
+function sourceRestraintKind(a) {
+  const raw = Number.parseFloat(String(a.SOURCE_RESTRAINT_TYPE ?? '').trim());
+  if (!Number.isFinite(raw)) return '';
+  const n = Math.round(raw);
+  // Conservative CAESAR/InputXML-style fallback. Descriptive fields still win in kind().
+  if ([0, 2, 17].includes(n)) return 'REST';
+  if ([1, 7].includes(n)) return 'GUIDE';
+  if ([3, 10, 18].includes(n)) return 'LINESTOP';
+  if ([4, 5, 6, 8, 9].includes(n)) return 'LIMIT';
+  return '';
+}
+
 function kind(a) {
-  const txt = [a.SUPPORT_KIND, a.SUPPORT_MAPPER_KIND, a.SUPPORT_TYPE, a.CMPSUPTYPE, a.MDSSUPPTYPE, a.SKEY, a.SPRE, a.DTXR, a.NAME, a.SUPPORT_TAG].map(up).join(' ');
+  const direct = up(a.SUPPORT_KIND || a.SUPPORT_MAPPER_KIND || a.SUPPORT_TYPE || a.CMPSUPTYPE || a.MDSSUPPTYPE);
+  if (/^(X|\+X|-X|XONLY|XSTOP)$/.test(direct)) return 'X';
+  if (/^(Y|\+Y|-Y|YONLY|YSTOP)$/.test(direct)) return 'Y';
+  if (/^(Z|\+Z|-Z|ZONLY|ZSTOP)$/.test(direct)) return 'Z';
+  if (/^(LIM|LIMIT)$/.test(direct)) return 'LIMIT';
+  if (/^(LINESTOP|LINE_STOP)$/.test(direct)) return 'LINESTOP';
+  if (/^(SPRING|HANGER|HANG)$/.test(direct)) return 'SPRING';
+  const txt = [a.SUPPORT_KIND, a.SUPPORT_MAPPER_KIND, a.SUPPORT_TYPE, a.CMPSUPTYPE, a.MDSSUPPTYPE, a.SKEY, a.SPRE, a.DTXR, a.NAME, a.SUPPORT_TAG, a.SUPPORT_DIRECTION].map(up).join(' ');
   if (/GUIDE|\bGDE\b|\bGUI\b|\bPG[-_ ]|\bGT0[1-4]\b/.test(txt)) return 'GUIDE';
   if (/LINE\s*STOP|LINESTOP|STOPPER|\bLS[-_ ]|\bST0[6-8]\b/.test(txt)) return 'LINESTOP';
-  if (/LIMIT/.test(txt)) return 'LIMIT';
+  if (/\bLIM\b|LIMIT/.test(txt)) return 'LIMIT';
   if (/ANCHOR|FIXED/.test(txt)) return 'ANCHOR';
-  if (/SPRING|HANGER/.test(txt)) return 'SPRING';
-  return 'REST';
+  if (/SPRING|HANGER|\bHANG\b/.test(txt)) return 'SPRING';
+  if (/\bX\b|\+X|-X|PIPE_AXIS_X/.test(txt)) return 'X';
+  if (/\bY\b|\+Y|-Y|PIPE_AXIS_Y/.test(txt)) return 'Y';
+  if (/\bZ\b|\+Z|-Z|PIPE_AXIS_Z/.test(txt)) return 'Z';
+  if (/REST|SHOE|WEAR\s*PLATE|W\.?\s*PAD|BASE\s*PLATE/.test(txt)) return 'REST';
+  return sourceRestraintKind(a) || 'UNRESOLVED';
 }
 
 function isInputXmlSupport(n) {
@@ -135,6 +196,36 @@ function removeOld(viewer) {
   });
 }
 
+function crossSymbol(p, len, r, color, name) {
+  const g = new THREE.Group();
+  g.name = name;
+  const m = mat(color);
+  for (const dir of [new THREE.Vector3(1, 0, 0), new THREE.Vector3(0, 1, 0), new THREE.Vector3(0, 0, 1)]) {
+    const bar = new THREE.Mesh(new THREE.CylinderGeometry(r, r, len, 10), m);
+    bar.position.copy(p);
+    orientY(bar, dir);
+    g.add(bar);
+  }
+  return g;
+}
+
+function springSymbol(p, len, r, color, name) {
+  const g = new THREE.Group();
+  g.name = name;
+  const m = mat(color);
+  const turns = 6;
+  const pts = [];
+  for (let i = 0; i <= turns * 8; i++) {
+    const t = i / (turns * 8);
+    const a = t * Math.PI * 2 * turns;
+    pts.push(new THREE.Vector3(Math.cos(a) * r * 4, -t * len, Math.sin(a) * r * 4).add(p));
+  }
+  const curve = new THREE.CatmullRomCurve3(pts);
+  g.add(new THREE.Mesh(new THREE.TubeGeometry(curve, pts.length, r, 8, false), m));
+  g.add(arrow(p.clone().add(new THREE.Vector3(0, -len, 0)), new THREE.Vector3(0, -1, 0), len * 0.35, r, color, `${name}_SPRING_ARROW`));
+  return g;
+}
+
 function makeSymbol(node, index, viewer, options) {
   const a = node.attributes || {};
   const local = supportPoint(a); if (!local) return null;
@@ -149,10 +240,11 @@ function makeSymbol(node, index, viewer, options) {
   const len = Math.max(od * 0.55, 28) * mul;
   const rad = Math.max(od * 0.035, 1.2) * mul;
   const lane = Math.max(od * 2 / 3, 20) * mul;
-  const color = KIND_COLORS[k] || KIND_COLORS.REST;
+  const color = KIND_COLORS[k] || KIND_COLORS.UNRESOLVED;
   const g = new THREE.Group();
   g.name = `SUPPORT_SYMBOL_${tag}`;
   g.userData = { supportSymbol: true, supportKind: k, supportTag: tag, inputXmlSupportGraphics: true, attributes: { ...a } };
+  const singleAxis = axisNameFromKind(k);
   if (k === 'ANCHOR') {
     for (const ax of [new THREE.Vector3(1, 0, 0), new THREE.Vector3(0, 1, 0), new THREE.Vector3(0, 0, 1)]) {
       g.add(arrow(p.clone().add(ax.clone().multiplyScalar(cr + gap)), ax, len, rad, color, `${tag}_ANCHOR_PLUS`));
@@ -163,10 +255,17 @@ function makeSymbol(node, index, viewer, options) {
       g.add(arrow(p.clone().add(ax.clone().multiplyScalar(cr + gap)), ax, len, rad, color, `${tag}_GUIDE_PLUS`));
       g.add(arrow(p.clone().add(ax.clone().multiplyScalar(-cr - gap)), ax.clone().multiplyScalar(-1), len, rad, color, `${tag}_GUIDE_MINUS`));
     }
-  } else if (k === 'LINESTOP' || k === 'LIMIT') {
+  } else if (k === 'LINESTOP' || k === 'LIMIT' || k === 'LIM') {
     const c = p.clone().add(ortho(t).multiplyScalar(lane));
     g.add(arrow(c.clone().add(t.clone().multiplyScalar(gap * 0.5)), t, len, rad, color, `${tag}_${k}_A`));
     g.add(arrow(c.clone().add(t.clone().multiplyScalar(-gap * 0.5)), t.clone().multiplyScalar(-1), len, rad, color, `${tag}_${k}_B`));
+  } else if (k === 'SPRING' || k === 'HANGER') {
+    g.add(springSymbol(p.clone().add(new THREE.Vector3(0, -cr - gap, 0)), len, rad, color, `${tag}_SPRING`));
+  } else if (singleAxis) {
+    g.add(arrow(p.clone().add(singleAxis.clone().multiplyScalar(cr + gap)), singleAxis, len, rad, color, `${tag}_${k}_PLUS`));
+    g.add(arrow(p.clone().add(singleAxis.clone().multiplyScalar(-cr - gap)), singleAxis.clone().multiplyScalar(-1), len, rad, color, `${tag}_${k}_MINUS`));
+  } else if (k === 'UNRESOLVED') {
+    g.add(crossSymbol(p, len * 0.75, rad * 1.25, color, `${tag}_UNRESOLVED_CROSS`));
   } else {
     g.add(arrow(p.clone().add(new THREE.Vector3(0, -cr - gap, 0)), new THREE.Vector3(0, -1, 0), len, rad, color, `${tag}_REST_PLUS_Y`));
   }
