@@ -1,6 +1,7 @@
 import { loadStickyState, state, setActiveTab } from './state.js';
 import { RuntimeEvents } from '../contracts/runtime-events.js';
 import { emit, on } from './event-bus.js';
+import { hideLoading } from './loading.js';
 import { initDevDebugWindow } from '../debug/dev-debug-window.js';
 
 const TAB_VISIBILITY_URL = new URL('../config/tab-visibility.json', import.meta.url).href;
@@ -38,6 +39,15 @@ function cleanupActiveTab() {
     console.warn('Tab cleanup failed', error);
   } finally {
     activeTabDestroy = null;
+  }
+}
+
+function hideStartupOverlay() {
+  try { hideLoading(); } catch {}
+  const overlay = document.getElementById('app-loading-overlay');
+  if (overlay) {
+    overlay.classList.remove('is-visible');
+    overlay.setAttribute('aria-hidden', 'true');
   }
 }
 
@@ -169,6 +179,7 @@ function renderNav(nav, tabs, content) {
 
 function renderTabError(content, tab, error) {
   console.error(`Failed to render tab ${tab?.id || ''}`, error);
+  hideStartupOverlay();
   content.innerHTML = `
     <section class="tab-error-boundary">
       <h2>Unable to open ${String(tab?.label || 'tab')}</h2>
@@ -184,7 +195,10 @@ async function activateTab(tabId, tabs, nav, content) {
   const tab = tabs.find((item) => item.id === resolvedTabId) || tabs.find((item) => item.id === fallbackId);
   if (!tab) return;
 
-  if (state.activeTab === tab.id && content.firstChild) return;
+  if (state.activeTab === tab.id && content.firstChild) {
+    hideStartupOverlay();
+    return;
+  }
   cleanupActiveTab();
   content.innerHTML = '';
   state.activeTab = tab.id;
@@ -202,6 +216,8 @@ async function activateTab(tabId, tabs, nav, content) {
   } catch (error) {
     activeTabDestroy = null;
     renderTabError(content, tab, error);
+  } finally {
+    hideStartupOverlay();
   }
 }
 
@@ -212,17 +228,23 @@ export async function init() {
   const mount = document.getElementById('app');
   const root = mount || document.getElementById('app-layout') || document.body;
   const { nav, content } = createAppShell(root);
-  const tabs = await visibleTabs();
-  renderNav(nav, tabs, content);
 
-  const initialTab = TAB_ID_ALIASES.get(state.activeTab) || state.activeTab || tabs[0]?.id;
-  await activateTab(initialTab, tabs, nav, content);
+  try {
+    const tabs = await visibleTabs();
+    renderNav(nav, tabs, content);
 
-  appDestroy = () => {
-    cleanupActiveTab();
-    root.innerHTML = '';
-  };
+    const initialTab = TAB_ID_ALIASES.get(state.activeTab) || state.activeTab || tabs[0]?.id;
+    await activateTab(initialTab, tabs, nav, content);
 
-  emit(RuntimeEvents.APP_READY, { tabs: tabs.map((tab) => tab.id) });
-  return appDestroy;
+    appDestroy = () => {
+      cleanupActiveTab();
+      hideStartupOverlay();
+      root.innerHTML = '';
+    };
+
+    emit(RuntimeEvents.APP_READY, { tabs: tabs.map((tab) => tab.id) });
+    return appDestroy;
+  } finally {
+    hideStartupOverlay();
+  }
 }
