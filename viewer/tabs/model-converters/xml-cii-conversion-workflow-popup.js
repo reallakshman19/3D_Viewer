@@ -4,7 +4,7 @@ import {
   renderXmlCiiWorkflowProcessEnrichmentPanel,
 } from './xml-cii-conversion-workflow-direct-panels.js';
 
-const FLAG = '__xmlCiiConversionWorkflowPopup_direct_v7';
+const FLAG = '__xmlCiiConversionWorkflowPopup_direct_v8';
 const ROOT_ATTR = 'data-xml-cii-workflow-root';
 const ACTIVE_TAB_KEY = 'xmlCii2019.conversionWorkflow.activeTab.v2';
 const DIRECT_RUN_FLAG = '__xmlCiiConversionWorkflowAllowDirectRun';
@@ -93,9 +93,15 @@ function activeConverterText(root = document) {
 }
 
 function isXmlCiiActive(root = document) {
+  const select = activeConverterSelect(root);
+  if (!select) return false;
+
   const id = activeConverterId(root);
   if (XML_CII_CONVERTER_IDS.has(id)) return true;
-  const normalized = normalizeConverterToken(activeConverterText(root));
+  if (XML_CII_CONVERTER_IDS.has(normalizeConverterToken(id))) return true;
+
+  const optionText = select.selectedOptions?.[0]?.textContent || '';
+  const normalized = normalizeConverterToken(`${id} ${optionText}`);
   return normalized.includes('xml') && normalized.includes('cii') && normalized.includes('2019');
 }
 
@@ -200,7 +206,7 @@ function renderActiveTab(root, state) {
 }
 
 function openConversionWorkflow(root = document, state = stateForRoot(root)) {
-  if (!browserReady()) return;
+  if (!browserReady() || !isXmlCiiActive(root)) return;
 
   if (state.modal) {
     renderActiveTab(root, state);
@@ -230,6 +236,10 @@ function openConversionWorkflow(root = document, state = stateForRoot(root)) {
   renderActiveTab(root, state);
 }
 
+function removeWorkflowButton(root) {
+  root.querySelectorAll?.('[data-xml-cii-open-conversion-workflow]').forEach((button) => button.remove());
+}
+
 function applyWorkflowButtonVisibility(quickButton, xmlActive) {
   quickButton.hidden = !xmlActive;
   quickButton.disabled = !xmlActive;
@@ -243,6 +253,12 @@ function ensureWorkflowButton(root, state = stateForRoot(root)) {
 
   const xmlActive = isXmlCiiActive(root);
   let quickButton = root.querySelector('[data-xml-cii-open-conversion-workflow]');
+
+  if (!xmlActive) {
+    removeWorkflowButton(root);
+    state.modal?.close?.();
+    return;
+  }
 
   if (!quickButton) {
     quickButton = document.createElement('button');
