@@ -5,6 +5,7 @@ const ROOT_NAME = '__RVM_INPUTXML_AUTO_BEND_GRAPHICS__';
 const AXIS_NAME = '__RVM_CANVAS_AXIS_TRIAD__';
 const PIPE_MAT = new THREE.MeshStandardMaterial({ color: 0x2f6fb8, roughness: 0.62, metalness: 0.08 });
 const BEND_MAT = new THREE.MeshStandardMaterial({ color: 0x9c4c9f, roughness: 0.6, metalness: 0.06 });
+const NODE_MAT = new THREE.MeshStandardMaterial({ color: 0x2f6fb8, roughness: 0.7, metalness: 0.04 });
 const TOL = 1e-3;
 
 function s(v) { return v == null ? '' : String(v); }
@@ -72,7 +73,15 @@ function cylinderBetween(a, b, radius, material, name, sourceAttrs = {}) {
   };
   return mesh;
 }
-function makeArc(fromDir, toDir, corner, radius, pipeRadius, material, name) {
+function makeNodeMarker(position, radius, name) {
+  const r = Math.max(radius * 0.72, 2);
+  const mesh = new THREE.Mesh(new THREE.SphereGeometry(r, 16, 12), NODE_MAT);
+  mesh.name = name || 'INPUTXML_NODE_MARKER';
+  mesh.position.copy(position);
+  mesh.userData = { inputXmlAutoBend: true, kind: 'NODE', attributes: { TYPE: 'PIPE', RAW_TYPE: 'PIPE', LABEL_POLICY: 'PIPE_ONLY' } };
+  return mesh;
+}
+function makeArc(fromDir, toDir, corner, radius, pipeRadius, material, name, maxTrimA = Infinity, maxTrimB = Infinity) {
   const d1 = fromDir.clone().normalize();
   const d2 = toDir.clone().normalize();
   const dot = THREE.MathUtils.clamp(d1.dot(d2), -1, 1);
@@ -82,9 +91,12 @@ function makeArc(fromDir, toDir, corner, radius, pipeRadius, material, name) {
   if (normal.lengthSq() < 1e-10) return null;
   normal.normalize();
   const angle = Math.acos(dot);
-  const trim = Math.min(radius * Math.tan(angle / 2), radius * 2.5);
-  const p1 = corner.clone().add(d1.clone().multiplyScalar(trim));
-  const p2 = corner.clone().add(d2.clone().multiplyScalar(trim));
+  const geometricTrim = Math.abs(radius * Math.tan(angle / 2));
+  const safeTrim = Math.min(geometricTrim, radius * 2.5, maxTrimA, maxTrimB);
+  if (!Number.isFinite(safeTrim) || safeTrim < Math.max(pipeRadius * 0.35, 0.5)) return null;
+
+  const p1 = corner.clone().add(d1.clone().multiplyScalar(safeTrim));
+  const p2 = corner.clone().add(d2.clone().multiplyScalar(safeTrim));
   const bisector = d1.clone().add(d2).normalize();
   if (bisector.lengthSq() < 1e-10) return null;
   const centerDistance = radius / Math.sin(angle / 2);
@@ -102,8 +114,8 @@ function makeArc(fromDir, toDir, corner, radius, pipeRadius, material, name) {
   const curve = new THREE.CatmullRomCurve3(pts);
   const mesh = new THREE.Mesh(new THREE.TubeGeometry(curve, steps * 2, pipeRadius, 18, false), material);
   mesh.name = name || 'INPUTXML_AUTO_BEND_1_5D';
-  mesh.userData = { inputXmlAutoBend: true, kind: 'BEND', attributes: { TYPE: 'PIPE', RAW_TYPE: 'PIPE', AUTO_BEND: '1.5D', LABEL_POLICY: 'PIPE_ONLY' } };
-  return { mesh, p1, p2 };
+  mesh.userData = { inputXmlAutoBend: true, kind: 'BEND', attributes: { TYPE: 'PIPE', RAW_TYPE: 'PIPE', AUTO_BEND: '1.5D', AUTO_BEND_TRIM_MM: safeTrim.toFixed(3), LABEL_POLICY: 'PIPE_ONLY' } };
+  return { mesh, p1, p2, trim: safeTrim };
 }
 function nodes() {
   return Array.isArray(state?.rvm?.index?.nodes) ? state.rvm.index.nodes : [];
@@ -138,6 +150,7 @@ function segments() {
       toNode,
       diameter: d,
       radius: d * 0.5,
+      length: p0.distanceTo(p1),
       sourceType: up(a.TYPE || a.RAW_TYPE || node.type),
     });
   });
@@ -213,15 +226,22 @@ export function applyInputXmlAutoBendGraphics(viewer, options = {}) {
   let bends = 0;
   let skippedJunctions = 0;
   let skippedRemoteNode = 0;
+  let skippedUnsafeTrim = 0;
+  let nodeMarkers = 0;
 
-  byNode.forEach((items) => {
+  byNode.forEach((items, id) => {
+    const corner = sameNodePoint(items);
     if (items.length !== 2) {
       skippedJunctions += items.length > 2 ? 1 : 0;
+      if (corner && items.length > 2) {
+        const dia = Math.min(...items.map((item) => item.seg.diameter).filter(Number.isFinite));
+        root.add(makeNodeMarker(corner, Math.max((dia || 50) * 0.5, 3), `INPUTXML_JUNCTION_${id}`));
+        nodeMarkers += 1;
+      }
       return;
     }
     const [a, b] = items;
     if (a.seg === b.seg) return;
-    const corner = sameNodePoint(items);
     if (!corner) {
       skippedRemoteNode += 1;
       return;
@@ -232,8 +252,15 @@ export function applyInputXmlAutoBendGraphics(viewer, options = {}) {
     const dia = Math.min(a.seg.diameter, b.seg.diameter);
     const bendRadius = Math.max(dia * 1.5, dia * 0.75);
     const pipeR = Math.max(dia * 0.5, 1);
-    const bend = makeArc(da, db, corner, bendRadius, pipeR, BEND_MAT, `INPUTXML_AUTO_BEND_${bends + 1}`);
-    if (!bend) return;
+    const maxTrimA = Math.max(a.seg.length * 0.42, pipeR * 0.5);
+    const maxTrimB = Math.max(b.seg.length * 0.42, pipeR * 0.5);
+    const bend = makeArc(da, db, corner, bendRadius, pipeR, BEND_MAT, `INPUTXML_AUTO_BEND_${bends + 1}`, maxTrimA, maxTrimB);
+    if (!bend) {
+      skippedUnsafeTrim += 1;
+      root.add(makeNodeMarker(corner, pipeR, `INPUTXML_MITER_NODE_${id}`));
+      nodeMarkers += 1;
+      return;
+    }
     bends += 1;
     root.add(bend.mesh);
     if (a.endName === 'p0') trimStart.set(a.seg, bend.p1); else trimEnd.set(a.seg, bend.p1);
@@ -260,7 +287,9 @@ export function applyInputXmlAutoBendGraphics(viewer, options = {}) {
     totalInputXmlComponents: segs.totalInputXmlComponents || segs.length,
     skippedJunctions,
     skippedRemoteNode,
-    labelPolicy: 'PIPE_ONLY_NODE_WISE',
+    skippedUnsafeTrim,
+    nodeMarkers,
+    labelPolicy: 'PIPE_ONLY_NODE_WISE_LENGTH_LIMITED_TRIM',
   };
   return viewer.inputXmlAutoBendDiagnostics;
 }
