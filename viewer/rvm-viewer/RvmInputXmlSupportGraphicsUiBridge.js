@@ -1,5 +1,5 @@
-import { applyInputXmlSupportGraphicsOverlay } from './RvmInputXmlSupportGraphics.js?v=20260619-inputxml-support-graphics-1';
-import { refreshInputXmlGraphics } from './RvmInputXmlAutoBendGraphics.js?v=20260619-inputxml-auto-bend-1';
+import { applyInputXmlSupportGraphicsOverlay } from './RvmInputXmlSupportGraphics.js?v=20260619-inputxml-node-graph-1';
+import { refreshInputXmlGraphics } from './RvmInputXmlAutoBendGraphics.js?v=20260619-inputxml-node-graph-1';
 
 const PANEL_KEY_LEFT = 'rvm.panel.left.width.v2';
 const PANEL_KEY_RIGHT = 'rvm.panel.right.width.v2';
@@ -42,8 +42,8 @@ function refresh() {
   if (!viewer) return;
   const options = optionsFromUi();
   setTimeout(() => {
-    applyInputXmlSupportGraphicsOverlay(viewer, options);
     refreshInputXmlGraphics(viewer, options);
+    applyInputXmlSupportGraphicsOverlay(viewer, options);
   }, 0);
 }
 
