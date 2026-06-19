@@ -9,7 +9,7 @@
  * ConverterRunner) are available here for convenience.
  */
 
-export { renderModelConvertersTab } from './ModelConvertersTab.js?v=20260618-xml-cii-popup-restore-1';
+export { renderModelConvertersTab } from './ModelConvertersTab.js?v=20260619-xml-cii-branch-sample-1';
 
 // Re-export reusable module surfaces so external consumers have one import target.
 export { XML_CII_WORKFLOW_PHASES, normalizeWorkflowPhaseId, getWorkflowPhase } from './WorkflowShell.js';
