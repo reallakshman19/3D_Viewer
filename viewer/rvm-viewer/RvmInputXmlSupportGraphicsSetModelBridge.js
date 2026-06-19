@@ -1,5 +1,5 @@
 import { RvmViewer3D } from './RvmViewer3D.js?v=20260518-statusbar-theme-12';
-import { applyInputXmlSupportGraphicsOverlay } from './RvmInputXmlSupportGraphics.js?v=20260619-inputxml-node-graph-1';
+import { applyInputXmlSupportGraphicsOverlay } from './RvmInputXmlSupportGraphics.js?v=20260619-inputxml-support-summary-1';
 import { refreshInputXmlGraphics } from './RvmInputXmlAutoBendGraphics.js?v=20260619-inputxml-node-graph-1';
 
 function optionsFromUi() {
@@ -20,7 +20,7 @@ function refresh(viewer) {
   applyInputXmlSupportGraphicsOverlay(viewer, options);
 }
 
-if (!RvmViewer3D.prototype.__inputXmlGraphicsSetModelBridgeV6) {
+if (!RvmViewer3D.prototype.__inputXmlGraphicsSetModelBridgeV7) {
   const setModelOriginal = RvmViewer3D.prototype.setModel;
   RvmViewer3D.prototype.setModel = function setModelWithInputXmlGraphics(...args) {
     const result = setModelOriginal.apply(this, args);
@@ -29,5 +29,5 @@ if (!RvmViewer3D.prototype.__inputXmlGraphicsSetModelBridgeV6) {
     setTimeout(() => refresh(this), 100);
     return result;
   };
-  RvmViewer3D.prototype.__inputXmlGraphicsSetModelBridgeV6 = true;
+  RvmViewer3D.prototype.__inputXmlGraphicsSetModelBridgeV7 = true;
 }
