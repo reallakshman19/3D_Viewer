@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict';
 import { collectBrowserRvmRenderInstructions } from '../../../rvm/BrowserRvmRenderContractAdapter.js';
-import { buildBrowserRvmRenderSceneFromHierarchy } from '../../../rvm/BrowserRvmRenderSceneBuilder.js';
+import {
+  BROWSER_RVM_RENDER_SCENE_SCHEMA,
+  buildBrowserRvmRenderSceneFromHierarchy
+} from '../../../rvm/BrowserRvmRenderSceneBuilder.js';
 
 const hierarchy = [
   {
@@ -59,9 +62,11 @@ assert.equal(instruction.attAttributes.SPEC, 'A106B');
 assert.equal(instruction.attributes.RVM_BROWSER_ATT_ENRICHED, 'true');
 
 const render = buildBrowserRvmRenderSceneFromHierarchy(hierarchy);
-assert.equal(render.schemaVersion, 'rvm-browser-render-scene/v2');
+assert.equal(render.schemaVersion, BROWSER_RVM_RENDER_SCENE_SCHEMA);
 assert.equal(render.diagnostics.attCounts.enriched, 1);
 assert.equal(render.diagnostics.renderableCount, 1);
+assert.equal(render.bounds.hasBounds, true);
+assert.equal(render.scene.userData.bounds.hasBounds, true);
 const object = render.scene.children[0];
 assert.equal(object.name, 'P-1001-A');
 assert.equal(object.userData.displayName, 'P-1001-A');

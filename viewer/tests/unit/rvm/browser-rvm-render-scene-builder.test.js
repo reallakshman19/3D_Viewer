@@ -144,6 +144,14 @@ assert.equal(result.diagnostics.skippedReasons['missing-position'], 1);
 assert.equal(result.diagnostics.attCounts.enriched, 1);
 assert.equal(result.diagnostics.attCounts.plain, 7);
 assert.equal(result.scene.children.length, 8);
+assert.equal(result.bounds.hasBounds, true);
+assert.equal(result.scene.userData.bounds.hasBounds, true);
+assert.equal(result.diagnostics.bounds.hasBounds, true);
+assert.ok(Number.isFinite(result.bounds.min.x), 'bounds min should be finite');
+assert.ok(Number.isFinite(result.bounds.max.x), 'bounds max should be finite');
+assert.ok(result.bounds.max.x > result.bounds.min.x, 'bounds should have positive X size');
+assert.ok(result.bounds.size.x > 0, 'bounds size.x should be positive');
+assert.ok(result.bounds.radius > 0, 'bounds radius should be positive');
 
 const pipe = result.scene.children.find((child) => child.userData.renderPrimitive === 'CYLINDER_BBOX');
 assert.ok(pipe, 'cylinder render instruction should create a mesh');
@@ -187,5 +195,18 @@ assert.ok(flange.geometry?.type?.includes('Cylinder'), 'flange should use a shor
 const support = result.scene.children.find((child) => child.userData.renderPrimitive === 'SUPPORT_BBOX_PLACEHOLDER');
 assert.ok(support?.isGroup, 'support placeholder should use a group');
 assert.ok(support.children.some((child) => child.geometry?.type?.includes('Box')), 'support should include a base box');
+
+const emptyResult = buildBrowserRvmRenderSceneFromInstructions([
+  {
+    renderPrimitive: 'UNKNOWN_BBOX_PLACEHOLDER',
+    center: null,
+    axisStart: null,
+    axisEnd: null
+  }
+]);
+assert.equal(emptyResult.diagnostics.renderableCount, 0);
+assert.equal(emptyResult.bounds.hasBounds, false);
+assert.equal(emptyResult.diagnostics.bounds.hasBounds, false);
+assert.equal(emptyResult.scene.userData.bounds.hasBounds, false);
 
 console.log('Browser RVM render scene builder test passed');
