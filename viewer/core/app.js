@@ -76,7 +76,7 @@ async function loadRvmViewerRenderer() {
   await import('../rvm-viewer/RvmSupportIndexAttributeBridge.js?v=20260620-rvm-direct-tab-1');
   await import('../tabs/viewer3d-rvm-file-dialog-singleton.js?v=20260618-rvm-file-dialog-singleton-1');
   await import('../tabs/viewer3d-rvm-uxml-import-addon.js?v=20260618-support-kind-authority-1');
-  return import('../tabs/viewer3d-rvm-tab-renderer.js?v=20260620-rvm-direct-tab-1')
+  return import('../tabs/viewer3d-rvm-tab-renderer.js?v=20260620-rvm-rhbg-fitguard-1')
     .then((module) => pickRenderer(module, 'renderViewer3DRvm', 'viewer3d-rvm'));
 }
 
@@ -119,132 +119,57 @@ function createAppShell(root) {
   content.className = 'app-content';
   shell.append(nav, content);
   root.appendChild(shell);
-  return { nav, content };
+  return { shell, nav, content };
 }
 
-async function visibleTabs() {
-  try {
-    const response = await fetch(TAB_VISIBILITY_URL, { cache: 'no-store' });
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
-    const config = await response.json();
-    const hidden = new Set(Array.isArray(config?.hiddenTabs) ? config.hiddenTabs : []);
-    return TABS.filter((tab) => !hidden.has(tab.id));
-  } catch {
-    return TABS;
-  }
-}
+export async function init(root = document.getElementById('app')) {
+  if (!root) throw new Error('App root #app not found');
+  loadStickyState();
+  const { nav, content } = createAppShell(root);
+  const buttons = new Map();
 
-function tabGroupFor(tabId) {
-  return TAB_GROUPS.find((group) => group.ids.includes(tabId))?.label || '';
-}
-
-function renderNav(nav, tabs, content) {
-  nav.innerHTML = '';
-  const groups = [];
-  for (const tab of tabs) {
-    const label = tabGroupFor(tab.id);
-    let group = groups.find((entry) => entry.label === label);
-    if (!group) {
-      group = { label, tabs: [] };
-      groups.push(group);
+  for (const group of TAB_GROUPS) {
+    const title = document.createElement('div');
+    title.className = 'app-nav-group-title';
+    title.textContent = group.label;
+    nav.appendChild(title);
+    for (const id of group.ids) {
+      const tab = TABS.find((item) => item.id === id);
+      if (!tab) continue;
+      const btn = document.createElement('button');
+      btn.className = 'app-tab-button';
+      btn.textContent = tab.label;
+      btn.addEventListener('click', () => activate(tab.id));
+      buttons.set(tab.id, btn);
+      nav.appendChild(btn);
     }
-    group.tabs.push(tab);
   }
 
-  for (const group of groups) {
-    const groupEl = document.createElement('div');
-    groupEl.className = 'app-nav-group';
-    if (group.label) {
-      const groupLabel = document.createElement('div');
-      groupLabel.className = 'app-nav-group-label';
-      groupLabel.textContent = group.label;
-      groupEl.appendChild(groupLabel);
-    }
-    for (const tab of group.tabs) {
-      const button = document.createElement('button');
-      button.type = 'button';
-      button.className = 'app-nav-button';
-      button.dataset.tabId = tab.id;
-      button.textContent = tab.label;
-      button.addEventListener('click', () => setActiveTab(tab.id));
-      groupEl.appendChild(button);
-    }
-    nav.appendChild(groupEl);
-  }
-
-  on(RuntimeEvents.TAB_CHANGED, async ({ tabId }) => {
-    await activateTab(tabId, tabs, nav, content);
-  });
-}
-
-function renderTabError(content, tab, error) {
-  console.error(`Failed to render tab ${tab?.id || ''}`, error);
-  hideStartupOverlay();
-  content.innerHTML = `
-    <section class="tab-error-boundary">
-      <h2>Unable to open ${String(tab?.label || 'tab')}</h2>
-      <p>The tab failed to load, but navigation is still available.</p>
-      <pre>${String(error?.stack || error?.message || error)}</pre>
-    </section>
-  `;
-}
-
-async function activateTab(tabId, tabs, nav, content) {
-  const resolvedTabId = TAB_ID_ALIASES.get(tabId) || tabId;
-  const fallbackId = tabs[0]?.id;
-  const tab = tabs.find((item) => item.id === resolvedTabId) || tabs.find((item) => item.id === fallbackId);
-  if (!tab) return;
-
-  if (state.activeTab === tab.id && content.firstChild) {
-    hideStartupOverlay();
-    return;
-  }
-  cleanupActiveTab();
-  content.innerHTML = '';
-  state.activeTab = tab.id;
-  nav.querySelectorAll('.app-nav-button').forEach((button) => {
-    button.classList.toggle('is-active', button.dataset.tabId === tab.id);
-  });
-
-  try {
+  async function activate(tabId) {
+    const normalizedId = TAB_ID_ALIASES.get(tabId) || tabId;
+    const tab = TABS.find((item) => item.id === normalizedId) || TABS[0];
+    cleanupActiveTab();
+    setActiveTab(tab.id);
+    buttons.forEach((btn, id) => btn.classList.toggle('active', id === tab.id));
+    content.innerHTML = '<div class="app-loading">Loading…</div>';
     let renderer = tabRendererCache.get(tab.id);
     if (!renderer) {
       renderer = await tab.load();
       tabRendererCache.set(tab.id, renderer);
     }
-    activeTabDestroy = renderer(content, { emit, on }) || null;
-  } catch (error) {
-    activeTabDestroy = null;
-    renderTabError(content, tab, error);
-  } finally {
+    content.innerHTML = '';
+    const maybeDestroy = await renderer(content, { state, RuntimeEvents, emit, on, visibilityConfigUrl: TAB_VISIBILITY_URL });
+    activeTabDestroy = typeof maybeDestroy === 'function' ? maybeDestroy : null;
     hideStartupOverlay();
   }
-}
 
-export async function init() {
-  initDevDebugWindow();
-  loadStickyState();
+  appDestroy = () => {
+    cleanupActiveTab();
+    root.innerHTML = '';
+    tabRendererCache.clear();
+  };
 
-  const mount = document.getElementById('app');
-  const root = mount || document.getElementById('app-layout') || document.body;
-  const { nav, content } = createAppShell(root);
-
-  try {
-    const tabs = await visibleTabs();
-    renderNav(nav, tabs, content);
-
-    const initialTab = TAB_ID_ALIASES.get(state.activeTab) || state.activeTab || tabs[0]?.id;
-    await activateTab(initialTab, tabs, nav, content);
-
-    appDestroy = () => {
-      cleanupActiveTab();
-      hideStartupOverlay();
-      root.innerHTML = '';
-    };
-
-    emit(RuntimeEvents.APP_READY, { tabs: tabs.map((tab) => tab.id) });
-    return appDestroy;
-  } finally {
-    hideStartupOverlay();
-  }
+  initDevDebugWindow({ activate, state });
+  await activate(TAB_ID_ALIASES.get(state.activeTab) || state.activeTab || 'viewer3d');
+  return appDestroy;
 }
