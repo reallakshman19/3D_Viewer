@@ -49,9 +49,10 @@ function state() {
   return window[FLAG];
 }
 
-function readBridgeConfig(bridge) {
-  if (typeof bridge?.exportPopupConfigText === 'function') {
-    const exported = parseJson(bridge.exportPopupConfigText());
+function readBridgeConfig() {
+  const exporter = state().original?.exportPopupConfigText;
+  if (typeof exporter === 'function') {
+    const exported = parseJson(exporter());
     if (exported) return exported;
   }
   return parseJson(configInput()?.value) || {};
@@ -114,10 +115,11 @@ function applyPreservedMasters(config, reason, explicitEmptyMaster = '') {
   return { config: next, changed, restored };
 }
 
-function writeThroughBridge(bridge, config) {
+function writeThroughBridge(config) {
   const text = JSON.stringify(config, null, 2);
-  if (typeof bridge?.importPopupConfigText === 'function') {
-    bridge.importPopupConfigText(text);
+  const importer = state().original?.importPopupConfigText;
+  if (typeof importer === 'function') {
+    importer(text);
     return true;
   }
 
@@ -129,9 +131,19 @@ function writeThroughBridge(bridge, config) {
   return true;
 }
 
-function debugSnapshot(bridge, activeSource = 'unknown') {
-  const cfg = readBridgeConfig(bridge);
-  const snap = typeof bridge?.getPopupSnapshot === 'function' ? bridge.getPopupSnapshot(configInput()) : null;
+function snapshotFromOriginal() {
+  const getter = state().original?.getPopupSnapshot;
+  if (typeof getter !== 'function') return null;
+  try {
+    return getter(configInput());
+  } catch {
+    return null;
+  }
+}
+
+function debugSnapshot(activeSource = 'unknown') {
+  const cfg = readBridgeConfig();
+  const snap = snapshotFromOriginal();
   const st = state();
   const counts = {};
   for (const def of MASTER_PATHS) {
@@ -151,44 +163,45 @@ function shouldLogDebug() {
   try {
     return window.location.hostname === 'localhost'
       || window.location.hostname === '127.0.0.1'
-      || window.localStorage.getItem('xmlCiiMasterLifecycleDebug') === '1'
       || new URLSearchParams(window.location.search).has('xmlCiiMasterDebug');
   } catch {
     return false;
   }
 }
 
-function logDebug(bridge, activeSource, detail = {}) {
-  const snap = debugSnapshot(bridge, activeSource);
+function logDebug(activeSource, detail = {}) {
+  const snap = debugSnapshot(activeSource);
   state().lastDebug = { ...snap, detail, at: new Date().toISOString() };
   if (shouldLogDebug()) {
     console.debug('[XML→CII master lifecycle]', state().lastDebug);
   }
 }
 
-function commitHydratedConfig(bridge, reason, explicitEmptyMaster = '') {
-  const current = readBridgeConfig(bridge);
-  rememberNonEmpty(current, 'supportConfigJson');
-  const result = applyPreservedMasters(current, reason, explicitEmptyMaster);
-  if (result.changed) {
-    writeThroughBridge(bridge, result.config);
-    rememberNonEmpty(result.config, `guard:${reason}`);
-  }
-  logDebug(bridge, reason, { restored: result.restored, wroteEmptyMaster: !!explicitEmptyMaster });
-  return result.config;
-}
-
-function masterSnapshot(bridge, masterName) {
+function commitHydratedConfig(reason, explicitEmptyMaster = '') {
+  if (state().committing) return readBridgeConfig();
+  state().committing = true;
   try {
-    const snap = bridge.getPopupSnapshot?.(configInput());
-    return (snap?.masters || []).find((entry) => entry.key === masterName) || null;
-  } catch {
-    return null;
+    const current = readBridgeConfig();
+    rememberNonEmpty(current, 'supportConfigJson');
+    const result = applyPreservedMasters(current, reason, explicitEmptyMaster);
+    if (result.changed) {
+      writeThroughBridge(result.config);
+      rememberNonEmpty(result.config, `guard:${reason}`);
+    }
+    logDebug(reason, { restored: result.restored, wroteEmptyMaster: !!explicitEmptyMaster });
+    return result.config;
+  } finally {
+    state().committing = false;
   }
 }
 
-function canSkipEmptySave(bridge, masterName) {
-  const snap = masterSnapshot(bridge, masterName);
+function masterSnapshot(masterName) {
+  const snap = snapshotFromOriginal();
+  return (snap?.masters || []).find((entry) => entry.key === masterName) || null;
+}
+
+function canSkipEmptySave(masterName) {
+  const snap = masterSnapshot(masterName);
   if (!snap) return false;
   const savedRows = Number(snap.rows || 0);
   const rawRows = Number(snap.rawRows || 0);
@@ -197,7 +210,8 @@ function canSkipEmptySave(bridge, masterName) {
 
 function wrapBridge(bridge) {
   const st = state();
-  if (!bridge || st.wrappedBridge === bridge) return bridge;
+  if (!bridge) return bridge;
+  if (st.wrappedBridge === bridge) return bridge;
   st.wrappedBridge = bridge;
 
   const original = {
@@ -215,9 +229,10 @@ function wrapBridge(bridge) {
     importPopupConfigText: bridge.importPopupConfigText?.bind(bridge),
     exportPopupConfigText: bridge.exportPopupConfigText?.bind(bridge),
   };
+  st.original = original;
 
   const after = (reason, explicitEmptyMaster = '') => {
-    const hydrated = commitHydratedConfig(bridge, reason, explicitEmptyMaster);
+    const hydrated = commitHydratedConfig(reason, explicitEmptyMaster);
     rememberNonEmpty(hydrated, reason);
     return hydrated;
   };
@@ -226,7 +241,7 @@ function wrapBridge(bridge) {
     bridge.getPopupSnapshot = (target) => {
       after('snapshot');
       const snapshot = original.getPopupSnapshot(target);
-      snapshot.masterLifecycleDebug = debugSnapshot(bridge, 'snapshot');
+      snapshot.masterLifecycleDebug = debugSnapshot('snapshot');
       return snapshot;
     };
   }
@@ -234,8 +249,8 @@ function wrapBridge(bridge) {
   if (original.savePopupMaster) {
     bridge.savePopupMaster = (masterName = 'linelist') => {
       after(`before-save:${masterName}`);
-      if (canSkipEmptySave(bridge, masterName)) {
-        logDebug(bridge, `blocked-empty-save:${masterName}`, { wroteEmptyMaster: true });
+      if (canSkipEmptySave(masterName)) {
+        logDebug(`blocked-empty-save:${masterName}`, { wroteEmptyMaster: true });
         return false;
       }
       const result = original.savePopupMaster(masterName);
@@ -256,31 +271,30 @@ function wrapBridge(bridge) {
   for (const [methodName, reason] of [
     ['autoMapPopupMaster', 'auto-map'],
     ['setPopupMasterField', 'field-map'],
-    ['importPopupMasterFile', 'import-master'],
-    ['loadPopupDefaultMaster', 'load-default-master'],
     ['savePopupConfigText', 'save-config-text'],
     ['importPopupConfigText', 'import-config-text'],
   ]) {
     if (!original[methodName]) continue;
-    bridge[methodName] = async (...args) => {
+    bridge[methodName] = (...args) => {
       after(`before-${reason}:${args[0] || ''}`);
       const result = original[methodName](...args);
-      const awaited = result && typeof result.then === 'function' ? await result : result;
       after(`${reason}:${args[0] || ''}`);
-      return awaited;
+      return result;
     };
   }
 
   for (const [methodName, reason] of [
+    ['importPopupMasterFile', 'import-master'],
+    ['loadPopupDefaultMaster', 'load-default-master'],
     ['buildPopupPreviewRows', 'preview'],
     ['runPopupDiagnostics', 'diagnostics'],
     ['computePopupWeightRows', 'weight-match'],
   ]) {
     if (!original[methodName]) continue;
     bridge[methodName] = async (...args) => {
-      after(`before-${reason}`);
+      after(`before-${reason}:${args[0] || ''}`);
       const result = await original[methodName](...args);
-      after(reason);
+      after(`${reason}:${args[0] || ''}`);
       return result;
     };
   }
@@ -294,11 +308,11 @@ function installConfigInputObserver() {
   state().inputObserverInstalled = true;
 
   const onConfigChange = (event) => {
-    if (!event.target?.matches?.(CONFIG_SELECTOR)) return;
+    if (!event.target?.matches?.(CONFIG_SELECTOR) || state().committing) return;
     const cfg = parseJson(event.target.value);
     rememberNonEmpty(cfg, 'supportConfigJson-dom');
     const bridge = wrapBridge(getXmlCiiPhaseBridge());
-    if (bridge) commitHydratedConfig(bridge, 'supportConfigJson-dom');
+    if (bridge) commitHydratedConfig('supportConfigJson-dom');
   };
 
   document.addEventListener('input', onConfigChange, true);
@@ -313,13 +327,15 @@ export function installXmlCiiMasterPreservePatch() {
       lastSource: {},
       lastDebug: null,
       wrappedBridge: null,
+      original: {},
+      committing: false,
       inputObserverInstalled: false,
     };
   }
 
   installConfigInputObserver();
   const bridge = wrapBridge(getXmlCiiPhaseBridge());
-  if (bridge) commitHydratedConfig(bridge, 'install');
+  if (bridge) commitHydratedConfig('install');
 
-  window.__xmlCiiMasterLifecycleDebug = () => debugSnapshot(getXmlCiiPhaseBridge(), 'manual');
+  window.__xmlCiiMasterLifecycleDebug = () => debugSnapshot('manual');
 }
