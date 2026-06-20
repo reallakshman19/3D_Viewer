@@ -70,8 +70,13 @@ async function run() {
 
   assert.match(
     tabSource,
-    /import\s+\{\s*loadRvmFileInBrowser\s*\}\s+from\s+['"]\.\.\/rvm\/BrowserRvmLoadBridge\.js\?v=20260620-rvm-direct-tab-1['"]/,
-    'The actual RVM tab must import the worker-first load bridge directly.'
+    /import\s+\{\s*loadRvmFileInBrowser\s*\}\s+from\s+['"]\.\.\/rvm\/BrowserRvmLoadBridge\.js\?v=20260620-rvm-tree-select-nohide-1['"]/,
+    'The actual RVM tab must import the current worker-first load bridge directly.'
+  );
+  assert.match(
+    tabSource,
+    /RVM_TAB_JS_VERSION\s*=\s*['"]20260620-rvm-tree-select-nohide-1['"]/,
+    'The RVM tab diagnostics version must identify the active tree-select/no-hide path.'
   );
   assert.match(
     tabSource,
@@ -92,6 +97,11 @@ async function run() {
     tabSource,
     /allowMainThreadParserFallback:\s*false[\s\S]*buildHierarchyFallback:\s*false/,
     'The direct RVM path must forbid large main-thread fallback and old hierarchy fallback.'
+  );
+  assert.doesNotMatch(
+    tabSource,
+    /const\s+bounds\s*=\s*payload\.browserRvmRender\?\.bounds/,
+    'The tab must not perform a duplicate post-load raw-bounds fit.'
   );
 
   const rvmBranchStart = tabSource.indexOf('if (rvmFile)');
