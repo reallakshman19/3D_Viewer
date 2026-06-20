@@ -1,5 +1,5 @@
 import { AvevaJsonLoader } from './AvevaJsonLoader.js';
-import { parseRvmArrayBuffer } from './BrowserRvmParser.js';
+import { parseRvmArrayBuffer } from './BrowserRvmHierarchyParser.js';
 
 export async function loadRvmFileInBrowser(file, viewer, options = {}) {
   if (!file || typeof file.arrayBuffer !== 'function') throw new Error('RVM File object is required');
