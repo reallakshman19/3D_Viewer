@@ -1,9 +1,9 @@
-import { parseRvmArrayBuffer } from './BrowserRvmHierarchyParser.js';
+import { parseRvmArrayBuffer } from './BrowserRvmTransformParser.js?v=20260620-rvm-prim-transform-1';
 import { enrichBrowserRvmHierarchyWithAtt } from './BrowserRvmAttEnricher.js';
 import { collectBrowserRvmRenderInstructions } from './BrowserRvmRenderContractAdapter.js';
 
 const DEFAULT_MANIFEST_NODE_LIMIT = 900;
-const MAX_INSTRUCTION_ATTRIBUTES = 18;
+const MAX_INSTRUCTION_ATTRIBUTES = 22;
 const KEEP_ATTRIBUTE_NAMES = new Set([
   'TYPE',
   'NAME',
@@ -14,6 +14,10 @@ const KEEP_ATTRIBUTE_NAMES = new Set([
   'RVM_OWNER_NAME',
   'BROWSER_PARSE_METHOD',
   'BROWSER_PARSE_CONFIDENCE',
+  'RVM_PRIM_TRANSFORM_APPLIED',
+  'RVM_PRIM_TRANSFORM_SCHEMA',
+  'RVM_LOCAL_AXIS',
+  'RVM_TRANSFORM_COLUMN_SCALES',
   'RVM_BROWSER_RENDER_PRIMITIVE',
   'RVM_BROWSER_RENDER_SOURCE',
   'RVM_BROWSER_GEOMETRY_CONTRACT_VERSION',
@@ -24,7 +28,7 @@ const KEEP_ATTRIBUTE_NAMES = new Set([
 self.onmessage = async (event) => {
   const { id, arrayBuffer, options = {} } = event.data || {};
   const timings = {};
-  const mark = (name) => nowMs();
+  const mark = () => nowMs();
   const measure = (name, start) => {
     timings[name] = Number((nowMs() - start).toFixed(2));
     postProgress(id, { stage: name, message: `RVM worker ${name} complete`, timings });
@@ -32,22 +36,22 @@ self.onmessage = async (event) => {
 
   try {
     postProgress(id, { stage: 'parse-start', message: `RVM worker parsing ${options.fileName || 'model.rvm'}…` });
-    let t = mark('parse');
+    let t = mark();
     const parsed = await parseRvmArrayBuffer(arrayBuffer, options);
     measure('parse', t);
 
     postProgress(id, { stage: 'att-enrichment', message: 'RVM worker enriching ATT metadata…' });
-    t = mark('attEnrichment');
+    t = mark();
     const attEnrichment = enrichBrowserRvmHierarchyWithAtt(parsed.hierarchy || [], options.attText || '');
     measure('attEnrichment', t);
 
     postProgress(id, { stage: 'render-instructions', message: 'RVM worker generating render instructions…' });
-    t = mark('renderInstructionGeneration');
+    t = mark();
     const instructionSet = collectBrowserRvmRenderInstructions(attEnrichment.hierarchy || []);
     const compactInstructionSet = compactInstructionSetForTransfer(instructionSet);
     measure('renderInstructionGeneration', t);
 
-    t = mark('manifest');
+    t = mark();
     const manifestNodes = flattenHierarchyForManifest(attEnrichment.hierarchy || [], positiveInteger(options.manifestNodeLimit, DEFAULT_MANIFEST_NODE_LIMIT));
     measure('manifest', t);
 
@@ -84,18 +88,13 @@ self.onmessage = async (event) => {
       id,
       ok: false,
       type: 'complete',
-      error: {
-        message: error?.message || String(error),
-        stack: error?.stack || ''
-      }
+      error: { message: error?.message || String(error), stack: error?.stack || '' }
     });
   }
 };
 
 function compactInstructionSetForTransfer(instructionSet = {}) {
-  const instructions = Array.isArray(instructionSet.instructions)
-    ? instructionSet.instructions.map(compactInstruction)
-    : [];
+  const instructions = Array.isArray(instructionSet.instructions) ? instructionSet.instructions.map(compactInstruction) : [];
   return {
     schemaVersion: instructionSet.schemaVersion || '',
     count: instructions.length,
