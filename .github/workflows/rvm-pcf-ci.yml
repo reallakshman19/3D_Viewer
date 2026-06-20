@@ -7,9 +7,14 @@ on:
     paths:
       - 'viewer/rvm-pcf-extract/**'
       - 'viewer/converters/xml-cii2019-core/**'
+      - 'viewer/rvm-viewer/RvmProgressiveModelRootPatch.js'
       - 'viewer/tabs/model-converters/workflow/**'
       - 'viewer/tabs/rvm-json-pcf-*.js'
       - 'viewer/tabs/viewer3d-rvm-tab.js'
+      - 'viewer/tabs/viewer3d-rvm-tab-renderer.js'
+      - 'viewer/core/app.js'
+      - 'viewer/index.html'
+      - 'viewer/main-rhbg-fitguard.js'
       - 'viewer/contracts/runtime-events.js'
       - 'viewer/core/event-bus.js'
       - 'viewer/core/state.js'
@@ -43,3 +48,6 @@ jobs:
 
       - name: Verify JSON/RVM PCF adapter preview and run
         run: node viewer/tests/rvm-pcf-json-adapter-preview-run.test.js
+
+      - name: Verify RHBG RVM fit guard
+        run: node viewer/tests/rvm-pcf-rhbg-fitguard.test.js
