@@ -10,6 +10,7 @@ function activeModuleEntrypoint(indexHtml) {
 async function run() {
   const bridgeSource = await readFile(new URL('../../../rvm/BrowserRvmLoadBridge.js', import.meta.url), 'utf8');
   const workerPatchSource = await readFile(new URL('../../../rvm/BrowserRvmCppMat3x4WorkerPatch.js', import.meta.url), 'utf8');
+  const nativeTessellationSource = await readFile(new URL('../../../rvm/BrowserRvmNativeTessellationRuntimePatch.js', import.meta.url), 'utf8');
   const workerSource = await readFile(new URL('../../../rvm/browser-rvm-worker.js', import.meta.url), 'utf8');
   const filterSource = await readFile(new URL('../../../rvm/BrowserRvmInstructionFilterV2.js', import.meta.url), 'utf8');
   const transformParserSource = await readFile(new URL('../../../rvm/BrowserRvmTransformParser.js', import.meta.url), 'utf8');
@@ -80,17 +81,22 @@ async function run() {
   assert.match(rendererSource, /RvmHierarchySelectionBridge\.js\?v=20260620-rvm-tree-select-nohide-1/, 'Renderer must load the hierarchy selection bridge.');
   assert.match(rendererSource, /RvmViewerInteractionPatch\.js\?v=20260620-rvm-toolbar-selection-1/, 'Renderer must load the toolbar/canvas selection patch.');
   assert.match(rendererSource, /BrowserRvmCppMat3x4WorkerPatch\.js\?v=20260620-rvm-cpp-mat3x4-1/, 'Renderer must install the C++ Mat3x4 worker patch.');
-  assert.match(rendererSource, /viewer3d-rvm-tab\.js\?v=20260620-rvm-cpp-mat3x4-1/, 'Renderer must load the C++ Mat3x4 tab cache key.');
+  assert.match(rendererSource, /BrowserRvmNativeTessellationRuntimePatch\.js\?v=20260620-rvm-native-tessellation-1/, 'Renderer must install the native tessellation runtime patch.');
+  assert.match(rendererSource, /viewer3d-rvm-tab\.js\?v=20260620-rvm-native-tessellation-1/, 'Renderer must load the native tessellation tab cache key.');
   assert.match(hierarchySelectionBridgeSource, /Fit Selection/,'Hierarchy selection bridge must expose Fit Selection.');
   assert.match(interactionPatchSource, /dispatchAction[\s\S]*VIEW_FIT_ALL/, 'Toolbar patch must implement RVM actions.');
   assert.match(interactionPatchSource, /installRvmCanvasSelectionBridge[\s\S]*raycaster\.intersectObject/, 'Canvas patch must raycast rendered geometry.');
+  assert.match(nativeTessellationSource, /browser-rvm-native-tessellation\/v1-cpp-triangulation-lite/, 'Native tessellation patch must expose its schema.');
+  assert.match(nativeTessellationSource, /cylinderGeometry[\s\S]*snoutGeometry[\s\S]*circularTorusGeometry/, 'Native tessellation patch must include C++ primitive geometry builders.');
+  assert.match(nativeTessellationSource, /matrix4FromCppMat3x4[\s\S]*m\[0\],\s*m\[3\],\s*m\[6\],\s*m\[9\]/, 'Native tessellation must use C++ Mat3x4 row mapping.');
+  assert.match(nativeTessellationSource, /native-cpp-tessellated/, 'Native tessellation must mark upgraded render quality.');
 
   assert.doesNotMatch(entrypointSource, /RvmBrowserRvmWorkerFirstBridge\.js/, 'The RVM freeze fix must not depend on an optional startup side-effect bridge.');
-  assert.match(entrypointSource, /core\/app\.js\?v=20260620-rvm-cpp-mat3x4-1/, 'App shell cache key must include the C++ Mat3x4 version.');
-  assert.match(indexHtml, /main(?:-[A-Za-z0-9_-]+)?\.js\?v=20260620-rvm-cpp-mat3x4-1/, 'GitHub Pages entrypoint must bump the app shell cache key.');
+  assert.match(entrypointSource, /core\/app\.js\?v=20260620-rvm-native-tessellation-1/, 'App shell cache key must include the native tessellation version.');
+  assert.match(indexHtml, /main(?:-[A-Za-z0-9_-]+)?\.js\?v=20260620-rvm-native-tessellation-1/, 'GitHub Pages entrypoint must bump the app shell cache key.');
   assert.match(indexHtml, /viewer3d-rvm-tab\.css\?v=20260620-rvm-direct-tab-1/, 'RVM tab CSS cache key must be bumped.');
 
-  console.log('Browser RVM direct tab C++ Mat3x4 contract test passed');
+  console.log('Browser RVM direct tab native tessellation contract test passed');
 }
 
 run();

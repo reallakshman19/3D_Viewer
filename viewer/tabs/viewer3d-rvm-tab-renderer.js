@@ -6,11 +6,13 @@ import { installRvmProgressiveModelRootPatch } from '../rvm-viewer/RvmProgressiv
 import { installRvmHierarchySelectionBridge } from './RvmHierarchySelectionBridge.js?v=20260620-rvm-tree-select-nohide-1';
 import { installRvmViewerInteractionPatch, installRvmCanvasSelectionBridge } from './RvmViewerInteractionPatch.js?v=20260620-rvm-toolbar-selection-1';
 import { installBrowserRvmCppMat3x4WorkerPatch } from '../rvm/BrowserRvmCppMat3x4WorkerPatch.js?v=20260620-rvm-cpp-mat3x4-1';
+import { installBrowserRvmNativeTessellationRuntimePatch } from '../rvm/BrowserRvmNativeTessellationRuntimePatch.js?v=20260620-rvm-native-tessellation-1';
 
 installBrowserRvmCppMat3x4WorkerPatch();
+installBrowserRvmNativeTessellationRuntimePatch();
 installRvmProgressiveModelRootPatch(RvmViewer3D);
 installRvmViewerInteractionPatch(RvmViewer3D);
 installRvmHierarchySelectionBridge();
 installRvmCanvasSelectionBridge();
 
-export { mountViewer3DRvmTab as renderViewer3DRvm } from './viewer3d-rvm-tab.js?v=20260620-rvm-cpp-mat3x4-1';
+export { mountViewer3DRvmTab as renderViewer3DRvm } from './viewer3d-rvm-tab.js?v=20260620-rvm-native-tessellation-1';

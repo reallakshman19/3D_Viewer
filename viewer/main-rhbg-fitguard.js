@@ -40,7 +40,7 @@ async function loadStartupSideEffects() {
 
 async function startViewer() {
   await loadStartupSideEffects();
-  const { init } = await import('./core/app.js?v=20260620-rvm-cpp-mat3x4-1');
+  const { init } = await import('./core/app.js?v=20260620-rvm-native-tessellation-1');
   await init();
 }
 
