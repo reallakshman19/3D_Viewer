@@ -1,3 +1,5 @@
+import { getXmlCiiPreviewRuntimeConfig } from '../../shared/preview-filldown.js?v=20260620-preview-override-mirror-1';
+
 function text(value) {
   return value === null || value === undefined ? '' : String(value);
 }
@@ -17,12 +19,28 @@ function esc(value) {
 function parseConfigFromDom() {
   const input = document?.querySelector?.('[data-option-key="supportConfigJson"]');
   const raw = input && 'value' in input ? input.value : '';
+  let parsed = {};
   try {
-    const parsed = JSON.parse(clean(raw) || '{}');
-    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+    const value = JSON.parse(clean(raw) || '{}');
+    parsed = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
   } catch {
-    return {};
+    parsed = {};
   }
+  return mergeOverrideConfig(parsed, getXmlCiiPreviewRuntimeConfig());
+}
+
+function mergeOverrideConfig(baseConfig, runtimeConfig) {
+  const out = baseConfig && typeof baseConfig === 'object' && !Array.isArray(baseConfig) ? { ...baseConfig } : {};
+  const runtimeOverrides = runtimeConfig?.overrides && typeof runtimeConfig.overrides === 'object' && !Array.isArray(runtimeConfig.overrides)
+    ? runtimeConfig.overrides
+    : {};
+  if (!out.overrides || typeof out.overrides !== 'object' || Array.isArray(out.overrides)) out.overrides = {};
+  for (const [bucketName, bucketValue] of Object.entries(runtimeOverrides)) {
+    if (bucketValue && typeof bucketValue === 'object' && !Array.isArray(bucketValue)) {
+      out.overrides[bucketName] = { ...(out.overrides[bucketName] || {}), ...bucketValue };
+    }
+  }
+  return out;
 }
 
 function flatEntries(config, bucketName) {
