@@ -11,6 +11,7 @@ async function run() {
   const bridgeSource = await readFile(new URL('../../../rvm/BrowserRvmLoadBridge.js', import.meta.url), 'utf8');
   const workerPatchSource = await readFile(new URL('../../../rvm/BrowserRvmCppMat3x4WorkerPatch.js', import.meta.url), 'utf8');
   const nativeTessellationSource = await readFile(new URL('../../../rvm/BrowserRvmNativeTessellationRuntimePatch.js', import.meta.url), 'utf8');
+  const dishTessellationSource = await readFile(new URL('../../../rvm/BrowserRvmDishTessellationRuntimePatch.js', import.meta.url), 'utf8');
   const workerSource = await readFile(new URL('../../../rvm/browser-rvm-worker.js', import.meta.url), 'utf8');
   const filterSource = await readFile(new URL('../../../rvm/BrowserRvmInstructionFilterV2.js', import.meta.url), 'utf8');
   const renderContractSource = await readFile(new URL('../../../rvm/BrowserRvmRenderContractAdapter.js', import.meta.url), 'utf8');
@@ -22,6 +23,7 @@ async function run() {
   const visibilityToolbarSource = await readFile(new URL('../../../tabs/RvmVisibilityToolbarBridge.js', import.meta.url), 'utf8');
   const selectionTreeSyncSource = await readFile(new URL('../../../tabs/RvmSelectionTreeSyncBridge.js', import.meta.url), 'utf8');
   const supportSummarySource = await readFile(new URL('../../../tabs/RvmSupportSummaryBridge.js', import.meta.url), 'utf8');
+  const supportAssemblySource = await readFile(new URL('../../../tabs/RvmSupportAssemblyBridge.js', import.meta.url), 'utf8');
   const nativeDiagnosticsBridgeSource = await readFile(new URL('../../../tabs/RvmNativeTessellationDiagnosticsBridge.js', import.meta.url), 'utf8');
   const progressivePatchSource = await readFile(new URL('../../../rvm-viewer/RvmProgressiveModelRootPatch.js', import.meta.url), 'utf8');
   const progressivePatchV5Source = await readFile(new URL('../../../rvm-viewer/RvmProgressiveModelRootPatchV5.js', import.meta.url), 'utf8');
@@ -86,7 +88,9 @@ async function run() {
   assert.match(rendererSource, /RvmVisibilityToolbarBridge\.js\?v=20260620-rvm-esc-hide-selection-1/, 'Renderer must inject Hide/Show toolbar controls.');
   assert.match(rendererSource, /BrowserRvmCppMat3x4WorkerPatch\.js\?v=20260620-rvm-scale-leak-1/, 'Renderer must install the scale-leak worker patch.');
   assert.match(rendererSource, /RvmSupportSummaryBridge\.js\?v=20260620-rvm-support-symbol-mode-1/, 'Renderer must install support symbol mode bridge.');
-  assert.match(rendererSource, /viewer3d-rvm-tab\.js\?v=20260620-rvm-support-symbol-mode-1/, 'Renderer must load the support symbol mode tab cache key.');
+  assert.match(rendererSource, /RvmSupportAssemblyBridge\.js\?v=20260620-rvm-support-assembly-dish-1/, 'Renderer must load support assembly bridge.');
+  assert.match(rendererSource, /BrowserRvmDishTessellationRuntimePatch\.js\?v=20260620-rvm-support-assembly-dish-1/, 'Renderer must install dish tessellation patch.');
+  assert.match(rendererSource, /viewer3d-rvm-tab\.js\?v=20260620-rvm-support-assembly-dish-1/, 'Renderer must load the support assembly dish tab cache key.');
   assert.match(hierarchySelectionBridgeSource, /Fit Selection[\s\S]*hide-selection[\s\S]*show-hidden/,'Hierarchy selection bridge must expose Fit Selection, Hide, and Show Hidden.');
   assert.match(interactionPatchSource, /keydown[\s\S]*Escape[\s\S]*handleEscape/, 'Toolbar patch must implement robust Esc behavior.');
   assert.match(interactionPatchSource, /dispatchAction[\s\S]*VIEW_HIDE_SELECTION[\s\S]*VIEW_SHOW_HIDDEN/, 'Toolbar patch must implement Hide and Show Hidden actions.');
@@ -98,14 +102,21 @@ async function run() {
   assert.match(supportSummarySource, /SUPPORT_SYMBOL_ROOT[\s\S]*buildSupportSymbolForObject/, 'Support summary must render support glyphs.');
   assert.match(supportSummarySource, /supportByGeometryCount[\s\S]*supportSymbolRenderedCount[\s\S]*supportRawBoxSuppressedCount/, 'Support summary must expose support-symbol diagnostics.');
   assert.match(supportSummarySource, /geometry-vertical-slender[\s\S]*geometry-plate-like/, 'Support summary must detect support-like geometry by shape.');
+  assert.match(supportAssemblySource, /rvm-support-assembly\/v1[\s\S]*supportAssemblyCount[\s\S]*supportContactPointResolvedCount/, 'Support assembly bridge must expose assembly/contact diagnostics.');
+  assert.match(supportAssemblySource, /groupSupportCandidates[\s\S]*supportGroupedPrimitiveCount[\s\S]*supportUngroupedPrimitiveCount/, 'Support assembly bridge must group support primitives.');
+  assert.match(supportAssemblySource, /SUPPORT_ASSEMBLY_ROOT[\s\S]*makeAssemblyMarker/, 'Support assembly bridge must render contact markers.');
+  assert.match(supportAssemblySource, /selectAssembly[\s\S]*setSelectionFromObjects/, 'Support assembly rows must select/focus grouped primitives.');
   assert.match(nativeTessellationSource, /browser-rvm-native-tessellation\/v2-diagnostics-toggle/, 'Native tessellation patch must expose diagnostics-toggle schema.');
+  assert.match(dishTessellationSource, /browser-rvm-dish-tessellation\/v1-cpp-mat3x4/, 'Dish tessellation patch must expose schema.');
+  assert.match(dishTessellationSource, /ellipticalDishGeometry[\s\S]*sphericalDishGeometry/, 'Dish tessellation patch must support PRIM 5 and PRIM 6.');
+  assert.match(dishTessellationSource, /matrix4FromCppMat3x4[\s\S]*native-cpp-dish-tessellated/, 'Dish tessellation patch must apply Mat3x4 and mark render quality.');
   assert.match(nativeDiagnosticsBridgeSource, /Native Tessellation[\s\S]*Native On[\s\S]*Native Off[\s\S]*Re-run/, 'Native diagnostics bridge must expose controls.');
 
   assert.doesNotMatch(entrypointSource, /RvmBrowserRvmWorkerFirstBridge\.js/, 'The RVM freeze fix must not depend on an optional startup side-effect bridge.');
-  assert.match(entrypointSource, /core\/app\.js\?v=20260620-rvm-support-symbol-mode-1/, 'App shell cache key must include the support symbol mode version.');
-  assert.match(indexHtml, /main(?:-[A-Za-z0-9_-]+)?\.js\?v=20260620-rvm-support-symbol-mode-1/, 'GitHub Pages entrypoint must bump the app shell cache key.');
+  assert.match(entrypointSource, /core\/app\.js\?v=20260620-rvm-support-assembly-dish-1/, 'App shell cache key must include the support assembly dish version.');
+  assert.match(indexHtml, /main(?:-[A-Za-z0-9_-]+)?\.js\?v=20260620-rvm-support-assembly-dish-1/, 'GitHub Pages entrypoint must bump the app shell cache key.');
 
-  console.log('Browser RVM support symbol mode contract test passed');
+  console.log('Browser RVM support assembly dish contract test passed');
 }
 
 run();
