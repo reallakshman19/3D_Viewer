@@ -1,1 +1,21 @@
-<!doctype html><html><body><div id="app-layout"></div><script type="module" src="./main-rhbg-fitguard.js?v=20260620-rvm-primitive-fallback-review-1"></script></body></html>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PCF-GLB-3D viewer</title>
+<link rel="stylesheet" href="styles/base.css">
+<link rel="stylesheet" href="styles/tabs.css?v=20260618-modular-app-shell-1">
+<link rel="stylesheet" href="styles/viewer3d.css?v=20260518-statusbar-theme-12">
+<link rel="stylesheet" href="tabs/viewer3d-rvm-tab.css?v=20260620-rvm-direct-tab-1">
+<script type="importmap">
+{"imports":{"three":"https://unpkg.com/three@0.160.1/build/three.module.js","three/addons/":"https://unpkg.com/three@0.160.1/examples/jsm/","gltf-exporter":"https://unpkg.com/three@0.160.1/examples/jsm/exporters/GLTFExporter.js","mdb-reader":"https://esm.sh/mdb-reader@2","buffer":"https://esm.sh/buffer@6","xlsx":"https://cdn.jsdelivr.net/npm/xlsx@0.18.5/+esm"}}
+</script>
+</head>
+<body>
+<div id="app-layout"><nav id="tab-bar"></nav><main id="tab-content"></main></div>
+<div id="app-loading-overlay" aria-live="polite" aria-label="Loading"><div class="app-loading-spinner" aria-hidden="true"></div><span class="app-loading-label" id="app-loading-label">Loading…</span></div>
+<div id="app-toast-container" aria-live="assertive" role="status"></div>
+<script type="module" src="./main-rhbg-fitguard.js?v=20260620-rvm-primitive-fallback-review-1"></script>
+</body>
+</html>
