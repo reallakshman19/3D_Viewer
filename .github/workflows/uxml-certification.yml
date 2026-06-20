@@ -5,12 +5,15 @@ on:
     paths:
       - "viewer/uxml/**"
       - "viewer/converters/inputxml-glb/**"
+      - "viewer/rvm/**"
+      - "viewer/tabs/viewer3d-rvm-tab.js"
       - "viewer/js/pcf2glb/glb/enhanceSupportDirectionProxy.js"
       - "viewer/js/pcf2glb/glb/buildExportScene.js"
       - "viewer/tabs/model-converters-tab.js"
       - "viewer/tabs/model-converters/converters/inputxml-to-glb.js"
       - "viewer/tests/uxml-*.test.js"
       - "viewer/tests/rvm-pcf-*.test.js"
+      - "viewer/tests/unit/rvm/**"
       - "viewer/tests/inputxml-glb-directional-restraints.test.js"
       - "tools/uxml-certification.mjs"
       - ".github/workflows/uxml-certification.yml"
@@ -22,12 +25,15 @@ on:
     paths:
       - "viewer/uxml/**"
       - "viewer/converters/inputxml-glb/**"
+      - "viewer/rvm/**"
+      - "viewer/tabs/viewer3d-rvm-tab.js"
       - "viewer/js/pcf2glb/glb/enhanceSupportDirectionProxy.js"
       - "viewer/js/pcf2glb/glb/buildExportScene.js"
       - "viewer/tabs/model-converters-tab.js"
       - "viewer/tabs/model-converters/converters/inputxml-to-glb.js"
       - "viewer/tests/uxml-*.test.js"
       - "viewer/tests/rvm-pcf-*.test.js"
+      - "viewer/tests/unit/rvm/**"
       - "viewer/tests/inputxml-glb-directional-restraints.test.js"
       - "tools/uxml-certification.mjs"
       - ".github/workflows/uxml-certification.yml"
@@ -73,3 +79,6 @@ jobs:
 
       - name: Run InputXML GLB directional restraint certification
         run: node viewer/tests/inputxml-glb-directional-restraints.test.js
+
+      - name: Run browser RVM unit contracts
+        run: node viewer/tests/unit/rvm/browser-rvm-att-enricher.test.js
