@@ -69,11 +69,28 @@ function findManualOverrideCard() {
   }) || null;
 }
 
+function previewOverrideFingerprint(config) {
+  const payload = {
+    rating: flatEntries(config, 'rating'),
+    materialCode: flatEntries(config, 'materialCode'),
+    wallThickness: flatEntries(config, 'wallThickness'),
+    corrosion: flatEntries(config, 'corrosion'),
+    rigidWeight: flatEntries(config, 'rigidWeight'),
+    processData: processEntries(config),
+    nativePipingClassCount: Object.keys(config?.overrides?.pipingClass || {}).length,
+    nativeMaterialCount: Object.keys(config?.overrides?.material || {}).length,
+  };
+  return JSON.stringify(payload);
+}
+
 function renderPreviewOverrideMirror() {
   const card = findManualOverrideCard();
   if (!card) return;
 
   const config = parseConfigFromDom();
+  const fingerprint = previewOverrideFingerprint(config);
+  if (card.dataset.previewOverrideMirrorFingerprint === fingerprint && card.querySelector('[data-preview-override-mirror]')) return;
+
   const sections = [
     tableHtml('Rating Overrides', 'Line / Branch / Class Key', 'Rating', flatEntries(config, 'rating')),
     tableHtml('Material Code Overrides', 'Line / Branch / Material Key', 'Code', flatEntries(config, 'materialCode')),
@@ -84,6 +101,7 @@ function renderPreviewOverrideMirror() {
   ].filter(Boolean).join('');
 
   card.querySelectorAll('[data-preview-override-mirror], [data-preview-override-mirror-section]').forEach((node) => node.remove());
+  card.dataset.previewOverrideMirrorFingerprint = fingerprint;
   if (!sections) return;
 
   const nativeCount = Object.keys(config?.overrides?.pipingClass || {}).length + Object.keys(config?.overrides?.material || {}).length;
@@ -100,11 +118,21 @@ function renderPreviewOverrideMirror() {
 }
 
 let installed = false;
+let scheduled = false;
 
 export function installXmlCiiPreviewOverrideTabMirror() {
   if (installed || typeof document === 'undefined') return;
   installed = true;
-  const schedule = () => window.requestAnimationFrame?.(renderPreviewOverrideMirror) || setTimeout(renderPreviewOverrideMirror, 0);
+  const schedule = () => {
+    if (scheduled) return;
+    scheduled = true;
+    const run = () => {
+      scheduled = false;
+      renderPreviewOverrideMirror();
+    };
+    if (typeof window !== 'undefined' && typeof window.requestAnimationFrame === 'function') window.requestAnimationFrame(run);
+    else setTimeout(run, 0);
+  };
   schedule();
   new MutationObserver(schedule).observe(document.body, { childList: true, subtree: true });
 }
