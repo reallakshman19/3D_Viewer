@@ -13,6 +13,7 @@ function activeModuleEntrypoint(indexHtml) {
 async function run() {
   const bridgeSource = await readFile(new URL('../../../rvm/BrowserRvmLoadBridge.js', import.meta.url), 'utf8');
   const workerSource = await readFile(new URL('../../../rvm/browser-rvm-worker.js', import.meta.url), 'utf8');
+  const transformParserSource = await readFile(new URL('../../../rvm/BrowserRvmTransformParser.js', import.meta.url), 'utf8');
   const tabSource = await readFile(new URL('../../../tabs/viewer3d-rvm-tab.js', import.meta.url), 'utf8');
   const progressivePatchSource = await readFile(new URL('../../../rvm-viewer/RvmProgressiveModelRootPatch.js', import.meta.url), 'utf8');
   const indexHtml = await readFile(new URL('../../../index.html', import.meta.url), 'utf8');
@@ -31,11 +32,16 @@ async function run() {
   assert.match(bridgeSource, /browserRvmStageTimingsMs:\s*perf\.measures[\s\S]*browserRvmMaxEventLoopStallMs:/, 'Diagnostics must expose timings and max event-loop stall.');
   assert.match(bridgeSource, /browserRvmWorkerEnabled:[\s\S]*browserRvmCompactInstructionTransfer:[\s\S]*browserRvmProgressiveRenderEnabled:/, 'Diagnostics must expose worker, compact transfer, and progressive flags.');
 
+  assert.match(workerSource, /BrowserRvmTransformParser\.js\?v=20260620-rvm-prim-transform-1/, 'Worker must use the transform-aware RVM parser with a cache-busted import.');
   assert.match(workerSource, /enrichBrowserRvmHierarchyWithAtt/, 'Worker must perform ATT enrichment.');
   assert.match(workerSource, /collectBrowserRvmRenderInstructions/, 'Worker must generate render instructions.');
   assert.match(workerSource, /instructionSet:\s*compactInstructionSet[\s\S]*manifestNodes,/, 'Worker must return compact instructions and capped manifest nodes.');
   assert.match(workerSource, /browserRvmHierarchyReturnedToMainThread:\s*false/, 'Worker must not return the huge hierarchy on the normal path.');
   assert.doesNotMatch(workerSource, /hierarchy:\s*attEnrichment\.hierarchy/, 'Worker complete message must not transfer enriched hierarchy.');
+
+  assert.match(transformParserSource, /transformPoint\(matrix,\s*origin/, 'Transform parser must apply PRIM matrix to local coordinates.');
+  assert.match(transformParserSource, /RVM_LEGACY_UNTRANSFORMED_BBOX/, 'Transform parser must preserve old raw bbox diagnostics for comparison.');
+  assert.match(transformParserSource, /PARTIAL_BINARY_PRIM_RECORDS_WORLD_TRANSFORMED/, 'Transform parser must identify world-transformed binary PRIM fidelity.');
 
   assert.match(tabSource, /import\s+\{\s*loadRvmFileInBrowser\s*\}\s+from\s+['"]\.\.\/rvm\/BrowserRvmLoadBridge\.js\?v=20260620-rvm-direct-tab-1['"]/, 'The real tab module must import the worker-first RVM loader directly.');
   assert.match(tabSource, /import\s+\{\s*isLikelyRvmFileName\s*\}\s+from\s+['"]\.\.\/rvm\/BrowserRvmParser\.js['"]/, 'The real tab must branch selected files by RVM/REV extension.');
