@@ -1,5 +1,6 @@
 import { decodeTextUtf8, encodeTextUtf8, baseNameWithoutExtension } from '../core/output-utils.js';
 import { collectXmlCiiZeroRigidWeightIssues, applyXmlCiiRigidWeightOverrides } from '../../../converters/xml-cii2019-core/weight-match-model.js?v=20260620-weight-fallback-1';
+import { applyXmlCiiFlangeWeightFallbackToIssues } from '../../../converters/xml-cii2019-core/flange-weight-fallback.js?v=20260620-flange-fallback-1';
 import { buildXmlCiiNodeResolverIndex } from '../../../converters/xml-cii2019-core/sideload-resolver.js';
 import { resolveManualRestraintRows } from '../../../converters/xml-cii2019-core/sideload-restraints.js';
 import { mergeXmlCiiMatchedFacts, matchedFactsFromEnrichmentDiagnostics } from '../../../converters/xml-cii2019-core/sideload-ledger.js';
@@ -58,28 +59,9 @@ function text(value) {
   return value === undefined || value === null ? '' : String(value).trim();
 }
 
-function plainObject(value) {
-  return value && typeof value === 'object' && !Array.isArray(value);
-}
-
-function mergeSection(target, source, sectionName, rowsKey) {
-  const sourceSection = plainObject(source?.[sectionName]) ? source[sectionName] : null;
-  if (!sourceSection) return;
-  const targetSection = plainObject(target?.[sectionName]) ? target[sectionName] : {};
-  target[sectionName] = { ...sourceSection, ...targetSection };
-  const sourceRows = Array.isArray(sourceSection[rowsKey]) ? sourceSection[rowsKey] : [];
-  const targetRows = Array.isArray(targetSection[rowsKey]) ? targetSection[rowsKey] : [];
-  if (sourceRows.length && !targetRows.length) target[sectionName][rowsKey] = sourceRows;
-  if (plainObject(sourceSection.fieldMap) && !plainObject(targetSection.fieldMap)) target[sectionName].fieldMap = sourceSection.fieldMap;
-}
-
 function mergeRuntimeOverridesIntoConfig(targetConfig, sourceConfig) {
   const target = targetConfig && typeof targetConfig === 'object' && !Array.isArray(targetConfig) ? targetConfig : {};
   const source = sourceConfig && typeof sourceConfig === 'object' && !Array.isArray(sourceConfig) ? sourceConfig : {};
-  mergeSection(target, source, 'linelist', 'masterRows');
-  mergeSection(target, source, 'pipingClass', 'masterRows');
-  mergeSection(target, source, 'material', 'mapRows');
-  mergeSection(target, source, 'weight', 'masterRows');
   const sourceOverrides = source.overrides && typeof source.overrides === 'object' && !Array.isArray(source.overrides)
     ? source.overrides
     : {};
@@ -244,7 +226,10 @@ export async function run(context) {
   );
   enriched.config = mergeRuntimeOverridesIntoConfig(enriched.config, liveSupportConfig);
   const rigidReviewLogLines = [];
-  const rigidWeightIssues = collectXmlCiiZeroRigidWeightIssues(enriched.xmlText, stagedJsonText, enriched.config);
+  const rigidWeightIssues = applyXmlCiiFlangeWeightFallbackToIssues(
+    collectXmlCiiZeroRigidWeightIssues(enriched.xmlText, stagedJsonText, enriched.config),
+    enriched.config,
+  );
 
   if (rigidWeightIssues.length > 0 && typeof runValues.openXmlCiiZeroRigidWeightPopup === 'function') {
     context.setStatus(`Review needed: ${rigidWeightIssues.length} rigid weight(s) are zero.`, 'running');
