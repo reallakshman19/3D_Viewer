@@ -1,4 +1,4 @@
-import { parseRvmArrayBuffer } from './BrowserRvmParser.js';
+import { parseRvmArrayBuffer } from './BrowserRvmHierarchyParser.js';
 
 self.onmessage = async (event) => {
   const { id, arrayBuffer, options = {} } = event.data || {};
