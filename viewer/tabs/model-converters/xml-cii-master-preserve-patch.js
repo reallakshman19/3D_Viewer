@@ -1,28 +1,34 @@
-const FLAG = '__xmlCiiMasterPreservePatch_v1';
+import { getXmlCiiPhaseBridge } from './legacy-adapter.js?v=20260620-rating-runtime-1';
+
+const FLAG = '__xmlCiiMasterLifecycleGuard_v1';
 const CONFIG_SELECTOR = '[data-option-key="supportConfigJson"]';
 
 const MASTER_PATHS = Object.freeze([
-  Object.freeze({ name: 'linelist', section: 'linelist', rows: 'masterRows', fieldMap: 'fieldMap' }),
-  Object.freeze({ name: 'pipingClass', section: 'pipingClass', rows: 'masterRows', fieldMap: 'fieldMap' }),
-  Object.freeze({ name: 'material', section: 'material', rows: 'mapRows', fieldMap: 'fieldMap' }),
-  Object.freeze({ name: 'weight', section: 'weight', rows: 'masterRows', fieldMap: 'fieldMap' }),
+  Object.freeze({ name: 'linelist', label: 'Line List', section: 'linelist', rows: 'masterRows', fieldMap: 'fieldMap' }),
+  Object.freeze({ name: 'pipingClass', label: 'Piping Class', section: 'pipingClass', rows: 'masterRows', fieldMap: 'fieldMap' }),
+  Object.freeze({ name: 'material', label: 'Material Map', section: 'material', rows: 'mapRows', fieldMap: 'fieldMap' }),
+  Object.freeze({ name: 'weight', label: 'Valve Weights', section: 'weight', rows: 'masterRows', fieldMap: 'fieldMap' }),
 ]);
 
 function ready() {
   return typeof window !== 'undefined' && typeof document !== 'undefined';
 }
 
-function parseJson(value) {
-  try {
-    const parsed = JSON.parse(String(value || '{}'));
-    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : null;
-  } catch {
-    return null;
-  }
+function isPlainObject(value) {
+  return value && typeof value === 'object' && !Array.isArray(value);
 }
 
 function clone(value) {
   return JSON.parse(JSON.stringify(value));
+}
+
+function parseJson(value) {
+  try {
+    const parsed = JSON.parse(String(value || '{}'));
+    return isPlainObject(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
 }
 
 function configInput() {
@@ -34,134 +40,286 @@ function rowCount(config, def) {
   return Array.isArray(rows) ? rows.length : 0;
 }
 
-function isPlainObject(value) {
-  return value && typeof value === 'object' && !Array.isArray(value);
-}
-
-function writeInput(input, config) {
-  const next = JSON.stringify(config, null, 2);
-  if (!input || input.value === next) return false;
-  input.value = next;
-  window[FLAG].writing = true;
-  try {
-    input.dispatchEvent(new Event('input', { bubbles: true }));
-    input.dispatchEvent(new Event('change', { bubbles: true }));
-  } finally {
-    window[FLAG].writing = false;
-  }
-  return true;
+function sectionClone(config, def) {
+  const section = config?.[def.section];
+  return isPlainObject(section) ? clone(section) : null;
 }
 
 function state() {
   return window[FLAG];
 }
 
-function remember(config) {
+function readBridgeConfig(bridge) {
+  if (typeof bridge?.exportPopupConfigText === 'function') {
+    const exported = parseJson(bridge.exportPopupConfigText());
+    if (exported) return exported;
+  }
+  return parseJson(configInput()?.value) || {};
+}
+
+function rememberNonEmpty(config, source = 'unknown') {
   if (!config) return;
   const st = state();
   for (const def of MASTER_PATHS) {
-    const section = config[def.section];
-    const rows = section?.[def.rows];
-    if (!Array.isArray(rows) || !rows.length) continue;
-    st.lastGood[def.name] = clone(section);
+    const rows = config?.[def.section]?.[def.rows];
+    if (!Array.isArray(rows) || rows.length <= 0) continue;
+    const section = sectionClone(config, def);
+    if (!section) continue;
+    st.sessionMasters[def.name] = section;
+    st.lastSource[def.name] = source;
   }
 }
 
-function currentMasterNameFromButton(button) {
-  return button?.getAttribute?.('data-xml-cii-clear-master')
-    || button?.getAttribute?.('data-native-clear-master')
-    || button?.getAttribute?.('data-xml-cii-save-master')
-    || button?.getAttribute?.('data-native-save-master')
-    || button?.getAttribute?.('data-xml-cii-auto-map')
-    || button?.getAttribute?.('data-native-auto-map')
-    || button?.getAttribute?.('data-xml-cii-dynamic-map')
-    || '';
-}
-
-function markExplicitClear(masterName) {
-  if (!masterName) return;
+function removeRememberedMaster(masterName) {
   const st = state();
-  st.allowEmptyUntil[masterName] = Date.now() + 1500;
-  delete st.lastGood[masterName];
+  delete st.sessionMasters[masterName];
+  delete st.lastSource[masterName];
 }
 
-function emptyIsAllowed(masterName) {
-  return (state().allowEmptyUntil[masterName] || 0) > Date.now();
-}
-
-function restoreMissingMasters(reason = '') {
-  const input = configInput();
-  const config = parseJson(input?.value);
-  if (!input || !config) return false;
-
-  remember(config);
-
+function applyPreservedMasters(config, reason, explicitEmptyMaster = '') {
+  const st = state();
+  const next = isPlainObject(config) ? clone(config) : {};
   let changed = false;
-  for (const def of MASTER_PATHS) {
-    if (rowCount(config, def) > 0 || emptyIsAllowed(def.name)) continue;
-    const cached = state().lastGood[def.name];
-    const cachedRows = cached?.[def.rows];
-    if (!Array.isArray(cachedRows) || !cachedRows.length) continue;
+  const restored = [];
 
-    const current = isPlainObject(config[def.section]) ? config[def.section] : {};
-    config[def.section] = { ...cached, ...current, [def.rows]: clone(cachedRows) };
-    if (!isPlainObject(config[def.section][def.fieldMap]) && isPlainObject(cached[def.fieldMap])) {
-      config[def.section][def.fieldMap] = clone(cached[def.fieldMap]);
-    }
-    config._masterPreservePatch = {
-      ...(isPlainObject(config._masterPreservePatch) ? config._masterPreservePatch : {}),
-      restoredAt: new Date().toISOString(),
-      reason,
-      section: def.name,
-      rows: cachedRows.length,
+  for (const def of MASTER_PATHS) {
+    if (explicitEmptyMaster === def.name) continue;
+    if (rowCount(next, def) > 0) continue;
+
+    const remembered = st.sessionMasters[def.name];
+    const rememberedRows = remembered?.[def.rows];
+    if (!Array.isArray(rememberedRows) || rememberedRows.length <= 0) continue;
+
+    const current = isPlainObject(next[def.section]) ? next[def.section] : {};
+    next[def.section] = {
+      ...clone(remembered),
+      ...current,
+      [def.rows]: clone(rememberedRows),
     };
+    if (!isPlainObject(next[def.section][def.fieldMap]) && isPlainObject(remembered[def.fieldMap])) {
+      next[def.section][def.fieldMap] = clone(remembered[def.fieldMap]);
+    }
+    restored.push({ master: def.name, rows: rememberedRows.length, source: st.lastSource[def.name] || 'session' });
     changed = true;
   }
 
-  if (changed) writeInput(input, config);
-  return changed;
+  if (changed) {
+    next._xmlCiiMasterLifecycle = {
+      ...(isPlainObject(next._xmlCiiMasterLifecycle) ? next._xmlCiiMasterLifecycle : {}),
+      lastGuardReason: reason,
+      lastGuardAt: new Date().toISOString(),
+      restored,
+    };
+  }
+  return { config: next, changed, restored };
 }
 
-function scheduleRestore(reason) {
+function writeThroughBridge(bridge, config) {
+  const text = JSON.stringify(config, null, 2);
+  if (typeof bridge?.importPopupConfigText === 'function') {
+    bridge.importPopupConfigText(text);
+    return true;
+  }
+
+  const input = configInput();
+  if (!input || input.value === text) return false;
+  input.value = text;
+  input.dispatchEvent(new Event('input', { bubbles: true }));
+  input.dispatchEvent(new Event('change', { bubbles: true }));
+  return true;
+}
+
+function debugSnapshot(bridge, activeSource = 'unknown') {
+  const cfg = readBridgeConfig(bridge);
+  const snap = typeof bridge?.getPopupSnapshot === 'function' ? bridge.getPopupSnapshot(configInput()) : null;
   const st = state();
-  clearTimeout(st.timer);
-  st.timer = setTimeout(() => restoreMissingMasters(reason), 0);
+  const counts = {};
+  for (const def of MASTER_PATHS) {
+    const snapMaster = (snap?.masters || []).find((entry) => entry.key === def.name) || {};
+    counts[def.name] = {
+      activeSession: rowCount({ [def.section]: st.sessionMasters[def.name] || {} }, def),
+      supportConfigJson: rowCount(cfg, def),
+      localMasterState: Number(snapMaster.rawRows || 0),
+      importMastersCount: Number(snapMaster.rows || 0),
+      source: st.lastSource[def.name] || '',
+    };
+  }
+  return { activeSource, counts };
+}
+
+function shouldLogDebug() {
+  try {
+    return window.location.hostname === 'localhost'
+      || window.location.hostname === '127.0.0.1'
+      || window.localStorage.getItem('xmlCiiMasterLifecycleDebug') === '1'
+      || new URLSearchParams(window.location.search).has('xmlCiiMasterDebug');
+  } catch {
+    return false;
+  }
+}
+
+function logDebug(bridge, activeSource, detail = {}) {
+  const snap = debugSnapshot(bridge, activeSource);
+  state().lastDebug = { ...snap, detail, at: new Date().toISOString() };
+  if (shouldLogDebug()) {
+    console.debug('[XML→CII master lifecycle]', state().lastDebug);
+  }
+}
+
+function commitHydratedConfig(bridge, reason, explicitEmptyMaster = '') {
+  const current = readBridgeConfig(bridge);
+  rememberNonEmpty(current, 'supportConfigJson');
+  const result = applyPreservedMasters(current, reason, explicitEmptyMaster);
+  if (result.changed) {
+    writeThroughBridge(bridge, result.config);
+    rememberNonEmpty(result.config, `guard:${reason}`);
+  }
+  logDebug(bridge, reason, { restored: result.restored, wroteEmptyMaster: !!explicitEmptyMaster });
+  return result.config;
+}
+
+function masterSnapshot(bridge, masterName) {
+  try {
+    const snap = bridge.getPopupSnapshot?.(configInput());
+    return (snap?.masters || []).find((entry) => entry.key === masterName) || null;
+  } catch {
+    return null;
+  }
+}
+
+function canSkipEmptySave(bridge, masterName) {
+  const snap = masterSnapshot(bridge, masterName);
+  if (!snap) return false;
+  const savedRows = Number(snap.rows || 0);
+  const rawRows = Number(snap.rawRows || 0);
+  return savedRows > 0 && rawRows <= 0;
+}
+
+function wrapBridge(bridge) {
+  const st = state();
+  if (!bridge || st.wrappedBridge === bridge) return bridge;
+  st.wrappedBridge = bridge;
+
+  const original = {
+    getPopupSnapshot: bridge.getPopupSnapshot?.bind(bridge),
+    savePopupMaster: bridge.savePopupMaster?.bind(bridge),
+    clearPopupMaster: bridge.clearPopupMaster?.bind(bridge),
+    autoMapPopupMaster: bridge.autoMapPopupMaster?.bind(bridge),
+    setPopupMasterField: bridge.setPopupMasterField?.bind(bridge),
+    importPopupMasterFile: bridge.importPopupMasterFile?.bind(bridge),
+    loadPopupDefaultMaster: bridge.loadPopupDefaultMaster?.bind(bridge),
+    buildPopupPreviewRows: bridge.buildPopupPreviewRows?.bind(bridge),
+    runPopupDiagnostics: bridge.runPopupDiagnostics?.bind(bridge),
+    computePopupWeightRows: bridge.computePopupWeightRows?.bind(bridge),
+    savePopupConfigText: bridge.savePopupConfigText?.bind(bridge),
+    importPopupConfigText: bridge.importPopupConfigText?.bind(bridge),
+    exportPopupConfigText: bridge.exportPopupConfigText?.bind(bridge),
+  };
+
+  const after = (reason, explicitEmptyMaster = '') => {
+    const hydrated = commitHydratedConfig(bridge, reason, explicitEmptyMaster);
+    rememberNonEmpty(hydrated, reason);
+    return hydrated;
+  };
+
+  if (original.getPopupSnapshot) {
+    bridge.getPopupSnapshot = (target) => {
+      after('snapshot');
+      const snapshot = original.getPopupSnapshot(target);
+      snapshot.masterLifecycleDebug = debugSnapshot(bridge, 'snapshot');
+      return snapshot;
+    };
+  }
+
+  if (original.savePopupMaster) {
+    bridge.savePopupMaster = (masterName = 'linelist') => {
+      after(`before-save:${masterName}`);
+      if (canSkipEmptySave(bridge, masterName)) {
+        logDebug(bridge, `blocked-empty-save:${masterName}`, { wroteEmptyMaster: true });
+        return false;
+      }
+      const result = original.savePopupMaster(masterName);
+      after(`save:${masterName}`);
+      return result;
+    };
+  }
+
+  if (original.clearPopupMaster) {
+    bridge.clearPopupMaster = (masterName = 'linelist') => {
+      removeRememberedMaster(masterName);
+      const result = original.clearPopupMaster(masterName);
+      after(`clear:${masterName}`, masterName);
+      return result;
+    };
+  }
+
+  for (const [methodName, reason] of [
+    ['autoMapPopupMaster', 'auto-map'],
+    ['setPopupMasterField', 'field-map'],
+    ['importPopupMasterFile', 'import-master'],
+    ['loadPopupDefaultMaster', 'load-default-master'],
+    ['savePopupConfigText', 'save-config-text'],
+    ['importPopupConfigText', 'import-config-text'],
+  ]) {
+    if (!original[methodName]) continue;
+    bridge[methodName] = async (...args) => {
+      after(`before-${reason}:${args[0] || ''}`);
+      const result = original[methodName](...args);
+      const awaited = result && typeof result.then === 'function' ? await result : result;
+      after(`${reason}:${args[0] || ''}`);
+      return awaited;
+    };
+  }
+
+  for (const [methodName, reason] of [
+    ['buildPopupPreviewRows', 'preview'],
+    ['runPopupDiagnostics', 'diagnostics'],
+    ['computePopupWeightRows', 'weight-match'],
+  ]) {
+    if (!original[methodName]) continue;
+    bridge[methodName] = async (...args) => {
+      after(`before-${reason}`);
+      const result = await original[methodName](...args);
+      after(reason);
+      return result;
+    };
+  }
+
+  after('install');
+  return bridge;
+}
+
+function installConfigInputObserver() {
+  if (state().inputObserverInstalled) return;
+  state().inputObserverInstalled = true;
+
+  const onConfigChange = (event) => {
+    if (!event.target?.matches?.(CONFIG_SELECTOR)) return;
+    const cfg = parseJson(event.target.value);
+    rememberNonEmpty(cfg, 'supportConfigJson-dom');
+    const bridge = wrapBridge(getXmlCiiPhaseBridge());
+    if (bridge) commitHydratedConfig(bridge, 'supportConfigJson-dom');
+  };
+
+  document.addEventListener('input', onConfigChange, true);
+  document.addEventListener('change', onConfigChange, true);
 }
 
 export function installXmlCiiMasterPreservePatch() {
   if (!ready()) return;
-  if (window[FLAG]) return;
-  window[FLAG] = { lastGood: {}, allowEmptyUntil: {}, timer: 0, writing: false };
+  if (!window[FLAG]) {
+    window[FLAG] = {
+      sessionMasters: {},
+      lastSource: {},
+      lastDebug: null,
+      wrappedBridge: null,
+      inputObserverInstalled: false,
+    };
+  }
 
-  const initial = parseJson(configInput()?.value);
-  remember(initial);
+  installConfigInputObserver();
+  const bridge = wrapBridge(getXmlCiiPhaseBridge());
+  if (bridge) commitHydratedConfig(bridge, 'install');
 
-  document.addEventListener('click', (event) => {
-    const clearButton = event.target?.closest?.('[data-xml-cii-clear-master], [data-native-clear-master]');
-    if (clearButton) {
-      markExplicitClear(currentMasterNameFromButton(clearButton));
-      scheduleRestore('explicit clear');
-      return;
-    }
-
-    const processButton = event.target?.closest?.('[data-xml-cii-save-master], [data-native-save-master], [data-xml-cii-auto-map], [data-native-auto-map], [data-xml-cii-dynamic-map]');
-    if (!processButton) return;
-    const before = parseJson(configInput()?.value);
-    remember(before);
-    scheduleRestore(`master process: ${currentMasterNameFromButton(processButton) || 'unknown'}`);
-  }, true);
-
-  document.addEventListener('input', (event) => {
-    if (!event.target?.matches?.(CONFIG_SELECTOR) || state().writing) return;
-    const config = parseJson(event.target.value);
-    remember(config);
-    scheduleRestore('supportConfigJson input');
-  }, true);
-
-  document.addEventListener('change', (event) => {
-    if (!event.target?.matches?.(CONFIG_SELECTOR) || state().writing) return;
-    const config = parseJson(event.target.value);
-    remember(config);
-    scheduleRestore('supportConfigJson change');
-  }, true);
+  window.__xmlCiiMasterLifecycleDebug = () => debugSnapshot(getXmlCiiPhaseBridge(), 'manual');
 }
