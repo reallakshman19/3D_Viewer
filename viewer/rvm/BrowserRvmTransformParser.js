@@ -1,6 +1,20 @@
 import { parseRvmArrayBuffer as parseLegacyRvmArrayBuffer } from './BrowserRvmParser.js';
 
-export const BROWSER_RVM_TRANSFORM_PARSER_SCHEMA = 'browser-rvm-transform-parser/v1';
+export const BROWSER_RVM_TRANSFORM_PARSER_SCHEMA = 'browser-rvm-transform-parser/v2-cpp-mat3x4';
+
+const PRIMITIVE_KIND_NAMES = Object.freeze({
+  1: 'Pyramid',
+  2: 'Box',
+  3: 'RectangularTorus',
+  4: 'CircularTorus',
+  5: 'EllipticalDish',
+  6: 'SphericalDish',
+  7: 'Snout',
+  8: 'Cylinder',
+  9: 'Sphere',
+  10: 'Line',
+  11: 'FacetGroup'
+});
 
 export async function parseRvmArrayBuffer(arrayBuffer, options = {}) {
   const parsed = await parseLegacyRvmArrayBuffer(arrayBuffer, options);
@@ -12,7 +26,10 @@ export async function parseRvmArrayBuffer(arrayBuffer, options = {}) {
     rvmPrimTransformSkippedCount: patch.skipped,
     rvmPrimWorldBounds: patch.worldBounds,
     rvmPrimLegacyBounds: patch.legacyBounds,
-    parseFidelity: patch.applied > 0 ? 'PARTIAL_BINARY_PRIM_RECORDS_WORLD_TRANSFORMED' : parsed.diagnostics?.parseFidelity
+    rvmPrimitiveKindCounts: patch.kindCounts,
+    rvmNativeParamDecodedCount: patch.nativeParamDecoded,
+    rvmCppMat3x4LayoutApplied: patch.applied > 0,
+    parseFidelity: patch.applied > 0 ? 'PARTIAL_BINARY_PRIM_RECORDS_CPP_MAT3X4_WORLD_TRANSFORMED' : parsed.diagnostics?.parseFidelity
   };
   return {
     ...parsed,
@@ -26,20 +43,24 @@ function patchHierarchyWithWorldTransforms(roots, arrayBuffer) {
   const view = arrayBuffer instanceof ArrayBuffer ? new DataView(arrayBuffer) : null;
   const world = makeBounds();
   const legacy = makeBounds();
+  const kindCounts = {};
   let applied = 0;
   let skipped = 0;
+  let nativeParamDecoded = 0;
 
   const patchNode = (node) => {
     if (!node || typeof node !== 'object') return node;
     const attrs = node.attributes || {};
     const offset = Number.parseInt(String(attrs.RVM_BYTE_OFFSET ?? ''), 10);
-    const code = Number.parseInt(String(attrs.RVM_PRIMITIVE_CODE ?? ''), 10);
-    const isPrimLeaf = attrs.RVM_RECORD_TAG === 'PRIM' || Number.isFinite(code);
+    const legacyCode = Number.parseInt(String(attrs.RVM_PRIMITIVE_CODE ?? ''), 10);
+    const isPrimLeaf = attrs.RVM_RECORD_TAG === 'PRIM' || Number.isFinite(legacyCode);
     let next = node;
     if (view && isPrimLeaf && Number.isFinite(offset) && offset >= 0) {
-      const geom = decodePrimGeometry(view, offset, code);
+      const geom = decodePrimGeometry(view, offset, legacyCode);
       if (geom) {
         applied += 1;
+        if (geom.paramsDecoded) nativeParamDecoded += 1;
+        bump(kindCounts, geom.kindName || `Kind-${geom.code}`);
         expandBounds(world, geom.bbox);
         expandBounds(legacy, geom.legacyBbox);
         next = {
@@ -47,17 +68,23 @@ function patchHierarchyWithWorldTransforms(roots, arrayBuffer) {
           bbox: geom.bbox,
           attributes: {
             ...attrs,
-            BROWSER_PARSE_METHOD: 'binary-rvm-record-world-transform',
+            BROWSER_PARSE_METHOD: 'binary-rvm-record-cpp-mat3x4-world-transform',
             RVM_PRIM_TRANSFORM_APPLIED: 'true',
             RVM_PRIM_TRANSFORM_SCHEMA: BROWSER_RVM_TRANSFORM_PARSER_SCHEMA,
+            RVM_PRIMITIVE_CODE: String(geom.code),
+            RVM_PRIMITIVE_KIND_NAME: geom.kindName,
+            RVM_NATIVE_PARAMS_DECODED: String(Boolean(geom.paramsDecoded)),
             RVM_LOCAL_BBOX: JSON.stringify(roundArray(geom.localBbox)),
             RVM_LEGACY_UNTRANSFORMED_BBOX: JSON.stringify(roundArray(geom.legacyBbox)),
-            RVM_TRANSFORM_MATRIX: JSON.stringify(roundArray(geom.matrix)),
+            RVM_TRANSFORM_MATRIX: JSON.stringify(roundArray(geom.matrix3x3)),
+            RVM_TRANSFORM_3X4: JSON.stringify(roundArray(geom.matrix3x4)),
             RVM_TRANSFORM_ORIGIN: JSON.stringify(roundVec(geom.origin)),
             RVM_TRANSFORM_COLUMN_SCALES: JSON.stringify(roundArray(geom.columnScales)),
+            RVM_TRANSFORM_LAYOUT: 'cpp-mat3x4-column-major-3x4',
             RVM_LOCAL_AXIS: geom.localAxis,
-            APOS: geom.apos,
-            LPOS: geom.lpos,
+            RVM_NATIVE_PRIMITIVE_PARAMS: JSON.stringify(geom.primitiveParams),
+            APOS: stringifyVec(geom.apos),
+            LPOS: stringifyVec(geom.lpos),
             HBOR: String(roundNumber(geom.hbor))
           }
         };
@@ -75,91 +102,178 @@ function patchHierarchyWithWorldTransforms(roots, arrayBuffer) {
   if (hierarchy[0]?.attributes && applied > 0) {
     hierarchy[0].attributes = {
       ...hierarchy[0].attributes,
-      PARSE_FIDELITY: 'PARTIAL_BINARY_PRIM_RECORDS_WORLD_TRANSFORMED',
+      PARSE_FIDELITY: 'PARTIAL_BINARY_PRIM_RECORDS_CPP_MAT3X4_WORLD_TRANSFORMED',
       RVM_PRIM_TRANSFORM_APPLIED_COUNT: String(applied),
       RVM_PRIM_TRANSFORM_SKIPPED_COUNT: String(skipped),
+      RVM_NATIVE_PARAM_DECODED_COUNT: String(nativeParamDecoded),
+      RVM_PRIMITIVE_KIND_COUNTS: JSON.stringify(kindCounts),
       RVM_PRIM_WORLD_BOUNDS: JSON.stringify(boundsToBbox(world)),
       RVM_PRIM_LEGACY_BOUNDS: JSON.stringify(boundsToBbox(legacy))
     };
   }
-  return { hierarchy, applied, skipped, worldBounds: boundsToBbox(world), legacyBounds: boundsToBbox(legacy) };
+  return { hierarchy, applied, skipped, nativeParamDecoded, kindCounts, worldBounds: boundsToBbox(world), legacyBounds: boundsToBbox(legacy) };
 }
 
-function decodePrimGeometry(view, offset, code) {
+function decodePrimGeometry(view, offset, legacyCode) {
   if (offset + 32 > view.byteLength || readWideTag(view, offset) !== 'PRIM') return null;
   const nextOffset = view.getUint32(offset + 16, false);
   const end = Math.min(nextOffset, view.byteLength);
   if (!Number.isFinite(end) || end <= offset + 32) return null;
+
+  const version = view.getUint32(offset + 24, false);
+  const codeFromRecord = view.getUint32(offset + 28, false);
+  const code = Number.isFinite(codeFromRecord) && codeFromRecord > 0 ? codeFromRecord : legacyCode;
+  const kindName = PRIMITIVE_KIND_NAMES[code] || `Unknown-${code}`;
+
   const floats = [];
   for (let p = offset + 32; p + 4 <= end; p += 4) {
     const value = view.getFloat32(p, false);
     floats.push(Number.isFinite(value) ? value : 0);
   }
   if (floats.length < 18) return null;
-  const matrix = floats.slice(0, 9);
-  const origin = { x: floats[9] || 0, y: floats[10] || 0, z: floats[11] || 0 };
+
+  const matrix3x4 = floats.slice(0, 12);
+  const matrix3x3 = matrix3x4.slice(0, 9);
+  const origin = { x: matrix3x4[9] || 0, y: matrix3x4[10] || 0, z: matrix3x4[11] || 0 };
   const localBbox = normalizeBbox(floats.slice(12, 18));
+  const params = decodePrimitiveParams(code, floats.slice(18));
   if (!isReasonableBbox(localBbox)) return null;
+
   const legacyBbox = [
     localBbox[0] + origin.x, localBbox[1] + origin.y, localBbox[2] + origin.z,
     localBbox[3] + origin.x, localBbox[4] + origin.y, localBbox[5] + origin.z
   ];
   const columnScales = [
-    Math.hypot(matrix[0], matrix[3], matrix[6]),
-    Math.hypot(matrix[1], matrix[4], matrix[7]),
-    Math.hypot(matrix[2], matrix[5], matrix[8])
+    Math.hypot(matrix3x4[0], matrix3x4[1], matrix3x4[2]),
+    Math.hypot(matrix3x4[3], matrix3x4[4], matrix3x4[5]),
+    Math.hypot(matrix3x4[6], matrix3x4[7], matrix3x4[8])
   ];
-  const det = determinant3(matrix);
-  if (!matrix.every((v) => Number.isFinite(v) && Math.abs(v) < 1e6) || !Number.isFinite(det) || Math.abs(det) <= 1e-18) return null;
-  const corners = bboxCorners(localBbox).map((point) => transformPoint(matrix, origin, point));
+  const det = determinant3CppLayout(matrix3x4);
+  if (!matrix3x4.every((v) => Number.isFinite(v) && Math.abs(v) < 1e9) || !Number.isFinite(det) || Math.abs(det) <= 1e-18) return null;
+
+  const corners = bboxCorners(localBbox).map((point) => transformPointCppMat3x4(matrix3x4, point));
   const bbox = normalizeBboxFromPoints(corners);
   if (!isReasonableBbox(bbox)) return null;
-  const localAxis = localAxisForCode(code, dimsFromBbox(localBbox));
-  const axis = transformedAxis(matrix, origin, localBbox, localAxis);
-  const hbor = transformedRadius(localBbox, columnScales, localAxis);
-  return { bbox, apos: axis.apos, lpos: axis.lpos, hbor, matrix, origin, columnScales, localAxis, localBbox, legacyBbox };
-}
 
-function transformPoint(m, o, p) {
+  const axisSpec = nativeAxisSpecForCode(code, localBbox, params, columnScales);
+  const axis = transformedAxis(matrix3x4, axisSpec.start, axisSpec.end);
+  const hbor = nativeRadiusForCode(code, localBbox, params, columnScales, axisSpec.localAxis);
   return {
-    x: o.x + m[0] * p.x + m[1] * p.y + m[2] * p.z,
-    y: o.y + m[3] * p.x + m[4] * p.y + m[5] * p.z,
-    z: o.z + m[6] * p.x + m[7] * p.y + m[8] * p.z
+    bbox,
+    apos: axis.apos,
+    lpos: axis.lpos,
+    hbor,
+    matrix3x3,
+    matrix3x4,
+    origin,
+    columnScales,
+    localAxis: axisSpec.localAxis,
+    localBbox,
+    legacyBbox,
+    code,
+    version,
+    kindName,
+    paramsDecoded: Boolean(params?.decoded),
+    primitiveParams: { version, kind: code, kindName, ...(params || {}) }
   };
 }
 
-function transformedAxis(matrix, origin, bbox, axis) {
+function decodePrimitiveParams(code, values = []) {
+  const v = (i) => Number(values[i]);
+  const finite = (i) => Number.isFinite(v(i));
+  switch (code) {
+    case 1:
+      if (values.length < 7) return { decoded: false };
+      return { decoded: true, bottomX: v(0), bottomY: v(1), topX: v(2), topY: v(3), offsetX: v(4), offsetY: v(5), height: v(6) };
+    case 2:
+      if (values.length < 3) return { decoded: false };
+      return { decoded: true, lengthX: v(0), lengthY: v(1), lengthZ: v(2) };
+    case 3:
+      if (values.length < 4) return { decoded: false };
+      return { decoded: true, innerRadius: v(0), outerRadius: v(1), height: v(2), angle: v(3) };
+    case 4:
+      if (values.length < 3) return { decoded: false };
+      return { decoded: true, offset: v(0), radius: v(1), angle: v(2) };
+    case 5:
+      if (values.length < 2) return { decoded: false };
+      return { decoded: true, baseRadius: v(0), height: v(1) };
+    case 6:
+      if (values.length < 2) return { decoded: false };
+      return { decoded: true, baseRadius: v(0), height: v(1) };
+    case 7:
+      if (values.length < 9) return { decoded: false };
+      return { decoded: true, radiusBottom: v(0), radiusTop: v(1), height: v(2), offsetX: v(3), offsetY: v(4), bottomShearX: v(5), bottomShearY: v(6), topShearX: v(7), topShearY: v(8) };
+    case 8:
+      if (values.length < 2) return { decoded: false };
+      return { decoded: true, radius: v(0), height: v(1) };
+    case 9:
+      if (values.length < 1) return { decoded: false };
+      return { decoded: true, diameter: v(0) };
+    case 10:
+      if (values.length < 2) return { decoded: false };
+      return { decoded: true, a: v(0), b: v(1) };
+    case 11:
+      return { decoded: false, facetGroup: true };
+    default:
+      return { decoded: false };
+  }
+}
+
+function nativeAxisSpecForCode(code, bbox, params = {}, columnScales = []) {
   const [minX, minY, minZ, maxX, maxY, maxZ] = bbox;
   const cx = (minX + maxX) / 2;
   const cy = (minY + maxY) / 2;
   const cz = (minZ + maxZ) / 2;
-  let start;
-  let end;
-  if (axis === 'X') {
-    start = { x: minX, y: cy, z: cz };
-    end = { x: maxX, y: cy, z: cz };
-  } else if (axis === 'Y') {
-    start = { x: cx, y: minY, z: cz };
-    end = { x: cx, y: maxY, z: cz };
-  } else {
-    start = { x: cx, y: cy, z: minZ };
-    end = { x: cx, y: cy, z: maxZ };
+  if ((code === 8 || code === 7) && params?.decoded && Number.isFinite(Number(params.height)) && Math.abs(Number(params.height)) > 0) {
+    const h2 = Number(params.height) * 0.5;
+    return { localAxis: 'Z', start: { x: 0, y: 0, z: -h2 }, end: { x: 0, y: 0, z: h2 } };
   }
-  return { apos: transformPoint(matrix, origin, start), lpos: transformPoint(matrix, origin, end) };
+  if (code === 4 && params?.decoded) {
+    const angle = Number(params.angle) || 0;
+    const offset = Number(params.offset) || 0;
+    const radius = Number(params.radius) || 0;
+    const r = Math.max(offset, radius, 0);
+    return { localAxis: 'TORUS_ARC', start: { x: offset + radius, y: 0, z: 0 }, end: { x: Math.cos(angle) * (offset + radius), y: Math.sin(angle) * (offset + radius), z: 0 }, arcCenter: { x: 0, y: 0, z: 0 }, arcRadius: r };
+  }
+  if (code === 9 && params?.decoded) {
+    const d = Math.abs(Number(params.diameter) || 0);
+    const r = d * 0.5;
+    return { localAxis: 'SPHERE', start: { x: 0, y: 0, z: -r }, end: { x: 0, y: 0, z: r } };
+  }
+  const dims = dimsFromBbox(bbox);
+  if (code === 3 || code === 11) return { localAxis: 'Z', start: { x: cx, y: cy, z: minZ }, end: { x: cx, y: cy, z: maxZ } };
+  if (dims.dx >= dims.dy && dims.dx >= dims.dz) return { localAxis: 'X', start: { x: minX, y: cy, z: cz }, end: { x: maxX, y: cy, z: cz } };
+  if (dims.dy >= dims.dx && dims.dy >= dims.dz) return { localAxis: 'Y', start: { x: cx, y: minY, z: cz }, end: { x: cx, y: maxY, z: cz } };
+  return { localAxis: 'Z', start: { x: cx, y: cy, z: minZ }, end: { x: cx, y: cy, z: maxZ } };
 }
 
-function transformedRadius(localBbox, columnScales, axis) {
+function nativeRadiusForCode(code, localBbox, params = {}, columnScales = [], axis = 'Z') {
+  const maxScale = Math.max(...columnScales.filter((value) => Number.isFinite(value) && value > 0), 1);
+  if (code === 8 && params?.decoded) return Math.max(Math.abs(Number(params.radius) || 0) * maxScale, 0.001);
+  if (code === 7 && params?.decoded) return Math.max(Math.max(Math.abs(Number(params.radiusBottom) || 0), Math.abs(Number(params.radiusTop) || 0)) * maxScale, 0.001);
+  if (code === 4 && params?.decoded) return Math.max(Math.abs(Number(params.radius) || 0) * maxScale, 0.001);
+  if ((code === 5 || code === 6) && params?.decoded) return Math.max(Math.abs(Number(params.baseRadius) || 0) * maxScale, 0.001);
+  if (code === 9 && params?.decoded) return Math.max(Math.abs(Number(params.diameter) || 0) * 0.5 * maxScale, 0.001);
+  return transformedRadiusFromBbox(localBbox, columnScales, axis);
+}
+
+function transformPointCppMat3x4(m, p) {
+  return {
+    x: m[0] * p.x + m[3] * p.y + m[6] * p.z + m[9],
+    y: m[1] * p.x + m[4] * p.y + m[7] * p.z + m[10],
+    z: m[2] * p.x + m[5] * p.y + m[8] * p.z + m[11]
+  };
+}
+
+function transformedAxis(matrix3x4, start, end) {
+  return { apos: transformPointCppMat3x4(matrix3x4, start), lpos: transformPointCppMat3x4(matrix3x4, end) };
+}
+
+function transformedRadiusFromBbox(localBbox, columnScales, axis) {
   const d = dimsFromBbox(localBbox);
   const scaled = { dx: d.dx * columnScales[0], dy: d.dy * columnScales[1], dz: d.dz * columnScales[2] };
   const minors = axis === 'X' ? [scaled.dy, scaled.dz] : axis === 'Y' ? [scaled.dx, scaled.dz] : [scaled.dx, scaled.dy];
   return Math.max(Math.min(minors[0], minors[1]) * 0.5, 0.001);
-}
-
-function localAxisForCode(code, dims) {
-  if (code === 8 || code === 7 || code === 3 || code === 11) return 'Z';
-  if (dims.dx >= dims.dy && dims.dx >= dims.dz) return 'X';
-  if (dims.dy >= dims.dx && dims.dy >= dims.dz) return 'Y';
-  return 'Z';
 }
 
 function readWideTag(view, offset) {
@@ -204,8 +318,11 @@ function dimsFromBbox(bbox) {
   return { dx: Math.abs(bbox[3] - bbox[0]), dy: Math.abs(bbox[4] - bbox[1]), dz: Math.abs(bbox[5] - bbox[2]) };
 }
 
-function determinant3(m) {
-  return m[0] * (m[4] * m[8] - m[5] * m[7]) - m[1] * (m[3] * m[8] - m[5] * m[6]) + m[2] * (m[3] * m[7] - m[4] * m[6]);
+function determinant3CppLayout(m) {
+  const m00 = m[0], m10 = m[1], m20 = m[2];
+  const m01 = m[3], m11 = m[4], m21 = m[5];
+  const m02 = m[6], m12 = m[7], m22 = m[8];
+  return m00 * (m11 * m22 - m12 * m21) - m01 * (m10 * m22 - m12 * m20) + m02 * (m10 * m21 - m11 * m20);
 }
 
 function makeBounds() {
@@ -226,6 +343,15 @@ function boundsToBbox(bounds) {
   const values = [bounds.minX, bounds.minY, bounds.minZ, bounds.maxX, bounds.maxY, bounds.maxZ];
   if (!values.every(Number.isFinite)) return null;
   return values.map(roundNumber);
+}
+
+function bump(target, key) {
+  const name = String(key || '').trim() || 'UNKNOWN';
+  target[name] = (target[name] || 0) + 1;
+}
+
+function stringifyVec(vec) {
+  return `${roundNumber(vec.x)},${roundNumber(vec.y)},${roundNumber(vec.z)}`;
 }
 
 function roundNumber(value) {
