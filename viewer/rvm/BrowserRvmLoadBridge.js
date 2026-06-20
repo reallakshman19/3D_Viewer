@@ -1,8 +1,8 @@
 import * as THREE from 'three';
-import { AvevaJsonLoader } from './AvevaJsonLoader.js';
-import { parseRvmArrayBuffer } from './BrowserRvmHierarchyParser.js';
+import { parseRvmArrayBuffer } from './BrowserRvmHierarchyTransformParser.js?v=20260620-rvm-prim-transform-1';
 import { enrichBrowserRvmHierarchyWithAtt } from './BrowserRvmAttEnricher.js';
 import { collectBrowserRvmRenderInstructions } from './BrowserRvmRenderContractAdapter.js';
+import { filterBrowserRvmRenderInstructions } from './BrowserRvmInstructionFilter.js?v=20260620-rvm-oversize-filter-1';
 import {
   BROWSER_RVM_RENDER_SCENE_SCHEMA,
   buildInstructionObject
@@ -14,7 +14,8 @@ const MAIN_THREAD_FALLBACK_MAX_BYTES = 1024 * 1024;
 const DEFAULT_RENDER_BUDGET = Object.freeze({
   maxRenderableObjects: 6000,
   batchSize: 64,
-  timeSliceMs: 8
+  timeSliceMs: 8,
+  hideOversizedNonPiping: true,
 });
 
 export async function loadRvmFileInBrowser(file, viewer, options = {}) {
@@ -27,7 +28,6 @@ export async function loadRvmFileInBrowser(file, viewer, options = {}) {
   const renderBudget = normalizeRenderBudget(options);
   const signal = options.signal || null;
   let activeScene = null;
-  let payload = null;
 
   try {
     checkAbort(signal);
@@ -46,6 +46,7 @@ export async function loadRvmFileInBrowser(file, viewer, options = {}) {
       maxStringScanBytes: options.maxStringScanBytes,
       manifestNodeLimit: MANIFEST_NODE_LIMIT,
       signal,
+      hideOversizedNonPiping: renderBudget.hideOversizedNonPiping,
       onProgress: (progress) => {
         update(progress?.message || `Parsing ${file.name}…`);
         options.onProgress?.({ stage: 'worker-parse', ...(progress || {}) });
@@ -55,31 +56,27 @@ export async function loadRvmFileInBrowser(file, viewer, options = {}) {
     }));
     checkAbort(signal);
 
-    const instructionSet = parsed.instructionSet || { instructions: [], count: 0, diagnostics: {} };
+    const instructionSet = ensureFilteredInstructionSet(parsed.instructionSet || { instructions: [], count: 0, diagnostics: {} }, renderBudget);
     const instructions = Array.isArray(instructionSet.instructions) ? instructionSet.instructions : [];
-    activeScene = makeProgressiveSceneRoot(file, parsed, renderBudget);
+    const filterDiagnostics = instructionSet.diagnostics?.oversizedNonPipingFilter || null;
+    activeScene = makeProgressiveSceneRoot(file, parsed, renderBudget, filterDiagnostics);
 
     if (viewer) {
       update(`Preparing progressive RVM scene for ${file.name}…`);
       await yieldToBrowser({ signal });
       viewer.ctx = viewer.ctx || {};
       viewer.ctx.identityMap = new Map();
-      viewer.setModel(activeScene, parsed.upAxis || 'Z');
+      viewer.setModel(activeScene, parsed.upAxis || 'Z', { progressive: true, fit: false });
       await yieldToBrowser({ signal });
     }
 
     update(`Rendering RVM objects 0/${instructions.length}…`);
-    let firstRenderableFitted = false;
     const renderResult = await measureAsyncStage(perf, 'scene.progressiveCreate', () => buildProgressiveBrowserRvmRenderSceneFromInstructions(instructionSet, {
       ...renderBudget,
       targetScene: activeScene,
       signal,
-      onFirstRenderable: () => {
-        if (firstRenderableFitted || !viewer) return;
-        firstRenderableFitted = true;
-        requestAnimationFrameSafe(() => {
-          try { viewer.fitAll?.(); } catch (_) {}
-        });
+      onFirstRenderable: (event) => {
+        options.onProgress?.({ stage: 'first-renderable', renderableCount: 1, processed: event?.processed || 1, total: instructions.length });
       },
       onProgress: ({ processed, total, renderableCount, skippedCount }) => {
         update(`Rendering RVM objects ${processed}/${total} (${renderableCount} drawn, ${skippedCount} skipped)`);
@@ -88,28 +85,13 @@ export async function loadRvmFileInBrowser(file, viewer, options = {}) {
     }));
     checkAbort(signal);
 
-    let hierarchyScene = null;
-    let usedDeferredHierarchyFallback = true;
-    const shouldUseRenderScene = Boolean(renderResult?.scene && renderResult.diagnostics?.renderableCount > 0);
-
-    if (!shouldUseRenderScene && options.buildHierarchyFallback === true && parsed.hierarchy) {
-      usedDeferredHierarchyFallback = false;
-      update(`Building explicit hierarchy fallback scene for ${file.name}`);
-      await yieldToBrowser({ signal });
-      const loader = new AvevaJsonLoader();
-      const fallbackPayload = await measureAsyncStage(perf, 'hierarchy.fallbackScene', () => loader.load(parsed.hierarchy, {}, options.asyncSession || makeAsyncSession(statusEl, signal)));
-      if (!fallbackPayload?.gltf?.scene) throw new Error('Browser RVM fallback produced no scene.');
-      hierarchyScene = fallbackPayload.gltf.scene;
-      activeScene = hierarchyScene;
-      payload = fallbackPayload;
-      if (viewer) {
-        viewer.ctx.identityMap = fallbackPayload.identityMap || new Map();
-        viewer.setModel(activeScene, fallbackPayload.manifest?.runtime?.upAxis || 'Z');
-      }
-    } else {
-      payload = makeRenderScenePayload(file, parsed.manifestNodes || [], renderResult, parsed.attDiagnostics || null);
+    if (viewer && renderResult?.bounds?.hasBounds) {
+      requestAnimationFrameSafe(() => {
+        try { viewer.fitProgressiveBounds?.(renderResult.bounds); } catch (_) {}
+      });
     }
 
+    const payload = makeRenderScenePayload(file, parsed.manifestNodes || [], renderResult, parsed.attDiagnostics || null, instructionSet);
     const watchdogSummary = watchdog.stop();
     const diagnostics = publishBrowserRvmLoadDiagnostics({
       ...(parsed.diagnostics || {}),
@@ -118,14 +100,17 @@ export async function loadRvmFileInBrowser(file, viewer, options = {}) {
       browserRvmWorkerFirstPipeline: true,
       browserRvmCompactInstructionTransfer: true,
       browserRvmProgressiveRenderEnabled: true,
-      browserRvmRenderSceneEnabled: shouldUseRenderScene,
+      browserRvmRenderSceneEnabled: Boolean(renderResult?.diagnostics?.renderableCount > 0),
       browserRvmRenderSchemaVersion: renderResult?.schemaVersion || '',
+      browserRvmOriginalInstructionCount: parsed.diagnostics?.browserRvmOriginalInstructionCount || instructionSet.diagnostics?.originalInstructionCount || instructionSet.count,
+      browserRvmInstructionCount: instructionSet.count || instructions.length,
+      browserRvmOversizedNonPipingSkippedCount: filterDiagnostics?.skippedCount || parsed.diagnostics?.browserRvmOversizedNonPipingSkippedCount || 0,
+      browserRvmOversizedNonPipingFilter: filterDiagnostics || parsed.diagnostics?.browserRvmOversizedNonPipingFilter || null,
       browserRvmRenderableCount: renderResult?.diagnostics?.renderableCount || 0,
       browserRvmSkippedCount: renderResult?.diagnostics?.skippedCount || 0,
       browserRvmRenderPrimitiveCounts: renderResult?.diagnostics?.primitiveCounts || {},
       browserRvmRenderSkippedReasons: renderResult?.diagnostics?.skippedReasons || {},
-      browserRvmHierarchyFallbackDeferred: usedDeferredHierarchyFallback,
-      browserRvmResponsiveLoadPath: shouldUseRenderScene ? 'worker-instructions-progressive-render-scene-first' : 'hierarchy-fallback',
+      browserRvmResponsiveLoadPath: 'worker-instructions-filtered-progressive-render-scene-first',
       browserRvmResponsiveSceneBuilder: true,
       browserRvmRenderBudgeted: Boolean(renderResult?.diagnostics?.budgeted),
       browserRvmMaxRenderableObjects: renderBudget.maxRenderableObjects,
@@ -144,42 +129,16 @@ export async function loadRvmFileInBrowser(file, viewer, options = {}) {
       count: instructions.length,
       diagnostics: instructionSet.diagnostics || {}
     };
-    payload.browserRvmHierarchyScene = hierarchyScene;
     payload.gltf.scene = activeScene;
-    payload.manifest = {
-      ...(payload.manifest || {}),
-      source: {
-        ...((payload.manifest || {}).source || {}),
-        format: 'RVM_BINARY_BROWSER_WORKER',
-        files: [file.name]
-      },
-      browserRvmParser: diagnostics,
-      browserRvmAtt: parsed.attDiagnostics || null,
-      browserRvmRender: renderResult?.diagnostics || null,
-      browserRvmRenderScene: {
-        enabled: shouldUseRenderScene,
-        schemaVersion: renderResult?.schemaVersion || '',
-        renderableCount: renderResult?.diagnostics?.renderableCount || 0,
-        skippedCount: renderResult?.diagnostics?.skippedCount || 0,
-        hierarchyFallbackDeferred: usedDeferredHierarchyFallback,
-        responsiveBuilder: true,
-        progressiveRenderEnabled: true,
-        workerEnabled: Boolean(parsed.workerEnabled),
-        renderBudgetSkipped: renderResult?.diagnostics?.skippedReasons?.['render-budget-limit'] || 0,
-        maxRenderableObjects: renderBudget.maxRenderableObjects,
-        stageTimingsMs: perf.measures,
-        maxEventLoopStallMs: watchdogSummary.maxEventLoopStallMs
-      }
-    };
-
     activeScene.userData = {
       ...(activeScene.userData || {}),
-      browserRvmLiveRenderScene: shouldUseRenderScene,
+      browserRvmLiveRenderScene: true,
       browserRvmParser: diagnostics,
       browserRvmAtt: parsed.attDiagnostics || null,
       browserRvmRender: renderResult?.diagnostics || null,
       browserRvmResponsiveSceneBuilder: true,
-      browserRvmProgressiveRenderEnabled: true
+      browserRvmProgressiveRenderEnabled: true,
+      browserRvmOversizedNonPipingFilter: filterDiagnostics || null,
     };
 
     update(`Loaded browser RVM ${file.name}`);
@@ -226,7 +185,7 @@ async function parseWithWorkerIfAvailable(arrayBuffer, options) {
   }
 
   try {
-    const workerUrl = new URL('./browser-rvm-worker.js?v=20260620-rvm-worker-first-1', import.meta.url);
+    const workerUrl = new URL('./browser-rvm-worker.js?v=20260620-rvm-oversize-filter-1', import.meta.url);
     const worker = new Worker(workerUrl, { type: 'module' });
     const id = `rvm-${Date.now()}-${Math.random().toString(36).slice(2)}`;
     return await new Promise((resolve, reject) => {
@@ -280,7 +239,8 @@ function stripWorkerOptions(options = {}) {
     fileName: options.fileName,
     attText: options.attText || '',
     maxStringScanBytes: options.maxStringScanBytes,
-    manifestNodeLimit: options.manifestNodeLimit || MANIFEST_NODE_LIMIT
+    manifestNodeLimit: options.manifestNodeLimit || MANIFEST_NODE_LIMIT,
+    hideOversizedNonPiping: options.hideOversizedNonPiping !== false,
   };
 }
 
@@ -291,7 +251,7 @@ async function parseCompactOnMainThreadIfSmall(arrayBuffer, options = {}, reason
   }
   const parsed = await parseRvmArrayBuffer(arrayBuffer, options);
   const attEnrichment = enrichBrowserRvmHierarchyWithAtt(parsed.hierarchy || [], options.attText || '');
-  const instructionSet = collectBrowserRvmRenderInstructions(attEnrichment.hierarchy || []);
+  const instructionSet = ensureFilteredInstructionSet(collectBrowserRvmRenderInstructions(attEnrichment.hierarchy || []), options);
   return {
     ok: true,
     fileName: options.fileName || parsed.fileName || '',
@@ -309,9 +269,16 @@ async function parseCompactOnMainThreadIfSmall(arrayBuffer, options = {}, reason
       browserRvmWorkerEnabled: false,
       browserRvmWorkerFallback: true,
       browserRvmWorkerFallbackReason: reason,
-      browserRvmInstructionCount: instructionSet.count || instructionSet.instructions?.length || 0
+      browserRvmInstructionCount: instructionSet.count || instructionSet.instructions?.length || 0,
+      browserRvmOversizedNonPipingSkippedCount: instructionSet.diagnostics?.oversizedNonPipingSkippedCount || 0,
+      browserRvmOversizedNonPipingFilter: instructionSet.diagnostics?.oversizedNonPipingFilter || null,
     }
   };
+}
+
+function ensureFilteredInstructionSet(instructionSet, options = {}) {
+  if (instructionSet?.diagnostics?.oversizedNonPipingFilter) return instructionSet;
+  return filterBrowserRvmRenderInstructions(instructionSet, { enabled: options.hideOversizedNonPiping !== false });
 }
 
 async function buildProgressiveBrowserRvmRenderSceneFromInstructions(instructionSet = {}, options = {}) {
@@ -330,15 +297,19 @@ async function buildProgressiveBrowserRvmRenderSceneFromInstructions(instruction
   };
 
   const context = makeRenderContext(renderOptions);
+  const filterDiagnostics = instructionSet.diagnostics?.oversizedNonPipingFilter || null;
   const diagnostics = {
     schemaVersion: BROWSER_RVM_RENDER_SCENE_SCHEMA,
     instructionCount: list.length,
+    originalInstructionCount: instructionSet.diagnostics?.originalInstructionCount || list.length,
+    oversizedNonPipingFilter: filterDiagnostics,
+    oversizedNonPipingSkippedCount: filterDiagnostics?.skippedCount || 0,
     renderableCount: 0,
-    skippedCount: 0,
+    skippedCount: filterDiagnostics?.skippedCount || 0,
     primitiveCounts: {},
     effectivePrimitiveCounts: {},
     renderQualityCounts: {},
-    skippedReasons: {},
+    skippedReasons: filterDiagnostics?.skippedReasons ? { ...filterDiagnostics.skippedReasons } : {},
     attCounts: { enriched: 0, plain: 0 },
     renderOptions: publicRenderOptions(renderOptions),
     performance: {},
@@ -421,7 +392,7 @@ async function buildProgressiveBrowserRvmRenderSceneFromInstructions(instruction
   };
 }
 
-function makeProgressiveSceneRoot(file, parsed, renderBudget) {
+function makeProgressiveSceneRoot(file, parsed, renderBudget, filterDiagnostics = null) {
   const group = new THREE.Group();
   group.name = `BrowserRvmRenderScene:${file.name || 'model.rvm'}`;
   group.userData = {
@@ -429,6 +400,7 @@ function makeProgressiveSceneRoot(file, parsed, renderBudget) {
     source: 'browser-rvm-worker-progressive-root',
     browserRvmWorkerFirstPipeline: true,
     browserRvmProgressiveRenderEnabled: true,
+    browserRvmOversizedNonPipingFilter: filterDiagnostics,
     fileName: file.name || parsed.fileName || '',
     byteLength: parsed.byteLength || file.size || 0,
     renderOptions: publicRenderOptions(renderBudget)
@@ -436,21 +408,28 @@ function makeProgressiveSceneRoot(file, parsed, renderBudget) {
   return group;
 }
 
-function makeRenderScenePayload(file, manifestNodes, renderResult, attDiagnostics) {
+function makeRenderScenePayload(file, manifestNodes, renderResult, attDiagnostics, instructionSet) {
   return {
     gltf: { scene: renderResult.scene },
     identityMap: new Map(),
     manifest: {
       runtime: { upAxis: 'Z' },
-      source: {
-        format: 'RVM_BINARY_BROWSER_WORKER',
-        files: [file.name]
-      },
+      source: { format: 'RVM_BINARY_BROWSER_WORKER', files: [file.name] },
       nodes: Array.isArray(manifestNodes) ? manifestNodes : [],
       browserRvmAtt: attDiagnostics,
       browserRvmRender: renderResult?.diagnostics || null,
-      browserRvmResponsiveLoadPath: 'worker-instructions-progressive-render-scene-first',
-      browserRvmManifestNodeLimit: MANIFEST_NODE_LIMIT
+      browserRvmResponsiveLoadPath: 'worker-instructions-filtered-progressive-render-scene-first',
+      browserRvmRenderInstructions: instructionSet?.diagnostics || null,
+      browserRvmManifestNodeLimit: MANIFEST_NODE_LIMIT,
+      browserRvmRenderScene: {
+        enabled: true,
+        schemaVersion: renderResult?.schemaVersion || '',
+        renderableCount: renderResult?.diagnostics?.renderableCount || 0,
+        skippedCount: renderResult?.diagnostics?.skippedCount || 0,
+        oversizedNonPipingSkippedCount: renderResult?.diagnostics?.oversizedNonPipingSkippedCount || 0,
+        responsiveBuilder: true,
+        progressiveRenderEnabled: true,
+      }
     }
   };
 }
@@ -460,16 +439,7 @@ function flattenHierarchyForManifest(roots = [], limit = MANIFEST_NODE_LIMIT) {
   const visit = (node, parentCanonicalObjectId = '', depth = 0) => {
     if (!node || typeof node !== 'object' || nodes.length >= limit) return;
     const canonicalObjectId = String(node.canonicalObjectId || node.id || node.name || `browser-rvm-${nodes.length}`);
-    nodes.push({
-      canonicalObjectId,
-      parentCanonicalObjectId,
-      sourceObjectId: node.sourceObjectId || node.id || canonicalObjectId,
-      name: node.name || canonicalObjectId,
-      kind: node.kind || node.type || node.attributes?.TYPE || 'NODE',
-      type: node.type || node.kind || node.attributes?.TYPE || 'NODE',
-      depth,
-      attributes: node.attributes && typeof node.attributes === 'object' ? compactAttributes(node.attributes) : {}
-    });
+    nodes.push({ canonicalObjectId, parentCanonicalObjectId, sourceObjectId: node.sourceObjectId || node.id || canonicalObjectId, name: node.name || canonicalObjectId, kind: node.kind || node.type || node.attributes?.TYPE || 'NODE', type: node.type || node.kind || node.attributes?.TYPE || 'NODE', depth, attributes: compactAttributes(node.attributes) });
     for (const child of Array.isArray(node.children) ? node.children : []) {
       visit(child, canonicalObjectId, depth + 1);
       if (nodes.length >= limit) break;
@@ -485,9 +455,7 @@ function flattenHierarchyForManifest(roots = [], limit = MANIFEST_NODE_LIMIT) {
 function compactAttributes(attrs = {}) {
   const keep = ['TYPE', 'NAME', 'RVM_PRIMITIVE_KIND', 'RVM_OWNER_NAME', 'RVM_BROWSER_RENDER_PRIMITIVE', 'RVM_BROWSER_RENDER_SOURCE', 'RVM_BROWSER_ATT_ENRICHED', 'RVM_BROWSER_ATT_ATTRIBUTE_COUNT'];
   const out = {};
-  for (const key of keep) {
-    if (attrs[key] !== undefined && attrs[key] !== null && attrs[key] !== '') out[key] = String(attrs[key]);
-  }
+  for (const key of keep) if (attrs?.[key] !== undefined && attrs?.[key] !== null && attrs?.[key] !== '') out[key] = String(attrs[key]);
   return out;
 }
 
@@ -496,69 +464,27 @@ function normalizeRenderBudget(options = {}) {
   return {
     maxRenderableObjects: positiveInteger(options.maxRenderableObjects ?? renderOptions.maxRenderableObjects, DEFAULT_RENDER_BUDGET.maxRenderableObjects),
     batchSize: positiveInteger(options.batchSize ?? renderOptions.batchSize, DEFAULT_RENDER_BUDGET.batchSize),
-    timeSliceMs: positiveNumber(options.timeSliceMs ?? renderOptions.timeSliceMs, DEFAULT_RENDER_BUDGET.timeSliceMs)
+    timeSliceMs: positiveNumber(options.timeSliceMs ?? renderOptions.timeSliceMs, DEFAULT_RENDER_BUDGET.timeSliceMs),
+    hideOversizedNonPiping: options.hideOversizedNonPiping ?? renderOptions.hideOversizedNonPiping ?? DEFAULT_RENDER_BUDGET.hideOversizedNonPiping,
   };
 }
 
 function makeRenderContext(renderOptions) {
-  return {
-    renderOptions,
-    materialCache: new Map(),
-    geometryCache: new Map(),
-    stats: {
-      geometryCacheHits: 0,
-      geometryCacheMisses: 0,
-      materialCacheHits: 0,
-      materialCacheMisses: 0,
-      estimatedGeometryBytes: 0
-    }
-  };
+  return { renderOptions, materialCache: new Map(), geometryCache: new Map(), stats: { geometryCacheHits: 0, geometryCacheMisses: 0, materialCacheHits: 0, materialCacheMisses: 0, estimatedGeometryBytes: 0 } };
 }
 
 function publicRenderOptions(options = {}) {
-  return {
-    maxRenderableObjects: options.maxRenderableObjects,
-    batchSize: options.batchSize,
-    timeSliceMs: options.timeSliceMs,
-    responsiveBuilder: true,
-    progressiveRenderEnabled: true,
-    workerFirst: true
-  };
+  return { maxRenderableObjects: options.maxRenderableObjects, batchSize: options.batchSize, timeSliceMs: options.timeSliceMs, hideOversizedNonPiping: options.hideOversizedNonPiping, responsiveBuilder: true, progressiveRenderEnabled: true, workerFirst: true };
 }
 
 function progressivePerformanceDiagnosticsFor(context, diagnostics, group, renderOptions) {
-  return {
-    responsiveBuilder: true,
-    progressiveRenderEnabled: true,
-    meshObjectCount: diagnostics.renderableCount,
-    groupObjectCount: group?.children?.filter?.((child) => child?.isGroup)?.length || 0,
-    geometryCacheSize: context.geometryCache.size,
-    materialCacheSize: context.materialCache.size,
-    geometryCacheHits: context.stats.geometryCacheHits,
-    geometryCacheMisses: context.stats.geometryCacheMisses,
-    materialCacheHits: context.stats.materialCacheHits,
-    materialCacheMisses: context.stats.materialCacheMisses,
-    estimatedGeometryBytes: context.stats.estimatedGeometryBytes,
-    estimatedGeometryKb: Number((context.stats.estimatedGeometryBytes / 1024).toFixed(2)),
-    maxRenderableObjects: renderOptions.maxRenderableObjects,
-    renderBudgeted: diagnostics.budgeted,
-    renderBudgetSkipped: diagnostics.skippedReasons['render-budget-limit'] || 0,
-    batchSize: renderOptions.batchSize,
-    timeSliceMs: renderOptions.timeSliceMs
-  };
+  return { responsiveBuilder: true, progressiveRenderEnabled: true, meshObjectCount: diagnostics.renderableCount, groupObjectCount: group?.children?.filter?.((child) => child?.isGroup)?.length || 0, geometryCacheSize: context.geometryCache.size, materialCacheSize: context.materialCache.size, geometryCacheHits: context.stats.geometryCacheHits, geometryCacheMisses: context.stats.geometryCacheMisses, materialCacheHits: context.stats.materialCacheHits, materialCacheMisses: context.stats.materialCacheMisses, estimatedGeometryBytes: context.stats.estimatedGeometryBytes, estimatedGeometryKb: Number((context.stats.estimatedGeometryBytes / 1024).toFixed(2)), maxRenderableObjects: renderOptions.maxRenderableObjects, renderBudgeted: diagnostics.budgeted, renderBudgetSkipped: diagnostics.skippedReasons['render-budget-limit'] || 0, batchSize: renderOptions.batchSize, timeSliceMs: renderOptions.timeSliceMs };
 }
 
-function makeBoundsAccumulator() {
-  return { hasBounds: false, min: { x: Infinity, y: Infinity, z: Infinity }, max: { x: -Infinity, y: -Infinity, z: -Infinity } };
-}
-
+function makeBoundsAccumulator() { return { hasBounds: false, min: { x: Infinity, y: Infinity, z: Infinity }, max: { x: -Infinity, y: -Infinity, z: -Infinity } }; }
 function expandBoundsForInstruction(bounds, instruction = {}) {
   const bbox = parseBbox(instruction.bbox || instruction.rawBbox);
-  if (bbox) {
-    expandBounds(bounds, bbox[0], bbox[1], bbox[2]);
-    expandBounds(bounds, bbox[3], bbox[4], bbox[5]);
-    return;
-  }
+  if (bbox) { expandBounds(bounds, bbox[0], bbox[1], bbox[2]); expandBounds(bounds, bbox[3], bbox[4], bbox[5]); return; }
   const radius = Number.isFinite(instruction.radius) ? Math.max(instruction.radius, 0) : 0;
   for (const point of [vec3(instruction.axisStart), vec3(instruction.axisEnd), vec3(instruction.center)]) {
     if (!point) continue;
@@ -566,224 +492,24 @@ function expandBoundsForInstruction(bounds, instruction = {}) {
     expandBounds(bounds, point.x + radius, point.y + radius, point.z + radius);
   }
 }
-
-function expandBounds(bounds, x, y, z) {
-  if (![x, y, z].every(Number.isFinite)) return;
-  bounds.hasBounds = true;
-  bounds.min.x = Math.min(bounds.min.x, x);
-  bounds.min.y = Math.min(bounds.min.y, y);
-  bounds.min.z = Math.min(bounds.min.z, z);
-  bounds.max.x = Math.max(bounds.max.x, x);
-  bounds.max.y = Math.max(bounds.max.y, y);
-  bounds.max.z = Math.max(bounds.max.z, z);
-}
-
-function boundsToSceneBounds(bounds) {
-  if (!bounds?.hasBounds) return emptySceneBounds();
-  const center = {
-    x: (bounds.min.x + bounds.max.x) * 0.5,
-    y: (bounds.min.y + bounds.max.y) * 0.5,
-    z: (bounds.min.z + bounds.max.z) * 0.5
-  };
-  const size = {
-    x: Math.max(bounds.max.x - bounds.min.x, 0),
-    y: Math.max(bounds.max.y - bounds.min.y, 0),
-    z: Math.max(bounds.max.z - bounds.min.z, 0)
-  };
-  return {
-    hasBounds: true,
-    min: plainPoint(bounds.min),
-    max: plainPoint(bounds.max),
-    center,
-    size,
-    radius: Math.max(Math.hypot(size.x, size.y, size.z) * 0.5, 0)
-  };
-}
-
-function emptySceneBounds() {
-  return { hasBounds: false, min: null, max: null, center: null, size: null, radius: 0 };
-}
-
-function parseBbox(value) {
-  if (Array.isArray(value) && value.length >= 6) {
-    const nums = value.slice(0, 6).map(Number);
-    return nums.every(Number.isFinite) ? nums : null;
-  }
-  if (typeof value === 'string') {
-    const nums = value.split(/[\s,]+/g).map(Number).filter(Number.isFinite);
-    return nums.length >= 6 ? nums.slice(0, 6) : null;
-  }
-  return null;
-}
-
-function vec3(value) {
-  if (!value) return null;
-  const x = Number(value.x);
-  const y = Number(value.y);
-  const z = Number(value.z);
-  if (![x, y, z].every(Number.isFinite)) return null;
-  return { x, y, z };
-}
-
-function plainPoint(point) {
-  return { x: finiteOrZero(point.x), y: finiteOrZero(point.y), z: finiteOrZero(point.z) };
-}
-
-function finiteOrZero(value) {
-  return Number.isFinite(value) ? value : 0;
-}
-
-function primitiveName(value) {
-  return String(value || '').trim().toUpperCase();
-}
-
-function skipReason(instruction) {
-  if (!instruction || typeof instruction !== 'object') return 'invalid-instruction';
-  if (!instruction.center && !instruction.axisStart && !instruction.axisEnd) return 'missing-position';
-  return 'unsupported-geometry';
-}
-
-function bump(target, key) {
-  const name = String(key || '').trim() || 'UNKNOWN';
-  target[name] = (target[name] || 0) + 1;
-}
-
-function positiveInteger(value, fallback) {
-  const n = Number.parseInt(String(value ?? ''), 10);
-  return Number.isFinite(n) && n > 0 ? n : fallback;
-}
-
-function positiveNumber(value, fallback) {
-  const n = Number(value);
-  return Number.isFinite(n) && n >= 0 ? n : fallback;
-}
-
-function nowMs() {
-  return typeof performance !== 'undefined' && typeof performance.now === 'function' ? performance.now() : Date.now();
-}
-
-function createStageTimer(runId) {
-  return {
-    runId,
-    measures: {},
-    mark(name) {
-      try { performance?.mark?.(`${runId}:${name}`); } catch (_) {}
-    },
-    measure(name, start, end) {
-      try {
-        performance?.mark?.(`${runId}:${end}`);
-        performance?.measure?.(`BrowserRVM:${name}`, `${runId}:${start}`, `${runId}:${end}`);
-      } catch (_) {}
-      const entries = typeof performance !== 'undefined' && typeof performance.getEntriesByName === 'function'
-        ? performance.getEntriesByName(`BrowserRVM:${name}`)
-        : [];
-      const duration = entries.length ? entries[entries.length - 1].duration : 0;
-      this.measures[name] = Number(duration.toFixed(2));
-      console.info(`[BrowserRVM] ${name}: ${this.measures[name]} ms`);
-      return this.measures[name];
-    }
-  };
-}
-
-async function measureAsyncStage(perf, name, fn) {
-  perf.mark(`${name}:start`);
-  try {
-    return await fn();
-  } finally {
-    perf.measure(name, `${name}:start`, `${name}:end`);
-  }
-}
-
-function createEventLoopWatchdog({ thresholdMs = 100, intervalMs = 50 } = {}) {
-  let last = nowMs();
-  let maxEventLoopStallMs = 0;
-  let eventLoopStallCount = 0;
-  const timer = setInterval(() => {
-    const current = nowMs();
-    const stall = current - last - intervalMs;
-    if (stall > thresholdMs) {
-      eventLoopStallCount += 1;
-      maxEventLoopStallMs = Math.max(maxEventLoopStallMs, stall);
-      console.warn(`[BrowserRVM] main-thread stall ${Math.round(stall)} ms`);
-    }
-    last = current;
-  }, intervalMs);
-  return {
-    snapshot() {
-      return {
-        maxEventLoopStallMs: Number(maxEventLoopStallMs.toFixed(1)),
-        eventLoopStallCount
-      };
-    },
-    stop() {
-      clearInterval(timer);
-      return this.snapshot();
-    }
-  };
-}
-
-function checkAbort(signal) {
-  if (signal?.aborted) throw makeAbortError();
-}
-
-function makeAbortError() {
-  try { return new DOMException('RVM load cancelled', 'AbortError'); } catch (_) {
-    const error = new Error('RVM load cancelled');
-    error.name = 'AbortError';
-    return error;
-  }
-}
-
-function isAbortError(error) {
-  return error?.name === 'AbortError' || /cancelled|aborted/i.test(String(error?.message || error));
-}
-
-function yieldToBrowser({ signal } = {}) {
-  checkAbort(signal);
-  if (typeof requestIdleCallback === 'function') {
-    return new Promise((resolve, reject) => {
-      const id = requestIdleCallback(() => {
-        try { checkAbort(signal); resolve(); } catch (error) { reject(error); }
-      }, { timeout: 80 });
-      signal?.addEventListener?.('abort', () => {
-        try { cancelIdleCallback?.(id); } catch (_) {}
-        reject(makeAbortError());
-      }, { once: true });
-    });
-  }
-  if (typeof requestAnimationFrame === 'function') {
-    return new Promise((resolve, reject) => {
-      const id = requestAnimationFrame(() => {
-        try { checkAbort(signal); resolve(); } catch (error) { reject(error); }
-      });
-      signal?.addEventListener?.('abort', () => {
-        try { cancelAnimationFrame?.(id); } catch (_) {}
-        reject(makeAbortError());
-      }, { once: true });
-    });
-  }
-  return new Promise((resolve, reject) => {
-    const id = setTimeout(() => {
-      try { checkAbort(signal); resolve(); } catch (error) { reject(error); }
-    }, 0);
-    signal?.addEventListener?.('abort', () => {
-      clearTimeout(id);
-      reject(makeAbortError());
-    }, { once: true });
-  });
-}
-
-function requestAnimationFrameSafe(fn) {
-  if (typeof requestAnimationFrame === 'function') requestAnimationFrame(fn);
-  else setTimeout(fn, 0);
-}
-
-function makeAsyncSession(statusEl, signal) {
-  return {
-    update(stage, percent) { if (statusEl) statusEl.textContent = `${stage} ${Number.isFinite(percent) ? `${percent}%` : ''}`.trim(); },
-    complete() { if (statusEl) statusEl.textContent = 'Loaded browser RVM fallback'; },
-    cancel() {},
-    isStale() { return Boolean(signal?.aborted); },
-    isCancelled() { return Boolean(signal?.aborted); }
-  };
-}
+function expandBounds(bounds, x, y, z) { if (![x, y, z].every(Number.isFinite)) return; bounds.hasBounds = true; bounds.min.x = Math.min(bounds.min.x, x); bounds.min.y = Math.min(bounds.min.y, y); bounds.min.z = Math.min(bounds.min.z, z); bounds.max.x = Math.max(bounds.max.x, x); bounds.max.y = Math.max(bounds.max.y, y); bounds.max.z = Math.max(bounds.max.z, z); }
+function boundsToSceneBounds(bounds) { if (!bounds?.hasBounds) return emptySceneBounds(); const center = { x: (bounds.min.x + bounds.max.x) * 0.5, y: (bounds.min.y + bounds.max.y) * 0.5, z: (bounds.min.z + bounds.max.z) * 0.5 }; const size = { x: Math.max(bounds.max.x - bounds.min.x, 0), y: Math.max(bounds.max.y - bounds.min.y, 0), z: Math.max(bounds.max.z - bounds.min.z, 0) }; return { hasBounds: true, min: plainPoint(bounds.min), max: plainPoint(bounds.max), center, size, radius: Math.max(Math.hypot(size.x, size.y, size.z) * 0.5, 0) }; }
+function emptySceneBounds() { return { hasBounds: false, min: null, max: null, center: null, size: null, radius: 0 }; }
+function parseBbox(value) { if (Array.isArray(value) && value.length >= 6) { const nums = value.slice(0, 6).map(Number); return nums.every(Number.isFinite) ? nums : null; } if (typeof value === 'string') { const nums = value.replace(/[\[\]]/g, ' ').split(/[\s,]+/g).map(Number).filter(Number.isFinite); return nums.length >= 6 ? nums.slice(0, 6) : null; } return null; }
+function vec3(value) { if (!value) return null; const x = Number(value.x), y = Number(value.y), z = Number(value.z); return [x, y, z].every(Number.isFinite) ? { x, y, z } : null; }
+function plainPoint(point) { return { x: finiteOrZero(point.x), y: finiteOrZero(point.y), z: finiteOrZero(point.z) }; }
+function finiteOrZero(value) { return Number.isFinite(value) ? value : 0; }
+function primitiveName(value) { return String(value || '').trim().toUpperCase(); }
+function skipReason(instruction) { if (!instruction || typeof instruction !== 'object') return 'invalid-instruction'; if (!instruction.center && !instruction.axisStart && !instruction.axisEnd) return 'missing-position'; return 'unsupported-geometry'; }
+function bump(target, key) { const name = String(key || '').trim() || 'UNKNOWN'; target[name] = (target[name] || 0) + 1; }
+function positiveInteger(value, fallback) { const n = Number.parseInt(String(value ?? ''), 10); return Number.isFinite(n) && n > 0 ? n : fallback; }
+function positiveNumber(value, fallback) { const n = Number(value); return Number.isFinite(n) && n >= 0 ? n : fallback; }
+function nowMs() { return typeof performance !== 'undefined' && typeof performance.now === 'function' ? performance.now() : Date.now(); }
+function createStageTimer(runId) { return { runId, measures: {}, mark(name) { try { performance?.mark?.(`${runId}:${name}`); } catch (_) {} }, measure(name, start, end) { try { performance?.mark?.(`${runId}:${end}`); performance?.measure?.(`BrowserRVM:${name}`, `${runId}:${start}`, `${runId}:${end}`); } catch (_) {} const entries = typeof performance !== 'undefined' && typeof performance.getEntriesByName === 'function' ? performance.getEntriesByName(`BrowserRVM:${name}`) : []; const duration = entries.length ? entries[entries.length - 1].duration : 0; this.measures[name] = Number(duration.toFixed(2)); console.info(`[BrowserRVM] ${name}: ${this.measures[name]} ms`); return this.measures[name]; } }; }
+async function measureAsyncStage(perf, name, fn) { perf.mark(`${name}:start`); try { return await fn(); } finally { perf.measure(name, `${name}:start`, `${name}:end`); } }
+function createEventLoopWatchdog({ thresholdMs = 100, intervalMs = 50 } = {}) { let last = nowMs(); let maxEventLoopStallMs = 0; let eventLoopStallCount = 0; const timer = setInterval(() => { const current = nowMs(); const stall = current - last - intervalMs; if (stall > thresholdMs) { eventLoopStallCount += 1; maxEventLoopStallMs = Math.max(maxEventLoopStallMs, stall); console.warn(`[BrowserRVM] main-thread stall ${Math.round(stall)} ms`); } last = current; }, intervalMs); return { snapshot() { return { maxEventLoopStallMs: Number(maxEventLoopStallMs.toFixed(1)), eventLoopStallCount }; }, stop() { clearInterval(timer); return this.snapshot(); } }; }
+function checkAbort(signal) { if (signal?.aborted) throw makeAbortError(); }
+function makeAbortError() { try { return new DOMException('RVM load cancelled', 'AbortError'); } catch (_) { const error = new Error('RVM load cancelled'); error.name = 'AbortError'; return error; } }
+function isAbortError(error) { return error?.name === 'AbortError' || /cancelled|aborted/i.test(String(error?.message || error)); }
+function yieldToBrowser({ signal } = {}) { checkAbort(signal); if (typeof requestIdleCallback === 'function') return new Promise((resolve, reject) => { const id = requestIdleCallback(() => { try { checkAbort(signal); resolve(); } catch (error) { reject(error); } }, { timeout: 80 }); signal?.addEventListener?.('abort', () => { try { cancelIdleCallback?.(id); } catch (_) {} reject(makeAbortError()); }, { once: true }); }); if (typeof requestAnimationFrame === 'function') return new Promise((resolve, reject) => { const id = requestAnimationFrame(() => { try { checkAbort(signal); resolve(); } catch (error) { reject(error); } }); signal?.addEventListener?.('abort', () => { try { cancelAnimationFrame?.(id); } catch (_) {} reject(makeAbortError()); }, { once: true }); }); return Promise.resolve(); }
+function requestAnimationFrameSafe(fn) { if (typeof requestAnimationFrame === 'function') requestAnimationFrame(fn); else setTimeout(fn, 0); }
