@@ -1,5 +1,5 @@
 const PATCH_FLAG = Symbol.for('pcf-glb-rvm-cpp-mat3x4-worker-url-patch-v1');
-const CPP_MAT3X4_WORKER_URL = './browser-rvm-worker.js?v=20260620-rvm-cpp-mat3x4-1';
+const CPP_MAT3X4_WORKER_SPECIFIER = './browser-rvm-worker.js?v=20260620-rvm-cpp-mat3x4-1';
 
 export function installBrowserRvmCppMat3x4WorkerPatch() {
   if (globalThis[PATCH_FLAG]) return;
@@ -11,7 +11,7 @@ export function installBrowserRvmCppMat3x4WorkerPatch() {
     try {
       const text = String(url || '');
       if (/browser-rvm-worker\.js/i.test(text)) {
-        nextUrl = new URL(CPP_MAT3X4_WORKER_URL, import.meta.url);
+        nextUrl = new URL(CPP_MAT3X4_WORKER_SPECIFIER, import.meta.url);
       }
     } catch (_) {
       nextUrl = url;
@@ -24,7 +24,7 @@ export function installBrowserRvmCppMat3x4WorkerPatch() {
   globalThis.Worker = BrowserRvmCppMat3x4Worker;
   globalThis[PATCH_FLAG] = {
     installed: true,
-    workerUrl: CPP_MAT3X4_WORKER_URL,
+    workerSpecifier: CPP_MAT3X4_WORKER_SPECIFIER,
     installedAt: new Date().toISOString()
   };
 }
