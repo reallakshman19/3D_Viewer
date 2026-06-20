@@ -1,7 +1,8 @@
 import { parseRvmArrayBuffer as parseFlatRvmArrayBuffer } from './BrowserRvmParser.js';
 
-export const BROWSER_RVM_HIERARCHY_SCHEMA = 'browser-rvm-hierarchy-wrapper/v3';
+export const BROWSER_RVM_HIERARCHY_SCHEMA = 'browser-rvm-hierarchy-wrapper/v4';
 export const BROWSER_RVM_PRIMITIVE_SEMANTICS_VERSION = 'rhbg-prim-code-map/v2';
+export const BROWSER_RVM_GEOMETRY_QUALITY_VERSION = 'rvm-geometry-quality/v1';
 
 const RVM_PRIM_CODE_SEMANTICS = {
   2: { type: 'BOX', kind: 'BOX', primitiveClass: 'BOX' },
@@ -17,6 +18,7 @@ export async function parseRvmArrayBuffer(arrayBuffer, options = {}) {
   const parsed = await parseFlatRvmArrayBuffer(arrayBuffer, options);
   const hierarchy = groupRvmOwnerHierarchy(parsed.hierarchy || []);
   const semanticSummary = summarizeRvmPrimitiveSemantics(hierarchy);
+  const geometrySummary = summarizeRvmGeometryQuality(hierarchy);
   return {
     ...parsed,
     hierarchy,
@@ -32,7 +34,14 @@ export async function parseRvmArrayBuffer(arrayBuffer, options = {}) {
       primitiveKindCounts: semanticSummary.kindCounts,
       primitiveCodeCounts: semanticSummary.codeCounts,
       primitiveSemanticSourceCounts: semanticSummary.semanticSourceCounts,
-      semanticLeafCount: semanticSummary.leafCount
+      semanticLeafCount: semanticSummary.leafCount,
+      geometryQualityVersion: BROWSER_RVM_GEOMETRY_QUALITY_VERSION,
+      geometryLeafCount: geometrySummary.leafCount,
+      geometrySourceCounts: geometrySummary.sourceCounts,
+      geometrySpanAxisCounts: geometrySummary.axisCounts,
+      geometryQualityCounts: geometrySummary.qualityCounts,
+      geometryMissingBboxCount: geometrySummary.missingBboxCount,
+      geometryApproximateCount: geometrySummary.approximateCount
     }
   };
 }
@@ -50,7 +59,8 @@ export function groupRvmOwnerHierarchy(roots = []) {
         BROWSER_RVM_HIERARCHY_GROUPED: 'true',
         BROWSER_RVM_HIERARCHY_SCHEMA: BROWSER_RVM_HIERARCHY_SCHEMA,
         BROWSER_RVM_PRIMITIVE_SEMANTICS: 'owner-name-and-rhbg-prim-code-map',
-        BROWSER_RVM_PRIMITIVE_SEMANTICS_VERSION: BROWSER_RVM_PRIMITIVE_SEMANTICS_VERSION
+        BROWSER_RVM_PRIMITIVE_SEMANTICS_VERSION: BROWSER_RVM_PRIMITIVE_SEMANTICS_VERSION,
+        BROWSER_RVM_GEOMETRY_QUALITY_VERSION: BROWSER_RVM_GEOMETRY_QUALITY_VERSION
       },
       children: []
     };
@@ -153,7 +163,16 @@ function enrichRvmPrimitiveLeaf(child) {
   const ownerSemantic = semanticFromOwnerName(ownerName);
   const codeSemantic = RVM_PRIM_CODE_SEMANTICS[primitiveCode];
   const semantic = ownerSemantic || codeSemantic;
-  if (!semantic) return child;
+  const geometryAttrs = geometryQualityAttributes(child);
+  if (!semantic) {
+    return {
+      ...child,
+      attributes: {
+        ...attrs,
+        ...geometryAttrs
+      }
+    };
+  }
 
   const type = semantic.type || child.type;
   const kind = semantic.kind || attrs.RVM_PRIMITIVE_KIND || '';
@@ -166,7 +185,8 @@ function enrichRvmPrimitiveLeaf(child) {
       RVM_PRIMITIVE_KIND: kind,
       RVM_BROWSER_PRIMITIVE_CLASS: semantic.primitiveClass || kind || type,
       RVM_BROWSER_PRIMITIVE_SEMANTIC_SOURCE: ownerSemantic ? 'owner-name' : 'prim-code-map',
-      RVM_BROWSER_PRIMITIVE_SEMANTIC_VERSION: BROWSER_RVM_PRIMITIVE_SEMANTICS_VERSION
+      RVM_BROWSER_PRIMITIVE_SEMANTIC_VERSION: BROWSER_RVM_PRIMITIVE_SEMANTICS_VERSION,
+      ...geometryAttrs
     }
   };
 }
@@ -191,6 +211,77 @@ function semanticFromOwnerName(ownerName) {
   return null;
 }
 
+function geometryQualityAttributes(child) {
+  const bbox = normalizeBbox(child?.bbox);
+  if (!bbox) {
+    return {
+      RVM_BROWSER_GEOMETRY_QUALITY_VERSION: BROWSER_RVM_GEOMETRY_QUALITY_VERSION,
+      RVM_BROWSER_GEOMETRY_QUALITY: 'missing-bbox',
+      RVM_BROWSER_GEOMETRY_SOURCE: 'none'
+    };
+  }
+  const dims = dimsFromBbox(bbox);
+  const axis = dominantAxis(dims);
+  const minorDims = minorExtents(dims, axis);
+  const source = String(child?.attributes?.BROWSER_PARSE_METHOD || '').trim() || 'unknown';
+  const span = dims[axis.toLowerCase()] || 0;
+  const radius = Number.parseFloat(String(child?.attributes?.HBOR ?? '')) || Math.max(Math.min(minorDims[0], minorDims[1]) * 0.5, 0);
+  const approximate = /fallback|layout|string-marker|unknown/i.test(source) || span <= 0;
+  return {
+    RVM_BROWSER_GEOMETRY_QUALITY_VERSION: BROWSER_RVM_GEOMETRY_QUALITY_VERSION,
+    RVM_BROWSER_GEOMETRY_QUALITY: approximate ? 'approximate' : 'bbox-derived',
+    RVM_BROWSER_GEOMETRY_SOURCE: source,
+    RVM_BROWSER_SPAN_AXIS: axis,
+    RVM_BROWSER_SPAN_LENGTH: fixed(span),
+    RVM_BROWSER_RADIUS_ESTIMATE: fixed(radius),
+    RVM_BROWSER_EXTENT_X: fixed(dims.dx),
+    RVM_BROWSER_EXTENT_Y: fixed(dims.dy),
+    RVM_BROWSER_EXTENT_Z: fixed(dims.dz),
+    RVM_BROWSER_BBOX_VOLUME: fixed(dims.dx * dims.dy * dims.dz),
+    RVM_BROWSER_GEOMETRY_APPROXIMATE: approximate ? 'true' : 'false'
+  };
+}
+
+function normalizeBbox(bbox) {
+  if (!Array.isArray(bbox) || bbox.length !== 6) return null;
+  const nums = bbox.map((value) => Number(value));
+  if (nums.some((value) => !Number.isFinite(value))) return null;
+  return [
+    Math.min(nums[0], nums[3]),
+    Math.min(nums[1], nums[4]),
+    Math.min(nums[2], nums[5]),
+    Math.max(nums[0], nums[3]),
+    Math.max(nums[1], nums[4]),
+    Math.max(nums[2], nums[5])
+  ];
+}
+
+function dimsFromBbox(bbox) {
+  return {
+    dx: Math.abs(bbox[3] - bbox[0]),
+    dy: Math.abs(bbox[4] - bbox[1]),
+    dz: Math.abs(bbox[5] - bbox[2])
+  };
+}
+
+function dominantAxis(dims) {
+  if (dims.dx >= dims.dy && dims.dx >= dims.dz) return 'X';
+  if (dims.dy >= dims.dx && dims.dy >= dims.dz) return 'Y';
+  return 'Z';
+}
+
+function minorExtents(dims, axis) {
+  if (axis === 'X') return [dims.dy, dims.dz];
+  if (axis === 'Y') return [dims.dx, dims.dz];
+  return [dims.dx, dims.dy];
+}
+
+function fixed(value) {
+  const num = Number(value);
+  if (!Number.isFinite(num)) return '0.000';
+  return num.toFixed(3);
+}
+
 function summarizeRvmPrimitiveSemantics(roots = []) {
   const typeCounts = {};
   const kindCounts = {};
@@ -206,7 +297,7 @@ function summarizeRvmPrimitiveSemantics(roots = []) {
   const walk = (node) => {
     if (!node || typeof node !== 'object') return;
     const attrs = node.attributes || {};
-    if (attrs.RVM_RECORD_TAG === 'PRIM' || attrs.RVM_PRIMITIVE_CODE !== undefined || attrs.RVM_BYTE_OFFSET !== undefined) {
+    if (isPrimitiveLeaf(node)) {
       leafCount += 1;
       bump(typeCounts, attrs.TYPE || node.type);
       bump(kindCounts, attrs.RVM_PRIMITIVE_KIND || attrs.RVM_BROWSER_PRIMITIVE_CLASS || node.type);
@@ -218,6 +309,40 @@ function summarizeRvmPrimitiveSemantics(roots = []) {
 
   for (const root of roots || []) walk(root);
   return { typeCounts, kindCounts, codeCounts, semanticSourceCounts, leafCount };
+}
+
+function summarizeRvmGeometryQuality(roots = []) {
+  const sourceCounts = {};
+  const axisCounts = {};
+  const qualityCounts = {};
+  let leafCount = 0;
+  let missingBboxCount = 0;
+  let approximateCount = 0;
+
+  const bump = (target, key) => {
+    const name = String(key || '').trim() || 'UNKNOWN';
+    target[name] = (target[name] || 0) + 1;
+  };
+  const walk = (node) => {
+    if (!node || typeof node !== 'object') return;
+    const attrs = node.attributes || {};
+    if (isPrimitiveLeaf(node)) {
+      leafCount += 1;
+      bump(sourceCounts, attrs.RVM_BROWSER_GEOMETRY_SOURCE);
+      bump(axisCounts, attrs.RVM_BROWSER_SPAN_AXIS);
+      bump(qualityCounts, attrs.RVM_BROWSER_GEOMETRY_QUALITY);
+      if (attrs.RVM_BROWSER_GEOMETRY_QUALITY === 'missing-bbox') missingBboxCount += 1;
+      if (attrs.RVM_BROWSER_GEOMETRY_APPROXIMATE === 'true') approximateCount += 1;
+    }
+    for (const child of Array.isArray(node.children) ? node.children : []) walk(child);
+  };
+  for (const root of roots || []) walk(root);
+  return { sourceCounts, axisCounts, qualityCounts, leafCount, missingBboxCount, approximateCount };
+}
+
+function isPrimitiveLeaf(node) {
+  const attrs = node?.attributes || {};
+  return attrs.RVM_RECORD_TAG === 'PRIM' || attrs.RVM_PRIMITIVE_CODE !== undefined || attrs.RVM_BYTE_OFFSET !== undefined;
 }
 
 function stripGroupingState(node) {
