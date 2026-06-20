@@ -1,8 +1,9 @@
 import { parseRvmArrayBuffer as parseFlatRvmArrayBuffer } from './BrowserRvmParser.js';
 
-export const BROWSER_RVM_HIERARCHY_SCHEMA = 'browser-rvm-hierarchy-wrapper/v4';
+export const BROWSER_RVM_HIERARCHY_SCHEMA = 'browser-rvm-hierarchy-wrapper/v5';
 export const BROWSER_RVM_PRIMITIVE_SEMANTICS_VERSION = 'rhbg-prim-code-map/v2';
 export const BROWSER_RVM_GEOMETRY_QUALITY_VERSION = 'rvm-geometry-quality/v1';
+export const BROWSER_RVM_GEOMETRY_CONTRACT_VERSION = 'rvm-browser-geometry-contract/v1';
 
 const RVM_PRIM_CODE_SEMANTICS = {
   2: { type: 'BOX', kind: 'BOX', primitiveClass: 'BOX' },
@@ -19,6 +20,7 @@ export async function parseRvmArrayBuffer(arrayBuffer, options = {}) {
   const hierarchy = groupRvmOwnerHierarchy(parsed.hierarchy || []);
   const semanticSummary = summarizeRvmPrimitiveSemantics(hierarchy);
   const geometrySummary = summarizeRvmGeometryQuality(hierarchy);
+  const contractSummary = summarizeRvmGeometryContracts(hierarchy);
   return {
     ...parsed,
     hierarchy,
@@ -41,7 +43,11 @@ export async function parseRvmArrayBuffer(arrayBuffer, options = {}) {
       geometrySpanAxisCounts: geometrySummary.axisCounts,
       geometryQualityCounts: geometrySummary.qualityCounts,
       geometryMissingBboxCount: geometrySummary.missingBboxCount,
-      geometryApproximateCount: geometrySummary.approximateCount
+      geometryApproximateCount: geometrySummary.approximateCount,
+      geometryContractVersion: BROWSER_RVM_GEOMETRY_CONTRACT_VERSION,
+      geometryContractCounts: contractSummary.contractCounts,
+      geometryContractSourceCounts: contractSummary.sourceCounts,
+      geometryContractLeafCount: contractSummary.leafCount
     }
   };
 }
@@ -60,7 +66,8 @@ export function groupRvmOwnerHierarchy(roots = []) {
         BROWSER_RVM_HIERARCHY_SCHEMA: BROWSER_RVM_HIERARCHY_SCHEMA,
         BROWSER_RVM_PRIMITIVE_SEMANTICS: 'owner-name-and-rhbg-prim-code-map',
         BROWSER_RVM_PRIMITIVE_SEMANTICS_VERSION: BROWSER_RVM_PRIMITIVE_SEMANTICS_VERSION,
-        BROWSER_RVM_GEOMETRY_QUALITY_VERSION: BROWSER_RVM_GEOMETRY_QUALITY_VERSION
+        BROWSER_RVM_GEOMETRY_QUALITY_VERSION: BROWSER_RVM_GEOMETRY_QUALITY_VERSION,
+        BROWSER_RVM_GEOMETRY_CONTRACT_VERSION: BROWSER_RVM_GEOMETRY_CONTRACT_VERSION
       },
       children: []
     };
@@ -164,18 +171,20 @@ function enrichRvmPrimitiveLeaf(child) {
   const codeSemantic = RVM_PRIM_CODE_SEMANTICS[primitiveCode];
   const semantic = ownerSemantic || codeSemantic;
   const geometryAttrs = geometryQualityAttributes(child);
+  const type = semantic?.type || child.type;
+  const kind = semantic?.kind || attrs.RVM_PRIMITIVE_KIND || '';
+  const contractAttrs = geometryContractAttributes(child, { type, kind, semantic, geometryAttrs });
   if (!semantic) {
     return {
       ...child,
       attributes: {
         ...attrs,
-        ...geometryAttrs
+        ...geometryAttrs,
+        ...contractAttrs
       }
     };
   }
 
-  const type = semantic.type || child.type;
-  const kind = semantic.kind || attrs.RVM_PRIMITIVE_KIND || '';
   return {
     ...child,
     type,
@@ -186,7 +195,8 @@ function enrichRvmPrimitiveLeaf(child) {
       RVM_BROWSER_PRIMITIVE_CLASS: semantic.primitiveClass || kind || type,
       RVM_BROWSER_PRIMITIVE_SEMANTIC_SOURCE: ownerSemantic ? 'owner-name' : 'prim-code-map',
       RVM_BROWSER_PRIMITIVE_SEMANTIC_VERSION: BROWSER_RVM_PRIMITIVE_SEMANTICS_VERSION,
-      ...geometryAttrs
+      ...geometryAttrs,
+      ...contractAttrs
     }
   };
 }
@@ -240,6 +250,79 @@ function geometryQualityAttributes(child) {
     RVM_BROWSER_BBOX_VOLUME: fixed(dims.dx * dims.dy * dims.dz),
     RVM_BROWSER_GEOMETRY_APPROXIMATE: approximate ? 'true' : 'false'
   };
+}
+
+function geometryContractAttributes(child, { type, kind, geometryAttrs }) {
+  const bbox = normalizeBbox(child?.bbox);
+  if (!bbox) {
+    return {
+      RVM_BROWSER_GEOMETRY_CONTRACT_VERSION: BROWSER_RVM_GEOMETRY_CONTRACT_VERSION,
+      RVM_BROWSER_RENDER_PRIMITIVE: 'UNSUPPORTED',
+      RVM_BROWSER_RENDER_SOURCE: 'missing-bbox'
+    };
+  }
+  const endpoints = endpointsForBbox(bbox);
+  const center = centerFromBbox(bbox);
+  const dims = dimsFromBbox(bbox);
+  const axis = geometryAttrs?.RVM_BROWSER_SPAN_AXIS || dominantAxis(dims);
+  const length = Number.parseFloat(geometryAttrs?.RVM_BROWSER_SPAN_LENGTH || '') || dims[axis.toLowerCase()] || 0;
+  const radius = Number.parseFloat(geometryAttrs?.RVM_BROWSER_RADIUS_ESTIMATE || '') || 0;
+  const renderPrimitive = renderPrimitiveFor(type, kind);
+  return {
+    RVM_BROWSER_GEOMETRY_CONTRACT_VERSION: BROWSER_RVM_GEOMETRY_CONTRACT_VERSION,
+    RVM_BROWSER_RENDER_PRIMITIVE: renderPrimitive,
+    RVM_BROWSER_RENDER_SOURCE: 'bbox-derived-browser-contract',
+    RVM_BROWSER_CENTER: stringifyVec(center),
+    RVM_BROWSER_AXIS_START: stringifyVec(endpoints.apos),
+    RVM_BROWSER_AXIS_END: stringifyVec(endpoints.lpos),
+    RVM_BROWSER_AXIS: axis,
+    RVM_BROWSER_LENGTH: fixed(length),
+    RVM_BROWSER_RADIUS: fixed(radius),
+    RVM_BROWSER_DIAMETER: fixed(radius * 2),
+    RVM_BROWSER_BBOX: JSON.stringify(bbox.map((value) => Number(fixed(value))))
+  };
+}
+
+function renderPrimitiveFor(type, kind) {
+  const t = String(type || '').toUpperCase();
+  const k = String(kind || '').toUpperCase();
+  if (t === 'PIPE' || k === 'CYLINDER') return 'CYLINDER_BBOX';
+  if (t === 'BOX' || k === 'BOX') return 'BOX_BBOX';
+  if (t === 'STRUCTURE') return 'BOX_BBOX';
+  if (t === 'GASK' || k === 'TORUS') return 'TORUS_BBOX_PLACEHOLDER';
+  if (t === 'ELBOW' || k === 'ELBOW') return 'ELBOW_BBOX_PLACEHOLDER';
+  if (t === 'REDUCER' || k === 'CONE') return 'CONE_BBOX_PLACEHOLDER';
+  if (t === 'FLANGE') return 'FLANGE_BBOX_PLACEHOLDER';
+  if (t === 'VALVE') return 'VALVE_BBOX_PLACEHOLDER';
+  if (t === 'TEE') return 'TEE_BBOX_PLACEHOLDER';
+  if (t === 'INSTRUMENT') return 'INSTRUMENT_BBOX_PLACEHOLDER';
+  if (t === 'SUPPORT') return 'SUPPORT_BBOX_PLACEHOLDER';
+  return 'GENERIC_BBOX_PLACEHOLDER';
+}
+
+function centerFromBbox(bbox) {
+  return {
+    x: (bbox[0] + bbox[3]) / 2,
+    y: (bbox[1] + bbox[4]) / 2,
+    z: (bbox[2] + bbox[5]) / 2
+  };
+}
+
+function endpointsForBbox(bbox) {
+  const [minX, minY, minZ, maxX, maxY, maxZ] = bbox;
+  const dx = Math.abs(maxX - minX);
+  const dy = Math.abs(maxY - minY);
+  const dz = Math.abs(maxZ - minZ);
+  const cy = (minY + maxY) / 2;
+  const cz = (minZ + maxZ) / 2;
+  const cx = (minX + maxX) / 2;
+  if (dx >= dy && dx >= dz) return { apos: { x: minX, y: cy, z: cz }, lpos: { x: maxX, y: cy, z: cz } };
+  if (dy >= dx && dy >= dz) return { apos: { x: cx, y: minY, z: cz }, lpos: { x: cx, y: maxY, z: cz } };
+  return { apos: { x: cx, y: cy, z: minZ }, lpos: { x: cx, y: cy, z: maxZ } };
+}
+
+function stringifyVec(vec) {
+  return `${fixed(vec.x)},${fixed(vec.y)},${fixed(vec.z)}`;
 }
 
 function normalizeBbox(bbox) {
@@ -338,6 +421,28 @@ function summarizeRvmGeometryQuality(roots = []) {
   };
   for (const root of roots || []) walk(root);
   return { sourceCounts, axisCounts, qualityCounts, leafCount, missingBboxCount, approximateCount };
+}
+
+function summarizeRvmGeometryContracts(roots = []) {
+  const contractCounts = {};
+  const sourceCounts = {};
+  let leafCount = 0;
+  const bump = (target, key) => {
+    const name = String(key || '').trim() || 'UNKNOWN';
+    target[name] = (target[name] || 0) + 1;
+  };
+  const walk = (node) => {
+    if (!node || typeof node !== 'object') return;
+    const attrs = node.attributes || {};
+    if (isPrimitiveLeaf(node)) {
+      leafCount += 1;
+      bump(contractCounts, attrs.RVM_BROWSER_RENDER_PRIMITIVE);
+      bump(sourceCounts, attrs.RVM_BROWSER_RENDER_SOURCE);
+    }
+    for (const child of Array.isArray(node.children) ? node.children : []) walk(child);
+  };
+  for (const root of roots || []) walk(root);
+  return { contractCounts, sourceCounts, leafCount };
 }
 
 function isPrimitiveLeaf(node) {
