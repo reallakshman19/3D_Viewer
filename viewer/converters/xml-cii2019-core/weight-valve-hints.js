@@ -213,6 +213,12 @@ export function scoreValveHintAgainstCandidate(nodeHint, candidateClass, candida
   return { tier: 0, reason: `${nodeHint.code} no semantic match` };
 }
 
+function roundWeight(value) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return 0;
+  return Math.round(numeric * 1000) / 1000;
+}
+
 function resolveCandidateWeight(candidate, xmlLengthMm, config) {
   const masterWeight = Number(candidate.weight);
   const masterLength = Number(candidate.rowLength);
@@ -229,7 +235,7 @@ function resolveCandidateWeight(candidate, xmlLengthMm, config) {
   if (Math.abs(ratio - 1) <= 1e-9) {
     return { masterWeight, selectedWeight: masterWeight, suggestedWeight: masterWeight, weightMethod: 'master', extrapolationRatio: 1, weightWarning: '' };
   }
-  const selectedWeight = Math.round(masterWeight * ratio * 1000) / 1000;
+  const selectedWeight = roundWeight(masterWeight * ratio);
   return { masterWeight, selectedWeight, suggestedWeight: selectedWeight, weightMethod: 'length-extrapolated', extrapolationRatio: ratio, weightWarning: '' };
 }
 
@@ -243,6 +249,153 @@ function baseCandidateFromRow(row, config, lengthMm) {
   const typeDesc = pickText(row, ['typeDesc', 'TypeDesc', 'Type Desc', 'Type Description', 'Description', 'Valve Type']);
   if (rowBore === null || rowLength === null || weight === null || !rowRating) return null;
   return { weight, rowBore, rowLength, rowRating, type, valveType: type, typeDesc, rowData: row };
+}
+
+function interpolateBetween(a, b, targetLength) {
+  const lenA = Number(a.rowLength);
+  const lenB = Number(b.rowLength);
+  const wtA = Number(a.weight);
+  const wtB = Number(b.weight);
+  if (!Number.isFinite(lenA) || !Number.isFinite(lenB) || !Number.isFinite(wtA) || !Number.isFinite(wtB) || Math.abs(lenB - lenA) <= 1e-9) return null;
+  return wtA + ((Number(targetLength) - lenA) * (wtB - wtA)) / (lenB - lenA);
+}
+
+function ratioFromNearest(nearest, targetLength) {
+  const len = Number(nearest?.rowLength);
+  const wt = Number(nearest?.weight);
+  const target = Number(targetLength);
+  if (!Number.isFinite(len) || !Number.isFinite(wt) || !Number.isFinite(target) || len <= 0) return null;
+  return wt * target / len;
+}
+
+function sameBoreRatingRows(rows, config, { boreMm, wantedRating, lengthMm }) {
+  const bore = Number(boreMm);
+  return rows
+    .map((row) => baseCandidateFromRow(row, config, lengthMm))
+    .filter(Boolean)
+    .filter((candidate) => {
+      const boreDelta = Math.abs(Number(candidate.rowBore) - bore);
+      return Number.isFinite(boreDelta) && boreDelta < 1 && candidate.rowRating === wantedRating && Number(candidate.rowLength) > 0 && Number(candidate.weight) > 0;
+    })
+    .sort((a, b) => Number(a.rowLength) - Number(b.rowLength));
+}
+
+function zeroWeightFallback({ boreMm, wantedRating, lengthMm, nodeHint }) {
+  const length = Number(lengthMm);
+  return {
+    weight: 0,
+    masterWeight: 0,
+    selectedWeight: 0,
+    suggestedWeight: 0,
+    weightMethod: 'no-same-bore-rating',
+    weightWarning: 'No matching weight master rows with the same bore and rating; defaulted to 0 kg for explicit review.',
+    inferredWeight: true,
+    fallbackSuggestion: true,
+    zeroFallback: true,
+    rowBore: Number(boreMm),
+    rowRating: wantedRating,
+    rowLength: Number.isFinite(length) ? length : 0,
+    type: 'Fallback',
+    valveType: 'Fallback',
+    typeDesc: 'No same Bore/Rating master row',
+    rowData: null,
+    lengthDelta: 0,
+    boreDelta: 0,
+    ratingExact: Boolean(wantedRating),
+    ratingScore: wantedRating ? 1 : 0,
+    score: 0,
+    candidateClass: { family: '', subtype: '' },
+    lengthQualified: false,
+    lengthToleranceMm: 0,
+    nodeValveHint: nodeHint,
+    valveHintLabel: formatValveHint(nodeHint),
+    semanticTier: 0,
+    semanticPotentialTier: 0,
+    semanticReason: 'No same bore/rating master rows',
+    rejectedReason: '',
+    preferred: false,
+  };
+}
+
+function sameBoreRatingInterpolationFallback({ rows, context, config, wantedRating, nodeHint, toleranceMm }) {
+  const { boreMm, lengthMm } = context || {};
+  const target = Number(lengthMm);
+  if (boreMm === null || boreMm === undefined || !wantedRating || !Number.isFinite(target)) return null;
+
+  const matches = sameBoreRatingRows(rows, config, { boreMm, wantedRating, lengthMm });
+  if (!matches.length) return zeroWeightFallback({ boreMm, wantedRating, lengthMm, nodeHint });
+
+  let method = 'length-extrapolated';
+  let selected = null;
+  let reference = matches[0];
+  let referenceLabel = '';
+
+  if (matches.length === 1) {
+    reference = matches[0];
+    selected = ratioFromNearest(reference, target);
+    referenceLabel = `${Number(reference.rowLength).toFixed(1)}mm`;
+  } else {
+    let lower = null;
+    let upper = null;
+    for (const candidate of matches) {
+      if (Number(candidate.rowLength) <= target) lower = candidate;
+      if (Number(candidate.rowLength) >= target && !upper) upper = candidate;
+    }
+
+    if (lower && upper && lower !== upper) {
+      method = 'length-interpolated';
+      selected = interpolateBetween(lower, upper, target);
+      reference = Math.abs(Number(lower.rowLength) - target) <= Math.abs(Number(upper.rowLength) - target) ? lower : upper;
+      referenceLabel = `${Number(lower.rowLength).toFixed(1)}-${Number(upper.rowLength).toFixed(1)}mm`;
+    } else {
+      const pair = target < Number(matches[0].rowLength)
+        ? [matches[0], matches[1]]
+        : [matches[matches.length - 2], matches[matches.length - 1]];
+      selected = interpolateBetween(pair[0], pair[1], target);
+      reference = Math.abs(Number(pair[0].rowLength) - target) <= Math.abs(Number(pair[1].rowLength) - target) ? pair[0] : pair[1];
+      referenceLabel = `${Number(pair[0].rowLength).toFixed(1)}-${Number(pair[1].rowLength).toFixed(1)}mm`;
+    }
+
+    if (!Number.isFinite(selected) || selected <= 0) selected = ratioFromNearest(reference, target);
+  }
+
+  const selectedWeight = roundWeight(selected);
+  if (!Number.isFinite(selectedWeight) || selectedWeight <= 0) return zeroWeightFallback({ boreMm, wantedRating, lengthMm, nodeHint });
+
+  const lengthDelta = Math.abs(Number(reference.rowLength) - target);
+  const label = method === 'length-interpolated' ? 'Interpolated' : 'Extrapolated';
+  return {
+    ...reference,
+    masterWeight: Number(reference.weight),
+    selectedWeight,
+    suggestedWeight: selectedWeight,
+    weight: selectedWeight,
+    weightMethod: method,
+    weightWarning: `${label} from same Bore ${Number(boreMm).toFixed(0)} / Rating ${wantedRating} master row(s) at ${referenceLabel}.`,
+    inferredWeight: true,
+    fallbackSuggestion: true,
+    zeroFallback: false,
+    rowBore: Number(boreMm),
+    rowRating: wantedRating,
+    lengthDelta,
+    boreDelta: 0,
+    ratingExact: true,
+    ratingScore: 1,
+    score: 0.5,
+    candidateClass: classifyWeightMasterCandidate(reference),
+    lengthQualified: false,
+    lengthToleranceMm: toleranceMm,
+    nodeValveHint: nodeHint,
+    valveHintLabel: formatValveHint(nodeHint),
+    semanticTier: 0,
+    semanticPotentialTier: 0,
+    semanticReason: label,
+    rejectedReason: '',
+    preferred: false,
+    type: reference.type || label,
+    valveType: reference.valveType || label,
+    typeDesc: `${label} from same Bore/Rating`,
+  };
 }
 
 function enrichWeightCandidate({ candidate, nodeHint, xmlLengthMm, toleranceMm, config, wantedRating, boreMm }) {
@@ -292,11 +445,14 @@ export function rankXmlCiiWeightCandidates(context, config, options = {}) {
   const { boreMm, rating, lengthMm, nodeName = '' } = context || {};
   if (boreMm === null || boreMm === undefined || lengthMm === null || lengthMm === undefined) return { nodeHint: null, candidates: [], rejectedCandidates: [], best: null };
   const rows = Array.isArray(config?.weight?.masterRows) ? config.weight.masterRows : [];
-  if (!rows.length) return { nodeHint: null, candidates: [], rejectedCandidates: [], best: null };
-  const toleranceMm = valveHintLengthToleranceMm(config);
-  const includeRejected = options.includeRejected !== false && config?.weight?.showLengthRejectedSemanticMatches !== false;
   const wantedRating = normalizedRating(rating);
   const nodeHint = useNodeNameValveHints(config) ? resolveNodeNameValveHint(nodeName, config) : null;
+  if (!rows.length) {
+    const zero = zeroWeightFallback({ boreMm, wantedRating, lengthMm, nodeHint });
+    return { nodeHint, candidates: [zero], rejectedCandidates: [], best: zero };
+  }
+  const toleranceMm = valveHintLengthToleranceMm(config);
+  const includeRejected = options.includeRejected !== false && config?.weight?.showLengthRejectedSemanticMatches !== false;
   const ranked = [];
   const rejected = [];
   for (const row of rows) {
@@ -313,6 +469,10 @@ export function rankXmlCiiWeightCandidates(context, config, options = {}) {
   }
   ranked.sort(compareRankedWeightCandidates);
   rejected.sort(compareRejectedWeightCandidates);
+  if (!ranked.length) {
+    const fallback = sameBoreRatingInterpolationFallback({ rows, context, config, wantedRating, nodeHint, toleranceMm });
+    if (fallback) ranked.push(fallback);
+  }
   return { nodeHint, candidates: ranked, rejectedCandidates: rejected, best: ranked[0] || null };
 }
 
