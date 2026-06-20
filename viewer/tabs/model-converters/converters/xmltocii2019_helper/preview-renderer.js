@@ -150,13 +150,45 @@ function _savePreviewOverride({ config, ensureOverrides, editType, row, derivedK
   if (key) overrides[editType] = { ...overrides[editType], [key]: cleanValue };
   return key;
 }
+function _manualPreviewActionHtml(label = 'Build Preview') {
+  return `<div class="model-converters-workflow-master-card mc-preview-manual-card" style="margin-bottom:10px;display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap;">
+    <div class="model-converters-workflow-detail-text" style="margin:0;">Preview is manual to protect saved overrides. Edit Regex/Masters freely, then click Build Preview.</div>
+    <button type="button" class="model-converters-run-btn" data-mc-preview-build style="padding:8px 14px;min-width:140px;">${_esc(label)}</button>
+  </div>`;
+}
+function _bindManualPreviewButton(host, rootEl, xmlText, config, options, label = 'Building preview...') {
+  host?.querySelectorAll('[data-mc-preview-build]').forEach((button) => {
+    button.addEventListener('click', () => {
+      host.innerHTML = `<div class="model-converters-workflow-detail-note" style="text-align:center;padding:18px;">${_esc(label)}</div>`;
+      setTimeout(() => xmlCiiBuildAndRenderPreview(rootEl, xmlText, config, { ...options, forceBuild: true }), 0);
+    });
+  });
+}
+function _renderManualPreviewIdle(host, rootEl, xmlText, config, options) {
+  if (!host) return;
+  host.innerHTML = `${_manualPreviewActionHtml('Build Preview')}<div class="model-converters-workflow-detail-note" style="text-align:center;padding:18px;">Preview has not been built for this visit. Click <strong>Build Preview</strong> when ready.</div>`;
+  _bindManualPreviewButton(host, rootEl, xmlText, config, options);
+}
+function _markPreviewSaved(host, message = 'Saved. Click Rebuild Preview when you want to recompute suggestions.') {
+  const existing = host?.querySelector('[data-mc-preview-save-note]');
+  if (existing) {
+    existing.textContent = message;
+    return;
+  }
+  host?.insertAdjacentHTML('afterbegin', `<div data-mc-preview-save-note class="model-converters-workflow-detail-note" style="margin:0 0 8px;border-color:#2f855a;color:#14532d;background:#f0fff4;">${_esc(message)}</div>`);
+}
+function _updateEditedPreviewCell(td, newVal) {
+  const val = _toText(newVal).trim() || '—';
+  const span = td?.querySelector?.('.mc-preview-editable-val');
+  if (span) span.textContent = val;
+}
 
 export function xmlCiiRenderPreviewPhase(xmlFile, config) {
   const llRows = Array.isArray(config.linelist?.masterRows) ? config.linelist.masterRows.length : 0;
   const pcRows = Array.isArray(config.pipingClass?.masterRows) ? config.pipingClass.masterRows.length : 0;
   if (!xmlFile) return `<div class="model-converters-workflow-detail-title">3 Preview</div><div class="model-converters-workflow-detail-note">⚠ Load an XML file in the sidebar first, then return here to preview enrichment.</div>`;
   if (!llRows && !pcRows) return `<div class="model-converters-workflow-detail-title">3 Preview</div><div class="model-converters-workflow-detail-note">⚠ Import at least one master in 2 Import Masters, then return here.</div>`;
-  return `<div class="model-converters-workflow-detail-title">3 Preview</div><div class="model-converters-workflow-detail-text">Dry-run enrichment preview per branch — inspect and override approximate matches.</div><div id="mc-preview-table-host"><div class="model-converters-workflow-detail-note" style="text-align:center;padding:18px;">Loading preview...</div></div>`;
+  return `<div class="model-converters-workflow-detail-title">3 Preview</div><div class="model-converters-workflow-detail-text">Dry-run enrichment preview per branch — inspect and override approximate matches.</div><div id="mc-preview-table-host">${_manualPreviewActionHtml('Build Preview')}<div class="model-converters-workflow-detail-note" style="text-align:center;padding:18px;">Preview is not auto-built. Click <strong>Build Preview</strong> after loading XML/master data.</div></div>`;
 }
 
 export function xmlCiiDryRunPreview(xmlText, config, stagedJsonText) {
@@ -252,12 +284,15 @@ export function xmlCiiDryRunPreview(xmlText, config, stagedJsonText) {
 }
 
 export async function xmlCiiBuildAndRenderPreview(rootEl, xmlText, config, options = {}) {
-  const { onSaveConfig, openOverridePopup, ensureOverrides, stagedJsonText } = options;
+  const { onSaveConfig, openOverridePopup, ensureOverrides, stagedJsonText, forceBuild = false } = options;
   const host = rootEl?.querySelector('#mc-preview-table-host');
   if (!host) return;
-  const refreshPreview = () => { host.innerHTML = '<div class="model-converters-workflow-detail-note" style="text-align:center;padding:18px;">Refreshing preview...</div>'; setTimeout(() => xmlCiiBuildAndRenderPreview(rootEl, xmlText, config, options), 0); };
+  if (!forceBuild) {
+    _renderManualPreviewIdle(host, rootEl, xmlText, config, options);
+    return;
+  }
   const { branchRows, nodeRows } = xmlCiiDryRunPreview(xmlText, config, stagedJsonText);
-  if (!branchRows.length) { host.innerHTML = '<div class="model-converters-workflow-detail-note">No branches found in XML.</div>'; return; }
+  if (!branchRows.length) { host.innerHTML = `${_manualPreviewActionHtml('Build Preview')}<div class="model-converters-workflow-detail-note">No branches found in XML.</div>`; _bindManualPreviewButton(host, rootEl, xmlText, config, options); return; }
   const nodesByBranch = {};
   for (const nr of nodeRows) (nodesByBranch[nr.branchName] = nodesByBranch[nr.branchName] || []).push(nr);
   const table = new EditablePreviewTable({
@@ -283,13 +318,15 @@ export async function xmlCiiBuildAndRenderPreview(rootEl, xmlText, config, optio
       const overrides = ensureOverrides(config);
       overrides.rigidWeight = { ...(overrides.rigidWeight || {}), [key]: numeric };
       onSaveConfig(config);
+      _markPreviewSaved(host, 'Weight override saved. Click Rebuild Preview to recompute suggestions.');
     },
-    onCellEditClick: ({ editType, derivedKey, currentVal, rowIndex, td }) => openOverridePopup({ editType, derivedKey, currentVal, config, onSave: (newVal) => { const row = branchRows[Number(rowIndex)] || {}; const savedKey = _savePreviewOverride({ config, ensureOverrides, editType, row, derivedKey, value: newVal }); markPreviewOverrideManual({ config, ensureOverrides, field: editType, key: savedKey, value: newVal }); if (editType === 'rating' && row.lineKey) markPreviewProcessManual({ config, ensureOverrides, field: 'rating', lineKey: row.lineKey, value: newVal }); onSaveConfig(config); td.dataset.mcFillState = 'manual'; refreshPreview(); }}),
-    onFillDownClick: ({ field, fromRow, currentVal }) => { const filled = applyPreviewOverrideFillDown({ host, config, ensureOverrides, field, fromRow, currentValue: currentVal }); if (filled > 0) { if (field === 'rating') { const overrides = ensureOverrides(config); for (const row of branchRows.slice(fromRow)) { const value = _bucketText(config, 'rating', _ratingKeys(row)); if (value && row.lineKey) _setProcessDataField(overrides, row.lineKey, 'rating', value); } } onSaveConfig(config); refreshPreview(); } },
-    onProcessInputChange: ({ field, fieldKey, lineKey, value, input }) => { const overrides = ensureOverrides(config); if (!overrides.processData) overrides.processData = {}; if (!overrides.processData[lineKey]) overrides.processData[lineKey] = {}; const cleanVal = _toText(value).trim(); const actualField = field || fieldKey; if (cleanVal === '') delete overrides.processData[lineKey][actualField]; else overrides.processData[lineKey][actualField] = cleanVal; if (actualField === 'rating' && cleanVal) { overrides.rating = overrides.rating && typeof overrides.rating === 'object' && !Array.isArray(overrides.rating) ? { ...overrides.rating, [lineKey]: cleanVal } : { [lineKey]: cleanVal }; } if (Object.keys(overrides.processData[lineKey]).length === 0) delete overrides.processData[lineKey]; markPreviewProcessManual({ config, ensureOverrides, field: actualField, lineKey, value: cleanVal }); onSaveConfig(config); const cell = input.closest('.mc-preview-pd-cell'); if (cell) cell.className = cleanVal ? 'mc-preview-pd-cell mc-preview-pd-override' : 'mc-preview-pd-cell mc-preview-pd-empty'; },
-    onProcessFillDownClick: ({ fieldKey, fromRow, value }) => { const filled = applyPreviewProcessFillDown({ host, config, ensureOverrides, field: fieldKey, fromRow, currentValue: value }); if (filled > 0) onSaveConfig(config); }
+    onCellEditClick: ({ editType, derivedKey, currentVal, rowIndex, td }) => openOverridePopup({ editType, derivedKey, currentVal, config, onSave: (newVal) => { const row = branchRows[Number(rowIndex)] || {}; const savedKey = _savePreviewOverride({ config, ensureOverrides, editType, row, derivedKey, value: newVal }); markPreviewOverrideManual({ config, ensureOverrides, field: editType, key: savedKey, value: newVal }); if (editType === 'rating' && row.lineKey) markPreviewProcessManual({ config, ensureOverrides, field: 'rating', lineKey: row.lineKey, value: newVal }); onSaveConfig(config); td.dataset.mcFillState = 'manual'; _updateEditedPreviewCell(td, newVal); _markPreviewSaved(host); }}),
+    onFillDownClick: ({ field, fromRow, currentVal }) => { const filled = applyPreviewOverrideFillDown({ host, config, ensureOverrides, field, fromRow, currentValue: currentVal }); if (filled > 0) { if (field === 'rating') { const overrides = ensureOverrides(config); for (const row of branchRows.slice(fromRow)) { const value = _bucketText(config, 'rating', _ratingKeys(row)); if (value && row.lineKey) _setProcessDataField(overrides, row.lineKey, 'rating', value); } } onSaveConfig(config); _markPreviewSaved(host, `${filled} override${filled === 1 ? '' : 's'} saved. Click Rebuild Preview to recompute suggestions.`); } },
+    onProcessInputChange: ({ field, fieldKey, lineKey, value, input }) => { const overrides = ensureOverrides(config); if (!overrides.processData) overrides.processData = {}; if (!overrides.processData[lineKey]) overrides.processData[lineKey] = {}; const cleanVal = _toText(value).trim(); const actualField = field || fieldKey; if (cleanVal === '') delete overrides.processData[lineKey][actualField]; else overrides.processData[lineKey][actualField] = cleanVal; if (actualField === 'rating' && cleanVal) { overrides.rating = overrides.rating && typeof overrides.rating === 'object' && !Array.isArray(overrides.rating) ? { ...overrides.rating, [lineKey]: cleanVal } : { [lineKey]: cleanVal }; } if (Object.keys(overrides.processData[lineKey]).length === 0) delete overrides.processData[lineKey]; markPreviewProcessManual({ config, ensureOverrides, field: actualField, lineKey, value: cleanVal }); onSaveConfig(config); const cell = input.closest('.mc-preview-pd-cell'); if (cell) cell.className = cleanVal ? 'mc-preview-pd-cell mc-preview-pd-override' : 'mc-preview-pd-cell mc-preview-pd-empty'; _markPreviewSaved(host, 'Process override saved. Click Rebuild Preview to recompute suggestions.'); },
+    onProcessFillDownClick: ({ fieldKey, fromRow, value }) => { const filled = applyPreviewProcessFillDown({ host, config, ensureOverrides, field: fieldKey, fromRow, currentValue: value }); if (filled > 0) { onSaveConfig(config); _markPreviewSaved(host, `${filled} process override${filled === 1 ? '' : 's'} saved. Click Rebuild Preview to recompute suggestions.`); } }
   });
-  host.innerHTML = table.renderHTML();
+  host.innerHTML = `${_manualPreviewActionHtml('Rebuild Preview')}${table.renderHTML()}`;
+  _bindManualPreviewButton(host, rootEl, xmlText, config, options, 'Rebuilding preview...');
   const defaultFields = ['p1', 't1', 't2', 't3', 'density', 'wallThickness', 'corrosion'];
   const defaultRows = branchRows.map((row, ri) => ({ row, ri, fields: defaultFields.filter((field) => _isDefaultSource(row[`${field}Source`])) })).filter((item) => item.fields.length > 0);
   if (defaultRows.length) host.insertAdjacentHTML('afterbegin', `<div class="model-converters-workflow-detail-note" style="margin:0 0 8px;border-color:#7f1d1d;color:#7f1d1d;background:#fff7f7;">${defaultRows.length} line${defaultRows.length === 1 ? '' : 's'} use config defaults. Default values are shown in dark red.</div>`);
