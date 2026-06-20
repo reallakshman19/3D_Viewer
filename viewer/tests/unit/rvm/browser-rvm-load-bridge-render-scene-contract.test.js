@@ -13,8 +13,9 @@ function activeModuleEntrypoint(indexHtml) {
 async function run() {
   const bridgeSource = await readFile(new URL('../../../rvm/BrowserRvmLoadBridge.js', import.meta.url), 'utf8');
   const workerSource = await readFile(new URL('../../../rvm/browser-rvm-worker.js', import.meta.url), 'utf8');
-  const filterSource = await readFile(new URL('../../../rvm/BrowserRvmInstructionFilter.js', import.meta.url), 'utf8');
+  const filterSource = await readFile(new URL('../../../rvm/BrowserRvmInstructionFilterV2.js', import.meta.url), 'utf8');
   const transformParserSource = await readFile(new URL('../../../rvm/BrowserRvmTransformParser.js', import.meta.url), 'utf8');
+  const transformHierarchySource = await readFile(new URL('../../../rvm/BrowserRvmHierarchyTransformParser.js', import.meta.url), 'utf8');
   const tabSource = await readFile(new URL('../../../tabs/viewer3d-rvm-tab.js', import.meta.url), 'utf8');
   const progressivePatchSource = await readFile(new URL('../../../rvm-viewer/RvmProgressiveModelRootPatch.js', import.meta.url), 'utf8');
   const indexHtml = await readFile(new URL('../../../index.html', import.meta.url), 'utf8');
@@ -23,7 +24,7 @@ async function run() {
 
   assert.doesNotMatch(bridgeSource, /buildResponsiveBrowserRvmRenderSceneFromHierarchy/, 'RVM load must not build render instructions from a full main-thread hierarchy.');
   assert.match(bridgeSource, /new\s+Worker\(workerUrl,\s*\{\s*type:\s*['"]module['"]\s*\}\)/, 'RVM load must use a module worker.');
-  assert.match(bridgeSource, /browser-rvm-worker\.js\?v=20260620-rvm-oversize-filter-1/, 'RVM worker URL must be cache-busted for the oversize filter.');
+  assert.match(bridgeSource, /browser-rvm-worker\.js\?v=20260620-rvm-scale-safe-1/, 'RVM worker URL must be cache-busted for the scale-safe contract.');
   assert.match(bridgeSource, /worker\.postMessage\(\{\s*id,\s*arrayBuffer,\s*options:\s*stripWorkerOptions\(options\)\s*\},\s*\[arrayBuffer\]\)/, 'RVM ArrayBuffer must be transferred to the worker.');
   assert.match(bridgeSource, /MAIN_THREAD_FALLBACK_MAX_BYTES\s*=\s*1024\s*\*\s*1024/, 'Main-thread parser fallback must be hard-limited.');
   assert.match(bridgeSource, /allowMainThreadParserFallback:\s*options\.allowMainThreadParserFallback\s*===\s*true/, 'Main-thread parser fallback must be opt-in.');
@@ -33,24 +34,28 @@ async function run() {
   assert.match(bridgeSource, /createEventLoopWatchdog\(\{\s*thresholdMs:\s*100,\s*intervalMs:\s*50\s*\}\)/, 'RVM load must include a responsiveness watchdog.');
   assert.match(bridgeSource, /browserRvmStageTimingsMs:\s*perf\.measures[\s\S]*browserRvmMaxEventLoopStallMs:/, 'Diagnostics must expose timings and max event-loop stall.');
   assert.match(bridgeSource, /browserRvmWorkerEnabled:[\s\S]*browserRvmCompactInstructionTransfer:[\s\S]*browserRvmProgressiveRenderEnabled:/, 'Diagnostics must expose worker, compact transfer, and progressive flags.');
-  assert.match(bridgeSource, /browserRvmOversizedNonPipingSkippedCount/, 'Diagnostics must expose oversized non-piping skips.');
+  assert.match(bridgeSource, /browserRvmScaleSafeContract/, 'Diagnostics must expose the scale-safe contract summary.');
 
-  assert.match(workerSource, /BrowserRvmTransformParser\.js\?v=20260620-rvm-prim-transform-1/, 'Worker must use the transform-aware RVM parser with a cache-busted import.');
-  assert.match(workerSource, /filterBrowserRvmRenderInstructions/, 'Worker must filter oversized non-piping instructions before transfer.');
-  assert.match(workerSource, /BrowserRvmInstructionFilter\.js\?v=20260620-rvm-oversize-filter-1/, 'Worker must cache-bust the oversized non-piping filter.');
+  assert.match(workerSource, /BrowserRvmHierarchyTransformParser\.js\?v=20260620-rvm-scale-safe-1/, 'Worker must use the scale-safe transform hierarchy parser with a cache-busted import.');
+  assert.match(workerSource, /filterBrowserRvmRenderInstructions/, 'Worker must filter only absurd oversized non-piping instructions before transfer.');
+  assert.match(workerSource, /BrowserRvmInstructionFilterV2\.js\?v=20260620-rvm-scale-safe-1/, 'Worker must cache-bust the scale-safe filter.');
   assert.match(workerSource, /enrichBrowserRvmHierarchyWithAtt/, 'Worker must perform ATT enrichment.');
   assert.match(workerSource, /collectBrowserRvmRenderInstructions/, 'Worker must generate render instructions.');
   assert.match(workerSource, /instructionSet:\s*compactInstructionSet[\s\S]*manifestNodes,/, 'Worker must return compact instructions and capped manifest nodes.');
   assert.match(workerSource, /browserRvmHierarchyReturnedToMainThread:\s*false/, 'Worker must not return the huge hierarchy on the normal path.');
   assert.doesNotMatch(workerSource, /hierarchy:\s*attEnrichment\.hierarchy/, 'Worker complete message must not transfer enriched hierarchy.');
 
-  assert.match(filterSource, /BROWSER_RVM_INSTRUCTION_FILTER_SCHEMA/, 'Oversized non-piping filter must expose a schema.');
-  assert.match(filterSource, /NON_PIPING_OWNER_RE/, 'Filter must classify equipment, road, and structure owners.');
+  assert.match(filterSource, /BROWSER_RVM_INSTRUCTION_FILTER_SCHEMA/, 'Scale-safe filter must expose a schema.');
+  assert.match(filterSource, /maxAbsoluteDiagonal/, 'Filter must use an absolute absurd-size threshold after transform.');
+  assert.match(filterSource, /PROTECTED_OWNER_RE/, 'Filter must protect pipe-rack and structure-like owners from small-threshold hiding.');
   assert.match(filterSource, /oversizedNonPipingHidden/, 'Filter diagnostics must expose hidden oversized chunks.');
 
   assert.match(transformParserSource, /transformPoint\(matrix,\s*origin/, 'Transform parser must apply PRIM matrix to local coordinates.');
   assert.match(transformParserSource, /RVM_LEGACY_UNTRANSFORMED_BBOX/, 'Transform parser must preserve old raw bbox diagnostics for comparison.');
   assert.match(transformParserSource, /PARTIAL_BINARY_PRIM_RECORDS_WORLD_TRANSFORMED/, 'Transform parser must identify world-transformed binary PRIM fidelity.');
+  assert.match(transformHierarchySource, /RVM_BROWSER_SCALE_SAFE_CONTRACT/, 'Hierarchy wrapper must repair render contracts after grouping.');
+  assert.match(transformHierarchySource, /APOS[\s\S]*LPOS[\s\S]*HBOR/, 'Scale-safe contract must use transformed APOS/LPOS/HBOR instead of bbox-only endpoints.');
+  assert.match(transformHierarchySource, /RVM_BROWSER_RENDER_SOURCE:\s*'transform-axis-scale-safe-contract'|transform-axis-scale-safe-contract/, 'Scale-safe contract must mark its render source.');
 
   assert.match(tabSource, /import\s+\{\s*loadRvmFileInBrowser\s*\}\s+from\s+['"]\.\.\/rvm\/BrowserRvmLoadBridge\.js\?v=20260620-rvm-direct-tab-1['"]/, 'The real tab module must import the worker-first RVM loader directly.');
   assert.match(tabSource, /import\s+\{\s*isLikelyRvmFileName\s*\}\s+from\s+['"]\.\.\/rvm\/BrowserRvmParser\.js['"]/, 'The real tab must branch selected files by RVM/REV extension.');
@@ -75,11 +80,11 @@ async function run() {
   assert.doesNotMatch(progressivePatchSource, /Box3\(\)\.setFromObject\(this\.modelGroup\)[\s\S]*computeBoundingSphere/, 'Progressive mount must not do full bounds and bounding-sphere work synchronously.');
 
   assert.doesNotMatch(entrypointSource, /RvmBrowserRvmWorkerFirstBridge\.js/, 'The RVM freeze fix must not depend on an optional startup side-effect bridge.');
-  assert.match(entrypointSource, /core\/app\.js\?v=20260620-rvm-oversize-filter-1/, 'App shell cache key must include the oversize-filter version.');
-  assert.match(indexHtml, /main(?:-[A-Za-z0-9_-]+)?\.js\?v=20260620-rvm-oversize-filter-1/, 'GitHub Pages entrypoint must bump the app shell cache key.');
+  assert.match(entrypointSource, /core\/app\.js\?v=20260620-rvm-scale-safe-1/, 'App shell cache key must include the scale-safe version.');
+  assert.match(indexHtml, /main(?:-[A-Za-z0-9_-]+)?\.js\?v=20260620-rvm-scale-safe-1/, 'GitHub Pages entrypoint must bump the app shell cache key.');
   assert.match(indexHtml, /viewer3d-rvm-tab\.css\?v=20260620-rvm-direct-tab-1/, 'RVM tab CSS cache key must be bumped.');
 
-  console.log('Browser RVM direct tab responsiveness contract test passed');
+  console.log('Browser RVM direct tab scale-safe responsiveness contract test passed');
 }
 
 run();

@@ -1,8 +1,8 @@
 import * as THREE from 'three';
-import { parseRvmArrayBuffer } from './BrowserRvmHierarchyTransformParser.js?v=20260620-rvm-prim-transform-1';
+import { parseRvmArrayBuffer } from './BrowserRvmHierarchyTransformParser.js?v=20260620-rvm-scale-safe-1';
 import { enrichBrowserRvmHierarchyWithAtt } from './BrowserRvmAttEnricher.js';
 import { collectBrowserRvmRenderInstructions } from './BrowserRvmRenderContractAdapter.js';
-import { filterBrowserRvmRenderInstructions } from './BrowserRvmInstructionFilter.js?v=20260620-rvm-oversize-filter-1';
+import { filterBrowserRvmRenderInstructions } from './BrowserRvmInstructionFilterV2.js?v=20260620-rvm-scale-safe-1';
 import {
   BROWSER_RVM_RENDER_SCENE_SCHEMA,
   buildInstructionObject
@@ -106,11 +106,12 @@ export async function loadRvmFileInBrowser(file, viewer, options = {}) {
       browserRvmInstructionCount: instructionSet.count || instructions.length,
       browserRvmOversizedNonPipingSkippedCount: filterDiagnostics?.skippedCount || parsed.diagnostics?.browserRvmOversizedNonPipingSkippedCount || 0,
       browserRvmOversizedNonPipingFilter: filterDiagnostics || parsed.diagnostics?.browserRvmOversizedNonPipingFilter || null,
+      browserRvmScaleSafeContract: parsed.diagnostics?.browserRvmScaleSafeContract || null,
       browserRvmRenderableCount: renderResult?.diagnostics?.renderableCount || 0,
       browserRvmSkippedCount: renderResult?.diagnostics?.skippedCount || 0,
       browserRvmRenderPrimitiveCounts: renderResult?.diagnostics?.primitiveCounts || {},
       browserRvmRenderSkippedReasons: renderResult?.diagnostics?.skippedReasons || {},
-      browserRvmResponsiveLoadPath: 'worker-instructions-filtered-progressive-render-scene-first',
+      browserRvmResponsiveLoadPath: 'worker-instructions-scale-safe-progressive-render-scene-first',
       browserRvmResponsiveSceneBuilder: true,
       browserRvmRenderBudgeted: Boolean(renderResult?.diagnostics?.budgeted),
       browserRvmMaxRenderableObjects: renderBudget.maxRenderableObjects,
@@ -139,6 +140,7 @@ export async function loadRvmFileInBrowser(file, viewer, options = {}) {
       browserRvmResponsiveSceneBuilder: true,
       browserRvmProgressiveRenderEnabled: true,
       browserRvmOversizedNonPipingFilter: filterDiagnostics || null,
+      browserRvmScaleSafeContract: parsed.diagnostics?.browserRvmScaleSafeContract || null,
     };
 
     update(`Loaded browser RVM ${file.name}`);
@@ -185,7 +187,7 @@ async function parseWithWorkerIfAvailable(arrayBuffer, options) {
   }
 
   try {
-    const workerUrl = new URL('./browser-rvm-worker.js?v=20260620-rvm-oversize-filter-1', import.meta.url);
+    const workerUrl = new URL('./browser-rvm-worker.js?v=20260620-rvm-scale-safe-1', import.meta.url);
     const worker = new Worker(workerUrl, { type: 'module' });
     const id = `rvm-${Date.now()}-${Math.random().toString(36).slice(2)}`;
     return await new Promise((resolve, reject) => {
@@ -272,6 +274,7 @@ async function parseCompactOnMainThreadIfSmall(arrayBuffer, options = {}, reason
       browserRvmInstructionCount: instructionSet.count || instructionSet.instructions?.length || 0,
       browserRvmOversizedNonPipingSkippedCount: instructionSet.diagnostics?.oversizedNonPipingSkippedCount || 0,
       browserRvmOversizedNonPipingFilter: instructionSet.diagnostics?.oversizedNonPipingFilter || null,
+      browserRvmScaleSafeContract: parsed.diagnostics?.browserRvmScaleSafeContract || null,
     }
   };
 }
@@ -418,7 +421,7 @@ function makeRenderScenePayload(file, manifestNodes, renderResult, attDiagnostic
       nodes: Array.isArray(manifestNodes) ? manifestNodes : [],
       browserRvmAtt: attDiagnostics,
       browserRvmRender: renderResult?.diagnostics || null,
-      browserRvmResponsiveLoadPath: 'worker-instructions-filtered-progressive-render-scene-first',
+      browserRvmResponsiveLoadPath: 'worker-instructions-scale-safe-progressive-render-scene-first',
       browserRvmRenderInstructions: instructionSet?.diagnostics || null,
       browserRvmManifestNodeLimit: MANIFEST_NODE_LIMIT,
       browserRvmRenderScene: {
@@ -453,7 +456,7 @@ function flattenHierarchyForManifest(roots = [], limit = MANIFEST_NODE_LIMIT) {
 }
 
 function compactAttributes(attrs = {}) {
-  const keep = ['TYPE', 'NAME', 'RVM_PRIMITIVE_KIND', 'RVM_OWNER_NAME', 'RVM_BROWSER_RENDER_PRIMITIVE', 'RVM_BROWSER_RENDER_SOURCE', 'RVM_BROWSER_ATT_ENRICHED', 'RVM_BROWSER_ATT_ATTRIBUTE_COUNT'];
+  const keep = ['TYPE', 'NAME', 'RVM_PRIMITIVE_KIND', 'RVM_OWNER_NAME', 'RVM_BROWSER_RENDER_PRIMITIVE', 'RVM_BROWSER_RENDER_SOURCE', 'RVM_BROWSER_ATT_ENRICHED', 'RVM_BROWSER_ATT_ATTRIBUTE_COUNT', 'RVM_BROWSER_SCALE_SAFE_CONTRACT'];
   const out = {};
   for (const key of keep) if (attrs?.[key] !== undefined && attrs?.[key] !== null && attrs?.[key] !== '') out[key] = String(attrs[key]);
   return out;

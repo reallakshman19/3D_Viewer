@@ -7,7 +7,8 @@ import {
   groupRvmOwnerHierarchy
 } from './BrowserRvmHierarchyParser.js';
 
-export const BROWSER_RVM_HIERARCHY_TRANSFORM_SCHEMA = 'browser-rvm-hierarchy-transform-wrapper/v1';
+export const BROWSER_RVM_HIERARCHY_TRANSFORM_SCHEMA = 'browser-rvm-hierarchy-transform-wrapper/v2';
+export const BROWSER_RVM_SCALE_SAFE_CONTRACT_SCHEMA = 'browser-rvm-scale-safe-contract/v1';
 export {
   BROWSER_RVM_GEOMETRY_CONTRACT_VERSION,
   BROWSER_RVM_GEOMETRY_QUALITY_VERSION,
@@ -19,24 +20,84 @@ export {
 export async function parseRvmArrayBuffer(arrayBuffer, options = {}) {
   const parsed = await parseTransformRvmArrayBuffer(arrayBuffer, options);
   const hierarchy = groupRvmOwnerHierarchy(parsed.hierarchy || []);
+  const repaired = repairTransformRenderContracts(hierarchy);
   return {
     ...parsed,
     schemaVersion: BROWSER_RVM_HIERARCHY_TRANSFORM_SCHEMA,
-    hierarchy,
-    indexJson: flattenHierarchyToIndex(hierarchy),
+    hierarchy: repaired.hierarchy,
+    indexJson: flattenHierarchyToIndex(repaired.hierarchy),
     diagnostics: {
       ...(parsed.diagnostics || {}),
       hierarchyTransformSchemaVersion: BROWSER_RVM_HIERARCHY_TRANSFORM_SCHEMA,
       hierarchySchemaVersion: BROWSER_RVM_HIERARCHY_SCHEMA,
-      hierarchyGrouped: hierarchy[0]?.attributes?.BROWSER_RVM_HIERARCHY_GROUPED === 'true',
-      hierarchyGroupCount: Number(hierarchy[0]?.attributes?.BROWSER_RVM_HIERARCHY_GROUP_COUNT || 0),
+      hierarchyGrouped: repaired.hierarchy[0]?.attributes?.BROWSER_RVM_HIERARCHY_GROUPED === 'true',
+      hierarchyGroupCount: Number(repaired.hierarchy[0]?.attributes?.BROWSER_RVM_HIERARCHY_GROUP_COUNT || 0),
       primitiveSemantics: 'owner-name-and-rhbg-prim-code-map',
       primitiveSemanticsVersion: BROWSER_RVM_PRIMITIVE_SEMANTICS_VERSION,
       geometryQualityVersion: BROWSER_RVM_GEOMETRY_QUALITY_VERSION,
       geometryContractVersion: BROWSER_RVM_GEOMETRY_CONTRACT_VERSION,
-      browserRvmTransformAwareHierarchy: true
+      browserRvmTransformAwareHierarchy: true,
+      browserRvmScaleSafeContract: repaired.diagnostics
     }
   };
+}
+
+function repairTransformRenderContracts(roots = []) {
+  const diagnostics = {
+    schemaVersion: BROWSER_RVM_SCALE_SAFE_CONTRACT_SCHEMA,
+    appliedCount: 0,
+    cylinderContractCount: 0,
+    boxContractCount: 0,
+    skippedCount: 0
+  };
+  const visit = (node) => {
+    if (!node || typeof node !== 'object') return;
+    const attrs = node.attributes || (node.attributes = {});
+    if (String(attrs.RVM_PRIM_TRANSFORM_APPLIED || '').toLowerCase() === 'true') {
+      if (applyScaleSafeContract(node, attrs, diagnostics)) diagnostics.appliedCount += 1;
+      else diagnostics.skippedCount += 1;
+    }
+    for (const child of Array.isArray(node.children) ? node.children : []) visit(child);
+  };
+  for (const root of Array.isArray(roots) ? roots : [roots]) visit(root);
+  return { hierarchy: roots, diagnostics };
+}
+
+function applyScaleSafeContract(node, attrs, diagnostics) {
+  const start = vecFromAny(attrs.APOS);
+  const end = vecFromAny(attrs.LPOS);
+  const radius = positiveNumber(attrs.HBOR);
+  const bbox = normalizeBbox(node.bbox || attrs.RVM_BROWSER_BBOX);
+  const center = start && end ? midPoint(start, end) : centerFromBbox(bbox);
+  if (!center) return false;
+  const code = String(attrs.RVM_PRIMITIVE_CODE ?? '').trim();
+  const primitive = scaleSafePrimitive(code, attrs);
+  attrs.RVM_BROWSER_RENDER_PRIMITIVE = primitive;
+  attrs.RVM_BROWSER_RENDER_SOURCE = 'transform-axis-scale-safe-contract';
+  attrs.RVM_BROWSER_SCALE_SAFE_CONTRACT = 'true';
+  attrs.RVM_BROWSER_SCALE_SAFE_CONTRACT_SCHEMA = BROWSER_RVM_SCALE_SAFE_CONTRACT_SCHEMA;
+  attrs.RVM_BROWSER_CENTER = stringifyVec(center);
+  if (bbox) attrs.RVM_BROWSER_BBOX = JSON.stringify(bbox.map((value) => Number(fixed(value))));
+  if (start && end && radius > 0) {
+    const length = distance(start, end);
+    attrs.RVM_BROWSER_AXIS_START = stringifyVec(start);
+    attrs.RVM_BROWSER_AXIS_END = stringifyVec(end);
+    attrs.RVM_BROWSER_AXIS = 'TRANSFORM_VECTOR';
+    attrs.RVM_BROWSER_LENGTH = fixed(length);
+    attrs.RVM_BROWSER_RADIUS = fixed(radius);
+    attrs.RVM_BROWSER_DIAMETER = fixed(radius * 2);
+  }
+  if (primitive === 'CYLINDER_BBOX') diagnostics.cylinderContractCount += 1;
+  else if (primitive === 'BOX_BBOX') diagnostics.boxContractCount += 1;
+  return true;
+}
+
+function scaleSafePrimitive(code, attrs = {}) {
+  const type = String(attrs.TYPE || '').toUpperCase();
+  const kind = String(attrs.RVM_PRIMITIVE_KIND || attrs.RVM_BROWSER_PRIMITIVE_CLASS || '').toUpperCase();
+  if (code === '2' || code === '5' || code === '11') return 'BOX_BBOX';
+  if (/BOX|STRUCTURE|AUXILIARY|INSTRUMENT/.test(`${type} ${kind}`)) return 'BOX_BBOX';
+  return 'CYLINDER_BBOX';
 }
 
 function flattenHierarchyToIndex(roots) {
@@ -69,3 +130,28 @@ function stringifyAttributes(attrs) {
   }
   return out;
 }
+
+function vecFromAny(value) {
+  if (!value) return null;
+  if (typeof value === 'object') {
+    const x = Number(value.x), y = Number(value.y), z = Number(value.z);
+    return [x, y, z].every(Number.isFinite) ? { x, y, z } : null;
+  }
+  const nums = String(value).replace(/[\[\]{}]/g, ' ').split(/[\s,:]+/g).map(Number).filter(Number.isFinite);
+  return nums.length >= 3 ? { x: nums[0], y: nums[1], z: nums[2] } : null;
+}
+
+function normalizeBbox(value) {
+  const nums = Array.isArray(value) ? value.map(Number) : String(value || '').replace(/[\[\]]/g, ' ').split(/[\s,]+/g).map(Number).filter(Number.isFinite);
+  if (nums.length < 6) return null;
+  return [Math.min(nums[0], nums[3]), Math.min(nums[1], nums[4]), Math.min(nums[2], nums[5]), Math.max(nums[0], nums[3]), Math.max(nums[1], nums[4]), Math.max(nums[2], nums[5])];
+}
+
+function centerFromBbox(bbox) {
+  return bbox ? { x: (bbox[0] + bbox[3]) / 2, y: (bbox[1] + bbox[4]) / 2, z: (bbox[2] + bbox[5]) / 2 } : null;
+}
+function midPoint(a, b) { return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2, z: (a.z + b.z) / 2 }; }
+function distance(a, b) { return Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z); }
+function positiveNumber(value) { const n = Number(value); return Number.isFinite(n) && n > 0 ? n : 0; }
+function stringifyVec(vec) { return `${fixed(vec.x)},${fixed(vec.y)},${fixed(vec.z)}`; }
+function fixed(value) { const n = Number(value); return Number.isFinite(n) ? n.toFixed(3) : '0.000'; }
