@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { TextEncoder } from 'node:util';
 import { parseRvmArrayBuffer } from '../../../rvm/BrowserRvmHierarchyParser.js';
+import { collectBrowserRvmRenderInstructions } from '../../../rvm/BrowserRvmRenderContractAdapter.js';
 
 function record(tag, ints, payloadBytes = new Uint8Array()) {
   return { tag, ints, payloadBytes };
@@ -130,6 +131,16 @@ assert.ok(findByName(root, 'INSTRUMENT 1'));
 assert.ok(findByName(root, 'REDUCER 1'));
 assert.ok(findByName(root, 'STRUCTURE 1'));
 
+const renderInstructions = collectBrowserRvmRenderInstructions(parsed.hierarchy);
+assert.equal(renderInstructions.schemaVersion, 'rvm-browser-render-instructions/v1');
+assert.equal(renderInstructions.count, 5);
+assert.equal(renderInstructions.diagnostics.instructionCount, 5);
+assert.equal(renderInstructions.diagnostics.contractCounts.TORUS_BBOX_PLACEHOLDER, 2);
+assert.equal(renderInstructions.diagnostics.contractCounts.INSTRUMENT_BBOX_PLACEHOLDER, 1);
+assert.equal(renderInstructions.diagnostics.contractCounts.CONE_BBOX_PLACEHOLDER, 1);
+assert.equal(renderInstructions.diagnostics.contractCounts.BOX_BBOX, 1);
+assert.equal(renderInstructions.diagnostics.sourceCounts['bbox-derived-browser-contract'], 5);
+
 const gasket = findByName(root, 'GASKET 1');
 assert.ok(gasket.children.some((child) => child.type === 'GASK'), 'gasket group should retain GASK primitive leaf');
 const rtorus = findByName(root, 'RTORUS 1');
@@ -156,6 +167,17 @@ assert.equal(rtorusLeaf.attributes.RVM_BROWSER_AXIS_END, '450.000,20.000,0.000')
 assert.equal(rtorusLeaf.attributes.RVM_BROWSER_LENGTH, '100.000');
 assert.equal(rtorusLeaf.attributes.RVM_BROWSER_RADIUS, '10.000');
 assert.equal(rtorusLeaf.attributes.RVM_BROWSER_DIAMETER, '20.000');
+
+const rtorusInstruction = renderInstructions.instructions.find((item) => item.sourcePath.includes('RTORUS 1'));
+assert.ok(rtorusInstruction, 'RTORUS render instruction should be collected');
+assert.equal(rtorusInstruction.renderPrimitive, 'TORUS_BBOX_PLACEHOLDER');
+assert.equal(rtorusInstruction.kind, 'TORUS');
+assert.deepEqual(rtorusInstruction.center, { x: 400, y: 20, z: 0 });
+assert.deepEqual(rtorusInstruction.axisStart, { x: 350, y: 20, z: 0 });
+assert.deepEqual(rtorusInstruction.axisEnd, { x: 450, y: 20, z: 0 });
+assert.equal(rtorusInstruction.length, 100);
+assert.equal(rtorusInstruction.radius, 10);
+assert.equal(rtorusInstruction.diameter, 20);
 
 const instrument = findByName(root, 'INSTRUMENT 1');
 const instrumentLeaf = instrument.children.find((child) => child.attributes?.RVM_PRIMITIVE_CODE === '11');
