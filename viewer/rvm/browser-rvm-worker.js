@@ -1,18 +1,19 @@
-import { parseRvmArrayBuffer } from './BrowserRvmHierarchyTransformParser.js?v=20260620-rvm-cpp-mat3x4-1';
+import { parseRvmArrayBuffer } from './BrowserRvmHierarchyTransformParser.js?v=20260620-rvm-scale-leak-1';
 import { enrichBrowserRvmHierarchyWithAtt } from './BrowserRvmAttEnricher.js';
 import { collectBrowserRvmRenderInstructions } from './BrowserRvmRenderContractAdapter.js';
 import { filterBrowserRvmRenderInstructions } from './BrowserRvmInstructionFilterV2.js?v=20260620-rvm-large-box-filter-1';
 
-// BrowserRvmHierarchyTransformParser.js?v=20260620-rvm-cpp-mat3x4-1 repairs transformed APOS/LPOS/HBOR contracts using the C++ parser's Mat3x4 layout.
+// BrowserRvmHierarchyTransformParser.js?v=20260620-rvm-scale-leak-1 repairs transformed APOS/LPOS/HBOR contracts using the C++ parser's Mat3x4 layout and scaled radius.
 const DEFAULT_MANIFEST_NODE_LIMIT = 900;
 const DEFAULT_MAX_PRIMITIVE_BOX_SIDE = 10;
 const KEEP_ATTRIBUTE_NAMES = new Set([
   'TYPE', 'NAME', 'RVM_PRIMITIVE_KIND', 'RVM_PRIMITIVE_KIND_NAME', 'RVM_BYTE_OFFSET', 'RVM_PRIMITIVE_CODE', 'RVM_RECORD_TAG',
   'RVM_OWNER_NAME', 'RVM_OWNER_PATH', 'BROWSER_PARSE_METHOD', 'BROWSER_PARSE_CONFIDENCE', 'RVM_PRIM_TRANSFORM_APPLIED',
   'RVM_PRIM_TRANSFORM_SCHEMA', 'RVM_LOCAL_AXIS', 'RVM_TRANSFORM_COLUMN_SCALES', 'RVM_TRANSFORM_LAYOUT', 'RVM_NATIVE_PRIMITIVE_PARAMS',
-  'RVM_NATIVE_PARAMS_DECODED', 'RVM_BROWSER_RENDER_PRIMITIVE', 'RVM_BROWSER_RENDER_SOURCE', 'RVM_BROWSER_GEOMETRY_CONTRACT_VERSION',
-  'RVM_BROWSER_ATT_ENRICHED', 'RVM_BROWSER_ATT_ATTRIBUTE_COUNT', 'RVM_BROWSER_BBOX', 'RVM_BROWSER_LENGTH', 'RVM_BROWSER_RADIUS',
-  'RVM_BROWSER_SCALE_SAFE_CONTRACT', 'RVM_BROWSER_SCALE_SAFE_CONTRACT_SCHEMA', 'RVM_BROWSER_SUPPORT_HINT', 'RVM_BROWSER_SUPPORT_KIND'
+  'RVM_NATIVE_PARAMS_DECODED', 'RVM_RADIUS_SCALE_SOURCE', 'RVM_RADIUS_SCALED_BY_TRANSFORM', 'RVM_BROWSER_RENDER_PRIMITIVE',
+  'RVM_BROWSER_RENDER_SOURCE', 'RVM_BROWSER_GEOMETRY_CONTRACT_VERSION', 'RVM_BROWSER_ATT_ENRICHED', 'RVM_BROWSER_ATT_ATTRIBUTE_COUNT',
+  'RVM_BROWSER_BBOX', 'RVM_BROWSER_LENGTH', 'RVM_BROWSER_RADIUS', 'RVM_BROWSER_DIAMETER', 'RVM_BROWSER_SCALE_SAFE_CONTRACT',
+  'RVM_BROWSER_SCALE_SAFE_CONTRACT_SCHEMA', 'RVM_BROWSER_SUPPORT_HINT', 'RVM_BROWSER_SUPPORT_KIND'
 ]);
 
 self.onmessage = async (event) => {
@@ -75,6 +76,7 @@ self.onmessage = async (event) => {
           browserRvmOversizedNonPipingFilter: compactInstructionSet.diagnostics?.oversizedNonPipingFilter || null,
           browserRvmScaleSafeContract: parsed.diagnostics?.browserRvmScaleSafeContract || null,
           browserRvmCppMat3x4LayoutApplied: Boolean(parsed.diagnostics?.rvmCppMat3x4LayoutApplied),
+          browserRvmCppMat3x4ScaledRadiusApplied: parsed.diagnostics?.rvmCppMat3x4ScaledRadiusApplied || 0,
           browserRvmNativeParamDecodedCount: parsed.diagnostics?.rvmNativeParamDecodedCount || 0,
           browserRvmPrimitiveKindCounts: parsed.diagnostics?.rvmPrimitiveKindCounts || {},
           browserRvmManifestNodeLimit: positiveInteger(options.manifestNodeLimit, DEFAULT_MANIFEST_NODE_LIMIT),
@@ -174,7 +176,7 @@ function flattenHierarchyForManifest(roots = [], limit = DEFAULT_MANIFEST_NODE_L
 
 function plainVec(v) { return v && Number.isFinite(Number(v.x)) && Number.isFinite(Number(v.y)) && Number.isFinite(Number(v.z)) ? { x: Number(v.x), y: Number(v.y), z: Number(v.z) } : null; }
 function finiteNumber(value) { const n = Number(value); return Number.isFinite(n) ? n : null; }
-function positiveInteger(value, fallback) { const n = Number(value); return Number.isFinite(n) && n > 0 ? Math.floor(n) : fallback; }
+function positiveInteger(value, fallback) { const n = Number.isFinite(Number(value)) && Number(value) > 0 ? Number(value) : fallback; return Math.floor(n); }
 function positiveNumber(value, fallback) { const n = Number(value); return Number.isFinite(n) && n > 0 ? n : fallback; }
 function postProgress(id, progress) { self.postMessage({ id, type: 'progress', progress }); }
 function nowMs() { return (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now(); }
