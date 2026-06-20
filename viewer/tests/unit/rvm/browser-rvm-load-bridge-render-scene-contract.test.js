@@ -6,14 +6,14 @@ async function run() {
 
   assert.match(
     source,
-    /import\s+\{\s*buildBrowserRvmRenderSceneFromHierarchy\s*\}\s+from\s+['"]\.\/BrowserRvmRenderSceneBuilder\.js['"]/, 
-    'Browser RVM direct load bridge must import the render scene builder.'
+    /import\s+\{\s*buildResponsiveBrowserRvmRenderSceneFromHierarchy\s*\}\s+from\s+['"]\.\/BrowserRvmResponsiveRenderSceneBuilder\.js['"]/,
+    'Browser RVM direct load bridge must import the responsive render scene builder.'
   );
 
   assert.match(
     source,
-    /const\s+renderResult\s*=\s*buildBrowserRvmRenderSceneFromHierarchy\(parsed\.hierarchy/,
-    'Browser RVM direct load must build render objects from the grouped browser hierarchy.'
+    /const\s+renderResult\s*=\s*await\s+buildResponsiveBrowserRvmRenderSceneFromHierarchy\(parsed\.hierarchy/,
+    'Browser RVM direct load must build render objects from the grouped browser hierarchy using the responsive async builder.'
   );
 
   assert.match(
@@ -36,14 +36,32 @@ async function run() {
 
   assert.match(
     source,
+    /const\s+DEFAULT_RENDER_BUDGET\s*=\s*Object\.freeze\([\s\S]*maxRenderableObjects:[\s\S]*batchSize:[\s\S]*timeSliceMs:/,
+    'Browser RVM direct load must define a bounded render budget for large RVM files.'
+  );
+
+  assert.match(
+    source,
+    /onProgress:\s*\(\{\s*processed,\s*total,\s*renderableCount\s*\}\)\s*=>\s*\{[\s\S]*Building RVM scene/,
+    'Browser RVM direct load must publish progress while responsive render batches are being built.'
+  );
+
+  assert.match(
+    source,
     /function\s+yieldToBrowser\s*\([\s\S]*requestIdleCallback[\s\S]*requestAnimationFrame[\s\S]*setTimeout/,
     'Browser RVM direct load must yield between parse, render-build, and setModel phases so the tab can repaint/status-update.'
   );
 
   assert.match(
     source,
-    /const\s+diagnostics\s*=\s*publishBrowserRvmLoadDiagnostics\(\{[\s\S]*browserRvmRenderSceneEnabled:\s*shouldUseRenderScene[\s\S]*browserRvmRenderableCount:[\s\S]*browserRvmSkippedCount:/,
-    'Browser RVM direct load must publish combined parse/render diagnostics.'
+    /const\s+diagnostics\s*=\s*publishBrowserRvmLoadDiagnostics\(\{[\s\S]*browserRvmRenderSceneEnabled:\s*shouldUseRenderScene[\s\S]*browserRvmRenderableCount:[\s\S]*browserRvmSkippedCount:[\s\S]*browserRvmResponsiveSceneBuilder:\s*true/,
+    'Browser RVM direct load must publish combined parse/render/responsiveness diagnostics.'
+  );
+
+  assert.match(
+    source,
+    /browserRvmRenderBudgetSkipped:\s*renderResult\?\.diagnostics\?\.skippedReasons\?\.\['render-budget-limit'\]/,
+    'Browser RVM direct load must expose render-budget skip diagnostics.'
   );
 
   assert.match(
@@ -78,8 +96,8 @@ async function run() {
 
   assert.match(
     source,
-    /browserRvmRenderScene:\s*\{[\s\S]*enabled:\s*shouldUseRenderScene[\s\S]*renderableCount:[\s\S]*skippedCount:[\s\S]*hierarchyFallbackDeferred:/,
-    'Browser RVM direct load manifest must report render-scene activation and deferred fallback diagnostics.'
+    /browserRvmRenderScene:\s*\{[\s\S]*enabled:\s*shouldUseRenderScene[\s\S]*renderableCount:[\s\S]*skippedCount:[\s\S]*hierarchyFallbackDeferred:[\s\S]*responsiveBuilder:\s*true/,
+    'Browser RVM direct load manifest must report render-scene activation, deferred fallback, and responsive builder diagnostics.'
   );
 
   console.log('Browser RVM load bridge render-scene contract test passed');
