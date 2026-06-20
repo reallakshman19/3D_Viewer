@@ -7,6 +7,7 @@ import { installRvmHierarchySelectionBridge } from './RvmHierarchySelectionBridg
 import { installRvmViewerInteractionPatch, installRvmCanvasSelectionBridge } from './RvmViewerInteractionPatch.js?v=20260620-rvm-esc-hide-selection-1';
 import { installRvmVisibilityToolbarBridge } from './RvmVisibilityToolbarBridge.js?v=20260620-rvm-esc-hide-selection-1';
 import { installRvmSelectionTreeSyncBridge } from './RvmSelectionTreeSyncBridge.js?v=20260620-rvm-large-box-support-sync-1';
+import { installRvmSupportSummaryBridge } from './RvmSupportSummaryBridge.js?v=20260620-rvm-large-box-support-sync-1';
 import { installBrowserRvmCppMat3x4WorkerPatch } from '../rvm/BrowserRvmCppMat3x4WorkerPatch.js?v=20260620-rvm-large-box-filter-1';
 import { installBrowserRvmNativeTessellationRuntimePatch } from '../rvm/BrowserRvmNativeTessellationRuntimePatch.js?v=20260620-rvm-native-diagnostics-1';
 import { installRvmNativeTessellationDiagnosticsBridge } from './RvmNativeTessellationDiagnosticsBridge.js?v=20260620-rvm-native-diagnostics-1';
@@ -19,6 +20,7 @@ installRvmHierarchySelectionBridge();
 installRvmCanvasSelectionBridge();
 installRvmVisibilityToolbarBridge();
 installRvmSelectionTreeSyncBridge();
+installRvmSupportSummaryBridge();
 installRvmNativeTessellationDiagnosticsBridge();
 
 export { mountViewer3DRvmTab as renderViewer3DRvm } from './viewer3d-rvm-tab.js?v=20260620-rvm-large-box-support-sync-1';
