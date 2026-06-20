@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 
-const PATCH_FLAG = Symbol.for('pcf-glb-rvm-progressive-model-root-patch-v2');
+const PATCH_FLAG = Symbol.for('pcf-glb-rvm-progressive-model-root-patch-v3');
 const MAX_ROBUST_FIT_OBJECTS = 6000;
 const MIN_ROBUST_FIT_OBJECTS = 3;
 const ABS_OUTLIER_DIAGONAL = 50000;
@@ -44,11 +44,11 @@ export function installRvmProgressiveModelRootPatch(RvmViewer3D) {
 
   proto.fitProgressiveBounds = function fitProgressiveBounds(bounds, options = {}) {
     const requestedBox = boxFromBounds(bounds || this._progressiveModelBounds);
-    if (!requestedBox || requestedBox.isEmpty()) return false;
-
     const fit = resolveRobustProgressiveFit(this, requestedBox, options);
     const fitBox = fit?.box && !fit.box.isEmpty() ? fit.box : requestedBox;
-    this._progressiveModelBounds = boundsFromBox(requestedBox);
+    if (!fitBox || fitBox.isEmpty()) return false;
+
+    this._progressiveModelBounds = boundsFromBox(fitBox);
     this._progressiveFitDiagnostics = fit?.diagnostics || null;
     annotateProgressiveRoot(this, this._progressiveFitDiagnostics);
 
@@ -100,13 +100,15 @@ function bindModulesWithoutFullTraversal(viewer) {
 
 function resolveRobustProgressiveFit(viewer, requestedBox, options = {}) {
   const entries = collectRenderableBoxes(viewer, options.maxFitObjects || MAX_ROBUST_FIT_OBJECTS);
+  const requestedRadius = boxRadius(requestedBox);
   if (entries.length < MIN_ROBUST_FIT_OBJECTS) {
     return {
       box: requestedBox,
       diagnostics: {
         progressiveFitGuard: 'insufficient-renderables',
-        requestedRadius: boxRadius(requestedBox),
+        requestedRadius,
         robustFitUsed: false,
+        renderedBoundsUsed: false,
         objectCount: entries.length,
       }
     };
@@ -121,7 +123,7 @@ function resolveRobustProgressiveFit(viewer, requestedBox, options = {}) {
     positiveNumber(p90, 0) * OUTLIER_P90_FACTOR,
   );
 
-  const robustBox = new THREE.Box3();
+  const renderedBox = new THREE.Box3();
   let included = 0;
   let excluded = 0;
   let hidden = 0;
@@ -142,21 +144,22 @@ function resolveRobustProgressiveFit(viewer, requestedBox, options = {}) {
       }
       continue;
     }
-    robustBox.union(entry.box);
+    renderedBox.union(entry.box);
     included += 1;
   }
 
-  const requestedRadius = boxRadius(requestedBox);
-  const robustRadius = boxRadius(robustBox);
-  const useRobust = included >= MIN_ROBUST_FIT_OBJECTS && robustBox && !robustBox.isEmpty() && robustRadius > 0 && robustRadius < requestedRadius;
+  const renderedRadius = boxRadius(renderedBox);
+  const useRendered = included >= MIN_ROBUST_FIT_OBJECTS && renderedBox && !renderedBox.isEmpty() && renderedRadius > 0;
 
   return {
-    box: useRobust ? robustBox : requestedBox,
+    box: useRendered ? renderedBox : requestedBox,
     diagnostics: {
-      progressiveFitGuard: useRobust ? 'robust-bounds' : 'full-bounds',
-      robustFitUsed: useRobust,
+      progressiveFitGuard: useRendered ? 'rendered-world-bounds' : 'requested-bounds-fallback',
+      robustFitUsed: useRendered,
+      renderedBoundsUsed: useRendered,
       requestedRadius: Number(requestedRadius.toFixed(3)),
-      robustRadius: Number(robustRadius.toFixed(3)),
+      renderedRadius: Number(renderedRadius.toFixed(3)),
+      robustRadius: Number(renderedRadius.toFixed(3)),
       objectCount: entries.length,
       fitIncludedCount: included,
       fitOutlierCount: excluded,
@@ -189,7 +192,7 @@ function shouldHideFitOutlier(obj) {
   const attrs = obj?.userData?.browserRvmAttributes || {};
   const code = String(attrs.RVM_PRIMITIVE_CODE || '').trim();
   const source = String(obj?.userData?.renderSource || attrs.RVM_BROWSER_RENDER_SOURCE || '').toUpperCase();
-  const browserBboxDerived = /BBOX|BROWSER|FALLBACK|DERIVED/.test(source);
+  const browserBboxDerived = /BBOX|BROWSER|FALLBACK|DERIVED|SCALE-SAFE/.test(source);
   const boxLike = primitive === 'BOX_SOLID' || primitive === 'STRUCTURE_SOLID' || primitive === 'BOX_BBOX' || primitive === 'STRUCTURE_BBOX' || type === 'BOX' || type === 'STRUCTURE' || code === '2';
   return boxLike && browserBboxDerived;
 }
