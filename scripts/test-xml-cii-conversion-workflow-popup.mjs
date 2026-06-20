@@ -23,6 +23,7 @@ const canonicalTabPath = 'viewer/tabs/model-converters/ModelConvertersTab.js';
 const branchSyncPath = 'viewer/tabs/model-converters/xml-cii-branch-sample-sync.js';
 const previewRendererPath = 'viewer/tabs/model-converters/converters/xmltocii2019_helper/preview-renderer.js';
 const weightMatchModelPath = 'viewer/converters/xml-cii2019-core/weight-match-model.js';
+const masterLifecycleGuardPath = 'viewer/tabs/model-converters/xml-cii-master-preserve-patch.js';
 const publicIndexPath = 'viewer/tabs/model-converters/index.js';
 const tabPath = 'viewer/tabs/model-converters-tab.js';
 const tabCssPath = 'viewer/tabs/model-converters-tab.css';
@@ -34,6 +35,7 @@ const canonicalTab = read(canonicalTabPath);
 const branchSync = read(branchSyncPath);
 const previewRenderer = read(previewRendererPath);
 const weightMatchModel = read(weightMatchModelPath);
+const masterLifecycleGuard = read(masterLifecycleGuardPath);
 const publicIndex = read(publicIndexPath);
 const tab = read(tabPath);
 const tabCss = read(tabCssPath);
@@ -42,6 +44,7 @@ assert(fs.existsSync(path.join(root, popupPath)), 'workflow popup module must ex
 assert(fs.existsSync(path.join(root, nativePanelsPath)), 'popup-native panel module must exist');
 assert(fs.existsSync(path.join(root, workflowShellPath)), 'canonical WorkflowShell module must exist');
 assert(fs.existsSync(path.join(root, branchSyncPath)), 'branch sample sync module must exist');
+assert(fs.existsSync(path.join(root, masterLifecycleGuardPath)), 'XML->CII master lifecycle guard module must exist');
 assert(popup.includes("import { WorkflowModal } from './shared/WorkflowModal.js'"), 'popup must reuse existing WorkflowModal');
 assert(/import \{ renderXmlCiiPopupNativePhase \} from '\.\/xml-cii-popup-native-panels\.js(?:\?v=[^']+)?'/.test(popup), 'popup must render popup-native phase bodies');
 assert(popup.includes("import { XML_CII_WORKFLOW_PHASES, normalizeWorkflowPhaseId } from './WorkflowShell.js'"), 'popup must use canonical XML CII phase registry');
@@ -115,14 +118,31 @@ assert(legacyAdapter.includes('runPopupDiagnostics()'), 'legacy phase bridge mus
 assert(legacyAdapter.includes('computePopupWeightRows()'), 'legacy phase bridge must expose popup weight action');
 assert(legacyAdapter.includes('xmlCiiConfigWithLoadedMasterRows'), 'Preview must hydrate config from loaded local master rows');
 assert(legacyAdapter.includes("const config = xmlCiiConfigWithLoadedMasterRows('XML->CII preview');"), 'Preview render/build must use hydrated master config');
+assert(legacyAdapter.includes("const config = xmlCiiConfigWithLoadedMasterRows('XML->CII weight match');"), '4A popup weight computation must use hydrated master config');
 assert(legacyAdapter.includes('model-converters-workflow-run-actions'), 'Run phase must use popup-native action layout instead of inline legacy button styles');
 assert(tabCss.includes('.model-converters-workflow-regex-field select'), 'Run phase select controls must use workflow field styling');
 assert(tabCss.includes('span:not(.model-converters-workflow-run-status-icon)'), 'Run status row layout must not flex the icon column as the label');
+
+assert(masterLifecycleGuard.includes("const FLAG = '__xmlCiiMasterLifecycleGuard_v1'"), 'master lifecycle guard must use a fresh lifecycle-specific runtime flag');
+assert(masterLifecycleGuard.includes('function commitHydratedConfig'), 'master lifecycle guard must centralize hydrated config commits');
+assert(masterLifecycleGuard.includes('sessionMasters'), 'master lifecycle guard must keep non-empty master sections in session memory');
+assert(masterLifecycleGuard.includes('canSkipEmptySave'), 'master lifecycle guard must prevent empty Save rows from replacing non-empty master sections');
+assert(masterLifecycleGuard.includes('blocked-empty-save'), 'master lifecycle guard must diagnose blocked empty master writes');
+assert(masterLifecycleGuard.includes('clearPopupMaster'), 'master lifecycle guard must keep explicit Clear as the only empty-write path');
+assert(masterLifecycleGuard.includes('explicitEmptyMaster'), 'explicit Clear must be represented as a first-class empty-write exception');
+assert(masterLifecycleGuard.includes('computePopupWeightRows'), '4A weight computation must pass through the same lifecycle guard');
+assert(masterLifecycleGuard.includes('__xmlCiiMasterLifecycleDebug'), 'development debug snapshot helper must be exposed');
+assert(masterLifecycleGuard.includes('activeSession') && masterLifecycleGuard.includes('supportConfigJson') && masterLifecycleGuard.includes('localMasterState') && masterLifecycleGuard.includes('importMastersCount'), 'debug snapshot must report all requested master count sources');
+assert(!masterLifecycleGuard.includes('setTimeout'), 'master lifecycle guard must not use timer-based restoration');
+assert(!masterLifecycleGuard.includes('setInterval'), 'master lifecycle guard must not poll');
+assert(!masterLifecycleGuard.includes('delay('), 'master lifecycle guard must not use delay/retry waits for readiness');
+assert(!masterLifecycleGuard.includes('restoreMissingMasters'), 'old post-damage restore patch must be removed');
 
 const popupBridgeImport = popup.match(/legacy-adapter\.js\?v=([^'"]+)/)?.[1] || '';
 const tabBridgeImport = canonicalTab.match(/legacy-adapter\.js\?v=([^'"]+)/)?.[1] || '';
 const publicTabImport = publicIndex.match(/ModelConvertersTab\.js\?v=([^'"]+)/)?.[1] || '';
 assert(popupBridgeImport && popupBridgeImport === tabBridgeImport, 'popup and ModelConvertersTab must import the same legacy-adapter module URL');
+assert(publicTabImport && publicTabImport.includes('master-lifecycle'), 'public index cache key must be bumped with the lifecycle fix');
 assert(publicTabImport && canonicalTab.includes(`legacy-adapter.js?v=${popupBridgeImport}`), 'public index and canonical tab cache keys must be bumped with rich workflow fixes');
 
 console.log('✅ XML CII phase-tab workflow popup static test passed', {
@@ -131,4 +151,5 @@ console.log('✅ XML CII phase-tab workflow popup static test passed', {
   branchNameSync: 'linelist.sampleBranchName',
   shiftedBranchPreview: 'lineKey/size/class guarded',
   weightMatchRating: 'manual override propagated',
+  masterLifecycle: 'synchronous hydrated session guard',
 });
