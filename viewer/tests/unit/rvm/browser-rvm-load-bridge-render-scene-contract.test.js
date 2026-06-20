@@ -1,13 +1,23 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
+function stripUrlSuffix(value) {
+  return String(value || '').split('?')[0].split('#')[0];
+}
+
+function activeModuleEntrypoint(indexHtml) {
+  const match = String(indexHtml).match(/<script\b[^>]*type=["']module["'][^>]*src=["']([^"']+)["'][^>]*>/i);
+  return match?.[1] || '';
+}
+
 async function run() {
   const bridgeSource = await readFile(new URL('../../../rvm/BrowserRvmLoadBridge.js', import.meta.url), 'utf8');
   const workerSource = await readFile(new URL('../../../rvm/browser-rvm-worker.js', import.meta.url), 'utf8');
   const tabSource = await readFile(new URL('../../../tabs/viewer3d-rvm-tab.js', import.meta.url), 'utf8');
   const progressivePatchSource = await readFile(new URL('../../../rvm-viewer/RvmProgressiveModelRootPatch.js', import.meta.url), 'utf8');
-  const mainSource = await readFile(new URL('../../../main.js', import.meta.url), 'utf8');
   const indexHtml = await readFile(new URL('../../../index.html', import.meta.url), 'utf8');
+  const entrypointRef = activeModuleEntrypoint(indexHtml);
+  const entrypointSource = await readFile(new URL(`../../../${stripUrlSuffix(entrypointRef).replace(/^\.\//, '')}`, import.meta.url), 'utf8');
 
   assert.doesNotMatch(bridgeSource, /buildResponsiveBrowserRvmRenderSceneFromHierarchy/, 'RVM load must not build render instructions from a full main-thread hierarchy.');
   assert.match(bridgeSource, /new\s+Worker\(workerUrl,\s*\{\s*type:\s*['"]module['"]\s*\}\)/, 'RVM load must use a module worker.');
@@ -51,9 +61,9 @@ async function run() {
   assert.match(progressivePatchSource, /browserRvmProgressiveRenderEnabled/, 'Progressive RVM roots must bypass full-scene setModel work.');
   assert.doesNotMatch(progressivePatchSource, /Box3\(\)\.setFromObject\(this\.modelGroup\)[\s\S]*computeBoundingSphere/, 'Progressive mount must not do full bounds and bounding-sphere work synchronously.');
 
-  assert.doesNotMatch(mainSource, /RvmBrowserRvmWorkerFirstBridge\.js/, 'The RVM freeze fix must not depend on an optional startup side-effect bridge.');
-  assert.match(mainSource, /core\/app\.js\?v=20260620-rvm-direct-tab-1/, 'App shell cache key must be bumped.');
-  assert.match(indexHtml, /main\.js\?v=20260620-rvm-direct-tab-1/, 'GitHub Pages entrypoint must bump the main.js cache key.');
+  assert.doesNotMatch(entrypointSource, /RvmBrowserRvmWorkerFirstBridge\.js/, 'The RVM freeze fix must not depend on an optional startup side-effect bridge.');
+  assert.match(entrypointSource, /core\/app\.js\?v=20260620-rvm-rhbg-fitguard-1/, 'App shell cache key must include the RHBG fit-guard version.');
+  assert.match(indexHtml, /main(?:-[A-Za-z0-9_-]+)?\.js\?v=20260620-rvm-rhbg-fitguard-1/, 'GitHub Pages entrypoint must bump the app shell cache key.');
   assert.match(indexHtml, /viewer3d-rvm-tab\.css\?v=20260620-rvm-direct-tab-1/, 'RVM tab CSS cache key must be bumped.');
 
   console.log('Browser RVM direct tab responsiveness contract test passed');
