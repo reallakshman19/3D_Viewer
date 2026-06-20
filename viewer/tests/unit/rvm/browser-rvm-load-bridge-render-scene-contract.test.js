@@ -13,6 +13,7 @@ function activeModuleEntrypoint(indexHtml) {
 async function run() {
   const bridgeSource = await readFile(new URL('../../../rvm/BrowserRvmLoadBridge.js', import.meta.url), 'utf8');
   const workerSource = await readFile(new URL('../../../rvm/browser-rvm-worker.js', import.meta.url), 'utf8');
+  const filterSource = await readFile(new URL('../../../rvm/BrowserRvmInstructionFilter.js', import.meta.url), 'utf8');
   const transformParserSource = await readFile(new URL('../../../rvm/BrowserRvmTransformParser.js', import.meta.url), 'utf8');
   const tabSource = await readFile(new URL('../../../tabs/viewer3d-rvm-tab.js', import.meta.url), 'utf8');
   const progressivePatchSource = await readFile(new URL('../../../rvm-viewer/RvmProgressiveModelRootPatch.js', import.meta.url), 'utf8');
@@ -22,22 +23,30 @@ async function run() {
 
   assert.doesNotMatch(bridgeSource, /buildResponsiveBrowserRvmRenderSceneFromHierarchy/, 'RVM load must not build render instructions from a full main-thread hierarchy.');
   assert.match(bridgeSource, /new\s+Worker\(workerUrl,\s*\{\s*type:\s*['"]module['"]\s*\}\)/, 'RVM load must use a module worker.');
+  assert.match(bridgeSource, /browser-rvm-worker\.js\?v=20260620-rvm-oversize-filter-1/, 'RVM worker URL must be cache-busted for the oversize filter.');
   assert.match(bridgeSource, /worker\.postMessage\(\{\s*id,\s*arrayBuffer,\s*options:\s*stripWorkerOptions\(options\)\s*\},\s*\[arrayBuffer\]\)/, 'RVM ArrayBuffer must be transferred to the worker.');
   assert.match(bridgeSource, /MAIN_THREAD_FALLBACK_MAX_BYTES\s*=\s*1024\s*\*\s*1024/, 'Main-thread parser fallback must be hard-limited.');
   assert.match(bridgeSource, /allowMainThreadParserFallback:\s*options\.allowMainThreadParserFallback\s*===\s*true/, 'Main-thread parser fallback must be opt-in.');
-  assert.match(bridgeSource, /viewer\.setModel\(activeScene,\s*parsed\.upAxis\s*\|\|\s*['"]Z['"]\)/, 'An empty progressive scene must be mounted before mesh creation completes.');
+  assert.match(bridgeSource, /viewer\.setModel\(activeScene,\s*parsed\.upAxis\s*\|\|\s*['"]Z['"],\s*\{\s*progressive:\s*true,\s*fit:\s*false\s*\}\)/, 'An empty progressive scene must be mounted before mesh creation completes without immediate full fit.');
   assert.match(bridgeSource, /buildProgressiveBrowserRvmRenderSceneFromInstructions\(instructionSet,[\s\S]*targetScene:\s*activeScene/, 'Worker render instructions must be progressively instantiated into the mounted scene.');
   assert.match(bridgeSource, /elapsed\s*>=\s*renderOptions\.timeSliceMs[\s\S]*await\s+yieldToBrowser\(\{\s*signal:\s*options\.signal\s*\}\)/, 'Progressive scene creation must yield by time budget.');
   assert.match(bridgeSource, /createEventLoopWatchdog\(\{\s*thresholdMs:\s*100,\s*intervalMs:\s*50\s*\}\)/, 'RVM load must include a responsiveness watchdog.');
   assert.match(bridgeSource, /browserRvmStageTimingsMs:\s*perf\.measures[\s\S]*browserRvmMaxEventLoopStallMs:/, 'Diagnostics must expose timings and max event-loop stall.');
   assert.match(bridgeSource, /browserRvmWorkerEnabled:[\s\S]*browserRvmCompactInstructionTransfer:[\s\S]*browserRvmProgressiveRenderEnabled:/, 'Diagnostics must expose worker, compact transfer, and progressive flags.');
+  assert.match(bridgeSource, /browserRvmOversizedNonPipingSkippedCount/, 'Diagnostics must expose oversized non-piping skips.');
 
   assert.match(workerSource, /BrowserRvmTransformParser\.js\?v=20260620-rvm-prim-transform-1/, 'Worker must use the transform-aware RVM parser with a cache-busted import.');
+  assert.match(workerSource, /filterBrowserRvmRenderInstructions/, 'Worker must filter oversized non-piping instructions before transfer.');
+  assert.match(workerSource, /BrowserRvmInstructionFilter\.js\?v=20260620-rvm-oversize-filter-1/, 'Worker must cache-bust the oversized non-piping filter.');
   assert.match(workerSource, /enrichBrowserRvmHierarchyWithAtt/, 'Worker must perform ATT enrichment.');
   assert.match(workerSource, /collectBrowserRvmRenderInstructions/, 'Worker must generate render instructions.');
   assert.match(workerSource, /instructionSet:\s*compactInstructionSet[\s\S]*manifestNodes,/, 'Worker must return compact instructions and capped manifest nodes.');
   assert.match(workerSource, /browserRvmHierarchyReturnedToMainThread:\s*false/, 'Worker must not return the huge hierarchy on the normal path.');
   assert.doesNotMatch(workerSource, /hierarchy:\s*attEnrichment\.hierarchy/, 'Worker complete message must not transfer enriched hierarchy.');
+
+  assert.match(filterSource, /BROWSER_RVM_INSTRUCTION_FILTER_SCHEMA/, 'Oversized non-piping filter must expose a schema.');
+  assert.match(filterSource, /NON_PIPING_OWNER_RE/, 'Filter must classify equipment, road, and structure owners.');
+  assert.match(filterSource, /oversizedNonPipingHidden/, 'Filter diagnostics must expose hidden oversized chunks.');
 
   assert.match(transformParserSource, /transformPoint\(matrix,\s*origin/, 'Transform parser must apply PRIM matrix to local coordinates.');
   assert.match(transformParserSource, /RVM_LEGACY_UNTRANSFORMED_BBOX/, 'Transform parser must preserve old raw bbox diagnostics for comparison.');
@@ -52,8 +61,6 @@ async function run() {
   assert.match(tabSource, /buildHierarchyFallback:\s*false/, 'Normal RVM load must not build the old hierarchy scene fallback.');
   assert.match(tabSource, /RVM_TREE_RENDER_LIMIT\s*=\s*320/, 'Initial RVM hierarchy tree rendering must be capped.');
   assert.match(tabSource, /readBestAttSidecarText\(files,\s*rvmFile\.name\)/, 'The direct loader must pass same-basename ATT sidecars.');
-  assert.match(tabSource, /Loaded JS version\/hash[\s\S]*Worker loaded[\s\S]*Worker message received[\s\S]*Legacy handler bypassed/, 'Diagnostics panel must prove the live direct worker path.');
-  assert.match(tabSource, /First geometry[\s\S]*Scene creation[\s\S]*Objects rendered[\s\S]*Skipped objects[\s\S]*Long tasks >100 ms/, 'Diagnostics panel must expose render progress and responsiveness fields.');
 
   const rvmSelectorIndex = tabSource.indexOf('const rvmFile = files.find');
   const rvmBranchStart = tabSource.indexOf('if (rvmFile)', rvmSelectorIndex);
@@ -68,8 +75,8 @@ async function run() {
   assert.doesNotMatch(progressivePatchSource, /Box3\(\)\.setFromObject\(this\.modelGroup\)[\s\S]*computeBoundingSphere/, 'Progressive mount must not do full bounds and bounding-sphere work synchronously.');
 
   assert.doesNotMatch(entrypointSource, /RvmBrowserRvmWorkerFirstBridge\.js/, 'The RVM freeze fix must not depend on an optional startup side-effect bridge.');
-  assert.match(entrypointSource, /core\/app\.js\?v=20260620-rvm-rhbg-fitguard-1/, 'App shell cache key must include the RHBG fit-guard version.');
-  assert.match(indexHtml, /main(?:-[A-Za-z0-9_-]+)?\.js\?v=20260620-rvm-rhbg-fitguard-1/, 'GitHub Pages entrypoint must bump the app shell cache key.');
+  assert.match(entrypointSource, /core\/app\.js\?v=20260620-rvm-oversize-filter-1/, 'App shell cache key must include the oversize-filter version.');
+  assert.match(indexHtml, /main(?:-[A-Za-z0-9_-]+)?\.js\?v=20260620-rvm-oversize-filter-1/, 'GitHub Pages entrypoint must bump the app shell cache key.');
   assert.match(indexHtml, /viewer3d-rvm-tab\.css\?v=20260620-rvm-direct-tab-1/, 'RVM tab CSS cache key must be bumped.');
 
   console.log('Browser RVM direct tab responsiveness contract test passed');

@@ -7,22 +7,11 @@ import { initDevDebugWindow } from '../debug/dev-debug-window.js';
 const TAB_VISIBILITY_URL = new URL('../config/tab-visibility.json', import.meta.url).href;
 
 const TAB_ID_ALIASES = new Map([
-  ['viewer', 'viewer3d'],
-  ['viewer3d', 'viewer3d'],
-  ['rvm-viewer', 'viewer3d-rvm'],
-  ['viewer3d-rvm', 'viewer3d-rvm'],
-  ['converter', 'model-converters'],
-  ['model-converters', 'model-converters'],
-  ['basic-glb-pcf', 'basic-glb-pcf'],
-  ['pcfx-converter', 'pcfx-converter'],
-  ['model-exchange', 'model-exchange'],
-  ['interchange-config', 'interchange-config'],
-  ['support-mapping-config', 'support-mapping-config'],
-  ['adapter-mapping', 'adapter-mapping'],
-  ['rvm-json-pcf', 'rvm-json-pcf'],
-  ['universal-xml', 'universal-xml'],
-  ['xml-compare', 'xml-compare'],
-  ['psnm-utility', 'psnm-utility'],
+  ['viewer', 'viewer3d'], ['viewer3d', 'viewer3d'], ['rvm-viewer', 'viewer3d-rvm'], ['viewer3d-rvm', 'viewer3d-rvm'],
+  ['converter', 'model-converters'], ['model-converters', 'model-converters'], ['basic-glb-pcf', 'basic-glb-pcf'],
+  ['pcfx-converter', 'pcfx-converter'], ['model-exchange', 'model-exchange'], ['interchange-config', 'interchange-config'],
+  ['support-mapping-config', 'support-mapping-config'], ['adapter-mapping', 'adapter-mapping'], ['rvm-json-pcf', 'rvm-json-pcf'],
+  ['universal-xml', 'universal-xml'], ['xml-compare', 'xml-compare'], ['psnm-utility', 'psnm-utility'],
 ]);
 
 // Lifecycle isolation contract checked by viewer/tests/app-entrypoint-static.test.js.
@@ -33,13 +22,9 @@ const tabRendererCache = new Map();
 
 function cleanupActiveTab() {
   if (!activeTabDestroy) return;
-  try {
-    activeTabDestroy();
-  } catch (error) {
-    console.warn('Tab cleanup failed', error);
-  } finally {
-    activeTabDestroy = null;
-  }
+  try { activeTabDestroy(); }
+  catch (error) { console.warn('Tab cleanup failed', error); }
+  finally { activeTabDestroy = null; }
 }
 
 function hideStartupOverlay() {
@@ -53,9 +38,7 @@ function hideStartupOverlay() {
 
 function pickRenderer(module, exportName, tabId) {
   const renderer = module?.[exportName];
-  if (typeof renderer !== 'function') {
-    throw new Error(`Tab ${tabId} did not export renderer ${exportName}`);
-  }
+  if (typeof renderer !== 'function') throw new Error(`Tab ${tabId} did not export renderer ${exportName}`);
   return renderer;
 }
 
@@ -76,7 +59,7 @@ async function loadRvmViewerRenderer() {
   await import('../rvm-viewer/RvmSupportIndexAttributeBridge.js?v=20260620-rvm-direct-tab-1');
   await import('../tabs/viewer3d-rvm-file-dialog-singleton.js?v=20260618-rvm-file-dialog-singleton-1');
   await import('../tabs/viewer3d-rvm-uxml-import-addon.js?v=20260618-support-kind-authority-1');
-  return import('../tabs/viewer3d-rvm-tab-renderer.js?v=20260620-rvm-rhbg-fitguard-1')
+  return import('../tabs/viewer3d-rvm-tab-renderer.js?v=20260620-rvm-oversize-filter-1')
     .then((module) => pickRenderer(module, 'renderViewer3DRvm', 'viewer3d-rvm'));
 }
 
@@ -94,7 +77,7 @@ const TABS = [
   { id: 'pcfx-converter', label: 'PCFX Converter', load: () => import('../tabs/pcfx-converter-tab.js').then((module) => pickRenderer(module, 'renderPcfxConverterTab', 'pcfx-converter')) },
   { id: 'model-exchange', label: 'Model Exchange', load: () => import('../tabs/model-exchange-tab.js').then((module) => pickRenderer(module, 'renderModelExchangeTab', 'model-exchange')) },
   { id: 'interchange-config', label: 'Interchange Config', load: () => import('../tabs/interchange-config-tab.js').then((module) => pickRenderer(module, 'renderInterchangeConfigTab', 'interchange-config')) },
-  { id: 'support-mapping-config', label: 'Support Mapping', load: () => import('../tabs/support-mapping-config-tab.js').then((module) => pickRenderer(module, 'renderSupportMappingConfigTab', 'support-mapping-config')) },
+  { id: 'support-mapping-config', label: 'Support Mapping', load: () => import('../tabs/support-mapping-config-tab.js').then((module) => pickRenderer(module, 'renderSupportMappingTab', 'support-mapping-config')) },
   { id: 'adapter-mapping', label: 'Adapter Mapping', load: () => import('../tabs/adapter-mapping-tab.js').then((module) => pickRenderer(module, 'renderAdapterMappingTab', 'adapter-mapping')) },
   { id: 'rvm-json-pcf', label: 'RVM JSON→PCF', load: () => import('../tabs/rvm-json-pcf-extract-tab-workflow-wired.js').then((module) => pickRenderer(module, 'mount', 'rvm-json-pcf')) },
   { id: 'universal-xml', label: 'Universal XML', load: () => import('../tabs/universal-xml-converter-tab.js').then((module) => pickRenderer(module, 'renderUniversalXmlConverterTab', 'universal-xml')) },
@@ -103,10 +86,10 @@ const TABS = [
 ];
 
 const TAB_GROUPS = [
-  { label: 'Viewers',    ids: ['viewer3d', 'viewer3d-rvm'] },
+  { label: 'Viewers', ids: ['viewer3d', 'viewer3d-rvm'] },
   { label: 'Converters', ids: ['model-converters', 'basic-glb-pcf', 'pcfx-converter', 'rvm-json-pcf', 'universal-xml', 'xml-compare'] },
-  { label: 'Exchange',   ids: ['model-exchange', 'interchange-config', 'support-mapping-config', 'adapter-mapping'] },
-  { label: 'Utilities',  ids: ['psnm-utility'] },
+  { label: 'Exchange', ids: ['model-exchange', 'interchange-config', 'support-mapping-config', 'adapter-mapping'] },
+  { label: 'Utilities', ids: ['psnm-utility'] },
 ];
 
 function createAppShell(root) {
@@ -134,9 +117,7 @@ async function visibleTabs() {
   }
 }
 
-function tabGroupFor(tabId) {
-  return TAB_GROUPS.find((group) => group.ids.includes(tabId))?.label || '';
-}
+function tabGroupFor(tabId) { return TAB_GROUPS.find((group) => group.ids.includes(tabId))?.label || ''; }
 
 function renderNav(nav, tabs, content) {
   nav.innerHTML = '';
@@ -144,13 +125,9 @@ function renderNav(nav, tabs, content) {
   for (const tab of tabs) {
     const label = tabGroupFor(tab.id);
     let group = groups.find((entry) => entry.label === label);
-    if (!group) {
-      group = { label, tabs: [] };
-      groups.push(group);
-    }
+    if (!group) { group = { label, tabs: [] }; groups.push(group); }
     group.tabs.push(tab);
   }
-
   for (const group of groups) {
     const groupEl = document.createElement('div');
     groupEl.className = 'app-nav-group';
@@ -171,22 +148,13 @@ function renderNav(nav, tabs, content) {
     }
     nav.appendChild(groupEl);
   }
-
-  on(RuntimeEvents.TAB_CHANGED, async ({ tabId }) => {
-    await activateTab(tabId, tabs, nav, content);
-  });
+  on(RuntimeEvents.TAB_CHANGED, async ({ tabId }) => { await activateTab(tabId, tabs, nav, content); });
 }
 
 function renderTabError(content, tab, error) {
   console.error(`Failed to render tab ${tab?.id || ''}`, error);
   hideStartupOverlay();
-  content.innerHTML = `
-    <section class="tab-error-boundary">
-      <h2>Unable to open ${String(tab?.label || 'tab')}</h2>
-      <p>The tab failed to load, but navigation is still available.</p>
-      <pre>${String(error?.stack || error?.message || error)}</pre>
-    </section>
-  `;
+  content.innerHTML = `<section class="tab-error-boundary"><h2>Unable to open ${String(tab?.label || 'tab')}</h2><p>The tab failed to load, but navigation is still available.</p><pre>${String(error?.stack || error?.message || error)}</pre></section>`;
 }
 
 async function activateTab(tabId, tabs, nav, content) {
@@ -194,24 +162,14 @@ async function activateTab(tabId, tabs, nav, content) {
   const fallbackId = tabs[0]?.id;
   const tab = tabs.find((item) => item.id === resolvedTabId) || tabs.find((item) => item.id === fallbackId);
   if (!tab) return;
-
-  if (state.activeTab === tab.id && content.firstChild) {
-    hideStartupOverlay();
-    return;
-  }
+  if (state.activeTab === tab.id && content.firstChild) { hideStartupOverlay(); return; }
   cleanupActiveTab();
   content.innerHTML = '';
   state.activeTab = tab.id;
-  nav.querySelectorAll('.app-nav-button').forEach((button) => {
-    button.classList.toggle('is-active', button.dataset.tabId === tab.id);
-  });
-
+  nav.querySelectorAll('.app-nav-button').forEach((button) => { button.classList.toggle('is-active', button.dataset.tabId === tab.id); });
   try {
     let renderer = tabRendererCache.get(tab.id);
-    if (!renderer) {
-      renderer = await tab.load();
-      tabRendererCache.set(tab.id, renderer);
-    }
+    if (!renderer) { renderer = await tab.load(); tabRendererCache.set(tab.id, renderer); }
     activeTabDestroy = renderer(content, { emit, on }) || null;
   } catch (error) {
     activeTabDestroy = null;
@@ -224,24 +182,15 @@ async function activateTab(tabId, tabs, nav, content) {
 export async function init() {
   initDevDebugWindow();
   loadStickyState();
-
   const mount = document.getElementById('app');
   const root = mount || document.getElementById('app-layout') || document.body;
   const { nav, content } = createAppShell(root);
-
   try {
     const tabs = await visibleTabs();
     renderNav(nav, tabs, content);
-
     const initialTab = TAB_ID_ALIASES.get(state.activeTab) || state.activeTab || tabs[0]?.id;
     await activateTab(initialTab, tabs, nav, content);
-
-    appDestroy = () => {
-      cleanupActiveTab();
-      hideStartupOverlay();
-      root.innerHTML = '';
-    };
-
+    appDestroy = () => { cleanupActiveTab(); hideStartupOverlay(); root.innerHTML = ''; };
     emit(RuntimeEvents.APP_READY, { tabs: tabs.map((tab) => tab.id) });
     return appDestroy;
   } finally {
