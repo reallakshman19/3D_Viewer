@@ -37,7 +37,7 @@ async function run() {
   assert.doesNotMatch(bridgeSource, /buildResponsiveBrowserRvmRenderSceneFromHierarchy/, 'RVM load must not build render instructions from a full main-thread hierarchy.');
   assert.match(bridgeSource, /new\s+Worker\(workerUrl,\s*\{\s*type:\s*['"]module['"]\s*\}\)/, 'RVM load must use a module worker.');
   assert.match(bridgeSource, /worker\.postMessage\(\{\s*id,\s*arrayBuffer,\s*options:\s*stripWorkerOptions\(options\)\s*\},\s*\[arrayBuffer\]\)/, 'RVM ArrayBuffer must be transferred to the worker.');
-  assert.match(workerPatchSource, /browser-rvm-worker\.js\?v=20260620-rvm-scale-leak-1/, 'Worker patch must redirect to the scale-leak worker URL.');
+  assert.match(workerPatchSource, /browser-rvm-worker\.js\?v=20260620-rvm-facetgroup-1/, 'Worker patch must redirect to the facet group worker URL.');
   assert.match(bridgeSource, /MAIN_THREAD_FALLBACK_MAX_BYTES\s*=\s*1024\s*\*\s*1024/, 'Main-thread parser fallback must be hard-limited.');
   assert.match(bridgeSource, /allowMainThreadParserFallback:\s*options\.allowMainThreadParserFallback\s*===\s*true/, 'Main-thread parser fallback must be opt-in.');
   assert.match(bridgeSource, /viewer\.setModel\(activeScene,\s*parsed\.upAxis\s*\|\|\s*['"]Z['"],\s*\{\s*progressive:\s*true,\s*fit:\s*false\s*\}\)/, 'An empty progressive scene must be mounted before mesh creation completes without immediate full fit.');
@@ -46,10 +46,11 @@ async function run() {
   assert.match(bridgeSource, /createEventLoopWatchdog\(\{\s*thresholdMs:\s*100,\s*intervalMs:\s*50\s*\}\)/, 'RVM load must include a responsiveness watchdog.');
   assert.match(bridgeSource, /browserRvmScaleSafeContract/, 'Diagnostics must expose the scale-safe contract summary.');
 
-  assert.match(workerSource, /BrowserRvmHierarchyTransformParser\.js\?v=20260620-rvm-scale-leak-1/, 'Worker must use the scaled-radius transform hierarchy parser.');
+  assert.match(workerSource, /BrowserRvmHierarchyTransformParser\.js\?v=20260620-rvm-facetgroup-1/, 'Worker must use the facet group transform hierarchy parser.');
   assert.match(workerSource, /BrowserRvmInstructionFilterV2\.js\?v=20260620-rvm-large-box-filter-1/, 'Worker must load the large-box filter module.');
   assert.match(workerSource, /maxPrimitiveBoxSide[\s\S]*DEFAULT_MAX_PRIMITIVE_BOX_SIDE/, 'Worker must pass configurable max primitive box side.');
   assert.match(workerSource, /browserRvmCppMat3x4ScaledRadiusApplied/, 'Worker diagnostics must expose scaled-radius usage.');
+  assert.match(workerSource, /browserRvmFacetGroupDecodedCount[\s\S]*browserRvmFacetGroupVertexCount/, 'Worker diagnostics must expose facet group decode counts.');
   assert.match(workerSource, /browserRvmNativeParamDecodedCount/, 'Worker diagnostics must expose native parameter decode count.');
   assert.match(workerSource, /filterBrowserRvmRenderInstructions/, 'Worker must filter only absurd oversized non-piping instructions before transfer.');
   assert.match(workerSource, /enrichBrowserRvmHierarchyWithAtt/, 'Worker must perform ATT enrichment.');
@@ -62,14 +63,16 @@ async function run() {
   assert.match(filterSource, /SUPPORT_OWNER_RE[\s\S]*supportLike/, 'Filter must protect support-like geometry from large-box side skip.');
   assert.match(renderContractSource, /v3-support-hints[\s\S]*SUPPORT_HINT_RE[\s\S]*SUPPORT_BBOX_PLACEHOLDER/, 'Render contract adapter must promote support-like RVM objects.');
 
-  assert.match(transformParserSource, /browser-rvm-transform-parser\/v3-cpp-mat3x4-scaled-radius/, 'Transform parser must identify the scaled-radius C++ Mat3x4 schema.');
+  assert.match(transformParserSource, /browser-rvm-transform-parser\/v4-cpp-mat3x4-facetgroup/, 'Transform parser must identify the facet group C++ Mat3x4 schema.');
   assert.match(transformParserSource, /transformPointCppMat3x4[\s\S]*m\[0\] \* p\.x \+ m\[3\] \* p\.y \+ m\[6\] \* p\.z \+ m\[9\]/, 'Transform parser must use the C++ column-major Mat3x4 point multiplication.');
-  assert.match(transformParserSource, /decodePrimitiveParams[\s\S]*case 8:[\s\S]*radius[\s\S]*height/, 'Transform parser must decode native cylinder parameters.');
+  assert.match(transformParserSource, /decodePrimitiveParams[\s\S]*case 11:[\s\S]*decodeFacetGroupParams/, 'Transform parser must decode native facet group parameters.');
+  assert.match(transformParserSource, /decodeFacetGroupParams[\s\S]*MAX_FACET_GROUP_VERTICES/, 'Transform parser must cap facet group payload decoding.');
+  assert.match(transformParserSource, /RVM_FACET_GROUP_DECODED[\s\S]*RVM_FACET_GROUP_VERTEX_COUNT/, 'Transform parser must annotate facet group decode metadata.');
   assert.match(transformParserSource, /validScales\.length \? Math\.max\(\.\.\.validScales\) : 1/, 'Transform parser must not clamp downscale factors to one.');
   assert.match(transformParserSource, /RVM_RADIUS_SCALE_SOURCE[\s\S]*RVM_RADIUS_SCALED_BY_TRANSFORM/, 'Transform parser must annotate scaled radius output.');
-  assert.match(transformHierarchySource, /BrowserRvmTransformParser\.js\?v=20260620-rvm-scale-leak-1/, 'Transform hierarchy wrapper must import the scaled-radius parser.');
-  assert.match(transformHierarchySource, /v3-scaled-dish-contract/, 'Scale-safe contract must mark scaled dish/flange source.');
-  assert.match(transformHierarchySource, /FLANGE_BBOX_PLACEHOLDER[\s\S]*DISH_BBOX_PLACEHOLDER/, 'Code 5/6 dish/flange primitives must not be routed to BOX_SOLID.');
+  assert.match(transformHierarchySource, /BrowserRvmTransformParser\.js\?v=20260620-rvm-facetgroup-1/, 'Transform hierarchy wrapper must import the facet group parser.');
+  assert.match(transformHierarchySource, /v4-facetgroup-contract/, 'Scale-safe contract must mark facet group source.');
+  assert.match(transformHierarchySource, /FACET_GROUP_BBOX_PLACEHOLDER/, 'Code 11 facet groups must get an explicit placeholder contract before runtime tessellation.');
 
   assert.match(tabSource, /import\s+\{\s*loadRvmFileInBrowser\s*\}\s+from\s+['"]\.\.\/rvm\/BrowserRvmLoadBridge\.js\?v=20260620-rvm-flat-tree-1['"]/, 'The real tab module must import the flat-tree worker-first RVM loader directly.');
   assert.match(tabSource, /buildFlatNodeTree/, 'The RVM tab must define a flat hierarchy renderer.');
@@ -88,13 +91,13 @@ async function run() {
   assert.match(rendererSource, /RvmViewerInteractionPatch\.js\?v=20260620-rvm-esc-hide-selection-1/, 'Renderer must load the Esc/hide toolbar/canvas selection patch.');
   assert.match(rendererSource, /RvmSelectionTreeSyncBridge\.js\?v=20260620-rvm-large-box-support-sync-1/, 'Renderer must load canvas-tree sync bridge.');
   assert.match(rendererSource, /RvmVisibilityToolbarBridge\.js\?v=20260620-rvm-esc-hide-selection-1/, 'Renderer must inject Hide/Show toolbar controls.');
-  assert.match(rendererSource, /BrowserRvmCppMat3x4WorkerPatch\.js\?v=20260620-rvm-scale-leak-1/, 'Renderer must install the scale-leak worker patch.');
+  assert.match(rendererSource, /BrowserRvmCppMat3x4WorkerPatch\.js\?v=20260620-rvm-facetgroup-1/, 'Renderer must install the facet group worker patch.');
   assert.match(rendererSource, /RvmSupportSummaryBridge\.js\?v=20260620-rvm-support-symbol-mode-1/, 'Renderer must install support symbol mode bridge.');
   assert.match(rendererSource, /RvmSupportAssemblyBridge\.js\?v=20260620-rvm-support-assembly-dish-1/, 'Renderer must load support assembly bridge.');
   assert.match(rendererSource, /BrowserRvmDishTessellationRuntimePatch\.js\?v=20260620-rvm-support-assembly-dish-1/, 'Renderer must install dish tessellation patch.');
-  assert.match(rendererSource, /BrowserRvmRemainingPrimitiveRuntimePatch\.js\?v=20260620-rvm-remaining-material-modes-1/, 'Renderer must install remaining primitive patch.');
+  assert.match(rendererSource, /BrowserRvmRemainingPrimitiveRuntimePatch\.js\?v=20260620-rvm-facetgroup-1/, 'Renderer must install facet group primitive patch.');
   assert.match(rendererSource, /RvmMaterialModeBridge\.js\?v=20260620-rvm-remaining-material-modes-1/, 'Renderer must load material mode controls.');
-  assert.match(rendererSource, /viewer3d-rvm-tab\.js\?v=20260620-rvm-remaining-material-modes-1/, 'Renderer must load the remaining material modes tab cache key.');
+  assert.match(rendererSource, /viewer3d-rvm-tab\.js\?v=20260620-rvm-facetgroup-1/, 'Renderer must load the facet group tab cache key.');
   assert.match(hierarchySelectionBridgeSource, /Fit Selection[\s\S]*hide-selection[\s\S]*show-hidden/,'Hierarchy selection bridge must expose Fit Selection, Hide, and Show Hidden.');
   assert.match(interactionPatchSource, /keydown[\s\S]*Escape[\s\S]*handleEscape/, 'Toolbar patch must implement robust Esc behavior.');
   assert.match(interactionPatchSource, /dispatchAction[\s\S]*VIEW_HIDE_SELECTION[\s\S]*VIEW_SHOW_HIDDEN/, 'Toolbar patch must implement Hide and Show Hidden actions.');
@@ -114,19 +117,20 @@ async function run() {
   assert.match(dishTessellationSource, /browser-rvm-dish-tessellation\/v1-cpp-mat3x4/, 'Dish tessellation patch must expose schema.');
   assert.match(dishTessellationSource, /ellipticalDishGeometry[\s\S]*sphericalDishGeometry/, 'Dish tessellation patch must support PRIM 5 and PRIM 6.');
   assert.match(dishTessellationSource, /matrix4FromCppMat3x4[\s\S]*native-cpp-dish-tessellated/, 'Dish tessellation patch must apply Mat3x4 and mark render quality.');
-  assert.match(remainingPrimitiveSource, /browser-rvm-remaining-primitives\/v1-pyramid-line-facet-diagnostics/, 'Remaining primitive patch must expose schema.');
+  assert.match(remainingPrimitiveSource, /browser-rvm-remaining-primitives\/v2-facetgroup-tessellation/, 'Remaining primitive patch must expose facet group tessellation schema.');
   assert.match(remainingPrimitiveSource, /pyramidGeometry[\s\S]*lineBoxGeometry/, 'Remaining primitive patch must support PRIM 1 and 10.');
-  assert.match(remainingPrimitiveSource, /facetGroupUnsupportedCount[\s\S]*facet-group-native-stream-not-decoded/, 'Remaining primitive patch must report PRIM 11 facet groups explicitly.');
+  assert.match(remainingPrimitiveSource, /facetGroupGeometry[\s\S]*facetGroupTessellatedCount[\s\S]*native-cpp-facetgroup-tessellated/, 'Remaining primitive patch must tessellate PRIM 11 facet groups.');
+  assert.match(remainingPrimitiveSource, /facetGroupTriangleCount[\s\S]*facetGroupContourHoleSkippedCount/, 'Remaining primitive patch must expose facet group tessellation diagnostics.');
   assert.match(materialModeSource, /Color[\s\S]*Type[\s\S]*Source[\s\S]*Mono/, 'Material mode bridge must expose color controls.');
   assert.match(materialModeSource, /browser-rvm-material-mode\/v1[\s\S]*__PCF_GLB_RVM_MATERIAL_MODE_DIAGNOSTICS__/, 'Material mode bridge must publish diagnostics.');
   assert.match(materialModeSource, /TYPE_COLORS[\s\S]*classifyObjectType[\s\S]*restoreOriginalMaterial/, 'Material mode bridge must color by type and restore source materials.');
   assert.match(nativeDiagnosticsBridgeSource, /Native Tessellation[\s\S]*Native On[\s\S]*Native Off[\s\S]*Re-run/, 'Native diagnostics bridge must expose controls.');
 
   assert.doesNotMatch(entrypointSource, /RvmBrowserRvmWorkerFirstBridge\.js/, 'The RVM freeze fix must not depend on an optional startup side-effect bridge.');
-  assert.match(entrypointSource, /core\/app\.js\?v=20260620-rvm-remaining-material-modes-1/, 'App shell cache key must include the remaining material modes version.');
-  assert.match(indexHtml, /main(?:-[A-Za-z0-9_-]+)?\.js\?v=20260620-rvm-remaining-material-modes-1/, 'GitHub Pages entrypoint must bump the app shell cache key.');
+  assert.match(entrypointSource, /core\/app\.js\?v=20260620-rvm-facetgroup-1/, 'App shell cache key must include the facet group version.');
+  assert.match(indexHtml, /main(?:-[A-Za-z0-9_-]+)?\.js\?v=20260620-rvm-facetgroup-1/, 'GitHub Pages entrypoint must bump the app shell cache key.');
 
-  console.log('Browser RVM remaining primitive material mode contract test passed');
+  console.log('Browser RVM facet group tessellation contract test passed');
 }
 
 run();
