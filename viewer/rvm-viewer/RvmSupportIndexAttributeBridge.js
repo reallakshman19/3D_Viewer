@@ -3,12 +3,15 @@ import { state } from '../core/state.js';
 import { applyRvmSupportSymbolSettings } from './RvmSupportSymbols.js?v=20260618-support-kind-authority-1';
 import { isLikelyRvmFileName } from '../rvm/BrowserRvmParser.js';
 import { parseRvmArrayBuffer } from '../rvm/BrowserRvmHierarchyParser.js';
+import { loadRvmFileInBrowser } from '../rvm/BrowserRvmLoadBridge.js';
 
 const PATCH_FLAG = Symbol.for('pcf-glb-rvm-support-index-attribute-bridge-v2');
 const RVM_TAB_FILE_FALLBACK_FLAG = Symbol.for('pcf-glb-rvm-browser-tab-file-fallback-v1');
 const RVM_TAB_DOM_PATCH_FLAG = Symbol.for('pcf-glb-rvm-browser-tab-dom-patch-v1');
 const RVM_ATT_SIDECAR_CACHE = Symbol.for('pcf-glb-rvm-att-sidecar-cache-v1');
 const RVM_BROWSER_PARSE_DIAGNOSTICS = Symbol.for('pcf-glb-rvm-browser-parse-diagnostics-v1');
+const RVM_DIRECT_TAB_LOAD_FLAG = '__pcfGlbRvmDirectBrowserLoadListener';
+const SUPPORT_MAX_LABELS = 18;
 
 const AUTHORITATIVE_SUPPORT_FIELDS = new Set([
   'SUPPORT_KIND',
@@ -163,6 +166,20 @@ async function readCachedAttSidecarText(fileName) {
   }
 }
 
+async function readBestAttSidecarText(files, rvmFileName) {
+  const list = Array.from(files || []);
+  const rvmKey = sidecarKey(rvmFileName);
+  const matching = list.find((file) => isLikelyAttFileName(file?.name) && sidecarKey(file.name) === rvmKey);
+  if (matching) {
+    try { return String(await rawFileText(matching) || ''); } catch (_) { return ''; }
+  }
+  return readCachedAttSidecarText(rvmFileName);
+}
+
+function selectPrimaryRvmFile(files) {
+  return Array.from(files || []).find((file) => isLikelyRvmFileName(file?.name)) || null;
+}
+
 function setLastBrowserRvmDiagnostics(diagnostics = {}, fileName = '') {
   const payload = {
     ...(diagnostics && typeof diagnostics === 'object' ? diagnostics : {}),
@@ -236,6 +253,96 @@ function renderBrowserRvmDiagnostics(diagnostics = lastBrowserRvmDiagnostics(), 
   `;
 }
 
+function nodeDisplayName(node) {
+  return node?.name || node?.canonicalObjectId || node?.sourceObjectId || node?.id || 'Node';
+}
+
+function nodeKind(node) {
+  return String(node?.kind || node?.attributes?.TYPE || '').toUpperCase() || 'NODE';
+}
+
+function escapeHtml(value) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
+function buildBridgeNodeTree(nodes = []) {
+  const list = Array.isArray(nodes) ? nodes : [];
+  const byId = new Map();
+  const children = new Map();
+  for (const node of list) {
+    if (!node?.canonicalObjectId) continue;
+    byId.set(node.canonicalObjectId, node);
+    const parent = node.parentCanonicalObjectId || '';
+    if (!children.has(parent)) children.set(parent, []);
+    children.get(parent).push(node);
+  }
+  const roots = children.get('') || list.filter((n) => !n.parentCanonicalObjectId).slice(0, 2600);
+  const renderNode = (node, depth = 0) => {
+    const kids = children.get(node.canonicalObjectId) || [];
+    return `<li data-node-id="${escapeHtml(node.canonicalObjectId || '')}" data-depth="${depth}"><button type="button" class="rvm-tree-node"><span class="rvm-kind">${escapeHtml(nodeKind(node))}</span><span>${escapeHtml(nodeDisplayName(node))}</span>${kids.length ? `<span class="rvm-tree-count">${kids.length}</span>` : ''}</button>${kids.length && depth < 10 ? `<ul>${kids.slice(0, 2600).map((k) => renderNode(k, depth + 1)).join('')}</ul>` : ''}</li>`;
+  };
+  return roots.slice(0, 2600).map((node) => renderNode(node)).join('') || '<li class="rvm-empty-state">No hierarchy nodes.</li>';
+}
+
+function browserSupportOptions(root) {
+  const rawScale = Number(root?.querySelector?.('#rvm-support-scale')?.value);
+  const scale = Number.isFinite(rawScale) ? Math.max(0.25, Math.min(2.0, rawScale)) : 1.0;
+  const labelsVisible = root?.querySelector?.('#rvm-support-labels')?.getAttribute('aria-pressed') === 'true';
+  return {
+    scaleMultiplier: scale,
+    labelsVisible,
+    maxVisibleLabels: labelsVisible ? SUPPORT_MAX_LABELS : 0,
+    labelGridFactor: 2.1,
+  };
+}
+
+function updateRvmTabTreeFromPayload(root, payload) {
+  const tree = root?.querySelector?.('#rvm-tree');
+  if (!tree) return;
+  const nodes = payload?.manifest?.nodes || payload?.manifest?.items || payload?.manifest?.runtime?.nodes || [];
+  tree.innerHTML = buildBridgeNodeTree(nodes);
+}
+
+function handleDirectBrowserRvmFileInputChange(event, input) {
+  const files = input?.files;
+  const rvmFile = selectPrimaryRvmFile(files);
+  if (!rvmFile) return false;
+  const viewer = globalThis.__3D_RVM_VIEWER__;
+  if (!viewer) return false;
+
+  event?.preventDefault?.();
+  event?.stopPropagation?.();
+  event?.stopImmediatePropagation?.();
+  void loadDirectBrowserRvmFromInput(input, rvmFile, files, viewer);
+  return true;
+}
+
+async function loadDirectBrowserRvmFromInput(input, rvmFile, files, viewer) {
+  const root = input?.closest?.('[data-rvm-viewer]') || document;
+  const status = root?.querySelector?.('#rvm-sb-msg') || null;
+  if (status) status.textContent = `Loading ${rvmFile.name}…`;
+  try {
+    const attText = await readBestAttSidecarText(files, rvmFile.name);
+    const payload = await loadRvmFileInBrowser(rvmFile, viewer, { statusEl: status, attText });
+    updateRvmTabTreeFromPayload(root, payload);
+    root?.querySelector?.('#rvm-placeholder')?.remove?.();
+    try { applyRvmSupportSymbolSettings(viewer, browserSupportOptions(root)); } catch (_) {}
+    renderBrowserRvmDiagnostics(payload?.browserRvmParser || lastBrowserRvmDiagnostics(), root);
+    if (status) {
+      const renderCount = payload?.browserRvmRender?.renderableCount ?? payload?.manifest?.browserRvmRenderScene?.renderableCount;
+      status.textContent = `Loaded browser RVM ${rvmFile.name}${Number.isFinite(renderCount) ? ` (${renderCount} renderable)` : ''}`;
+    }
+  } catch (err) {
+    if (status) status.textContent = `RVM browser load failed: ${err?.message || err}`;
+    console.error('[RVM tab] browser RVM direct load failed', err);
+  }
+}
+
 export function installBrowserRvmTabFileFallback() {
   if (globalThis[RVM_TAB_FILE_FALLBACK_FLAG]) return;
   globalThis[RVM_TAB_FILE_FALLBACK_FLAG] = true;
@@ -275,9 +382,12 @@ function patchRvmTabDom(root = document) {
     input.setAttribute('multiple', 'multiple');
     input.setAttribute('data-browser-rvm-fallback', 'true');
     input.setAttribute('data-browser-rvm-att-sidecar', 'true');
-    if (!input.__pcfGlbRvmAttSidecarCacheListener) {
-      input.addEventListener('change', () => cacheRvmAttSidecars(input.files), { capture: true });
-      input.__pcfGlbRvmAttSidecarCacheListener = true;
+    if (!input[RVM_DIRECT_TAB_LOAD_FLAG]) {
+      input.addEventListener('change', (event) => {
+        cacheRvmAttSidecars(input.files);
+        handleDirectBrowserRvmFileInputChange(event, input);
+      }, { capture: true });
+      input[RVM_DIRECT_TAB_LOAD_FLAG] = true;
     }
   });
 
