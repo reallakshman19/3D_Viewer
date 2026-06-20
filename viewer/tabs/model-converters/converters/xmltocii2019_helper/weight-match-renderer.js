@@ -1,4 +1,4 @@
-import { collectXmlCiiWeightMatchRows } from '../../../../converters/xml-cii2019-core/weight-match-model.js?v=20260620-rating-runtime-1';
+import { collectXmlCiiWeightMatchRows } from '../../../../converters/xml-cii2019-core/weight-match-model.js?v=20260620-weight-fallback-1';
 import {
   ensureValveHintConfig,
   formatValveHint,
@@ -129,8 +129,10 @@ function hintPanel(config) {
 function renderAcceptedChip(candidate, rowIndex, issue) {
   const value = selectedWeight(candidate);
   const label = desc(candidate);
-  const title = [`Rating: ${issue.rating || '-'}`, `TypeDesc: ${label}`, `Selected weight: ${value} kg`, `Length delta: ${nfmt(candidate.lengthDelta)} mm`].join(' | ');
-  return `<button type="button" class="mc-rigid-review-candidate${candidate.preferred ? ' best' : ''}" data-wm-candidate="${rowIndex}" data-wm-weight="${attr(value)}" title="${attr(title)}" style="font-size:11px;line-height:1.1;padding:3px 6px;border-radius:999px;white-space:nowrap;max-width:330px;overflow:hidden;text-overflow:ellipsis;">${candidate.preferred ? '★ ' : ''}${esc(label)} · ${esc(value)}kg · Δ${esc(nfmt(candidate.lengthDelta))}</button>`;
+  const title = [`Rating: ${issue.rating || '-'}`, `TypeDesc: ${label}`, `Selected weight: ${value} kg`, `Length delta: ${nfmt(candidate.lengthDelta)} mm`, candidate?.weightWarning || ''].filter(Boolean).join(' | ');
+  const marker = candidate?.inferredWeight ? '≈ ' : (candidate.preferred ? '★ ' : '');
+  const method = candidate?.weightMethod === 'length-interpolated' ? ' · Interpolated' : (candidate?.weightMethod === 'length-extrapolated' && candidate?.inferredWeight ? ' · Extrapolated' : (candidate?.zeroFallback ? ' · No match' : ` · Δ${esc(nfmt(candidate.lengthDelta))}`));
+  return `<button type="button" class="mc-rigid-review-candidate${candidate.preferred ? ' best' : ''}" data-wm-candidate="${rowIndex}" data-wm-weight="${attr(value)}" title="${attr(title)}" style="font-size:11px;line-height:1.1;padding:3px 6px;border-radius:999px;white-space:nowrap;max-width:330px;overflow:hidden;text-overflow:ellipsis;${candidate?.zeroFallback ? 'background:#3a1010;border:1px solid #ef4444;color:#ffd6d6;' : (candidate?.inferredWeight ? 'background:#3a2a08;border:1px solid #d9a441;color:#ffe7a3;' : '')}">${marker}${esc(value)}kg${method}</button>`;
 }
 
 function renderRejectedChip(candidate) {
@@ -159,15 +161,17 @@ export function bindXmlCiiWeightMatchPhase(detailEl, { xmlFile, stagedJsonText, 
     const rows = issues.map((issue, rowIndex) => {
       const best = issue.candidates?.[0];
       const initial = issue.weight && issue.weight > 0 ? issue.weight : (best ? selectedWeight(best) : '');
-      const rowStyle = issue.mapped ? 'background:#0f2a1b;border-left:4px solid #2f9e63;' : 'background:#3a240f;border-left:4px solid #d08a22;';
+      const rowStyle = issue.mapped ? 'background:#0f2a1b;border-left:4px solid #2f9e63;' : (best?.zeroFallback ? 'background:#3a1010;border-left:4px solid #ef4444;' : (best?.inferredWeight ? 'background:#302607;border-left:4px solid #d9a441;' : 'background:#3a240f;border-left:4px solid #d08a22;'));
+      const inputStyle = `width:86px;${best?.zeroFallback ? 'background:#3a1010;border:1px solid #ef4444;color:#ffd6d6;' : (best?.inferredWeight ? 'background:#352706;border:1px solid #d9a441;color:#fff1b8;' : '')}`;
       const accepted = (issue.candidates || []).map((candidate) => renderAcceptedChip(candidate, rowIndex, issue)).join('');
       const rejected = (issue.rejectedCandidates || []).map(renderRejectedChip).join('');
       const rejectedBlock = rejected ? `<span class="mc-wm-rejected-label">Rejected by length</span>${rejected}` : '';
       const chips = accepted || rejectedBlock || '<span class="model-converters-muted">No suggestion</span>';
-      return `<tr style="${rowStyle}"><td>${esc(issue.mapped ? `Mapped (${issue.weightSource || 'weight'})` : (best?.preferred ? 'Suggested' : 'Unresolved'))}</td><td title="${attr(issue.branchName)}">${esc(issue.branchName)}</td><td>${esc(issue.lineKey || '')}</td><td>${esc(issue.componentType || '')}</td><td>${esc(issue.boreMm == null ? '' : `${Number(issue.boreMm).toFixed(0)} mm`)}</td><td>${esc(issue.rating || '')}</td><td>${esc(issue.nodeNumber)}</td><td title="${attr([issue.dtxrSource, issue.dtxrMatchedKey, issue.dtxrSuppressionReason].filter(Boolean).join(' · '))}">${esc(issue.dtxr || 'Not found')}</td><td>${esc(issue.valveHint || '—')}</td><td title="${attr(issue.elementLengthSource || '')}">${esc(issue.lengthMm == null ? '' : `${Number(issue.lengthMm).toFixed(1)} mm`)}</td><td><input type="number" min="0" step="0.001" class="mc-rigid-review-input" data-wm-key="${attr(issue.key)}" value="${attr(initial)}" placeholder="kg" style="width:86px;"></td><td style="max-width:540px;"><div style="display:flex;flex-wrap:wrap;gap:4px;max-height:72px;overflow:auto;align-items:flex-start;">${chips}</div></td></tr>`;
+      const statusText = issue.mapped ? `Mapped (${issue.weightSource || 'weight'})` : (best?.zeroFallback ? 'Zero fallback' : (best?.inferredWeight ? (best.weightMethod === 'length-interpolated' ? 'Interpolated' : 'Extrapolated') : (best?.preferred ? 'Suggested' : 'Unresolved')));
+      return `<tr style="${rowStyle}"><td>${esc(statusText)}</td><td title="${attr(issue.branchName)}">${esc(issue.branchName)}</td><td>${esc(issue.lineKey || '')}</td><td>${esc(issue.componentType || '')}</td><td>${esc(issue.boreMm == null ? '' : `${Number(issue.boreMm).toFixed(0)} mm`)}</td><td>${esc(issue.rating || '')}</td><td>${esc(issue.nodeNumber)}</td><td title="${attr([issue.dtxrSource, issue.dtxrMatchedKey, issue.dtxrSuppressionReason].filter(Boolean).join(' · '))}">${esc(issue.dtxr || 'Not found')}</td><td>${esc(issue.valveHint || '—')}</td><td title="${attr(issue.elementLengthSource || '')}">${esc(issue.lengthMm == null ? '' : `${Number(issue.lengthMm).toFixed(1)} mm`)}</td><td><input type="number" min="0" step="0.001" class="mc-rigid-review-input" data-wm-key="${attr(issue.key)}" value="${attr(initial)}" placeholder="kg" style="${inputStyle}"></td><td style="max-width:540px;"><div style="display:flex;flex-wrap:wrap;gap:4px;max-height:72px;overflow:auto;align-items:flex-start;">${chips}</div></td></tr>`;
     }).join('');
     const cfg = activeConfig();
-    contentEl.innerHTML = `<div class="model-converters-workflow-detail-note" style="margin-bottom:8px;">Candidate length gate is ±${nfmt(valveHintLengthToleranceMm(cfg))} mm. Rating is resolved from line list/manual overrides/runtime cache before ranking. Length conversion is ${convOn(cfg) ? 'ON' : 'OFF'}.</div><div class="mc-rigid-review-table-wrap" style="overflow:auto;max-height:48vh;"><table class="mc-rigid-review-table" style="border-collapse:collapse;font-size:12px;"><thead><tr><th>Status</th><th>Branch</th><th>Line Key</th><th>Type</th><th>Bore</th><th>Rating</th><th>Node</th><th>DTXR</th><th>Valve Hint</th><th>Length</th><th>Weight (kg)</th><th>Nearest Suggestions</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+    contentEl.innerHTML = `<div class="model-converters-workflow-detail-note" style="margin-bottom:8px;">Exact candidate length gate is ±${nfmt(valveHintLengthToleranceMm(cfg))} mm. If no exact candidate exists, same Bore + Rating interpolation/extrapolation is used; if no same Bore/Rating rows exist, the box is red 0. Length conversion is ${convOn(cfg) ? 'ON' : 'OFF'}.</div><div class="mc-rigid-review-table-wrap" style="overflow:auto;max-height:48vh;"><table class="mc-rigid-review-table" style="border-collapse:collapse;font-size:12px;"><thead><tr><th>Status</th><th>Branch</th><th>Line Key</th><th>Type</th><th>Bore</th><th>Rating</th><th>Node</th><th>DTXR</th><th>Valve Hint</th><th>Length</th><th>Weight (kg)</th><th>Nearest Suggestions</th></tr></thead><tbody>${rows}</tbody></table></div>`;
     contentEl.querySelectorAll('[data-wm-candidate]').forEach((button) => button.addEventListener('click', () => { const input = contentEl.querySelectorAll('.mc-rigid-review-input')[Number(button.dataset.wmCandidate)]; if (!input) return; input.value = button.dataset.wmWeight || ''; input.dispatchEvent(new Event('change', { bubbles: true })); }));
   };
   const compute = async () => {
@@ -184,8 +188,10 @@ export function bindXmlCiiWeightMatchPhase(detailEl, { xmlFile, stagedJsonText, 
       localIssues = collectXmlCiiWeightMatchRows(xmlText, jsonText, cfg).map(cleanRow).filter(Boolean).map((row) => rerankWithRating(row, cfg));
       const mapped = localIssues.filter((row) => row.mapped).length;
       const suggested = localIssues.filter((row) => row.candidates?.[0]?.preferred).length;
-      const unresolved = localIssues.length - mapped - suggested;
-      status(`${mapped} mapped · ${suggested} suggested · ${unresolved} unresolved · ${localIssues.length} shown`, unresolved ? 'bad' : 'ok');
+      const inferred = localIssues.filter((row) => row.candidates?.[0]?.inferredWeight && !row.candidates?.[0]?.zeroFallback).length;
+      const zero = localIssues.filter((row) => row.candidates?.[0]?.zeroFallback).length;
+      const unresolved = localIssues.length - mapped - suggested - inferred - zero;
+      status(`${mapped} mapped · ${suggested} exact · ${inferred} inferred · ${zero} zero fallback · ${unresolved} unresolved · ${localIssues.length} shown`, (zero || unresolved) ? 'bad' : 'ok');
       drawRows(localIssues);
     } catch (error) {
       localIssues = [];
@@ -195,7 +201,7 @@ export function bindXmlCiiWeightMatchPhase(detailEl, { xmlFile, stagedJsonText, 
   };
   detailEl.querySelector('#mc-wm-refresh')?.addEventListener('click', compute);
   toggleEl?.addEventListener('click', () => { const cfg = activeConfig(); cfg.weight = cfg.weight && typeof cfg.weight === 'object' ? cfg.weight : {}; cfg.weight.convertSmallLengthsInToMm = cfg.weight.convertSmallLengthsInToMm !== true; onSaveConfig(cfg); void compute(); });
-  detailEl.querySelector('#mc-wm-fill-best')?.addEventListener('click', () => { contentEl.querySelectorAll('.mc-rigid-review-input').forEach((input, index) => { const best = localIssues[index]?.candidates?.[0]; if (!best || best.preferred !== true || best.lengthQualified !== true) return; input.value = String(selectedWeight(best)); input.dispatchEvent(new Event('change', { bubbles: true })); }); });
+  detailEl.querySelector('#mc-wm-fill-best')?.addEventListener('click', () => { contentEl.querySelectorAll('.mc-rigid-review-input').forEach((input, index) => { const best = localIssues[index]?.candidates?.[0]; if (!best || Number(selectedWeight(best)) <= 0) return; input.value = String(selectedWeight(best)); input.dispatchEvent(new Event('change', { bubbles: true })); }); });
   panelEl?.addEventListener('change', (event) => { const cfg = activeConfig(); ensureValveHintConfig(cfg); const use = event.target.closest?.('#mc-wm-use-valve-hints'); if (use) cfg.weight.useNodeNameValveHints = use.checked; const tolerance = event.target.closest?.('#mc-wm-valve-tol'); if (tolerance) cfg.weight.valveHintLengthToleranceMm = Math.max(0, Number(tolerance.value) || 0); const extrapolate = event.target.closest?.('#mc-wm-use-extrapolation'); if (extrapolate) cfg.weight.useWeightExtrapolation = extrapolate.checked; const input = event.target.closest?.('[data-hint-i]'); if (input) { const rows = valveHintMappingRows(cfg); const row = rows[Number(input.dataset.hintI)]; if (row) { const field = input.dataset.hintF; if (field === 'on') row.on = input.checked; else if (field === 'priority') row.priority = Number(input.value) || row.priority; else row[field] = input.value; cfg.weight.valveHintMapping = rows; } } onSaveConfig(cfg); void compute(); });
   contentEl.addEventListener('change', (event) => { const input = event.target.closest?.('.mc-rigid-review-input'); if (!input) return; const key = input.getAttribute('data-wm-key') || ''; const value = Number(input.value); if (!key || !Number.isFinite(value) || value <= 0) return; const cfg = activeConfig(); const overrides = ensureOverrides(cfg); overrides.rigidWeight = { ...(overrides.rigidWeight || {}), [key]: value }; onSaveConfig(cfg); });
   syncToggle(); drawPanel(); void compute();
