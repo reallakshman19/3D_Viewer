@@ -1,15 +1,19 @@
-export const BROWSER_RVM_INSTRUCTION_FILTER_SCHEMA = 'browser-rvm-instruction-filter/v2';
+export const BROWSER_RVM_INSTRUCTION_FILTER_SCHEMA = 'browser-rvm-instruction-filter/v3-large-box-side';
 
 const DEFAULT_OPTIONS = Object.freeze({
   enabled: true,
   maxAbsoluteDiagonal: 5000,
   protectPipeRackLikeOwners: true,
+  hideOversizedPrimitiveBoxes: true,
+  maxPrimitiveBoxSide: 10,
+  maxPrimitiveBoxSideUnit: 'model-units-assumed-meters',
 });
 
 const PROTECTED_OWNER_RE = /\b(PIPE|BRANCH|VALVE|FLANGE|ELBOW|TEE|GASKET|REDUCER|NOZZLE|INSTRUMENT|SUPPORT|STRAINER|CAP|STRUCTURE|FRAME|STEEL|PLATFORM|RACK)\b/i;
+const SUPPORT_OWNER_RE = /\b(SUPPORT|SUPP|GUIDE|ANCHOR|LINE\s*STOP|LINESTOP|STOPPER|REST|SHOE|HANGER|SPRING|CLAMP)\b/i;
 const CIVIL_OWNER_RE = /\b(ROAD|TRANCHE|CIVIL|FOUNDATION|GRADE|TERRAIN)\b/i;
 const EQUIPMENT_OWNER_RE = /\b(EQUIPMENT|SUBEQUIPMENT)\b/i;
-const BOXISH_RE = /\b(BOX|STRUCTURE|AUXILIARY_SOLID|GENERIC|UNKNOWN)\b/i;
+const BOXISH_RE = /\b(BOX|BOX_SOLID|BOX_BBOX|STRUCTURE|STRUCTURE_SOLID|AUXILIARY_SOLID|GENERIC|UNKNOWN|RVM_PRIM_CODE_[12569]|RVM_PRIM_CODE_1|RVM_PRIM_CODE_2|RVM_PRIM_CODE_5|RVM_PRIM_CODE_6|RVM_PRIM_CODE_9)\b/i;
 
 export function filterBrowserRvmRenderInstructions(instructionSet = {}, options = {}) {
   const opts = { ...DEFAULT_OPTIONS, ...(options || {}) };
@@ -20,12 +24,28 @@ export function filterBrowserRvmRenderInstructions(instructionSet = {}, options 
 
   const skipped = [];
   const kept = [];
-  const threshold = positiveNumber(opts.maxAbsoluteDiagonal, DEFAULT_OPTIONS.maxAbsoluteDiagonal);
+  const diagonalThreshold = positiveNumber(opts.maxAbsoluteDiagonal, DEFAULT_OPTIONS.maxAbsoluteDiagonal);
+  const boxSideThreshold = positiveNumber(opts.maxPrimitiveBoxSide, DEFAULT_OPTIONS.maxPrimitiveBoxSide);
+
   for (const instruction of source) {
     const item = classifyInstruction(instruction);
-    const hide = item.diagonal > threshold && item.hideCandidate;
-    if (hide) skipped.push({ instruction, reason: item.reason, diagonal: item.diagonal, threshold });
-    else kept.push(instruction);
+    const oversizedPrimitiveBox = opts.hideOversizedPrimitiveBoxes !== false
+      && item.boxish
+      && !item.supportLike
+      && item.maxSide > boxSideThreshold;
+    const oversizedNonPiping = item.diagonal > diagonalThreshold && item.hideCandidate;
+    const hide = oversizedPrimitiveBox || oversizedNonPiping;
+    if (hide) {
+      skipped.push({
+        instruction,
+        reason: oversizedPrimitiveBox ? 'oversized-primitive-box-side' : item.reason,
+        diagonal: item.diagonal,
+        maxSide: item.maxSide,
+        threshold: oversizedPrimitiveBox ? boxSideThreshold : diagonalThreshold,
+      });
+    } else {
+      kept.push(instruction);
+    }
   }
 
   return withDiagnostics(instructionSet, kept, skipped, {
@@ -34,10 +54,13 @@ export function filterBrowserRvmRenderInstructions(instructionSet = {}, options 
     originalCount: source.length,
     keptCount: kept.length,
     skippedCount: skipped.length,
-    threshold: round(threshold),
+    threshold: round(diagonalThreshold),
+    maxPrimitiveBoxSide: round(boxSideThreshold),
+    maxPrimitiveBoxSideUnit: opts.maxPrimitiveBoxSideUnit || DEFAULT_OPTIONS.maxPrimitiveBoxSideUnit,
+    hideOversizedPrimitiveBoxes: opts.hideOversizedPrimitiveBoxes !== false,
     skippedReasons: summarizeSkipped(skipped),
     oversizedNonPipingHidden: skipped.length,
-    policy: 'hide-only-absurd-civil-or-unprotected-boxes-after-transform',
+    policy: 'hide-primitive-box-cuboids-with-any-side-over-configured-threshold-plus-absurd-civil-box-filter',
   });
 }
 
@@ -55,15 +78,24 @@ function classifyInstruction(instruction = {}) {
     attrs.NAME,
     attrs.TYPE,
     attrs.RVM_PRIMITIVE_KIND,
+    attrs.RVM_PRIMITIVE_KIND_NAME,
+    attrs.RVM_PRIMITIVE_CODE,
   ].map((value) => String(value || '')).join(' ');
-  const diagonal = instructionDiagonal(instruction, attrs);
+  const bbox = parseBbox(instruction.bbox || attrs.RVM_BROWSER_BBOX);
+  const dims = bbox ? bboxDims(bbox) : fallbackDims(instruction);
+  const diagonal = dims ? Math.hypot(dims.x, dims.y, dims.z) : instructionDiagonal(instruction, attrs);
+  const maxSide = dims ? Math.max(dims.x, dims.y, dims.z) : 0;
   const protectedOwner = PROTECTED_OWNER_RE.test(text);
+  const supportLike = SUPPORT_OWNER_RE.test(text);
   const civilOwner = CIVIL_OWNER_RE.test(text);
   const equipmentOwner = EQUIPMENT_OWNER_RE.test(text) && !protectedOwner;
-  const boxish = BOXISH_RE.test(`${instruction.type || ''} ${instruction.kind || ''} ${instruction.renderPrimitive || ''}`);
+  const boxish = BOXISH_RE.test(`${instruction.type || ''} ${instruction.kind || ''} ${instruction.renderPrimitive || ''} ${attrs.RVM_PRIMITIVE_KIND || ''} ${attrs.RVM_PRIMITIVE_CODE || ''}`);
   const hideCandidate = civilOwner || equipmentOwner || (boxish && !protectedOwner);
   return {
     diagonal,
+    maxSide,
+    boxish,
+    supportLike,
     hideCandidate,
     reason: civilOwner ? 'absurd-civil-owner' : equipmentOwner ? 'absurd-equipment-owner' : 'absurd-unprotected-box',
   };
@@ -94,6 +126,8 @@ function makeDiagnostics(count, skippedCount, reason) {
     keptCount: count,
     skippedCount,
     threshold: 0,
+    maxPrimitiveBoxSide: DEFAULT_OPTIONS.maxPrimitiveBoxSide,
+    hideOversizedPrimitiveBoxes: DEFAULT_OPTIONS.hideOversizedPrimitiveBoxes,
     skippedReasons: {},
     oversizedNonPipingHidden: skippedCount,
   };
@@ -112,6 +146,23 @@ function parseBbox(value) {
     ? value.slice(0, 6).map(Number)
     : String(value || '').replace(/[\[\]]/g, ' ').split(/[\s,]+/g).map(Number).filter(Number.isFinite);
   return nums.length >= 6 && nums.slice(0, 6).every(Number.isFinite) ? nums.slice(0, 6) : null;
+}
+
+function bboxDims(bbox) {
+  if (!bbox) return null;
+  return {
+    x: Math.abs(bbox[3] - bbox[0]),
+    y: Math.abs(bbox[4] - bbox[1]),
+    z: Math.abs(bbox[5] - bbox[2]),
+  };
+}
+
+function fallbackDims(instruction = {}) {
+  const len = Number(instruction.length);
+  const rad = Number(instruction.radius);
+  if (!Number.isFinite(len) || len <= 0) return null;
+  const diameter = Number.isFinite(rad) && rad > 0 ? rad * 2 : 0;
+  return { x: len, y: diameter, z: diameter };
 }
 
 function summarizeSkipped(skipped) {
