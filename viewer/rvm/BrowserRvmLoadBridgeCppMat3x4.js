@@ -5,7 +5,7 @@ import {
 
 export { publishBrowserRvmLoadDiagnostics };
 
-const CPP_MAT3X4_WORKER_URL = './browser-rvm-worker.js?v=20260620-rvm-cpp-mat3x4-1';
+const CPP_MAT3X4_WORKER_SPECIFIER = './browser-rvm-worker.js?v=20260620-rvm-cpp-mat3x4-1';
 
 export async function loadRvmFileInBrowser(file, viewer, options = {}) {
   const OriginalWorker = globalThis.Worker;
@@ -17,7 +17,7 @@ export async function loadRvmFileInBrowser(file, viewer, options = {}) {
     try {
       const text = String(url || '');
       if (/browser-rvm-worker\.js/i.test(text)) {
-        nextUrl = new URL(CPP_MAT3X4_WORKER_URL, import.meta.url);
+        nextUrl = new URL(CPP_MAT3X4_WORKER_SPECIFIER, import.meta.url);
       }
     } catch (_) {
       nextUrl = url;
