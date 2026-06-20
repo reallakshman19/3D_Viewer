@@ -1,6 +1,11 @@
 import * as THREE from 'three';
 
-const PATCH_FLAG = Symbol.for('pcf-glb-rvm-progressive-model-root-patch-v1');
+const PATCH_FLAG = Symbol.for('pcf-glb-rvm-progressive-model-root-patch-v2');
+const MAX_ROBUST_FIT_OBJECTS = 6000;
+const MIN_ROBUST_FIT_OBJECTS = 3;
+const ABS_OUTLIER_DIAGONAL = 50000;
+const OUTLIER_MEDIAN_FACTOR = 25;
+const OUTLIER_P90_FACTOR = 8;
 
 export function installRvmProgressiveModelRootPatch(RvmViewer3D) {
   const proto = RvmViewer3D?.prototype;
@@ -18,6 +23,7 @@ export function installRvmProgressiveModelRootPatch(RvmViewer3D) {
     this._modelDiag = positiveNumber(options.estimatedDiagonal, positiveNumber(this._modelDiag, 5000));
     this._progressiveModelRoot = model || null;
     this._progressiveModelBounds = normalizeBounds(options.bounds || model?.userData?.bounds || model?.userData?.diagnostics?.bounds || null);
+    this._progressiveFitDiagnostics = null;
 
     if (this.modelGroup) {
       if (String(upAxis || '').toUpperCase() === 'Z') this.modelGroup.rotation.set(-Math.PI / 2, 0, 0);
@@ -30,17 +36,24 @@ export function installRvmProgressiveModelRootPatch(RvmViewer3D) {
     bindModulesWithoutFullTraversal(this);
 
     if (options.fit === true && this._progressiveModelBounds) {
-      this.fitProgressiveBounds(this._progressiveModelBounds);
+      this.fitProgressiveBounds(this._progressiveModelBounds, options);
     }
 
     return model;
   };
 
-  proto.fitProgressiveBounds = function fitProgressiveBounds(bounds) {
-    const box = boxFromBounds(bounds || this._progressiveModelBounds);
-    if (!box || box.isEmpty()) return false;
-    this._modelDiag = Math.max(box.getSize(new THREE.Vector3()).length(), 1);
-    this._fitBox(box);
+  proto.fitProgressiveBounds = function fitProgressiveBounds(bounds, options = {}) {
+    const requestedBox = boxFromBounds(bounds || this._progressiveModelBounds);
+    if (!requestedBox || requestedBox.isEmpty()) return false;
+
+    const fit = resolveRobustProgressiveFit(this, requestedBox, options);
+    const fitBox = fit?.box && !fit.box.isEmpty() ? fit.box : requestedBox;
+    this._progressiveModelBounds = boundsFromBox(requestedBox);
+    this._progressiveFitDiagnostics = fit?.diagnostics || null;
+    annotateProgressiveRoot(this, this._progressiveFitDiagnostics);
+
+    this._modelDiag = Math.max(fitBox.getSize(new THREE.Vector3()).length(), 1);
+    fitBoxWithoutFullSceneTraversal(this, fitBox);
     return true;
   };
 
@@ -85,6 +98,151 @@ function bindModulesWithoutFullTraversal(viewer) {
   }
 }
 
+function resolveRobustProgressiveFit(viewer, requestedBox, options = {}) {
+  const entries = collectRenderableBoxes(viewer, options.maxFitObjects || MAX_ROBUST_FIT_OBJECTS);
+  if (entries.length < MIN_ROBUST_FIT_OBJECTS) {
+    return {
+      box: requestedBox,
+      diagnostics: {
+        progressiveFitGuard: 'insufficient-renderables',
+        requestedRadius: boxRadius(requestedBox),
+        robustFitUsed: false,
+        objectCount: entries.length,
+      }
+    };
+  }
+
+  const diagonals = entries.map((entry) => entry.diagonal).filter((value) => Number.isFinite(value) && value > 0).sort((a, b) => a - b);
+  const median = percentile(diagonals, 0.5);
+  const p90 = percentile(diagonals, 0.9);
+  const threshold = Math.max(
+    ABS_OUTLIER_DIAGONAL,
+    positiveNumber(median, 0) * OUTLIER_MEDIAN_FACTOR,
+    positiveNumber(p90, 0) * OUTLIER_P90_FACTOR,
+  );
+
+  const robustBox = new THREE.Box3();
+  let included = 0;
+  let excluded = 0;
+  let hidden = 0;
+
+  for (const entry of entries) {
+    const isOutlier = entry.diagonal > threshold;
+    if (isOutlier) {
+      excluded += 1;
+      if (shouldHideFitOutlier(entry.object)) {
+        entry.object.visible = false;
+        entry.object.userData = {
+          ...(entry.object.userData || {}),
+          browserRvmHiddenFitOutlier: true,
+          browserRvmFitOutlierDiagonal: Number(entry.diagonal.toFixed(3)),
+          browserRvmFitOutlierThreshold: Number(threshold.toFixed(3)),
+        };
+        hidden += 1;
+      }
+      continue;
+    }
+    robustBox.union(entry.box);
+    included += 1;
+  }
+
+  const requestedRadius = boxRadius(requestedBox);
+  const robustRadius = boxRadius(robustBox);
+  const useRobust = included >= MIN_ROBUST_FIT_OBJECTS && robustBox && !robustBox.isEmpty() && robustRadius > 0 && robustRadius < requestedRadius;
+
+  return {
+    box: useRobust ? robustBox : requestedBox,
+    diagnostics: {
+      progressiveFitGuard: useRobust ? 'robust-bounds' : 'full-bounds',
+      robustFitUsed: useRobust,
+      requestedRadius: Number(requestedRadius.toFixed(3)),
+      robustRadius: Number(robustRadius.toFixed(3)),
+      objectCount: entries.length,
+      fitIncludedCount: included,
+      fitOutlierCount: excluded,
+      fitOutlierHiddenCount: hidden,
+      outlierDiagonalThreshold: Number(threshold.toFixed(3)),
+      medianObjectDiagonal: Number(positiveNumber(median, 0).toFixed(3)),
+      p90ObjectDiagonal: Number(positiveNumber(p90, 0).toFixed(3)),
+    }
+  };
+}
+
+function collectRenderableBoxes(viewer, limit) {
+  const entries = [];
+  viewer?.modelGroup?.updateMatrixWorld?.(true);
+  viewer?.modelGroup?.traverse?.((obj) => {
+    if (entries.length >= limit) return;
+    if (!obj?.isMesh || !obj.geometry || obj.userData?.supportSymbol) return;
+    const box = new THREE.Box3().setFromObject(obj);
+    if (!box || box.isEmpty()) return;
+    const diagonal = box.getSize(new THREE.Vector3()).length();
+    if (!Number.isFinite(diagonal) || diagonal <= 0) return;
+    entries.push({ object: obj, box, diagonal });
+  });
+  return entries;
+}
+
+function shouldHideFitOutlier(obj) {
+  const primitive = String(obj?.userData?.effectiveRenderPrimitive || obj?.userData?.renderPrimitive || '').toUpperCase();
+  const type = String(obj?.userData?.type || obj?.userData?.kind || '').toUpperCase();
+  const attrs = obj?.userData?.browserRvmAttributes || {};
+  const code = String(attrs.RVM_PRIMITIVE_CODE || '').trim();
+  const source = String(obj?.userData?.renderSource || attrs.RVM_BROWSER_RENDER_SOURCE || '').toUpperCase();
+  const browserBboxDerived = /BBOX|BROWSER|FALLBACK|DERIVED/.test(source);
+  const boxLike = primitive === 'BOX_SOLID' || primitive === 'STRUCTURE_SOLID' || primitive === 'BOX_BBOX' || primitive === 'STRUCTURE_BBOX' || type === 'BOX' || type === 'STRUCTURE' || code === '2';
+  return boxLike && browserBboxDerived;
+}
+
+function annotateProgressiveRoot(viewer, diagnostics) {
+  const root = viewer?._progressiveModelRoot || viewer?.modelGroup?.children?.[0] || null;
+  if (!root || !diagnostics) return;
+  root.userData = {
+    ...(root.userData || {}),
+    browserRvmProgressiveFitGuard: diagnostics,
+  };
+}
+
+function fitBoxWithoutFullSceneTraversal(viewer, box) {
+  if (!viewer?.camera || !viewer?.controls || !box || box.isEmpty()) return false;
+  const size = box.getSize(new THREE.Vector3());
+  const center = box.getCenter(new THREE.Vector3());
+  const maxSize = Math.max(size.x, size.y, size.z, 1);
+  const aspect = viewer._isOrthographic
+    ? safeAspect((viewer.orthoCamera.right - viewer.orthoCamera.left), (viewer.orthoCamera.top - viewer.orthoCamera.bottom))
+    : safeAspect(viewer.perspCamera?.aspect, 1);
+
+  let distance;
+  if (viewer._isOrthographic) {
+    distance = maxSize * 1.35;
+  } else {
+    const fov = Number(viewer.camera.fov) || 45;
+    const fitHeightDistance = maxSize / (2 * Math.tan(THREE.MathUtils.degToRad(fov) / 2));
+    const fitWidthDistance = fitHeightDistance / Math.max(aspect, 0.01);
+    distance = 1.35 * Math.max(fitHeightDistance, fitWidthDistance, maxSize);
+  }
+
+  const direction = viewer.controls.target.clone().sub(viewer.camera.position).normalize().multiplyScalar(-1);
+  if (direction.lengthSq() < 0.0001) direction.set(1, 1, 1).normalize();
+
+  viewer.controls.target.copy(center);
+  viewer.camera.position.copy(center).add(direction.multiplyScalar(distance));
+
+  if (viewer._isOrthographic) {
+    viewer.orthoCamera.left = -distance * aspect / 2;
+    viewer.orthoCamera.right = distance * aspect / 2;
+    viewer.orthoCamera.top = distance / 2;
+    viewer.orthoCamera.bottom = -distance / 2;
+  }
+
+  const fitDiagonal = Math.max(size.length(), 1);
+  viewer.camera.near = Math.max(0.01, distance / 2000);
+  viewer.camera.far = Math.max(1000, distance * 40, fitDiagonal * 20);
+  viewer.camera.updateProjectionMatrix?.();
+  viewer.controls.update?.();
+  return true;
+}
+
 function scheduleDisposal(children = []) {
   if (!children.length) return;
   const queue = [...children];
@@ -119,6 +277,33 @@ function performanceNow() {
 function positiveNumber(value, fallback) {
   const n = Number(value);
   return Number.isFinite(n) && n > 0 ? n : fallback;
+}
+
+function percentile(sortedValues, ratio) {
+  if (!Array.isArray(sortedValues) || !sortedValues.length) return 0;
+  const index = Math.min(sortedValues.length - 1, Math.max(0, Math.floor((sortedValues.length - 1) * ratio)));
+  return sortedValues[index];
+}
+
+function safeAspect(widthOrAspect, height) {
+  const width = Number(widthOrAspect);
+  const h = Number(height);
+  if (Number.isFinite(width) && Number.isFinite(h) && h !== 0) return Math.abs(width / h) || 1;
+  if (Number.isFinite(width) && width > 0) return width;
+  return 1;
+}
+
+function boxRadius(box) {
+  if (!box || box.isEmpty()) return 0;
+  return Math.max(box.getSize(new THREE.Vector3()).length() * 0.5, 0);
+}
+
+function boundsFromBox(box) {
+  if (!box || box.isEmpty()) return null;
+  return {
+    min: { x: box.min.x, y: box.min.y, z: box.min.z },
+    max: { x: box.max.x, y: box.max.y, z: box.max.z },
+  };
 }
 
 function normalizeBounds(bounds) {
