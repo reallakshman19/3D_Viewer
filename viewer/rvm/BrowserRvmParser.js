@@ -3,6 +3,8 @@ const MAX_STRING_SCAN_BYTES = 12 * 1024 * 1024;
 const MAX_DIAGNOSTIC_STRINGS = 280;
 const MAX_SYNTHETIC_OBJECTS = 600;
 const MAX_STRUCTURED_RECORDS = 1200;
+const MAX_RVM_RECORDS = 20000;
+const MAX_BINARY_PRIMITIVES = 5000;
 
 const PRIMITIVE_PATTERNS = [
   { pattern: /\b(CYLI|CYLINDER|PIPE|TUBE|TUBI)\b/i, type: 'PIPE', kind: 'CYLINDER' },
@@ -26,7 +28,7 @@ const ENDIAN_PROBES = [
 
 const NUM = '[-+]?(?:\\d+\\.?\\d*|\\.\\d+)(?:[eE][-+]?\\d+)?';
 
-export const BROWSER_RVM_PARSER_SCHEMA = 'browser-rvm-parser/v2';
+export const BROWSER_RVM_PARSER_SCHEMA = 'browser-rvm-parser/v3';
 
 export async function parseRvmArrayBuffer(arrayBuffer, options = {}) {
   if (!(arrayBuffer instanceof ArrayBuffer)) throw new Error('parseRvmArrayBuffer requires an ArrayBuffer');
@@ -35,14 +37,22 @@ export async function parseRvmArrayBuffer(arrayBuffer, options = {}) {
   const strings = scanPrintableStrings(bytes, { maxBytes: options.maxStringScanBytes || MAX_STRING_SCAN_BYTES });
   const probe = probeRvmBinary(arrayBuffer, strings);
   const attAttributes = parseAttText(options.attText || '');
-  const structuredCandidates = detectStructuredPrimitiveRecords(strings, probe);
+  const binaryRecordScan = parseAvevaBinaryRvmRecords(arrayBuffer, strings, probe);
+  const binaryCandidates = binaryRecordScan.primitiveCandidates;
+  const structuredTextCandidates = detectStructuredPrimitiveRecords(strings, probe);
+  const structuredCandidates = binaryCandidates.length ? binaryCandidates : structuredTextCandidates;
   const genericCandidates = detectPrimitiveCandidates(strings, probe, structuredCandidates);
   const candidates = structuredCandidates.length ? structuredCandidates : genericCandidates;
   const roots = buildBrowserFallbackHierarchy(fileName, arrayBuffer.byteLength, candidates, strings, probe, attAttributes, options);
-  const parseFidelity = structuredCandidates.length ? 'PARTIAL_PRIMITIVE_RECORDS' : (candidates.length ? 'PARTIAL_HEURISTIC' : 'PLACEHOLDER_ONLY');
+  const parseFidelity = binaryCandidates.length
+    ? 'PARTIAL_BINARY_PRIM_RECORDS'
+    : (structuredTextCandidates.length ? 'PARTIAL_PRIMITIVE_RECORDS' : (candidates.length ? 'PARTIAL_HEURISTIC' : 'PLACEHOLDER_ONLY'));
 
   roots[0].attributes.PARSE_FIDELITY = parseFidelity;
-  roots[0].attributes.STRUCTURED_RECORD_COUNT = String(structuredCandidates.length);
+  roots[0].attributes.STRUCTURED_RECORD_COUNT = String(structuredTextCandidates.length);
+  roots[0].attributes.BINARY_PRIMITIVE_RECORD_COUNT = String(binaryCandidates.length);
+  roots[0].attributes.RVM_RECORD_COUNT = String(binaryRecordScan.recordCount);
+  roots[0].attributes.RVM_CONTAINER_COUNT = String(binaryRecordScan.containerCount);
   roots[0].attributes.GENERIC_MARKER_COUNT = String(genericCandidates.length);
 
   return {
@@ -60,16 +70,23 @@ export async function parseRvmArrayBuffer(arrayBuffer, options = {}) {
       fileName,
       byteLength: arrayBuffer.byteLength,
       printableStringCount: strings.length,
-      structuredRecordCount: structuredCandidates.length,
+      rvmRecordCount: binaryRecordScan.recordCount,
+      rvmContainerCount: binaryRecordScan.containerCount,
+      binaryPrimitiveRecordCount: binaryCandidates.length,
+      structuredRecordCount: structuredTextCandidates.length,
       primitiveCandidateCount: candidates.length,
       genericMarkerCount: genericCandidates.length,
+      rvmRecordTags: binaryRecordScan.tags,
       selectedEndianProbe: probe.selectedEndianProbe,
       numericSampleCount: probe.numericSampleCount,
-      unsupportedBinaryDecoding: structuredCandidates.length === 0,
-      warning: structuredCandidates.length
-        ? 'Browser fallback extracted text-encoded RVM primitive records and renders partial geometry; opaque binary chunks are still reported as unsupported.'
-        : 'Browser fallback scans RVM bytes safely and renders partial/placeholder geometry; full AVEVA RVM primitive decoding still requires native/WASM parser.',
-      sampleStrings: strings.slice(0, MAX_DIAGNOSTIC_STRINGS).map(({ offset, text }) => ({ offset, text }))
+      unsupportedBinaryDecoding: binaryCandidates.length === 0 && structuredTextCandidates.length === 0,
+      warning: binaryCandidates.length
+        ? 'Browser fallback decoded AVEVA wide-tag RVM records and PRIM local bounding boxes from the binary stream. Primitive meshes are still approximate until full primitive parameter decoding is added.'
+        : (structuredTextCandidates.length
+          ? 'Browser fallback extracted text-encoded RVM primitive records and renders partial geometry; opaque binary chunks are still reported as unsupported.'
+          : 'Browser fallback scans RVM bytes safely and renders partial/placeholder geometry; full AVEVA RVM primitive decoding still requires native/WASM parser.'),
+      sampleStrings: strings.slice(0, MAX_DIAGNOSTIC_STRINGS).map(({ offset, text }) => ({ offset, text })),
+      sampleBinaryRecords: binaryRecordScan.sampleRecords
     }
   };
 }
@@ -82,7 +99,8 @@ export function isRvmBinarySignature(arrayBuffer) {
   if (!(arrayBuffer instanceof ArrayBuffer)) return false;
   const bytes = new Uint8Array(arrayBuffer.slice(0, Math.min(arrayBuffer.byteLength, 512)));
   const head = scanPrintableStrings(bytes, { maxBytes: bytes.length }).map((s) => s.text.toUpperCase()).join(' ');
-  return /\bRVM\b|AVEVA|REVIEW|PDMS|DESIGN/.test(head);
+  if (/\bRVM\b|AVEVA|REVIEW|PDMS|DESIGN/.test(head)) return true;
+  return readWideTag(new DataView(arrayBuffer), 0) === 'HEAD';
 }
 
 function scanPrintableStrings(bytes, options = {}) {
@@ -135,8 +153,208 @@ function probeRvmBinary(arrayBuffer, strings) {
     numericSampleCount: best?.plausible || 0,
     numericFiniteCount: best?.finite || 0,
     headerText: head,
-    hasRvmMarker: /\bRVM\b|AVEVA|REVIEW|PDMS|DESIGN/i.test(head)
+    hasRvmMarker: /\bRVM\b|AVEVA|REVIEW|PDMS|DESIGN/i.test(head) || readWideTag(view, 0) === 'HEAD'
   };
+}
+
+function parseAvevaBinaryRvmRecords(arrayBuffer, strings, probe) {
+  const view = new DataView(arrayBuffer);
+  const firstTag = readWideTag(view, 0);
+  const tagCounts = new Map();
+  const sampleRecords = [];
+  const primitiveCandidates = [];
+  let containerCount = 0;
+  let recordCount = 0;
+  let currentName = '';
+  let currentType = 'UNKNOWN';
+  let offset = firstTag === 'HEAD' ? 0 : findFirstWideTag(view, ['HEAD', 'MODL', 'CNTB', 'PRIM']);
+  const seenOffsets = new Set();
+
+  while (offset >= 0 && offset + 32 <= arrayBuffer.byteLength && recordCount < MAX_RVM_RECORDS) {
+    if (seenOffsets.has(offset)) break;
+    seenOffsets.add(offset);
+
+    const tag = readWideTag(view, offset);
+    if (!isRvmRecordTag(tag)) break;
+    const nextOffset = view.getUint32(offset + 16, false);
+    const major = view.getUint32(offset + 20, false);
+    const minor = view.getUint32(offset + 24, false);
+    const code = view.getUint32(offset + 28, false);
+    if (!Number.isFinite(nextOffset) || nextOffset <= offset || nextOffset > arrayBuffer.byteLength + 32) break;
+
+    recordCount += 1;
+    tagCounts.set(tag, (tagCounts.get(tag) || 0) + 1);
+    const safeEnd = Math.min(nextOffset, arrayBuffer.byteLength);
+    const recordStrings = stringsInRange(strings, offset + 32, safeEnd);
+
+    if (sampleRecords.length < 40) {
+      sampleRecords.push({
+        offset,
+        tag,
+        nextOffset,
+        byteLength: safeEnd - offset,
+        code,
+        sampleText: recordStrings[0]?.text || ''
+      });
+    }
+
+    if (tag === 'CNTB') {
+      containerCount += 1;
+      const name = bestContainerName(recordStrings);
+      if (name) {
+        currentName = name;
+        currentType = classifyOwnerName(name);
+      }
+    } else if (tag === 'MODL') {
+      const name = bestContainerName(recordStrings);
+      if (name) currentName = name;
+    } else if (tag === 'PRIM') {
+      const geometry = parseRvmPrimGeometry(view, offset, safeEnd);
+      if (geometry && primitiveCandidates.length < MAX_BINARY_PRIMITIVES) {
+        const ownerType = currentType !== 'UNKNOWN' ? currentType : classifyPrimCode(code);
+        primitiveCandidates.push({
+          offset,
+          endOffset: safeEnd,
+          sourceText: `${currentName || 'RVM PRIM'} [PRIM code ${code}]`,
+          type: ownerType,
+          primitiveKind: primitiveKindFor(ownerType, code),
+          confidence: probe?.hasRvmMarker ? 0.92 : 0.84,
+          structured: true,
+          geometry: {
+            ...geometry,
+            source: 'binary-rvm-record',
+            primitiveCode: code,
+            rvmRecordTag: tag,
+            ownerName: currentName || ''
+          }
+        });
+      }
+    }
+
+    if (tag === 'END:') break;
+    offset = nextOffset;
+  }
+
+  return {
+    recordCount,
+    containerCount,
+    tags: Object.fromEntries(Array.from(tagCounts.entries()).sort(([a], [b]) => a.localeCompare(b))),
+    sampleRecords,
+    primitiveCandidates
+  };
+}
+
+function readWideTag(view, offset) {
+  if (!view || offset < 0 || offset + 16 > view.byteLength) return null;
+  let out = '';
+  for (let i = 0; i < 4; i += 1) {
+    const value = view.getUint32(offset + i * 4, false);
+    if (value < 32 || value > 126) return null;
+    out += String.fromCharCode(value);
+  }
+  return out;
+}
+
+function isRvmRecordTag(tag) {
+  return tag === 'HEAD' || tag === 'MODL' || tag === 'CNTB' || tag === 'CNTE' || tag === 'PRIM' || tag === 'END:';
+}
+
+function findFirstWideTag(view, tags) {
+  const maxScan = Math.min(view.byteLength - 16, 64 * 1024);
+  for (let offset = 0; offset <= maxScan; offset += 4) {
+    const tag = readWideTag(view, offset);
+    if (tags.includes(tag)) return offset;
+  }
+  return -1;
+}
+
+function stringsInRange(strings, start, end) {
+  return (strings || []).filter((entry) => entry.offset >= start && entry.offset < end);
+}
+
+function bestContainerName(recordStrings) {
+  for (const entry of recordStrings || []) {
+    const text = String(entry.text || '').trim();
+    if (!text) continue;
+    if (/^[A-Za-z][\w /_.:-]{2,240}$/.test(text)) return text;
+  }
+  return '';
+}
+
+function classifyOwnerName(name) {
+  const upper = String(name || '').toUpperCase();
+  if (/\bGASKET\b/.test(upper)) return 'GASK';
+  if (/\bFLANGE\b/.test(upper)) return 'FLANGE';
+  if (/\bVALVE\b|\bVALV\b/.test(upper)) return 'VALVE';
+  if (/\bELBOW\b|\bBEND\b/.test(upper)) return 'ELBOW';
+  if (/\bTEE\b/.test(upper)) return 'TEE';
+  if (/\bPIPE\b|\bBRANCH\b|\bTUBE\b|\bCYLI\b/.test(upper)) return 'PIPE';
+  if (/\bBOX\b|\bSUBEQUIPMENT\b|\bEQUIPMENT\b|\bOBST\b/.test(upper)) return 'BOX';
+  if (/\bSUPPORT\b|\bSUPP\b|\bATTA\b|\bANCI\b/.test(upper)) return 'SUPPORT';
+  return 'UNKNOWN';
+}
+
+function classifyPrimCode(code) {
+  if (code === 2) return 'BOX';
+  if (code === 4) return 'ELBOW';
+  if (code === 7) return 'FLANGE';
+  if (code === 8) return 'PIPE';
+  return 'UNKNOWN';
+}
+
+function primitiveKindFor(ownerType, code) {
+  const t = String(ownerType || '').toUpperCase();
+  if (t === 'PIPE') return 'CYLINDER';
+  if (t === 'GASK') return 'TORUS';
+  if (t === 'FLANGE') return 'FLANGE';
+  if (t === 'VALVE') return 'VALVE';
+  if (t === 'ELBOW') return 'ELBOW';
+  if (t === 'TEE') return 'TEE';
+  if (t === 'BOX') return 'BOX';
+  return `RVM_PRIM_CODE_${code}`;
+}
+
+function parseRvmPrimGeometry(view, offset, endOffset) {
+  const floats = [];
+  for (let p = offset + 32; p + 4 <= endOffset; p += 4) {
+    const value = view.getFloat32(p, false);
+    floats.push(Number.isFinite(value) ? value : 0);
+  }
+  if (floats.length < 18) return null;
+
+  const origin = { x: floats[9] || 0, y: floats[10] || 0, z: floats[11] || 0 };
+  const local = normalizeBbox(floats.slice(12, 18));
+  if (!isReasonableBbox(local)) return null;
+
+  const bbox = [
+    local[0] + origin.x,
+    local[1] + origin.y,
+    local[2] + origin.z,
+    local[3] + origin.x,
+    local[4] + origin.y,
+    local[5] + origin.z
+  ];
+  if (!isReasonableBbox(bbox)) return null;
+  const endpoints = endpointsForBBox(bbox);
+  const dims = dimsFromBBox(bbox);
+  const hbor = Math.max(Math.min(dims.dy, dims.dz) * 0.5, 1);
+
+  return {
+    bbox,
+    apos: endpoints.apos,
+    lpos: endpoints.lpos,
+    hbor,
+    transformOrigin: origin,
+    localBbox: local,
+    floatCount: floats.length
+  };
+}
+
+function isReasonableBbox(bbox) {
+  if (!Array.isArray(bbox) || bbox.length !== 6) return false;
+  if (!bbox.every((value) => Number.isFinite(value) && Math.abs(value) < 1e9)) return false;
+  const dims = dimsFromBBox(bbox);
+  return dims.dx > 0 || dims.dy > 0 || dims.dz > 0;
 }
 
 function detectStructuredPrimitiveRecords(strings, probe) {
@@ -205,10 +423,6 @@ function parsePrimitiveGeometry(text, type) {
     return { bbox: box, apos: endpoints.apos, lpos: endpoints.lpos, hbor: hbor || Math.min(dims.dy, dims.dz) * 0.5, source: 'named-center-dims' };
   }
 
-  // Many exported/debug RVM-like snippets preserve primitive records as:
-  //   CYLI x1 y1 z1 x2 y2 z2 radius
-  //   BOX  minx miny minz maxx maxy maxz
-  // Support this limited text-encoded form without pretending opaque binary is solved.
   if (rawNumbers.length >= 6 && /\b(BOX|BBOX|CUBE|OBST)\b/i.test(text)) {
     const box = normalizeBbox(rawNumbers.slice(0, 6));
     const endpoints = endpointsForBBox(box);
@@ -338,7 +552,12 @@ function makeSyntheticElement({ index, total, layout, type, primitiveKind, label
       SOURCE_FORMAT: 'RVM_BINARY_BROWSER_FALLBACK',
       RVM_PRIMITIVE_KIND: primitiveKind,
       RVM_BYTE_OFFSET: String(offset),
-      RVM_BYTE_LENGTH: String(byteLength),
+      RVM_BYTE_LENGTH: String(byteLength || 0),
+      RVM_PRIMITIVE_CODE: geometry?.primitiveCode == null ? '' : String(geometry.primitiveCode),
+      RVM_RECORD_TAG: geometry?.rvmRecordTag || '',
+      RVM_OWNER_NAME: geometry?.ownerName || '',
+      RVM_LOCAL_BBOX: geometry?.localBbox ? JSON.stringify(geometry.localBbox) : '',
+      RVM_TRANSFORM_ORIGIN: geometry?.transformOrigin ? JSON.stringify(geometry.transformOrigin) : '',
       BROWSER_PARSE_CONFIDENCE: confidence.toFixed(2),
       BROWSER_PARSE_METHOD: structured ? (geometry?.source || 'structured-record') : 'string-marker-layout',
       SOURCE_TEXT: truncateText(sourceText, 180),
@@ -529,8 +748,9 @@ function parseAttText(text) {
 
 function labelFromCandidate(candidate, index) {
   const primitive = String(candidate.primitiveKind || candidate.type || 'RVM').toUpperCase();
-  const text = String(candidate.sourceText || '').replace(/[^A-Za-z0-9_. -]+/g, ' ').trim();
-  const suffix = text ? ` ${truncateText(text, 32)}` : '';
+  const owner = String(candidate.geometry?.ownerName || '').replace(/[^A-Za-z0-9_. /:-]+/g, ' ').trim();
+  const text = owner || String(candidate.sourceText || '').replace(/[^A-Za-z0-9_. -]+/g, ' ').trim();
+  const suffix = text ? ` ${truncateText(text, 44)}` : '';
   return `RVM ${primitive} ${index + 1}${suffix}`;
 }
 
