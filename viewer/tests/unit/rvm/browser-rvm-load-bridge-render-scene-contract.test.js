@@ -17,8 +17,9 @@ async function run() {
   const transformParserSource = await readFile(new URL('../../../rvm/BrowserRvmTransformParser.js', import.meta.url), 'utf8');
   const transformHierarchySource = await readFile(new URL('../../../rvm/BrowserRvmHierarchyTransformParser.js', import.meta.url), 'utf8');
   const tabSource = await readFile(new URL('../../../tabs/viewer3d-rvm-tab.js', import.meta.url), 'utf8');
+  const hierarchySelectionBridgeSource = await readFile(new URL('../../../tabs/RvmHierarchySelectionBridge.js', import.meta.url), 'utf8');
   const progressivePatchSource = await readFile(new URL('../../../rvm-viewer/RvmProgressiveModelRootPatch.js', import.meta.url), 'utf8');
-  const progressivePatchV4Source = await readFile(new URL('../../../rvm-viewer/RvmProgressiveModelRootPatchV4.js', import.meta.url), 'utf8');
+  const progressivePatchV5Source = await readFile(new URL('../../../rvm-viewer/RvmProgressiveModelRootPatchV5.js', import.meta.url), 'utf8');
   const rendererSource = await readFile(new URL('../../../tabs/viewer3d-rvm-tab-renderer.js', import.meta.url), 'utf8');
   const indexHtml = await readFile(new URL('../../../index.html', import.meta.url), 'utf8');
   const entrypointRef = activeModuleEntrypoint(indexHtml);
@@ -59,7 +60,8 @@ async function run() {
   assert.match(transformHierarchySource, /APOS[\s\S]*LPOS[\s\S]*HBOR/, 'Scale-safe contract must use transformed APOS/LPOS/HBOR instead of bbox-only endpoints.');
   assert.match(transformHierarchySource, /RVM_BROWSER_RENDER_SOURCE:\s*'transform-axis-scale-safe-contract'|transform-axis-scale-safe-contract/, 'Scale-safe contract must mark its render source.');
 
-  assert.match(tabSource, /import\s+\{\s*loadRvmFileInBrowser\s*\}\s+from\s+['"]\.\.\/rvm\/BrowserRvmLoadBridge\.js\?v=20260620-rvm-direct-tab-1['"]/, 'The real tab module must import the worker-first RVM loader directly.');
+  assert.match(tabSource, /import\s+\{\s*loadRvmFileInBrowser\s*\}\s+from\s+['"]\.\.\/rvm\/BrowserRvmLoadBridge\.js\?v=20260620-rvm-tree-select-nohide-1['"]/, 'The real tab module must import the cache-busted worker-first RVM loader directly.');
+  assert.match(tabSource, /RVM_TAB_JS_VERSION\s*=\s*['"]20260620-rvm-tree-select-nohide-1['"]/, 'The diagnostics version must identify the active no-hide/tree-selection path.');
   assert.match(tabSource, /import\s+\{\s*isLikelyRvmFileName\s*\}\s+from\s+['"]\.\.\/rvm\/BrowserRvmParser\.js['"]/, 'The real tab must branch selected files by RVM/REV extension.');
   assert.match(tabSource, /data-rvm-direct-worker-load="true"/, 'The static file input must identify the direct RVM worker path.');
   assert.match(tabSource, /const\s+rvmFile\s*=\s*files\.find\(\(file\)\s*=>\s*isLikelyRvmFileName\(file\?\.name\)\)/, 'The change handler must pick real RVM/REV files explicitly.');
@@ -68,6 +70,7 @@ async function run() {
   assert.match(tabSource, /buildHierarchyFallback:\s*false/, 'Normal RVM load must not build the old hierarchy scene fallback.');
   assert.match(tabSource, /RVM_TREE_RENDER_LIMIT\s*=\s*320/, 'Initial RVM hierarchy tree rendering must be capped.');
   assert.match(tabSource, /readBestAttSidecarText\(files,\s*rvmFile\.name\)/, 'The direct loader must pass same-basename ATT sidecars.');
+  assert.doesNotMatch(tabSource, /const\s+bounds\s*=\s*payload\.browserRvmRender\?\.bounds/, 'The tab must not perform a second raw-bounds fit after the worker loader completes.');
 
   const rvmSelectorIndex = tabSource.indexOf('const rvmFile = files.find');
   const rvmBranchStart = tabSource.indexOf('if (rvmFile)', rvmSelectorIndex);
@@ -80,15 +83,19 @@ async function run() {
   assert.match(progressivePatchSource, /originalSetModel/, 'The progressive patch must preserve the legacy JSON/UXML setModel path.');
   assert.match(progressivePatchSource, /browserRvmProgressiveRenderEnabled/, 'Progressive RVM roots must bypass full-scene setModel work.');
   assert.doesNotMatch(progressivePatchSource, /Box3\(\)\.setFromObject\(this\.modelGroup\)[\s\S]*computeBoundingSphere/, 'Progressive mount must not do full bounds and bounding-sphere work synchronously.');
-  assert.match(progressivePatchV4Source, /duplicate-fit-suppressed-rendered-world-bounds/, 'Duplicate final progressive fit must be suppressed.');
-  assert.match(rendererSource, /RvmProgressiveModelRootPatchV4\.js\?v=20260620-rvm-no-duplicate-fit-1/, 'Renderer must load the v4 duplicate-fit suppressor.');
+  assert.match(progressivePatchV5Source, /rendered-world-bounds-no-hide/, 'Renderer must load a no-hide rendered-world-bounds fit patch.');
+  assert.doesNotMatch(progressivePatchV5Source, /visible\s*=\s*false/, 'No-hide fit patch must not hide meshes during final fit.');
+  assert.match(rendererSource, /RvmProgressiveModelRootPatchV5\.js\?v=20260620-rvm-tree-select-nohide-1/, 'Renderer must load the v5 no-hide fit patch.');
+  assert.match(rendererSource, /RvmHierarchySelectionBridge\.js\?v=20260620-rvm-tree-select-nohide-1/, 'Renderer must load the hierarchy selection bridge.');
+  assert.match(hierarchySelectionBridgeSource, /Fit Selection/,'Hierarchy selection bridge must expose Fit Selection.');
+  assert.match(hierarchySelectionBridgeSource, /stopImmediatePropagation/, 'Hierarchy selection bridge must bypass the legacy tree click fit path.');
 
   assert.doesNotMatch(entrypointSource, /RvmBrowserRvmWorkerFirstBridge\.js/, 'The RVM freeze fix must not depend on an optional startup side-effect bridge.');
-  assert.match(entrypointSource, /core\/app\.js\?v=20260620-rvm-no-duplicate-fit-1/, 'App shell cache key must include the no-duplicate-fit version.');
-  assert.match(indexHtml, /main(?:-[A-Za-z0-9_-]+)?\.js\?v=20260620-rvm-no-duplicate-fit-1/, 'GitHub Pages entrypoint must bump the app shell cache key.');
+  assert.match(entrypointSource, /core\/app\.js\?v=20260620-rvm-tree-select-nohide-1/, 'App shell cache key must include the tree-selection no-hide version.');
+  assert.match(indexHtml, /main(?:-[A-Za-z0-9_-]+)?\.js\?v=20260620-rvm-tree-select-nohide-1/, 'GitHub Pages entrypoint must bump the app shell cache key.');
   assert.match(indexHtml, /viewer3d-rvm-tab\.css\?v=20260620-rvm-direct-tab-1/, 'RVM tab CSS cache key must be bumped.');
 
-  console.log('Browser RVM direct tab no-duplicate-fit responsiveness contract test passed');
+  console.log('Browser RVM direct tab tree-selection no-hide responsiveness contract test passed');
 }
 
 run();
