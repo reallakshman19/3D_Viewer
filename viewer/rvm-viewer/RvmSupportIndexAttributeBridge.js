@@ -6,6 +6,7 @@ import { isLikelyRvmFileName, parseRvmArrayBuffer } from '../rvm/BrowserRvmParse
 const PATCH_FLAG = Symbol.for('pcf-glb-rvm-support-index-attribute-bridge-v2');
 const RVM_TAB_FILE_FALLBACK_FLAG = Symbol.for('pcf-glb-rvm-browser-tab-file-fallback-v1');
 const RVM_TAB_DOM_PATCH_FLAG = Symbol.for('pcf-glb-rvm-browser-tab-dom-patch-v1');
+const RVM_ATT_SIDECAR_CACHE = Symbol.for('pcf-glb-rvm-att-sidecar-cache-v1');
 
 const AUTHORITATIVE_SUPPORT_FIELDS = new Set([
   'SUPPORT_KIND',
@@ -114,6 +115,49 @@ function annotateBrowserRvmFallbackHierarchy(roots, diagnostics = {}) {
   return rootList;
 }
 
+function isLikelyAttFileName(fileName = '') {
+  return /\.att$/i.test(String(fileName || '').trim());
+}
+
+function sidecarKey(fileName = '') {
+  return String(fileName || '').trim().toLowerCase().replace(/\.[^.]+$/, '');
+}
+
+function attSidecarCache() {
+  if (!globalThis[RVM_ATT_SIDECAR_CACHE]) globalThis[RVM_ATT_SIDECAR_CACHE] = new Map();
+  return globalThis[RVM_ATT_SIDECAR_CACHE];
+}
+
+async function rawFileText(file) {
+  const proto = globalThis.File?.prototype;
+  const rawText = proto?.__pcfGlbOriginalTextForRvmFallback || proto?.text;
+  if (typeof rawText !== 'function') return '';
+  return rawText.call(file);
+}
+
+function cacheRvmAttSidecars(files) {
+  const list = Array.from(files || []);
+  const attFiles = list.filter((file) => isLikelyAttFileName(file?.name));
+  if (!attFiles.length) return;
+  const cache = attSidecarCache();
+  for (const attFile of attFiles) {
+    const key = sidecarKey(attFile.name);
+    if (!key) continue;
+    cache.set(key, rawFileText(attFile).catch(() => ''));
+  }
+}
+
+async function readCachedAttSidecarText(fileName) {
+  const cache = attSidecarCache();
+  const promise = cache.get(sidecarKey(fileName));
+  if (!promise) return '';
+  try {
+    return String(await promise || '');
+  } catch (_) {
+    return '';
+  }
+}
+
 export function installBrowserRvmTabFileFallback() {
   if (globalThis[RVM_TAB_FILE_FALLBACK_FLAG]) return;
   globalThis[RVM_TAB_FILE_FALLBACK_FLAG] = true;
@@ -121,7 +165,7 @@ export function installBrowserRvmTabFileFallback() {
   const FileCtor = globalThis.File;
   const proto = FileCtor?.prototype;
   if (proto && typeof proto.text === 'function' && typeof proto.arrayBuffer === 'function') {
-    const originalText = proto.text;
+    const originalText = proto.__pcfGlbOriginalTextForRvmFallback || proto.text;
     if (!proto.__pcfGlbOriginalTextForRvmFallback) {
       Object.defineProperty(proto, '__pcfGlbOriginalTextForRvmFallback', {
         value: originalText,
@@ -132,7 +176,8 @@ export function installBrowserRvmTabFileFallback() {
     proto.text = async function patchedRvmFileText(...args) {
       if (!isLikelyRvmFileName(this?.name)) return originalText.apply(this, args);
       const arrayBuffer = await this.arrayBuffer();
-      const parsed = await parseRvmArrayBuffer(arrayBuffer, { fileName: this.name });
+      const attText = await readCachedAttSidecarText(this.name);
+      const parsed = await parseRvmArrayBuffer(arrayBuffer, { fileName: this.name, attText });
       const hierarchy = annotateBrowserRvmFallbackHierarchy(parsed.hierarchy, parsed.diagnostics);
       return JSON.stringify(hierarchy);
     };
@@ -146,17 +191,23 @@ function patchRvmTabDom(root = document) {
     const accept = String(input.getAttribute('accept') || '');
     const isRvmTabInput = input.id === 'rvm-file-input' || /\.uxml|\.json/i.test(accept);
     if (!isRvmTabInput) return;
-    input.setAttribute('accept', '.json,.uxml,.uxml.json,.rvm,.rev');
+    input.setAttribute('accept', '.json,.uxml,.uxml.json,.rvm,.rev,.att');
+    input.setAttribute('multiple', 'multiple');
     input.setAttribute('data-browser-rvm-fallback', 'true');
+    input.setAttribute('data-browser-rvm-att-sidecar', 'true');
+    if (!input.__pcfGlbRvmAttSidecarCacheListener) {
+      input.addEventListener('change', () => cacheRvmAttSidecars(input.files), { capture: true });
+      input.__pcfGlbRvmAttSidecarCacheListener = true;
+    }
   });
 
   const placeholder = root.querySelector?.('#rvm-placeholder');
   if (placeholder && /JSON\s*\/\s*UXML/i.test(placeholder.textContent || '')) {
-    placeholder.textContent = 'Load RVM / JSON / UXML to begin.';
+    placeholder.textContent = 'Load RVM / REV / ATT / JSON / UXML to begin.';
   }
   const treeEmpty = root.querySelector?.('#rvm-tree .rvm-empty-state');
   if (treeEmpty && /JSON\s*\/\s*UXML/i.test(treeEmpty.textContent || '')) {
-    treeEmpty.textContent = 'Load RVM / JSON / UXML to view hierarchy.';
+    treeEmpty.textContent = 'Load RVM / REV / ATT / JSON / UXML to view hierarchy.';
   }
 }
 
@@ -218,9 +269,8 @@ export function installRvmSupportIndexAttributeBridge() {
     this.supportIndexAttributeBridgeDiagnostics = diagnostics;
 
     if (diagnostics.injected > 0) {
-      this.supportSymbolDiagnostics = applyRvmSupportSymbolSettings(this, this.supportSymbolOptions || {});
+      try { applyRvmSupportSymbolSettings(this, { preserveSelection: true }); } catch (_) {}
     }
-
     return result;
   };
 
