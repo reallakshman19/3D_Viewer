@@ -1,4 +1,4 @@
-import { collectXmlCiiWeightMatchRows } from '../../../../converters/xml-cii2019-core/weight-match-model.js?v=20260620-rich-state-refresh-1';
+import { collectXmlCiiWeightMatchRows } from '../../../../converters/xml-cii2019-core/weight-match-model.js?v=20260620-rating-override-1';
 import {
   ensureValveHintConfig,
   formatValveHint,
@@ -21,6 +21,40 @@ function cleanRow(row) { if (!allowedType(row?.componentType)) return null; retu
 async function stagedText(stagedJsonText) { const direct = clean(stagedJsonText); if (direct) return direct; const file = document?.querySelector?.('#model-converters-secondary-input')?.files?.[0]; return file ? await file.text().catch(() => '') : ''; }
 function currentXmlFile(passedFile) { return passedFile || document?.querySelector?.('#model-converters-primary-input')?.files?.[0] || null; }
 
+function parseConfigText(value) {
+  try {
+    const parsed = JSON.parse(clean(value) || '{}');
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+function currentDomSupportConfig() {
+  const input = document?.querySelector?.('[data-option-key="supportConfigJson"]');
+  return input && 'value' in input ? parseConfigText(input.value) : {};
+}
+
+function mergeRuntimeOverrides(baseConfig, liveConfig) {
+  const out = { ...(baseConfig || {}) };
+  const live = liveConfig && typeof liveConfig === 'object' ? liveConfig : {};
+  const liveOverrides = live.overrides && typeof live.overrides === 'object' && !Array.isArray(live.overrides)
+    ? live.overrides
+    : {};
+  if (Object.keys(liveOverrides).length) {
+    out.overrides = out.overrides && typeof out.overrides === 'object' && !Array.isArray(out.overrides) ? { ...out.overrides } : {};
+    for (const [bucketName, bucketValue] of Object.entries(liveOverrides)) {
+      if (bucketValue && typeof bucketValue === 'object' && !Array.isArray(bucketValue)) {
+        out.overrides[bucketName] = { ...(out.overrides[bucketName] || {}), ...bucketValue };
+      } else if (clean(bucketValue)) {
+        out.overrides[bucketName] = bucketValue;
+      }
+    }
+  }
+  if (clean(live?.rating?.defaultRating)) out.rating = { ...(out.rating || {}), defaultRating: clean(live.rating.defaultRating) };
+  return out;
+}
+
 function overrideValue(config, bucketName, keys) {
   const bucket = config?.overrides?.[bucketName];
   if (!bucket || typeof bucket !== 'object' || Array.isArray(bucket)) return '';
@@ -41,9 +75,9 @@ function processRating(config, keys) {
 }
 function ratingFromConfig(row, config) {
   const keys = [row?.lineKey, row?.branchName, row?.requestedPipingClass, row?.resolvedPipingClass, row?.nodeNumber];
-  return clean(row?.rating)
-    || overrideValue(config, 'rating', keys)
+  return overrideValue(config, 'rating', keys)
     || processRating(config, keys)
+    || clean(row?.rating)
     || clean(config?.rating?.defaultRating || config?.defaultRating);
 }
 function rerankWithRating(row, config) {
@@ -100,25 +134,43 @@ export function bindXmlCiiWeightMatchPhase(detailEl, { xmlFile, stagedJsonText, 
   if (!contentEl) return;
   let localIssues = [];
   const status = (message, tone) => { if (statusEl) { statusEl.textContent = message || ''; statusEl.className = `mc-diag-run-status ${tone || ''}`.trim(); } };
-  const syncToggle = () => { if (!toggleEl) return; const on = convOn(config); toggleEl.textContent = `⇄ in→mm: ${on ? 'ON' : 'OFF'}`; toggleEl.style.borderColor = on ? '#2f9e63' : ''; toggleEl.style.color = on ? '#fff' : ''; toggleEl.style.background = on ? '#14532d' : ''; };
-  const drawPanel = () => { if (panelEl) panelEl.innerHTML = hintPanel(config); };
+  const activeConfig = () => mergeRuntimeOverrides(config, currentDomSupportConfig());
+  const syncToggle = () => { if (!toggleEl) return; const on = convOn(activeConfig()); toggleEl.textContent = `⇄ in→mm: ${on ? 'ON' : 'OFF'}`; toggleEl.style.borderColor = on ? '#2f9e63' : ''; toggleEl.style.color = on ? '#fff' : ''; toggleEl.style.background = on ? '#14532d' : ''; };
+  const drawPanel = () => { if (panelEl) panelEl.innerHTML = hintPanel(activeConfig()); };
   const drawRows = (issues) => {
     if (!issues.length) { contentEl.innerHTML = '<div class="model-converters-workflow-detail-note">No actual RIGID / FLAN* / VALVE nodes with ElementLengthMm &gt; 6 mm were found.</div>'; return; }
     const rows = issues.map((issue, rowIndex) => { const best = issue.candidates?.[0]; const initial = issue.weight && issue.weight > 0 ? issue.weight : (best ? selectedWeight(best) : ''); const rowStyle = issue.mapped ? 'background:#0f2a1b;border-left:4px solid #2f9e63;' : 'background:#3a240f;border-left:4px solid #d08a22;'; const accepted = (issue.candidates || []).map((candidate) => renderAcceptedChip(candidate, rowIndex, issue)).join(''); const rejected = (issue.rejectedCandidates || []).map(renderRejectedChip).join(''); const rejectedBlock = rejected ? `<span class="mc-wm-rejected-label">Rejected by length</span>${rejected}` : ''; const chips = accepted || rejectedBlock || '<span class="model-converters-muted">No suggestion</span>'; return `<tr style="${rowStyle}"><td>${esc(issue.mapped ? `Mapped (${issue.weightSource || 'weight'})` : (best?.preferred ? 'Suggested' : 'Unresolved'))}</td><td title="${attr(issue.branchName)}">${esc(issue.branchName)}</td><td>${esc(issue.lineKey || '')}</td><td>${esc(issue.componentType || '')}</td><td>${esc(issue.boreMm == null ? '' : `${Number(issue.boreMm).toFixed(0)} mm`)}</td><td>${esc(issue.rating || '')}</td><td>${esc(issue.nodeNumber)}</td><td title="${attr([issue.dtxrSource, issue.dtxrMatchedKey, issue.dtxrSuppressionReason].filter(Boolean).join(' · '))}">${esc(issue.dtxr || 'Not found')}</td><td>${esc(issue.valveHint || '—')}</td><td title="${attr(issue.elementLengthSource || '')}">${esc(issue.lengthMm == null ? '' : `${Number(issue.lengthMm).toFixed(1)} mm`)}</td><td><input type="number" min="0" step="0.001" class="mc-rigid-review-input" data-wm-key="${attr(issue.key)}" value="${attr(initial)}" placeholder="kg" style="width:86px;"></td><td style="max-width:540px;"><div style="display:flex;flex-wrap:wrap;gap:4px;max-height:72px;overflow:auto;align-items:flex-start;">${chips}</div></td></tr>`; }).join('');
-    contentEl.innerHTML = `<div class="model-converters-workflow-detail-note" style="margin-bottom:8px;">Candidate length gate is ±${nfmt(valveHintLengthToleranceMm(config))} mm. Rating is resolved from line list/manual overrides before ranking. Length conversion is ${convOn(config) ? 'ON' : 'OFF'}.</div><div class="mc-rigid-review-table-wrap" style="overflow:auto;max-height:48vh;"><table class="mc-rigid-review-table" style="border-collapse:collapse;font-size:12px;"><thead><tr><th>Status</th><th>Branch</th><th>Line Key</th><th>Type</th><th>Bore</th><th>Rating</th><th>Node</th><th>DTXR</th><th>Valve Hint</th><th>Length</th><th>Weight (kg)</th><th>Nearest Suggestions</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+    const cfg = activeConfig();
+    contentEl.innerHTML = `<div class="model-converters-workflow-detail-note" style="margin-bottom:8px;">Candidate length gate is ±${nfmt(valveHintLengthToleranceMm(cfg))} mm. Rating is resolved from line list/manual overrides before ranking. Length conversion is ${convOn(cfg) ? 'ON' : 'OFF'}.</div><div class="mc-rigid-review-table-wrap" style="overflow:auto;max-height:48vh;"><table class="mc-rigid-review-table" style="border-collapse:collapse;font-size:12px;"><thead><tr><th>Status</th><th>Branch</th><th>Line Key</th><th>Type</th><th>Bore</th><th>Rating</th><th>Node</th><th>DTXR</th><th>Valve Hint</th><th>Length</th><th>Weight (kg)</th><th>Nearest Suggestions</th></tr></thead><tbody>${rows}</tbody></table></div>`;
     contentEl.querySelectorAll('[data-wm-candidate]').forEach((button) => button.addEventListener('click', () => { const input = contentEl.querySelectorAll('.mc-rigid-review-input')[Number(button.dataset.wmCandidate)]; if (!input) return; input.value = button.dataset.wmWeight || ''; input.dispatchEvent(new Event('change', { bubbles: true })); }));
   };
   const compute = async () => {
+    const liveConfig = activeConfig();
     syncToggle(); drawPanel();
     const file = currentXmlFile(xmlFile);
     if (!file) { localIssues = []; contentEl.innerHTML = '<div class="model-converters-workflow-detail-note">No XML source loaded. Import an XML file first.</div>'; status('No input', 'bad'); return; }
     status('Computing…');
-    try { const xmlText = await file.text(); const jsonText = await stagedText(stagedJsonText); const enriched = await enrichXmlForCii2019(xmlText, jsonText, { dryRun: true, skipAutoWeightMatch: true }); const cfg = enriched.config || config; localIssues = collectXmlCiiWeightMatchRows(xmlText, jsonText, cfg).map(cleanRow).filter(Boolean).map((row) => rerankWithRating(row, cfg)); const mapped = localIssues.filter((row) => row.mapped).length; const suggested = localIssues.filter((row) => row.candidates?.[0]?.preferred).length; const unresolved = localIssues.length - mapped - suggested; status(`${mapped} mapped · ${suggested} suggested · ${unresolved} unresolved · ${localIssues.length} shown`, unresolved ? 'bad' : 'ok'); drawRows(localIssues); } catch (error) { localIssues = []; contentEl.innerHTML = `<div class="model-converters-workflow-detail-note">Could not compute weight matches: ${esc(error?.message || error)}</div>`; status('Error', 'bad'); }
+    try {
+      const xmlText = await file.text();
+      const jsonText = await stagedText(stagedJsonText);
+      const enriched = await enrichXmlForCii2019(xmlText, jsonText, { dryRun: true, skipAutoWeightMatch: true });
+      const cfg = mergeRuntimeOverrides(enriched.config || liveConfig, liveConfig);
+      localIssues = collectXmlCiiWeightMatchRows(xmlText, jsonText, cfg).map(cleanRow).filter(Boolean).map((row) => rerankWithRating(row, cfg));
+      const mapped = localIssues.filter((row) => row.mapped).length;
+      const suggested = localIssues.filter((row) => row.candidates?.[0]?.preferred).length;
+      const unresolved = localIssues.length - mapped - suggested;
+      status(`${mapped} mapped · ${suggested} suggested · ${unresolved} unresolved · ${localIssues.length} shown`, unresolved ? 'bad' : 'ok');
+      drawRows(localIssues);
+    } catch (error) {
+      localIssues = [];
+      contentEl.innerHTML = `<div class="model-converters-workflow-detail-note">Could not compute weight matches: ${esc(error?.message || error)}</div>`;
+      status('Error', 'bad');
+    }
   };
   detailEl.querySelector('#mc-wm-refresh')?.addEventListener('click', compute);
-  toggleEl?.addEventListener('click', () => { config.weight = config.weight && typeof config.weight === 'object' ? config.weight : {}; config.weight.convertSmallLengthsInToMm = config.weight.convertSmallLengthsInToMm !== true; onSaveConfig(config); void compute(); });
+  toggleEl?.addEventListener('click', () => { const cfg = activeConfig(); cfg.weight = cfg.weight && typeof cfg.weight === 'object' ? cfg.weight : {}; cfg.weight.convertSmallLengthsInToMm = cfg.weight.convertSmallLengthsInToMm !== true; onSaveConfig(cfg); void compute(); });
   detailEl.querySelector('#mc-wm-fill-best')?.addEventListener('click', () => { contentEl.querySelectorAll('.mc-rigid-review-input').forEach((input, index) => { const best = localIssues[index]?.candidates?.[0]; if (!best || best.preferred !== true || best.lengthQualified !== true) return; input.value = String(selectedWeight(best)); input.dispatchEvent(new Event('change', { bubbles: true })); }); });
-  panelEl?.addEventListener('change', (event) => { ensureValveHintConfig(config); const use = event.target.closest?.('#mc-wm-use-valve-hints'); if (use) config.weight.useNodeNameValveHints = use.checked; const tolerance = event.target.closest?.('#mc-wm-valve-tol'); if (tolerance) config.weight.valveHintLengthToleranceMm = Math.max(0, Number(tolerance.value) || 0); const extrapolate = event.target.closest?.('#mc-wm-use-extrapolation'); if (extrapolate) config.weight.useWeightExtrapolation = extrapolate.checked; const input = event.target.closest?.('[data-hint-i]'); if (input) { const rows = valveHintMappingRows(config); const row = rows[Number(input.dataset.hintI)]; if (row) { const field = input.dataset.hintF; if (field === 'on') row.on = input.checked; else if (field === 'priority') row.priority = Number(input.value) || row.priority; else row[field] = input.value; config.weight.valveHintMapping = rows; } } onSaveConfig(config); void compute(); });
-  contentEl.addEventListener('change', (event) => { const input = event.target.closest?.('.mc-rigid-review-input'); if (!input) return; const key = input.getAttribute('data-wm-key') || ''; const value = Number(input.value); if (!key || !Number.isFinite(value) || value <= 0) return; const overrides = ensureOverrides(config); overrides.rigidWeight = { ...(overrides.rigidWeight || {}), [key]: value }; onSaveConfig(config); });
+  panelEl?.addEventListener('change', (event) => { const cfg = activeConfig(); ensureValveHintConfig(cfg); const use = event.target.closest?.('#mc-wm-use-valve-hints'); if (use) cfg.weight.useNodeNameValveHints = use.checked; const tolerance = event.target.closest?.('#mc-wm-valve-tol'); if (tolerance) cfg.weight.valveHintLengthToleranceMm = Math.max(0, Number(tolerance.value) || 0); const extrapolate = event.target.closest?.('#mc-wm-use-extrapolation'); if (extrapolate) cfg.weight.useWeightExtrapolation = extrapolate.checked; const input = event.target.closest?.('[data-hint-i]'); if (input) { const rows = valveHintMappingRows(cfg); const row = rows[Number(input.dataset.hintI)]; if (row) { const field = input.dataset.hintF; if (field === 'on') row.on = input.checked; else if (field === 'priority') row.priority = Number(input.value) || row.priority; else row[field] = input.value; cfg.weight.valveHintMapping = rows; } } onSaveConfig(cfg); void compute(); });
+  contentEl.addEventListener('change', (event) => { const input = event.target.closest?.('.mc-rigid-review-input'); if (!input) return; const key = input.getAttribute('data-wm-key') || ''; const value = Number(input.value); if (!key || !Number.isFinite(value) || value <= 0) return; const overrides = ensureOverrides(activeConfig()); overrides.rigidWeight = { ...(overrides.rigidWeight || {}), [key]: value }; onSaveConfig(activeConfig()); });
   syncToggle(); drawPanel(); void compute();
 }
