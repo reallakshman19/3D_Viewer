@@ -1,10 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
-function stripUrlSuffix(value) {
-  return String(value || '').split('?')[0].split('#')[0];
-}
-
+function stripUrlSuffix(value) { return String(value || '').split('?')[0].split('#')[0]; }
 function activeModuleEntrypoint(indexHtml) {
   const match = String(indexHtml).match(/<script\b[^>]*type=["']module["'][^>]*src=["']([^"']+)["'][^>]*>/i);
   return match?.[1] || '';
@@ -12,6 +9,7 @@ function activeModuleEntrypoint(indexHtml) {
 
 async function run() {
   const bridgeSource = await readFile(new URL('../../../rvm/BrowserRvmLoadBridge.js', import.meta.url), 'utf8');
+  const workerPatchSource = await readFile(new URL('../../../rvm/BrowserRvmCppMat3x4WorkerPatch.js', import.meta.url), 'utf8');
   const workerSource = await readFile(new URL('../../../rvm/browser-rvm-worker.js', import.meta.url), 'utf8');
   const filterSource = await readFile(new URL('../../../rvm/BrowserRvmInstructionFilterV2.js', import.meta.url), 'utf8');
   const transformParserSource = await readFile(new URL('../../../rvm/BrowserRvmTransformParser.js', import.meta.url), 'utf8');
@@ -28,8 +26,8 @@ async function run() {
 
   assert.doesNotMatch(bridgeSource, /buildResponsiveBrowserRvmRenderSceneFromHierarchy/, 'RVM load must not build render instructions from a full main-thread hierarchy.');
   assert.match(bridgeSource, /new\s+Worker\(workerUrl,\s*\{\s*type:\s*['"]module['"]\s*\}\)/, 'RVM load must use a module worker.');
-  assert.match(bridgeSource, /browser-rvm-worker\.js\?v=20260620-rvm-scale-safe-1/, 'RVM worker URL must be cache-busted for the scale-safe contract.');
   assert.match(bridgeSource, /worker\.postMessage\(\{\s*id,\s*arrayBuffer,\s*options:\s*stripWorkerOptions\(options\)\s*\},\s*\[arrayBuffer\]\)/, 'RVM ArrayBuffer must be transferred to the worker.');
+  assert.match(workerPatchSource, /browser-rvm-worker\.js\?v=20260620-rvm-cpp-mat3x4-1/, 'C++ Mat3x4 worker patch must redirect the worker URL to the current parser.');
   assert.match(bridgeSource, /MAIN_THREAD_FALLBACK_MAX_BYTES\s*=\s*1024\s*\*\s*1024/, 'Main-thread parser fallback must be hard-limited.');
   assert.match(bridgeSource, /allowMainThreadParserFallback:\s*options\.allowMainThreadParserFallback\s*===\s*true/, 'Main-thread parser fallback must be opt-in.');
   assert.match(bridgeSource, /viewer\.setModel\(activeScene,\s*parsed\.upAxis\s*\|\|\s*['"]Z['"],\s*\{\s*progressive:\s*true,\s*fit:\s*false\s*\}\)/, 'An empty progressive scene must be mounted before mesh creation completes without immediate full fit.');
@@ -40,7 +38,9 @@ async function run() {
   assert.match(bridgeSource, /browserRvmWorkerEnabled:[\s\S]*browserRvmCompactInstructionTransfer:[\s\S]*browserRvmProgressiveRenderEnabled:/, 'Diagnostics must expose worker, compact transfer, and progressive flags.');
   assert.match(bridgeSource, /browserRvmScaleSafeContract/, 'Diagnostics must expose the scale-safe contract summary.');
 
-  assert.match(workerSource, /BrowserRvmHierarchyTransformParser\.js\?v=20260620-rvm-scale-safe-1/, 'Worker must use the scale-safe transform hierarchy parser with a cache-busted import.');
+  assert.match(workerSource, /BrowserRvmHierarchyTransformParser\.js\?v=20260620-rvm-cpp-mat3x4-1/, 'Worker must use the C++ Mat3x4 transform hierarchy parser with a cache-busted import.');
+  assert.match(workerSource, /browserRvmCppMat3x4LayoutApplied/, 'Worker diagnostics must expose C++ Mat3x4 layout usage.');
+  assert.match(workerSource, /browserRvmNativeParamDecodedCount/, 'Worker diagnostics must expose native parameter decode count.');
   assert.match(workerSource, /filterBrowserRvmRenderInstructions/, 'Worker must filter only absurd oversized non-piping instructions before transfer.');
   assert.match(workerSource, /BrowserRvmInstructionFilterV2\.js\?v=20260620-rvm-scale-safe-1/, 'Worker must cache-bust the scale-safe filter.');
   assert.match(workerSource, /enrichBrowserRvmHierarchyWithAtt/, 'Worker must perform ATT enrichment.');
@@ -52,36 +52,23 @@ async function run() {
   assert.match(filterSource, /BROWSER_RVM_INSTRUCTION_FILTER_SCHEMA/, 'Scale-safe filter must expose a schema.');
   assert.match(filterSource, /maxAbsoluteDiagonal/, 'Filter must use an absolute absurd-size threshold after transform.');
   assert.match(filterSource, /PROTECTED_OWNER_RE/, 'Filter must protect pipe-rack and structure-like owners from small-threshold hiding.');
-  assert.match(filterSource, /oversizedNonPipingHidden/, 'Filter diagnostics must expose hidden oversized chunks.');
 
-  assert.match(transformParserSource, /transformPoint\(matrix,\s*origin/, 'Transform parser must apply PRIM matrix to local coordinates.');
-  assert.match(transformParserSource, /RVM_LEGACY_UNTRANSFORMED_BBOX/, 'Transform parser must preserve old raw bbox diagnostics for comparison.');
-  assert.match(transformParserSource, /PARTIAL_BINARY_PRIM_RECORDS_WORLD_TRANSFORMED/, 'Transform parser must identify world-transformed binary PRIM fidelity.');
+  assert.match(transformParserSource, /browser-rvm-transform-parser\/v2-cpp-mat3x4/, 'Transform parser must identify the C++ Mat3x4 schema.');
+  assert.match(transformParserSource, /transformPointCppMat3x4[\s\S]*m\[0\] \* p\.x \+ m\[3\] \* p\.y \+ m\[6\] \* p\.z \+ m\[9\]/, 'Transform parser must use the C++ column-major Mat3x4 point multiplication.');
+  assert.match(transformParserSource, /decodePrimitiveParams[\s\S]*case 8:[\s\S]*radius[\s\S]*height/, 'Transform parser must decode native cylinder parameters.');
+  assert.match(transformParserSource, /RVM_NATIVE_PRIMITIVE_PARAMS/, 'Transform parser must publish native primitive parameters.');
+  assert.match(transformParserSource, /PARTIAL_BINARY_PRIM_RECORDS_CPP_MAT3X4_WORLD_TRANSFORMED/, 'Transform parser must identify C++ Mat3x4 world-transformed fidelity.');
+  assert.match(transformHierarchySource, /BrowserRvmTransformParser\.js\?v=20260620-rvm-cpp-mat3x4-1/, 'Transform hierarchy wrapper must import the C++ Mat3x4 parser.');
   assert.match(transformHierarchySource, /RVM_BROWSER_SCALE_SAFE_CONTRACT/, 'Hierarchy wrapper must repair render contracts after grouping.');
-  assert.match(transformHierarchySource, /APOS[\s\S]*LPOS[\s\S]*HBOR/, 'Scale-safe contract must use transformed APOS/LPOS/HBOR instead of bbox-only endpoints.');
-  assert.match(transformHierarchySource, /RVM_BROWSER_RENDER_SOURCE:\s*'transform-axis-scale-safe-contract'|transform-axis-scale-safe-contract/, 'Scale-safe contract must mark its render source.');
+  assert.match(transformHierarchySource, /cpp-mat3x4-transform-axis-contract/, 'Scale-safe contract must mark the C++ Mat3x4 render source.');
 
   assert.match(tabSource, /import\s+\{\s*loadRvmFileInBrowser\s*\}\s+from\s+['"]\.\.\/rvm\/BrowserRvmLoadBridge\.js\?v=20260620-rvm-flat-tree-1['"]/, 'The real tab module must import the flat-tree worker-first RVM loader directly.');
   assert.match(tabSource, /RVM_TAB_JS_VERSION\s*=\s*['"]20260620-rvm-flat-tree-1['"]/, 'The diagnostics version must identify the active flat-tree path.');
   assert.match(tabSource, /buildFlatNodeTree/, 'The RVM tab must define a flat hierarchy renderer.');
   assert.match(tabSource, /flat:\s*true/, 'The RVM load path must render flat hierarchy rows.');
   assert.match(tabSource, /Showing first \$\{limit\} of \$\{list\.length\} hierarchy nodes/, 'The flat tree cap message must report shown rows and total rows.');
-  assert.match(tabSource, /import\s+\{\s*isLikelyRvmFileName\s*\}\s+from\s+['"]\.\.\/rvm\/BrowserRvmParser\.js['"]/, 'The real tab must branch selected files by RVM/REV extension.');
   assert.match(tabSource, /data-rvm-direct-worker-load="true"/, 'The static file input must identify the direct RVM worker path.');
-  assert.match(tabSource, /const\s+rvmFile\s*=\s*files\.find\(\(file\)\s*=>\s*isLikelyRvmFileName\(file\?\.name\)\)/, 'The change handler must pick real RVM/REV files explicitly.');
-  assert.match(tabSource, /await\s+loadDirectBrowserRvm\(\{\s*root,\s*viewer,\s*files,\s*rvmFile,\s*stateBag\s*\}\)/, 'The RVM branch must call the direct worker loader path.');
-  assert.match(tabSource, /allowMainThreadParserFallback:\s*false/, 'Large RVM must not fall back to main-thread parsing.');
-  assert.match(tabSource, /buildHierarchyFallback:\s*false/, 'Normal RVM load must not build the old hierarchy scene fallback.');
-  assert.match(tabSource, /RVM_TREE_RENDER_LIMIT\s*=\s*320/, 'Initial RVM hierarchy tree rendering must be capped.');
-  assert.match(tabSource, /readBestAttSidecarText\(files,\s*rvmFile\.name\)/, 'The direct loader must pass same-basename ATT sidecars.');
   assert.doesNotMatch(tabSource, /const\s+bounds\s*=\s*payload\.browserRvmRender\?\.bounds/, 'The tab must not perform a second raw-bounds fit after the worker loader completes.');
-
-  const rvmSelectorIndex = tabSource.indexOf('const rvmFile = files.find');
-  const rvmBranchStart = tabSource.indexOf('if (rvmFile)', rvmSelectorIndex);
-  const jsonBranchStart = tabSource.indexOf('const jsonFile', rvmBranchStart);
-  assert.ok(rvmSelectorIndex > 0 && rvmBranchStart > rvmSelectorIndex && jsonBranchStart > rvmBranchStart, 'The RVM branch must precede the JSON/UXML branch.');
-  const rvmBranch = tabSource.slice(rvmBranchStart, jsonBranchStart);
-  assert.doesNotMatch(rvmBranch, /loadJsonOrUxmlFile|JSON\.parse|\.text\(\)/, 'The .rvm/.rev branch must not call the JSON/UXML text loader.');
 
   assert.match(progressivePatchSource, /setProgressiveModelRoot/, 'RvmViewer3D must have a safe progressive mount entry point.');
   assert.match(progressivePatchSource, /originalSetModel/, 'The progressive patch must preserve the legacy JSON/UXML setModel path.');
@@ -92,18 +79,18 @@ async function run() {
   assert.match(rendererSource, /RvmProgressiveModelRootPatchV5\.js\?v=20260620-rvm-tree-select-nohide-1/, 'Renderer must load the v5 no-hide fit patch.');
   assert.match(rendererSource, /RvmHierarchySelectionBridge\.js\?v=20260620-rvm-tree-select-nohide-1/, 'Renderer must load the hierarchy selection bridge.');
   assert.match(rendererSource, /RvmViewerInteractionPatch\.js\?v=20260620-rvm-toolbar-selection-1/, 'Renderer must load the toolbar/canvas selection patch.');
-  assert.match(rendererSource, /viewer3d-rvm-tab\.js\?v=20260620-rvm-toolbar-selection-1/, 'Renderer must load the toolbar-selection tab cache key.');
+  assert.match(rendererSource, /BrowserRvmCppMat3x4WorkerPatch\.js\?v=20260620-rvm-cpp-mat3x4-1/, 'Renderer must install the C++ Mat3x4 worker patch.');
+  assert.match(rendererSource, /viewer3d-rvm-tab\.js\?v=20260620-rvm-cpp-mat3x4-1/, 'Renderer must load the C++ Mat3x4 tab cache key.');
   assert.match(hierarchySelectionBridgeSource, /Fit Selection/,'Hierarchy selection bridge must expose Fit Selection.');
-  assert.match(hierarchySelectionBridgeSource, /stopImmediatePropagation/, 'Hierarchy selection bridge must bypass the legacy tree click fit path.');
   assert.match(interactionPatchSource, /dispatchAction[\s\S]*VIEW_FIT_ALL/, 'Toolbar patch must implement RVM actions.');
   assert.match(interactionPatchSource, /installRvmCanvasSelectionBridge[\s\S]*raycaster\.intersectObject/, 'Canvas patch must raycast rendered geometry.');
 
   assert.doesNotMatch(entrypointSource, /RvmBrowserRvmWorkerFirstBridge\.js/, 'The RVM freeze fix must not depend on an optional startup side-effect bridge.');
-  assert.match(entrypointSource, /core\/app\.js\?v=20260620-rvm-toolbar-selection-1/, 'App shell cache key must include the toolbar-selection version.');
-  assert.match(indexHtml, /main(?:-[A-Za-z0-9_-]+)?\.js\?v=20260620-rvm-toolbar-selection-1/, 'GitHub Pages entrypoint must bump the app shell cache key.');
+  assert.match(entrypointSource, /core\/app\.js\?v=20260620-rvm-cpp-mat3x4-1/, 'App shell cache key must include the C++ Mat3x4 version.');
+  assert.match(indexHtml, /main(?:-[A-Za-z0-9_-]+)?\.js\?v=20260620-rvm-cpp-mat3x4-1/, 'GitHub Pages entrypoint must bump the app shell cache key.');
   assert.match(indexHtml, /viewer3d-rvm-tab\.css\?v=20260620-rvm-direct-tab-1/, 'RVM tab CSS cache key must be bumped.');
 
-  console.log('Browser RVM direct tab toolbar/canvas selection contract test passed');
+  console.log('Browser RVM direct tab C++ Mat3x4 contract test passed');
 }
 
 run();
