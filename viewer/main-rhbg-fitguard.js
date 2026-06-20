@@ -33,7 +33,7 @@ async function loadStartupSideEffects() {
     .map((result, index) => ({ result, specifier: STARTUP_SIDE_EFFECT_MODULES[index] }))
     .filter(({ result }) => result.status === 'rejected');
   for (const { result, specifier } of failures) {
-    console.warn(`[3D Viewer] optional startup module error: ${specifier}`, result.reason);
+    console.warn(`[3D Viewer] optional startup module failed: ${specifier}`, result.reason);
   }
   return failures;
 }
