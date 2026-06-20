@@ -20,6 +20,8 @@ const selectionBridgeSource = await fs.readFile(new URL('../tabs/RvmHierarchySel
 const selectionTreeSyncSource = await fs.readFile(new URL('../tabs/RvmSelectionTreeSyncBridge.js', import.meta.url), 'utf8');
 const supportSummarySource = await fs.readFile(new URL('../tabs/RvmSupportSummaryBridge.js', import.meta.url), 'utf8');
 const supportAssemblySource = await fs.readFile(new URL('../tabs/RvmSupportAssemblyBridge.js', import.meta.url), 'utf8');
+const materialModeSource = await fs.readFile(new URL('../tabs/RvmMaterialModeBridge.js', import.meta.url), 'utf8');
+const remainingPrimitiveSource = await fs.readFile(new URL('../rvm/BrowserRvmRemainingPrimitiveRuntimePatch.js', import.meta.url), 'utf8');
 const interactionPatchSource = await fs.readFile(new URL('../tabs/RvmViewerInteractionPatch.js', import.meta.url), 'utf8');
 const visibilityToolbarSource = await fs.readFile(new URL('../tabs/RvmVisibilityToolbarBridge.js', import.meta.url), 'utf8');
 const nativeTessellationSource = await fs.readFile(new URL('../rvm/BrowserRvmNativeTessellationRuntimePatch.js', import.meta.url), 'utf8');
@@ -50,7 +52,9 @@ check(rendererSource.includes('RvmSelectionTreeSyncBridge.js?v=20260620-rvm-larg
 check(rendererSource.includes('RvmSupportSummaryBridge.js?v=20260620-rvm-support-symbol-mode-1'), 'renderer loads support symbol mode bridge');
 check(rendererSource.includes('RvmSupportAssemblyBridge.js?v=20260620-rvm-support-assembly-dish-1'), 'renderer loads support assembly diagnostics bridge');
 check(rendererSource.includes('BrowserRvmDishTessellationRuntimePatch.js?v=20260620-rvm-support-assembly-dish-1'), 'renderer loads dish tessellation patch');
-check(rendererSource.includes('viewer3d-rvm-tab.js?v=20260620-rvm-support-assembly-dish-1'), 'renderer loads support assembly dish tab URL');
+check(rendererSource.includes('BrowserRvmRemainingPrimitiveRuntimePatch.js?v=20260620-rvm-remaining-material-modes-1'), 'renderer loads remaining primitive tessellation patch');
+check(rendererSource.includes('RvmMaterialModeBridge.js?v=20260620-rvm-remaining-material-modes-1'), 'renderer loads material mode bridge');
+check(rendererSource.includes('viewer3d-rvm-tab.js?v=20260620-rvm-remaining-material-modes-1'), 'renderer loads remaining material modes tab URL');
 check(rendererSource.includes('BrowserRvmCppMat3x4WorkerPatch.js?v=20260620-rvm-scale-leak-1'), 'renderer installs scale-leak worker patch');
 check(interactionPatchSource.includes('keydown') && interactionPatchSource.includes('Escape') && interactionPatchSource.includes('handleEscape'), 'interaction patch implements robust Esc behavior');
 check(interactionPatchSource.includes('VIEW_HIDE_SELECTION') && interactionPatchSource.includes('VIEW_SHOW_HIDDEN'), 'interaction patch handles Hide and Show Hidden actions');
@@ -66,6 +70,13 @@ check(supportAssemblySource.includes('groupSupportCandidates') && supportAssembl
 check(supportAssemblySource.includes('SUPPORT_ASSEMBLY_ROOT') && supportAssemblySource.includes('makeAssemblyMarker'), 'support assembly bridge renders contact markers');
 check(supportAssemblySource.includes('selectAssembly') && supportAssemblySource.includes('setSelectionFromObjects'), 'support assembly rows select and fit grouped primitives');
 check(renderContractSource.includes('v3-support-hints') && renderContractSource.includes('SUPPORT_HINT_RE') && renderContractSource.includes('SUPPORT_BBOX_PLACEHOLDER'), 'render contracts promote support-like RVM objects');
+check(remainingPrimitiveSource.includes('browser-rvm-remaining-primitives/v1-pyramid-line-facet-diagnostics'), 'remaining primitive patch exposes schema');
+check(remainingPrimitiveSource.includes('pyramidGeometry') && remainingPrimitiveSource.includes('lineBoxGeometry'), 'remaining primitive patch supports PRIM 1 and 10 geometry');
+check(remainingPrimitiveSource.includes('facetGroupUnsupportedCount') && remainingPrimitiveSource.includes('facet-group-native-stream-not-decoded'), 'remaining primitive patch reports PRIM 11 facet groups explicitly');
+check(remainingPrimitiveSource.includes('matrix4FromCppMat3x4') && remainingPrimitiveSource.includes('native-cpp-remaining-primitive'), 'remaining primitive patch applies Mat3x4 and marks render quality');
+check(materialModeSource.includes('Color') && materialModeSource.includes('Type') && materialModeSource.includes('Source') && materialModeSource.includes('Mono'), 'material mode bridge exposes color modes');
+check(materialModeSource.includes('browser-rvm-material-mode/v1') && materialModeSource.includes('__PCF_GLB_RVM_MATERIAL_MODE_DIAGNOSTICS__'), 'material mode bridge exposes diagnostics');
+check(materialModeSource.includes('TYPE_COLORS') && materialModeSource.includes('classifyObjectType') && materialModeSource.includes('restoreOriginalMaterial'), 'material mode bridge colors by type and restores source materials');
 check(nativeTessellationSource.includes('browser-rvm-native-tessellation/v2-diagnostics-toggle'), 'native tessellation diagnostics schema present');
 check(dishTessellationSource.includes('browser-rvm-dish-tessellation/v1-cpp-mat3x4'), 'dish tessellation schema present');
 check(dishTessellationSource.includes('ellipticalDishGeometry') && dishTessellationSource.includes('sphericalDishGeometry'), 'dish tessellation supports PRIM 5 and 6 geometry');
@@ -77,9 +88,9 @@ check(nativeDiagnosticsBridgeSource.includes('Native Tessellation') && nativeDia
 check(tabSource.includes("BrowserRvmLoadBridge.js?v=20260620-rvm-flat-tree-1"), 'tab keeps flat-tree direct loader while worker URL is patched');
 check(tabSource.includes('buildFlatNodeTree') && tabSource.includes('flat: true'), 'RVM tree renders flat selectable rows');
 check(!tabSource.includes('const bounds = payload.browserRvmRender?.bounds'), 'tab does not issue duplicate post-load raw-bounds fit');
-check(appSource.includes('viewer3d-rvm-tab-renderer.js?v=20260620-rvm-support-assembly-dish-1'), 'app loads support assembly dish renderer');
-check(indexSource.includes('main-rhbg-fitguard.js?v=20260620-rvm-support-assembly-dish-1'), 'html loads support assembly dish entry');
-check(entrySource.includes('core/app.js?v=20260620-rvm-support-assembly-dish-1'), 'entry loads support assembly dish app');
+check(appSource.includes('viewer3d-rvm-tab-renderer.js?v=20260620-rvm-remaining-material-modes-1'), 'app loads remaining material modes renderer');
+check(indexSource.includes('main-rhbg-fitguard.js?v=20260620-rvm-remaining-material-modes-1'), 'html loads remaining material modes entry');
+check(entrySource.includes('core/app.js?v=20260620-rvm-remaining-material-modes-1'), 'entry loads remaining material modes app');
 check(workerPatchSource.includes('browser-rvm-worker.js?v=20260620-rvm-scale-leak-1'), 'worker patch redirects to scale-leak worker URL');
 check(bridgeSource.includes('browser-rvm-worker.js?v=20260620-rvm-scale-safe-1'), 'base bridge remains scale-safe-compatible');
 check(workerSource.includes('BrowserRvmInstructionFilterV2.js?v=20260620-rvm-large-box-filter-1'), 'worker loads large-box side filter');

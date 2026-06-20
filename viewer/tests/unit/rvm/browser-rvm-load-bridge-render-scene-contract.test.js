@@ -12,6 +12,7 @@ async function run() {
   const workerPatchSource = await readFile(new URL('../../../rvm/BrowserRvmCppMat3x4WorkerPatch.js', import.meta.url), 'utf8');
   const nativeTessellationSource = await readFile(new URL('../../../rvm/BrowserRvmNativeTessellationRuntimePatch.js', import.meta.url), 'utf8');
   const dishTessellationSource = await readFile(new URL('../../../rvm/BrowserRvmDishTessellationRuntimePatch.js', import.meta.url), 'utf8');
+  const remainingPrimitiveSource = await readFile(new URL('../../../rvm/BrowserRvmRemainingPrimitiveRuntimePatch.js', import.meta.url), 'utf8');
   const workerSource = await readFile(new URL('../../../rvm/browser-rvm-worker.js', import.meta.url), 'utf8');
   const filterSource = await readFile(new URL('../../../rvm/BrowserRvmInstructionFilterV2.js', import.meta.url), 'utf8');
   const renderContractSource = await readFile(new URL('../../../rvm/BrowserRvmRenderContractAdapter.js', import.meta.url), 'utf8');
@@ -24,6 +25,7 @@ async function run() {
   const selectionTreeSyncSource = await readFile(new URL('../../../tabs/RvmSelectionTreeSyncBridge.js', import.meta.url), 'utf8');
   const supportSummarySource = await readFile(new URL('../../../tabs/RvmSupportSummaryBridge.js', import.meta.url), 'utf8');
   const supportAssemblySource = await readFile(new URL('../../../tabs/RvmSupportAssemblyBridge.js', import.meta.url), 'utf8');
+  const materialModeSource = await readFile(new URL('../../../tabs/RvmMaterialModeBridge.js', import.meta.url), 'utf8');
   const nativeDiagnosticsBridgeSource = await readFile(new URL('../../../tabs/RvmNativeTessellationDiagnosticsBridge.js', import.meta.url), 'utf8');
   const progressivePatchSource = await readFile(new URL('../../../rvm-viewer/RvmProgressiveModelRootPatch.js', import.meta.url), 'utf8');
   const progressivePatchV5Source = await readFile(new URL('../../../rvm-viewer/RvmProgressiveModelRootPatchV5.js', import.meta.url), 'utf8');
@@ -90,7 +92,9 @@ async function run() {
   assert.match(rendererSource, /RvmSupportSummaryBridge\.js\?v=20260620-rvm-support-symbol-mode-1/, 'Renderer must install support symbol mode bridge.');
   assert.match(rendererSource, /RvmSupportAssemblyBridge\.js\?v=20260620-rvm-support-assembly-dish-1/, 'Renderer must load support assembly bridge.');
   assert.match(rendererSource, /BrowserRvmDishTessellationRuntimePatch\.js\?v=20260620-rvm-support-assembly-dish-1/, 'Renderer must install dish tessellation patch.');
-  assert.match(rendererSource, /viewer3d-rvm-tab\.js\?v=20260620-rvm-support-assembly-dish-1/, 'Renderer must load the support assembly dish tab cache key.');
+  assert.match(rendererSource, /BrowserRvmRemainingPrimitiveRuntimePatch\.js\?v=20260620-rvm-remaining-material-modes-1/, 'Renderer must install remaining primitive patch.');
+  assert.match(rendererSource, /RvmMaterialModeBridge\.js\?v=20260620-rvm-remaining-material-modes-1/, 'Renderer must load material mode controls.');
+  assert.match(rendererSource, /viewer3d-rvm-tab\.js\?v=20260620-rvm-remaining-material-modes-1/, 'Renderer must load the remaining material modes tab cache key.');
   assert.match(hierarchySelectionBridgeSource, /Fit Selection[\s\S]*hide-selection[\s\S]*show-hidden/,'Hierarchy selection bridge must expose Fit Selection, Hide, and Show Hidden.');
   assert.match(interactionPatchSource, /keydown[\s\S]*Escape[\s\S]*handleEscape/, 'Toolbar patch must implement robust Esc behavior.');
   assert.match(interactionPatchSource, /dispatchAction[\s\S]*VIEW_HIDE_SELECTION[\s\S]*VIEW_SHOW_HIDDEN/, 'Toolbar patch must implement Hide and Show Hidden actions.');
@@ -110,13 +114,19 @@ async function run() {
   assert.match(dishTessellationSource, /browser-rvm-dish-tessellation\/v1-cpp-mat3x4/, 'Dish tessellation patch must expose schema.');
   assert.match(dishTessellationSource, /ellipticalDishGeometry[\s\S]*sphericalDishGeometry/, 'Dish tessellation patch must support PRIM 5 and PRIM 6.');
   assert.match(dishTessellationSource, /matrix4FromCppMat3x4[\s\S]*native-cpp-dish-tessellated/, 'Dish tessellation patch must apply Mat3x4 and mark render quality.');
+  assert.match(remainingPrimitiveSource, /browser-rvm-remaining-primitives\/v1-pyramid-line-facet-diagnostics/, 'Remaining primitive patch must expose schema.');
+  assert.match(remainingPrimitiveSource, /pyramidGeometry[\s\S]*lineBoxGeometry/, 'Remaining primitive patch must support PRIM 1 and 10.');
+  assert.match(remainingPrimitiveSource, /facetGroupUnsupportedCount[\s\S]*facet-group-native-stream-not-decoded/, 'Remaining primitive patch must report PRIM 11 facet groups explicitly.');
+  assert.match(materialModeSource, /Color[\s\S]*Type[\s\S]*Source[\s\S]*Mono/, 'Material mode bridge must expose color controls.');
+  assert.match(materialModeSource, /browser-rvm-material-mode\/v1[\s\S]*__PCF_GLB_RVM_MATERIAL_MODE_DIAGNOSTICS__/, 'Material mode bridge must publish diagnostics.');
+  assert.match(materialModeSource, /TYPE_COLORS[\s\S]*classifyObjectType[\s\S]*restoreOriginalMaterial/, 'Material mode bridge must color by type and restore source materials.');
   assert.match(nativeDiagnosticsBridgeSource, /Native Tessellation[\s\S]*Native On[\s\S]*Native Off[\s\S]*Re-run/, 'Native diagnostics bridge must expose controls.');
 
   assert.doesNotMatch(entrypointSource, /RvmBrowserRvmWorkerFirstBridge\.js/, 'The RVM freeze fix must not depend on an optional startup side-effect bridge.');
-  assert.match(entrypointSource, /core\/app\.js\?v=20260620-rvm-support-assembly-dish-1/, 'App shell cache key must include the support assembly dish version.');
-  assert.match(indexHtml, /main(?:-[A-Za-z0-9_-]+)?\.js\?v=20260620-rvm-support-assembly-dish-1/, 'GitHub Pages entrypoint must bump the app shell cache key.');
+  assert.match(entrypointSource, /core\/app\.js\?v=20260620-rvm-remaining-material-modes-1/, 'App shell cache key must include the remaining material modes version.');
+  assert.match(indexHtml, /main(?:-[A-Za-z0-9_-]+)?\.js\?v=20260620-rvm-remaining-material-modes-1/, 'GitHub Pages entrypoint must bump the app shell cache key.');
 
-  console.log('Browser RVM support assembly dish contract test passed');
+  console.log('Browser RVM remaining primitive material mode contract test passed');
 }
 
 run();
