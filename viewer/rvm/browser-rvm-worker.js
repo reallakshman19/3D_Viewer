@@ -1,16 +1,17 @@
-import { parseRvmArrayBuffer } from './BrowserRvmHierarchyTransformParser.js?v=20260620-rvm-scale-leak-1';
+import { parseRvmArrayBuffer } from './BrowserRvmHierarchyTransformParser.js?v=20260620-rvm-facetgroup-1';
 import { enrichBrowserRvmHierarchyWithAtt } from './BrowserRvmAttEnricher.js';
 import { collectBrowserRvmRenderInstructions } from './BrowserRvmRenderContractAdapter.js';
 import { filterBrowserRvmRenderInstructions } from './BrowserRvmInstructionFilterV2.js?v=20260620-rvm-large-box-filter-1';
 
-// BrowserRvmHierarchyTransformParser.js?v=20260620-rvm-scale-leak-1 repairs transformed APOS/LPOS/HBOR contracts using the C++ parser's Mat3x4 layout and scaled radius.
+// BrowserRvmHierarchyTransformParser.js?v=20260620-rvm-facetgroup-1 repairs transformed APOS/LPOS/HBOR contracts and decodes PRIM 11 facet-group payloads using the C++ parser layout.
 const DEFAULT_MANIFEST_NODE_LIMIT = 900;
 const DEFAULT_MAX_PRIMITIVE_BOX_SIDE = 10;
 const KEEP_ATTRIBUTE_NAMES = new Set([
   'TYPE', 'NAME', 'RVM_PRIMITIVE_KIND', 'RVM_PRIMITIVE_KIND_NAME', 'RVM_BYTE_OFFSET', 'RVM_PRIMITIVE_CODE', 'RVM_RECORD_TAG',
   'RVM_OWNER_NAME', 'RVM_OWNER_PATH', 'BROWSER_PARSE_METHOD', 'BROWSER_PARSE_CONFIDENCE', 'RVM_PRIM_TRANSFORM_APPLIED',
   'RVM_PRIM_TRANSFORM_SCHEMA', 'RVM_LOCAL_AXIS', 'RVM_TRANSFORM_COLUMN_SCALES', 'RVM_TRANSFORM_LAYOUT', 'RVM_NATIVE_PRIMITIVE_PARAMS',
-  'RVM_NATIVE_PARAMS_DECODED', 'RVM_RADIUS_SCALE_SOURCE', 'RVM_RADIUS_SCALED_BY_TRANSFORM', 'RVM_BROWSER_RENDER_PRIMITIVE',
+  'RVM_NATIVE_PARAMS_DECODED', 'RVM_RADIUS_SCALE_SOURCE', 'RVM_RADIUS_SCALED_BY_TRANSFORM', 'RVM_FACET_GROUP_DECODED',
+  'RVM_FACET_GROUP_POLYGON_COUNT', 'RVM_FACET_GROUP_CONTOUR_COUNT', 'RVM_FACET_GROUP_VERTEX_COUNT', 'RVM_BROWSER_RENDER_PRIMITIVE',
   'RVM_BROWSER_RENDER_SOURCE', 'RVM_BROWSER_GEOMETRY_CONTRACT_VERSION', 'RVM_BROWSER_ATT_ENRICHED', 'RVM_BROWSER_ATT_ATTRIBUTE_COUNT',
   'RVM_BROWSER_BBOX', 'RVM_BROWSER_LENGTH', 'RVM_BROWSER_RADIUS', 'RVM_BROWSER_DIAMETER', 'RVM_BROWSER_SCALE_SAFE_CONTRACT',
   'RVM_BROWSER_SCALE_SAFE_CONTRACT_SCHEMA', 'RVM_BROWSER_SUPPORT_HINT', 'RVM_BROWSER_SUPPORT_KIND'
@@ -78,6 +79,11 @@ self.onmessage = async (event) => {
           browserRvmCppMat3x4LayoutApplied: Boolean(parsed.diagnostics?.rvmCppMat3x4LayoutApplied),
           browserRvmCppMat3x4ScaledRadiusApplied: parsed.diagnostics?.rvmCppMat3x4ScaledRadiusApplied || 0,
           browserRvmNativeParamDecodedCount: parsed.diagnostics?.rvmNativeParamDecodedCount || 0,
+          browserRvmFacetGroupDecodedCount: parsed.diagnostics?.rvmFacetGroupDecodedCount || 0,
+          browserRvmFacetGroupPolygonCount: parsed.diagnostics?.rvmFacetGroupPolygonCount || 0,
+          browserRvmFacetGroupContourCount: parsed.diagnostics?.rvmFacetGroupContourCount || 0,
+          browserRvmFacetGroupVertexCount: parsed.diagnostics?.rvmFacetGroupVertexCount || 0,
+          browserRvmFacetGroupDecodeSkippedCount: parsed.diagnostics?.rvmFacetGroupDecodeSkippedCount || 0,
           browserRvmPrimitiveKindCounts: parsed.diagnostics?.rvmPrimitiveKindCounts || {},
           browserRvmManifestNodeLimit: positiveInteger(options.manifestNodeLimit, DEFAULT_MANIFEST_NODE_LIMIT),
           browserRvmWorkerTimingsMs: timings,

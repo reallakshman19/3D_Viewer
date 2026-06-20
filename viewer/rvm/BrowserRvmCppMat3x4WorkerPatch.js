@@ -1,5 +1,5 @@
-const PATCH_FLAG = Symbol.for('pcf-glb-rvm-cpp-mat3x4-worker-url-patch-v3-scale-leak');
-const CPP_MAT3X4_WORKER_SPECIFIER = './browser-rvm-worker.js?v=20260620-rvm-scale-leak-1';
+const PATCH_FLAG = Symbol.for('pcf-glb-rvm-cpp-mat3x4-worker-url-patch-v4-facetgroup');
+const CPP_MAT3X4_WORKER_SPECIFIER = './browser-rvm-worker.js?v=20260620-rvm-facetgroup-1';
 
 export function installBrowserRvmCppMat3x4WorkerPatch() {
   if (globalThis[PATCH_FLAG]) return;

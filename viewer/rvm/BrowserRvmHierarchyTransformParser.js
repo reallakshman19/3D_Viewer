@@ -1,4 +1,4 @@
-import { parseRvmArrayBuffer as parseTransformRvmArrayBuffer } from './BrowserRvmTransformParser.js?v=20260620-rvm-scale-leak-1';
+import { parseRvmArrayBuffer as parseTransformRvmArrayBuffer } from './BrowserRvmTransformParser.js?v=20260620-rvm-facetgroup-1';
 import {
   BROWSER_RVM_GEOMETRY_CONTRACT_VERSION,
   BROWSER_RVM_GEOMETRY_QUALITY_VERSION,
@@ -7,8 +7,8 @@ import {
   groupRvmOwnerHierarchy
 } from './BrowserRvmHierarchyParser.js';
 
-export const BROWSER_RVM_HIERARCHY_TRANSFORM_SCHEMA = 'browser-rvm-hierarchy-transform-wrapper/v4-scaled-dish-contract';
-export const BROWSER_RVM_SCALE_SAFE_CONTRACT_SCHEMA = 'browser-rvm-scale-safe-contract/v3-scaled-dish-contract';
+export const BROWSER_RVM_HIERARCHY_TRANSFORM_SCHEMA = 'browser-rvm-hierarchy-transform-wrapper/v5-facetgroup-contract';
+export const BROWSER_RVM_SCALE_SAFE_CONTRACT_SCHEMA = 'browser-rvm-scale-safe-contract/v4-facetgroup-contract';
 export {
   BROWSER_RVM_GEOMETRY_CONTRACT_VERSION,
   BROWSER_RVM_GEOMETRY_QUALITY_VERSION,
@@ -32,7 +32,7 @@ export async function parseRvmArrayBuffer(arrayBuffer, options = {}) {
       hierarchySchemaVersion: BROWSER_RVM_HIERARCHY_SCHEMA,
       hierarchyGrouped: repaired.hierarchy[0]?.attributes?.BROWSER_RVM_HIERARCHY_GROUPED === 'true',
       hierarchyGroupCount: Number(repaired.hierarchy[0]?.attributes?.BROWSER_RVM_HIERARCHY_GROUP_COUNT || 0),
-      primitiveSemantics: 'owner-name-and-rhbg-prim-code-map-cpp-mat3x4-scaled-radius',
+      primitiveSemantics: 'owner-name-and-rhbg-prim-code-map-cpp-mat3x4-facetgroup',
       primitiveSemanticsVersion: BROWSER_RVM_PRIMITIVE_SEMANTICS_VERSION,
       geometryQualityVersion: BROWSER_RVM_GEOMETRY_QUALITY_VERSION,
       geometryContractVersion: BROWSER_RVM_GEOMETRY_CONTRACT_VERSION,
@@ -54,6 +54,7 @@ function repairTransformRenderContracts(roots = []) {
     flangeContractCount: 0,
     dishContractCount: 0,
     sphereContractCount: 0,
+    facetGroupContractCount: 0,
     skippedCount: 0
   };
   const visit = (node) => {
@@ -100,6 +101,7 @@ function applyScaleSafeContract(node, attrs, diagnostics) {
   else if (primitive === 'TORUS_BBOX_PLACEHOLDER') diagnostics.elbowContractCount += 1;
   else if (primitive === 'FLANGE_BBOX_PLACEHOLDER') diagnostics.flangeContractCount += 1;
   else if (primitive === 'DISH_BBOX_PLACEHOLDER') diagnostics.dishContractCount += 1;
+  else if (primitive === 'FACET_GROUP_BBOX_PLACEHOLDER') diagnostics.facetGroupContractCount += 1;
   else if (primitive === 'GENERIC_BBOX_PLACEHOLDER') diagnostics.sphereContractCount += 1;
   return true;
 }
@@ -112,7 +114,8 @@ function scaleSafePrimitive(code, attrs = {}) {
     if (/FLANGE/.test(text)) return 'FLANGE_BBOX_PLACEHOLDER';
     return 'DISH_BBOX_PLACEHOLDER';
   }
-  if (code === '2' || code === '11') return 'BOX_BBOX';
+  if (code === '11') return 'FACET_GROUP_BBOX_PLACEHOLDER';
+  if (code === '2') return 'BOX_BBOX';
   if (code === '4') return 'ELBOW_BBOX_PLACEHOLDER';
   if (code === '7') return 'CONE_BBOX_PLACEHOLDER';
   if (code === '3') return 'TORUS_BBOX_PLACEHOLDER';

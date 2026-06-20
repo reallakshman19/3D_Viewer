@@ -40,7 +40,7 @@ async function loadStartupSideEffects() {
 
 async function startViewer() {
   await loadStartupSideEffects();
-  const { init } = await import('./core/app.js?v=20260620-rvm-remaining-material-modes-1');
+  const { init } = await import('./core/app.js?v=20260620-rvm-facetgroup-1');
   await init();
 }
 
