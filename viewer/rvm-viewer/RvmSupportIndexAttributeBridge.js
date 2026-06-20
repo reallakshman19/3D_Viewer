@@ -1,12 +1,14 @@
 import { RvmViewer3D } from './RvmViewer3D.js?v=20260518-statusbar-theme-12';
 import { state } from '../core/state.js';
 import { applyRvmSupportSymbolSettings } from './RvmSupportSymbols.js?v=20260618-support-kind-authority-1';
-import { isLikelyRvmFileName, parseRvmArrayBuffer } from '../rvm/BrowserRvmParser.js';
+import { isLikelyRvmFileName } from '../rvm/BrowserRvmParser.js';
+import { parseRvmArrayBuffer } from '../rvm/BrowserRvmHierarchyParser.js';
 
 const PATCH_FLAG = Symbol.for('pcf-glb-rvm-support-index-attribute-bridge-v2');
 const RVM_TAB_FILE_FALLBACK_FLAG = Symbol.for('pcf-glb-rvm-browser-tab-file-fallback-v1');
 const RVM_TAB_DOM_PATCH_FLAG = Symbol.for('pcf-glb-rvm-browser-tab-dom-patch-v1');
 const RVM_ATT_SIDECAR_CACHE = Symbol.for('pcf-glb-rvm-att-sidecar-cache-v1');
+const RVM_BROWSER_PARSE_DIAGNOSTICS = Symbol.for('pcf-glb-rvm-browser-parse-diagnostics-v1');
 
 const AUTHORITATIVE_SUPPORT_FIELDS = new Set([
   'SUPPORT_KIND',
@@ -109,6 +111,9 @@ function annotateBrowserRvmFallbackHierarchy(roots, diagnostics = {}) {
       BROWSER_RVM_TAB_FALLBACK: 'true',
       BROWSER_RVM_PARSE_FIDELITY: diagnostics.parseFidelity || 'UNKNOWN',
       BROWSER_RVM_PRIMITIVE_CANDIDATES: String(diagnostics.primitiveCandidateCount ?? 0),
+      BROWSER_RVM_BINARY_PRIMITIVES: String(diagnostics.binaryPrimitiveRecordCount ?? 0),
+      BROWSER_RVM_RECORDS: String(diagnostics.rvmRecordCount ?? 0),
+      BROWSER_RVM_HIERARCHY_GROUPS: String(diagnostics.hierarchyGroupCount ?? 0),
       BROWSER_RVM_WARNING: diagnostics.warning || 'Browser RVM fallback generated a partial/placeholder scene.',
     };
   }
@@ -158,6 +163,79 @@ async function readCachedAttSidecarText(fileName) {
   }
 }
 
+function setLastBrowserRvmDiagnostics(diagnostics = {}, fileName = '') {
+  const payload = {
+    ...(diagnostics && typeof diagnostics === 'object' ? diagnostics : {}),
+    fileName: fileName || diagnostics.fileName || '',
+    capturedAt: new Date().toISOString(),
+  };
+  globalThis[RVM_BROWSER_PARSE_DIAGNOSTICS] = payload;
+  globalThis.__PCF_GLB_RVM_BROWSER_PARSE_DIAGNOSTICS__ = payload;
+  try {
+    globalThis.dispatchEvent?.(new CustomEvent('rvm-browser-parse-diagnostics', { detail: payload }));
+  } catch (_) {}
+  return payload;
+}
+
+function lastBrowserRvmDiagnostics() {
+  return globalThis[RVM_BROWSER_PARSE_DIAGNOSTICS] || globalThis.__PCF_GLB_RVM_BROWSER_PARSE_DIAGNOSTICS__ || null;
+}
+
+function diagnosticValue(value, fallback = '-') {
+  if (value === undefined || value === null || value === '') return fallback;
+  return String(value);
+}
+
+function renderDiagnosticRows(diagnostics = {}) {
+  const rows = [
+    ['File', diagnostics.fileName],
+    ['Fidelity', diagnostics.parseFidelity],
+    ['RVM records', diagnostics.rvmRecordCount],
+    ['CNTB containers', diagnostics.rvmContainerCount],
+    ['Binary PRIM', diagnostics.binaryPrimitiveRecordCount],
+    ['Primitive candidates', diagnostics.primitiveCandidateCount],
+    ['Hierarchy groups', diagnostics.hierarchyGroupCount],
+    ['Semantic mode', diagnostics.primitiveSemantics],
+  ];
+  return rows.map(([label, value]) => `<div class="rvm-browser-diag-row"><span>${label}</span><b>${diagnosticValue(value)}</b></div>`).join('');
+}
+
+function ensureBrowserRvmDiagnosticsPanel(root = document) {
+  if (!root?.querySelector) return null;
+  const doc = root.ownerDocument || document;
+  let panel = root.querySelector('#rvm-browser-parse-diagnostics') || doc.querySelector('#rvm-browser-parse-diagnostics');
+  if (panel) return panel;
+  const rightPanel = root.querySelector('.rvm-right-panel') || doc.querySelector('.rvm-right-panel');
+  if (!rightPanel) return null;
+
+  const header = doc.createElement('div');
+  header.className = 'rvm-panel-header';
+  header.textContent = 'Browser RVM Parse';
+  header.setAttribute('data-rvm-browser-diagnostics-header', 'true');
+
+  panel = doc.createElement('div');
+  panel.id = 'rvm-browser-parse-diagnostics';
+  panel.className = 'rvm-tag-list rvm-browser-parse-diagnostics';
+  panel.setAttribute('aria-live', 'polite');
+  panel.setAttribute('data-browser-rvm-diagnostics-panel', 'true');
+  panel.innerHTML = '<div class="rvm-empty-state">No browser RVM parse yet.</div>';
+
+  rightPanel.append(header, panel);
+  return panel;
+}
+
+function renderBrowserRvmDiagnostics(diagnostics = lastBrowserRvmDiagnostics(), root = document) {
+  if (!diagnostics) return;
+  const panel = ensureBrowserRvmDiagnosticsPanel(root);
+  if (!panel) return;
+  panel.innerHTML = `
+    <div class="rvm-browser-diag-grid">
+      ${renderDiagnosticRows(diagnostics)}
+    </div>
+    <div class="rvm-browser-diag-warning">${diagnosticValue(diagnostics.warning, 'Browser fallback parse active.')}</div>
+  `;
+}
+
 export function installBrowserRvmTabFileFallback() {
   if (globalThis[RVM_TAB_FILE_FALLBACK_FLAG]) return;
   globalThis[RVM_TAB_FILE_FALLBACK_FLAG] = true;
@@ -178,7 +256,9 @@ export function installBrowserRvmTabFileFallback() {
       const arrayBuffer = await this.arrayBuffer();
       const attText = await readCachedAttSidecarText(this.name);
       const parsed = await parseRvmArrayBuffer(arrayBuffer, { fileName: this.name, attText });
-      const hierarchy = annotateBrowserRvmFallbackHierarchy(parsed.hierarchy, parsed.diagnostics);
+      const diagnostics = setLastBrowserRvmDiagnostics(parsed.diagnostics, this.name);
+      renderBrowserRvmDiagnostics(diagnostics);
+      const hierarchy = annotateBrowserRvmFallbackHierarchy(parsed.hierarchy, diagnostics);
       return JSON.stringify(hierarchy);
     };
   }
@@ -209,6 +289,8 @@ function patchRvmTabDom(root = document) {
   if (treeEmpty && /JSON\s*\/\s*UXML/i.test(treeEmpty.textContent || '')) {
     treeEmpty.textContent = 'Load RVM / REV / ATT / JSON / UXML to view hierarchy.';
   }
+  ensureBrowserRvmDiagnosticsPanel(root);
+  renderBrowserRvmDiagnostics(lastBrowserRvmDiagnostics(), root);
 }
 
 export function installBrowserRvmTabDomPatch() {
@@ -217,6 +299,7 @@ export function installBrowserRvmTabDomPatch() {
   if (typeof document === 'undefined') return;
 
   patchRvmTabDom(document);
+  globalThis.addEventListener?.('rvm-browser-parse-diagnostics', (event) => renderBrowserRvmDiagnostics(event.detail));
   if (typeof MutationObserver !== 'function') return;
   const observer = new MutationObserver((records) => {
     for (const record of records) {
