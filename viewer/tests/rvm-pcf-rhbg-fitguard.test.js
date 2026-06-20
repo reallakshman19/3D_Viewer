@@ -11,7 +11,7 @@ const rendererSource = await fs.readFile(new URL('../tabs/viewer3d-rvm-tab-rende
 const fallbackBridgeSource = await fs.readFile(new URL('../tabs/RvmPrimitiveFallbackBridge.js', import.meta.url), 'utf8');
 const appSource = await fs.readFile(new URL('../core/app.js', import.meta.url), 'utf8');
 const indexSource = await fs.readFile(new URL('../index.html', import.meta.url), 'utf8');
-const entrySource = await fs.readFile(new URL('../main-rvm-review.js', import.meta.url), 'utf8');
+const entrySource = await fs.readFile(new URL('../main-rhbg-fitguard.js', import.meta.url), 'utf8');
 const workerPatchSource = await fs.readFile(new URL('../rvm/BrowserRvmCppMat3x4WorkerPatch.js', import.meta.url), 'utf8');
 const workerSource = await fs.readFile(new URL('../rvm/browser-rvm-worker.js', import.meta.url), 'utf8');
 const remainingPrimitiveSource = await fs.readFile(new URL('../rvm/BrowserRvmRemainingPrimitiveRuntimePatch.js', import.meta.url), 'utf8');
@@ -27,8 +27,8 @@ check(fallbackBridgeSource.includes('__PCF_GLB_RVM_PRIMITIVE_FALLBACK_DIAGNOSTIC
 check(fallbackBridgeSource.includes('primitiveDecodedKindCounts') && fallbackBridgeSource.includes('primitiveNativeUpgradedKindCounts') && fallbackBridgeSource.includes('primitiveFallbackKindCounts'), 'fallback review exposes decoded/native/fallback counts');
 check(fallbackBridgeSource.includes('fallbackReasonCounts') && fallbackBridgeSource.includes('Re-scan'), 'fallback review exposes fallback reasons and rescan UI');
 check(appSource.includes('viewer3d-rvm-tab-renderer.js?v=20260620-rvm-primitive-fallback-review-1'), 'app loads primitive fallback renderer');
-check(indexSource.includes('main-rvm-review.js?v=20260620-rvm-primitive-fallback-review-1'), 'index loads primitive review entrypoint');
-check(entrySource.includes('core/app.js?v=20260620-rvm-primitive-fallback-review-1'), 'entry loads primitive fallback app cache key');
+check(indexSource.includes('main-rhbg-fitguard.js?v=20260620-rvm-primitive-fallback-review-1'), 'index loads guarded RVM entrypoint');
+check(entrySource.includes('Promise.allSettled') && entrySource.includes('optional startup module failed'), 'guarded entrypoint remains protected');
 check(workerPatchSource.includes('browser-rvm-worker.js?v=20260620-rvm-facetgroup-1'), 'worker patch remains on facet group worker');
 check(workerSource.includes('browserRvmFacetGroupDecodedCount') && workerSource.includes('browserRvmCppMat3x4ScaledRadiusApplied'), 'worker keeps facet and scale diagnostics');
 check(remainingPrimitiveSource.includes('facetGroupTessellatedCount') && remainingPrimitiveSource.includes('native-cpp-facetgroup-tessellated'), 'facet group runtime remains installed');
