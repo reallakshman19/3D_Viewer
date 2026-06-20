@@ -9,8 +9,8 @@
  * rendered inside this popup.
  */
 import { WorkflowModal } from './shared/WorkflowModal.js';
-import { getXmlCiiPhaseBridge } from './legacy-adapter.js?v=20260620-rich-state-refresh-1';
-import { renderXmlCiiPopupNativePhase } from './xml-cii-popup-native-panels.js?v=20260619-git-ss-adapt-1';
+import { getXmlCiiPhaseBridge } from './legacy-adapter.js?v=20260620-rating-runtime-1';
+import { renderXmlCiiPopupNativePhase } from './xml-cii-popup-native-panels.js?v=20260620-rating-runtime-1';
 import { XML_CII_WORKFLOW_PHASES, normalizeWorkflowPhaseId } from './WorkflowShell.js';
 
 const FLAG = '__xmlCiiConversionWorkflowPopup_phaseTabs_v1';

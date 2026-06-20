@@ -1,4 +1,4 @@
-import { collectXmlCiiWeightMatchRows } from '../../../../converters/xml-cii2019-core/weight-match-model.js?v=20260620-rating-override-1';
+import { collectXmlCiiWeightMatchRows } from '../../../../converters/xml-cii2019-core/weight-match-model.js?v=20260620-rating-runtime-1';
 import {
   ensureValveHintConfig,
   formatValveHint,
@@ -6,6 +6,7 @@ import {
   valveHintLengthToleranceMm,
   valveHintMappingRows,
 } from '../../../../converters/xml-cii2019-core/weight-valve-hints.js';
+import { getXmlCiiPreviewRuntimeConfig } from '../../shared/preview-filldown.js?v=20260620-rating-runtime-1';
 
 function t(value) { return value === null || value === undefined ? '' : String(value); }
 function clean(value) { return t(value).replace(/\s+/g, ' ').trim(); }
@@ -64,6 +65,7 @@ function overrideValue(config, bucketName, keys) {
   }
   return '';
 }
+
 function processRating(config, keys) {
   const bucket = config?.overrides?.processData;
   if (!bucket || typeof bucket !== 'object' || Array.isArray(bucket)) return '';
@@ -73,6 +75,7 @@ function processRating(config, keys) {
   }
   return '';
 }
+
 function ratingFromConfig(row, config) {
   const keys = [row?.lineKey, row?.branchName, row?.requestedPipingClass, row?.resolvedPipingClass, row?.nodeNumber];
   return overrideValue(config, 'rating', keys)
@@ -80,6 +83,7 @@ function ratingFromConfig(row, config) {
     || clean(row?.rating)
     || clean(config?.rating?.defaultRating || config?.defaultRating);
 }
+
 function rerankWithRating(row, config) {
   const rating = ratingFromConfig(row, config);
   const ranking = rankXmlCiiWeightCandidates({
@@ -107,18 +111,31 @@ function helpText(config) {
     'Rows included: only RIGID, FLAN*, VALV / VALVE / VLV.',
     'Rows excluded: support-only, TEE, ELBO/BEND, REDUCER, OLET, PIPE, GASK.',
     `Length rule: master length must be within ±${valveHintLengthToleranceMm(config)} mm of XML ElementLengthMm.`,
-    'Rating is read from line list / manual override / processData before candidate ranking.',
+    'Rating is read from line list / manual override / processData / Preview runtime cache before candidate ranking.',
   ].join('\n');
 }
-function hintRows(config) { return valveHintMappingRows(config).map((row, index) => `<tr><td><input type="checkbox" data-hint-i="${index}" data-hint-f="on" ${row.on ? 'checked' : ''}></td><td><input type="number" data-hint-i="${index}" data-hint-f="priority" value="${attr(row.priority)}"></td><td><input data-hint-i="${index}" data-hint-f="code" value="${attr(row.code)}"></td><td><input data-hint-i="${index}" data-hint-f="label" value="${attr(row.label)}"></td><td><input data-hint-i="${index}" data-hint-f="nodeNameRegex" value="${attr(row.nodeNameRegex)}"></td><td><input data-hint-i="${index}" data-hint-f="masterRegex" value="${attr(row.masterRegex)}"></td></tr>`).join(''); }
+
+function hintRows(config) {
+  return valveHintMappingRows(config).map((row, index) => `<tr><td><input type="checkbox" data-hint-i="${index}" data-hint-f="on" ${row.on ? 'checked' : ''}></td><td><input type="number" data-hint-i="${index}" data-hint-f="priority" value="${attr(row.priority)}"></td><td><input data-hint-i="${index}" data-hint-f="code" value="${attr(row.code)}"></td><td><input data-hint-i="${index}" data-hint-f="label" value="${attr(row.label)}"></td><td><input data-hint-i="${index}" data-hint-f="nodeNameRegex" value="${attr(row.nodeNameRegex)}"></td><td><input data-hint-i="${index}" data-hint-f="masterRegex" value="${attr(row.masterRegex)}"></td></tr>`).join('');
+}
+
 function hintPanel(config) {
   ensureValveHintConfig(config);
   const on = config.weight.useNodeNameValveHints !== false;
   const tolerance = valveHintLengthToleranceMm(config);
-  return `<style>.mc-wm-rules-card{margin:10px 0;padding:10px;background:#0c1520;border:1px solid #243247;border-radius:8px}.mc-wm-rules-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:8px;margin-top:10px}.mc-wm-rules-grid label{display:flex;align-items:center;gap:7px;min-width:0;color:#d7e6ff;font-size:12px}.mc-wm-rules-grid input[type="number"]{width:76px;min-width:0;background:#182334;color:#e6edf5;border:1px solid #31455f;border-radius:6px;padding:4px 6px}.mc-wm-hint-table-wrap{margin-top:10px;overflow:auto;max-height:180px;border:1px solid #243247;border-radius:8px}.mc-wm-hint-table{border-collapse:collapse;font-size:11px;min-width:760px;width:100%}.mc-wm-hint-table th,.mc-wm-hint-table td{padding:4px 5px;border-bottom:1px solid #243247;color:#d7e6ff;white-space:nowrap}.mc-wm-hint-table input{box-sizing:border-box;min-width:64px;max-width:210px;background:#182334;color:#e6edf5;border:1px solid #31455f;border-radius:5px;padding:3px 5px}.mc-wm-chip-rejected{opacity:.72;border-style:dashed!important;cursor:not-allowed!important}.mc-wm-rejected-label{font-size:11px;font-weight:700;opacity:.75;color:#f5c96a;align-self:center}</style><section class="mc-wm-rules-card"><div style="display:flex;justify-content:space-between;gap:10px;"><div><div style="color:#9cc5ff;font-weight:700;font-size:13px;">Valve Hint / TypeDesc Ranking Rules</div><div style="margin-top:3px;color:#9aa8ba;font-size:12px;line-height:1.35;">${esc(helpText(config))}</div></div></div><div class="mc-wm-rules-grid"><label><input type="checkbox" id="mc-wm-use-valve-hints" ${on ? 'checked' : ''}> Use NodeName valve hint</label><label>Length tolerance ± <input type="number" id="mc-wm-valve-tol" min="0" step="0.1" value="${attr(tolerance)}"> mm</label><label><input type="checkbox" id="mc-wm-use-extrapolation" ${config.weight.useWeightExtrapolation === false ? '' : 'checked'}> Use weight extrapolation</label></div><div class="mc-wm-hint-table-wrap"><table class="mc-wm-hint-table"><thead><tr><th>On</th><th>Priority</th><th>Code</th><th>Label</th><th>NodeName Regex</th><th>Master Regex</th></tr></thead><tbody>${hintRows(config)}</tbody></table></div></section>`;
+  return `<style>.mc-wm-rules-card{margin:10px 0;padding:10px;background:#0c1520;border:1px solid #243247;border-radius:8px}.mc-wm-rules-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:8px;margin-top:10px}.mc-wm-rules-grid label{display:flex;align-items:center;gap:7px;min-width:0;color:#d7e6ff;font-size:12px}.mc-wm-rules-grid input[type="number"]{width:76px;min-width:0;background:#182334;color:#e6edf5;border:1px solid #31455f;border-radius:6px;padding:4px 6px}.mc-wm-hint-table-wrap{margin-top:10px;overflow:auto;max-height:180px;border:1px solid #243247;border-radius:8px}.mc-wm-hint-table{border-collapse:collapse;font-size:11px;min-width:760px;width:100%}.mc-wm-hint-table th,.mc-wm-hint-table td{padding:4px 5px;border-bottom:1px solid #243247;color:#d7e6ff;white-space:nowrap}.mc-wm-hint-table input{box-sizing:border-box;min-width:64px;max-width:210px;background:#182334;color:#e6edf5;border:1px solid #31455f;border-radius:5px;padding:3px 5px}.mc-wm-chip-rejected{opacity:.72;border-style:dashed!important;cursor:not-allowed!important}.mc-wm-rejected-label{font-size:11px;font-weight:700;opacity:.75;color:#f5c96a;align-self:center}</style><section class="mc-wm-rules-card"><div style="display:flex;justify-content:space-between;gap:10px;"><div><div style="color:#9cc5ff;font-weight:700;font-size:13px;">Valve Hint / TypeDesc Ranking Rules</div><div style="margin-top:3px;color:#9aa8ba;font-size:12px;line-height:1.35;white-space:pre-line;">${esc(helpText(config))}</div></div></div><div class="mc-wm-rules-grid"><label><input type="checkbox" id="mc-wm-use-valve-hints" ${on ? 'checked' : ''}> Use NodeName valve hint</label><label>Length tolerance ± <input type="number" id="mc-wm-valve-tol" min="0" step="0.1" value="${attr(tolerance)}"> mm</label><label><input type="checkbox" id="mc-wm-use-extrapolation" ${config.weight.useWeightExtrapolation === false ? '' : 'checked'}> Use weight extrapolation</label></div><div class="mc-wm-hint-table-wrap"><table class="mc-wm-hint-table"><thead><tr><th>On</th><th>Priority</th><th>Code</th><th>Label</th><th>NodeName Regex</th><th>Master Regex</th></tr></thead><tbody>${hintRows(config)}</tbody></table></div></section>`;
 }
-function renderAcceptedChip(candidate, rowIndex, issue) { const value = selectedWeight(candidate); const label = desc(candidate); const title = [`Rating: ${issue.rating || '-'}`, `TypeDesc: ${label}`, `Selected weight: ${value} kg`, `Length delta: ${nfmt(candidate.lengthDelta)} mm`].join(' | '); return `<button type="button" class="mc-rigid-review-candidate${candidate.preferred ? ' best' : ''}" data-wm-candidate="${rowIndex}" data-wm-weight="${attr(value)}" title="${attr(title)}" style="font-size:11px;line-height:1.1;padding:3px 6px;border-radius:999px;white-space:nowrap;max-width:330px;overflow:hidden;text-overflow:ellipsis;">${candidate.preferred ? '★ ' : ''}${esc(label)} · ${esc(value)}kg · Δ${esc(nfmt(candidate.lengthDelta))}</button>`; }
-function renderRejectedChip(candidate) { return `<span class="mc-rigid-review-candidate mc-wm-chip-rejected" title="${attr(candidate.rejectedReason || '')}" style="font-size:11px;line-height:1.1;padding:3px 6px;border-radius:999px;white-space:nowrap;max-width:330px;overflow:hidden;text-overflow:ellipsis;">× ${esc(desc(candidate))} · Δ${esc(nfmt(candidate.lengthDelta))}mm</span>`; }
+
+function renderAcceptedChip(candidate, rowIndex, issue) {
+  const value = selectedWeight(candidate);
+  const label = desc(candidate);
+  const title = [`Rating: ${issue.rating || '-'}`, `TypeDesc: ${label}`, `Selected weight: ${value} kg`, `Length delta: ${nfmt(candidate.lengthDelta)} mm`].join(' | ');
+  return `<button type="button" class="mc-rigid-review-candidate${candidate.preferred ? ' best' : ''}" data-wm-candidate="${rowIndex}" data-wm-weight="${attr(value)}" title="${attr(title)}" style="font-size:11px;line-height:1.1;padding:3px 6px;border-radius:999px;white-space:nowrap;max-width:330px;overflow:hidden;text-overflow:ellipsis;">${candidate.preferred ? '★ ' : ''}${esc(label)} · ${esc(value)}kg · Δ${esc(nfmt(candidate.lengthDelta))}</button>`;
+}
+
+function renderRejectedChip(candidate) {
+  return `<span class="mc-rigid-review-candidate mc-wm-chip-rejected" title="${attr(candidate.rejectedReason || '')}" style="font-size:11px;line-height:1.1;padding:3px 6px;border-radius:999px;white-space:nowrap;max-width:330px;overflow:hidden;text-overflow:ellipsis;">× ${esc(desc(candidate))} · Δ${esc(nfmt(candidate.lengthDelta))}mm</span>`;
+}
 
 export function xmlCiiRenderWeightMatchPhase() {
   const info = 'Length gate is mandatory. Rating is resolved before nearest-weight candidate ranking.';
@@ -134,14 +151,23 @@ export function bindXmlCiiWeightMatchPhase(detailEl, { xmlFile, stagedJsonText, 
   if (!contentEl) return;
   let localIssues = [];
   const status = (message, tone) => { if (statusEl) { statusEl.textContent = message || ''; statusEl.className = `mc-diag-run-status ${tone || ''}`.trim(); } };
-  const activeConfig = () => mergeRuntimeOverrides(config, currentDomSupportConfig());
+  const activeConfig = () => mergeRuntimeOverrides(mergeRuntimeOverrides(mergeRuntimeOverrides(config, currentDomSupportConfig()), getXmlCiiPreviewRuntimeConfig()), currentDomSupportConfig());
   const syncToggle = () => { if (!toggleEl) return; const on = convOn(activeConfig()); toggleEl.textContent = `⇄ in→mm: ${on ? 'ON' : 'OFF'}`; toggleEl.style.borderColor = on ? '#2f9e63' : ''; toggleEl.style.color = on ? '#fff' : ''; toggleEl.style.background = on ? '#14532d' : ''; };
   const drawPanel = () => { if (panelEl) panelEl.innerHTML = hintPanel(activeConfig()); };
   const drawRows = (issues) => {
     if (!issues.length) { contentEl.innerHTML = '<div class="model-converters-workflow-detail-note">No actual RIGID / FLAN* / VALVE nodes with ElementLengthMm &gt; 6 mm were found.</div>'; return; }
-    const rows = issues.map((issue, rowIndex) => { const best = issue.candidates?.[0]; const initial = issue.weight && issue.weight > 0 ? issue.weight : (best ? selectedWeight(best) : ''); const rowStyle = issue.mapped ? 'background:#0f2a1b;border-left:4px solid #2f9e63;' : 'background:#3a240f;border-left:4px solid #d08a22;'; const accepted = (issue.candidates || []).map((candidate) => renderAcceptedChip(candidate, rowIndex, issue)).join(''); const rejected = (issue.rejectedCandidates || []).map(renderRejectedChip).join(''); const rejectedBlock = rejected ? `<span class="mc-wm-rejected-label">Rejected by length</span>${rejected}` : ''; const chips = accepted || rejectedBlock || '<span class="model-converters-muted">No suggestion</span>'; return `<tr style="${rowStyle}"><td>${esc(issue.mapped ? `Mapped (${issue.weightSource || 'weight'})` : (best?.preferred ? 'Suggested' : 'Unresolved'))}</td><td title="${attr(issue.branchName)}">${esc(issue.branchName)}</td><td>${esc(issue.lineKey || '')}</td><td>${esc(issue.componentType || '')}</td><td>${esc(issue.boreMm == null ? '' : `${Number(issue.boreMm).toFixed(0)} mm`)}</td><td>${esc(issue.rating || '')}</td><td>${esc(issue.nodeNumber)}</td><td title="${attr([issue.dtxrSource, issue.dtxrMatchedKey, issue.dtxrSuppressionReason].filter(Boolean).join(' · '))}">${esc(issue.dtxr || 'Not found')}</td><td>${esc(issue.valveHint || '—')}</td><td title="${attr(issue.elementLengthSource || '')}">${esc(issue.lengthMm == null ? '' : `${Number(issue.lengthMm).toFixed(1)} mm`)}</td><td><input type="number" min="0" step="0.001" class="mc-rigid-review-input" data-wm-key="${attr(issue.key)}" value="${attr(initial)}" placeholder="kg" style="width:86px;"></td><td style="max-width:540px;"><div style="display:flex;flex-wrap:wrap;gap:4px;max-height:72px;overflow:auto;align-items:flex-start;">${chips}</div></td></tr>`; }).join('');
+    const rows = issues.map((issue, rowIndex) => {
+      const best = issue.candidates?.[0];
+      const initial = issue.weight && issue.weight > 0 ? issue.weight : (best ? selectedWeight(best) : '');
+      const rowStyle = issue.mapped ? 'background:#0f2a1b;border-left:4px solid #2f9e63;' : 'background:#3a240f;border-left:4px solid #d08a22;';
+      const accepted = (issue.candidates || []).map((candidate) => renderAcceptedChip(candidate, rowIndex, issue)).join('');
+      const rejected = (issue.rejectedCandidates || []).map(renderRejectedChip).join('');
+      const rejectedBlock = rejected ? `<span class="mc-wm-rejected-label">Rejected by length</span>${rejected}` : '';
+      const chips = accepted || rejectedBlock || '<span class="model-converters-muted">No suggestion</span>';
+      return `<tr style="${rowStyle}"><td>${esc(issue.mapped ? `Mapped (${issue.weightSource || 'weight'})` : (best?.preferred ? 'Suggested' : 'Unresolved'))}</td><td title="${attr(issue.branchName)}">${esc(issue.branchName)}</td><td>${esc(issue.lineKey || '')}</td><td>${esc(issue.componentType || '')}</td><td>${esc(issue.boreMm == null ? '' : `${Number(issue.boreMm).toFixed(0)} mm`)}</td><td>${esc(issue.rating || '')}</td><td>${esc(issue.nodeNumber)}</td><td title="${attr([issue.dtxrSource, issue.dtxrMatchedKey, issue.dtxrSuppressionReason].filter(Boolean).join(' · '))}">${esc(issue.dtxr || 'Not found')}</td><td>${esc(issue.valveHint || '—')}</td><td title="${attr(issue.elementLengthSource || '')}">${esc(issue.lengthMm == null ? '' : `${Number(issue.lengthMm).toFixed(1)} mm`)}</td><td><input type="number" min="0" step="0.001" class="mc-rigid-review-input" data-wm-key="${attr(issue.key)}" value="${attr(initial)}" placeholder="kg" style="width:86px;"></td><td style="max-width:540px;"><div style="display:flex;flex-wrap:wrap;gap:4px;max-height:72px;overflow:auto;align-items:flex-start;">${chips}</div></td></tr>`;
+    }).join('');
     const cfg = activeConfig();
-    contentEl.innerHTML = `<div class="model-converters-workflow-detail-note" style="margin-bottom:8px;">Candidate length gate is ±${nfmt(valveHintLengthToleranceMm(cfg))} mm. Rating is resolved from line list/manual overrides before ranking. Length conversion is ${convOn(cfg) ? 'ON' : 'OFF'}.</div><div class="mc-rigid-review-table-wrap" style="overflow:auto;max-height:48vh;"><table class="mc-rigid-review-table" style="border-collapse:collapse;font-size:12px;"><thead><tr><th>Status</th><th>Branch</th><th>Line Key</th><th>Type</th><th>Bore</th><th>Rating</th><th>Node</th><th>DTXR</th><th>Valve Hint</th><th>Length</th><th>Weight (kg)</th><th>Nearest Suggestions</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+    contentEl.innerHTML = `<div class="model-converters-workflow-detail-note" style="margin-bottom:8px;">Candidate length gate is ±${nfmt(valveHintLengthToleranceMm(cfg))} mm. Rating is resolved from line list/manual overrides/runtime cache before ranking. Length conversion is ${convOn(cfg) ? 'ON' : 'OFF'}.</div><div class="mc-rigid-review-table-wrap" style="overflow:auto;max-height:48vh;"><table class="mc-rigid-review-table" style="border-collapse:collapse;font-size:12px;"><thead><tr><th>Status</th><th>Branch</th><th>Line Key</th><th>Type</th><th>Bore</th><th>Rating</th><th>Node</th><th>DTXR</th><th>Valve Hint</th><th>Length</th><th>Weight (kg)</th><th>Nearest Suggestions</th></tr></thead><tbody>${rows}</tbody></table></div>`;
     contentEl.querySelectorAll('[data-wm-candidate]').forEach((button) => button.addEventListener('click', () => { const input = contentEl.querySelectorAll('.mc-rigid-review-input')[Number(button.dataset.wmCandidate)]; if (!input) return; input.value = button.dataset.wmWeight || ''; input.dispatchEvent(new Event('change', { bubbles: true })); }));
   };
   const compute = async () => {
@@ -154,7 +180,7 @@ export function bindXmlCiiWeightMatchPhase(detailEl, { xmlFile, stagedJsonText, 
       const xmlText = await file.text();
       const jsonText = await stagedText(stagedJsonText);
       const enriched = await enrichXmlForCii2019(xmlText, jsonText, { dryRun: true, skipAutoWeightMatch: true });
-      const cfg = mergeRuntimeOverrides(enriched.config || liveConfig, liveConfig);
+      const cfg = mergeRuntimeOverrides(mergeRuntimeOverrides(enriched.config || liveConfig, liveConfig), getXmlCiiPreviewRuntimeConfig());
       localIssues = collectXmlCiiWeightMatchRows(xmlText, jsonText, cfg).map(cleanRow).filter(Boolean).map((row) => rerankWithRating(row, cfg));
       const mapped = localIssues.filter((row) => row.mapped).length;
       const suggested = localIssues.filter((row) => row.candidates?.[0]?.preferred).length;
@@ -171,6 +197,6 @@ export function bindXmlCiiWeightMatchPhase(detailEl, { xmlFile, stagedJsonText, 
   toggleEl?.addEventListener('click', () => { const cfg = activeConfig(); cfg.weight = cfg.weight && typeof cfg.weight === 'object' ? cfg.weight : {}; cfg.weight.convertSmallLengthsInToMm = cfg.weight.convertSmallLengthsInToMm !== true; onSaveConfig(cfg); void compute(); });
   detailEl.querySelector('#mc-wm-fill-best')?.addEventListener('click', () => { contentEl.querySelectorAll('.mc-rigid-review-input').forEach((input, index) => { const best = localIssues[index]?.candidates?.[0]; if (!best || best.preferred !== true || best.lengthQualified !== true) return; input.value = String(selectedWeight(best)); input.dispatchEvent(new Event('change', { bubbles: true })); }); });
   panelEl?.addEventListener('change', (event) => { const cfg = activeConfig(); ensureValveHintConfig(cfg); const use = event.target.closest?.('#mc-wm-use-valve-hints'); if (use) cfg.weight.useNodeNameValveHints = use.checked; const tolerance = event.target.closest?.('#mc-wm-valve-tol'); if (tolerance) cfg.weight.valveHintLengthToleranceMm = Math.max(0, Number(tolerance.value) || 0); const extrapolate = event.target.closest?.('#mc-wm-use-extrapolation'); if (extrapolate) cfg.weight.useWeightExtrapolation = extrapolate.checked; const input = event.target.closest?.('[data-hint-i]'); if (input) { const rows = valveHintMappingRows(cfg); const row = rows[Number(input.dataset.hintI)]; if (row) { const field = input.dataset.hintF; if (field === 'on') row.on = input.checked; else if (field === 'priority') row.priority = Number(input.value) || row.priority; else row[field] = input.value; cfg.weight.valveHintMapping = rows; } } onSaveConfig(cfg); void compute(); });
-  contentEl.addEventListener('change', (event) => { const input = event.target.closest?.('.mc-rigid-review-input'); if (!input) return; const key = input.getAttribute('data-wm-key') || ''; const value = Number(input.value); if (!key || !Number.isFinite(value) || value <= 0) return; const overrides = ensureOverrides(activeConfig()); overrides.rigidWeight = { ...(overrides.rigidWeight || {}), [key]: value }; onSaveConfig(activeConfig()); });
+  contentEl.addEventListener('change', (event) => { const input = event.target.closest?.('.mc-rigid-review-input'); if (!input) return; const key = input.getAttribute('data-wm-key') || ''; const value = Number(input.value); if (!key || !Number.isFinite(value) || value <= 0) return; const cfg = activeConfig(); const overrides = ensureOverrides(cfg); overrides.rigidWeight = { ...(overrides.rigidWeight || {}), [key]: value }; onSaveConfig(cfg); });
   syncToggle(); drawPanel(); void compute();
 }
