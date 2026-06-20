@@ -11,18 +11,18 @@
  * orchestrator.
  */
 
-import { renderLegacyModelConvertersTab } from './legacy-adapter.js?v=20260620-master-preserve-1';
+import { renderLegacyModelConvertersTab } from './legacy-adapter.js?v=20260620-master-session-1';
 import { installBmCiiSupportAnnotationPopup } from './bm-cii-support-annotation-popup.js?v=20260617-bmcii-open-basic-handoff-2';
 import { installInputXmlPropertyTransferUi } from './inputxml-property-transfer-popup-ui-v4.js?v=20260615-inputxml-property-transfer-popup-host-hide-1';
 import { installRvmAttrUxmlAddon } from './rvmattr-uxml-addon.js?v=20260618-port-bore-contract-1';
-import { installXmlCiiConversionWorkflowPopup } from './xml-cii-conversion-workflow-popup.js?v=20260620-master-preserve-1';
+import { installXmlCiiConversionWorkflowPopup } from './xml-cii-conversion-workflow-popup.js?v=20260620-master-session-1';
 import { installXmlCiiBranchSampleSync } from './xml-cii-branch-sample-sync.js?v=20260620-rating-runtime-1';
 import { installXmlCiiLineKeySelectPatch } from './xml-cii-linekey-select-patch.js?v=20260620-rating-runtime-1';
 import { installInputXmlBasicGlbBridge } from './inputxml-basic-glb-bridge.js';
-import { installXmlCiiDefaultMasterAutoload, installXmlCiiRecoveryPatch } from '../xml-cii-master-autoload-patch.js?v=20260620-master-preserve-1';
+import { installXmlCiiDefaultMasterAutoload, installXmlCiiRecoveryPatch } from '../xml-cii-master-autoload-patch.js?v=20260620-master-session-1';
 import { installXmlCiiPreviewLineKeyRemap } from './xml-cii-preview-linekey-remap.js?v=20260620-rating-runtime-1';
 import { installXmlCiiRuntimeOverrideSync } from './xml-cii-runtime-override-sync.js?v=20260620-rating-runtime-1';
-import { installXmlCiiMasterPreservePatch } from './xml-cii-master-preserve-patch.js?v=20260620-master-preserve-1';
+import { installXmlCiiMasterPreservePatch } from './xml-cii-master-preserve-patch.js?v=20260620-master-session-1';
 
 const TRACE_PREFIX = '[BM_CII_CONVERTER_TRACE]';
 
@@ -33,6 +33,7 @@ const TRACE_PREFIX = '[BM_CII_CONVERTER_TRACE]';
  * @type {ReadonlyArray<[string, (container: HTMLElement) => void]>}
  */
 const MODEL_CONVERTER_INSTALLERS = Object.freeze([
+  ['xml-cii-session-config', installXmlCiiMasterPreservePatch],
   ['rvmattr-uxml-addon', installRvmAttrUxmlAddon],
   ['xml-cii-conversion-workflow-popup', installXmlCiiConversionWorkflowPopup],
   ['xml-cii-branch-sample-sync', installXmlCiiBranchSampleSync],
@@ -40,11 +41,10 @@ const MODEL_CONVERTER_INSTALLERS = Object.freeze([
   ['bm-cii-support-annotation-popup', installBmCiiSupportAnnotationPopup],
   ['inputxml-property-transfer-popup-ui-v4', installInputXmlPropertyTransferUi],
   ['inputxml-basic-glb-bridge', installInputXmlBasicGlbBridge],
-  ['xml-cii-default-master-autoload', installXmlCiiDefaultMasterAutoload],
-  ['xml-cii-recovery-patch', installXmlCiiRecoveryPatch],
+  ['xml-cii-default-master-autoload-retired', installXmlCiiDefaultMasterAutoload],
+  ['xml-cii-recovery-global-helper', installXmlCiiRecoveryPatch],
   ['xml-cii-preview-linekey-remap', installXmlCiiPreviewLineKeyRemap],
   ['xml-cii-runtime-override-sync', installXmlCiiRuntimeOverrideSync],
-  ['xml-cii-master-preserve-patch', installXmlCiiMasterPreservePatch],
 ]);
 
 export function renderModelConvertersTab(container) {
