@@ -22,6 +22,7 @@ function unsafeDtxr(row) { const source = clean(row?.dtxrSource).toLowerCase(); 
 function cleanRow(row) { if (!allowedType(row?.componentType)) return null; return unsafeDtxr(row) ? { ...row, dtxr: '', dtxrSource: 'weight-dtxr-suppressed' } : row; }
 async function stagedText(stagedJsonText) { const direct = clean(stagedJsonText); if (direct) return direct; const file = document?.querySelector?.('#model-converters-secondary-input')?.files?.[0]; return file ? await file.text().catch(() => '') : ''; }
 function currentXmlFile(passedFile) { return passedFile || document?.querySelector?.('#model-converters-primary-input')?.files?.[0] || null; }
+function delay(ms) { return new Promise((resolve) => setTimeout(resolve, ms)); }
 
 function parseConfigText(value) {
   try {
@@ -74,6 +75,26 @@ function mergeRuntimeOverrides(baseConfig, liveConfig) {
   }
   if (clean(live?.rating?.defaultRating)) out.rating = { ...(out.rating || {}), defaultRating: clean(live.rating.defaultRating) };
   return out;
+}
+
+function hasWeightMasterRows(config) {
+  return Array.isArray(config?.weight?.masterRows) && config.weight.masterRows.length > 0;
+}
+
+async function waitForWeightMasterRows(activeConfig, setStatus) {
+  let cfg = activeConfig();
+  if (hasWeightMasterRows(cfg)) return cfg;
+
+  setStatus?.('Loading weight master…');
+  for (let attempt = 0; attempt < 24; attempt += 1) {
+    await delay(250);
+    cfg = activeConfig();
+    if (hasWeightMasterRows(cfg)) {
+      setStatus?.(`Weight master ready (${cfg.weight.masterRows.length} row(s))`);
+      return cfg;
+    }
+  }
+  return cfg;
 }
 
 function overrideValue(config, bucketName, keys) {
@@ -205,12 +226,14 @@ export function bindXmlCiiWeightMatchPhase(detailEl, { xmlFile, stagedJsonText, 
     contentEl.querySelectorAll('[data-wm-candidate]').forEach((button) => button.addEventListener('click', () => { const input = contentEl.querySelectorAll('.mc-rigid-review-input')[Number(button.dataset.wmCandidate)]; if (!input) return; input.value = button.dataset.wmWeight || ''; input.dispatchEvent(new Event('change', { bubbles: true })); }));
   };
   const compute = async () => {
-    const liveConfig = activeConfig();
+    let liveConfig = activeConfig();
     syncToggle(); drawPanel();
     const file = currentXmlFile(xmlFile);
     if (!file) { localIssues = []; contentEl.innerHTML = '<div class="model-converters-workflow-detail-note">No XML source loaded. Import an XML file first.</div>'; status('No input', 'bad'); return; }
     status('Computing…');
     try {
+      liveConfig = await waitForWeightMasterRows(activeConfig, status);
+      syncToggle(); drawPanel();
       const xmlText = await file.text();
       const jsonText = await stagedText(stagedJsonText);
       const enriched = await enrichXmlForCii2019(xmlText, jsonText, { dryRun: true, skipAutoWeightMatch: true });
