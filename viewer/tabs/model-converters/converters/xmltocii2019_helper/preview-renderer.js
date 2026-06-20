@@ -103,6 +103,53 @@ function _hasOwn(obj, key) { return !!obj && Object.prototype.hasOwnProperty.cal
 function _overrideSource(overrides, bucket, key) { return _hasOwn(overrides?.[bucket], key) ? 'override' : 'auto'; }
 function _isDefaultSource(source) { return source === 'default' || source === 'config-default' || source === 'default-zero'; }
 function _percentText(confidence) { const numeric = Number(confidence); return Number.isFinite(numeric) ? `${Math.max(0, Math.min(100, Math.round(numeric * 100)))}%` : ''; }
+function _uniqueKeys(values) { return [...new Set(values.map((value) => _toText(value).trim()).filter(Boolean))]; }
+function _bucketText(config, bucketName, keys) {
+  const bucket = config?.overrides?.[bucketName];
+  if (!bucket || typeof bucket !== 'object' || Array.isArray(bucket)) return '';
+  for (const key of _uniqueKeys(keys)) {
+    if (_hasOwn(bucket, key) && _toText(bucket[key]).trim()) return _toText(bucket[key]).trim();
+  }
+  return '';
+}
+function _processDataText(config, keys, fieldKey) {
+  const bucket = config?.overrides?.processData;
+  if (!bucket || typeof bucket !== 'object' || Array.isArray(bucket)) return '';
+  for (const key of _uniqueKeys(keys)) {
+    const value = bucket[key]?.[fieldKey];
+    if (_toText(value).trim()) return _toText(value).trim();
+  }
+  return '';
+}
+function _ratingKeys(row, derivedKey = '') {
+  return _uniqueKeys([derivedKey, row?.lineKey, row?.branchName, row?.pipingClassDerived, row?.pipingClass]);
+}
+function _ratingOverride(config, keys) {
+  return _bucketText(config, 'rating', keys) || _processDataText(config, keys, 'rating');
+}
+function _setProcessDataField(overrides, key, field, value) {
+  if (!key) return;
+  if (!overrides.processData || typeof overrides.processData !== 'object' || Array.isArray(overrides.processData)) overrides.processData = {};
+  overrides.processData[key] = overrides.processData[key] && typeof overrides.processData[key] === 'object' && !Array.isArray(overrides.processData[key])
+    ? { ...overrides.processData[key] }
+    : {};
+  overrides.processData[key][field] = value;
+}
+function _savePreviewOverride({ config, ensureOverrides, editType, row, derivedKey, value }) {
+  const overrides = ensureOverrides(config);
+  const cleanValue = _toText(value).trim();
+  if (editType === 'rating') {
+    const keys = _ratingKeys(row, derivedKey);
+    overrides.rating = overrides.rating && typeof overrides.rating === 'object' && !Array.isArray(overrides.rating) ? { ...overrides.rating } : {};
+    for (const key of keys) overrides.rating[key] = cleanValue;
+    for (const key of _uniqueKeys([row?.lineKey, row?.branchName])) _setProcessDataField(overrides, key, 'rating', cleanValue);
+    return keys[0] || derivedKey || row?.lineKey || row?.branchName || '';
+  }
+  if (!overrides[editType] || typeof overrides[editType] !== 'object') overrides[editType] = {};
+  const key = _fieldOverrideKey(editType, derivedKey) || row?.lineKey || row?.branchName || '';
+  if (key) overrides[editType] = { ...overrides[editType], [key]: cleanValue };
+  return key;
+}
 
 export function xmlCiiRenderPreviewPhase(xmlFile, config) {
   const llRows = Array.isArray(config.linelist?.masterRows) ? config.linelist.masterRows.length : 0;
@@ -129,9 +176,14 @@ export function xmlCiiDryRunPreview(xmlText, config, stagedJsonText) {
     const branchClass = _derivePipingClassFromBranchName(branchName, config);
     const derivedClassRaw = lineListClass || branchClass;
     const boreMm = _deriveBoreFromBranchName(branchName, config) || _rowNumber(lineListMatch, ['convertedBore', 'Bore', 'DN', 'NB']);
+    const ratingKeys = _uniqueKeys([lineKey, branchName, derivedClassRaw]);
+    const manualRating = _ratingOverride(config, ratingKeys);
+    const rowRating = _rowText(lineListMatch, ['rating', 'Rating', 'RATING']);
+    const inputRating = manualRating || rowRating || _deriveRatingFromPipingClass(derivedClassRaw, config);
     const resolverLineRow = { ...(lineListMatch || {}), pipingClass: derivedClassRaw };
-    const resolved = resolveBranchProcessData({ branchName, lineKey, lineRow: resolverLineRow, boreMm, componentType: 'PIPE', rating: _rowText(lineListMatch, ['rating', 'Rating', 'RATING']) || _deriveRatingFromPipingClass(derivedClassRaw, config), materialMap, pipingClassIndex, overrides: config.overrides || {}, xmlNode: null, xmlBranch: branch, config });
-    const branchRating = resolved.rating || _deriveRatingFromPipingClass(resolved.pipingClass, config) || _rowText(lineListMatch, ['rating', 'Rating']);
+    const resolved = resolveBranchProcessData({ branchName, lineKey, lineRow: resolverLineRow, boreMm, componentType: 'PIPE', rating: inputRating, materialMap, pipingClassIndex, overrides: config.overrides || {}, xmlNode: null, xmlBranch: branch, config });
+    const branchRating = manualRating || resolved.rating || _deriveRatingFromPipingClass(resolved.pipingClass, config) || rowRating;
+    const ratingSource = manualRating ? 'override' : _overrideSource(config.overrides, 'rating', lineKey);
     const pdOverride = (lineKey && config?.overrides?.processData?.[lineKey]) || {};
     const p1 = _xmlCiiProcessValue(pdOverride, lineListMatch, 'p1', ['p1'], config);
     const t1 = _xmlCiiProcessValue(pdOverride, lineListMatch, 't1', ['t1'], config);
@@ -146,7 +198,7 @@ export function xmlCiiDryRunPreview(xmlText, config, stagedJsonText) {
     if (resolved.materialSource === 'override' || resolved.materialSource === 'override-material-map') matMethod = 'override';
     else if (resolved.materialSource === 'line-list-material-map' || resolved.materialSource === 'piping-class-material-map') matMethod = 'exact';
     else if (resolved.materialSource === 'xml-fallback') matMethod = 'xml-fallback';
-    branchRows.push({ branchName, lineKey, lineMiss: !lineListMatch, size: boreMm != null ? `${boreMm}mm` : '', sizeMm: boreMm, pipingClass: resolved.pipingClass || '', pipingClassDerived: derivedClassRaw || '', pipingClassMethod: resolved.pipingClassMatchMethod, pipingClassConfidence: resolved.pipingClassConfidence, pipingClassScore: resolved.pipingClassScore, pipingClassRowScore: resolved.pipingClassRowScore, pipingClassRowReasons: resolved.pipingClassRowReasons || [], pipingClassNeedsReview: resolved.pipingClassNeedsReview, pipingClassCandidates: resolved.pipingClassCandidates || [], material: resolved.material || '', materialSource: resolved.materialSource || _overrideSource(config.overrides, 'material', lineKey), materialCode: resolved.materialCode || '', materialCodeMethod: matMethod, materialCodeNeedsReview: !resolved.materialCode, rating: branchRating || '', ratingSource: _overrideSource(config.overrides, 'rating', lineKey), p1, t1, t2, t3, density, p1Source: _xmlCiiProcessSource(pdOverride, lineListMatch, 'p1', ['p1'], config), t1Source: _xmlCiiProcessSource(pdOverride, lineListMatch, 't1', ['t1'], config), t2Source: _xmlCiiProcessSource(pdOverride, lineListMatch, 't2', ['t2'], config), t3Source: _xmlCiiProcessSource(pdOverride, lineListMatch, 't3', ['t3'], config), densitySource, wallThickness, wallThicknessSource: resolved.wallThicknessSource || _overrideSource(config.overrides, 'wallThickness', lineKey), corrosion, corrosionSource: resolved.corrosionSource || _overrideSource(config.overrides, 'corrosion', lineKey) });
+    branchRows.push({ branchName, lineKey, lineMiss: !lineListMatch, size: boreMm != null ? `${boreMm}mm` : '', sizeMm: boreMm, pipingClass: resolved.pipingClass || '', pipingClassDerived: derivedClassRaw || '', pipingClassMethod: resolved.pipingClassMatchMethod, pipingClassConfidence: resolved.pipingClassConfidence, pipingClassScore: resolved.pipingClassScore, pipingClassRowScore: resolved.pipingClassRowScore, pipingClassRowReasons: resolved.pipingClassRowReasons || [], pipingClassNeedsReview: resolved.pipingClassNeedsReview, pipingClassCandidates: resolved.pipingClassCandidates || [], material: resolved.material || '', materialSource: resolved.materialSource || _overrideSource(config.overrides, 'material', lineKey), materialCode: resolved.materialCode || '', materialCodeMethod: matMethod, materialCodeNeedsReview: !resolved.materialCode, rating: branchRating || '', ratingSource, p1, t1, t2, t3, density, p1Source: _xmlCiiProcessSource(pdOverride, lineListMatch, 'p1', ['p1'], config), t1Source: _xmlCiiProcessSource(pdOverride, lineListMatch, 't1', ['t1'], config), t2Source: _xmlCiiProcessSource(pdOverride, lineListMatch, 't2', ['t2'], config), t3Source: _xmlCiiProcessSource(pdOverride, lineListMatch, 't3', ['t3'], config), densitySource, wallThickness, wallThicknessSource: resolved.wallThicknessSource || _overrideSource(config.overrides, 'wallThickness', lineKey), corrosion, corrosionSource: resolved.corrosionSource || _overrideSource(config.overrides, 'corrosion', lineKey) });
     let previousPosition = null;
     for (const node of _xmlChildrenByName(branch, 'Node')) {
       const positionText = _xmlText(node, 'Position');
@@ -232,9 +284,9 @@ export async function xmlCiiBuildAndRenderPreview(rootEl, xmlText, config, optio
       overrides.rigidWeight = { ...(overrides.rigidWeight || {}), [key]: numeric };
       onSaveConfig(config);
     },
-    onCellEditClick: ({ editType, derivedKey, currentVal, td }) => openOverridePopup({ editType, derivedKey, currentVal, config, onSave: (newVal) => { const overrides = ensureOverrides(config); if (!overrides[editType] || typeof overrides[editType] !== 'object') overrides[editType] = {}; if (editType === 'pipingClass') overrides.pipingClass = { ...overrides.pipingClass, [derivedKey]: newVal }; else if (editType === 'materialCode') overrides.materialCode = { ...overrides.materialCode, [derivedKey]: newVal }; else if (editType === 'material') overrides.material = { ...overrides.material, [derivedKey]: newVal }; else if (editType === 'rating') overrides.rating = { ...overrides.rating, [derivedKey]: newVal }; else if (editType === 'wallThickness') overrides.wallThickness = { ...overrides.wallThickness, [derivedKey]: newVal }; else if (editType === 'corrosion') overrides.corrosion = { ...overrides.corrosion, [derivedKey]: newVal }; markPreviewOverrideManual({ config, ensureOverrides, field: editType, key: _fieldOverrideKey(editType, derivedKey), value: newVal }); onSaveConfig(config); td.dataset.mcFillState = 'manual'; refreshPreview(); }}),
-    onFillDownClick: ({ field, fromRow, currentVal }) => { const filled = applyPreviewOverrideFillDown({ host, config, ensureOverrides, field, fromRow, currentValue: currentVal }); if (filled > 0) { onSaveConfig(config); refreshPreview(); } },
-    onProcessInputChange: ({ field, fieldKey, lineKey, value, input }) => { const overrides = ensureOverrides(config); if (!overrides.processData) overrides.processData = {}; if (!overrides.processData[lineKey]) overrides.processData[lineKey] = {}; const cleanVal = _toText(value).trim(); const actualField = field || fieldKey; if (cleanVal === '') delete overrides.processData[lineKey][actualField]; else overrides.processData[lineKey][actualField] = cleanVal; if (Object.keys(overrides.processData[lineKey]).length === 0) delete overrides.processData[lineKey]; markPreviewProcessManual({ config, ensureOverrides, field: actualField, lineKey, value: cleanVal }); onSaveConfig(config); const cell = input.closest('.mc-preview-pd-cell'); if (cell) cell.className = cleanVal ? 'mc-preview-pd-cell mc-preview-pd-override' : 'mc-preview-pd-cell mc-preview-pd-empty'; },
+    onCellEditClick: ({ editType, derivedKey, currentVal, rowIndex, td }) => openOverridePopup({ editType, derivedKey, currentVal, config, onSave: (newVal) => { const row = branchRows[Number(rowIndex)] || {}; const savedKey = _savePreviewOverride({ config, ensureOverrides, editType, row, derivedKey, value: newVal }); markPreviewOverrideManual({ config, ensureOverrides, field: editType, key: savedKey, value: newVal }); if (editType === 'rating' && row.lineKey) markPreviewProcessManual({ config, ensureOverrides, field: 'rating', lineKey: row.lineKey, value: newVal }); onSaveConfig(config); td.dataset.mcFillState = 'manual'; refreshPreview(); }}),
+    onFillDownClick: ({ field, fromRow, currentVal }) => { const filled = applyPreviewOverrideFillDown({ host, config, ensureOverrides, field, fromRow, currentValue: currentVal }); if (filled > 0) { if (field === 'rating') { const overrides = ensureOverrides(config); for (const row of branchRows.slice(fromRow)) { const value = _bucketText(config, 'rating', _ratingKeys(row)); if (value && row.lineKey) _setProcessDataField(overrides, row.lineKey, 'rating', value); } } onSaveConfig(config); refreshPreview(); } },
+    onProcessInputChange: ({ field, fieldKey, lineKey, value, input }) => { const overrides = ensureOverrides(config); if (!overrides.processData) overrides.processData = {}; if (!overrides.processData[lineKey]) overrides.processData[lineKey] = {}; const cleanVal = _toText(value).trim(); const actualField = field || fieldKey; if (cleanVal === '') delete overrides.processData[lineKey][actualField]; else overrides.processData[lineKey][actualField] = cleanVal; if (actualField === 'rating' && cleanVal) { overrides.rating = overrides.rating && typeof overrides.rating === 'object' && !Array.isArray(overrides.rating) ? { ...overrides.rating, [lineKey]: cleanVal } : { [lineKey]: cleanVal }; } if (Object.keys(overrides.processData[lineKey]).length === 0) delete overrides.processData[lineKey]; markPreviewProcessManual({ config, ensureOverrides, field: actualField, lineKey, value: cleanVal }); onSaveConfig(config); const cell = input.closest('.mc-preview-pd-cell'); if (cell) cell.className = cleanVal ? 'mc-preview-pd-cell mc-preview-pd-override' : 'mc-preview-pd-cell mc-preview-pd-empty'; },
     onProcessFillDownClick: ({ fieldKey, fromRow, value }) => { const filled = applyPreviewProcessFillDown({ host, config, ensureOverrides, field: fieldKey, fromRow, currentValue: value }); if (filled > 0) onSaveConfig(config); }
   });
   host.innerHTML = table.renderHTML();
