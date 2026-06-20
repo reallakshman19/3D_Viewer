@@ -8,4 +8,4 @@ import { installRvmHierarchySelectionBridge } from './RvmHierarchySelectionBridg
 installRvmProgressiveModelRootPatch(RvmViewer3D);
 installRvmHierarchySelectionBridge();
 
-export { mountViewer3DRvmTab as renderViewer3DRvm } from './viewer3d-rvm-tab.js?v=20260620-rvm-tree-select-nohide-1';
+export { mountViewer3DRvmTab as renderViewer3DRvm } from './viewer3d-rvm-tab.js?v=20260620-rvm-flat-tree-1';
