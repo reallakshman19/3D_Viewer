@@ -11,15 +11,15 @@
  * orchestrator.
  */
 
-import { renderLegacyModelConvertersTab } from './legacy-adapter.js?v=20260619-git-ss-adapt-8';
+import { renderLegacyModelConvertersTab } from './legacy-adapter.js?v=20260620-rich-file-master-1';
 import { installBmCiiSupportAnnotationPopup } from './bm-cii-support-annotation-popup.js?v=20260617-bmcii-open-basic-handoff-2';
 import { installInputXmlPropertyTransferUi } from './inputxml-property-transfer-popup-ui-v4.js?v=20260615-inputxml-property-transfer-popup-host-hide-1';
 import { installRvmAttrUxmlAddon } from './rvmattr-uxml-addon.js?v=20260618-port-bore-contract-1';
-import { installXmlCiiConversionWorkflowPopup } from './xml-cii-conversion-workflow-popup.js?v=20260619-git-ss-adapt-8';
-import { installXmlCiiBranchSampleSync } from './xml-cii-branch-sample-sync.js?v=20260619-xml-cii-branch-sample-1';
+import { installXmlCiiConversionWorkflowPopup } from './xml-cii-conversion-workflow-popup.js?v=20260620-rich-file-master-1';
+import { installXmlCiiBranchSampleSync } from './xml-cii-branch-sample-sync.js?v=20260620-rich-branch-preview-2';
 import { installInputXmlBasicGlbBridge } from './inputxml-basic-glb-bridge.js';
-import { installXmlCiiDefaultMasterAutoload, installXmlCiiRecoveryPatch } from '../xml-cii-master-autoload-patch.js';
-import { installXmlCiiPreviewLineKeyRemap } from './xml-cii-preview-linekey-remap.js';
+import { installXmlCiiDefaultMasterAutoload, installXmlCiiRecoveryPatch } from '../xml-cii-master-autoload-patch.js?v=20260620-rich-master-autoload-1';
+import { installXmlCiiPreviewLineKeyRemap } from './xml-cii-preview-linekey-remap.js?v=20260620-rich-preview-remap-1';
 
 const TRACE_PREFIX = '[BM_CII_CONVERTER_TRACE]';
 
