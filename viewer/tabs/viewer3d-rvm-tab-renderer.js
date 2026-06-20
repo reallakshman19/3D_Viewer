@@ -10,7 +10,7 @@ import { installRvmSelectionTreeSyncBridge } from './RvmSelectionTreeSyncBridge.
 import { installRvmSupportSummaryBridge } from './RvmSupportSummaryBridge.js?v=20260620-rvm-support-symbol-mode-1';
 import { installRvmSupportAssemblyBridge } from './RvmSupportAssemblyBridge.js?v=20260620-rvm-support-assembly-dish-1';
 import { installRvmMaterialModeBridge } from './RvmMaterialModeBridge.js?v=20260620-rvm-remaining-material-modes-1';
-import { installRvmPrimitiveFallbackBridge } from './RvmPrimitiveFallbackBridge.js?v=20260620-rvm-primitive-fallback-review-1';
+import { installRvmPrimitiveFallbackBridge } from './RvmPrimitiveFallbackBridge.js?v=20260620-rvm-primitive-fallback-clickable-1';
 import { installBrowserRvmCppMat3x4WorkerPatch } from '../rvm/BrowserRvmCppMat3x4WorkerPatch.js?v=20260620-rvm-facetgroup-1';
 import { installBrowserRvmNativeTessellationRuntimePatch } from '../rvm/BrowserRvmNativeTessellationRuntimePatch.js?v=20260620-rvm-native-diagnostics-1';
 import { installBrowserRvmDishTessellationRuntimePatch } from '../rvm/BrowserRvmDishTessellationRuntimePatch.js?v=20260620-rvm-support-assembly-dish-1';
@@ -37,4 +37,4 @@ installRvmMaterialModeBridge();
 installRvmPrimitiveFallbackBridge();
 installRvmNativeTessellationDiagnosticsBridge();
 
-export { mountViewer3DRvmTab as renderViewer3DRvm } from './viewer3d-rvm-tab.js?v=20260620-rvm-primitive-fallback-review-1';
+export { mountViewer3DRvmTab as renderViewer3DRvm } from './viewer3d-rvm-tab.js?v=20260620-rvm-primitive-fallback-clickable-1';
