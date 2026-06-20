@@ -59,7 +59,7 @@ async function loadRvmViewerRenderer() {
   await import('../rvm-viewer/RvmSupportIndexAttributeBridge.js?v=20260620-rvm-direct-tab-1');
   await import('../tabs/viewer3d-rvm-file-dialog-singleton.js?v=20260618-rvm-file-dialog-singleton-1');
   await import('../tabs/viewer3d-rvm-uxml-import-addon.js?v=20260618-support-kind-authority-1');
-  return import('../tabs/viewer3d-rvm-tab-renderer.js?v=20260620-rvm-primitive-fallback-clickable-1')
+  return import('../tabs/viewer3d-rvm-tab-renderer.js?v=20260620-rvm-native-scene-glb-export-1')
     .then((module) => pickRenderer(module, 'renderViewer3DRvm', 'viewer3d-rvm'));
 }
 
