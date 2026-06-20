@@ -61,9 +61,9 @@
 <div id="app-pat-modal" role="dialog" aria-modal="true" aria-labelledby="app-pat-modal-title">
   <div class="app-pat-modal__box">
     <p class="app-pat-modal__title" id="app-pat-modal-title">GitHub Personal Access Token</p>
-    <p class="app-pat-modal__desc">No local conversion server found. Enter a PAT to enable remote RVM conversion via GitHub Actions. The token is used only for this session and is never stored.</p>
+    <p class="app-pat-modal__desc">No local conversion server found. Enter a GitHub token to enable remote RVM conversion via GitHub Actions. The token is used only for this session and is never stored.</p>
     <input class="app-pat-modal__input" id="app-pat-input" type="password"
-           placeholder="ghp_…" autocomplete="off" aria-label="GitHub Personal Access Token" />
+           placeholder="GitHub token" autocomplete="off" aria-label="GitHub Personal Access Token" />
     <div class="app-pat-modal__actions">
       <button class="app-pat-modal__cancel" id="app-pat-cancel" type="button">Cancel</button>
       <button class="app-pat-modal__submit" id="app-pat-submit" type="button">Connect</button>
@@ -83,6 +83,6 @@
 </div>
 
 <!-- Application entrypoint. Optional tab addons are loaded from guarded runtime paths. -->
-<script type="module" src="./main-rhbg-fitguard.js?v=20260620-rvm-scale-safe-1"></script>
+<script type="module" src="./main-rhbg-fitguard.js?v=20260620-rvm-no-duplicate-fit-1"></script>
 </body>
 </html>
