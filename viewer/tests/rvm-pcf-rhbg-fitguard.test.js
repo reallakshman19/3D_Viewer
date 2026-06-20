@@ -14,6 +14,7 @@ function check(condition, label) {
 }
 
 const patchSource = await fs.readFile(new URL('../rvm-viewer/RvmProgressiveModelRootPatch.js', import.meta.url), 'utf8');
+const patchV4Source = await fs.readFile(new URL('../rvm-viewer/RvmProgressiveModelRootPatchV4.js', import.meta.url), 'utf8');
 const rendererSource = await fs.readFile(new URL('../tabs/viewer3d-rvm-tab-renderer.js', import.meta.url), 'utf8');
 const appSource = await fs.readFile(new URL('../core/app.js', import.meta.url), 'utf8');
 const indexSource = await fs.readFile(new URL('../index.html', import.meta.url), 'utf8');
@@ -29,11 +30,13 @@ check(patchSource.includes('renderedBoundsUsed'), 'fit diagnostics expose render
 check(patchSource.includes('resolveRobustProgressiveFit'), 'robust progressive fit present');
 check(patchSource.includes('fitBoxWithoutFullSceneTraversal'), 'final fit avoids full traversal');
 check(!patchSource.includes('this._fitBox(box)'), 'final fit avoids legacy fit box');
-check(rendererSource.includes('RvmProgressiveModelRootPatch.js?v=20260620-rvm-final-fit-1'), 'renderer loads final-fit patch');
-check(rendererSource.includes('viewer3d-rvm-tab.js?v=20260620-rvm-final-fit-1'), 'renderer loads final-fit tab');
-check(appSource.includes('viewer3d-rvm-tab-renderer.js?v=20260620-rvm-scale-safe-1'), 'app loads scale-safe renderer');
-check(indexSource.includes('main-rhbg-fitguard.js?v=20260620-rvm-scale-safe-1'), 'html loads scale-safe entry');
-check(entrySource.includes('core/app.js?v=20260620-rvm-scale-safe-1'), 'entry loads scale-safe app');
+check(patchV4Source.includes('pcf-glb-rvm-progressive-model-root-patch-v4'), 'fit patch v4 wrapper present');
+check(patchV4Source.includes('duplicate-fit-suppressed-rendered-world-bounds'), 'duplicate final fit is suppressed');
+check(rendererSource.includes('RvmProgressiveModelRootPatchV4.js?v=20260620-rvm-no-duplicate-fit-1'), 'renderer loads no-duplicate-fit patch');
+check(rendererSource.includes('viewer3d-rvm-tab.js?v=20260620-rvm-no-duplicate-fit-1'), 'renderer loads no-duplicate-fit tab URL');
+check(appSource.includes('viewer3d-rvm-tab-renderer.js?v=20260620-rvm-no-duplicate-fit-1'), 'app loads no-duplicate-fit renderer');
+check(indexSource.includes('main-rhbg-fitguard.js?v=20260620-rvm-no-duplicate-fit-1'), 'html loads no-duplicate-fit entry');
+check(entrySource.includes('core/app.js?v=20260620-rvm-no-duplicate-fit-1'), 'entry loads no-duplicate-fit app');
 check(bridgeSource.includes('browser-rvm-worker.js?v=20260620-rvm-scale-safe-1'), 'bridge loads scale-safe worker');
 check(workerSource.includes('BrowserRvmInstructionFilterV2.js?v=20260620-rvm-scale-safe-1'), 'worker loads scale-safe filter');
 check(workerSource.includes('BrowserRvmHierarchyTransformParser.js?v=20260620-rvm-scale-safe-1'), 'worker loads scale-safe hierarchy parser');
