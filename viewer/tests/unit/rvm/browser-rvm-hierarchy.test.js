@@ -132,7 +132,7 @@ assert.ok(findByName(root, 'REDUCER 1'));
 assert.ok(findByName(root, 'STRUCTURE 1'));
 
 const renderInstructions = collectBrowserRvmRenderInstructions(parsed.hierarchy);
-assert.equal(renderInstructions.schemaVersion, 'rvm-browser-render-instructions/v2');
+assert.equal(renderInstructions.schemaVersion, 'rvm-browser-render-instructions/v3-support-hints');
 assert.equal(renderInstructions.count, 5);
 assert.equal(renderInstructions.diagnostics.instructionCount, 5);
 assert.equal(renderInstructions.diagnostics.contractCounts.TORUS_BBOX_PLACEHOLDER, 2);
@@ -141,6 +141,7 @@ assert.equal(renderInstructions.diagnostics.contractCounts.CONE_BBOX_PLACEHOLDER
 assert.equal(renderInstructions.diagnostics.contractCounts.BOX_BBOX, 1);
 assert.equal(renderInstructions.diagnostics.sourceCounts['bbox-derived-browser-contract'], 5);
 assert.equal(renderInstructions.diagnostics.attCounts.plain, 5);
+assert.equal(renderInstructions.diagnostics.supportHintCount, 0);
 
 const gasket = findByName(root, 'GASKET 1');
 assert.ok(gasket.children.some((child) => child.type === 'GASK'), 'gasket group should retain GASK primitive leaf');
@@ -171,7 +172,7 @@ assert.equal(rtorusLeaf.attributes.RVM_BROWSER_DIAMETER, '20.000');
 
 const rtorusInstruction = renderInstructions.instructions.find((item) => item.sourcePath.includes('RTORUS 1'));
 assert.ok(rtorusInstruction, 'RTORUS render instruction should be collected');
-assert.equal(rtorusInstruction.schemaVersion, 'rvm-browser-render-instructions/v2');
+assert.equal(rtorusInstruction.schemaVersion, 'rvm-browser-render-instructions/v3-support-hints');
 assert.equal(rtorusInstruction.renderPrimitive, 'TORUS_BBOX_PLACEHOLDER');
 assert.equal(rtorusInstruction.kind, 'TORUS');
 assert.deepEqual(rtorusInstruction.center, { x: 400, y: 20, z: 0 });
@@ -210,5 +211,4 @@ assert.ok(parsed.indexJson.nodes.some((node) => node.kind === 'REDUCER'));
 assert.ok(parsed.indexJson.nodes.some((node) => node.kind === 'STRUCTURE'));
 assert.ok(parsed.indexJson.nodes.some((node) => node.attributes.RVM_BROWSER_GEOMETRY_QUALITY_VERSION === 'rvm-geometry-quality/v2'));
 assert.ok(parsed.indexJson.nodes.some((node) => node.attributes.RVM_BROWSER_GEOMETRY_CONTRACT_VERSION === 'rvm-browser-geometry-contract/v1'));
-
 console.log('Browser RVM hierarchy grouping test passed');

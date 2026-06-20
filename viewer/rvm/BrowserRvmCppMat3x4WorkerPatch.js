@@ -1,5 +1,5 @@
-const PATCH_FLAG = Symbol.for('pcf-glb-rvm-cpp-mat3x4-worker-url-patch-v1');
-const CPP_MAT3X4_WORKER_SPECIFIER = './browser-rvm-worker.js?v=20260620-rvm-cpp-mat3x4-1';
+const PATCH_FLAG = Symbol.for('pcf-glb-rvm-cpp-mat3x4-worker-url-patch-v2-large-box-filter');
+const CPP_MAT3X4_WORKER_SPECIFIER = './browser-rvm-worker.js?v=20260620-rvm-large-box-filter-1';
 
 export function installBrowserRvmCppMat3x4WorkerPatch() {
   if (globalThis[PATCH_FLAG]) return;
