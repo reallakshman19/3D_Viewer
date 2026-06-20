@@ -85,8 +85,8 @@ async function run() {
   assert.match(rendererSource, /RvmSelectionTreeSyncBridge\.js\?v=20260620-rvm-large-box-support-sync-1/, 'Renderer must load canvas-tree sync bridge.');
   assert.match(rendererSource, /RvmVisibilityToolbarBridge\.js\?v=20260620-rvm-esc-hide-selection-1/, 'Renderer must inject Hide/Show toolbar controls.');
   assert.match(rendererSource, /BrowserRvmCppMat3x4WorkerPatch\.js\?v=20260620-rvm-scale-leak-1/, 'Renderer must install the scale-leak worker patch.');
-  assert.match(rendererSource, /RvmSupportSummaryBridge\.js\?v=20260620-rvm-scale-leak-1/, 'Renderer must install geometry-based support summary bridge.');
-  assert.match(rendererSource, /viewer3d-rvm-tab\.js\?v=20260620-rvm-scale-leak-1/, 'Renderer must load the scale-leak tab cache key.');
+  assert.match(rendererSource, /RvmSupportSummaryBridge\.js\?v=20260620-rvm-support-symbol-mode-1/, 'Renderer must install support symbol mode bridge.');
+  assert.match(rendererSource, /viewer3d-rvm-tab\.js\?v=20260620-rvm-support-symbol-mode-1/, 'Renderer must load the support symbol mode tab cache key.');
   assert.match(hierarchySelectionBridgeSource, /Fit Selection[\s\S]*hide-selection[\s\S]*show-hidden/,'Hierarchy selection bridge must expose Fit Selection, Hide, and Show Hidden.');
   assert.match(interactionPatchSource, /keydown[\s\S]*Escape[\s\S]*handleEscape/, 'Toolbar patch must implement robust Esc behavior.');
   assert.match(interactionPatchSource, /dispatchAction[\s\S]*VIEW_HIDE_SELECTION[\s\S]*VIEW_SHOW_HIDDEN/, 'Toolbar patch must implement Hide and Show Hidden actions.');
@@ -94,15 +94,18 @@ async function run() {
   assert.match(interactionPatchSource, /fitCurrentSelection[\s\S]*selectedMeshes/, 'Fit Selection must use actual selected meshes.');
   assert.match(visibilityToolbarSource, /VIEW_HIDE_SELECTION[\s\S]*VIEW_SHOW_HIDDEN[\s\S]*NAV_SELECT/, 'Visibility toolbar bridge must inject Hide, Show and Select controls.');
   assert.match(selectionTreeSyncSource, /installRvmSelectionTreeSyncBridge[\s\S]*is-canvas-selected[\s\S]*scrollIntoView/, 'Selection tree sync must highlight and scroll tree rows.');
-  assert.match(supportSummarySource, /isSupportLikeByGeometry[\s\S]*GEOM-SUPPORT/, 'Support summary must detect support-like geometry by shape.');
+  assert.match(supportSummarySource, /rvm-support-symbol-mode\/v1[\s\S]*Raw[\s\S]*Symbol[\s\S]*Both/, 'Support summary must expose Raw/Symbol/Both support modes.');
+  assert.match(supportSummarySource, /SUPPORT_SYMBOL_ROOT[\s\S]*buildSupportSymbolForObject/, 'Support summary must render support glyphs.');
+  assert.match(supportSummarySource, /supportByGeometryCount[\s\S]*supportSymbolRenderedCount[\s\S]*supportRawBoxSuppressedCount/, 'Support summary must expose support-symbol diagnostics.');
+  assert.match(supportSummarySource, /geometry-vertical-slender[\s\S]*geometry-plate-like/, 'Support summary must detect support-like geometry by shape.');
   assert.match(nativeTessellationSource, /browser-rvm-native-tessellation\/v2-diagnostics-toggle/, 'Native tessellation patch must expose diagnostics-toggle schema.');
   assert.match(nativeDiagnosticsBridgeSource, /Native Tessellation[\s\S]*Native On[\s\S]*Native Off[\s\S]*Re-run/, 'Native diagnostics bridge must expose controls.');
 
   assert.doesNotMatch(entrypointSource, /RvmBrowserRvmWorkerFirstBridge\.js/, 'The RVM freeze fix must not depend on an optional startup side-effect bridge.');
-  assert.match(entrypointSource, /core\/app\.js\?v=20260620-rvm-scale-leak-1/, 'App shell cache key must include the scale-leak version.');
-  assert.match(indexHtml, /main(?:-[A-Za-z0-9_-]+)?\.js\?v=20260620-rvm-scale-leak-1/, 'GitHub Pages entrypoint must bump the app shell cache key.');
+  assert.match(entrypointSource, /core\/app\.js\?v=20260620-rvm-support-symbol-mode-1/, 'App shell cache key must include the support symbol mode version.');
+  assert.match(indexHtml, /main(?:-[A-Za-z0-9_-]+)?\.js\?v=20260620-rvm-support-symbol-mode-1/, 'GitHub Pages entrypoint must bump the app shell cache key.');
 
-  console.log('Browser RVM scale-leak support-summary contract test passed');
+  console.log('Browser RVM support symbol mode contract test passed');
 }
 
 run();

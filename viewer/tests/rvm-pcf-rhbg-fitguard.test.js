@@ -46,8 +46,8 @@ check(rendererSource.includes('RvmViewerInteractionPatch.js?v=20260620-rvm-esc-h
 check(rendererSource.includes('RvmVisibilityToolbarBridge.js?v=20260620-rvm-esc-hide-selection-1'), 'renderer loads injected hide/show toolbar bridge');
 check(rendererSource.includes('RvmSelectionTreeSyncBridge.js?v=20260620-rvm-large-box-support-sync-1'), 'renderer loads canvas-tree selection sync bridge');
 check(rendererSource.includes('BrowserRvmCppMat3x4WorkerPatch.js?v=20260620-rvm-scale-leak-1'), 'renderer installs scale-leak worker patch');
-check(rendererSource.includes('RvmSupportSummaryBridge.js?v=20260620-rvm-scale-leak-1'), 'renderer loads geometry-based support summary bridge');
-check(rendererSource.includes('viewer3d-rvm-tab.js?v=20260620-rvm-scale-leak-1'), 'renderer loads scale-leak tab URL');
+check(rendererSource.includes('RvmSupportSummaryBridge.js?v=20260620-rvm-support-symbol-mode-1'), 'renderer loads support symbol mode bridge');
+check(rendererSource.includes('viewer3d-rvm-tab.js?v=20260620-rvm-support-symbol-mode-1'), 'renderer loads support symbol mode tab URL');
 check(interactionPatchSource.includes('keydown') && interactionPatchSource.includes('Escape') && interactionPatchSource.includes('handleEscape'), 'interaction patch implements robust Esc behavior');
 check(interactionPatchSource.includes('VIEW_HIDE_SELECTION') && interactionPatchSource.includes('VIEW_SHOW_HIDDEN'), 'interaction patch handles Hide and Show Hidden actions');
 check(interactionPatchSource.includes('installRvmCanvasSelectionBridge') && interactionPatchSource.includes('raycaster.intersectObject'), 'canvas selection bridge raycasts model geometry');
@@ -55,7 +55,10 @@ check(interactionPatchSource.includes('fitCurrentSelection') && interactionPatch
 check(interactionPatchSource.includes('rvmHiddenByUser') && interactionPatchSource.includes('showHiddenObjects'), 'hide/show tracks user-hidden meshes');
 check(selectionTreeSyncSource.includes('installRvmSelectionTreeSyncBridge') && selectionTreeSyncSource.includes('is-canvas-selected') && selectionTreeSyncSource.includes('scrollIntoView'), 'selection tree sync highlights tree row from canvas selection');
 check(visibilityToolbarSource.includes('VIEW_HIDE_SELECTION') && visibilityToolbarSource.includes('VIEW_SHOW_HIDDEN') && visibilityToolbarSource.includes('NAV_SELECT'), 'visibility toolbar injects Hide, Show, and Select controls');
-check(supportSummarySource.includes('isSupportLikeByGeometry') && supportSummarySource.includes('GEOM-SUPPORT'), 'support summary detects support-like geometry by shape');
+check(supportSummarySource.includes('rvm-support-symbol-mode/v1') && supportSummarySource.includes('Raw') && supportSummarySource.includes('Symbol') && supportSummarySource.includes('Both'), 'support summary exposes raw/symbol/both support modes');
+check(supportSummarySource.includes('SUPPORT_SYMBOL_ROOT') && supportSummarySource.includes('buildSupportSymbolForObject'), 'support summary renders support glyphs from geometry candidates');
+check(supportSummarySource.includes('supportByGeometryCount') && supportSummarySource.includes('supportSymbolRenderedCount') && supportSummarySource.includes('supportRawBoxSuppressedCount'), 'support summary exposes support symbol diagnostics');
+check(supportSummarySource.includes('geometry-vertical-slender') && supportSummarySource.includes('geometry-plate-like'), 'support summary detects support-like geometry by shape');
 check(renderContractSource.includes('v3-support-hints') && renderContractSource.includes('SUPPORT_HINT_RE') && renderContractSource.includes('SUPPORT_BBOX_PLACEHOLDER'), 'render contracts promote support-like RVM objects');
 check(nativeTessellationSource.includes('browser-rvm-native-tessellation/v2-diagnostics-toggle'), 'native tessellation diagnostics schema present');
 check(nativeTessellationSource.includes('setEnabled') && nativeTessellationSource.includes('runNow') && nativeTessellationSource.includes('rvm-native-tessellation-diagnostics'), 'native tessellation exposes toggle, rerun, and diagnostics events');
@@ -67,9 +70,9 @@ check(tabSource.includes("BrowserRvmLoadBridge.js?v=20260620-rvm-flat-tree-1"), 
 check(tabSource.includes('buildFlatNodeTree') && tabSource.includes('flat: true'), 'RVM tree renders flat selectable rows');
 check(!tabSource.includes('const bounds = payload.browserRvmRender?.bounds'), 'tab does not issue duplicate post-load raw-bounds fit');
 check(selectionBridgeSource.includes('Hierarchy selection') && selectionBridgeSource.includes('Fit Selection') && selectionBridgeSource.includes('hide-selection'), 'hierarchy details include fit and hide UI');
-check(appSource.includes('viewer3d-rvm-tab-renderer.js?v=20260620-rvm-scale-leak-1'), 'app loads scale-leak renderer');
-check(indexSource.includes('main-rhbg-fitguard.js?v=20260620-rvm-scale-leak-1'), 'html loads scale-leak entry');
-check(entrySource.includes('core/app.js?v=20260620-rvm-scale-leak-1'), 'entry loads scale-leak app');
+check(appSource.includes('viewer3d-rvm-tab-renderer.js?v=20260620-rvm-support-symbol-mode-1'), 'app loads support symbol mode renderer');
+check(indexSource.includes('main-rhbg-fitguard.js?v=20260620-rvm-support-symbol-mode-1'), 'html loads support symbol mode entry');
+check(entrySource.includes('core/app.js?v=20260620-rvm-support-symbol-mode-1'), 'entry loads support symbol mode app');
 check(workerPatchSource.includes('browser-rvm-worker.js?v=20260620-rvm-scale-leak-1'), 'worker patch redirects to scale-leak worker URL');
 check(bridgeSource.includes('browser-rvm-worker.js?v=20260620-rvm-scale-safe-1'), 'base bridge remains scale-safe-compatible');
 check(workerSource.includes('BrowserRvmInstructionFilterV2.js?v=20260620-rvm-large-box-filter-1'), 'worker loads large-box side filter');
