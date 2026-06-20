@@ -23,5 +23,8 @@ assert(hints.includes("weightMethod: 'length-interpolated'") && hints.includes("
 assert(hints.includes("weightMethod: 'no-same-bore-rating'") && hints.includes('selectedWeight: 0'), 'fallback emits explicit zero when no same bore/rating rows exist');
 assert(hints.includes('inferredWeight: true') && hints.includes('zeroFallback: true'), 'fallback candidates are traceable');
 assert(renderer.includes('20260620-weight-fallback-1'), '4A weight-match renderer cache-busts fallback model');
+assert(renderer.includes("weight-valve-hints.js?v=20260620-weight-fallback-1"), '4A renderer cache-busts weight hint ranker');
+assert(renderer.includes("mergeSection(out, live, 'weight', 'masterRows')"), '4A merge preserves weight master rows');
 assert(renderer.includes('Interpolated') && renderer.includes('Extrapolated') && renderer.includes('Zero fallback'), '4A renderer labels inferred weight sources');
 assert(runner.includes('20260620-weight-fallback-1'), 'final runner cache-busts fallback model');
+assert(runner.includes("mergeSection(target, source, 'weight', 'masterRows')"), 'final runner merge preserves weight master rows');
