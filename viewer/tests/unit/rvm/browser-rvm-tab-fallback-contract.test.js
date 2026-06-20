@@ -70,13 +70,18 @@ async function run() {
 
   assert.match(
     tabSource,
-    /import\s+\{\s*loadRvmFileInBrowser\s*\}\s+from\s+['"]\.\.\/rvm\/BrowserRvmLoadBridge\.js\?v=20260620-rvm-tree-select-nohide-1['"]/,
+    /import\s+\{\s*loadRvmFileInBrowser\s*\}\s+from\s+['"]\.\.\/rvm\/BrowserRvmLoadBridge\.js\?v=20260620-rvm-flat-tree-1['"]/,
     'The actual RVM tab must import the current worker-first load bridge directly.'
   );
   assert.match(
     tabSource,
-    /RVM_TAB_JS_VERSION\s*=\s*['"]20260620-rvm-tree-select-nohide-1['"]/,
-    'The RVM tab diagnostics version must identify the active tree-select/no-hide path.'
+    /RVM_TAB_JS_VERSION\s*=\s*['"]20260620-rvm-flat-tree-1['"]/,
+    'The RVM tab diagnostics version must identify the active flat-tree path.'
+  );
+  assert.match(
+    tabSource,
+    /buildFlatNodeTree[\s\S]*flat:\s*true/,
+    'The RVM tab must render manifest nodes as flat selectable rows.'
   );
   assert.match(
     tabSource,
