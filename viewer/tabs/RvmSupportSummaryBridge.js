@@ -1,5 +1,5 @@
-const BRIDGE_VERSION = '20260620-rvm-large-box-support-sync-1';
-const SUPPORT_WORDS_RE = /\b(SUPPORT|SUPP|GUIDE|ANCHOR|LINE\s*STOP|LINESTOP|REST|SHOE|HANGER|SPRING|CLAMP|TRUNNION|SADDLE)\b/i;
+const BRIDGE_VERSION = '20260620-rvm-scale-leak-1';
+const SUPPORT_WORDS_RE = /\b(SUPPORT|SUPP|GUIDE|ANCHOR|LINE\s*STOP|LINESTOP|REST|SHOE|HANGER|SPRING|CLAMP|TRUNNION|SADDLE|DUMMY|U[-_ ]?BOLT)\b/i;
 
 export function installRvmSupportSummaryBridge() {
   let attempts = 0;
@@ -20,7 +20,7 @@ function bind(root, viewer) {
   let last = '';
   const tick = () => {
     const supports = collectSupportObjects(viewer);
-    const key = supports.map((item) => item.uuid).sort().join('|');
+    const key = supports.map((item) => `${item.uuid}:${item.visible}`).sort().join('|');
     if (key !== last) {
       last = key;
       renderSupportSummary(root, supports);
@@ -30,6 +30,7 @@ function bind(root, viewer) {
   root._rvmSupportSummaryCleanup = () => clearInterval(timer);
   setTimeout(tick, 100);
   setTimeout(tick, 1500);
+  setTimeout(tick, 3500);
 }
 
 function collectSupportObjects(viewer) {
@@ -62,7 +63,30 @@ function isSupportObject(obj) {
     attrs.RVM_OWNER_PATH,
     attrs.RVM_PRIMITIVE_KIND,
   ].map((value) => String(value || '')).join(' ');
-  return data.type === 'SUPPORT' || attrs.RVM_BROWSER_SUPPORT_HINT === 'true' || SUPPORT_WORDS_RE.test(text);
+  if (data.type === 'SUPPORT' || attrs.RVM_BROWSER_SUPPORT_HINT === 'true' || SUPPORT_WORDS_RE.test(text)) return true;
+  return isSupportLikeByGeometry(obj, attrs);
+}
+
+function isSupportLikeByGeometry(obj, attrs = {}) {
+  const primitive = String(attrs.RVM_BROWSER_RENDER_PRIMITIVE || obj.userData?.renderPrimitive || obj.userData?.effectiveRenderPrimitive || '').toUpperCase();
+  const type = String(attrs.TYPE || obj.userData?.type || '').toUpperCase();
+  if (!/BOX|SUPPORT|STRUCTURE|RVM_PRIM_CODE_2/.test(`${primitive} ${type}`)) return false;
+  let size = null;
+  try {
+    obj.updateMatrixWorld?.(true);
+    const box = obj.geometry?.boundingBox?.clone?.() || null;
+    const worldBox = box ? box.applyMatrix4(obj.matrixWorld) : null;
+    const targetBox = worldBox && !worldBox.isEmpty() ? worldBox : null;
+    if (targetBox) size = targetBox.getSize({ x: 0, y: 0, z: 0 });
+  } catch (_) {}
+  if (!size || ![size.x, size.y, size.z].every(Number.isFinite)) return false;
+  const dims = [Math.abs(size.x), Math.abs(size.y), Math.abs(size.z)].sort((a, b) => a - b);
+  const [a, b, c] = dims;
+  if (c <= 0 || b <= 0) return false;
+  const slender = c >= Math.max(a, b) * 3;
+  const smallSection = a <= 0.35 && b <= 0.75;
+  const plausibleLength = c >= 0.35 && c <= 8;
+  return slender && smallSection && plausibleLength;
 }
 
 function renderSupportSummary(root, supports) {
@@ -74,14 +98,14 @@ function renderSupportSummary(root, supports) {
     panel.innerHTML = '<div class="rvm-empty-state">No supports detected in rendered RVM objects.</div>';
     return;
   }
-  const rows = supports.slice(0, 20).map((obj) => {
+  const rows = supports.slice(0, 24).map((obj) => {
     const data = obj.userData || {};
     const attrs = data.browserRvmAttributes || data.browserRvmProperties?.attributes || {};
     const label = data.displayName || data.browserRvmProperties?.displayName || attrs.NAME || obj.name || 'Support';
-    const kind = attrs.RVM_BROWSER_SUPPORT_KIND || data.kind || attrs.RVM_PRIMITIVE_KIND || 'SUPPORT';
+    const kind = attrs.RVM_BROWSER_SUPPORT_KIND || data.kind || attrs.RVM_PRIMITIVE_KIND || (isSupportLikeByGeometry(obj, attrs) ? 'GEOM-SUPPORT' : 'SUPPORT');
     return `<button type="button" class="rvm-support-summary-row" data-rvm-support-object="${escapeHtml(obj.uuid)}"><span>${escapeHtml(kind)}</span><b>${escapeHtml(label)}</b></button>`;
   }).join('');
-  const suffix = supports.length > 20 ? `<div class="rvm-empty-state">Showing 20 of ${supports.length} support-like objects.</div>` : '';
+  const suffix = supports.length > 24 ? `<div class="rvm-empty-state">Showing 24 of ${supports.length} support-like objects.</div>` : '';
   panel.innerHTML = `<div class="rvm-support-summary-list">${rows}</div>${suffix}`;
   panel.querySelectorAll('[data-rvm-support-object]').forEach((button) => {
     button.addEventListener('click', () => {
