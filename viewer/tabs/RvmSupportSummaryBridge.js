@@ -1,3 +1,5 @@
+import * as THREE from 'three';
+
 const BRIDGE_VERSION = '20260620-rvm-scale-leak-1';
 const SUPPORT_WORDS_RE = /\b(SUPPORT|SUPP|GUIDE|ANCHOR|LINE\s*STOP|LINESTOP|REST|SHOE|HANGER|SPRING|CLAMP|TRUNNION|SADDLE|DUMMY|U[-_ ]?BOLT)\b/i;
 
@@ -74,10 +76,10 @@ function isSupportLikeByGeometry(obj, attrs = {}) {
   let size = null;
   try {
     obj.updateMatrixWorld?.(true);
-    const box = obj.geometry?.boundingBox?.clone?.() || null;
-    const worldBox = box ? box.applyMatrix4(obj.matrixWorld) : null;
-    const targetBox = worldBox && !worldBox.isEmpty() ? worldBox : null;
-    if (targetBox) size = targetBox.getSize({ x: 0, y: 0, z: 0 });
+    if (!obj.geometry?.boundingBox) obj.geometry?.computeBoundingBox?.();
+    const localBox = obj.geometry?.boundingBox?.clone?.() || null;
+    const worldBox = localBox ? localBox.applyMatrix4(obj.matrixWorld) : new THREE.Box3().setFromObject(obj);
+    if (worldBox && !worldBox.isEmpty()) size = worldBox.getSize(new THREE.Vector3());
   } catch (_) {}
   if (!size || ![size.x, size.y, size.z].every(Number.isFinite)) return false;
   const dims = [Math.abs(size.x), Math.abs(size.y), Math.abs(size.z)].sort((a, b) => a - b);
