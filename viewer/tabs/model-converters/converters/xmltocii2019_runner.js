@@ -58,9 +58,28 @@ function text(value) {
   return value === undefined || value === null ? '' : String(value).trim();
 }
 
+function plainObject(value) {
+  return value && typeof value === 'object' && !Array.isArray(value);
+}
+
+function mergeSection(target, source, sectionName, rowsKey) {
+  const sourceSection = plainObject(source?.[sectionName]) ? source[sectionName] : null;
+  if (!sourceSection) return;
+  const targetSection = plainObject(target?.[sectionName]) ? target[sectionName] : {};
+  target[sectionName] = { ...sourceSection, ...targetSection };
+  const sourceRows = Array.isArray(sourceSection[rowsKey]) ? sourceSection[rowsKey] : [];
+  const targetRows = Array.isArray(targetSection[rowsKey]) ? targetSection[rowsKey] : [];
+  if (sourceRows.length && !targetRows.length) target[sectionName][rowsKey] = sourceRows;
+  if (plainObject(sourceSection.fieldMap) && !plainObject(targetSection.fieldMap)) target[sectionName].fieldMap = sourceSection.fieldMap;
+}
+
 function mergeRuntimeOverridesIntoConfig(targetConfig, sourceConfig) {
   const target = targetConfig && typeof targetConfig === 'object' && !Array.isArray(targetConfig) ? targetConfig : {};
   const source = sourceConfig && typeof sourceConfig === 'object' && !Array.isArray(sourceConfig) ? sourceConfig : {};
+  mergeSection(target, source, 'linelist', 'masterRows');
+  mergeSection(target, source, 'pipingClass', 'masterRows');
+  mergeSection(target, source, 'material', 'mapRows');
+  mergeSection(target, source, 'weight', 'masterRows');
   const sourceOverrides = source.overrides && typeof source.overrides === 'object' && !Array.isArray(source.overrides)
     ? source.overrides
     : {};
