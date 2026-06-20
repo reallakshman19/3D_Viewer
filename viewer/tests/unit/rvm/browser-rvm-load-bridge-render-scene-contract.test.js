@@ -18,6 +18,7 @@ async function run() {
   const tabSource = await readFile(new URL('../../../tabs/viewer3d-rvm-tab.js', import.meta.url), 'utf8');
   const hierarchySelectionBridgeSource = await readFile(new URL('../../../tabs/RvmHierarchySelectionBridge.js', import.meta.url), 'utf8');
   const interactionPatchSource = await readFile(new URL('../../../tabs/RvmViewerInteractionPatch.js', import.meta.url), 'utf8');
+  const visibilityToolbarSource = await readFile(new URL('../../../tabs/RvmVisibilityToolbarBridge.js', import.meta.url), 'utf8');
   const nativeDiagnosticsBridgeSource = await readFile(new URL('../../../tabs/RvmNativeTessellationDiagnosticsBridge.js', import.meta.url), 'utf8');
   const progressivePatchSource = await readFile(new URL('../../../rvm-viewer/RvmProgressiveModelRootPatch.js', import.meta.url), 'utf8');
   const progressivePatchV5Source = await readFile(new URL('../../../rvm-viewer/RvmProgressiveModelRootPatchV5.js', import.meta.url), 'utf8');
@@ -79,15 +80,19 @@ async function run() {
   assert.match(progressivePatchV5Source, /rendered-world-bounds-no-hide/, 'Renderer must load a no-hide rendered-world-bounds fit patch.');
   assert.doesNotMatch(progressivePatchV5Source, /visible\s*=\s*false/, 'No-hide fit patch must not hide meshes during final fit.');
   assert.match(rendererSource, /RvmProgressiveModelRootPatchV5\.js\?v=20260620-rvm-tree-select-nohide-1/, 'Renderer must load the v5 no-hide fit patch.');
-  assert.match(rendererSource, /RvmHierarchySelectionBridge\.js\?v=20260620-rvm-tree-select-nohide-1/, 'Renderer must load the hierarchy selection bridge.');
-  assert.match(rendererSource, /RvmViewerInteractionPatch\.js\?v=20260620-rvm-toolbar-selection-1/, 'Renderer must load the toolbar/canvas selection patch.');
+  assert.match(rendererSource, /RvmHierarchySelectionBridge\.js\?v=20260620-rvm-esc-hide-selection-1/, 'Renderer must load the Esc/hide hierarchy selection bridge.');
+  assert.match(rendererSource, /RvmViewerInteractionPatch\.js\?v=20260620-rvm-esc-hide-selection-1/, 'Renderer must load the Esc/hide toolbar/canvas selection patch.');
+  assert.match(rendererSource, /RvmVisibilityToolbarBridge\.js\?v=20260620-rvm-esc-hide-selection-1/, 'Renderer must inject Hide/Show toolbar controls.');
   assert.match(rendererSource, /BrowserRvmCppMat3x4WorkerPatch\.js\?v=20260620-rvm-cpp-mat3x4-1/, 'Renderer must install the C++ Mat3x4 worker patch.');
   assert.match(rendererSource, /BrowserRvmNativeTessellationRuntimePatch\.js\?v=20260620-rvm-native-diagnostics-1/, 'Renderer must install the native tessellation diagnostics runtime patch.');
   assert.match(rendererSource, /RvmNativeTessellationDiagnosticsBridge\.js\?v=20260620-rvm-native-diagnostics-1/, 'Renderer must load the native tessellation diagnostics UI bridge.');
-  assert.match(rendererSource, /viewer3d-rvm-tab\.js\?v=20260620-rvm-native-diagnostics-1/, 'Renderer must load the native diagnostics tab cache key.');
-  assert.match(hierarchySelectionBridgeSource, /Fit Selection/,'Hierarchy selection bridge must expose Fit Selection.');
-  assert.match(interactionPatchSource, /dispatchAction[\s\S]*VIEW_FIT_ALL/, 'Toolbar patch must implement RVM actions.');
+  assert.match(rendererSource, /viewer3d-rvm-tab\.js\?v=20260620-rvm-esc-hide-selection-1/, 'Renderer must load the Esc/hide tab cache key.');
+  assert.match(hierarchySelectionBridgeSource, /Fit Selection[\s\S]*hide-selection[\s\S]*show-hidden/,'Hierarchy selection bridge must expose Fit Selection, Hide, and Show Hidden.');
+  assert.match(interactionPatchSource, /keydown[\s\S]*Escape[\s\S]*handleEscape/, 'Toolbar patch must implement robust Esc behavior.');
+  assert.match(interactionPatchSource, /dispatchAction[\s\S]*VIEW_HIDE_SELECTION[\s\S]*VIEW_SHOW_HIDDEN/, 'Toolbar patch must implement Hide and Show Hidden actions.');
   assert.match(interactionPatchSource, /installRvmCanvasSelectionBridge[\s\S]*raycaster\.intersectObject/, 'Canvas patch must raycast rendered geometry.');
+  assert.match(interactionPatchSource, /fitCurrentSelection[\s\S]*selectedMeshes/, 'Fit Selection must use actual selected meshes.');
+  assert.match(visibilityToolbarSource, /VIEW_HIDE_SELECTION[\s\S]*VIEW_SHOW_HIDDEN[\s\S]*NAV_SELECT/, 'Visibility toolbar bridge must inject Hide, Show and Select controls.');
   assert.match(nativeTessellationSource, /browser-rvm-native-tessellation\/v2-diagnostics-toggle/, 'Native tessellation patch must expose diagnostics-toggle schema.');
   assert.match(nativeTessellationSource, /setEnabled/, 'Native tessellation must expose a setEnabled control.');
   assert.match(nativeTessellationSource, /runNow/, 'Native tessellation must expose a rerun control.');
@@ -100,11 +105,11 @@ async function run() {
   assert.match(nativeDiagnosticsBridgeSource, /__PCF_GLB_RVM_NATIVE_TESSELLATION_DIAGNOSTICS__/, 'Native diagnostics bridge must read global diagnostics.');
 
   assert.doesNotMatch(entrypointSource, /RvmBrowserRvmWorkerFirstBridge\.js/, 'The RVM freeze fix must not depend on an optional startup side-effect bridge.');
-  assert.match(entrypointSource, /core\/app\.js\?v=20260620-rvm-native-diagnostics-1/, 'App shell cache key must include the native diagnostics version.');
-  assert.match(indexHtml, /main(?:-[A-Za-z0-9_-]+)?\.js\?v=20260620-rvm-native-diagnostics-1/, 'GitHub Pages entrypoint must bump the app shell cache key.');
+  assert.match(entrypointSource, /core\/app\.js\?v=20260620-rvm-esc-hide-selection-1/, 'App shell cache key must include the Esc/hide version.');
+  assert.match(indexHtml, /main(?:-[A-Za-z0-9_-]+)?\.js\?v=20260620-rvm-esc-hide-selection-1/, 'GitHub Pages entrypoint must bump the app shell cache key.');
   assert.match(indexHtml, /viewer3d-rvm-tab\.css\?v=20260620-rvm-direct-tab-1/, 'RVM tab CSS cache key must be bumped.');
 
-  console.log('Browser RVM direct tab native tessellation diagnostics contract test passed');
+  console.log('Browser RVM direct tab Esc/hide interaction contract test passed');
 }
 
 run();
