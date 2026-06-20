@@ -18,6 +18,8 @@ async function run() {
   const transformHierarchySource = await readFile(new URL('../../../rvm/BrowserRvmHierarchyTransformParser.js', import.meta.url), 'utf8');
   const tabSource = await readFile(new URL('../../../tabs/viewer3d-rvm-tab.js', import.meta.url), 'utf8');
   const progressivePatchSource = await readFile(new URL('../../../rvm-viewer/RvmProgressiveModelRootPatch.js', import.meta.url), 'utf8');
+  const progressivePatchV4Source = await readFile(new URL('../../../rvm-viewer/RvmProgressiveModelRootPatchV4.js', import.meta.url), 'utf8');
+  const rendererSource = await readFile(new URL('../../../tabs/viewer3d-rvm-tab-renderer.js', import.meta.url), 'utf8');
   const indexHtml = await readFile(new URL('../../../index.html', import.meta.url), 'utf8');
   const entrypointRef = activeModuleEntrypoint(indexHtml);
   const entrypointSource = await readFile(new URL(`../../../${stripUrlSuffix(entrypointRef).replace(/^\.\//, '')}`, import.meta.url), 'utf8');
@@ -78,13 +80,15 @@ async function run() {
   assert.match(progressivePatchSource, /originalSetModel/, 'The progressive patch must preserve the legacy JSON/UXML setModel path.');
   assert.match(progressivePatchSource, /browserRvmProgressiveRenderEnabled/, 'Progressive RVM roots must bypass full-scene setModel work.');
   assert.doesNotMatch(progressivePatchSource, /Box3\(\)\.setFromObject\(this\.modelGroup\)[\s\S]*computeBoundingSphere/, 'Progressive mount must not do full bounds and bounding-sphere work synchronously.');
+  assert.match(progressivePatchV4Source, /duplicate-fit-suppressed-rendered-world-bounds/, 'Duplicate final progressive fit must be suppressed.');
+  assert.match(rendererSource, /RvmProgressiveModelRootPatchV4\.js\?v=20260620-rvm-no-duplicate-fit-1/, 'Renderer must load the v4 duplicate-fit suppressor.');
 
   assert.doesNotMatch(entrypointSource, /RvmBrowserRvmWorkerFirstBridge\.js/, 'The RVM freeze fix must not depend on an optional startup side-effect bridge.');
-  assert.match(entrypointSource, /core\/app\.js\?v=20260620-rvm-scale-safe-1/, 'App shell cache key must include the scale-safe version.');
-  assert.match(indexHtml, /main(?:-[A-Za-z0-9_-]+)?\.js\?v=20260620-rvm-scale-safe-1/, 'GitHub Pages entrypoint must bump the app shell cache key.');
+  assert.match(entrypointSource, /core\/app\.js\?v=20260620-rvm-no-duplicate-fit-1/, 'App shell cache key must include the no-duplicate-fit version.');
+  assert.match(indexHtml, /main(?:-[A-Za-z0-9_-]+)?\.js\?v=20260620-rvm-no-duplicate-fit-1/, 'GitHub Pages entrypoint must bump the app shell cache key.');
   assert.match(indexHtml, /viewer3d-rvm-tab\.css\?v=20260620-rvm-direct-tab-1/, 'RVM tab CSS cache key must be bumped.');
 
-  console.log('Browser RVM direct tab scale-safe responsiveness contract test passed');
+  console.log('Browser RVM direct tab no-duplicate-fit responsiveness contract test passed');
 }
 
 run();
