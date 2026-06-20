@@ -1,11 +1,14 @@
 import * as THREE from 'three';
 
-export const BROWSER_RVM_NATIVE_TESSELLATION_SCHEMA = 'browser-rvm-native-tessellation/v1-cpp-triangulation-lite';
+export const BROWSER_RVM_NATIVE_TESSELLATION_SCHEMA = 'browser-rvm-native-tessellation/v2-diagnostics-toggle';
 
-const PATCH_FLAG = Symbol.for('pcf-glb-rvm-native-tessellation-runtime-patch-v1');
+const PATCH_FLAG = Symbol.for('pcf-glb-rvm-native-tessellation-runtime-patch-v2');
 const UPGRADE_FLAG = Symbol.for('pcf-glb-rvm-native-tessellated-object-v1');
 const DEFAULT_SEGMENTS = 24;
 const MAX_UPGRADE_OBJECTS = 8000;
+const STORAGE_KEY = 'pcf-glb-rvm-native-tessellation-enabled';
+const GLOBAL_STATE_KEY = '__PCF_GLB_RVM_NATIVE_TESSELLATION__';
+const GLOBAL_DIAGNOSTICS_KEY = '__PCF_GLB_RVM_NATIVE_TESSELLATION_DIAGNOSTICS__';
 
 export function installBrowserRvmNativeTessellationRuntimePatch() {
   if (globalThis[PATCH_FLAG]) return globalThis[PATCH_FLAG];
@@ -13,41 +16,106 @@ export function installBrowserRvmNativeTessellationRuntimePatch() {
     installed: true,
     schemaVersion: BROWSER_RVM_NATIVE_TESSELLATION_SCHEMA,
     installedAt: new Date().toISOString(),
+    enabled: readEnabled(),
     upgrades: 0,
+    runs: 0,
     lastDiagnostics: null,
+    setEnabled(enabled) {
+      state.enabled = Boolean(enabled);
+      writeEnabled(state.enabled);
+      const diagnostics = publishNativeTessellationDiagnostics({
+        schemaVersion: BROWSER_RVM_NATIVE_TESSELLATION_SCHEMA,
+        enabled: state.enabled,
+        disabled: !state.enabled,
+        reason: state.enabled ? 'enabled' : 'disabled-by-user',
+        scannedCount: 0,
+        candidateCount: 0,
+        upgradedCount: 0,
+        skippedCount: 0,
+        kindCounts: {},
+        upgradedKindCounts: {},
+        skippedReasons: {},
+      });
+      state.lastDiagnostics = diagnostics;
+      if (state.enabled) schedule();
+      return state.enabled;
+    },
+    runNow() {
+      return runAndPublish();
+    },
+    getDiagnostics() {
+      return state.lastDiagnostics || globalThis[GLOBAL_DIAGNOSTICS_KEY] || null;
+    },
   };
   globalThis[PATCH_FLAG] = state;
+  globalThis[GLOBAL_STATE_KEY] = state;
 
-  const schedule = () => {
-    requestAnimationFrameSafe(() => {
-      const diagnostics = upgradeActiveRvmViewerNativeTessellation();
-      if (diagnostics?.upgradedCount) state.upgrades += diagnostics.upgradedCount;
-      if (diagnostics) state.lastDiagnostics = diagnostics;
-    });
-  };
+  const schedule = () => requestAnimationFrameSafe(runAndPublish);
+  state.schedule = schedule;
+
+  function runAndPublish() {
+    const diagnostics = upgradeActiveRvmViewerNativeTessellation({ enabled: state.enabled });
+    if (diagnostics?.upgradedCount) state.upgrades += diagnostics.upgradedCount;
+    if (diagnostics) {
+      state.runs += 1;
+      state.lastDiagnostics = diagnostics;
+      publishNativeTessellationDiagnostics(diagnostics);
+    }
+    return diagnostics;
+  }
 
   try { globalThis.addEventListener?.('rvm-browser-parse-diagnostics', schedule); } catch (_) {}
+  try { globalThis.addEventListener?.('rvm-native-tessellation-request', schedule); } catch (_) {}
   for (const delay of [400, 1200, 2600, 5000]) setTimeout(schedule, delay);
   return state;
 }
 
-export function upgradeActiveRvmViewerNativeTessellation() {
+export function publishNativeTessellationDiagnostics(diagnostics = {}) {
+  const payload = {
+    schemaVersion: BROWSER_RVM_NATIVE_TESSELLATION_SCHEMA,
+    capturedAt: new Date().toISOString(),
+    ...(diagnostics || {}),
+  };
+  globalThis[GLOBAL_DIAGNOSTICS_KEY] = payload;
+  try {
+    globalThis.dispatchEvent?.(new CustomEvent('rvm-native-tessellation-diagnostics', { detail: payload }));
+  } catch (_) {}
+  return payload;
+}
+
+export function setBrowserRvmNativeTessellationEnabled(enabled) {
+  const state = installBrowserRvmNativeTessellationRuntimePatch();
+  return state.setEnabled(enabled);
+}
+
+export function upgradeActiveRvmViewerNativeTessellation(options = {}) {
+  const enabled = options.enabled ?? globalThis[GLOBAL_STATE_KEY]?.enabled ?? readEnabled();
   const viewer = globalThis.__3D_RVM_VIEWER__;
-  if (!viewer?.modelGroup) return null;
-  const diagnostics = upgradeNativeRvmTessellation(viewer.modelGroup);
-  if (diagnostics.upgradedCount > 0) {
+  if (!viewer?.modelGroup) {
+    return makeEmptyDiagnostics({ enabled, reason: 'viewer-not-ready' });
+  }
+  if (!enabled) {
+    const diagnostics = makeEmptyDiagnostics({ enabled: false, reason: 'disabled-by-user' });
     annotateViewer(viewer, diagnostics);
+    return diagnostics;
+  }
+  const diagnostics = upgradeNativeRvmTessellation(viewer.modelGroup, { enabled: true });
+  annotateViewer(viewer, diagnostics);
+  if (diagnostics.upgradedCount > 0) {
     try { viewer.fitProgressiveBounds?.(viewer._progressiveModelBounds || viewer.modelGroup?.children?.[0]?.userData?.bounds || null, { force: true }); } catch (_) {}
   }
   return diagnostics;
 }
 
-export function upgradeNativeRvmTessellation(root) {
+export function upgradeNativeRvmTessellation(root, options = {}) {
   const diagnostics = {
     schemaVersion: BROWSER_RVM_NATIVE_TESSELLATION_SCHEMA,
+    enabled: options.enabled !== false,
+    disabled: options.enabled === false,
     scannedCount: 0,
     candidateCount: 0,
     upgradedCount: 0,
+    alreadyNativeCount: 0,
     skippedCount: 0,
     kindCounts: {},
     upgradedKindCounts: {},
@@ -59,8 +127,11 @@ export function upgradeNativeRvmTessellation(root) {
   root.traverse((object) => {
     if (!object || replacements.length >= MAX_UPGRADE_OBJECTS) return;
     if (object === root || !object.parent) return;
-    if (object[UPGRADE_FLAG] || object.userData?.browserRvmNativeTessellated) return;
     diagnostics.scannedCount += 1;
+    if (object[UPGRADE_FLAG] || object.userData?.browserRvmNativeTessellated) {
+      diagnostics.alreadyNativeCount += 1;
+      return;
+    }
     const attrs = object.userData?.browserRvmAttributes || null;
     const params = parseNativeParams(attrs?.RVM_NATIVE_PRIMITIVE_PARAMS);
     const matrix = parseNumericArray(attrs?.RVM_TRANSFORM_3X4, 12);
@@ -77,12 +148,34 @@ export function upgradeNativeRvmTessellation(root) {
     replacements.push({ source: object, native, params, code });
   });
 
+  if (replacements.length >= MAX_UPGRADE_OBJECTS) {
+    diagnostics.skippedCount += 1;
+    bump(diagnostics.skippedReasons, 'upgrade-object-limit');
+  }
+
   for (const item of replacements) {
     replaceObject(item.source, item.native, item.params, item.code);
     diagnostics.upgradedCount += 1;
     bump(diagnostics.upgradedKindCounts, item.params.kindName || `Kind-${item.code}`);
   }
   return diagnostics;
+}
+
+function makeEmptyDiagnostics(extra = {}) {
+  return {
+    schemaVersion: BROWSER_RVM_NATIVE_TESSELLATION_SCHEMA,
+    enabled: extra.enabled !== false,
+    disabled: extra.enabled === false,
+    reason: extra.reason || '',
+    scannedCount: 0,
+    candidateCount: 0,
+    upgradedCount: 0,
+    alreadyNativeCount: 0,
+    skippedCount: 0,
+    kindCounts: {},
+    upgradedKindCounts: {},
+    skippedReasons: {},
+  };
 }
 
 function buildNativeObjectFromParams(code, params, matrix3x4, material) {
@@ -141,6 +234,7 @@ function replaceObject(source, native, params, code) {
     renderQuality: 'native-cpp-tessellated',
     pickable: true,
   };
+  native.matrixAutoUpdate = true;
   const index = parent.children.indexOf(source);
   if (index >= 0) parent.children[index] = native;
   native.parent = parent;
@@ -302,6 +396,17 @@ function parseNumericArray(value, expected) {
   return out.every(Number.isFinite) ? out : null;
 }
 
+function readEnabled() {
+  try {
+    const saved = globalThis.localStorage?.getItem?.(STORAGE_KEY);
+    return saved !== 'false';
+  } catch (_) {
+    return true;
+  }
+}
+function writeEnabled(enabled) {
+  try { globalThis.localStorage?.setItem?.(STORAGE_KEY, enabled ? 'true' : 'false'); } catch (_) {}
+}
 function segmentCount(radius) {
   const r = positive(Math.abs(radius), 1);
   return Math.max(12, Math.min(48, Math.ceil(Math.sqrt(r) * 8)));
@@ -318,6 +423,7 @@ function annotateViewer(viewer, diagnostics) {
       ...root.userData.browserRvmRender,
       nativeTessellation: diagnostics,
       nativeTessellatedCount: diagnostics.upgradedCount,
+      nativeTessellationEnabled: diagnostics.enabled,
     };
   }
 }
