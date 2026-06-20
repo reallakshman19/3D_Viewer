@@ -1,5 +1,6 @@
 import { EditablePreviewTable } from '../../shared/EditablePreviewTable.js';
 import { deriveLineKeyFromBranchName, tokenAtPosition } from '../../../../converters/xml-cii2019-core/regex-line-key.js';
+import { computeLineNoKey } from '../../../../converters/xml-cii2019-core/linelist-mapping.js';
 import { xmlCiiRigidWeightOverrideKey, isXmlCiiWeightReviewNode, xmlCiiNumberText } from '../../../../converters/xml-cii2019-core/weight-match-model.js';
 import { rankXmlCiiWeightCandidates, formatValveHint } from '../../../../converters/xml-cii2019-core/weight-valve-hints.js';
 import { buildPipingClassIndex } from '../../../../converters/xml-cii2019-core/piping-class-resolver.js';
@@ -39,14 +40,64 @@ function _rowText(row, keys) { if (!row || typeof row !== 'object') return ''; f
 function _rowNumber(row, keys) { const text = _rowText(row, keys); const match = text.match(/[-+]?\d*\.?\d+/); const num = match ? Number(match[0]) : Number(text); return Number.isFinite(num) ? num : null; }
 function _xmlCiiLineKeyRegexValue(value, pattern, groupIndex) { const text = _toText(value).trim(); const patternText = _toText(pattern).trim(); if (!text || !patternText) return text; return _regexGroup(text, patternText, groupIndex || 1) || text; }
 function _xmlCiiNormalizeLineKey(value) { return _toText(value).trim().toUpperCase().replace(/\s+/g, ''); }
-function _xmlCiiFindLineListRow(branchLineKey, config) { const rows = Array.isArray(config.linelist?.masterRows) ? config.linelist.masterRows : []; const lookupKey = _xmlCiiNormalizeLineKey(branchLineKey); const columnRegex = config.linelist?.linelistColumnRegex || ''; const columnGroup = config.linelist?.linelistColumnGroup || 1; for (const row of rows) { const rawKey = _rowText(row, ['lineNoKey', 'lineNo', 'lineKey', 'LineNo', 'Line No', 'Line Number', 'PipelineReference']); const cleanKey = _xmlCiiNormalizeLineKey(_xmlCiiLineKeyRegexValue(rawKey, columnRegex, columnGroup)); if (cleanKey && cleanKey === lookupKey) return row; } return null; }
+function _lineListRowKey(row, config) {
+  const mapped = computeLineNoKey(row, config.linelist?.fieldMap || {});
+  if (mapped) return mapped;
+  const key1 = _rowText(row, ['lineKey1', 'Key 1', 'ColumnX1', 'Service', 'Fluid']);
+  const key2 = _rowText(row, ['lineKey2', 'Key 2', 'ColumnX2', 'Line number', 'Line Number', 'Line No']);
+  if (key1 || key2) return `${key1}${key2}`;
+  return _rowText(row, ['lineNoKey', 'lineNo', 'lineKey', 'LineNo', 'Line No', 'Line Number', 'PipelineReference']);
+}
+function _xmlCiiFindLineListRow(branchLineKey, config) {
+  const rows = Array.isArray(config.linelist?.masterRows) ? config.linelist.masterRows : [];
+  const lookupKey = _xmlCiiNormalizeLineKey(branchLineKey);
+  const columnRegex = config.linelist?.linelistColumnRegex || '';
+  const columnGroup = config.linelist?.linelistColumnGroup || 1;
+  for (const row of rows) {
+    const rawKey = _lineListRowKey(row, config);
+    const cleanKey = _xmlCiiNormalizeLineKey(_xmlCiiLineKeyRegexValue(rawKey, columnRegex, columnGroup));
+    if (cleanKey && cleanKey === lookupKey) return row;
+  }
+  return null;
+}
 function _processDefaultValue(config, fieldKey) { const defaults = config?.processDefaults && typeof config.processDefaults === 'object' ? config.processDefaults : {}; return _toText(defaults[fieldKey]).trim(); }
 function _xmlCiiProcessValue(pdOverride, row, overrideKey, rowKeys, config) { if (pdOverride && Object.prototype.hasOwnProperty.call(pdOverride, overrideKey)) return _toText(pdOverride[overrideKey]).trim(); const rowVal = _rowText(row, rowKeys); if (rowVal) return rowVal; return _processDefaultValue(config, overrideKey); }
 function _xmlCiiProcessSource(pdOverride, row, overrideKey, rowKeys, config) { if (pdOverride && Object.prototype.hasOwnProperty.call(pdOverride, overrideKey)) return 'override'; if (_rowText(row, rowKeys)) return 'linelist'; return _processDefaultValue(config, overrideKey) ? 'default' : 'none'; }
-function _derivePipingClassFromBranchName(branchName, config) { return _regexGroup(branchName, config.rating?.pipingClassRegex, config.rating?.pipingClassGroup || 1) || tokenAtPosition(branchName, config.rating?.tokenDelimiter || '-', config.rating?.pipingClassTokenIndex || 5); }
+function _looksLikeNpsToken(value) { return /^\s*\d+(?:\.\d+)?\s*(?:"|in|inch|nps)?\s*$/i.test(_toText(value)); }
+function _numericFromSizeToken(value) { const n = Number(_toText(value).replace(/[^0-9.+-]/g, '')); return Number.isFinite(n) ? n : null; }
+function _isLikelyMaterialToken(value) { return /^(CS|SS|LTCS|DSS|SDSS|ALLOY|GI|CI|DI|PVC|CPVC|HDPE|GRP|GRE)$/i.test(_toText(value).trim()); }
+function _shiftedBranchTokens(branchName, delimiter = '-') {
+  return {
+    third: tokenAtPosition(branchName, delimiter, 3),
+    fourth: tokenAtPosition(branchName, delimiter, 4),
+    fifth: tokenAtPosition(branchName, delimiter, 5),
+    sixth: tokenAtPosition(branchName, delimiter, 6),
+    seventh: tokenAtPosition(branchName, delimiter, 7),
+  };
+}
+function _derivePipingClassFromBranchName(branchName, config) {
+  const regexValue = _regexGroup(branchName, config.rating?.pipingClassRegex, config.rating?.pipingClassGroup || 1);
+  if (regexValue) return regexValue;
+  const delimiter = config.rating?.tokenDelimiter || config.linelist?.tokenDelimiter || '-';
+  const index = Number(config.rating?.pipingClassTokenIndex || 5);
+  const value = tokenAtPosition(branchName, delimiter, index);
+  const shifted = _shiftedBranchTokens(branchName, delimiter);
+  if (index === 5 && _isLikelyMaterialToken(value) && _looksLikeNpsToken(shifted.fourth) && /^S\d+/i.test(shifted.sixth)) return '';
+  return value;
+}
 function _deriveRatingFromPipingClass(pipingClass, config) { const text = _toText(pipingClass).trim().toUpperCase(); const sequence = Array.isArray(config.rating?.ratingSequence) ? config.rating.ratingSequence : []; for (const pair of sequence) { if (Array.isArray(pair) && pair.length >= 2 && text.startsWith(_toText(pair[0]).toUpperCase())) return _toText(pair[1]); } return ''; }
 function _nominalDnFromNps(inches, config) { if (!Number.isFinite(inches)) return null; const map = config.weight?.npsToDn && typeof config.weight.npsToDn === 'object' ? config.weight.npsToDn : {}; const key = String(Number(inches)); const mapped = Number(map[key] ?? map[inches] ?? map[inches.toFixed(3)]); return Number.isFinite(mapped) ? mapped : inches * _toFiniteNumber(config.weight?.inchToMm, 25.4); }
-function _deriveBoreFromBranchName(branchName, config) { const raw = _regexGroup(branchName, config.weight?.boreRegex, config.weight?.boreGroup || 1) || tokenAtPosition(branchName, config.weight?.tokenDelimiter || '-', config.weight?.boreTokenIndex || 3); return _nominalDnFromNps(Number(_toText(raw).replace(/[^0-9.+-]/g, '')), config); }
+function _deriveBoreFromBranchName(branchName, config) {
+  const regexRaw = _regexGroup(branchName, config.weight?.boreRegex, config.weight?.boreGroup || 1);
+  const delimiter = config.weight?.tokenDelimiter || config.linelist?.tokenDelimiter || '-';
+  const index = Number(config.weight?.boreTokenIndex || 3);
+  let raw = regexRaw || tokenAtPosition(branchName, delimiter, index);
+  if (!_looksLikeNpsToken(raw) && index === 3) {
+    const shifted = _shiftedBranchTokens(branchName, delimiter);
+    if (_looksLikeNpsToken(shifted.fourth) && /^S\d+/i.test(shifted.sixth)) raw = shifted.fourth;
+  }
+  return _nominalDnFromNps(_numericFromSizeToken(raw), config);
+}
 function _fieldOverrideKey(editType, derivedKey) { return _toText(derivedKey).trim(); }
 function _hasOwn(obj, key) { return !!obj && Object.prototype.hasOwnProperty.call(obj, key); }
 function _overrideSource(overrides, bucket, key) { return _hasOwn(overrides?.[bucket], key) ? 'override' : 'auto'; }
