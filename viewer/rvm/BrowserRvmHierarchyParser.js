@@ -1,6 +1,16 @@
 import { parseRvmArrayBuffer as parseFlatRvmArrayBuffer } from './BrowserRvmParser.js';
 
-export const BROWSER_RVM_HIERARCHY_SCHEMA = 'browser-rvm-hierarchy-wrapper/v1';
+export const BROWSER_RVM_HIERARCHY_SCHEMA = 'browser-rvm-hierarchy-wrapper/v2';
+
+const RVM_PRIM_CODE_SEMANTICS = {
+  2: { type: 'BOX', kind: 'BOX', primitiveClass: 'BOX' },
+  3: { type: 'GASK', kind: 'TORUS', primitiveClass: 'TORUS' },
+  4: { type: 'ELBOW', kind: 'ELBOW', primitiveClass: 'ELBOW' },
+  5: { type: 'BOX', kind: 'AUXILIARY_SOLID', primitiveClass: 'AUXILIARY_SOLID' },
+  7: { type: 'FLANGE', kind: 'FLANGE', primitiveClass: 'FLANGE' },
+  8: { type: 'PIPE', kind: 'CYLINDER', primitiveClass: 'CYLINDER' },
+  11: { type: 'INSTRUMENT', kind: 'INSTRUMENT', primitiveClass: 'INSTRUMENT' }
+};
 
 export async function parseRvmArrayBuffer(arrayBuffer, options = {}) {
   const parsed = await parseFlatRvmArrayBuffer(arrayBuffer, options);
@@ -13,7 +23,8 @@ export async function parseRvmArrayBuffer(arrayBuffer, options = {}) {
       ...(parsed.diagnostics || {}),
       hierarchySchemaVersion: BROWSER_RVM_HIERARCHY_SCHEMA,
       hierarchyGrouped: hierarchy[0]?.attributes?.BROWSER_RVM_HIERARCHY_GROUPED === 'true',
-      hierarchyGroupCount: Number(hierarchy[0]?.attributes?.BROWSER_RVM_HIERARCHY_GROUP_COUNT || 0)
+      hierarchyGroupCount: Number(hierarchy[0]?.attributes?.BROWSER_RVM_HIERARCHY_GROUP_COUNT || 0),
+      primitiveSemantics: 'owner-name-and-rhbg-prim-code-map'
     }
   };
 }
@@ -29,7 +40,8 @@ export function groupRvmOwnerHierarchy(roots = []) {
       attributes: {
         ...(root.attributes || {}),
         BROWSER_RVM_HIERARCHY_GROUPED: 'true',
-        BROWSER_RVM_HIERARCHY_SCHEMA: BROWSER_RVM_HIERARCHY_SCHEMA
+        BROWSER_RVM_HIERARCHY_SCHEMA: BROWSER_RVM_HIERARCHY_SCHEMA,
+        BROWSER_RVM_PRIMITIVE_SEMANTICS: 'owner-name-and-rhbg-prim-code-map'
       },
       children: []
     };
@@ -59,10 +71,11 @@ export function groupRvmOwnerHierarchy(roots = []) {
         if (!parent.__rvmGroupingState) parent.__rvmGroupingState = { childByKey: new Map() };
         state = parent.__rvmGroupingState;
       }
+      const semanticChild = enrichRvmPrimitiveLeaf(child);
       parent.children.push({
-        ...child,
+        ...semanticChild,
         attributes: {
-          ...(child.attributes || {}),
+          ...(semanticChild.attributes || {}),
           RVM_OWNER_PATH: path.join(' / '),
           RVM_OWNER_DEPTH: String(path.length)
         }
@@ -119,8 +132,46 @@ function classifyBranchSegment(segment, depth) {
   if (/^PIPE\b/.test(upper)) return 'PIPE_GROUP';
   if (/^BRANCH\b/.test(upper)) return 'BRANCH_GROUP';
   if (/^EQUIPMENT\b|^SUBEQUIPMENT\b/.test(upper)) return 'EQUIPMENT_GROUP';
-  if (/^GASKET\b|^FLANGE\b|^VALVE\b|^ELBOW\b|^TEE\b/.test(upper)) return 'COMPONENT_GROUP';
+  if (/^GASKET\b|^FLANGE\b|^VALVE\b|^ELBOW\b|^TEE\b|^RTORUS\b|^TORUS\b|^INSTRUMENT\b/.test(upper)) return 'COMPONENT_GROUP';
   return depth === 0 ? 'MODEL_GROUP' : 'RVM_GROUP';
+}
+
+function enrichRvmPrimitiveLeaf(child) {
+  const attrs = child?.attributes || {};
+  const ownerName = String(attrs.RVM_OWNER_NAME || '');
+  const primitiveCode = Number(attrs.RVM_PRIMITIVE_CODE);
+  const ownerSemantic = semanticFromOwnerName(ownerName);
+  const codeSemantic = RVM_PRIM_CODE_SEMANTICS[primitiveCode];
+  const semantic = ownerSemantic || codeSemantic;
+  if (!semantic) return child;
+
+  const type = semantic.type || child.type;
+  const kind = semantic.kind || attrs.RVM_PRIMITIVE_KIND || '';
+  return {
+    ...child,
+    type,
+    attributes: {
+      ...attrs,
+      TYPE: type,
+      RVM_PRIMITIVE_KIND: kind,
+      RVM_BROWSER_PRIMITIVE_CLASS: semantic.primitiveClass || kind || type,
+      RVM_BROWSER_PRIMITIVE_SEMANTIC_SOURCE: ownerSemantic ? 'owner-name' : 'prim-code-map'
+    }
+  };
+}
+
+function semanticFromOwnerName(ownerName) {
+  const upper = String(ownerName || '').toUpperCase();
+  if (/\bRTORUS\b|\bTORUS\b/.test(upper)) return { type: 'GASK', kind: 'TORUS', primitiveClass: 'TORUS' };
+  if (/\bGASKET\b|\bGASK\b/.test(upper)) return { type: 'GASK', kind: 'GASKET', primitiveClass: 'GASKET' };
+  if (/\bFLANGE\b|\bFLAN\b/.test(upper)) return { type: 'FLANGE', kind: 'FLANGE', primitiveClass: 'FLANGE' };
+  if (/\bVALVE\b|\bVALV\b/.test(upper)) return { type: 'VALVE', kind: 'VALVE', primitiveClass: 'VALVE' };
+  if (/\bELBOW\b|\bBEND\b/.test(upper)) return { type: 'ELBOW', kind: 'ELBOW', primitiveClass: 'ELBOW' };
+  if (/\bTEE\b/.test(upper)) return { type: 'TEE', kind: 'TEE', primitiveClass: 'TEE' };
+  if (/\bINSTRUMENT\b|\bINST\b/.test(upper)) return { type: 'INSTRUMENT', kind: 'INSTRUMENT', primitiveClass: 'INSTRUMENT' };
+  if (/\bPIPE\b|\bCYLI\b|\bTUBE\b/.test(upper)) return { type: 'PIPE', kind: 'CYLINDER', primitiveClass: 'CYLINDER' };
+  if (/\bBOX\b|\bEQUIPMENT\b|\bSUBEQUIPMENT\b|\bOBST\b/.test(upper)) return { type: 'BOX', kind: 'BOX', primitiveClass: 'BOX' };
+  return null;
 }
 
 function stripGroupingState(node) {
