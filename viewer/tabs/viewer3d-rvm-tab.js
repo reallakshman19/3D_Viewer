@@ -1,6 +1,10 @@
 import { RuntimeEvents } from '../contracts/runtime-events.js';
 import { RvmViewer3D } from '../rvm-viewer/RvmViewer3D.js?v=20260518-statusbar-theme-12';
 import { AvevaJsonLoader } from '../rvm/AvevaJsonLoader.js';
+import { loadRvmSource } from '../rvm/RvmLoadPipeline.js';
+import { RvmStaticBundleLoader } from '../rvm/RvmStaticBundleLoader.js';
+import { RvmHelperBridge } from '../converters/rvm-helper-bridge.js';
+import { convertRevFileToAvevaHierarchy } from '../rvm/RevLocalLoader.js?v=20260508-preview-geometry';
 import {
   convertUxmlDocumentToAvevaHierarchy,
   isUxmlDocument,
@@ -67,6 +71,7 @@ const TOOL_GROUPS = [
 ];
 
 const ICON_ONLY_ACTIONS = new Set(['NAV_PLAN_X', 'NAV_ROTATE_Y', 'NAV_ROTATE_Z', 'SNAP_ISO_NW', 'SNAP_ISO_NE', 'SNAP_ISO_SW', 'SNAP_ISO_SE']);
+const RAW_RVM_EXTENSIONS = new Set(['.rvm', '.rev']);
 
 function escapeHtml(value) {
   return String(value ?? '')
@@ -75,6 +80,12 @@ function escapeHtml(value) {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#039;');
+}
+
+function fileExtension(fileName = '') {
+  const lower = String(fileName || '').toLowerCase().trim();
+  const idx = lower.lastIndexOf('.');
+  return idx >= 0 ? lower.slice(idx) : '';
 }
 
 function normalizeUiSupportScale(value) {
@@ -174,9 +185,7 @@ function supportOptions(scaleMultiplier, labelsVisible) {
   };
 }
 
-async function loadJsonOrUxmlFile(file, viewer, statusEl, scaleMultiplier, labelsVisible) {
-  const text = await file.text();
-  const source = parseJsonSource(text, file.name);
+async function loadAvevaHierarchyIntoViewer(source, viewer, statusEl, scaleMultiplier, labelsVisible) {
   const loader = new AvevaJsonLoader();
   const payload = await loader.load(source, {}, makeAsyncSession(statusEl));
   if (!payload?.gltf?.scene) throw new Error('RVM/AVEVA JSON loader produced no scene.');
@@ -184,6 +193,43 @@ async function loadJsonOrUxmlFile(file, viewer, statusEl, scaleMultiplier, label
   viewer.setModel(payload.gltf.scene, payload.manifest?.runtime?.upAxis || 'Z');
   applyRvmSupportSymbolSettings(viewer, supportOptions(scaleMultiplier, labelsVisible));
   return payload;
+}
+
+async function loadJsonOrUxmlFile(file, viewer, statusEl, scaleMultiplier, labelsVisible) {
+  const text = await file.text();
+  const source = parseJsonSource(text, file.name);
+  return loadAvevaHierarchyIntoViewer(source, viewer, statusEl, scaleMultiplier, labelsVisible);
+}
+
+async function loadRevFile(file, viewer, statusEl, scaleMultiplier, labelsVisible) {
+  if (statusEl) statusEl.textContent = `Converting REV ${file.name}`;
+  const hierarchy = await convertRevFileToAvevaHierarchy(file);
+  return loadAvevaHierarchyIntoViewer(hierarchy, viewer, statusEl, scaleMultiplier, labelsVisible);
+}
+
+async function loadRawRvmFile(file, viewer, statusEl, scaleMultiplier, labelsVisible) {
+  if (statusEl) statusEl.textContent = `Converting RVM ${file.name}`;
+  const payload = await loadRvmSource(
+    { kind: 'raw-rvm', file, sidecars: [] },
+    {
+      capabilities: { deploymentMode: 'assisted', rawRvmImport: true, preconvertedBundleImport: true },
+      staticBundleLoader: new RvmStaticBundleLoader(),
+      assistedBridge: new RvmHelperBridge(),
+    }
+  );
+  if (!payload?.gltf?.scene) throw new Error('Raw RVM conversion produced no GLB scene.');
+  viewer.ctx.identityMap = payload.identityMap;
+  viewer.setModel(payload.gltf.scene, payload.manifest?.runtime?.upAxis || 'Y');
+  applyRvmSupportSymbolSettings(viewer, supportOptions(scaleMultiplier, labelsVisible));
+  return payload;
+}
+
+async function loadRvmViewerFile(file, viewer, statusEl, scaleMultiplier, labelsVisible) {
+  const ext = fileExtension(file?.name);
+  if (ext === '.rvm') return loadRawRvmFile(file, viewer, statusEl, scaleMultiplier, labelsVisible);
+  if (ext === '.rev') return loadRevFile(file, viewer, statusEl, scaleMultiplier, labelsVisible);
+  if (RAW_RVM_EXTENSIONS.has(ext)) throw new Error(`Unsupported raw RVM extension ${ext}.`);
+  return loadJsonOrUxmlFile(file, viewer, statusEl, scaleMultiplier, labelsVisible);
 }
 
 function renderToolButton(action) {
@@ -198,15 +244,16 @@ function renderToolGroup(group) {
 
 function renderShell(container) {
   const scale = initialSupportScale();
+  const isStaticMode = false; // rawRvmImport is enabled through the assisted bridge when a local helper is available.
   container.innerHTML = `
-    <div class="rvm-tab-root geo-theme-navisdark" data-rvm-viewer>
-      <div class="rvm-capability-banner" id="rvm-capability-banner" data-mode="assisted">RVM / JSON / UXML viewer ready</div>
+    <div class="rvm-tab-root geo-theme-navisdark" data-rvm-viewer data-static-mode="${String(isStaticMode)}">
+      <div class="rvm-capability-banner" id="rvm-capability-banner" data-mode="assisted">RVM / REV / JSON / UXML viewer ready</div>
       <div class="geo-top-ribbon">
         ${TOOL_GROUPS.map(renderToolGroup).join('')}
         <div class="rvm-ribbon-section rvm-ribbon-load">
-          <label class="rvm-btn rvm-btn-file" title="Load JSON / UXML">
-            <span>Load</span>
-            <input id="rvm-file-input" type="file" accept=".json,.uxml,.uxml.json" style="display:none" />
+          <label class="rvm-btn rvm-btn-file" title="Load RVM / REV / JSON / UXML">
+            <span>Load RVM</span>
+            <input id="rvm-file-input" type="file" accept=".rvm,.rev,.json,.uxml,.uxml.json" style="display:none" />
           </label>
         </div>
         <div class="rvm-ribbon-section">
@@ -227,15 +274,17 @@ function renderShell(container) {
         <aside class="rvm-left-panel">
           <div class="rvm-panel-header">Hierarchy</div>
           <div class="rvm-panel-filter-row"><input id="rvm-tree-filter" class="rvm-panel-filter" placeholder="Filter tree…"></div>
-          <ul id="rvm-tree" class="rvm-tree"><li class="rvm-empty-state">Load JSON/UXML to view hierarchy.</li></ul>
+          <ul id="rvm-tree" class="rvm-tree" data-alias="rvm-hierarchy-tree"><li class="rvm-empty-state">Load RVM/REV/JSON/UXML to view hierarchy.</li></ul>
         </aside>
         <section class="rvm-viewport">
           <div id="rvm-canvas" class="rvm-canvas"></div>
-          <div class="rvm-placeholder" id="rvm-placeholder">Load RVM JSON / UXML to begin.</div>
+          <div class="rvm-placeholder" id="rvm-placeholder">Load RVM / REV / JSON / UXML to begin.</div>
+          <div id="rvm-selection-hud" class="rvm-selection-hud" hidden></div>
+          <div id="rvm-context-menu" class="rvm-context-menu" hidden></div>
         </section>
         <aside class="rvm-right-panel">
           <div class="rvm-panel-header">Properties</div>
-          <div id="rvm-attributes-panel" class="rvm-attributes-panel"><div class="rvm-empty-state">No object selected.</div></div>
+          <div id="rvm-attributes-panel" class="rvm-attributes-panel" data-alias="rvm-attributes-content"><div class="rvm-empty-state">No object selected.</div></div>
           <div class="rvm-panel-header">Support Summary</div>
           <div id="rvm-support-summary" class="rvm-tag-list"><div class="rvm-empty-state">No supports loaded.</div></div>
         </aside>
@@ -250,7 +299,7 @@ function nodeDisplayName(node) {
 }
 
 function nodeKind(node) {
-  return String(node?.kind || node?.attributes?.TYPE || '').toUpperCase() || 'NODE';
+  return String(node?.kind || node?.type || node?.attributes?.TYPE || '').toUpperCase() || 'NODE';
 }
 
 function buildNodeTree(nodes = []) {
@@ -319,7 +368,7 @@ function updateStatus(container, viewer, fileName = '') {
   setStatusChip(container, 'objects', 'Objects', nodes.length.toLocaleString());
   setStatusChip(container, 'visible', 'Visible', nodes.length.toLocaleString());
   setStatusChip(container, 'supports', 'Supports', supports.toLocaleString());
-  setStatusChip(container, 'selected', 'Selected', viewer?.selection?.getSelectedCanonicalIds?.()?.length || 0);
+  setStatusChip(container, 'selected', viewer?.selection?.getSelectedCanonicalIds?.()?.length || 0);
   setStatusChip(container, 'kind', 'Kinds', Object.entries(counts).map(([k, v]) => `${k}:${v}`).join(' ') || '-');
   const msg = container.querySelector('#rvm-sb-msg');
   if (msg) msg.textContent = fileName ? `Loaded ${fileName}; indexAttrs=${viewer?.supportIndexAttributeBridgeDiagnostics?.injected ?? 0}` : 'Ready';
@@ -378,6 +427,11 @@ function handleAction(action, viewer, container) {
   }
 }
 
+function safeCssEscape(value) {
+  if (typeof CSS !== 'undefined' && typeof CSS.escape === 'function') return CSS.escape(value);
+  return String(value).replace(/[^a-zA-Z0-9_-]/g, '\\$&');
+}
+
 export function renderViewer3DRvm(container, ctx = {}) {
   renderShell(container);
 
@@ -395,6 +449,7 @@ export function renderViewer3DRvm(container, ctx = {}) {
   const viewer = new RvmViewer3D(canvas, ctx);
   let labelsVisible = false;
   let nodeById = new Map();
+  let _shortcutHandler = null;
 
   const currentScale = () => normalizeUiSupportScale(scaleInput.value);
   const currentSupportOptions = () => supportOptions(currentScale(), labelsVisible);
@@ -411,7 +466,7 @@ export function renderViewer3DRvm(container, ctx = {}) {
     viewer.selectByCanonicalId?.(id);
     renderAttributes(container, node);
     tree.querySelectorAll('li.is-selected').forEach((li) => li.classList.remove('is-selected'));
-    tree.querySelector(`li[data-node-id="${CSS.escape(id)}"]`)?.classList.add('is-selected');
+    tree.querySelector(`li[data-node-id="${safeCssEscape(id)}"]`)?.classList.add('is-selected');
     container.querySelector('#rvm-sel-count').textContent = '1';
     updateStatus(container, viewer);
   };
@@ -421,7 +476,7 @@ export function renderViewer3DRvm(container, ctx = {}) {
     if (!file) return;
     try {
       container.querySelector('#rvm-sb-msg').textContent = `Loading ${file.name}`;
-      const payload = await loadJsonOrUxmlFile(file, viewer, container.querySelector('#rvm-sb-msg'), currentScale(), labelsVisible);
+      const payload = await loadRvmViewerFile(file, viewer, container.querySelector('#rvm-sb-msg'), currentScale(), labelsVisible);
       const nodes = payload.indexJson?.nodes || [];
       viewer._lastIndexNodes = nodes;
       nodeById = new Map(nodes.map((node) => [node.canonicalObjectId, node]));
@@ -430,6 +485,7 @@ export function renderViewer3DRvm(container, ctx = {}) {
       placeholder.hidden = true;
       applyRvmSupportSymbolSettings(viewer, currentSupportOptions());
       updateStatus(container, viewer, file.name);
+      ctx.emit?.(RuntimeEvents.RVM_SOURCE_LOADED, { fileName: file.name, kind: fileExtension(file.name) });
       ctx.emit?.(RuntimeEvents.RVM_MODEL_LOADED, payload);
     } catch (error) {
       console.error(error);
@@ -452,11 +508,11 @@ export function renderViewer3DRvm(container, ctx = {}) {
   };
 
   const onSelection = (payload = {}) => {
-    const id = payload.canonicalId || payload.canonicalIds?.[0] || '';
+    const id = payload.canonicalId || payload.canonicalObjectId || payload.canonicalIds?.[0] || '';
     const node = nodeById.get(id);
     renderAttributes(container, node || null);
     tree.querySelectorAll('li.is-selected').forEach((li) => li.classList.remove('is-selected'));
-    if (id) tree.querySelector(`li[data-node-id="${CSS.escape(id)}"]`)?.classList.add('is-selected');
+    if (id) tree.querySelector(`li[data-node-id="${safeCssEscape(id)}"]`)?.classList.add('is-selected');
     container.querySelector('#rvm-sel-count').textContent = String(payload.canonicalIds?.length || (id ? 1 : 0));
     updateStatus(container, viewer);
   };
@@ -483,12 +539,15 @@ export function renderViewer3DRvm(container, ctx = {}) {
     handleAction(button.dataset.action, viewer, container);
   });
 
-  return () => {
+  const _disposeRvmViewer = () => {
     unsubSelection?.();
     fileInput.removeEventListener('change', onFile);
     scaleInput.removeEventListener('input', onScale);
     labelsBtn.removeEventListener('click', onLabels);
+    _shortcutHandler = null;
     viewer.dispose?.();
     container.innerHTML = '';
   };
+
+  return _disposeRvmViewer;
 }
