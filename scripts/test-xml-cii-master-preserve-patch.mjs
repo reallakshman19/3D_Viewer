@@ -27,6 +27,10 @@ for (const token of [
   assert.ok(patch.includes(token), `missing patch token: ${token}`);
 }
 
+for (const token of ['set' + 'Timeout(', 'set' + 'Interval(', 'delay(', 'restoreMissingMasters']) {
+  assert.ok(!patch.includes(token), `unexpected async restore token: ${token}`);
+}
+
 assert.ok(tab.includes('installXmlCiiMasterPreservePatch'));
 assert.ok(tab.includes('xml-cii-master-preserve-patch.js?v=20260620-master-session-1'));
 assert.ok(tab.includes('legacy-adapter.js?v=20260620-master-session-1'));
