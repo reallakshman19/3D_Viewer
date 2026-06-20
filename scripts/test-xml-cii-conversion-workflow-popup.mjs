@@ -21,6 +21,7 @@ const workflowShellPath = 'viewer/tabs/model-converters/WorkflowShell.js';
 const legacyAdapterPath = 'viewer/tabs/model-converters/legacy-adapter.js';
 const canonicalTabPath = 'viewer/tabs/model-converters/ModelConvertersTab.js';
 const branchSyncPath = 'viewer/tabs/model-converters/xml-cii-branch-sample-sync.js';
+const previewRendererPath = 'viewer/tabs/model-converters/converters/xmltocii2019_helper/preview-renderer.js';
 const tabPath = 'viewer/tabs/model-converters-tab.js';
 const tabCssPath = 'viewer/tabs/model-converters-tab.css';
 const popup = read(popupPath);
@@ -29,6 +30,7 @@ const workflowShell = read(workflowShellPath);
 const legacyAdapter = read(legacyAdapterPath);
 const canonicalTab = read(canonicalTabPath);
 const branchSync = read(branchSyncPath);
+const previewRenderer = read(previewRendererPath);
 const tab = read(tabPath);
 const tabCss = read(tabCssPath);
 
@@ -79,7 +81,14 @@ assert(branchSync.includes("const BRANCH_SAMPLE_KEY = 'xmlCii2019.regex.branchNa
 assert(branchSync.includes('/<\\s*[^>]*Branchname'), 'Branchname sync must extract <Branchname> tag values');
 assert(branchSync.includes('cfg.linelist.sampleBranchName = sample'), 'Branchname sync must write canonical linelist.sampleBranchName used by the Regex tab');
 assert(branchSync.includes('cfg.regex.branchNameSample = sample'), 'Branchname sync must retain backward-compatible regex.branchNameSample mirror');
+assert(branchSync.includes('data-native-regex-path="linelist.sampleBranchName"'), 'Branchname sync must update native Regex popup sample input');
+assert(branchSync.includes('if (current === value) return false'), 'Branchname sync must avoid redundant synthetic events/render loops');
 assert(branchSync.includes("input.dispatchEvent(new Event('change', { bubbles: true }))"), 'Branchname sync must dispatch config change so last-session defaults persist');
+
+assert(previewRenderer.includes('computeLineNoKey'), 'Preview must match line-list rows using configured field maps');
+assert(previewRenderer.includes('_looksLikeNpsToken(shifted.fourth)'), 'Preview must recognize shifted Branchname size token at position 4');
+assert(previewRenderer.includes('_isLikelyMaterialToken(value)'), 'Preview must not treat material token CS as piping class fallback');
+assert(previewRenderer.includes('^S\\d+'), 'Preview shifted-branch guard must recognize S-prefixed line keys');
 
 assert(!popup.includes('mountExistingPanel'), 'popup must not move live DOM panels by portal');
 assert(!popup.includes('new MutationObserver'), 'popup must not install MutationObserver');
@@ -109,4 +118,5 @@ console.log('✅ XML CII phase-tab workflow popup static test passed', {
   topLevelTabs: 8,
   workflowMode: 'phase-tabs',
   branchNameSync: 'linelist.sampleBranchName',
+  shiftedBranchPreview: 'lineKey/size/class guarded',
 });

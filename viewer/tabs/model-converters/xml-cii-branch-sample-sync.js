@@ -116,6 +116,8 @@ function currentFileKey(file) {
 
 function setElementValue(element, value) {
   if (!element || !value) return false;
+  const current = 'value' in element ? element.value : element.textContent;
+  if (current === value) return false;
   if ('value' in element) element.value = value;
   else element.textContent = value;
   try {
@@ -140,11 +142,18 @@ function isInsideWorkflowPopup(node) {
   return Boolean(node?.closest?.('.model-converters-workflow-popup-overlay'));
 }
 
+function isNativeBranchSampleTarget(node) {
+  const path = node?.getAttribute?.('data-native-regex-path') || node?.getAttribute?.('data-xml-cii-regex-path') || '';
+  return path === 'linelist.sampleBranchName';
+}
+
 function branchSampleTargets(root) {
   const scope = root?.querySelectorAll ? root : document;
   const targets = new Set();
-  scope.querySelectorAll?.('[data-option-key="branchNameSample"], [name="branchNameSample"], #branchNameSample, #xml-cii-branchname-sample, #xml-cii-branch-name-sample')
-    .forEach((node) => { if (!isInsideWorkflowPopup(node)) targets.add(node); });
+  scope.querySelectorAll?.('[data-option-key="branchNameSample"], [name="branchNameSample"], #branchNameSample, #xml-cii-branchname-sample, #xml-cii-branch-name-sample, [data-native-regex-path="linelist.sampleBranchName"], [data-xml-cii-regex-path="linelist.sampleBranchName"]')
+    .forEach((node) => {
+      if (!isInsideWorkflowPopup(node) || isNativeBranchSampleTarget(node)) targets.add(node);
+    });
   scope.querySelectorAll?.('label').forEach((label) => {
     if (isInsideWorkflowPopup(label)) return;
     const control = findLabelBoundControl(label);
