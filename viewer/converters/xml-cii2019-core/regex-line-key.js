@@ -16,6 +16,36 @@ function _regexGroup(text, pattern, groupIndex = 1) {
   }
 }
 
+function _looksLikeNpsSizeToken(value) {
+  const text = _toText(value).trim();
+  if (!text) return false;
+  return /^(?:\d+(?:\.\d+)?|\d+\s*\/\s*\d+)(?:\s*(?:in|inch|"))?$/i.test(text);
+}
+
+function _looksLikeLineKeyToken(value) {
+  const text = _toText(value).trim();
+  if (!text) return false;
+  if (_looksLikeNpsSizeToken(text)) return false;
+  // Project line keys commonly look like S8810105, D8810386, etc. Require both
+  // letters and at least four consecutive digits so material/spec tokens such as
+  // CS, PL, HC, or 91261M7 are not accidentally treated as line keys.
+  return /^(?=.*[A-Za-z])(?=.*\d{4,})[A-Za-z][A-Za-z0-9_./]*$/i.test(text);
+}
+
+function _autoShiftedLineKeyFromTokens(tokens, configuredParts) {
+  if (!Array.isArray(tokens) || tokens.length < 5) return '';
+  const configured = _toText(configuredParts).trim();
+  // Only rescue the legacy default case where token 4 has become the NPS size
+  // because the branch contains an inserted discipline/service token, e.g.:
+  // /ASIM-1885-PL-10"-CS-S8810105-01/B2
+  if (!_looksLikeNpsSizeToken(configured)) return '';
+  for (let index = 4; index < tokens.length; index += 1) {
+    const token = tokens[index];
+    if (_looksLikeLineKeyToken(token)) return token;
+  }
+  return '';
+}
+
 export function tokenizeBranchName(branchName, delimiter = '-') {
   const cleaned = _toText(branchName).trim().replace(/^\/+/, '').replace(/\/B\d+$/i, '');
   const delim = _toText(delimiter) || '-';
@@ -45,8 +75,16 @@ export function xmlCiiLineKeyFromBranchTokens(branchName, config) {
   const safePositions = positions.length ? positions : [4];
   const delimiter = linelist.tokenDelimiter || '-';
   const joiner = _toText(linelist.lineKeyJoiner);
-  const parts = safePositions.map((position) => tokenAtPosition(branchName, delimiter, position)).filter(Boolean);
-  return parts.join(joiner);
+  const tokens = tokenizeBranchName(branchName, delimiter);
+  const parts = safePositions.map((position) => tokens[Math.round(position) - 1] || '').filter(Boolean);
+  const joined = parts.join(joiner);
+
+  if (safePositions.length === 1 && Math.round(safePositions[0]) === 4) {
+    const shifted = _autoShiftedLineKeyFromTokens(tokens, joined);
+    if (shifted) return shifted;
+  }
+
+  return joined;
 }
 
 export function deriveLineKeyFromBranchName(branchName, config) {
