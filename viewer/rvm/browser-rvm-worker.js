@@ -1,16 +1,16 @@
-import { parseRvmArrayBuffer } from './BrowserRvmHierarchyTransformParser.js?v=20260620-rvm-scale-safe-1';
+import { parseRvmArrayBuffer } from './BrowserRvmHierarchyTransformParser.js?v=20260620-rvm-cpp-mat3x4-1';
 import { enrichBrowserRvmHierarchyWithAtt } from './BrowserRvmAttEnricher.js';
 import { collectBrowserRvmRenderInstructions } from './BrowserRvmRenderContractAdapter.js';
 import { filterBrowserRvmRenderInstructions } from './BrowserRvmInstructionFilterV2.js?v=20260620-rvm-scale-safe-1';
 
-// BrowserRvmHierarchyTransformParser.js?v=20260620-rvm-scale-safe-1 repairs transformed APOS/LPOS/HBOR contracts.
+// BrowserRvmHierarchyTransformParser.js?v=20260620-rvm-cpp-mat3x4-1 repairs transformed APOS/LPOS/HBOR contracts using the C++ parser's Mat3x4 layout.
 const DEFAULT_MANIFEST_NODE_LIMIT = 900;
 const KEEP_ATTRIBUTE_NAMES = new Set([
-  'TYPE', 'NAME', 'RVM_PRIMITIVE_KIND', 'RVM_BYTE_OFFSET', 'RVM_PRIMITIVE_CODE', 'RVM_RECORD_TAG',
+  'TYPE', 'NAME', 'RVM_PRIMITIVE_KIND', 'RVM_PRIMITIVE_KIND_NAME', 'RVM_BYTE_OFFSET', 'RVM_PRIMITIVE_CODE', 'RVM_RECORD_TAG',
   'RVM_OWNER_NAME', 'RVM_OWNER_PATH', 'BROWSER_PARSE_METHOD', 'BROWSER_PARSE_CONFIDENCE', 'RVM_PRIM_TRANSFORM_APPLIED',
-  'RVM_PRIM_TRANSFORM_SCHEMA', 'RVM_LOCAL_AXIS', 'RVM_TRANSFORM_COLUMN_SCALES', 'RVM_BROWSER_RENDER_PRIMITIVE',
-  'RVM_BROWSER_RENDER_SOURCE', 'RVM_BROWSER_GEOMETRY_CONTRACT_VERSION', 'RVM_BROWSER_ATT_ENRICHED',
-  'RVM_BROWSER_ATT_ATTRIBUTE_COUNT', 'RVM_BROWSER_BBOX', 'RVM_BROWSER_LENGTH', 'RVM_BROWSER_RADIUS',
+  'RVM_PRIM_TRANSFORM_SCHEMA', 'RVM_LOCAL_AXIS', 'RVM_TRANSFORM_COLUMN_SCALES', 'RVM_TRANSFORM_LAYOUT', 'RVM_NATIVE_PRIMITIVE_PARAMS',
+  'RVM_NATIVE_PARAMS_DECODED', 'RVM_BROWSER_RENDER_PRIMITIVE', 'RVM_BROWSER_RENDER_SOURCE', 'RVM_BROWSER_GEOMETRY_CONTRACT_VERSION',
+  'RVM_BROWSER_ATT_ENRICHED', 'RVM_BROWSER_ATT_ATTRIBUTE_COUNT', 'RVM_BROWSER_BBOX', 'RVM_BROWSER_LENGTH', 'RVM_BROWSER_RADIUS',
   'RVM_BROWSER_SCALE_SAFE_CONTRACT', 'RVM_BROWSER_SCALE_SAFE_CONTRACT_SCHEMA'
 ]);
 
@@ -71,6 +71,9 @@ self.onmessage = async (event) => {
           browserRvmOversizedNonPipingSkippedCount: compactInstructionSet.diagnostics?.oversizedNonPipingSkippedCount || 0,
           browserRvmOversizedNonPipingFilter: compactInstructionSet.diagnostics?.oversizedNonPipingFilter || null,
           browserRvmScaleSafeContract: parsed.diagnostics?.browserRvmScaleSafeContract || null,
+          browserRvmCppMat3x4LayoutApplied: Boolean(parsed.diagnostics?.rvmCppMat3x4LayoutApplied),
+          browserRvmNativeParamDecodedCount: parsed.diagnostics?.rvmNativeParamDecodedCount || 0,
+          browserRvmPrimitiveKindCounts: parsed.diagnostics?.rvmPrimitiveKindCounts || {},
           browserRvmManifestNodeLimit: positiveInteger(options.manifestNodeLimit, DEFAULT_MANIFEST_NODE_LIMIT),
           browserRvmWorkerTimingsMs: timings,
           browserRvmAtt: attEnrichment.diagnostics,
@@ -117,7 +120,7 @@ function compactAttributes(attrs = {}) {
   let copied = 0;
   for (const [key, value] of Object.entries(attrs || {})) {
     if (value == null || value === '') continue;
-    if (!KEEP_ATTRIBUTE_NAMES.has(key) && copied >= 28) continue;
+    if (!KEEP_ATTRIBUTE_NAMES.has(key) && copied >= 34) continue;
     if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
       out[key] = String(value);
       copied += 1;
