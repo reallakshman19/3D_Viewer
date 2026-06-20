@@ -100,6 +100,11 @@ function fieldValue(root, path, fallback = '') {
   return fallback;
 }
 
+function savedLineKeyPosition(fallback = '') {
+  const { config } = readSupportConfig();
+  return text(config.linelist?.lineKeyTokenPositions || fallback).trim();
+}
+
 function optionHtml(tokens, selected) {
   const safeSelected = normalizePositionValue(selected) || '4';
   const values = new Set(tokens.map((_, index) => String(index + 1)));
@@ -139,7 +144,8 @@ function patchOne(element) {
   const tokens = tokenizeBranchName(sample, delimiter);
   if (!tokens.length) return false;
 
-  const configured = element.value || fieldValue(root, LINE_KEY_PATH, '4') || '4';
+  const rendered = element.value || '4';
+  const configured = savedLineKeyPosition(rendered) || rendered;
   const shifted = shiftedLineKeyPosition(tokens, configured);
   const selected = shifted || configured;
   const attrName = pathAttr(element);
