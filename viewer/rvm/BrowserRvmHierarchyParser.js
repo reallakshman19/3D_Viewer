@@ -1,6 +1,7 @@
 import { parseRvmArrayBuffer as parseFlatRvmArrayBuffer } from './BrowserRvmParser.js';
 
-export const BROWSER_RVM_HIERARCHY_SCHEMA = 'browser-rvm-hierarchy-wrapper/v2';
+export const BROWSER_RVM_HIERARCHY_SCHEMA = 'browser-rvm-hierarchy-wrapper/v3';
+export const BROWSER_RVM_PRIMITIVE_SEMANTICS_VERSION = 'rhbg-prim-code-map/v2';
 
 const RVM_PRIM_CODE_SEMANTICS = {
   2: { type: 'BOX', kind: 'BOX', primitiveClass: 'BOX' },
@@ -15,6 +16,7 @@ const RVM_PRIM_CODE_SEMANTICS = {
 export async function parseRvmArrayBuffer(arrayBuffer, options = {}) {
   const parsed = await parseFlatRvmArrayBuffer(arrayBuffer, options);
   const hierarchy = groupRvmOwnerHierarchy(parsed.hierarchy || []);
+  const semanticSummary = summarizeRvmPrimitiveSemantics(hierarchy);
   return {
     ...parsed,
     hierarchy,
@@ -24,7 +26,13 @@ export async function parseRvmArrayBuffer(arrayBuffer, options = {}) {
       hierarchySchemaVersion: BROWSER_RVM_HIERARCHY_SCHEMA,
       hierarchyGrouped: hierarchy[0]?.attributes?.BROWSER_RVM_HIERARCHY_GROUPED === 'true',
       hierarchyGroupCount: Number(hierarchy[0]?.attributes?.BROWSER_RVM_HIERARCHY_GROUP_COUNT || 0),
-      primitiveSemantics: 'owner-name-and-rhbg-prim-code-map'
+      primitiveSemantics: 'owner-name-and-rhbg-prim-code-map',
+      primitiveSemanticsVersion: BROWSER_RVM_PRIMITIVE_SEMANTICS_VERSION,
+      primitiveTypeCounts: semanticSummary.typeCounts,
+      primitiveKindCounts: semanticSummary.kindCounts,
+      primitiveCodeCounts: semanticSummary.codeCounts,
+      primitiveSemanticSourceCounts: semanticSummary.semanticSourceCounts,
+      semanticLeafCount: semanticSummary.leafCount
     }
   };
 }
@@ -41,7 +49,8 @@ export function groupRvmOwnerHierarchy(roots = []) {
         ...(root.attributes || {}),
         BROWSER_RVM_HIERARCHY_GROUPED: 'true',
         BROWSER_RVM_HIERARCHY_SCHEMA: BROWSER_RVM_HIERARCHY_SCHEMA,
-        BROWSER_RVM_PRIMITIVE_SEMANTICS: 'owner-name-and-rhbg-prim-code-map'
+        BROWSER_RVM_PRIMITIVE_SEMANTICS: 'owner-name-and-rhbg-prim-code-map',
+        BROWSER_RVM_PRIMITIVE_SEMANTICS_VERSION: BROWSER_RVM_PRIMITIVE_SEMANTICS_VERSION
       },
       children: []
     };
@@ -132,7 +141,8 @@ function classifyBranchSegment(segment, depth) {
   if (/^PIPE\b/.test(upper)) return 'PIPE_GROUP';
   if (/^BRANCH\b/.test(upper)) return 'BRANCH_GROUP';
   if (/^EQUIPMENT\b|^SUBEQUIPMENT\b/.test(upper)) return 'EQUIPMENT_GROUP';
-  if (/^GASKET\b|^FLANGE\b|^VALVE\b|^ELBOW\b|^TEE\b|^RTORUS\b|^TORUS\b|^INSTRUMENT\b/.test(upper)) return 'COMPONENT_GROUP';
+  if (/^STRUCTURE\b|^FRAME\b|^STEEL\b|^PLATFORM\b/.test(upper)) return 'STRUCTURE_GROUP';
+  if (/^GASKET\b|^FLANGE\b|^VALVE\b|^ELBOW\b|^TEE\b|^RTORUS\b|^TORUS\b|^INSTRUMENT\b|^REDUCER\b|^CONE\b|^NOZZLE\b|^CAP\b|^STRAINER\b|^SUPPORT\b/.test(upper)) return 'COMPONENT_GROUP';
   return depth === 0 ? 'MODEL_GROUP' : 'RVM_GROUP';
 }
 
@@ -155,7 +165,8 @@ function enrichRvmPrimitiveLeaf(child) {
       TYPE: type,
       RVM_PRIMITIVE_KIND: kind,
       RVM_BROWSER_PRIMITIVE_CLASS: semantic.primitiveClass || kind || type,
-      RVM_BROWSER_PRIMITIVE_SEMANTIC_SOURCE: ownerSemantic ? 'owner-name' : 'prim-code-map'
+      RVM_BROWSER_PRIMITIVE_SEMANTIC_SOURCE: ownerSemantic ? 'owner-name' : 'prim-code-map',
+      RVM_BROWSER_PRIMITIVE_SEMANTIC_VERSION: BROWSER_RVM_PRIMITIVE_SEMANTICS_VERSION
     }
   };
 }
@@ -168,10 +179,45 @@ function semanticFromOwnerName(ownerName) {
   if (/\bVALVE\b|\bVALV\b/.test(upper)) return { type: 'VALVE', kind: 'VALVE', primitiveClass: 'VALVE' };
   if (/\bELBOW\b|\bBEND\b/.test(upper)) return { type: 'ELBOW', kind: 'ELBOW', primitiveClass: 'ELBOW' };
   if (/\bTEE\b/.test(upper)) return { type: 'TEE', kind: 'TEE', primitiveClass: 'TEE' };
+  if (/\bREDUCER\b|\bCONE\b|\bCONI\b|\bFRUSTUM\b/.test(upper)) return { type: 'REDUCER', kind: 'CONE', primitiveClass: 'CONE' };
+  if (/\bNOZZLE\b|\bNOZZ\b/.test(upper)) return { type: 'NOZZLE', kind: 'NOZZLE', primitiveClass: 'NOZZLE' };
+  if (/\bCAP\b|\bCLOSURE\b/.test(upper)) return { type: 'CAP', kind: 'CAP', primitiveClass: 'CAP' };
+  if (/\bSTRAINER\b|\bFILTER\b/.test(upper)) return { type: 'STRAINER', kind: 'STRAINER', primitiveClass: 'STRAINER' };
   if (/\bINSTRUMENT\b|\bINST\b/.test(upper)) return { type: 'INSTRUMENT', kind: 'INSTRUMENT', primitiveClass: 'INSTRUMENT' };
+  if (/\bSUPPORT\b|\bSUPP\b|\bANCHOR\b|\bGUIDE\b/.test(upper)) return { type: 'SUPPORT', kind: 'SUPPORT', primitiveClass: 'SUPPORT' };
   if (/\bPIPE\b|\bCYLI\b|\bTUBE\b/.test(upper)) return { type: 'PIPE', kind: 'CYLINDER', primitiveClass: 'CYLINDER' };
   if (/\bBOX\b|\bEQUIPMENT\b|\bSUBEQUIPMENT\b|\bOBST\b/.test(upper)) return { type: 'BOX', kind: 'BOX', primitiveClass: 'BOX' };
+  if (/\bSTRUCTURE\b|\bFRAME\b|\bSTEEL\b|\bPLATFORM\b|\bSTAIR\b|\bLADDER\b/.test(upper)) return { type: 'STRUCTURE', kind: 'STRUCTURE', primitiveClass: 'STRUCTURE' };
   return null;
+}
+
+function summarizeRvmPrimitiveSemantics(roots = []) {
+  const typeCounts = {};
+  const kindCounts = {};
+  const codeCounts = {};
+  const semanticSourceCounts = {};
+  let leafCount = 0;
+
+  const bump = (target, key) => {
+    const name = String(key || '').trim() || 'UNKNOWN';
+    target[name] = (target[name] || 0) + 1;
+  };
+
+  const walk = (node) => {
+    if (!node || typeof node !== 'object') return;
+    const attrs = node.attributes || {};
+    if (attrs.RVM_RECORD_TAG === 'PRIM' || attrs.RVM_PRIMITIVE_CODE !== undefined || attrs.RVM_BYTE_OFFSET !== undefined) {
+      leafCount += 1;
+      bump(typeCounts, attrs.TYPE || node.type);
+      bump(kindCounts, attrs.RVM_PRIMITIVE_KIND || attrs.RVM_BROWSER_PRIMITIVE_CLASS || node.type);
+      if (attrs.RVM_PRIMITIVE_CODE !== undefined && String(attrs.RVM_PRIMITIVE_CODE) !== '') bump(codeCounts, attrs.RVM_PRIMITIVE_CODE);
+      bump(semanticSourceCounts, attrs.RVM_BROWSER_PRIMITIVE_SEMANTIC_SOURCE || 'unmapped');
+    }
+    for (const child of Array.isArray(node.children) ? node.children : []) walk(child);
+  };
+
+  for (const root of roots || []) walk(root);
+  return { typeCounts, kindCounts, codeCounts, semanticSourceCounts, leafCount };
 }
 
 function stripGroupingState(node) {
