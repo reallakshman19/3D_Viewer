@@ -8,7 +8,6 @@ const __dirname = path.dirname(__filename);
 const repoRoot = path.resolve(__dirname, '../..');
 const viewerRoot = path.join(repoRoot, 'viewer');
 const indexPath = path.join(viewerRoot, 'index.html');
-const mainPath = path.join(viewerRoot, 'main.js');
 const runtimeEventsPath = path.join(viewerRoot, 'contracts/runtime-events.js');
 const appPath = path.join(viewerRoot, 'core/app.js');
 const eventBusPath = path.join(viewerRoot, 'core/event-bus.js');
@@ -182,20 +181,29 @@ function verifyAppTabLifecycleIsolation() {
 }
 
 function verifyStartupBlankPageGuard(moduleScripts) {
-  const mainSource = fs.readFileSync(mainPath, 'utf8');
+  const scriptPaths = moduleScripts.map(stripUrlSuffix);
   assert.deepEqual(
-    moduleScripts.map(stripUrlSuffix),
-    ['./main.js'],
-    'viewer/index.html must expose only the guarded main.js module entrypoint; optional addons belong behind guarded dynamic imports',
+    scriptPaths.length,
+    1,
+    'viewer/index.html must expose exactly one guarded module entrypoint; optional addons belong behind guarded dynamic imports',
   );
   assert.ok(
-    !/^\s*import\s+(?!\()/m.test(mainSource),
-    'main.js must not use eager static imports because module-load failures bypass reportStartupError and can blank the page',
+    /^\.\/main(?:-[A-Za-z0-9_-]+)?\.js$/.test(scriptPaths[0]),
+    `viewer/index.html module entrypoint must be a guarded local main*.js file: ${moduleScripts[0]}`,
   );
-  assert.ok(mainSource.includes('Promise.allSettled'), 'main.js must load optional startup side effects with Promise.allSettled');
-  assert.ok(mainSource.includes('optional startup module failed'), 'main.js must log optional startup side-effect failures without aborting the shell');
-  assert.ok(/import\s*\(\s*["']\.\/core\/app\.js\?v=/.test(mainSource), 'main.js must dynamically import core/app.js through the guarded startup path');
-  assert.ok(mainSource.includes('startViewer().catch(reportStartupError)'), 'main.js must catch startup failures and render the startup error boundary');
+
+  const activeMainPath = resolveViewerAsset(viewerRoot, moduleScripts[0]);
+  assertFileExists(activeMainPath, `guarded module entrypoint ${moduleScripts[0]}`);
+  const mainSource = fs.readFileSync(activeMainPath, 'utf8');
+
+  assert.ok(
+    !/^\s*import\s+(?!\()/m.test(mainSource),
+    `${path.relative(viewerRoot, activeMainPath)} must not use eager static imports because module-load failures bypass reportStartupError and can blank the page`,
+  );
+  assert.ok(mainSource.includes('Promise.allSettled'), `${path.relative(viewerRoot, activeMainPath)} must load optional startup side effects with Promise.allSettled`);
+  assert.ok(mainSource.includes('optional startup module failed'), `${path.relative(viewerRoot, activeMainPath)} must log optional startup side-effect failures without aborting the shell`);
+  assert.ok(/import\s*\(\s*["']\.\/core\/app\.js\?v=/.test(mainSource), `${path.relative(viewerRoot, activeMainPath)} must dynamically import core/app.js through the guarded startup path`);
+  assert.ok(mainSource.includes('startViewer().catch(reportStartupError)'), `${path.relative(viewerRoot, activeMainPath)} must catch startup failures and render the startup error boundary`);
   assert.ok(mainSource.includes("document.getElementById('app-layout')"), 'startup error boundary must target the deployed #app-layout mount');
 }
 
