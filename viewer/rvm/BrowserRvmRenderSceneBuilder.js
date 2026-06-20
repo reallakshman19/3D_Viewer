@@ -10,9 +10,13 @@ const DEFAULT_COLOR_BY_PRIMITIVE = Object.freeze({
   STRUCTURE_BBOX: 0x7b8794,
   TORUS_BBOX_PLACEHOLDER: 0x444444,
   CONE_BBOX_PLACEHOLDER: 0x8f8f8f,
+  ELBOW_BBOX_PLACEHOLDER: 0x3d74c5,
+  TEE_BBOX_PLACEHOLDER: 0x3d74c5,
   VALVE_BBOX_PLACEHOLDER: 0xcc2222,
   FLANGE_BBOX_PLACEHOLDER: 0x9a9a9a,
   INSTRUMENT_BBOX_PLACEHOLDER: 0xb53f3f,
+  SUPPORT_BBOX_PLACEHOLDER: 0xb68b3c,
+  GENERIC_BBOX_PLACEHOLDER: 0x657083,
   UNKNOWN_BBOX_PLACEHOLDER: 0x657083
 });
 
@@ -91,12 +95,20 @@ export function buildInstructionObject(instruction = {}, options = {}) {
   });
 
   let object = null;
-  if ((primitive === 'BOX_BBOX' || primitive === 'STRUCTURE_BBOX') && start && end) {
+  if ((primitive === 'BOX_BBOX' || primitive === 'STRUCTURE_BBOX' || primitive === 'GENERIC_BBOX_PLACEHOLDER' || primitive === 'UNKNOWN_BBOX_PLACEHOLDER') && start && end) {
     object = boxFromInstruction(instruction, center, length, radius, material);
   } else if (primitive === 'TORUS_BBOX_PLACEHOLDER') {
     object = torusPlaceholder(center, axis, length, radius, material);
   } else if (primitive === 'CONE_BBOX_PLACEHOLDER') {
     object = conePlaceholder(center, axis, length, radius, material);
+  } else if (primitive === 'ELBOW_BBOX_PLACEHOLDER') {
+    object = elbowPlaceholder(center, axis, length, radius, material);
+  } else if (primitive === 'TEE_BBOX_PLACEHOLDER') {
+    object = teePlaceholder(center, axis, length, radius, material);
+  } else if (primitive === 'FLANGE_BBOX_PLACEHOLDER') {
+    object = flangePlaceholder(center, axis, length, radius, material);
+  } else if (primitive === 'SUPPORT_BBOX_PLACEHOLDER') {
+    object = supportPlaceholder(center, axis, length, radius, material);
   } else if (primitive === 'VALVE_BBOX_PLACEHOLDER' || primitive === 'INSTRUMENT_BBOX_PLACEHOLDER') {
     object = valveLikePlaceholder(center, axis, length, radius, material);
   } else if (start && end) {
@@ -182,6 +194,53 @@ function conePlaceholder(center, axis, length, radius, material) {
   return mesh;
 }
 
+function elbowPlaceholder(center, axis, length, radius, material) {
+  const group = new THREE.Group();
+  group.position.copy(center);
+  const bendRadius = Math.max(radius * 2.2, (length || radius * 6) * 0.22, 1);
+  const tubeRadius = Math.max(radius * 0.42, 0.5);
+  const arc = new THREE.Mesh(new THREE.TorusGeometry(bendRadius, tubeRadius, 18, 36, Math.PI * 0.5), material);
+  group.add(arc);
+  if (axis && axis.length() > 1e-6) group.quaternion.setFromUnitVectors(new THREE.Vector3(1, 0, 0), axis.clone().normalize());
+  return group;
+}
+
+function teePlaceholder(center, axis, length, radius, material) {
+  const group = new THREE.Group();
+  group.position.copy(center);
+  const dir = axis && axis.length() > 1e-6 ? axis.clone().normalize() : new THREE.Vector3(1, 0, 0);
+  const half = Math.max((length || radius * 6) * 0.38, radius * 2);
+  const main = cylinderBetween(dir.clone().multiplyScalar(-half), dir.clone().multiplyScalar(half), Math.max(radius * 0.55, 0.5), material, 14);
+  const branchDir = perpendicularTo(dir);
+  const branch = cylinderBetween(new THREE.Vector3(0, 0, 0), branchDir.multiplyScalar(Math.max(half * 0.82, radius * 2)), Math.max(radius * 0.5, 0.5), material, 14);
+  if (main) group.add(main);
+  if (branch) group.add(branch);
+  return group;
+}
+
+function flangePlaceholder(center, axis, length, radius, material) {
+  const safeLength = Math.max((length || radius * 4) * 0.28, radius * 0.8, 1);
+  const safeRadius = Math.max(radius * 1.8, 1);
+  const start = new THREE.Vector3(-safeLength / 2, 0, 0);
+  const end = new THREE.Vector3(safeLength / 2, 0, 0);
+  const mesh = cylinderBetween(start, end, safeRadius, material, 24);
+  if (!mesh) return null;
+  mesh.position.add(center);
+  if (axis && axis.length() > 1e-6) mesh.quaternion.premultiply(new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(1, 0, 0), axis.clone().normalize()));
+  return mesh;
+}
+
+function supportPlaceholder(center, axis, length, radius, material) {
+  const group = new THREE.Group();
+  group.position.copy(center);
+  const base = new THREE.Mesh(new THREE.BoxGeometry(Math.max(radius * 3, 4), Math.max(radius * 0.6, 1), Math.max(radius * 3, 4)), material);
+  base.position.y = -Math.max(radius * 1.8, 2);
+  const post = cylinderBetween(new THREE.Vector3(0, -Math.max(radius * 1.8, 2), 0), new THREE.Vector3(0, Math.max(radius * 1.8, 2), 0), Math.max(radius * 0.25, 0.5), material, 10);
+  if (post) group.add(post);
+  group.add(base);
+  return group;
+}
+
 function valveLikePlaceholder(center, axis, length, radius, material) {
   const group = new THREE.Group();
   group.position.copy(center);
@@ -196,6 +255,11 @@ function valveLikePlaceholder(center, axis, length, radius, material) {
     if (barrel) group.add(barrel);
   }
   return group;
+}
+
+function perpendicularTo(dir) {
+  const up = Math.abs(dir.y) < 0.85 ? new THREE.Vector3(0, 1, 0) : new THREE.Vector3(1, 0, 0);
+  return new THREE.Vector3().crossVectors(dir, up).normalize();
 }
 
 function colorForPrimitive(primitive, options = {}) {
