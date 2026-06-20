@@ -8,12 +8,15 @@ import { installRvmViewerInteractionPatch, installRvmCanvasSelectionBridge } fro
 import { installRvmVisibilityToolbarBridge } from './RvmVisibilityToolbarBridge.js?v=20260620-rvm-esc-hide-selection-1';
 import { installRvmSelectionTreeSyncBridge } from './RvmSelectionTreeSyncBridge.js?v=20260620-rvm-large-box-support-sync-1';
 import { installRvmSupportSummaryBridge } from './RvmSupportSummaryBridge.js?v=20260620-rvm-support-symbol-mode-1';
+import { installRvmSupportAssemblyBridge } from './RvmSupportAssemblyBridge.js?v=20260620-rvm-support-assembly-dish-1';
 import { installBrowserRvmCppMat3x4WorkerPatch } from '../rvm/BrowserRvmCppMat3x4WorkerPatch.js?v=20260620-rvm-scale-leak-1';
 import { installBrowserRvmNativeTessellationRuntimePatch } from '../rvm/BrowserRvmNativeTessellationRuntimePatch.js?v=20260620-rvm-native-diagnostics-1';
+import { installBrowserRvmDishTessellationRuntimePatch } from '../rvm/BrowserRvmDishTessellationRuntimePatch.js?v=20260620-rvm-support-assembly-dish-1';
 import { installRvmNativeTessellationDiagnosticsBridge } from './RvmNativeTessellationDiagnosticsBridge.js?v=20260620-rvm-native-diagnostics-1';
 
 installBrowserRvmCppMat3x4WorkerPatch();
 installBrowserRvmNativeTessellationRuntimePatch();
+installBrowserRvmDishTessellationRuntimePatch();
 installRvmProgressiveModelRootPatch(RvmViewer3D);
 installRvmViewerInteractionPatch(RvmViewer3D);
 installRvmHierarchySelectionBridge();
@@ -21,6 +24,7 @@ installRvmCanvasSelectionBridge();
 installRvmVisibilityToolbarBridge();
 installRvmSelectionTreeSyncBridge();
 installRvmSupportSummaryBridge();
+installRvmSupportAssemblyBridge();
 installRvmNativeTessellationDiagnosticsBridge();
 
-export { mountViewer3DRvmTab as renderViewer3DRvm } from './viewer3d-rvm-tab.js?v=20260620-rvm-support-symbol-mode-1';
+export { mountViewer3DRvmTab as renderViewer3DRvm } from './viewer3d-rvm-tab.js?v=20260620-rvm-support-assembly-dish-1';
