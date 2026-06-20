@@ -3,6 +3,19 @@ function _toText(value) {
   return String(value);
 }
 
+function _regexGroup(text, pattern, groupIndex = 1) {
+  const source = _toText(text).trim();
+  const patternText = _toText(pattern).trim();
+  if (!source || !patternText) return '';
+  try {
+    const match = new RegExp(patternText, 'i').exec(source);
+    const index = Math.max(0, Number(groupIndex || 0));
+    return _toText(match?.[index] || '').trim();
+  } catch {
+    return '';
+  }
+}
+
 export function tokenizeBranchName(branchName, delimiter = '-') {
   const cleaned = _toText(branchName).trim().replace(/^\/+/, '').replace(/\/B\d+$/i, '');
   const delim = _toText(delimiter) || '-';
@@ -39,16 +52,14 @@ export function xmlCiiLineKeyFromBranchTokens(branchName, config) {
 export function deriveLineKeyFromBranchName(branchName, config) {
   const text = _toText(branchName).trim();
   const linelist = config.linelist || {};
+
+  // Regex is an explicit user override and must take precedence over token fallback.
+  // Otherwise a configured regex cannot fix shifted branch formats such as:
+  // /ASIM-1885-PL-10"-CS-S8810105-01/B2, where token 4 is the size, not the line key.
+  const byRegex = _regexGroup(text, linelist.branchNameRegex, linelist.lineNoGroup || 1);
+  if (byRegex) return byRegex;
+
   const byToken = xmlCiiLineKeyFromBranchTokens(text, config);
   if (byToken) return byToken;
-  const pattern = _toText(linelist.branchNameRegex).trim();
-  if (pattern) {
-    try {
-      const regex = new RegExp(pattern);
-      const match = regex.exec(text);
-      const group = Math.max(0, Number(linelist.lineNoGroup || 0));
-      if (match && match[group]) return match[group];
-    } catch {}
-  }
   return '';
 }
