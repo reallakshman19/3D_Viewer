@@ -1,6 +1,6 @@
 import { parseRvmArrayBuffer as parseLegacyRvmArrayBuffer } from './BrowserRvmParser.js';
 
-export const BROWSER_RVM_TRANSFORM_PARSER_SCHEMA = 'browser-rvm-transform-parser/v2-cpp-mat3x4';
+export const BROWSER_RVM_TRANSFORM_PARSER_SCHEMA = 'browser-rvm-transform-parser/v3-cpp-mat3x4-scaled-radius';
 
 const PRIMITIVE_KIND_NAMES = Object.freeze({
   1: 'Pyramid',
@@ -29,6 +29,7 @@ export async function parseRvmArrayBuffer(arrayBuffer, options = {}) {
     rvmPrimitiveKindCounts: patch.kindCounts,
     rvmNativeParamDecodedCount: patch.nativeParamDecoded,
     rvmCppMat3x4LayoutApplied: patch.applied > 0,
+    rvmCppMat3x4ScaledRadiusApplied: patch.scaledRadiusApplied,
     parseFidelity: patch.applied > 0 ? 'PARTIAL_BINARY_PRIM_RECORDS_CPP_MAT3X4_WORLD_TRANSFORMED' : parsed.diagnostics?.parseFidelity
   };
   return {
@@ -47,6 +48,7 @@ function patchHierarchyWithWorldTransforms(roots, arrayBuffer) {
   let applied = 0;
   let skipped = 0;
   let nativeParamDecoded = 0;
+  let scaledRadiusApplied = 0;
 
   const patchNode = (node) => {
     if (!node || typeof node !== 'object') return node;
@@ -60,6 +62,7 @@ function patchHierarchyWithWorldTransforms(roots, arrayBuffer) {
       if (geom) {
         applied += 1;
         if (geom.paramsDecoded) nativeParamDecoded += 1;
+        if (geom.radiusScaledByTransform) scaledRadiusApplied += 1;
         bump(kindCounts, geom.kindName || `Kind-${geom.code}`);
         expandBounds(world, geom.bbox);
         expandBounds(legacy, geom.legacyBbox);
@@ -83,6 +86,8 @@ function patchHierarchyWithWorldTransforms(roots, arrayBuffer) {
             RVM_TRANSFORM_LAYOUT: 'cpp-mat3x4-column-major-3x4',
             RVM_LOCAL_AXIS: geom.localAxis,
             RVM_NATIVE_PRIMITIVE_PARAMS: JSON.stringify(geom.primitiveParams),
+            RVM_RADIUS_SCALE_SOURCE: geom.radiusScaleSource,
+            RVM_RADIUS_SCALED_BY_TRANSFORM: String(Boolean(geom.radiusScaledByTransform)),
             APOS: stringifyVec(geom.apos),
             LPOS: stringifyVec(geom.lpos),
             HBOR: String(roundNumber(geom.hbor))
@@ -106,12 +111,13 @@ function patchHierarchyWithWorldTransforms(roots, arrayBuffer) {
       RVM_PRIM_TRANSFORM_APPLIED_COUNT: String(applied),
       RVM_PRIM_TRANSFORM_SKIPPED_COUNT: String(skipped),
       RVM_NATIVE_PARAM_DECODED_COUNT: String(nativeParamDecoded),
+      RVM_CPP_MAT3X4_SCALED_RADIUS_COUNT: String(scaledRadiusApplied),
       RVM_PRIMITIVE_KIND_COUNTS: JSON.stringify(kindCounts),
       RVM_PRIM_WORLD_BOUNDS: JSON.stringify(boundsToBbox(world)),
       RVM_PRIM_LEGACY_BOUNDS: JSON.stringify(boundsToBbox(legacy))
     };
   }
-  return { hierarchy, applied, skipped, nativeParamDecoded, kindCounts, worldBounds: boundsToBbox(world), legacyBounds: boundsToBbox(legacy) };
+  return { hierarchy, applied, skipped, nativeParamDecoded, scaledRadiusApplied, kindCounts, worldBounds: boundsToBbox(world), legacyBounds: boundsToBbox(legacy) };
 }
 
 function decodePrimGeometry(view, offset, legacyCode) {
@@ -157,12 +163,14 @@ function decodePrimGeometry(view, offset, legacyCode) {
 
   const axisSpec = nativeAxisSpecForCode(code, localBbox, params, columnScales);
   const axis = transformedAxis(matrix3x4, axisSpec.start, axisSpec.end);
-  const hbor = nativeRadiusForCode(code, localBbox, params, columnScales, axisSpec.localAxis);
+  const radiusInfo = nativeRadiusForCode(code, localBbox, params, columnScales, axisSpec.localAxis);
   return {
     bbox,
     apos: axis.apos,
     lpos: axis.lpos,
-    hbor,
+    hbor: radiusInfo.radius,
+    radiusScaleSource: radiusInfo.source,
+    radiusScaledByTransform: radiusInfo.scaledByTransform,
     matrix3x3,
     matrix3x4,
     origin,
@@ -180,7 +188,6 @@ function decodePrimGeometry(view, offset, legacyCode) {
 
 function decodePrimitiveParams(code, values = []) {
   const v = (i) => Number(values[i]);
-  const finite = (i) => Number.isFinite(v(i));
   switch (code) {
     case 1:
       if (values.length < 7) return { decoded: false };
@@ -228,6 +235,9 @@ function nativeAxisSpecForCode(code, bbox, params = {}, columnScales = []) {
     const h2 = Number(params.height) * 0.5;
     return { localAxis: 'Z', start: { x: 0, y: 0, z: -h2 }, end: { x: 0, y: 0, z: h2 } };
   }
+  if ((code === 5 || code === 6) && params?.decoded && Number.isFinite(Number(params.height)) && Math.abs(Number(params.height)) > 0) {
+    return { localAxis: 'DISH', start: { x: 0, y: 0, z: 0 }, end: { x: 0, y: 0, z: Number(params.height) } };
+  }
   if (code === 4 && params?.decoded) {
     const angle = Number(params.angle) || 0;
     const offset = Number(params.offset) || 0;
@@ -248,13 +258,19 @@ function nativeAxisSpecForCode(code, bbox, params = {}, columnScales = []) {
 }
 
 function nativeRadiusForCode(code, localBbox, params = {}, columnScales = [], axis = 'Z') {
-  const maxScale = Math.max(...columnScales.filter((value) => Number.isFinite(value) && value > 0), 1);
-  if (code === 8 && params?.decoded) return Math.max(Math.abs(Number(params.radius) || 0) * maxScale, 0.001);
-  if (code === 7 && params?.decoded) return Math.max(Math.max(Math.abs(Number(params.radiusBottom) || 0), Math.abs(Number(params.radiusTop) || 0)) * maxScale, 0.001);
-  if (code === 4 && params?.decoded) return Math.max(Math.abs(Number(params.radius) || 0) * maxScale, 0.001);
-  if ((code === 5 || code === 6) && params?.decoded) return Math.max(Math.abs(Number(params.baseRadius) || 0) * maxScale, 0.001);
-  if (code === 9 && params?.decoded) return Math.max(Math.abs(Number(params.diameter) || 0) * 0.5 * maxScale, 0.001);
-  return transformedRadiusFromBbox(localBbox, columnScales, axis);
+  const validScales = columnScales.filter((value) => Number.isFinite(value) && value > 0);
+  const maxScale = validScales.length ? Math.max(...validScales) : 1;
+  const scaled = (raw, source) => ({
+    radius: Math.max(Math.abs(Number(raw) || 0) * maxScale, 0.001),
+    source,
+    scaledByTransform: maxScale !== 1,
+  });
+  if (code === 8 && params?.decoded) return scaled(params.radius, 'native-cylinder-radius-times-mat3x4-scale');
+  if (code === 7 && params?.decoded) return scaled(Math.max(Math.abs(Number(params.radiusBottom) || 0), Math.abs(Number(params.radiusTop) || 0)), 'native-snout-radius-times-mat3x4-scale');
+  if (code === 4 && params?.decoded) return scaled(params.radius, 'native-torus-radius-times-mat3x4-scale');
+  if ((code === 5 || code === 6) && params?.decoded) return scaled(params.baseRadius, 'native-dish-radius-times-mat3x4-scale');
+  if (code === 9 && params?.decoded) return scaled(Math.abs(Number(params.diameter) || 0) * 0.5, 'native-sphere-radius-times-mat3x4-scale');
+  return { radius: transformedRadiusFromBbox(localBbox, columnScales, axis), source: 'bbox-minor-dimension-times-mat3x4-scale', scaledByTransform: maxScale !== 1 };
 }
 
 function transformPointCppMat3x4(m, p) {
@@ -271,7 +287,10 @@ function transformedAxis(matrix3x4, start, end) {
 
 function transformedRadiusFromBbox(localBbox, columnScales, axis) {
   const d = dimsFromBbox(localBbox);
-  const scaled = { dx: d.dx * columnScales[0], dy: d.dy * columnScales[1], dz: d.dz * columnScales[2] };
+  const sx = Number.isFinite(columnScales[0]) && columnScales[0] > 0 ? columnScales[0] : 1;
+  const sy = Number.isFinite(columnScales[1]) && columnScales[1] > 0 ? columnScales[1] : 1;
+  const sz = Number.isFinite(columnScales[2]) && columnScales[2] > 0 ? columnScales[2] : 1;
+  const scaled = { dx: d.dx * sx, dy: d.dy * sy, dz: d.dz * sz };
   const minors = axis === 'X' ? [scaled.dy, scaled.dz] : axis === 'Y' ? [scaled.dx, scaled.dz] : [scaled.dx, scaled.dy];
   return Math.max(Math.min(minors[0], minors[1]) * 0.5, 0.001);
 }
@@ -347,7 +366,7 @@ function boundsToBbox(bounds) {
 
 function bump(target, key) {
   const name = String(key || '').trim() || 'UNKNOWN';
-  target[name] = (target[name] || 0) + 1;
+  target[name] = (target[key] || 0) + 1;
 }
 
 function stringifyVec(vec) {
