@@ -6,7 +6,6 @@ const INPUTXML_HEADER_DEFAULTS = Object.freeze({
   headerUserName: 'MUCE828',
   headerPurpose: 'Preliminary stress run',
   headerProjectName: 'ZAU',
-  headerMdbName: '/ZAU1',
 });
 
 const INPUTXML2019_SAFE_UNITS = Object.freeze({
@@ -395,7 +394,7 @@ const CONVERTER_DEFS = {
           lineKeyJoiner: '',
           branchNameRegex: '',
           lineNoGroup: 1,
-          linelistColumnRegex: '^\\s*(.*?)\\s*$',
+          linelistColumnRegex: '^\s*(.*?)\s*$',
           linelistColumnGroup: 1,
         },
         rating: {
@@ -477,7 +476,7 @@ const CONVERTER_DEFS = {
       ...INPUTXML_HEADER_DEFAULTS,
     },
     fields: [
-      { key: 'inferReducerAngleFromGeometry', label: 'Infer Reducer Angle From Geometry', type: 'checkbox' },
+      { key: 'inferReducerAngleFromGeometry', label: 'Infer ReducerAngle From Geometry', type: 'checkbox' },
       { key: 'defaultDiameter', label: 'Default Diameter', type: 'number', step: '0.001' },
       { key: 'defaultWallThickness', label: 'Default Wall Thickness', type: 'number', step: '0.001' },
       { key: 'defaultInsulationThickness', label: 'Default Insulation Thickness', type: 'number', step: '0.001' },
@@ -651,7 +650,7 @@ import { run as pythonWorkerRun } from './converters/python-worker-base.js';
 import { run as stagedJsonToXmlRun } from './converters/stagedjson-to-xml.js';
 import { run as stagedJsonToInputXmlRun } from './converters/stagedjson-to-inputxml.js';
 import { run as stagedJsonToCsvRun } from './converters/stagedjson-to-csv.js';
-import { run as xmlToCiiRun } from './converters/xmltocii2019_runner.js';
+import { run as xmlToCiiRun } from './converters/xmltocii2019_runner.js?v=20260620-weight-ready-1';
 import { run as inputXmlToCii2019Run } from './converters/inputxml-to-cii2019.js';
 import { run as inputXmlToRvmRun } from './converters/inputxml-to-rvm.js';
 import { run as pcfContinuityCheckRun } from './converters/pcf-continuity-check.js';
@@ -749,4 +748,3 @@ export function getConverterById(id) {
     }
   }
 })();
-
