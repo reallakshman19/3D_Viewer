@@ -18,6 +18,7 @@ async function run() {
   const transformHierarchySource = await readFile(new URL('../../../rvm/BrowserRvmHierarchyTransformParser.js', import.meta.url), 'utf8');
   const tabSource = await readFile(new URL('../../../tabs/viewer3d-rvm-tab.js', import.meta.url), 'utf8');
   const hierarchySelectionBridgeSource = await readFile(new URL('../../../tabs/RvmHierarchySelectionBridge.js', import.meta.url), 'utf8');
+  const interactionPatchSource = await readFile(new URL('../../../tabs/RvmViewerInteractionPatch.js', import.meta.url), 'utf8');
   const progressivePatchSource = await readFile(new URL('../../../rvm-viewer/RvmProgressiveModelRootPatch.js', import.meta.url), 'utf8');
   const progressivePatchV5Source = await readFile(new URL('../../../rvm-viewer/RvmProgressiveModelRootPatchV5.js', import.meta.url), 'utf8');
   const rendererSource = await readFile(new URL('../../../tabs/viewer3d-rvm-tab-renderer.js', import.meta.url), 'utf8');
@@ -90,16 +91,19 @@ async function run() {
   assert.doesNotMatch(progressivePatchV5Source, /visible\s*=\s*false/, 'No-hide fit patch must not hide meshes during final fit.');
   assert.match(rendererSource, /RvmProgressiveModelRootPatchV5\.js\?v=20260620-rvm-tree-select-nohide-1/, 'Renderer must load the v5 no-hide fit patch.');
   assert.match(rendererSource, /RvmHierarchySelectionBridge\.js\?v=20260620-rvm-tree-select-nohide-1/, 'Renderer must load the hierarchy selection bridge.');
-  assert.match(rendererSource, /viewer3d-rvm-tab\.js\?v=20260620-rvm-flat-tree-1/, 'Renderer must load the flat-tree tab cache key.');
+  assert.match(rendererSource, /RvmViewerInteractionPatch\.js\?v=20260620-rvm-toolbar-selection-1/, 'Renderer must load the toolbar/canvas selection patch.');
+  assert.match(rendererSource, /viewer3d-rvm-tab\.js\?v=20260620-rvm-toolbar-selection-1/, 'Renderer must load the toolbar-selection tab cache key.');
   assert.match(hierarchySelectionBridgeSource, /Fit Selection/,'Hierarchy selection bridge must expose Fit Selection.');
   assert.match(hierarchySelectionBridgeSource, /stopImmediatePropagation/, 'Hierarchy selection bridge must bypass the legacy tree click fit path.');
+  assert.match(interactionPatchSource, /dispatchAction[\s\S]*VIEW_FIT_ALL/, 'Toolbar patch must implement RVM actions.');
+  assert.match(interactionPatchSource, /installRvmCanvasSelectionBridge[\s\S]*raycaster\.intersectObject/, 'Canvas patch must raycast rendered geometry.');
 
   assert.doesNotMatch(entrypointSource, /RvmBrowserRvmWorkerFirstBridge\.js/, 'The RVM freeze fix must not depend on an optional startup side-effect bridge.');
-  assert.match(entrypointSource, /core\/app\.js\?v=20260620-rvm-flat-tree-1/, 'App shell cache key must include the flat-tree version.');
-  assert.match(indexHtml, /main(?:-[A-Za-z0-9_-]+)?\.js\?v=20260620-rvm-flat-tree-1/, 'GitHub Pages entrypoint must bump the app shell cache key.');
+  assert.match(entrypointSource, /core\/app\.js\?v=20260620-rvm-toolbar-selection-1/, 'App shell cache key must include the toolbar-selection version.');
+  assert.match(indexHtml, /main(?:-[A-Za-z0-9_-]+)?\.js\?v=20260620-rvm-toolbar-selection-1/, 'GitHub Pages entrypoint must bump the app shell cache key.');
   assert.match(indexHtml, /viewer3d-rvm-tab\.css\?v=20260620-rvm-direct-tab-1/, 'RVM tab CSS cache key must be bumped.');
 
-  console.log('Browser RVM direct tab flat hierarchy responsiveness contract test passed');
+  console.log('Browser RVM direct tab toolbar/canvas selection contract test passed');
 }
 
 run();
