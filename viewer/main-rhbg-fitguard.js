@@ -43,7 +43,7 @@ async function loadStartupSideEffects() {
 
 async function startViewer() {
   await loadStartupSideEffects();
-  const { init } = await import('./core/app.js?v=20260620-rvm-oversize-filter-1');
+  const { init } = await import('./core/app.js?v=20260620-rvm-scale-safe-1');
   await init();
 }
 
