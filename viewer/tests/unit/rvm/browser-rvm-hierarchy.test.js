@@ -90,6 +90,8 @@ assert.equal(parsed.diagnostics.parseFidelity, 'PARTIAL_BINARY_PRIM_RECORDS');
 assert.equal(parsed.diagnostics.hierarchyGrouped, true);
 assert.equal(parsed.diagnostics.primitiveSemantics, 'owner-name-and-rhbg-prim-code-map');
 assert.equal(parsed.diagnostics.primitiveSemanticsVersion, 'rhbg-prim-code-map/v2');
+assert.equal(parsed.diagnostics.hierarchySchemaVersion, 'browser-rvm-hierarchy-wrapper/v4');
+assert.equal(parsed.diagnostics.geometryQualityVersion, 'rvm-geometry-quality/v1');
 assert.ok(parsed.diagnostics.hierarchyGroupCount >= 4, 'owner path should create zone/pipe/branch/component groups');
 assert.equal(parsed.diagnostics.primitiveCodeCounts['3'], 1);
 assert.equal(parsed.diagnostics.primitiveCodeCounts['5'], 1);
@@ -99,11 +101,18 @@ assert.equal(parsed.diagnostics.primitiveTypeCounts.INSTRUMENT, 1);
 assert.equal(parsed.diagnostics.primitiveTypeCounts.REDUCER, 1);
 assert.equal(parsed.diagnostics.primitiveTypeCounts.STRUCTURE, 1);
 assert.equal(parsed.diagnostics.primitiveSemanticSourceCounts['owner-name'], 5);
+assert.equal(parsed.diagnostics.geometryLeafCount, 5);
+assert.equal(parsed.diagnostics.geometrySpanAxisCounts.X, 5);
+assert.equal(parsed.diagnostics.geometrySourceCounts['binary-rvm-record'], 5);
+assert.equal(parsed.diagnostics.geometryMissingBboxCount, 0);
+assert.equal(parsed.diagnostics.geometryApproximateCount, 0);
 
 const root = parsed.hierarchy[0];
 assert.equal(root.attributes.BROWSER_RVM_HIERARCHY_GROUPED, 'true');
+assert.equal(root.attributes.BROWSER_RVM_HIERARCHY_SCHEMA, 'browser-rvm-hierarchy-wrapper/v4');
 assert.equal(root.attributes.BROWSER_RVM_PRIMITIVE_SEMANTICS, 'owner-name-and-rhbg-prim-code-map');
 assert.equal(root.attributes.BROWSER_RVM_PRIMITIVE_SEMANTICS_VERSION, 'rhbg-prim-code-map/v2');
+assert.equal(root.attributes.BROWSER_RVM_GEOMETRY_QUALITY_VERSION, 'rvm-geometry-quality/v1');
 assert.ok(findByName(root, 'ZONE /RHBG-1000-CU-PI-P'));
 assert.ok(findByName(root, 'PIPE 1'));
 assert.ok(findByName(root, 'BRANCH 1'));
@@ -123,12 +132,20 @@ assert.equal(rtorusLeaf.attributes.RVM_PRIMITIVE_KIND, 'TORUS');
 assert.equal(rtorusLeaf.attributes.RVM_BROWSER_PRIMITIVE_CLASS, 'TORUS');
 assert.equal(rtorusLeaf.attributes.RVM_BROWSER_PRIMITIVE_SEMANTIC_SOURCE, 'owner-name');
 assert.equal(rtorusLeaf.attributes.RVM_BROWSER_PRIMITIVE_SEMANTIC_VERSION, 'rhbg-prim-code-map/v2');
+assert.equal(rtorusLeaf.attributes.RVM_BROWSER_GEOMETRY_QUALITY_VERSION, 'rvm-geometry-quality/v1');
+assert.equal(rtorusLeaf.attributes.RVM_BROWSER_GEOMETRY_QUALITY, 'bbox-derived');
+assert.equal(rtorusLeaf.attributes.RVM_BROWSER_GEOMETRY_SOURCE, 'binary-rvm-record');
+assert.equal(rtorusLeaf.attributes.RVM_BROWSER_SPAN_AXIS, 'X');
+assert.equal(rtorusLeaf.attributes.RVM_BROWSER_SPAN_LENGTH, '100.000');
+assert.equal(rtorusLeaf.attributes.RVM_BROWSER_EXTENT_Y, '20.000');
+assert.equal(rtorusLeaf.attributes.RVM_BROWSER_EXTENT_Z, '20.000');
 
 const instrument = findByName(root, 'INSTRUMENT 1');
 const instrumentLeaf = instrument.children.find((child) => child.attributes?.RVM_PRIMITIVE_CODE === '11');
 assert.ok(instrumentLeaf, 'INSTRUMENT code-11 PRIM should remain under the instrument owner group');
 assert.equal(instrumentLeaf.type, 'INSTRUMENT');
 assert.equal(instrumentLeaf.attributes.RVM_BROWSER_PRIMITIVE_CLASS, 'INSTRUMENT');
+assert.equal(instrumentLeaf.attributes.RVM_BROWSER_GEOMETRY_QUALITY, 'bbox-derived');
 
 const reducer = findByName(root, 'REDUCER 1');
 const reducerLeaf = reducer.children.find((child) => child.attributes?.RVM_PRIMITIVE_CODE === '5');
@@ -141,10 +158,12 @@ const structureLeaf = structure.children.find((child) => child.attributes?.RVM_P
 assert.ok(structureLeaf, 'STRUCTURE owner should override generic box code');
 assert.equal(structureLeaf.type, 'STRUCTURE');
 assert.equal(structureLeaf.attributes.RVM_BROWSER_PRIMITIVE_CLASS, 'STRUCTURE');
+assert.equal(structureLeaf.attributes.RVM_BROWSER_SPAN_AXIS, 'X');
 
 assert.ok(parsed.indexJson.nodes.some((node) => node.name === 'GASKET 1'));
 assert.ok(parsed.indexJson.nodes.some((node) => node.kind === 'INSTRUMENT'));
 assert.ok(parsed.indexJson.nodes.some((node) => node.kind === 'REDUCER'));
 assert.ok(parsed.indexJson.nodes.some((node) => node.kind === 'STRUCTURE'));
+assert.ok(parsed.indexJson.nodes.some((node) => node.attributes.RVM_BROWSER_GEOMETRY_QUALITY_VERSION === 'rvm-geometry-quality/v1'));
 
 console.log('Browser RVM hierarchy grouping test passed');
