@@ -129,6 +129,7 @@ const result = buildBrowserRvmRenderSceneFromInstructions(instructions);
 assert.equal(result.schemaVersion, BROWSER_RVM_RENDER_SCENE_SCHEMA);
 assert.equal(result.scene.userData.schemaVersion, BROWSER_RVM_RENDER_SCENE_SCHEMA);
 assert.equal(result.scene.userData.instructionSchemaVersion, '');
+assert.equal(result.scene.userData.renderOptions.renderMode, 'all');
 assert.equal(result.diagnostics.instructionCount, 9);
 assert.equal(result.diagnostics.renderableCount, 8);
 assert.equal(result.diagnostics.skippedCount, 1);
@@ -140,6 +141,16 @@ assert.equal(result.diagnostics.primitiveCounts.ELBOW_BBOX_PLACEHOLDER, 1);
 assert.equal(result.diagnostics.primitiveCounts.TEE_BBOX_PLACEHOLDER, 1);
 assert.equal(result.diagnostics.primitiveCounts.FLANGE_BBOX_PLACEHOLDER, 1);
 assert.equal(result.diagnostics.primitiveCounts.SUPPORT_BBOX_PLACEHOLDER, 1);
+assert.equal(result.diagnostics.effectivePrimitiveCounts.PIPE_CYLINDER, 1);
+assert.equal(result.diagnostics.effectivePrimitiveCounts.TORUS_RING, 1);
+assert.equal(result.diagnostics.effectivePrimitiveCounts.CONE_FRUSTUM, 1);
+assert.equal(result.diagnostics.effectivePrimitiveCounts.STRUCTURE_SOLID, 1);
+assert.equal(result.diagnostics.effectivePrimitiveCounts.ELBOW_TORUS_ARC, 1);
+assert.equal(result.diagnostics.effectivePrimitiveCounts.TEE_COMPOSITE, 1);
+assert.equal(result.diagnostics.effectivePrimitiveCounts.FLANGE_DISC, 1);
+assert.equal(result.diagnostics.effectivePrimitiveCounts.SUPPORT_STAND, 1);
+assert.equal(result.diagnostics.renderQualityCounts['bbox-derived-geometry'], 2);
+assert.equal(result.diagnostics.renderQualityCounts['bbox-promoted-geometry'], 6);
 assert.equal(result.diagnostics.skippedReasons['missing-position'], 1);
 assert.equal(result.diagnostics.attCounts.enriched, 1);
 assert.equal(result.diagnostics.attCounts.plain, 7);
@@ -152,6 +163,10 @@ assert.ok(Number.isFinite(result.bounds.max.x), 'bounds max should be finite');
 assert.ok(result.bounds.max.x > result.bounds.min.x, 'bounds should have positive X size');
 assert.ok(result.bounds.size.x > 0, 'bounds size.x should be positive');
 assert.ok(result.bounds.radius > 0, 'bounds radius should be positive');
+assert.ok(result.diagnostics.performance.meshObjectCount >= 8, 'performance diagnostics should count meshes');
+assert.ok(result.diagnostics.performance.geometryCacheSize > 0, 'geometry cache should be populated');
+assert.ok(result.diagnostics.performance.materialCacheSize > 0, 'material cache should be populated');
+assert.ok(result.diagnostics.performance.estimatedGeometryBytes > 0, 'geometry memory estimate should be populated');
 
 const pipe = result.scene.children.find((child) => child.userData.renderPrimitive === 'CYLINDER_BBOX');
 assert.ok(pipe, 'cylinder render instruction should create a mesh');
@@ -160,6 +175,10 @@ assert.equal(pipe.userData.type, 'PIPE');
 assert.equal(pipe.userData.kind, 'CYLINDER');
 assert.equal(pipe.userData.sourcePath, 'ROOT/PIPE 1/PRIM 1');
 assert.equal(pipe.userData.displayName, 'PIPE-10-A');
+assert.equal(pipe.userData.effectiveRenderPrimitive, 'PIPE_CYLINDER');
+assert.equal(pipe.userData.renderQuality, 'bbox-derived-geometry');
+assert.equal(pipe.userData.pickable, true);
+assert.equal(pipe.userData.browserRvmProperties.attAttributes.LINE, 'PIPE-10-A');
 assert.equal(pipe.userData.browserRvmAttEnriched, true);
 assert.equal(pipe.userData.browserRvmAtt.ownerQuery, 'PIPE 1');
 assert.equal(pipe.userData.browserRvmAtt.attributeCount, 2);
@@ -170,31 +189,49 @@ assert.ok(pipe.geometry?.type?.includes('Cylinder'), 'pipe should use CylinderGe
 
 const torus = result.scene.children.find((child) => child.userData.renderPrimitive === 'TORUS_BBOX_PLACEHOLDER');
 assert.ok(torus, 'torus placeholder should be renderable');
-assert.ok(torus.geometry?.type?.includes('Torus'), 'torus placeholder should use TorusGeometry');
+assert.ok(torus.geometry?.type?.includes('Torus'), 'torus promoted geometry should use TorusGeometry');
 assert.equal(torus.userData.kind, 'TORUS');
+assert.equal(torus.userData.effectiveRenderPrimitive, 'TORUS_RING');
+assert.equal(torus.userData.renderQuality, 'bbox-promoted-geometry');
 assert.equal(torus.userData.browserRvmAttEnriched, false);
 
 const cone = result.scene.children.find((child) => child.userData.renderPrimitive === 'CONE_BBOX_PLACEHOLDER');
-assert.ok(cone.geometry?.type?.includes('Cone'), 'cone placeholder should use ConeGeometry');
+assert.ok(cone.geometry?.type?.includes('Cylinder'), 'cone/frustum promoted geometry should use tapered CylinderGeometry');
+assert.equal(cone.userData.effectiveRenderPrimitive, 'CONE_FRUSTUM');
 
 const box = result.scene.children.find((child) => child.userData.renderPrimitive === 'BOX_BBOX');
 assert.ok(box.geometry?.type?.includes('Box'), 'box primitive should use BoxGeometry');
 assert.equal(box.userData.type, 'STRUCTURE');
+assert.equal(box.userData.effectiveRenderPrimitive, 'STRUCTURE_SOLID');
 
 const elbow = result.scene.children.find((child) => child.userData.renderPrimitive === 'ELBOW_BBOX_PLACEHOLDER');
-assert.ok(elbow?.isGroup, 'elbow placeholder should use a group');
+assert.ok(elbow?.isGroup, 'elbow promoted geometry should use a group');
+assert.equal(elbow.userData.effectiveRenderPrimitive, 'ELBOW_TORUS_ARC');
 assert.ok(elbow.children.some((child) => child.geometry?.type?.includes('Torus')), 'elbow should include arc geometry');
 
 const tee = result.scene.children.find((child) => child.userData.renderPrimitive === 'TEE_BBOX_PLACEHOLDER');
-assert.ok(tee?.isGroup, 'tee placeholder should use a group');
+assert.ok(tee?.isGroup, 'tee promoted geometry should use a group');
+assert.equal(tee.userData.effectiveRenderPrimitive, 'TEE_COMPOSITE');
 assert.ok(tee.children.filter((child) => child.geometry?.type?.includes('Cylinder')).length >= 2, 'tee should include main and branch cylinders');
 
 const flange = result.scene.children.find((child) => child.userData.renderPrimitive === 'FLANGE_BBOX_PLACEHOLDER');
-assert.ok(flange.geometry?.type?.includes('Cylinder'), 'flange should use a short cylinder/disc placeholder');
+assert.ok(flange.geometry?.type?.includes('Cylinder'), 'flange should use a short cylinder/disc geometry');
+assert.equal(flange.userData.effectiveRenderPrimitive, 'FLANGE_DISC');
 
 const support = result.scene.children.find((child) => child.userData.renderPrimitive === 'SUPPORT_BBOX_PLACEHOLDER');
-assert.ok(support?.isGroup, 'support placeholder should use a group');
+assert.ok(support?.isGroup, 'support promoted geometry should use a group');
+assert.equal(support.userData.effectiveRenderPrimitive, 'SUPPORT_STAND');
 assert.ok(support.children.some((child) => child.geometry?.type?.includes('Box')), 'support should include a base box');
+
+const exactOnly = buildBrowserRvmRenderSceneFromInstructions(instructions, { renderMode: 'exact', showUnknown: false });
+assert.equal(exactOnly.diagnostics.renderOptions.renderMode, 'exact');
+assert.equal(exactOnly.diagnostics.renderableCount, 8);
+assert.equal(exactOnly.diagnostics.skippedReasons['hidden-by-render-toggle'], 1);
+
+const placeholderOnly = buildBrowserRvmRenderSceneFromInstructions(instructions, { renderMode: 'placeholder' });
+assert.equal(placeholderOnly.diagnostics.renderOptions.renderMode, 'placeholder');
+assert.equal(placeholderOnly.diagnostics.renderableCount, 0);
+assert.ok(placeholderOnly.diagnostics.skippedCount >= 9);
 
 const emptyResult = buildBrowserRvmRenderSceneFromInstructions([
   {
