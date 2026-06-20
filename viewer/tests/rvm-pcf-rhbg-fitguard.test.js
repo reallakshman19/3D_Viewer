@@ -20,20 +20,25 @@ const indexSource = await fs.readFile(new URL('../index.html', import.meta.url),
 const entrySource = await fs.readFile(new URL('../main-rhbg-fitguard.js', import.meta.url), 'utf8');
 const bridgeSource = await fs.readFile(new URL('../rvm/BrowserRvmLoadBridge.js', import.meta.url), 'utf8');
 const workerSource = await fs.readFile(new URL('../rvm/browser-rvm-worker.js', import.meta.url), 'utf8');
-const filterSource = await fs.readFile(new URL('../rvm/BrowserRvmInstructionFilter.js', import.meta.url), 'utf8');
+const transformHierarchySource = await fs.readFile(new URL('../rvm/BrowserRvmHierarchyTransformParser.js', import.meta.url), 'utf8');
+const filterSource = await fs.readFile(new URL('../rvm/BrowserRvmInstructionFilterV2.js', import.meta.url), 'utf8');
 
 check(patchSource.includes('pcf-glb-rvm-progressive-model-root-patch-v2'), 'fit patch v2 present');
 check(patchSource.includes('resolveRobustProgressiveFit'), 'robust progressive fit present');
 check(patchSource.includes('fitBoxWithoutFullSceneTraversal'), 'final fit avoids full traversal');
 check(!patchSource.includes('this._fitBox(box)'), 'final fit avoids legacy fit box');
 check(rendererSource.includes('RvmProgressiveModelRootPatch.js?v=20260620-rvm-rhbg-fitguard-1'), 'renderer loads fit guard patch');
-check(rendererSource.includes('viewer3d-rvm-tab.js?v=20260620-rvm-oversize-filter-1'), 'renderer loads oversize-filter tab');
-check(appSource.includes('viewer3d-rvm-tab-renderer.js?v=20260620-rvm-oversize-filter-1'), 'app loads oversize-filter renderer');
-check(indexSource.includes('main-rhbg-fitguard.js?v=20260620-rvm-oversize-filter-1'), 'html loads oversize-filter entry');
-check(entrySource.includes('core/app.js?v=20260620-rvm-oversize-filter-1'), 'entry loads oversize-filter app');
-check(bridgeSource.includes('browser-rvm-worker.js?v=20260620-rvm-oversize-filter-1'), 'bridge loads oversize-filter worker');
-check(workerSource.includes('BrowserRvmInstructionFilter.js?v=20260620-rvm-oversize-filter-1'), 'worker loads oversize filter');
-check(filterSource.includes('oversizedNonPipingHidden'), 'filter reports skipped chunks');
+check(rendererSource.includes('viewer3d-rvm-tab.js?v=20260620-rvm-scale-safe-1'), 'renderer loads scale-safe tab');
+check(appSource.includes('viewer3d-rvm-tab-renderer.js?v=20260620-rvm-scale-safe-1'), 'app loads scale-safe renderer');
+check(indexSource.includes('main-rhbg-fitguard.js?v=20260620-rvm-scale-safe-1'), 'html loads scale-safe entry');
+check(entrySource.includes('core/app.js?v=20260620-rvm-scale-safe-1'), 'entry loads scale-safe app');
+check(bridgeSource.includes('browser-rvm-worker.js?v=20260620-rvm-scale-safe-1'), 'bridge loads scale-safe worker');
+check(workerSource.includes('BrowserRvmInstructionFilterV2.js?v=20260620-rvm-scale-safe-1'), 'worker loads scale-safe filter');
+check(workerSource.includes('BrowserRvmHierarchyTransformParser.js?v=20260620-rvm-scale-safe-1'), 'worker loads scale-safe hierarchy parser');
+check(transformHierarchySource.includes('RVM_BROWSER_SCALE_SAFE_CONTRACT'), 'transform wrapper repairs render contracts');
+check(transformHierarchySource.includes('APOS') && transformHierarchySource.includes('LPOS') && transformHierarchySource.includes('HBOR'), 'scale-safe contract uses transformed APOS/LPOS/HBOR');
+check(filterSource.includes('browser-rvm-instruction-filter/v2'), 'filter v2 schema present');
+check(filterSource.includes('maxAbsoluteDiagonal') && filterSource.includes('5000'), 'filter v2 avoids hiding valid pipe racks by small threshold');
 
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed > 0) process.exit(1);
