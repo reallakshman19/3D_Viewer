@@ -9,7 +9,7 @@
  * rendered inside this popup.
  */
 import { WorkflowModal } from './shared/WorkflowModal.js';
-import { getXmlCiiPhaseBridge } from './legacy-adapter.js?v=20260619-git-ss-adapt-8';
+import { getXmlCiiPhaseBridge } from './legacy-adapter.js?v=20260620-rich-file-master-1';
 import { renderXmlCiiPopupNativePhase } from './xml-cii-popup-native-panels.js?v=20260619-git-ss-adapt-1';
 import { XML_CII_WORKFLOW_PHASES, normalizeWorkflowPhaseId } from './WorkflowShell.js';
 
@@ -25,17 +25,11 @@ function browserReady() {
 }
 
 function readStored(key, fallback) {
-  try {
-    return window.localStorage.getItem(key) ?? fallback;
-  } catch {
-    return fallback;
-  }
+  try { return window.localStorage.getItem(key) ?? fallback; } catch { return fallback; }
 }
 
 function writeStored(key, value) {
-  try {
-    window.localStorage.setItem(key, value);
-  } catch {}
+  try { window.localStorage.setItem(key, value); } catch {}
 }
 
 function runtime() {
@@ -120,11 +114,9 @@ function activeConverterId(root) {
 function isXmlCiiActive(root) {
   const select = activeConverterSelect(root);
   if (!select) return false;
-
   const id = activeConverterId(root);
   if (XML_CII_CONVERTER_IDS.has(id)) return true;
   if (XML_CII_CONVERTER_IDS.has(normalizeConverterToken(id))) return true;
-
   const optionText = select.selectedOptions?.[0]?.textContent || '';
   const normalized = normalizeConverterToken(`${id} ${optionText}`);
   if (normalized.includes('inputxml')) return false;
@@ -133,15 +125,12 @@ function isXmlCiiActive(root) {
 
 function armDirectRunGuard() {
   window[DIRECT_RUN_FLAG] = true;
-  setTimeout(() => {
-    window[DIRECT_RUN_FLAG] = false;
-  }, 0);
+  setTimeout(() => { window[DIRECT_RUN_FLAG] = false; }, 0);
 }
 
 function dispatchDirectRun(root) {
   const runButton = root.querySelector?.('#model-converters-run') || document.querySelector('#model-converters-run');
   if (!runButton) return false;
-
   armDirectRunGuard();
   runButton.click();
   return true;
@@ -170,11 +159,10 @@ function bindNativePhaseActions(root, state, bridge, phaseId) {
   const rerender = () => renderPhase(root, state);
 
   body.querySelectorAll('[data-native-regex-path]').forEach((input) => {
-    const save = () => {
+    input.addEventListener('change', () => {
       bridge.setPopupConfigValue?.(input.getAttribute('data-native-regex-path') || '', input.value, input.type);
       rerender();
-    };
-    input.addEventListener('change', save);
+    });
   });
 
   body.querySelectorAll('[data-native-master-tab]').forEach((button) => {
@@ -190,14 +178,9 @@ function bindNativePhaseActions(root, state, bridge, phaseId) {
       const file = input.files?.[0];
       if (!file) return;
       const masterKey = input.getAttribute('data-native-import-master') || 'linelist';
-      try {
-        await bridge.importPopupMasterFile?.(masterKey, file);
-      } catch (err) {
-        console.warn('XML->CII workflow: master import failed', err);
-      } finally {
-        input.value = '';
-        rerender();
-      }
+      try { await bridge.importPopupMasterFile?.(masterKey, file); }
+      catch (err) { console.warn('XML->CII workflow: master import failed', err); }
+      finally { input.value = ''; rerender(); }
     });
   });
 
@@ -205,13 +188,9 @@ function bindNativePhaseActions(root, state, bridge, phaseId) {
     button.addEventListener('click', async () => {
       const masterKey = button.getAttribute('data-native-load-default') || '';
       button.disabled = true;
-      try {
-        await bridge.loadPopupDefaultMaster?.(masterKey);
-      } catch (err) {
-        console.warn('XML->CII workflow: default master load failed', err);
-      } finally {
-        rerender();
-      }
+      try { await bridge.loadPopupDefaultMaster?.(masterKey); }
+      catch (err) { console.warn('XML->CII workflow: default master load failed', err); }
+      finally { rerender(); }
     });
   });
 
@@ -256,9 +235,7 @@ function bindNativePhaseActions(root, state, bridge, phaseId) {
     } catch (err) {
       state.previewRows = [];
       state.previewStatus = String(err?.message || err);
-    } finally {
-      rerender();
-    }
+    } finally { rerender(); }
   });
 
   body.querySelector('[data-native-dry-run]')?.addEventListener('click', async () => {
@@ -270,9 +247,7 @@ function bindNativePhaseActions(root, state, bridge, phaseId) {
     } catch (err) {
       state.diagnosticsRows = [];
       state.diagnosticsStatus = String(err?.message || err);
-    } finally {
-      rerender();
-    }
+    } finally { rerender(); }
   });
 
   body.querySelector('[data-native-compute-weights]')?.addEventListener('click', async () => {
@@ -284,9 +259,7 @@ function bindNativePhaseActions(root, state, bridge, phaseId) {
     } catch (err) {
       state.weightRows = [];
       state.weightStatus = String(err?.message || err);
-    } finally {
-      rerender();
-    }
+    } finally { rerender(); }
   });
 
   body.querySelector('[data-native-apply-preferred-weights]')?.addEventListener('click', () => {
@@ -334,9 +307,7 @@ function bindNativePhaseActions(root, state, bridge, phaseId) {
       state.configStatus = 'Saved';
     } catch (err) {
       state.configStatus = `JSON error: ${String(err?.message || err)}`;
-    } finally {
-      rerender();
-    }
+    } finally { rerender(); }
   });
 
   body.querySelector('[data-native-export-config]')?.addEventListener('click', () => {
@@ -396,9 +367,7 @@ function preloadDefaultMasters(root, state) {
 
   const preloadTarget = state.modal?.overlayEl || root;
   state.defaultMastersPromise = Promise.resolve(bridge.ensureDefaultMastersLoaded(preloadTarget))
-    .catch((err) => {
-      console.warn('XML->CII workflow: default master preload failed', err);
-    })
+    .catch((err) => { console.warn('XML->CII workflow: default master preload failed', err); })
     .finally(() => {
       state.defaultMastersPromise = null;
       if (state.modal) renderPhase(root, state);
@@ -486,7 +455,7 @@ function ensureWorkflowButton(root, state) {
     quickButton.type = 'button';
     quickButton.className = 'model-converters-download-btn';
     quickButton.dataset.xmlCiiOpenConversionWorkflow = 'true';
-    quickButton.textContent = 'XML->CII Simple Workflow';
+    quickButton.textContent = 'XML->CII Rich Workflow';
     quickButton.style.cssText = 'width:100%;padding:10px;margin-top:6px;';
     quickButton.addEventListener('click', () => {
       if (isXmlCiiActive(root)) openConversionWorkflow(root, state);

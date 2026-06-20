@@ -9,7 +9,7 @@
  * ConverterRunner) are available here for convenience.
  */
 
-export { renderModelConvertersTab } from './ModelConvertersTab.js?v=20260619-git-ss-adapt-8';
+export { renderModelConvertersTab } from './ModelConvertersTab.js?v=20260620-rich-file-master-1';
 
 // Re-export reusable module surfaces so external consumers have one import target.
 export { XML_CII_WORKFLOW_PHASES, normalizeWorkflowPhaseId, getWorkflowPhase } from './WorkflowShell.js';

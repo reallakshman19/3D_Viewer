@@ -1,4 +1,5 @@
 import { deriveLineKeyFromBranchName, tokenAtPosition } from './regex-line-key.js';
+import { computeLineNoKey } from './linelist-mapping.js';
 import { buildPipingClassIndex } from './piping-class-resolver.js';
 import { resolveBranchProcessData } from './branch-process-resolver.js';
 import { buildDtxrContext, resolveDtxrForXmlNode } from './dtxr-resolver.js';
@@ -346,16 +347,33 @@ function normalizeLineKey(value) {
   return toText(value).trim().toUpperCase().replace(/\s+/g, '');
 }
 
+function lineListRowKey(row, config) {
+  const mapped = computeLineNoKey(row, config.linelist?.fieldMap || {});
+  if (mapped) return mapped;
+  const key1 = rowText(row, ['lineKey1', 'Key 1', 'ColumnX1', 'Service', 'Fluid']);
+  const key2 = rowText(row, ['lineKey2', 'Key 2', 'ColumnX2', 'Line number', 'Line Number', 'Line No']);
+  if (key1 || key2) return `${key1}${key2}`;
+  return rowText(row, ['lineNoKey', 'lineNo', 'lineKey', 'LineNo', 'Line No', 'Line Number', 'PipelineReference']);
+}
+
 function lineListRowForBranch(branchName, config) {
   const rows = Array.isArray(config.linelist?.masterRows) ? config.linelist.masterRows : [];
   const lineKey = deriveLineKeyFromBranchName(branchName, config);
   const wanted = normalizeLineKey(lineKey);
   if (!wanted) return { lineKey: '', row: null };
   for (const row of rows) {
-    const raw = rowText(row, ['lineNoKey', 'lineNo', 'lineKey', 'LineNo', 'Line No', 'Line Number', 'PipelineReference']);
+    const raw = lineListRowKey(row, config);
     if (normalizeLineKey(raw) === wanted) return { lineKey, row };
   }
   return { lineKey, row: null };
+}
+
+function looksLikeNpsToken(value) {
+  return /^\s*\d+(?:\.\d+)?\s*(?:"|in|inch|nps)?\s*$/i.test(toText(value));
+}
+
+function isLikelyMaterialToken(value) {
+  return /^(CS|SS|LTCS|DSS|SDSS|ALLOY|GI|CI|DI|PVC|CPVC|HDPE|GRP|GRE)$/i.test(toText(value).trim());
 }
 
 function derivePipingClassFromBranchName(branchName, config) {
@@ -367,7 +385,13 @@ function derivePipingClassFromBranchName(branchName, config) {
       if (match?.[group]) return toText(match[group]).trim();
     } catch {}
   }
-  return tokenAtPosition(branchName, config.rating?.tokenDelimiter || '-', config.rating?.pipingClassTokenIndex || 5);
+  const delimiter = config.rating?.tokenDelimiter || config.linelist?.tokenDelimiter || '-';
+  const index = Number(config.rating?.pipingClassTokenIndex || 5);
+  const value = tokenAtPosition(branchName, delimiter, index);
+  const fourth = tokenAtPosition(branchName, delimiter, 4);
+  const sixth = tokenAtPosition(branchName, delimiter, 6);
+  if (index === 5 && isLikelyMaterialToken(value) && looksLikeNpsToken(fourth) && /^S\d+/i.test(sixth)) return '';
+  return value;
 }
 
 function branchBoreFromFirstUsefulNode(branch) {
@@ -383,11 +407,42 @@ function branchBoreFromFirstUsefulNode(branch) {
   return null;
 }
 
+function overrideText(config, bucketName, keys = []) {
+  const bucket = config?.overrides?.[bucketName];
+  if (!bucket || typeof bucket !== 'object' || Array.isArray(bucket)) return '';
+  for (const key of keys) {
+    const value = bucket[key];
+    if (toText(value).trim()) return toText(value).trim();
+  }
+  return '';
+}
+
+function ratingOverrideForBranch(config, { lineKey, branchName, lineRow, requestedPipingClass }) {
+  const candidates = [
+    lineKey,
+    branchName,
+    requestedPipingClass,
+    lineListRowKey(lineRow, config),
+    rowText(lineRow, ['lineNoKey', 'lineNo', 'lineKey', 'LineNo', 'Line No', 'Line Number', 'PipelineReference']),
+  ].filter(Boolean);
+  const direct = overrideText(config, 'rating', candidates);
+  if (direct) return direct;
+  for (const key of candidates) {
+    const processRating = config?.overrides?.processData?.[key]?.rating;
+    if (toText(processRating).trim()) return toText(processRating).trim();
+  }
+  return toText(config?.rating?.defaultRating || config?.defaultRating || '').trim();
+}
+
 function resolveRigidWeightBranchContext(branch, config, pipingClassIndex) {
   const branchName = xmlText(branch, 'Branchname');
   const { lineKey, row: lineRow } = lineListRowForBranch(branchName, config);
   const derivedClass = derivePipingClassFromBranchName(branchName, config);
-  const resolverLineRow = { ...(lineRow || {}), pipingClass: rowText(lineRow, ['pipingClass', 'Piping Class', 'PIPING_CLASS']) || derivedClass };
+  const requestedPipingClass = rowText(lineRow, ['pipingClass', 'Piping Class', 'PIPING_CLASS']) || derivedClass;
+  const manualRating = ratingOverrideForBranch(config, { lineKey, branchName, lineRow, requestedPipingClass });
+  const lineRating = rowText(lineRow, ['rating', 'Rating', 'RATING']);
+  const resolverLineRow = { ...(lineRow || {}), pipingClass: requestedPipingClass };
+  if (manualRating || lineRating) resolverLineRow.rating = manualRating || lineRating;
   const boreMm = branchBoreFromFirstUsefulNode(branch);
   const resolved = resolveBranchProcessData({
     branchName,
@@ -395,7 +450,7 @@ function resolveRigidWeightBranchContext(branch, config, pipingClassIndex) {
     lineRow: resolverLineRow,
     boreMm,
     componentType: 'PIPE',
-    rating: rowText(lineRow, ['rating', 'Rating', 'RATING']),
+    rating: manualRating || lineRating,
     materialMap: config.material?.mapRows || [],
     pipingClassIndex,
     overrides: config.overrides || {},
@@ -403,6 +458,7 @@ function resolveRigidWeightBranchContext(branch, config, pipingClassIndex) {
     xmlBranch: branch,
     config,
   });
+  const rating = manualRating || resolved.rating || lineRating;
   return {
     branchName,
     lineKey,
@@ -410,15 +466,18 @@ function resolveRigidWeightBranchContext(branch, config, pipingClassIndex) {
     boreMm,
     requestedPipingClass: resolverLineRow.pipingClass,
     resolvedPipingClass: resolved.pipingClass,
-    rating: resolved.rating,
+    rating,
     pipingClassMatchMethod: resolved.pipingClassMatchMethod,
     pipingClassNeedsReview: resolved.pipingClassNeedsReview,
     pipingClassCandidates: resolved.pipingClassCandidates || [],
   };
 }
 
-function ratingForRigidWeightIssue(node, branchContext) {
-  return toText(branchContext.rating).trim() || xmlText(node, 'Rating');
+function ratingForRigidWeightIssue(node, branchContext, config) {
+  const nodeRating = xmlText(node, 'Rating');
+  if (toText(branchContext.rating).trim()) return toText(branchContext.rating).trim();
+  const nodeNumber = xmlText(node, 'NodeNumber');
+  return overrideText(config, 'rating', [branchContext.lineKey, branchContext.branchName, nodeNumber]) || nodeRating;
 }
 
 function collectWeightRows(xmlTextVal, stagedJsonText, config, mode = 'zero-rigid') {
@@ -465,7 +524,7 @@ function collectWeightRows(xmlTextVal, stagedJsonText, config, mode = 'zero-rigi
       }
       if (boreMm === null) boreMm = branchContext.boreMm;
 
-      const rating = ratingForRigidWeightIssue(node, branchContext);
+      const rating = ratingForRigidWeightIssue(node, branchContext, config);
       const ranking = rankXmlCiiWeightCandidates({
         boreMm,
         rating,
@@ -479,6 +538,7 @@ function collectWeightRows(xmlTextVal, stagedJsonText, config, mode = 'zero-rigi
       rows.push({
         key: xmlCiiRigidWeightOverrideKey(branchName, nodeNumber),
         branchName,
+        lineKey: branchContext.lineKey,
         nodeNumber,
         nodeName: xmlText(node, 'NodeName'),
         componentType,
