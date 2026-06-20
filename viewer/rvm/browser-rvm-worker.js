@@ -1,16 +1,17 @@
-import { parseRvmArrayBuffer } from './BrowserRvmHierarchyTransformParser.js?v=20260620-rvm-prim-transform-1';
+import { parseRvmArrayBuffer } from './BrowserRvmHierarchyTransformParser.js?v=20260620-rvm-scale-safe-1';
 import { enrichBrowserRvmHierarchyWithAtt } from './BrowserRvmAttEnricher.js';
 import { collectBrowserRvmRenderInstructions } from './BrowserRvmRenderContractAdapter.js';
-import { filterBrowserRvmRenderInstructions } from './BrowserRvmInstructionFilter.js?v=20260620-rvm-oversize-filter-1';
+import { filterBrowserRvmRenderInstructions } from './BrowserRvmInstructionFilterV2.js?v=20260620-rvm-scale-safe-1';
 
-// BrowserRvmTransformParser.js?v=20260620-rvm-prim-transform-1 is used by the hierarchy transform wrapper.
+// BrowserRvmHierarchyTransformParser.js?v=20260620-rvm-scale-safe-1 repairs transformed APOS/LPOS/HBOR contracts.
 const DEFAULT_MANIFEST_NODE_LIMIT = 900;
 const KEEP_ATTRIBUTE_NAMES = new Set([
   'TYPE', 'NAME', 'RVM_PRIMITIVE_KIND', 'RVM_BYTE_OFFSET', 'RVM_PRIMITIVE_CODE', 'RVM_RECORD_TAG',
   'RVM_OWNER_NAME', 'RVM_OWNER_PATH', 'BROWSER_PARSE_METHOD', 'BROWSER_PARSE_CONFIDENCE', 'RVM_PRIM_TRANSFORM_APPLIED',
   'RVM_PRIM_TRANSFORM_SCHEMA', 'RVM_LOCAL_AXIS', 'RVM_TRANSFORM_COLUMN_SCALES', 'RVM_BROWSER_RENDER_PRIMITIVE',
   'RVM_BROWSER_RENDER_SOURCE', 'RVM_BROWSER_GEOMETRY_CONTRACT_VERSION', 'RVM_BROWSER_ATT_ENRICHED',
-  'RVM_BROWSER_ATT_ATTRIBUTE_COUNT', 'RVM_BROWSER_BBOX', 'RVM_BROWSER_LENGTH', 'RVM_BROWSER_RADIUS'
+  'RVM_BROWSER_ATT_ATTRIBUTE_COUNT', 'RVM_BROWSER_BBOX', 'RVM_BROWSER_LENGTH', 'RVM_BROWSER_RADIUS',
+  'RVM_BROWSER_SCALE_SAFE_CONTRACT', 'RVM_BROWSER_SCALE_SAFE_CONTRACT_SCHEMA'
 ]);
 
 self.onmessage = async (event) => {
@@ -35,9 +36,8 @@ self.onmessage = async (event) => {
     const rawInstructionSet = collectBrowserRvmRenderInstructions(attEnrichment.hierarchy || []);
     const filteredInstructionSet = filterBrowserRvmRenderInstructions(rawInstructionSet, {
       enabled: options.hideOversizedNonPiping !== false,
-      minAbsoluteDiagonal: 12,
-      medianFactor: 40,
-      p90Factor: 12,
+      maxAbsoluteDiagonal: 5000,
+      protectPipeRackLikeOwners: true,
     });
     const compactInstructionSet = compactInstructionSetForTransfer(filteredInstructionSet);
     measure('renderInstructionGeneration', t);
@@ -70,6 +70,7 @@ self.onmessage = async (event) => {
           browserRvmOriginalInstructionCount: rawInstructionSet.count || rawInstructionSet.instructions?.length || 0,
           browserRvmOversizedNonPipingSkippedCount: compactInstructionSet.diagnostics?.oversizedNonPipingSkippedCount || 0,
           browserRvmOversizedNonPipingFilter: compactInstructionSet.diagnostics?.oversizedNonPipingFilter || null,
+          browserRvmScaleSafeContract: parsed.diagnostics?.browserRvmScaleSafeContract || null,
           browserRvmManifestNodeLimit: positiveInteger(options.manifestNodeLimit, DEFAULT_MANIFEST_NODE_LIMIT),
           browserRvmWorkerTimingsMs: timings,
           browserRvmAtt: attEnrichment.diagnostics,
