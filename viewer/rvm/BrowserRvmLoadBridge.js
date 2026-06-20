@@ -2,6 +2,8 @@ import { AvevaJsonLoader } from './AvevaJsonLoader.js';
 import { parseRvmArrayBuffer } from './BrowserRvmHierarchyParser.js';
 import { buildBrowserRvmRenderSceneFromHierarchy } from './BrowserRvmRenderSceneBuilder.js';
 
+const RVM_BROWSER_PARSE_DIAGNOSTICS = Symbol.for('pcf-glb-rvm-browser-parse-diagnostics-v1');
+
 export async function loadRvmFileInBrowser(file, viewer, options = {}) {
   if (!file || typeof file.arrayBuffer !== 'function') throw new Error('RVM File object is required');
   const statusEl = options.statusEl || null;
@@ -27,8 +29,17 @@ export async function loadRvmFileInBrowser(file, viewer, options = {}) {
   const shouldUseRenderScene = Boolean(renderResult?.scene && renderResult.diagnostics?.renderableCount > 0);
   const hierarchyScene = payload.gltf.scene;
   const activeScene = shouldUseRenderScene ? renderResult.scene : hierarchyScene;
+  const diagnostics = publishBrowserRvmLoadDiagnostics({
+    ...(parsed.diagnostics || {}),
+    browserRvmRenderSceneEnabled: shouldUseRenderScene,
+    browserRvmRenderSchemaVersion: renderResult?.schemaVersion || '',
+    browserRvmRenderableCount: renderResult?.diagnostics?.renderableCount || 0,
+    browserRvmSkippedCount: renderResult?.diagnostics?.skippedCount || 0,
+    browserRvmRenderPrimitiveCounts: renderResult?.diagnostics?.primitiveCounts || {},
+    browserRvmRenderSkippedReasons: renderResult?.diagnostics?.skippedReasons || {},
+  }, file.name);
 
-  payload.browserRvmParser = parsed.diagnostics;
+  payload.browserRvmParser = diagnostics;
   payload.browserRvmRender = renderResult?.diagnostics || null;
   payload.browserRvmRenderInstructions = renderResult?.instructionSet || null;
   payload.browserRvmHierarchyScene = hierarchyScene;
@@ -40,7 +51,7 @@ export async function loadRvmFileInBrowser(file, viewer, options = {}) {
       format: 'RVM_BINARY_BROWSER_FALLBACK',
       files: [file.name]
     },
-    browserRvmParser: parsed.diagnostics,
+    browserRvmParser: diagnostics,
     browserRvmRender: renderResult?.diagnostics || null,
     browserRvmRenderScene: {
       enabled: shouldUseRenderScene,
@@ -53,7 +64,7 @@ export async function loadRvmFileInBrowser(file, viewer, options = {}) {
   activeScene.userData = {
     ...(activeScene.userData || {}),
     browserRvmLiveRenderScene: shouldUseRenderScene,
-    browserRvmParser: parsed.diagnostics,
+    browserRvmParser: diagnostics,
     browserRvmRender: renderResult?.diagnostics || null
   };
 
@@ -61,6 +72,20 @@ export async function loadRvmFileInBrowser(file, viewer, options = {}) {
     viewer.ctx.identityMap = payload.identityMap;
     viewer.setModel(activeScene, payload.manifest?.runtime?.upAxis || 'Z');
   }
+  return payload;
+}
+
+export function publishBrowserRvmLoadDiagnostics(diagnostics = {}, fileName = '') {
+  const payload = {
+    ...(diagnostics && typeof diagnostics === 'object' ? diagnostics : {}),
+    fileName: fileName || diagnostics.fileName || '',
+    capturedAt: new Date().toISOString(),
+  };
+  globalThis[RVM_BROWSER_PARSE_DIAGNOSTICS] = payload;
+  globalThis.__PCF_GLB_RVM_BROWSER_PARSE_DIAGNOSTICS__ = payload;
+  try {
+    globalThis.dispatchEvent?.(new CustomEvent('rvm-browser-parse-diagnostics', { detail: payload }));
+  } catch (_) {}
   return payload;
 }
 
