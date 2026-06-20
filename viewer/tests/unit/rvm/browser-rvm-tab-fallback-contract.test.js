@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises';
 
 async function run() {
   const bridgeSource = await readFile(new URL('../../../rvm-viewer/RvmSupportIndexAttributeBridge.js', import.meta.url), 'utf8');
+  const tabSource = await readFile(new URL('../../../tabs/viewer3d-rvm-tab.js', import.meta.url), 'utf8');
 
   assert.match(
     bridgeSource,
@@ -32,18 +33,50 @@ async function run() {
   assert.match(
     bridgeSource,
     /input\.setAttribute\('accept',\s*'\.json,\.uxml,\.uxml\.json,\.rvm,\.rev,\.att'\)/,
-    'RVM tab file input must accept .rvm, .rev, and .att sidecar files.'
+    'RVM tab bridge must keep a defensive input accept patch for stale shells.'
   );
   assert.match(
     bridgeSource,
     /input\.setAttribute\('multiple',\s*'multiple'\)/,
-    'RVM tab file input must allow selecting RVM and ATT together.'
+    'RVM tab bridge must allow selecting RVM and ATT together even for stale shells.'
   );
   assert.match(
     bridgeSource,
     /cacheRvmAttSidecars\(input\.files\)/,
     'RVM tab change handling must cache ATT sidecars before RVM parsing reads the file.'
   );
+
+  assert.match(
+    tabSource,
+    /title="Load RVM \/ REV \/ ATT \/ JSON \/ UXML"/,
+    'RVM tab static source must advertise RVM / REV / ATT / JSON / UXML without relying on runtime DOM patching.'
+  );
+  assert.match(
+    tabSource,
+    /id="rvm-file-input"[^>]+accept="\.json,\.uxml,\.uxml\.json,\.rvm,\.rev,\.att"[^>]+multiple/,
+    'RVM tab static file input must accept .rvm, .rev, and .att sidecars directly in the template.'
+  );
+  assert.match(
+    tabSource,
+    /data-browser-rvm-fallback="true"[^>]+data-browser-rvm-att-sidecar="true"/,
+    'RVM tab static input must expose browser fallback and ATT sidecar markers.'
+  );
+  assert.match(
+    tabSource,
+    /Load RVM \/ REV \/ ATT \/ JSON \/ UXML to view hierarchy\./,
+    'RVM hierarchy empty-state text must be correct in static source.'
+  );
+  assert.match(
+    tabSource,
+    /Load RVM \/ REV \/ ATT \/ JSON \/ UXML to begin\./,
+    'RVM viewport placeholder text must be correct in static source.'
+  );
+  assert.doesNotMatch(
+    tabSource,
+    /Load JSON\/UXML to view hierarchy|Load RVM JSON \/ UXML to begin/,
+    'RVM tab static source must not regress to old JSON/UXML-only wording.'
+  );
+
   assert.match(
     bridgeSource,
     /installBrowserRvmTabFileFallback\(\);[\s\S]*installBrowserRvmTabDomPatch\(\);[\s\S]*installRvmSupportIndexAttributeBridge\(\);/,
