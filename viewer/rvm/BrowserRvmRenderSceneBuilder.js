@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { collectBrowserRvmRenderInstructions } from './BrowserRvmRenderContractAdapter.js';
 
-export const BROWSER_RVM_RENDER_SCENE_SCHEMA = 'rvm-browser-render-scene/v1';
+export const BROWSER_RVM_RENDER_SCENE_SCHEMA = 'rvm-browser-render-scene/v2';
 
 const DEFAULT_COLOR_BY_PRIMITIVE = Object.freeze({
   CYLINDER_BBOX: 0x3d74c5,
@@ -40,7 +40,8 @@ export function buildBrowserRvmRenderSceneFromInstructions(instructions = [], op
     renderableCount: 0,
     skippedCount: 0,
     primitiveCounts: {},
-    skippedReasons: {}
+    skippedReasons: {},
+    attCounts: { enriched: 0, plain: 0 }
   };
 
   for (const instruction of Array.isArray(instructions) ? instructions : []) {
@@ -52,6 +53,8 @@ export function buildBrowserRvmRenderSceneFromInstructions(instructions = [], op
     }
     diagnostics.renderableCount += 1;
     bump(diagnostics.primitiveCounts, instruction.renderPrimitive || 'UNKNOWN');
+    if (instruction.att?.enriched) diagnostics.attCounts.enriched += 1;
+    else diagnostics.attCounts.plain += 1;
     group.add(mesh);
   }
 
@@ -104,21 +107,35 @@ export function buildInstructionObject(instruction = {}, options = {}) {
   }
 
   if (!object) return null;
-  object.name = instruction.sourcePath || instruction.sourceName || primitive;
+  const displayName = String(instruction.displayName || instruction.sourcePath || instruction.sourceName || primitive).trim() || primitive;
+  object.name = displayName;
   object.userData = {
     ...(object.userData || {}),
     schemaVersion: BROWSER_RVM_RENDER_SCENE_SCHEMA,
     sourcePath: instruction.sourcePath || '',
     sourceName: instruction.sourceName || '',
+    displayName,
     type: instruction.type || 'UNKNOWN',
     kind: instruction.kind || 'UNKNOWN',
     renderPrimitive: primitive,
     renderSource: instruction.renderSource || '',
-    contractVersion: instruction.contractVersion || ''
+    contractVersion: instruction.contractVersion || '',
+    browserRvmAttributes: clonePlainObject(instruction.attributes),
+    browserRvmAtt: instruction.att && typeof instruction.att === 'object' ? { ...instruction.att } : null,
+    browserRvmAttAttributes: clonePlainObject(instruction.attAttributes),
+    browserRvmAttEnriched: Boolean(instruction.att?.enriched)
   };
   object.traverse?.((child) => {
     if (!child || child === object) return;
-    child.userData = { ...(child.userData || {}), parentBrowserRvmRenderPrimitive: primitive, sourcePath: object.userData.sourcePath };
+    child.userData = {
+      ...(child.userData || {}),
+      parentBrowserRvmRenderPrimitive: primitive,
+      sourcePath: object.userData.sourcePath,
+      displayName,
+      browserRvmAtt: object.userData.browserRvmAtt,
+      browserRvmAttAttributes: object.userData.browserRvmAttAttributes,
+      browserRvmAttEnriched: object.userData.browserRvmAttEnriched
+    };
   });
   return object;
 }
@@ -211,6 +228,16 @@ function parseBbox(value) {
     return nums.length >= 6 ? nums.slice(0, 6) : null;
   }
   return null;
+}
+
+function clonePlainObject(value) {
+  if (!value || typeof value !== 'object') return {};
+  const out = {};
+  for (const [key, entry] of Object.entries(value)) {
+    if (entry == null) continue;
+    if (typeof entry === 'string' || typeof entry === 'number' || typeof entry === 'boolean') out[key] = entry;
+  }
+  return out;
 }
 
 function bump(target, key) {

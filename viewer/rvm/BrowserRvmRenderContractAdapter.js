@@ -1,4 +1,24 @@
-export const BROWSER_RVM_RENDER_INSTRUCTION_SCHEMA = 'rvm-browser-render-instructions/v1';
+export const BROWSER_RVM_RENDER_INSTRUCTION_SCHEMA = 'rvm-browser-render-instructions/v2';
+
+const INTERNAL_ATTRIBUTE_PREFIXES = Object.freeze([
+  'BROWSER_RVM_',
+  'RVM_BROWSER_',
+  'RVM_BINARY_',
+  'RVM_GEOMETRY_',
+  'RVM_RECORD_',
+  'RVM_PRIMITIVE_',
+  'RVM_OWNER_',
+  'RVM_SOURCE_',
+  'RVM_STRING_'
+]);
+
+const INTERNAL_ATTRIBUTE_NAMES = Object.freeze(new Set([
+  'TYPE',
+  'RVM_BROWSER_ATT_ENRICHED',
+  'RVM_BROWSER_ATT_ENRICHER_SCHEMA',
+  'RVM_BROWSER_ATT_OWNER_QUERY',
+  'RVM_BROWSER_ATT_ATTRIBUTE_COUNT'
+]));
 
 export function collectBrowserRvmRenderInstructions(roots = []) {
   const list = [];
@@ -9,10 +29,14 @@ export function collectBrowserRvmRenderInstructions(roots = []) {
     const attrs = node.attributes || {};
     const primitive = String(attrs.RVM_BROWSER_RENDER_PRIMITIVE || '').trim();
     if (primitive && primitive !== 'UNSUPPORTED') {
+      const attributes = cloneSerializableAttributes(attrs);
+      const att = summarizeBrowserRvmAtt(attrs);
+      const attAttributes = extractBrowserRvmAttAttributes(attrs, att.enriched);
       list.push({
         schemaVersion: BROWSER_RVM_RENDER_INSTRUCTION_SCHEMA,
         sourcePath: nodePath,
         sourceName: name,
+        displayName: displayNameForNode(name, attrs, attAttributes),
         type: String(attrs.TYPE || node.type || 'UNKNOWN'),
         kind: String(attrs.RVM_PRIMITIVE_KIND || attrs.RVM_BROWSER_PRIMITIVE_CLASS || attrs.TYPE || node.type || 'UNKNOWN'),
         renderPrimitive: primitive,
@@ -23,7 +47,11 @@ export function collectBrowserRvmRenderInstructions(roots = []) {
         axisEnd: parseVec3(attrs.RVM_BROWSER_AXIS_END),
         length: finiteNumber(attrs.RVM_BROWSER_LENGTH),
         radius: finiteNumber(attrs.RVM_BROWSER_RADIUS),
-        diameter: finiteNumber(attrs.RVM_BROWSER_DIAMETER)
+        diameter: finiteNumber(attrs.RVM_BROWSER_DIAMETER),
+        bbox: attrs.RVM_BROWSER_BBOX || attrs.RVM_BROWSER_RAW_BBOX || '',
+        attributes,
+        att,
+        attAttributes
       });
     }
     for (const child of Array.isArray(node.children) ? node.children : []) walk(child, nodePath);
@@ -41,18 +69,77 @@ function summarize(list) {
   const contractCounts = {};
   const kindCounts = {};
   const sourceCounts = {};
+  const attCounts = { enriched: 0, plain: 0 };
   for (const item of list) {
     bump(contractCounts, item.renderPrimitive);
     bump(kindCounts, item.kind);
     bump(sourceCounts, item.renderSource);
+    if (item.att?.enriched) attCounts.enriched += 1;
+    else attCounts.plain += 1;
   }
   return {
     schemaVersion: BROWSER_RVM_RENDER_INSTRUCTION_SCHEMA,
     instructionCount: list.length,
     contractCounts,
     kindCounts,
-    sourceCounts
+    sourceCounts,
+    attCounts
   };
+}
+
+function summarizeBrowserRvmAtt(attrs = {}) {
+  const enriched = String(attrs.RVM_BROWSER_ATT_ENRICHED || '').toLowerCase() === 'true';
+  return {
+    enriched,
+    schemaVersion: String(attrs.RVM_BROWSER_ATT_ENRICHER_SCHEMA || ''),
+    ownerQuery: String(attrs.RVM_BROWSER_ATT_OWNER_QUERY || ''),
+    attributeCount: finiteNumber(attrs.RVM_BROWSER_ATT_ATTRIBUTE_COUNT) || 0
+  };
+}
+
+function cloneSerializableAttributes(attrs = {}) {
+  const out = {};
+  for (const [key, value] of Object.entries(attrs || {})) {
+    if (value == null) continue;
+    if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+      out[key] = String(value);
+    }
+  }
+  return out;
+}
+
+function extractBrowserRvmAttAttributes(attrs = {}, enriched = false) {
+  if (!enriched) return {};
+  const out = {};
+  for (const [key, value] of Object.entries(attrs || {})) {
+    if (value == null || value === '') continue;
+    if (INTERNAL_ATTRIBUTE_NAMES.has(key)) continue;
+    if (INTERNAL_ATTRIBUTE_PREFIXES.some((prefix) => key.startsWith(prefix))) continue;
+    if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+      out[key] = String(value);
+    }
+  }
+  return out;
+}
+
+function displayNameForNode(defaultName, attrs = {}, attAttributes = {}) {
+  const candidates = [
+    attAttributes.TAG,
+    attAttributes.TAG_NO,
+    attAttributes.TAGNO,
+    attAttributes.LINE,
+    attAttributes.LINE_NO,
+    attAttributes.LINENO,
+    attAttributes.EQUI,
+    attAttributes.NAME,
+    attrs.NAME,
+    defaultName
+  ];
+  for (const candidate of candidates) {
+    const text = String(candidate || '').trim();
+    if (text) return text;
+  }
+  return 'RVM Node';
 }
 
 function bump(target, key) {

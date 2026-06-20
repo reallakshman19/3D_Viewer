@@ -81,4 +81,28 @@ jobs:
         run: node viewer/tests/inputxml-glb-directional-restraints.test.js
 
       - name: Run browser RVM unit contracts
-        run: node viewer/tests/unit/rvm/browser-rvm-att-enricher.test.js
+        shell: bash
+        run: |
+          set -euo pipefail
+          : > browser-rvm-unit.log
+          tests=(
+            viewer/tests/unit/rvm/browser-rvm-att-parser.test.js
+            viewer/tests/unit/rvm/browser-rvm-att-enricher.test.js
+            viewer/tests/unit/rvm/browser-rvm-parser.test.js
+            viewer/tests/unit/rvm/browser-rvm-render-scene-builder.test.js
+            viewer/tests/unit/rvm/browser-rvm-render-att-metadata.test.js
+            viewer/tests/unit/rvm/browser-rvm-load-bridge-render-scene-contract.test.js
+            viewer/tests/unit/rvm/browser-rvm-tab-fallback-contract.test.js
+          )
+          for test_file in "${tests[@]}"; do
+            echo "Running ${test_file}" | tee -a browser-rvm-unit.log
+            node "${test_file}" 2>&1 | tee -a browser-rvm-unit.log
+          done
+
+      - name: Upload browser RVM unit log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser-rvm-unit-log
+          path: browser-rvm-unit.log
+          if-no-files-found: ignore
