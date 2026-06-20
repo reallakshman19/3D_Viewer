@@ -24,6 +24,24 @@ async function run() {
 
   assert.match(
     source,
+    /if\s*\(shouldUseRenderScene\s*&&\s*options\.buildHierarchyFallback\s*!==\s*true\)\s*\{[\s\S]*makeRenderScenePayload/,
+    'Browser RVM direct load must use a render-scene-first path and defer the expensive hierarchy-loader scene when renderable geometry exists.'
+  );
+
+  assert.match(
+    source,
+    /browserRvmHierarchyFallbackDeferred:\s*usedDeferredHierarchyFallback/,
+    'Browser RVM diagnostics must report when the hierarchy fallback was deferred to keep the tab responsive.'
+  );
+
+  assert.match(
+    source,
+    /function\s+yieldToBrowser\s*\([\s\S]*requestIdleCallback[\s\S]*requestAnimationFrame[\s\S]*setTimeout/,
+    'Browser RVM direct load must yield between parse, render-build, and setModel phases so the tab can repaint/status-update.'
+  );
+
+  assert.match(
+    source,
     /const\s+diagnostics\s*=\s*publishBrowserRvmLoadDiagnostics\(\{[\s\S]*browserRvmRenderSceneEnabled:\s*shouldUseRenderScene[\s\S]*browserRvmRenderableCount:[\s\S]*browserRvmSkippedCount:/,
     'Browser RVM direct load must publish combined parse/render diagnostics.'
   );
@@ -43,7 +61,7 @@ async function run() {
   assert.match(
     source,
     /payload\.browserRvmHierarchyScene\s*=\s*hierarchyScene/,
-    'Browser RVM direct load must retain the hierarchy-loader scene for diagnostics/fallback.'
+    'Browser RVM direct load must retain the hierarchy-loader scene when it is actually built, otherwise null for deferred fallback.'
   );
 
   assert.match(
@@ -54,14 +72,14 @@ async function run() {
 
   assert.match(
     source,
-    /viewer\.setModel\(activeScene,/,
-    'Browser RVM direct load must commit the render-scene adapter output into the viewer when available.'
+    /await\s+yieldToBrowser\(\);\s*\n\s*viewer\.ctx\.identityMap[\s\S]*viewer\.setModel\(activeScene,/,
+    'Browser RVM direct load must yield immediately before committing the scene to the viewer.'
   );
 
   assert.match(
     source,
-    /browserRvmRenderScene:\s*\{[\s\S]*enabled:\s*shouldUseRenderScene[\s\S]*renderableCount:[\s\S]*skippedCount:/,
-    'Browser RVM direct load manifest must report render-scene activation and render diagnostics.'
+    /browserRvmRenderScene:\s*\{[\s\S]*enabled:\s*shouldUseRenderScene[\s\S]*renderableCount:[\s\S]*skippedCount:[\s\S]*hierarchyFallbackDeferred:/,
+    'Browser RVM direct load manifest must report render-scene activation and deferred fallback diagnostics.'
   );
 
   console.log('Browser RVM load bridge render-scene contract test passed');
