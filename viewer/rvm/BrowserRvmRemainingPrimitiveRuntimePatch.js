@@ -7,6 +7,7 @@ const UPGRADE_FLAG = Symbol.for('pcf-glb-rvm-remaining-primitive-upgraded-v2');
 const GLOBAL_STATE_KEY = '__PCF_GLB_RVM_REMAINING_PRIMITIVES__';
 const GLOBAL_DIAGNOSTICS_KEY = '__PCF_GLB_RVM_REMAINING_PRIMITIVES_DIAGNOSTICS__';
 const MAX_OBJECTS = 8000;
+const FACET_GROUP_RENDER_QUALITY = 'native-cpp-facetgroup-tessellated';
 
 export function installBrowserRvmRemainingPrimitiveRuntimePatch() {
   if (globalThis[PATCH_FLAG]) return globalThis[PATCH_FLAG];
@@ -127,7 +128,7 @@ function buildNativeObject(code, params, matrix3x4, material, diagnostics) {
     browserRvmRemainingPrimitiveUpgraded: true,
     browserRvmRemainingPrimitiveSchema: BROWSER_RVM_REMAINING_PRIMITIVE_SCHEMA,
     effectiveRenderPrimitive: primitive,
-    renderQuality: code === 11 ? 'native-cpp-facetgroup-tessellated' : 'native-cpp-remaining-primitive',
+    renderQuality: code === 11 ? FACET_GROUP_RENDER_QUALITY : 'native-cpp-remaining-primitive',
   };
   mesh[UPGRADE_FLAG] = true;
   return mesh;
@@ -261,6 +262,7 @@ function makeDiagnostics(extra = {}) {
     pyramidTessellatedCount: 0,
     lineTessellatedCount: 0,
     facetGroupTessellatedCount: 0,
+    facetGroupRenderQuality: FACET_GROUP_RENDER_QUALITY,
     facetGroupUnsupportedCount: 0,
     facetGroupDecodeCapSkippedCount: 0,
     facetGroupPolygonCount: 0,
