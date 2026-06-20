@@ -1,17 +1,18 @@
 import { parseRvmArrayBuffer } from './BrowserRvmHierarchyTransformParser.js?v=20260620-rvm-cpp-mat3x4-1';
 import { enrichBrowserRvmHierarchyWithAtt } from './BrowserRvmAttEnricher.js';
 import { collectBrowserRvmRenderInstructions } from './BrowserRvmRenderContractAdapter.js';
-import { filterBrowserRvmRenderInstructions } from './BrowserRvmInstructionFilterV2.js?v=20260620-rvm-scale-safe-1';
+import { filterBrowserRvmRenderInstructions } from './BrowserRvmInstructionFilterV2.js?v=20260620-rvm-large-box-filter-1';
 
 // BrowserRvmHierarchyTransformParser.js?v=20260620-rvm-cpp-mat3x4-1 repairs transformed APOS/LPOS/HBOR contracts using the C++ parser's Mat3x4 layout.
 const DEFAULT_MANIFEST_NODE_LIMIT = 900;
+const DEFAULT_MAX_PRIMITIVE_BOX_SIDE = 10;
 const KEEP_ATTRIBUTE_NAMES = new Set([
   'TYPE', 'NAME', 'RVM_PRIMITIVE_KIND', 'RVM_PRIMITIVE_KIND_NAME', 'RVM_BYTE_OFFSET', 'RVM_PRIMITIVE_CODE', 'RVM_RECORD_TAG',
   'RVM_OWNER_NAME', 'RVM_OWNER_PATH', 'BROWSER_PARSE_METHOD', 'BROWSER_PARSE_CONFIDENCE', 'RVM_PRIM_TRANSFORM_APPLIED',
   'RVM_PRIM_TRANSFORM_SCHEMA', 'RVM_LOCAL_AXIS', 'RVM_TRANSFORM_COLUMN_SCALES', 'RVM_TRANSFORM_LAYOUT', 'RVM_NATIVE_PRIMITIVE_PARAMS',
   'RVM_NATIVE_PARAMS_DECODED', 'RVM_BROWSER_RENDER_PRIMITIVE', 'RVM_BROWSER_RENDER_SOURCE', 'RVM_BROWSER_GEOMETRY_CONTRACT_VERSION',
   'RVM_BROWSER_ATT_ENRICHED', 'RVM_BROWSER_ATT_ATTRIBUTE_COUNT', 'RVM_BROWSER_BBOX', 'RVM_BROWSER_LENGTH', 'RVM_BROWSER_RADIUS',
-  'RVM_BROWSER_SCALE_SAFE_CONTRACT', 'RVM_BROWSER_SCALE_SAFE_CONTRACT_SCHEMA'
+  'RVM_BROWSER_SCALE_SAFE_CONTRACT', 'RVM_BROWSER_SCALE_SAFE_CONTRACT_SCHEMA', 'RVM_BROWSER_SUPPORT_HINT', 'RVM_BROWSER_SUPPORT_KIND'
 ]);
 
 self.onmessage = async (event) => {
@@ -38,6 +39,8 @@ self.onmessage = async (event) => {
       enabled: options.hideOversizedNonPiping !== false,
       maxAbsoluteDiagonal: 5000,
       protectPipeRackLikeOwners: true,
+      hideOversizedPrimitiveBoxes: options.hideOversizedPrimitiveBoxes !== false,
+      maxPrimitiveBoxSide: positiveNumber(options.maxPrimitiveBoxSide, DEFAULT_MAX_PRIMITIVE_BOX_SIDE),
     });
     const compactInstructionSet = compactInstructionSetForTransfer(filteredInstructionSet);
     measure('renderInstructionGeneration', t);
@@ -143,42 +146,35 @@ function compactAttAttributes(attrs = {}) {
 }
 
 function summarizeInstructions(instructions = []) {
-  const contractCounts = {}, kindCounts = {}, sourceCounts = {}, attCounts = { enriched: 0, plain: 0 };
-  for (const item of instructions) {
-    bump(contractCounts, item.renderPrimitive);
-    bump(kindCounts, item.kind);
-    bump(sourceCounts, item.renderSource);
-    if (item.att?.enriched) attCounts.enriched += 1;
-    else attCounts.plain += 1;
-  }
-  return { instructionCount: instructions.length, contractCounts, kindCounts, sourceCounts, attCounts };
+  const primitiveCounts = {};
+  for (const item of instructions) primitiveCounts[item.renderPrimitive || 'UNKNOWN'] = (primitiveCounts[item.renderPrimitive || 'UNKNOWN'] || 0) + 1;
+  return { primitiveCounts };
 }
 
 function flattenHierarchyForManifest(roots = [], limit = DEFAULT_MANIFEST_NODE_LIMIT) {
-  const nodes = [];
-  const visit = (node, parentCanonicalObjectId = '', depth = 0) => {
-    if (!node || typeof node !== 'object' || nodes.length >= limit) return;
-    const canonicalObjectId = String(node.canonicalObjectId || node.id || node.name || `browser-rvm-${nodes.length}`);
-    nodes.push({ canonicalObjectId, parentCanonicalObjectId, sourceObjectId: node.sourceObjectId || node.id || canonicalObjectId, name: node.name || canonicalObjectId, kind: node.kind || node.type || node.attributes?.TYPE || 'NODE', type: node.type || node.kind || node.attributes?.TYPE || 'NODE', depth, attributes: compactAttributes(node.attributes) });
-    for (const child of Array.isArray(node.children) ? node.children : []) {
-      visit(child, canonicalObjectId, depth + 1);
-      if (nodes.length >= limit) break;
-    }
+  const out = [];
+  const visit = (node, parentCanonicalObjectId = '') => {
+    if (!node || out.length >= limit) return;
+    const attrs = node.attributes || {};
+    const canonicalObjectId = attrs.RVM_OWNER_PATH || attrs.RVM_OWNER_NAME || attrs.NAME || node.name || `rvm-node-${out.length + 1}`;
+    out.push({
+      canonicalObjectId,
+      parentCanonicalObjectId,
+      sourceObjectId: attrs.RVM_BYTE_OFFSET || canonicalObjectId,
+      name: node.name || attrs.NAME || canonicalObjectId,
+      type: node.type || attrs.TYPE || 'RVM',
+      kind: attrs.RVM_PRIMITIVE_KIND || attrs.RVM_BROWSER_PRIMITIVE_CLASS || node.type || attrs.TYPE || 'RVM',
+      attributes: attrs,
+    });
+    for (const child of Array.isArray(node.children) ? node.children : []) visit(child, canonicalObjectId);
   };
-  for (const root of Array.isArray(roots) ? roots : []) {
-    visit(root, '', 0);
-    if (nodes.length >= limit) break;
-  }
-  return nodes;
+  for (const root of Array.isArray(roots) ? roots : [roots]) visit(root, '');
+  return out;
 }
 
-function plainVec(value) {
-  if (!value) return null;
-  const x = Number(value.x), y = Number(value.y), z = Number(value.z);
-  return [x, y, z].every(Number.isFinite) ? { x, y, z } : null;
-}
+function plainVec(v) { return v && Number.isFinite(Number(v.x)) && Number.isFinite(Number(v.y)) && Number.isFinite(Number(v.z)) ? { x: Number(v.x), y: Number(v.y), z: Number(v.z) } : null; }
 function finiteNumber(value) { const n = Number(value); return Number.isFinite(n) ? n : null; }
-function positiveInteger(value, fallback) { const n = Number.parseInt(String(value ?? ''), 10); return Number.isFinite(n) && n > 0 ? n : fallback; }
-function bump(target, key) { const name = String(key || '').trim() || 'UNKNOWN'; target[name] = (target[name] || 0) + 1; }
-function postProgress(id, progress) { try { self.postMessage({ id, type: 'progress', progress }); } catch (_) {} }
-function nowMs() { return typeof performance !== 'undefined' && typeof performance.now === 'function' ? performance.now() : Date.now(); }
+function positiveInteger(value, fallback) { const n = Number(value); return Number.isFinite(n) && n > 0 ? Math.floor(n) : fallback; }
+function positiveNumber(value, fallback) { const n = Number(value); return Number.isFinite(n) && n > 0 ? n : fallback; }
+function postProgress(id, progress) { self.postMessage({ id, type: 'progress', progress }); }
+function nowMs() { return (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now(); }
