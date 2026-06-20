@@ -6,4 +6,4 @@ import { installRvmProgressiveModelRootPatch } from '../rvm-viewer/RvmProgressiv
 
 installRvmProgressiveModelRootPatch(RvmViewer3D);
 
-export { mountViewer3DRvmTab as renderViewer3DRvm } from './viewer3d-rvm-tab.js?v=20260620-rvm-oversize-filter-1';
+export { mountViewer3DRvmTab as renderViewer3DRvm } from './viewer3d-rvm-tab.js?v=20260620-rvm-scale-safe-1';
