@@ -3,7 +3,7 @@ import { RvmViewer3D } from '../rvm-viewer/RvmViewer3D.js?v=20260620-rvm-direct-
 import { installRvmProgressiveModelRootPatch } from '../rvm-viewer/RvmProgressiveModelRootPatchV5.js?v=20260620-rvm-tree-select-nohide-1';
 import { AvevaJsonLoader } from '../rvm/AvevaJsonLoader.js';
 import { isLikelyRvmFileName } from '../rvm/BrowserRvmParser.js';
-import { loadRvmFileInBrowser } from '../rvm/BrowserRvmLoadBridge.js?v=20260620-rvm-tree-select-nohide-1';
+import { loadRvmFileInBrowser } from '../rvm/BrowserRvmLoadBridge.js?v=20260620-rvm-flat-tree-1';
 import {
   convertUxmlDocumentToAvevaHierarchy,
   isUxmlDocument,
@@ -16,7 +16,7 @@ import '../rvm-viewer/RvmSupportIndexAttributeBridge.js?v=20260620-rvm-direct-ta
 
 installRvmProgressiveModelRootPatch(RvmViewer3D);
 
-const RVM_TAB_JS_VERSION = '20260620-rvm-tree-select-nohide-1';
+const RVM_TAB_JS_VERSION = '20260620-rvm-flat-tree-1';
 const SUPPORT_DEFAULT_SCALE = 1.0;
 const SUPPORT_MAX_LABELS = 18;
 const JSON_TREE_RENDER_LIMIT = 2600;
@@ -40,7 +40,7 @@ const ACTION_LABELS = {
   NAV_ROTATE_Y: 'Front',
   NAV_ROTATE_Z: 'Right',
   SNAP_ISO_NW: 'Iso NW',
-  SNAP_ISO_NE: 'Iso NE',
+  SNAP_ISO_NE: 'NE',
   SNAP_ISO_SW: 'SW',
   SNAP_ISO_SE: 'SE',
 };
@@ -189,6 +189,7 @@ function nodeDisplayName(node) { return node?.name || node?.canonicalObjectId ||
 function nodeKind(node) { return String(node?.kind || node?.attributes?.TYPE || '').toUpperCase() || 'NODE'; }
 
 function buildNodeTree(nodes = [], options = {}) {
+  if (options.flat === true) return buildFlatNodeTree(nodes, options);
   const limit = options.limit || JSON_TREE_RENDER_LIMIT;
   const recursive = options.recursive !== false;
   const children = new Map();
@@ -207,6 +208,45 @@ function buildNodeTree(nodes = [], options = {}) {
   const rows = roots.slice(0, limit).map((node) => renderNode(node));
   const suffix = nodes.length > limit ? `<li class="rvm-empty-state">Tree capped at ${limit} rows for responsive RVM loading.</li>` : '';
   return rows.join('') + suffix || '<li class="rvm-empty-state">No hierarchy nodes.</li>';
+}
+
+function buildFlatNodeTree(nodes = [], options = {}) {
+  const limit = options.limit || RVM_TREE_RENDER_LIMIT;
+  const list = Array.isArray(nodes) ? nodes.filter((node) => node?.canonicalObjectId) : [];
+  const rowNodes = list.slice(0, limit);
+  const childCounts = new Map();
+  for (const node of list) {
+    const parent = node.parentCanonicalObjectId || '';
+    if (!parent) continue;
+    childCounts.set(parent, (childCounts.get(parent) || 0) + 1);
+  }
+  const rows = rowNodes.map((node) => renderFlatTreeRow(node, depthForNode(node, list), childCounts.get(node.canonicalObjectId) || 0));
+  const suffix = list.length > limit ? `<li class="rvm-empty-state">Showing first ${limit} of ${list.length} hierarchy nodes. Use search/filter to narrow.</li>` : '';
+  return rows.join('') + suffix || '<li class="rvm-empty-state">No hierarchy nodes.</li>';
+}
+
+function renderFlatTreeRow(node, depth, childCount) {
+  const attrs = node.attributes || {};
+  const kind = nodeKind(node);
+  const name = nodeDisplayName(node);
+  const depthPx = Math.min(Math.max(Number(depth) || 0, 0), 12) * 12;
+  const sub = attrs.RVM_OWNER_NAME || attrs.TYPE || attrs.RVM_PRIMITIVE_KIND || node.parentCanonicalObjectId || '';
+  return `<li data-node-id="${escapeHtml(node.canonicalObjectId || '')}" data-depth="${escapeHtml(depth)}" data-flat-rvm-tree-row="true"><button type="button" class="rvm-tree-node" style="padding-left:${depthPx}px"><span class="rvm-kind">${escapeHtml(kind)}</span><span>${escapeHtml(name)}</span>${sub ? `<span class="rvm-tree-sub">${escapeHtml(sub)}</span>` : ''}${childCount ? `<span class="rvm-tree-count">${childCount}</span>` : ''}</button></li>`;
+}
+
+function depthForNode(node, nodes) {
+  const byId = depthForNode._cacheNodes === nodes ? depthForNode._cache : new Map(nodes.map((item) => [item.canonicalObjectId, item]));
+  depthForNode._cacheNodes = nodes;
+  depthForNode._cache = byId;
+  let depth = 0;
+  let parent = node?.parentCanonicalObjectId || '';
+  const seen = new Set([node?.canonicalObjectId]);
+  while (parent && byId.has(parent) && !seen.has(parent) && depth < 16) {
+    depth += 1;
+    seen.add(parent);
+    parent = byId.get(parent)?.parentCanonicalObjectId || '';
+  }
+  return depth;
 }
 
 function bindToolbar(viewer, root, stateBag) {
@@ -282,7 +322,7 @@ async function loadDirectBrowserRvm({ root, viewer, files, rvmFile, stateBag }) 
   });
   if (stateBag.abortController.signal.aborted) return null;
   const nodes = payload.manifest?.nodes || payload.manifest?.items || payload.manifest?.runtime?.nodes || [];
-  const tree = root.querySelector('#rvm-tree'); if (tree) { tree.innerHTML = buildNodeTree(nodes, { limit: RVM_TREE_RENDER_LIMIT, recursive: false }); latestDiagnostics.browserRvmTreeNodesRendered = Math.min(nodes.length, RVM_TREE_RENDER_LIMIT); }
+  const tree = root.querySelector('#rvm-tree'); if (tree) { tree.innerHTML = buildNodeTree(nodes, { limit: RVM_TREE_RENDER_LIMIT, flat: true }); latestDiagnostics.browserRvmTreeNodesRendered = Math.min(nodes.length, RVM_TREE_RENDER_LIMIT); }
   root.querySelector('#rvm-placeholder')?.remove(); stateBag.syncSupport?.(); updateStatus(root, viewer, payload);
   const fitGuard = viewer?._progressiveFitDiagnostics || viewer?.modelGroup?.children?.[0]?.userData?.browserRvmProgressiveFitGuard || null;
   latestDiagnostics = { ...latestDiagnostics, ...(payload.browserRvmParser || {}), browserRvmProgressiveFitGuard: fitGuard, loadedJsVersion: RVM_TAB_JS_VERSION, browserRvmDirectTabLoadPath: true, browserRvmLegacyJsonHandlerBypassed: true, browserRvmWorkerLoaded: true, browserRvmWorkerMessageReceived: true, browserRvmTreeNodesRendered: Math.min(nodes.length, RVM_TREE_RENDER_LIMIT) }; renderDiagnostics(root, latestDiagnostics);

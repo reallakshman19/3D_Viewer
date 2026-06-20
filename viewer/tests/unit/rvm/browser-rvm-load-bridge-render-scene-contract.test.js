@@ -60,8 +60,11 @@ async function run() {
   assert.match(transformHierarchySource, /APOS[\s\S]*LPOS[\s\S]*HBOR/, 'Scale-safe contract must use transformed APOS/LPOS/HBOR instead of bbox-only endpoints.');
   assert.match(transformHierarchySource, /RVM_BROWSER_RENDER_SOURCE:\s*'transform-axis-scale-safe-contract'|transform-axis-scale-safe-contract/, 'Scale-safe contract must mark its render source.');
 
-  assert.match(tabSource, /import\s+\{\s*loadRvmFileInBrowser\s*\}\s+from\s+['"]\.\.\/rvm\/BrowserRvmLoadBridge\.js\?v=20260620-rvm-tree-select-nohide-1['"]/, 'The real tab module must import the cache-busted worker-first RVM loader directly.');
-  assert.match(tabSource, /RVM_TAB_JS_VERSION\s*=\s*['"]20260620-rvm-tree-select-nohide-1['"]/, 'The diagnostics version must identify the active no-hide/tree-selection path.');
+  assert.match(tabSource, /import\s+\{\s*loadRvmFileInBrowser\s*\}\s+from\s+['"]\.\.\/rvm\/BrowserRvmLoadBridge\.js\?v=20260620-rvm-flat-tree-1['"]/, 'The real tab module must import the flat-tree worker-first RVM loader directly.');
+  assert.match(tabSource, /RVM_TAB_JS_VERSION\s*=\s*['"]20260620-rvm-flat-tree-1['"]/, 'The diagnostics version must identify the active flat-tree path.');
+  assert.match(tabSource, /buildFlatNodeTree/, 'The RVM tab must define a flat hierarchy renderer.');
+  assert.match(tabSource, /flat:\s*true/, 'The RVM load path must render flat hierarchy rows.');
+  assert.match(tabSource, /Showing first \$\{limit\} of \$\{list\.length\} hierarchy nodes/, 'The flat tree cap message must report shown rows and total rows.');
   assert.match(tabSource, /import\s+\{\s*isLikelyRvmFileName\s*\}\s+from\s+['"]\.\.\/rvm\/BrowserRvmParser\.js['"]/, 'The real tab must branch selected files by RVM/REV extension.');
   assert.match(tabSource, /data-rvm-direct-worker-load="true"/, 'The static file input must identify the direct RVM worker path.');
   assert.match(tabSource, /const\s+rvmFile\s*=\s*files\.find\(\(file\)\s*=>\s*isLikelyRvmFileName\(file\?\.name\)\)/, 'The change handler must pick real RVM/REV files explicitly.');
@@ -87,15 +90,16 @@ async function run() {
   assert.doesNotMatch(progressivePatchV5Source, /visible\s*=\s*false/, 'No-hide fit patch must not hide meshes during final fit.');
   assert.match(rendererSource, /RvmProgressiveModelRootPatchV5\.js\?v=20260620-rvm-tree-select-nohide-1/, 'Renderer must load the v5 no-hide fit patch.');
   assert.match(rendererSource, /RvmHierarchySelectionBridge\.js\?v=20260620-rvm-tree-select-nohide-1/, 'Renderer must load the hierarchy selection bridge.');
+  assert.match(rendererSource, /viewer3d-rvm-tab\.js\?v=20260620-rvm-flat-tree-1/, 'Renderer must load the flat-tree tab cache key.');
   assert.match(hierarchySelectionBridgeSource, /Fit Selection/,'Hierarchy selection bridge must expose Fit Selection.');
   assert.match(hierarchySelectionBridgeSource, /stopImmediatePropagation/, 'Hierarchy selection bridge must bypass the legacy tree click fit path.');
 
   assert.doesNotMatch(entrypointSource, /RvmBrowserRvmWorkerFirstBridge\.js/, 'The RVM freeze fix must not depend on an optional startup side-effect bridge.');
-  assert.match(entrypointSource, /core\/app\.js\?v=20260620-rvm-tree-select-nohide-1/, 'App shell cache key must include the tree-selection no-hide version.');
-  assert.match(indexHtml, /main(?:-[A-Za-z0-9_-]+)?\.js\?v=20260620-rvm-tree-select-nohide-1/, 'GitHub Pages entrypoint must bump the app shell cache key.');
+  assert.match(entrypointSource, /core\/app\.js\?v=20260620-rvm-flat-tree-1/, 'App shell cache key must include the flat-tree version.');
+  assert.match(indexHtml, /main(?:-[A-Za-z0-9_-]+)?\.js\?v=20260620-rvm-flat-tree-1/, 'GitHub Pages entrypoint must bump the app shell cache key.');
   assert.match(indexHtml, /viewer3d-rvm-tab\.css\?v=20260620-rvm-direct-tab-1/, 'RVM tab CSS cache key must be bumped.');
 
-  console.log('Browser RVM direct tab tree-selection no-hide responsiveness contract test passed');
+  console.log('Browser RVM direct tab flat hierarchy responsiveness contract test passed');
 }
 
 run();
