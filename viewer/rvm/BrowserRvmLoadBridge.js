@@ -1,5 +1,6 @@
 import { AvevaJsonLoader } from './AvevaJsonLoader.js';
 import { parseRvmArrayBuffer } from './BrowserRvmHierarchyParser.js';
+import { buildBrowserRvmRenderSceneFromHierarchy } from './BrowserRvmRenderSceneBuilder.js';
 
 export async function loadRvmFileInBrowser(file, viewer, options = {}) {
   if (!file || typeof file.arrayBuffer !== 'function') throw new Error('RVM File object is required');
@@ -19,7 +20,19 @@ export async function loadRvmFileInBrowser(file, viewer, options = {}) {
   const loader = new AvevaJsonLoader();
   const payload = await loader.load(parsed.hierarchy, {}, options.asyncSession || makeAsyncSession(statusEl));
   if (!payload?.gltf?.scene) throw new Error('Browser RVM fallback produced no scene.');
+
+  const renderResult = buildBrowserRvmRenderSceneFromHierarchy(parsed.hierarchy, {
+    name: `BrowserRvmRenderScene:${file.name || 'model.rvm'}`
+  });
+  const shouldUseRenderScene = Boolean(renderResult?.scene && renderResult.diagnostics?.renderableCount > 0);
+  const hierarchyScene = payload.gltf.scene;
+  const activeScene = shouldUseRenderScene ? renderResult.scene : hierarchyScene;
+
   payload.browserRvmParser = parsed.diagnostics;
+  payload.browserRvmRender = renderResult?.diagnostics || null;
+  payload.browserRvmRenderInstructions = renderResult?.instructionSet || null;
+  payload.browserRvmHierarchyScene = hierarchyScene;
+  payload.gltf.scene = activeScene;
   payload.manifest = {
     ...(payload.manifest || {}),
     source: {
@@ -27,11 +40,26 @@ export async function loadRvmFileInBrowser(file, viewer, options = {}) {
       format: 'RVM_BINARY_BROWSER_FALLBACK',
       files: [file.name]
     },
-    browserRvmParser: parsed.diagnostics
+    browserRvmParser: parsed.diagnostics,
+    browserRvmRender: renderResult?.diagnostics || null,
+    browserRvmRenderScene: {
+      enabled: shouldUseRenderScene,
+      schemaVersion: renderResult?.schemaVersion || '',
+      renderableCount: renderResult?.diagnostics?.renderableCount || 0,
+      skippedCount: renderResult?.diagnostics?.skippedCount || 0
+    }
   };
+
+  activeScene.userData = {
+    ...(activeScene.userData || {}),
+    browserRvmLiveRenderScene: shouldUseRenderScene,
+    browserRvmParser: parsed.diagnostics,
+    browserRvmRender: renderResult?.diagnostics || null
+  };
+
   if (viewer) {
     viewer.ctx.identityMap = payload.identityMap;
-    viewer.setModel(payload.gltf.scene, payload.manifest?.runtime?.upAxis || 'Z');
+    viewer.setModel(activeScene, payload.manifest?.runtime?.upAxis || 'Z');
   }
   return payload;
 }
