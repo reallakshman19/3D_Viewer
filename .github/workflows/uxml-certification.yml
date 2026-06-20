@@ -30,6 +30,7 @@ on:
       - "viewer/js/pcf2glb/glb/enhanceSupportDirectionProxy.js"
       - "viewer/js/pcf2glb/glb/buildExportScene.js"
       - "viewer/tabs/model-converters-tab.js"
+      - "viewer/tabs/model-converters-tab.js"
       - "viewer/tabs/model-converters/converters/inputxml-to-glb.js"
       - "viewer/tests/uxml-*.test.js"
       - "viewer/tests/rvm-pcf-*.test.js"
@@ -84,7 +85,16 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          : > browser-rvm-unit.log
           for test_file in viewer/tests/unit/rvm/browser-rvm-*.test.js; do
-            echo "Running ${test_file}"
-            node "${test_file}"
+            echo "Running ${test_file}" | tee -a browser-rvm-unit.log
+            node "${test_file}" 2>&1 | tee -a browser-rvm-unit.log
           done
+
+      - name: Upload browser RVM unit log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser-rvm-unit-log
+          path: browser-rvm-unit.log
+          if-no-files-found: ignore
