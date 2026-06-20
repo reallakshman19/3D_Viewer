@@ -6,13 +6,18 @@ on:
       - "viewer/uxml/**"
       - "viewer/converters/inputxml-glb/**"
       - "viewer/rvm/**"
+      - "viewer/rvm-viewer/**"
+      - "viewer/core/app.js"
+      - "viewer/main.js"
       - "viewer/tabs/viewer3d-rvm-tab.js"
+      - "viewer/tabs/viewer3d-rvm-tab-renderer.js"
       - "viewer/js/pcf2glb/glb/enhanceSupportDirectionProxy.js"
       - "viewer/js/pcf2glb/glb/buildExportScene.js"
       - "viewer/tabs/model-converters-tab.js"
       - "viewer/tabs/model-converters/converters/inputxml-to-glb.js"
       - "viewer/tests/uxml-*.test.js"
       - "viewer/tests/rvm-pcf-*.test.js"
+      - "viewer/tests/app-entrypoint-static.test.js"
       - "viewer/tests/unit/rvm/**"
       - "viewer/tests/inputxml-glb-directional-restraints.test.js"
       - "tools/uxml-certification.mjs"
@@ -26,13 +31,18 @@ on:
       - "viewer/uxml/**"
       - "viewer/converters/inputxml-glb/**"
       - "viewer/rvm/**"
+      - "viewer/rvm-viewer/**"
+      - "viewer/core/app.js"
+      - "viewer/main.js"
       - "viewer/tabs/viewer3d-rvm-tab.js"
+      - "viewer/tabs/viewer3d-rvm-tab-renderer.js"
       - "viewer/js/pcf2glb/glb/enhanceSupportDirectionProxy.js"
       - "viewer/js/pcf2glb/glb/buildExportScene.js"
       - "viewer/tabs/model-converters-tab.js"
       - "viewer/tabs/model-converters/converters/inputxml-to-glb.js"
       - "viewer/tests/uxml-*.test.js"
       - "viewer/tests/rvm-pcf-*.test.js"
+      - "viewer/tests/app-entrypoint-static.test.js"
       - "viewer/tests/unit/rvm/**"
       - "viewer/tests/inputxml-glb-directional-restraints.test.js"
       - "tools/uxml-certification.mjs"
@@ -73,6 +83,9 @@ jobs:
             echo "package.json not found. Installing Vitest, jsdom, and Three as temporary CI dependencies."
             npm install --no-save vitest jsdom three
           fi
+
+      - name: Run app entrypoint static contract
+        run: node viewer/tests/app-entrypoint-static.test.js
 
       - name: Run UXML static certification
         run: node tools/uxml-certification.mjs
