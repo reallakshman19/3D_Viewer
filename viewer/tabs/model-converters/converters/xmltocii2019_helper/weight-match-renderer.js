@@ -22,7 +22,6 @@ function unsafeDtxr(row) { const source = clean(row?.dtxrSource).toLowerCase(); 
 function cleanRow(row) { if (!allowedType(row?.componentType)) return null; return unsafeDtxr(row) ? { ...row, dtxr: '', dtxrSource: 'weight-dtxr-suppressed' } : row; }
 async function stagedText(stagedJsonText) { const direct = clean(stagedJsonText); if (direct) return direct; const file = document?.querySelector?.('#model-converters-secondary-input')?.files?.[0]; return file ? await file.text().catch(() => '') : ''; }
 function currentXmlFile(passedFile) { return passedFile || document?.querySelector?.('#model-converters-primary-input')?.files?.[0] || null; }
-function delay(ms) { return new Promise((resolve) => setTimeout(resolve, ms)); }
 
 function parseConfigText(value) {
   try {
@@ -81,20 +80,8 @@ function hasWeightMasterRows(config) {
   return Array.isArray(config?.weight?.masterRows) && config.weight.masterRows.length > 0;
 }
 
-async function waitForWeightMasterRows(activeConfig, setStatus) {
-  let cfg = activeConfig();
-  if (hasWeightMasterRows(cfg)) return cfg;
-
-  setStatus?.('Loading weight master…');
-  for (let attempt = 0; attempt < 24; attempt += 1) {
-    await delay(250);
-    cfg = activeConfig();
-    if (hasWeightMasterRows(cfg)) {
-      setStatus?.(`Weight master ready (${cfg.weight.masterRows.length} row(s))`);
-      return cfg;
-    }
-  }
-  return cfg;
+function renderWeightMasterBlocked(contentEl) {
+  contentEl.innerHTML = '<div class="model-converters-workflow-detail-note" style="padding:10px;border:1px solid #7c5a18;border-radius:8px;background:#2a210b;color:#ffe7a3;">Weight master is not ready yet, so 4A is blocked to prevent false <strong>0 / No match</strong> rows. Default masters are loading through the workflow master loader; reopen this phase or click Recompute after the Import Masters status shows Valve Weights loaded.</div>';
 }
 
 function overrideValue(config, bucketName, keys) {
@@ -226,18 +213,18 @@ export function bindXmlCiiWeightMatchPhase(detailEl, { xmlFile, stagedJsonText, 
     contentEl.querySelectorAll('[data-wm-candidate]').forEach((button) => button.addEventListener('click', () => { const input = contentEl.querySelectorAll('.mc-rigid-review-input')[Number(button.dataset.wmCandidate)]; if (!input) return; input.value = button.dataset.wmWeight || ''; input.dispatchEvent(new Event('change', { bubbles: true })); }));
   };
   const compute = async () => {
-    let liveConfig = activeConfig();
+    const liveConfig = activeConfig();
     syncToggle(); drawPanel();
     const file = currentXmlFile(xmlFile);
     if (!file) { localIssues = []; contentEl.innerHTML = '<div class="model-converters-workflow-detail-note">No XML source loaded. Import an XML file first.</div>'; status('No input', 'bad'); return; }
+    if (!hasWeightMasterRows(liveConfig)) { localIssues = []; renderWeightMasterBlocked(contentEl); status('Weight master not ready', 'bad'); return; }
     status('Computing…');
     try {
-      liveConfig = await waitForWeightMasterRows(activeConfig, status);
-      syncToggle(); drawPanel();
       const xmlText = await file.text();
       const jsonText = await stagedText(stagedJsonText);
       const enriched = await enrichXmlForCii2019(xmlText, jsonText, { dryRun: true, skipAutoWeightMatch: true });
       const cfg = mergeRuntimeOverrides(mergeRuntimeOverrides(enriched.config || liveConfig, liveConfig), getXmlCiiPreviewRuntimeConfig());
+      if (!hasWeightMasterRows(cfg)) { localIssues = []; renderWeightMasterBlocked(contentEl); status('Weight master not ready', 'bad'); return; }
       localIssues = collectXmlCiiWeightMatchRows(xmlText, jsonText, cfg).map(cleanRow).filter(Boolean).map((row) => applyXmlCiiFlangeWeightFallbackToIssue(rerankWithRating(row, cfg), cfg));
       const mapped = localIssues.filter((row) => row.mapped).length;
       const suggested = localIssues.filter((row) => row.candidates?.[0]?.preferred).length;

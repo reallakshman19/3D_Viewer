@@ -14,8 +14,10 @@ function assert(condition, message) {
   }
 }
 
-assert(source.includes('function waitForWeightMasterRows'), '4A renderer waits for weight master rows');
-assert(source.includes('Loading weight master'), 'first-open loading status is shown before ranking');
-assert(source.includes('hasWeightMasterRows(cfg)'), 'wait exits only after weight master rows are hydrated');
-assert(source.includes('liveConfig = await waitForWeightMasterRows(activeConfig, status)'), 'compute waits before dry-run/ranking');
-assert(source.includes('mergeRuntimeOverrides(enriched.config || liveConfig, liveConfig)'), 'hydrated live master rows are merged into dry-run config');
+assert(!source.includes('function delay('), '4A renderer has no polling delay helper');
+assert(!source.includes('waitForWeightMasterRows'), '4A renderer has no timer-based wait loop');
+assert(source.includes('function hasWeightMasterRows'), '4A renderer checks weight master readiness');
+assert(source.includes('renderWeightMasterBlocked'), '4A renderer blocks instead of ranking without master rows');
+assert(source.includes('false <strong>0 / No match</strong> rows'), 'blocked state explains false zero/no-match prevention');
+assert(source.includes('if (!hasWeightMasterRows(liveConfig))'), 'compute stops before dry-run when master rows are missing');
+assert(source.includes('if (!hasWeightMasterRows(cfg))'), 'compute stops after dry-run merge if master rows are still missing');
