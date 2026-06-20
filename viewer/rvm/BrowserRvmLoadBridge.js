@@ -1,133 +1,208 @@
+import * as THREE from 'three';
 import { AvevaJsonLoader } from './AvevaJsonLoader.js';
 import { parseRvmArrayBuffer } from './BrowserRvmHierarchyParser.js';
 import { enrichBrowserRvmHierarchyWithAtt } from './BrowserRvmAttEnricher.js';
-import { buildResponsiveBrowserRvmRenderSceneFromHierarchy } from './BrowserRvmResponsiveRenderSceneBuilder.js';
+import { collectBrowserRvmRenderInstructions } from './BrowserRvmRenderContractAdapter.js';
+import {
+  BROWSER_RVM_RENDER_SCENE_SCHEMA,
+  buildInstructionObject
+} from './BrowserRvmRenderSceneBuilder.js';
 
 const RVM_BROWSER_PARSE_DIAGNOSTICS = Symbol.for('pcf-glb-rvm-browser-parse-diagnostics-v1');
 const MANIFEST_NODE_LIMIT = 900;
+const MAIN_THREAD_FALLBACK_MAX_BYTES = 1024 * 1024;
 const DEFAULT_RENDER_BUDGET = Object.freeze({
-  maxRenderableObjects: 2400,
-  batchSize: 48,
-  timeSliceMs: 10
+  maxRenderableObjects: 6000,
+  batchSize: 64,
+  timeSliceMs: 8
 });
 
 export async function loadRvmFileInBrowser(file, viewer, options = {}) {
   if (!file || typeof file.arrayBuffer !== 'function') throw new Error('RVM File object is required');
   const statusEl = options.statusEl || null;
   const update = (text) => { if (statusEl) statusEl.textContent = text; };
-  update(`Scanning ${file.name} in browser`);
-
-  await yieldToBrowser();
-  const arrayBuffer = await file.arrayBuffer();
-  const attText = options.attText || '';
-  const parsed = await parseWithWorkerIfAvailable(arrayBuffer, {
-    fileName: file.name,
-    attText,
-    maxStringScanBytes: options.maxStringScanBytes
-  });
-
-  await yieldToBrowser();
-  const attEnrichment = enrichBrowserRvmHierarchyWithAtt(parsed.hierarchy || [], attText);
-  parsed.hierarchy = attEnrichment.hierarchy;
-  parsed.diagnostics = {
-    ...(parsed.diagnostics || {}),
-    browserRvmAtt: attEnrichment.diagnostics
-  };
-
+  const runId = `rvm-load-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  const perf = createStageTimer(runId);
+  const watchdog = createEventLoopWatchdog({ thresholdMs: 100, intervalMs: 50 });
   const renderBudget = normalizeRenderBudget(options);
-  update(`Building responsive RVM render scene for ${file.name}`);
-  await yieldToBrowser();
-  const renderResult = await buildResponsiveBrowserRvmRenderSceneFromHierarchy(parsed.hierarchy, {
-    name: `BrowserRvmRenderScene:${file.name || 'model.rvm'}`,
-    ...(options.renderOptions || {}),
-    ...renderBudget,
-    onProgress: ({ processed, total, renderableCount }) => {
-      update(`Building RVM scene ${processed}/${total}${Number.isFinite(renderableCount) ? ` (${renderableCount} drawn)` : ''}`);
-    }
-  });
-  const shouldUseRenderScene = Boolean(renderResult?.scene && renderResult.diagnostics?.renderableCount > 0);
-
+  const signal = options.signal || null;
+  let activeScene = null;
   let payload = null;
-  let hierarchyScene = null;
-  let activeScene = renderResult?.scene || null;
-  let usedDeferredHierarchyFallback = false;
 
-  if (shouldUseRenderScene && options.buildHierarchyFallback !== true) {
-    usedDeferredHierarchyFallback = true;
-    payload = makeRenderScenePayload(file, parsed.hierarchy, renderResult, attEnrichment.diagnostics);
-  } else {
-    update(`Building hierarchy fallback scene for ${file.name}`);
-    await yieldToBrowser();
-    const loader = new AvevaJsonLoader();
-    payload = await loader.load(parsed.hierarchy, {}, options.asyncSession || makeAsyncSession(statusEl));
-    if (!payload?.gltf?.scene) throw new Error('Browser RVM fallback produced no scene.');
-    hierarchyScene = payload.gltf.scene;
-    activeScene = shouldUseRenderScene ? renderResult.scene : hierarchyScene;
-  }
+  try {
+    checkAbort(signal);
+    update(`Reading ${file.name}…`);
+    const arrayBuffer = await measureAsyncStage(perf, 'file.arrayBuffer', async () => {
+      await yieldToBrowser({ signal });
+      return file.arrayBuffer();
+    });
+    checkAbort(signal);
 
-  const diagnostics = publishBrowserRvmLoadDiagnostics({
-    ...(parsed.diagnostics || {}),
-    browserRvmRenderSceneEnabled: shouldUseRenderScene,
-    browserRvmRenderSchemaVersion: renderResult?.schemaVersion || '',
-    browserRvmRenderableCount: renderResult?.diagnostics?.renderableCount || 0,
-    browserRvmSkippedCount: renderResult?.diagnostics?.skippedCount || 0,
-    browserRvmRenderPrimitiveCounts: renderResult?.diagnostics?.primitiveCounts || {},
-    browserRvmRenderSkippedReasons: renderResult?.diagnostics?.skippedReasons || {},
-    browserRvmHierarchyFallbackDeferred: usedDeferredHierarchyFallback,
-    browserRvmResponsiveLoadPath: shouldUseRenderScene ? 'responsive-render-scene-first' : 'hierarchy-fallback',
-    browserRvmResponsiveSceneBuilder: true,
-    browserRvmRenderBudgeted: Boolean(renderResult?.diagnostics?.budgeted),
-    browserRvmMaxRenderableObjects: renderBudget.maxRenderableObjects,
-    browserRvmRenderBudgetSkipped: renderResult?.diagnostics?.skippedReasons?.['render-budget-limit'] || 0,
-    browserRvmManifestNodeLimit: MANIFEST_NODE_LIMIT
-  }, file.name);
+    const attText = options.attText || '';
+    update(`Parsing ${file.name} in RVM worker…`);
+    const parsed = await measureAsyncStage(perf, 'worker.parse.renderInstructions', () => parseWithWorkerIfAvailable(arrayBuffer, {
+      fileName: file.name,
+      attText,
+      maxStringScanBytes: options.maxStringScanBytes,
+      manifestNodeLimit: MANIFEST_NODE_LIMIT,
+      signal,
+      onProgress: (progress) => {
+        update(progress?.message || `Parsing ${file.name}…`);
+        options.onProgress?.({ stage: 'worker-parse', ...(progress || {}) });
+      },
+      allowMainThreadParserFallback: options.allowMainThreadParserFallback === true,
+      mainThreadFallbackMaxBytes: positiveInteger(options.mainThreadFallbackMaxBytes, MAIN_THREAD_FALLBACK_MAX_BYTES)
+    }));
+    checkAbort(signal);
 
-  payload.browserRvmParser = diagnostics;
-  payload.browserRvmAtt = attEnrichment.diagnostics;
-  payload.browserRvmRender = renderResult?.diagnostics || null;
-  payload.browserRvmRenderInstructions = renderResult?.instructionSet || null;
-  payload.browserRvmHierarchyScene = hierarchyScene;
-  payload.gltf.scene = activeScene;
-  payload.manifest = {
-    ...(payload.manifest || {}),
-    source: {
-      ...((payload.manifest || {}).source || {}),
-      format: 'RVM_BINARY_BROWSER_FALLBACK',
-      files: [file.name]
-    },
-    browserRvmParser: diagnostics,
-    browserRvmAtt: attEnrichment.diagnostics,
-    browserRvmRender: renderResult?.diagnostics || null,
-    browserRvmRenderScene: {
-      enabled: shouldUseRenderScene,
-      schemaVersion: renderResult?.schemaVersion || '',
-      renderableCount: renderResult?.diagnostics?.renderableCount || 0,
-      skippedCount: renderResult?.diagnostics?.skippedCount || 0,
-      hierarchyFallbackDeferred: usedDeferredHierarchyFallback,
-      responsiveBuilder: true,
-      budgeted: Boolean(renderResult?.diagnostics?.budgeted),
-      renderBudgetSkipped: renderResult?.diagnostics?.skippedReasons?.['render-budget-limit'] || 0,
-      maxRenderableObjects: renderBudget.maxRenderableObjects
+    const instructionSet = parsed.instructionSet || { instructions: [], count: 0, diagnostics: {} };
+    const instructions = Array.isArray(instructionSet.instructions) ? instructionSet.instructions : [];
+    activeScene = makeProgressiveSceneRoot(file, parsed, renderBudget);
+
+    if (viewer) {
+      update(`Preparing progressive RVM scene for ${file.name}…`);
+      await yieldToBrowser({ signal });
+      viewer.ctx = viewer.ctx || {};
+      viewer.ctx.identityMap = new Map();
+      viewer.setModel(activeScene, parsed.upAxis || 'Z');
+      await yieldToBrowser({ signal });
     }
-  };
 
-  activeScene.userData = {
-    ...(activeScene.userData || {}),
-    browserRvmLiveRenderScene: shouldUseRenderScene,
-    browserRvmParser: diagnostics,
-    browserRvmAtt: attEnrichment.diagnostics,
-    browserRvmRender: renderResult?.diagnostics || null,
-    browserRvmResponsiveSceneBuilder: true
-  };
+    update(`Rendering RVM objects 0/${instructions.length}…`);
+    let firstRenderableFitted = false;
+    const renderResult = await measureAsyncStage(perf, 'scene.progressiveCreate', () => buildProgressiveBrowserRvmRenderSceneFromInstructions(instructionSet, {
+      ...renderBudget,
+      targetScene: activeScene,
+      signal,
+      onFirstRenderable: () => {
+        if (firstRenderableFitted || !viewer) return;
+        firstRenderableFitted = true;
+        requestAnimationFrameSafe(() => {
+          try { viewer.fitAll?.(); } catch (_) {}
+        });
+      },
+      onProgress: ({ processed, total, renderableCount, skippedCount }) => {
+        update(`Rendering RVM objects ${processed}/${total} (${renderableCount} drawn, ${skippedCount} skipped)`);
+        options.onProgress?.({ stage: 'progressive-render', processed, total, renderableCount, skippedCount });
+      }
+    }));
+    checkAbort(signal);
 
-  if (viewer) {
-    update(`Committing RVM scene ${file.name}`);
-    await yieldToBrowser();
-    viewer.ctx.identityMap = payload.identityMap || new Map();
-    viewer.setModel(activeScene, payload.manifest?.runtime?.upAxis || 'Z');
-    await yieldToBrowser();
+    let hierarchyScene = null;
+    let usedDeferredHierarchyFallback = true;
+    const shouldUseRenderScene = Boolean(renderResult?.scene && renderResult.diagnostics?.renderableCount > 0);
+
+    if (!shouldUseRenderScene && options.buildHierarchyFallback === true && parsed.hierarchy) {
+      usedDeferredHierarchyFallback = false;
+      update(`Building explicit hierarchy fallback scene for ${file.name}`);
+      await yieldToBrowser({ signal });
+      const loader = new AvevaJsonLoader();
+      const fallbackPayload = await measureAsyncStage(perf, 'hierarchy.fallbackScene', () => loader.load(parsed.hierarchy, {}, options.asyncSession || makeAsyncSession(statusEl, signal)));
+      if (!fallbackPayload?.gltf?.scene) throw new Error('Browser RVM fallback produced no scene.');
+      hierarchyScene = fallbackPayload.gltf.scene;
+      activeScene = hierarchyScene;
+      payload = fallbackPayload;
+      if (viewer) {
+        viewer.ctx.identityMap = fallbackPayload.identityMap || new Map();
+        viewer.setModel(activeScene, fallbackPayload.manifest?.runtime?.upAxis || 'Z');
+      }
+    } else {
+      payload = makeRenderScenePayload(file, parsed.manifestNodes || [], renderResult, parsed.attDiagnostics || null);
+    }
+
+    const watchdogSummary = watchdog.stop();
+    const diagnostics = publishBrowserRvmLoadDiagnostics({
+      ...(parsed.diagnostics || {}),
+      browserRvmWorkerEnabled: Boolean(parsed.workerEnabled),
+      browserRvmWorkerFallback: Boolean(parsed.workerFallback),
+      browserRvmWorkerFirstPipeline: true,
+      browserRvmCompactInstructionTransfer: true,
+      browserRvmProgressiveRenderEnabled: true,
+      browserRvmRenderSceneEnabled: shouldUseRenderScene,
+      browserRvmRenderSchemaVersion: renderResult?.schemaVersion || '',
+      browserRvmRenderableCount: renderResult?.diagnostics?.renderableCount || 0,
+      browserRvmSkippedCount: renderResult?.diagnostics?.skippedCount || 0,
+      browserRvmRenderPrimitiveCounts: renderResult?.diagnostics?.primitiveCounts || {},
+      browserRvmRenderSkippedReasons: renderResult?.diagnostics?.skippedReasons || {},
+      browserRvmHierarchyFallbackDeferred: usedDeferredHierarchyFallback,
+      browserRvmResponsiveLoadPath: shouldUseRenderScene ? 'worker-instructions-progressive-render-scene-first' : 'hierarchy-fallback',
+      browserRvmResponsiveSceneBuilder: true,
+      browserRvmRenderBudgeted: Boolean(renderResult?.diagnostics?.budgeted),
+      browserRvmMaxRenderableObjects: renderBudget.maxRenderableObjects,
+      browserRvmRenderBudgetSkipped: renderResult?.diagnostics?.skippedReasons?.['render-budget-limit'] || 0,
+      browserRvmManifestNodeLimit: MANIFEST_NODE_LIMIT,
+      browserRvmStageTimingsMs: perf.measures,
+      browserRvmMaxEventLoopStallMs: watchdogSummary.maxEventLoopStallMs,
+      browserRvmEventLoopStallCount: watchdogSummary.eventLoopStallCount
+    }, file.name);
+
+    payload.browserRvmParser = diagnostics;
+    payload.browserRvmAtt = parsed.attDiagnostics || null;
+    payload.browserRvmRender = renderResult?.diagnostics || null;
+    payload.browserRvmRenderInstructions = {
+      schemaVersion: instructionSet.schemaVersion || '',
+      count: instructions.length,
+      diagnostics: instructionSet.diagnostics || {}
+    };
+    payload.browserRvmHierarchyScene = hierarchyScene;
+    payload.gltf.scene = activeScene;
+    payload.manifest = {
+      ...(payload.manifest || {}),
+      source: {
+        ...((payload.manifest || {}).source || {}),
+        format: 'RVM_BINARY_BROWSER_WORKER',
+        files: [file.name]
+      },
+      browserRvmParser: diagnostics,
+      browserRvmAtt: parsed.attDiagnostics || null,
+      browserRvmRender: renderResult?.diagnostics || null,
+      browserRvmRenderScene: {
+        enabled: shouldUseRenderScene,
+        schemaVersion: renderResult?.schemaVersion || '',
+        renderableCount: renderResult?.diagnostics?.renderableCount || 0,
+        skippedCount: renderResult?.diagnostics?.skippedCount || 0,
+        hierarchyFallbackDeferred: usedDeferredHierarchyFallback,
+        responsiveBuilder: true,
+        progressiveRenderEnabled: true,
+        workerEnabled: Boolean(parsed.workerEnabled),
+        renderBudgetSkipped: renderResult?.diagnostics?.skippedReasons?.['render-budget-limit'] || 0,
+        maxRenderableObjects: renderBudget.maxRenderableObjects,
+        stageTimingsMs: perf.measures,
+        maxEventLoopStallMs: watchdogSummary.maxEventLoopStallMs
+      }
+    };
+
+    activeScene.userData = {
+      ...(activeScene.userData || {}),
+      browserRvmLiveRenderScene: shouldUseRenderScene,
+      browserRvmParser: diagnostics,
+      browserRvmAtt: parsed.attDiagnostics || null,
+      browserRvmRender: renderResult?.diagnostics || null,
+      browserRvmResponsiveSceneBuilder: true,
+      browserRvmProgressiveRenderEnabled: true
+    };
+
+    update(`Loaded browser RVM ${file.name}`);
+    options.onDiagnostics?.(diagnostics);
+    return payload;
+  } catch (error) {
+    watchdog.stop();
+    if (isAbortError(error)) {
+      update(`Cancelled RVM load ${file.name}`);
+      throw error;
+    }
+    const diagnostics = publishBrowserRvmLoadDiagnostics({
+      fileName: file.name,
+      browserRvmWorkerFirstPipeline: true,
+      browserRvmLoadFailed: true,
+      error: error?.message || String(error),
+      browserRvmStageTimingsMs: perf.measures,
+      browserRvmMaxEventLoopStallMs: watchdog.snapshot().maxEventLoopStallMs,
+      browserRvmEventLoopStallCount: watchdog.snapshot().eventLoopStallCount
+    }, file.name);
+    options.onDiagnostics?.(diagnostics);
+    throw error;
   }
-  return payload;
 }
 
 export function publishBrowserRvmLoadDiagnostics(diagnostics = {}, fileName = '') {
@@ -145,62 +220,245 @@ export function publishBrowserRvmLoadDiagnostics(diagnostics = {}, fileName = ''
 }
 
 async function parseWithWorkerIfAvailable(arrayBuffer, options) {
-  if (typeof Worker !== 'function' || typeof URL !== 'function') {
-    return parseRvmArrayBuffer(arrayBuffer, options);
+  const workerCapable = typeof Worker === 'function' && typeof URL === 'function';
+  if (!workerCapable) {
+    return parseCompactOnMainThreadIfSmall(arrayBuffer, options, 'worker-unavailable');
   }
+
   try {
-    const workerUrl = new URL('./browser-rvm-worker.js', import.meta.url);
+    const workerUrl = new URL('./browser-rvm-worker.js?v=20260620-rvm-worker-first-1', import.meta.url);
     const worker = new Worker(workerUrl, { type: 'module' });
     const id = `rvm-${Date.now()}-${Math.random().toString(36).slice(2)}`;
     return await new Promise((resolve, reject) => {
-      const timer = setTimeout(() => {
+      let settled = false;
+      const cleanup = () => {
+        settled = true;
+        clearTimeout(timer);
+        options.signal?.removeEventListener?.('abort', onAbort);
         worker.terminate();
+      };
+      const onAbort = () => {
+        if (settled) return;
+        cleanup();
+        reject(makeAbortError());
+      };
+      const timer = setTimeout(() => {
+        if (settled) return;
+        cleanup();
         reject(new Error('Browser RVM worker timed out'));
-      }, 45_000);
+      }, 120_000);
+      options.signal?.addEventListener?.('abort', onAbort, { once: true });
       worker.onmessage = (event) => {
         const msg = event.data || {};
         if (msg.id !== id) return;
-        clearTimeout(timer);
-        worker.terminate();
-        if (msg.ok) resolve(msg.result);
+        if (msg.type === 'progress') {
+          options.onProgress?.(msg.progress || {});
+          return;
+        }
+        cleanup();
+        if (msg.ok) resolve({ ...(msg.result || {}), workerEnabled: true, workerFallback: false });
         else reject(new Error(msg.error?.message || 'Browser RVM worker failed'));
       };
       worker.onerror = (error) => {
-        clearTimeout(timer);
-        worker.terminate();
+        if (settled) return;
+        cleanup();
         reject(new Error(error?.message || 'Browser RVM worker error'));
       };
-      worker.postMessage({ id, arrayBuffer, options }, [arrayBuffer]);
+      worker.postMessage({ id, arrayBuffer, options: stripWorkerOptions(options) }, [arrayBuffer]);
     });
-  } catch {
-    return parseRvmArrayBuffer(arrayBuffer, options);
+  } catch (error) {
+    if (isAbortError(error)) throw error;
+    if (options.allowMainThreadParserFallback === true) {
+      return parseCompactOnMainThreadIfSmall(arrayBuffer, options, error?.message || 'worker-error');
+    }
+    throw error;
   }
 }
 
-function makeRenderScenePayload(file, hierarchy, renderResult, attDiagnostics) {
-  const nodes = flattenHierarchyForManifest(hierarchy);
+function stripWorkerOptions(options = {}) {
+  return {
+    fileName: options.fileName,
+    attText: options.attText || '',
+    maxStringScanBytes: options.maxStringScanBytes,
+    manifestNodeLimit: options.manifestNodeLimit || MANIFEST_NODE_LIMIT
+  };
+}
+
+async function parseCompactOnMainThreadIfSmall(arrayBuffer, options = {}, reason = '') {
+  const limit = positiveInteger(options.mainThreadFallbackMaxBytes, MAIN_THREAD_FALLBACK_MAX_BYTES);
+  if (arrayBuffer.byteLength > limit) {
+    throw new Error(`Browser RVM worker is required for ${options.fileName || 'large RVM'}; refused ${arrayBuffer.byteLength} byte main-thread parse (${reason || 'no-worker'}).`);
+  }
+  const parsed = await parseRvmArrayBuffer(arrayBuffer, options);
+  const attEnrichment = enrichBrowserRvmHierarchyWithAtt(parsed.hierarchy || [], options.attText || '');
+  const instructionSet = collectBrowserRvmRenderInstructions(attEnrichment.hierarchy || []);
+  return {
+    ok: true,
+    fileName: options.fileName || parsed.fileName || '',
+    byteLength: arrayBuffer.byteLength,
+    upAxis: 'Z',
+    workerEnabled: false,
+    workerFallback: true,
+    workerFallbackReason: reason,
+    hierarchy: options.buildHierarchyFallback === true ? attEnrichment.hierarchy : null,
+    instructionSet,
+    manifestNodes: flattenHierarchyForManifest(attEnrichment.hierarchy, options.manifestNodeLimit || MANIFEST_NODE_LIMIT),
+    attDiagnostics: attEnrichment.diagnostics,
+    diagnostics: {
+      ...(parsed.diagnostics || {}),
+      browserRvmWorkerEnabled: false,
+      browserRvmWorkerFallback: true,
+      browserRvmWorkerFallbackReason: reason,
+      browserRvmInstructionCount: instructionSet.count || instructionSet.instructions?.length || 0
+    }
+  };
+}
+
+async function buildProgressiveBrowserRvmRenderSceneFromInstructions(instructionSet = {}, options = {}) {
+  const renderOptions = normalizeRenderBudget(options);
+  const list = Array.isArray(instructionSet.instructions) ? instructionSet.instructions : [];
+  const group = options.targetScene || new THREE.Group();
+  group.name = options.name || group.name || 'BrowserRvmProgressiveRenderScene';
+  group.userData = {
+    ...(group.userData || {}),
+    schemaVersion: BROWSER_RVM_RENDER_SCENE_SCHEMA,
+    instructionSchemaVersion: instructionSet.schemaVersion || '',
+    source: 'browser-rvm-worker-render-instructions-progressive',
+    responsiveBuilder: true,
+    progressiveRenderEnabled: true,
+    renderOptions: publicRenderOptions(renderOptions)
+  };
+
+  const context = makeRenderContext(renderOptions);
+  const diagnostics = {
+    schemaVersion: BROWSER_RVM_RENDER_SCENE_SCHEMA,
+    instructionCount: list.length,
+    renderableCount: 0,
+    skippedCount: 0,
+    primitiveCounts: {},
+    effectivePrimitiveCounts: {},
+    renderQualityCounts: {},
+    skippedReasons: {},
+    attCounts: { enriched: 0, plain: 0 },
+    renderOptions: publicRenderOptions(renderOptions),
+    performance: {},
+    bounds: emptySceneBounds(),
+    responsiveBuilder: true,
+    progressiveRenderEnabled: true,
+    budgeted: list.length > renderOptions.maxRenderableObjects,
+    maxRenderableObjects: renderOptions.maxRenderableObjects
+  };
+  const bounds = makeBoundsAccumulator();
+  let lastYield = nowMs();
+  let lastProgress = 0;
+  let firstRenderableSent = false;
+
+  for (let index = 0; index < list.length; index += 1) {
+    checkAbort(options.signal);
+    const instruction = list[index];
+    if (diagnostics.renderableCount >= renderOptions.maxRenderableObjects) {
+      diagnostics.skippedCount += 1;
+      bump(diagnostics.skippedReasons, 'render-budget-limit');
+    } else {
+      const mesh = buildInstructionObject(instruction, { renderOptions }, context);
+      if (!mesh) {
+        diagnostics.skippedCount += 1;
+        bump(diagnostics.skippedReasons, skipReason(instruction));
+      } else {
+        diagnostics.renderableCount += 1;
+        const rawPrimitive = primitiveName(mesh.userData?.renderPrimitive || instruction?.renderPrimitive || 'UNKNOWN');
+        const effectivePrimitive = primitiveName(mesh.userData?.effectiveRenderPrimitive || rawPrimitive);
+        const renderQuality = String(mesh.userData?.renderQuality || 'unknown');
+        bump(diagnostics.primitiveCounts, rawPrimitive || 'UNKNOWN');
+        bump(diagnostics.effectivePrimitiveCounts, effectivePrimitive || rawPrimitive || 'UNKNOWN');
+        bump(diagnostics.renderQualityCounts, renderQuality);
+        if (instruction?.att?.enriched) diagnostics.attCounts.enriched += 1;
+        else diagnostics.attCounts.plain += 1;
+        expandBoundsForInstruction(bounds, instruction);
+        group.add(mesh);
+        if (!firstRenderableSent) {
+          firstRenderableSent = true;
+          options.onFirstRenderable?.({ object: mesh, processed: index + 1, total: list.length });
+        }
+      }
+    }
+
+    const processed = index + 1;
+    const elapsed = nowMs() - lastYield;
+    const progressDue = nowMs() - lastProgress >= 240;
+    if (processed === list.length || elapsed >= renderOptions.timeSliceMs || progressDue) {
+      lastProgress = nowMs();
+      options.onProgress?.({
+        stage: 'progressive-render-scene-build',
+        processed,
+        total: list.length,
+        renderableCount: diagnostics.renderableCount,
+        skippedCount: diagnostics.skippedCount
+      });
+    }
+    if (elapsed >= renderOptions.timeSliceMs || processed % renderOptions.batchSize === 0) {
+      await yieldToBrowser({ signal: options.signal });
+      lastYield = nowMs();
+    }
+  }
+
+  diagnostics.performance = progressivePerformanceDiagnosticsFor(context, diagnostics, group, renderOptions);
+  diagnostics.bounds = boundsToSceneBounds(bounds);
+  group.userData.diagnostics = diagnostics;
+  group.userData.bounds = diagnostics.bounds;
+  group.userData.performance = diagnostics.performance;
+
+  return {
+    schemaVersion: BROWSER_RVM_RENDER_SCENE_SCHEMA,
+    scene: group,
+    diagnostics,
+    bounds: diagnostics.bounds,
+    instructionSet: {
+      schemaVersion: instructionSet.schemaVersion || '',
+      count: list.length,
+      diagnostics: instructionSet.diagnostics || {}
+    }
+  };
+}
+
+function makeProgressiveSceneRoot(file, parsed, renderBudget) {
+  const group = new THREE.Group();
+  group.name = `BrowserRvmRenderScene:${file.name || 'model.rvm'}`;
+  group.userData = {
+    schemaVersion: BROWSER_RVM_RENDER_SCENE_SCHEMA,
+    source: 'browser-rvm-worker-progressive-root',
+    browserRvmWorkerFirstPipeline: true,
+    browserRvmProgressiveRenderEnabled: true,
+    fileName: file.name || parsed.fileName || '',
+    byteLength: parsed.byteLength || file.size || 0,
+    renderOptions: publicRenderOptions(renderBudget)
+  };
+  return group;
+}
+
+function makeRenderScenePayload(file, manifestNodes, renderResult, attDiagnostics) {
   return {
     gltf: { scene: renderResult.scene },
     identityMap: new Map(),
     manifest: {
       runtime: { upAxis: 'Z' },
       source: {
-        format: 'RVM_BINARY_BROWSER_FALLBACK',
+        format: 'RVM_BINARY_BROWSER_WORKER',
         files: [file.name]
       },
-      nodes,
+      nodes: Array.isArray(manifestNodes) ? manifestNodes : [],
       browserRvmAtt: attDiagnostics,
       browserRvmRender: renderResult?.diagnostics || null,
-      browserRvmResponsiveLoadPath: 'responsive-render-scene-first',
+      browserRvmResponsiveLoadPath: 'worker-instructions-progressive-render-scene-first',
       browserRvmManifestNodeLimit: MANIFEST_NODE_LIMIT
     }
   };
 }
 
-function flattenHierarchyForManifest(roots = []) {
+function flattenHierarchyForManifest(roots = [], limit = MANIFEST_NODE_LIMIT) {
   const nodes = [];
   const visit = (node, parentCanonicalObjectId = '', depth = 0) => {
-    if (!node || typeof node !== 'object' || nodes.length >= MANIFEST_NODE_LIMIT) return;
+    if (!node || typeof node !== 'object' || nodes.length >= limit) return;
     const canonicalObjectId = String(node.canonicalObjectId || node.id || node.name || `browser-rvm-${nodes.length}`);
     nodes.push({
       canonicalObjectId,
@@ -210,18 +468,27 @@ function flattenHierarchyForManifest(roots = []) {
       kind: node.kind || node.type || node.attributes?.TYPE || 'NODE',
       type: node.type || node.kind || node.attributes?.TYPE || 'NODE',
       depth,
-      attributes: node.attributes && typeof node.attributes === 'object' ? node.attributes : {}
+      attributes: node.attributes && typeof node.attributes === 'object' ? compactAttributes(node.attributes) : {}
     });
     for (const child of Array.isArray(node.children) ? node.children : []) {
       visit(child, canonicalObjectId, depth + 1);
-      if (nodes.length >= MANIFEST_NODE_LIMIT) break;
+      if (nodes.length >= limit) break;
     }
   };
   for (const root of Array.isArray(roots) ? roots : []) {
     visit(root, '', 0);
-    if (nodes.length >= MANIFEST_NODE_LIMIT) break;
+    if (nodes.length >= limit) break;
   }
   return nodes;
+}
+
+function compactAttributes(attrs = {}) {
+  const keep = ['TYPE', 'NAME', 'RVM_PRIMITIVE_KIND', 'RVM_OWNER_NAME', 'RVM_BROWSER_RENDER_PRIMITIVE', 'RVM_BROWSER_RENDER_SOURCE', 'RVM_BROWSER_ATT_ENRICHED', 'RVM_BROWSER_ATT_ATTRIBUTE_COUNT'];
+  const out = {};
+  for (const key of keep) {
+    if (attrs[key] !== undefined && attrs[key] !== null && attrs[key] !== '') out[key] = String(attrs[key]);
+  }
+  return out;
 }
 
 function normalizeRenderBudget(options = {}) {
@@ -231,6 +498,154 @@ function normalizeRenderBudget(options = {}) {
     batchSize: positiveInteger(options.batchSize ?? renderOptions.batchSize, DEFAULT_RENDER_BUDGET.batchSize),
     timeSliceMs: positiveNumber(options.timeSliceMs ?? renderOptions.timeSliceMs, DEFAULT_RENDER_BUDGET.timeSliceMs)
   };
+}
+
+function makeRenderContext(renderOptions) {
+  return {
+    renderOptions,
+    materialCache: new Map(),
+    geometryCache: new Map(),
+    stats: {
+      geometryCacheHits: 0,
+      geometryCacheMisses: 0,
+      materialCacheHits: 0,
+      materialCacheMisses: 0,
+      estimatedGeometryBytes: 0
+    }
+  };
+}
+
+function publicRenderOptions(options = {}) {
+  return {
+    maxRenderableObjects: options.maxRenderableObjects,
+    batchSize: options.batchSize,
+    timeSliceMs: options.timeSliceMs,
+    responsiveBuilder: true,
+    progressiveRenderEnabled: true,
+    workerFirst: true
+  };
+}
+
+function progressivePerformanceDiagnosticsFor(context, diagnostics, group, renderOptions) {
+  return {
+    responsiveBuilder: true,
+    progressiveRenderEnabled: true,
+    meshObjectCount: diagnostics.renderableCount,
+    groupObjectCount: group?.children?.filter?.((child) => child?.isGroup)?.length || 0,
+    geometryCacheSize: context.geometryCache.size,
+    materialCacheSize: context.materialCache.size,
+    geometryCacheHits: context.stats.geometryCacheHits,
+    geometryCacheMisses: context.stats.geometryCacheMisses,
+    materialCacheHits: context.stats.materialCacheHits,
+    materialCacheMisses: context.stats.materialCacheMisses,
+    estimatedGeometryBytes: context.stats.estimatedGeometryBytes,
+    estimatedGeometryKb: Number((context.stats.estimatedGeometryBytes / 1024).toFixed(2)),
+    maxRenderableObjects: renderOptions.maxRenderableObjects,
+    renderBudgeted: diagnostics.budgeted,
+    renderBudgetSkipped: diagnostics.skippedReasons['render-budget-limit'] || 0,
+    batchSize: renderOptions.batchSize,
+    timeSliceMs: renderOptions.timeSliceMs
+  };
+}
+
+function makeBoundsAccumulator() {
+  return { hasBounds: false, min: { x: Infinity, y: Infinity, z: Infinity }, max: { x: -Infinity, y: -Infinity, z: -Infinity } };
+}
+
+function expandBoundsForInstruction(bounds, instruction = {}) {
+  const bbox = parseBbox(instruction.bbox || instruction.rawBbox);
+  if (bbox) {
+    expandBounds(bounds, bbox[0], bbox[1], bbox[2]);
+    expandBounds(bounds, bbox[3], bbox[4], bbox[5]);
+    return;
+  }
+  const radius = Number.isFinite(instruction.radius) ? Math.max(instruction.radius, 0) : 0;
+  for (const point of [vec3(instruction.axisStart), vec3(instruction.axisEnd), vec3(instruction.center)]) {
+    if (!point) continue;
+    expandBounds(bounds, point.x - radius, point.y - radius, point.z - radius);
+    expandBounds(bounds, point.x + radius, point.y + radius, point.z + radius);
+  }
+}
+
+function expandBounds(bounds, x, y, z) {
+  if (![x, y, z].every(Number.isFinite)) return;
+  bounds.hasBounds = true;
+  bounds.min.x = Math.min(bounds.min.x, x);
+  bounds.min.y = Math.min(bounds.min.y, y);
+  bounds.min.z = Math.min(bounds.min.z, z);
+  bounds.max.x = Math.max(bounds.max.x, x);
+  bounds.max.y = Math.max(bounds.max.y, y);
+  bounds.max.z = Math.max(bounds.max.z, z);
+}
+
+function boundsToSceneBounds(bounds) {
+  if (!bounds?.hasBounds) return emptySceneBounds();
+  const center = {
+    x: (bounds.min.x + bounds.max.x) * 0.5,
+    y: (bounds.min.y + bounds.max.y) * 0.5,
+    z: (bounds.min.z + bounds.max.z) * 0.5
+  };
+  const size = {
+    x: Math.max(bounds.max.x - bounds.min.x, 0),
+    y: Math.max(bounds.max.y - bounds.min.y, 0),
+    z: Math.max(bounds.max.z - bounds.min.z, 0)
+  };
+  return {
+    hasBounds: true,
+    min: plainPoint(bounds.min),
+    max: plainPoint(bounds.max),
+    center,
+    size,
+    radius: Math.max(Math.hypot(size.x, size.y, size.z) * 0.5, 0)
+  };
+}
+
+function emptySceneBounds() {
+  return { hasBounds: false, min: null, max: null, center: null, size: null, radius: 0 };
+}
+
+function parseBbox(value) {
+  if (Array.isArray(value) && value.length >= 6) {
+    const nums = value.slice(0, 6).map(Number);
+    return nums.every(Number.isFinite) ? nums : null;
+  }
+  if (typeof value === 'string') {
+    const nums = value.split(/[\s,]+/g).map(Number).filter(Number.isFinite);
+    return nums.length >= 6 ? nums.slice(0, 6) : null;
+  }
+  return null;
+}
+
+function vec3(value) {
+  if (!value) return null;
+  const x = Number(value.x);
+  const y = Number(value.y);
+  const z = Number(value.z);
+  if (![x, y, z].every(Number.isFinite)) return null;
+  return { x, y, z };
+}
+
+function plainPoint(point) {
+  return { x: finiteOrZero(point.x), y: finiteOrZero(point.y), z: finiteOrZero(point.z) };
+}
+
+function finiteOrZero(value) {
+  return Number.isFinite(value) ? value : 0;
+}
+
+function primitiveName(value) {
+  return String(value || '').trim().toUpperCase();
+}
+
+function skipReason(instruction) {
+  if (!instruction || typeof instruction !== 'object') return 'invalid-instruction';
+  if (!instruction.center && !instruction.axisStart && !instruction.axisEnd) return 'missing-position';
+  return 'unsupported-geometry';
+}
+
+function bump(target, key) {
+  const name = String(key || '').trim() || 'UNKNOWN';
+  target[name] = (target[name] || 0) + 1;
 }
 
 function positiveInteger(value, fallback) {
@@ -243,23 +658,132 @@ function positiveNumber(value, fallback) {
   return Number.isFinite(n) && n >= 0 ? n : fallback;
 }
 
-function yieldToBrowser() {
-  if (typeof requestIdleCallback === 'function') {
-    return new Promise((resolve) => requestIdleCallback(() => resolve(), { timeout: 120 }));
-  }
-  if (typeof requestAnimationFrame === 'function') {
-    return new Promise((resolve) => requestAnimationFrame(() => resolve()));
-  }
-  return new Promise((resolve) => setTimeout(resolve, 0));
+function nowMs() {
+  return typeof performance !== 'undefined' && typeof performance.now === 'function' ? performance.now() : Date.now();
 }
 
-function makeAsyncSession(statusEl) {
-  let stale = false;
+function createStageTimer(runId) {
+  return {
+    runId,
+    measures: {},
+    mark(name) {
+      try { performance?.mark?.(`${runId}:${name}`); } catch (_) {}
+    },
+    measure(name, start, end) {
+      try {
+        performance?.mark?.(`${runId}:${end}`);
+        performance?.measure?.(`BrowserRVM:${name}`, `${runId}:${start}`, `${runId}:${end}`);
+      } catch (_) {}
+      const entries = typeof performance !== 'undefined' && typeof performance.getEntriesByName === 'function'
+        ? performance.getEntriesByName(`BrowserRVM:${name}`)
+        : [];
+      const duration = entries.length ? entries[entries.length - 1].duration : 0;
+      this.measures[name] = Number(duration.toFixed(2));
+      console.info(`[BrowserRVM] ${name}: ${this.measures[name]} ms`);
+      return this.measures[name];
+    }
+  };
+}
+
+async function measureAsyncStage(perf, name, fn) {
+  perf.mark(`${name}:start`);
+  try {
+    return await fn();
+  } finally {
+    perf.measure(name, `${name}:start`, `${name}:end`);
+  }
+}
+
+function createEventLoopWatchdog({ thresholdMs = 100, intervalMs = 50 } = {}) {
+  let last = nowMs();
+  let maxEventLoopStallMs = 0;
+  let eventLoopStallCount = 0;
+  const timer = setInterval(() => {
+    const current = nowMs();
+    const stall = current - last - intervalMs;
+    if (stall > thresholdMs) {
+      eventLoopStallCount += 1;
+      maxEventLoopStallMs = Math.max(maxEventLoopStallMs, stall);
+      console.warn(`[BrowserRVM] main-thread stall ${Math.round(stall)} ms`);
+    }
+    last = current;
+  }, intervalMs);
+  return {
+    snapshot() {
+      return {
+        maxEventLoopStallMs: Number(maxEventLoopStallMs.toFixed(1)),
+        eventLoopStallCount
+      };
+    },
+    stop() {
+      clearInterval(timer);
+      return this.snapshot();
+    }
+  };
+}
+
+function checkAbort(signal) {
+  if (signal?.aborted) throw makeAbortError();
+}
+
+function makeAbortError() {
+  try { return new DOMException('RVM load cancelled', 'AbortError'); } catch (_) {
+    const error = new Error('RVM load cancelled');
+    error.name = 'AbortError';
+    return error;
+  }
+}
+
+function isAbortError(error) {
+  return error?.name === 'AbortError' || /cancelled|aborted/i.test(String(error?.message || error));
+}
+
+function yieldToBrowser({ signal } = {}) {
+  checkAbort(signal);
+  if (typeof requestIdleCallback === 'function') {
+    return new Promise((resolve, reject) => {
+      const id = requestIdleCallback(() => {
+        try { checkAbort(signal); resolve(); } catch (error) { reject(error); }
+      }, { timeout: 80 });
+      signal?.addEventListener?.('abort', () => {
+        try { cancelIdleCallback?.(id); } catch (_) {}
+        reject(makeAbortError());
+      }, { once: true });
+    });
+  }
+  if (typeof requestAnimationFrame === 'function') {
+    return new Promise((resolve, reject) => {
+      const id = requestAnimationFrame(() => {
+        try { checkAbort(signal); resolve(); } catch (error) { reject(error); }
+      });
+      signal?.addEventListener?.('abort', () => {
+        try { cancelAnimationFrame?.(id); } catch (_) {}
+        reject(makeAbortError());
+      }, { once: true });
+    });
+  }
+  return new Promise((resolve, reject) => {
+    const id = setTimeout(() => {
+      try { checkAbort(signal); resolve(); } catch (error) { reject(error); }
+    }, 0);
+    signal?.addEventListener?.('abort', () => {
+      clearTimeout(id);
+      reject(makeAbortError());
+    }, { once: true });
+  });
+}
+
+function requestAnimationFrameSafe(fn) {
+  if (typeof requestAnimationFrame === 'function') requestAnimationFrame(fn);
+  else setTimeout(fn, 0);
+}
+
+function makeAsyncSession(statusEl, signal) {
   return {
     update(stage, percent) { if (statusEl) statusEl.textContent = `${stage} ${Number.isFinite(percent) ? `${percent}%` : ''}`.trim(); },
     complete() { if (statusEl) statusEl.textContent = 'Loaded browser RVM fallback'; },
-    cancel() { stale = true; },
-    isStale() { return stale; },
-    isCancelled() { return stale; }
+    cancel() {},
+    isStale() { return Boolean(signal?.aborted); },
+    isCancelled() { return Boolean(signal?.aborted); }
   };
 }

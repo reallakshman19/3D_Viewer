@@ -1,5 +1,6 @@
 const STARTUP_SIDE_EFFECT_MODULES = [
   './rvm/AvevaJsonAutoConnectOverride.js?v=20260618-inputxml-auto-connect-1',
+  './rvm-viewer/RvmBrowserRvmWorkerFirstBridge.js?v=20260620-rvm-worker-first-1',
   './rvm-viewer/RvmInputXmlSupportGraphicsSetModelBridge.js?v=20260619-source-bend-collapse-1',
   './rvm-viewer/RvmInputXmlSupportGraphicsUiBridge.js?v=20260619-source-bend-collapse-1',
   './tabs/model-converters/xml-cii-finalise-run-button.js?v=20260619-workflow-perf-1',
@@ -47,7 +48,7 @@ async function loadStartupSideEffects() {
 
 async function startViewer() {
   await loadStartupSideEffects();
-  const { init } = await import('./core/app.js?v=20260620-startup-blank-guard-1');
+  const { init } = await import('./core/app.js?v=20260620-rvm-worker-first-1');
   await init();
 }
 

@@ -2,105 +2,43 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
 async function run() {
-  const source = await readFile(new URL('../../../rvm/BrowserRvmLoadBridge.js', import.meta.url), 'utf8');
+  const bridgeSource = await readFile(new URL('../../../rvm/BrowserRvmLoadBridge.js', import.meta.url), 'utf8');
+  const workerSource = await readFile(new URL('../../../rvm/browser-rvm-worker.js', import.meta.url), 'utf8');
+  const tabBridgeSource = await readFile(new URL('../../../rvm-viewer/RvmBrowserRvmWorkerFirstBridge.js', import.meta.url), 'utf8');
+  const mainSource = await readFile(new URL('../../../main.js', import.meta.url), 'utf8');
+  const indexHtml = await readFile(new URL('../../../index.html', import.meta.url), 'utf8');
 
-  assert.match(
-    source,
-    /import\s+\{\s*buildResponsiveBrowserRvmRenderSceneFromHierarchy\s*\}\s+from\s+['"]\.\/BrowserRvmResponsiveRenderSceneBuilder\.js['"]/,
-    'Browser RVM direct load bridge must import the responsive render scene builder.'
-  );
+  assert.doesNotMatch(bridgeSource, /buildResponsiveBrowserRvmRenderSceneFromHierarchy/, 'RVM load must not build render instructions from a full main-thread hierarchy.');
+  assert.match(bridgeSource, /new\s+Worker\(workerUrl,\s*\{\s*type:\s*['"]module['"]\s*\}\)/, 'RVM load must use a module worker.');
+  assert.match(bridgeSource, /browser-rvm-worker\.js\?v=20260620-rvm-worker-first-1/, 'Worker URL must be cache-busted.');
+  assert.match(bridgeSource, /worker\.postMessage\(\{\s*id,\s*arrayBuffer,\s*options:\s*stripWorkerOptions\(options\)\s*\},\s*\[arrayBuffer\]\)/, 'RVM ArrayBuffer must be transferred to the worker.');
+  assert.match(bridgeSource, /MAIN_THREAD_FALLBACK_MAX_BYTES\s*=\s*1024\s*\*\s*1024/, 'Main-thread parser fallback must be hard-limited.');
+  assert.match(bridgeSource, /allowMainThreadParserFallback:\s*options\.allowMainThreadParserFallback\s*===\s*true/, 'Main-thread parser fallback must be opt-in.');
+  assert.match(bridgeSource, /viewer\.setModel\(activeScene,\s*parsed\.upAxis\s*\|\|\s*['"]Z['"]\)/, 'An empty progressive scene must be mounted before mesh creation completes.');
+  assert.match(bridgeSource, /buildProgressiveBrowserRvmRenderSceneFromInstructions\(instructionSet,[\s\S]*targetScene:\s*activeScene/, 'Worker render instructions must be progressively instantiated into the mounted scene.');
+  assert.match(bridgeSource, /elapsed\s*>=\s*renderOptions\.timeSliceMs[\s\S]*await\s+yieldToBrowser\(\{\s*signal:\s*options\.signal\s*\}\)/, 'Progressive scene creation must yield by time budget.');
+  assert.match(bridgeSource, /createEventLoopWatchdog\(\{\s*thresholdMs:\s*100,\s*intervalMs:\s*50\s*\}\)/, 'RVM load must include a responsiveness watchdog.');
+  assert.match(bridgeSource, /browserRvmStageTimingsMs:\s*perf\.measures[\s\S]*browserRvmMaxEventLoopStallMs:/, 'Diagnostics must expose timings and max event-loop stall.');
+  assert.match(bridgeSource, /browserRvmWorkerEnabled:[\s\S]*browserRvmCompactInstructionTransfer:[\s\S]*browserRvmProgressiveRenderEnabled:/, 'Diagnostics must expose worker, compact transfer, and progressive flags.');
 
-  assert.match(
-    source,
-    /const\s+renderResult\s*=\s*await\s+buildResponsiveBrowserRvmRenderSceneFromHierarchy\(parsed\.hierarchy/,
-    'Browser RVM direct load must build render objects from the grouped browser hierarchy using the responsive async builder.'
-  );
+  assert.match(workerSource, /enrichBrowserRvmHierarchyWithAtt/, 'Worker must perform ATT enrichment.');
+  assert.match(workerSource, /collectBrowserRvmRenderInstructions/, 'Worker must generate render instructions.');
+  assert.match(workerSource, /instructionSet:\s*compactInstructionSet[\s\S]*manifestNodes,/, 'Worker must return compact instructions and capped manifest nodes.');
+  assert.match(workerSource, /browserRvmHierarchyReturnedToMainThread:\s*false/, 'Worker must not return the huge hierarchy on the normal path.');
+  assert.doesNotMatch(workerSource, /hierarchy:\s*attEnrichment\.hierarchy/, 'Worker complete message must not transfer enriched hierarchy.');
 
-  assert.match(
-    source,
-    /const\s+shouldUseRenderScene\s*=\s*Boolean\(renderResult\?\.scene\s*&&\s*renderResult\.diagnostics\?\.renderableCount\s*>\s*0\)/,
-    'Browser RVM direct load must use the render scene only when it contains renderable geometry.'
-  );
+  assert.match(tabBridgeSource, /installBrowserRvmWorkerFirstBridge/, 'Worker-first tab bridge must be installed.');
+  assert.match(tabBridgeSource, /event\?\.stopImmediatePropagation\?\.\(\)/, 'Worker-first bridge must stop the stale tab change handler for real RVM files.');
+  assert.match(tabBridgeSource, /new\s+AbortController\(\)/, 'Worker-first bridge must cancel previous RVM load jobs.');
+  assert.match(tabBridgeSource, /sidecarKey\(file\.name\)\s*===\s*rvmKey/, 'ATT sidecars must be matched by same basename.');
+  assert.match(tabBridgeSource, /MAX_TREE_ROWS\s*=\s*320/, 'Initial tree rendering must be capped.');
+  assert.match(tabBridgeSource, /Max event-loop stall[\s\S]*browserRvmMaxEventLoopStallMs/, 'Diagnostics panel must show max event-loop stall.');
+  assert.match(tabBridgeSource, /Worker enabled[\s\S]*browserRvmWorkerEnabled[\s\S]*Progressive render[\s\S]*browserRvmProgressiveRenderEnabled/, 'Diagnostics panel must show worker and progressive-render status.');
 
-  assert.match(
-    source,
-    /if\s*\(shouldUseRenderScene\s*&&\s*options\.buildHierarchyFallback\s*!==\s*true\)\s*\{[\s\S]*makeRenderScenePayload/,
-    'Browser RVM direct load must use a render-scene-first path and defer the expensive hierarchy-loader scene when renderable geometry exists.'
-  );
+  assert.match(mainSource, /RvmBrowserRvmWorkerFirstBridge\.js\?v=20260620-rvm-worker-first-1/, 'Worker-first bridge must load as an early startup side effect.');
+  assert.match(indexHtml, /main\.js\?v=20260620-rvm-worker-first-1/, 'GitHub Pages entrypoint must bump the main.js cache key.');
 
-  assert.match(
-    source,
-    /browserRvmHierarchyFallbackDeferred:\s*usedDeferredHierarchyFallback/,
-    'Browser RVM diagnostics must report when the hierarchy fallback was deferred to keep the tab responsive.'
-  );
-
-  assert.match(
-    source,
-    /const\s+DEFAULT_RENDER_BUDGET\s*=\s*Object\.freeze\([\s\S]*maxRenderableObjects:[\s\S]*batchSize:[\s\S]*timeSliceMs:/,
-    'Browser RVM direct load must define a bounded render budget for large RVM files.'
-  );
-
-  assert.match(
-    source,
-    /onProgress:\s*\(\{\s*processed,\s*total,\s*renderableCount\s*\}\)\s*=>\s*\{[\s\S]*Building RVM scene/,
-    'Browser RVM direct load must publish progress while responsive render batches are being built.'
-  );
-
-  assert.match(
-    source,
-    /function\s+yieldToBrowser\s*\([\s\S]*requestIdleCallback[\s\S]*requestAnimationFrame[\s\S]*setTimeout/,
-    'Browser RVM direct load must yield between parse, render-build, and setModel phases so the tab can repaint/status-update.'
-  );
-
-  assert.match(
-    source,
-    /const\s+diagnostics\s*=\s*publishBrowserRvmLoadDiagnostics\(\{[\s\S]*browserRvmRenderSceneEnabled:\s*shouldUseRenderScene[\s\S]*browserRvmRenderableCount:[\s\S]*browserRvmSkippedCount:[\s\S]*browserRvmResponsiveSceneBuilder:\s*true/,
-    'Browser RVM direct load must publish combined parse/render/responsiveness diagnostics.'
-  );
-
-  assert.match(
-    source,
-    /browserRvmRenderBudgetSkipped:\s*renderResult\?\.diagnostics\?\.skippedReasons\?\.\['render-budget-limit'\]/,
-    'Browser RVM direct load must expose render-budget skip diagnostics.'
-  );
-
-  assert.match(
-    source,
-    /globalThis\[RVM_BROWSER_PARSE_DIAGNOSTICS\]\s*=\s*payload[\s\S]*__PCF_GLB_RVM_BROWSER_PARSE_DIAGNOSTICS__\s*=\s*payload/,
-    'Browser RVM direct load diagnostics must update the same global diagnostics channel used by the tab panel.'
-  );
-
-  assert.match(
-    source,
-    /dispatchEvent\?\.\(new\s+CustomEvent\(['"]rvm-browser-parse-diagnostics['"],\s*\{\s*detail:\s*payload\s*\}\)\)/,
-    'Browser RVM direct load must notify the diagnostics panel after render-scene selection.'
-  );
-
-  assert.match(
-    source,
-    /payload\.browserRvmHierarchyScene\s*=\s*hierarchyScene/,
-    'Browser RVM direct load must retain the hierarchy-loader scene when it is actually built, otherwise null for deferred fallback.'
-  );
-
-  assert.match(
-    source,
-    /payload\.gltf\.scene\s*=\s*activeScene/,
-    'Browser RVM direct load payload must expose the chosen active scene.'
-  );
-
-  assert.match(
-    source,
-    /await\s+yieldToBrowser\(\);\s*\n\s*viewer\.ctx\.identityMap[\s\S]*viewer\.setModel\(activeScene,/,
-    'Browser RVM direct load must yield immediately before committing the scene to the viewer.'
-  );
-
-  assert.match(
-    source,
-    /browserRvmRenderScene:\s*\{[\s\S]*enabled:\s*shouldUseRenderScene[\s\S]*renderableCount:[\s\S]*skippedCount:[\s\S]*hierarchyFallbackDeferred:[\s\S]*responsiveBuilder:\s*true/,
-    'Browser RVM direct load manifest must report render-scene activation, deferred fallback, and responsive builder diagnostics.'
-  );
-
-  console.log('Browser RVM load bridge render-scene contract test passed');
+  console.log('Browser RVM worker-first responsiveness contract test passed');
 }
 
 run();
