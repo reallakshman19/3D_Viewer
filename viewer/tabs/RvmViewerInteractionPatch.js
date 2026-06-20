@@ -1,8 +1,10 @@
 import * as THREE from 'three';
 
-const PATCH_FLAG = Symbol.for('pcf-glb-rvm-toolbar-canvas-selection-patch-v1');
-const BRIDGE_VERSION = '20260620-rvm-toolbar-selection-1';
+const PATCH_FLAG = Symbol.for('pcf-glb-rvm-toolbar-canvas-selection-patch-v2-esc-hide-fit');
+const BRIDGE_VERSION = '20260620-rvm-esc-hide-selection-1';
 const CLICK_DRAG_TOLERANCE_PX = 5;
+const SELECTED_COLOR = 0x60a5fa;
+const SELECTED_EMISSIVE = 0x2563eb;
 
 export function installRvmViewerInteractionPatch(RvmViewer3D) {
   const proto = RvmViewer3D?.prototype;
@@ -15,16 +17,15 @@ export function installRvmViewerInteractionPatch(RvmViewer3D) {
   proto.setToolMode = function setRvmToolMode(action) {
     const mode = modeForAction(action);
     if (!mode) return false;
-    this.setNavMode?.(mode);
-    return true;
+    return setMode(this, mode);
   };
 
   const originalSetNavMode = proto.setNavMode;
   if (typeof originalSetNavMode === 'function') {
     proto.setNavMode = function patchedSetNavMode(mode) {
-      const normalized = String(mode || '').toLowerCase();
-      const result = originalSetNavMode.call(this, mode);
-      this._rvmLastToolMode = normalized || this._navMode || 'orbit';
+      const normalized = normalizeMode(mode || 'select');
+      const result = originalSetNavMode.call(this, normalized);
+      applyInteractionMode(this, normalized);
       return result;
     };
   }
@@ -39,11 +40,19 @@ export function installRvmCanvasSelectionBridge() {
     attempts += 1;
     const viewer = globalThis.__3D_RVM_VIEWER__;
     const root = document.querySelector('[data-rvm-viewer]');
-    if (viewer && root && viewer.renderer?.domElement) bindCanvasSelection(root, viewer);
-    if ((!viewer || !root) && attempts < 160) setTimeout(attach, 350);
+    if (viewer && root && viewer.renderer?.domElement) bindInteraction(root, viewer);
+    if ((!viewer || !root) && attempts < 180) setTimeout(attach, 300);
   };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', attach, { once: true });
   else attach();
+}
+
+function bindInteraction(root, viewer) {
+  bindCanvasSelection(root, viewer);
+  bindKeyboardEsc(root, viewer);
+  publishInteractionApi(root, viewer);
+  if (!viewer._rvmInteractionMode) setMode(viewer, 'select');
+  updateModeUi(root, 'select');
 }
 
 function executeToolbarAction(viewer, action) {
@@ -58,6 +67,8 @@ function executeToolbarAction(viewer, action) {
       case 'VIEW_MARQUEE_ZOOM': return setMode(viewer, 'view_marquee_zoom');
       case 'VIEW_FIT_ALL': return fitAllRvm(viewer);
       case 'VIEW_FIT_SELECTION': return fitCurrentSelection(viewer) || fitAllRvm(viewer);
+      case 'VIEW_HIDE_SELECTION': return hideCurrentSelection(viewer);
+      case 'VIEW_SHOW_HIDDEN': return showHiddenObjects(viewer);
       case 'VIEW_TOGGLE_PROJECTION': viewer.toggleProjection?.(); return true;
       case 'SECTION_BOX': viewer.setSectionMode?.('BOX'); return true;
       case 'SECTION_PLANE_UP': viewer.setSectionMode?.('PLANE_UP'); return true;
@@ -89,8 +100,55 @@ function modeForAction(action) {
 }
 
 function setMode(viewer, mode) {
-  viewer.setNavMode?.(mode);
+  const normalized = normalizeMode(mode);
+  if (typeof viewer?.setNavMode === 'function') viewer.setNavMode(normalized);
+  else applyInteractionMode(viewer, normalized);
+  updateModeUi(document.querySelector('[data-rvm-viewer]'), normalized);
   return true;
+}
+
+function normalizeMode(mode) {
+  const text = String(mode || 'select').trim().toLowerCase();
+  if (text === 'nav_select') return 'select';
+  if (text === 'nav_orbit') return 'orbit';
+  if (text === 'nav_pan') return 'pan';
+  return text || 'select';
+}
+
+function applyInteractionMode(viewer, mode) {
+  if (!viewer) return;
+  const normalized = normalizeMode(mode);
+  viewer._rvmInteractionMode = normalized;
+  viewer._navMode = normalized;
+
+  if (viewer.controls) {
+    if (normalized === 'select') {
+      viewer.controls.enabled = false;
+      viewer.controls.enableRotate = false;
+      viewer.controls.enablePan = false;
+      viewer.controls.enableZoom = true;
+    } else if (normalized === 'orbit') {
+      viewer.controls.enabled = true;
+      viewer.controls.enableRotate = true;
+      viewer.controls.enablePan = true;
+      viewer.controls.enableZoom = true;
+      viewer.controls.mouseButtons = { LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN };
+    } else if (normalized === 'pan') {
+      viewer.controls.enabled = true;
+      viewer.controls.enableRotate = true;
+      viewer.controls.enablePan = true;
+      viewer.controls.enableZoom = true;
+      viewer.controls.mouseButtons = { LEFT: THREE.MOUSE.PAN, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.ROTATE };
+    }
+  }
+
+  if (viewer.container?.style) {
+    if (normalized === 'select') viewer.container.style.cursor = 'crosshair';
+    else if (normalized === 'pan') viewer.container.style.cursor = 'grab';
+    else if (normalized === 'measure_tool' || normalized === 'measure') viewer.container.style.cursor = 'crosshair';
+    else if (normalized === 'view_marquee_zoom') viewer.container.style.cursor = 'zoom-in';
+    else viewer.container.style.cursor = 'default';
+  }
 }
 
 function bindCanvasSelection(root, viewer) {
@@ -102,6 +160,11 @@ function bindCanvasSelection(root, viewer) {
   canvas.addEventListener('pointerdown', (event) => {
     if (event.button !== 0) return;
     down = { x: event.clientX, y: event.clientY, time: performanceNow() };
+    if (viewer._rvmInteractionMode === 'select' && !viewer.measureModeEnabled && !viewer.marqueeModeEnabled) {
+      event.preventDefault();
+      event.stopPropagation();
+      event.stopImmediatePropagation?.();
+    }
   }, true);
 
   canvas.addEventListener('pointerup', (event) => {
@@ -109,15 +172,57 @@ function bindCanvasSelection(root, viewer) {
     const moved = Math.hypot(event.clientX - down.x, event.clientY - down.y);
     const elapsed = performanceNow() - down.time;
     down = null;
-    if (moved > CLICK_DRAG_TOLERANCE_PX || elapsed > 800) return;
+    if (moved > CLICK_DRAG_TOLERANCE_PX || elapsed > 900) return;
     if (viewer.measureModeEnabled || viewer.marqueeModeEnabled) return;
     const selected = selectGeometryAtClientPoint(root, viewer, event.clientX, event.clientY, { additive: event.ctrlKey || event.shiftKey || event.metaKey });
-    if (selected) {
+    if (selected || viewer._rvmInteractionMode === 'select') {
       event.preventDefault();
       event.stopPropagation();
       event.stopImmediatePropagation?.();
     }
   }, true);
+}
+
+function bindKeyboardEsc(root, viewer) {
+  if (!root || root.dataset.rvmEscBridge === BRIDGE_VERSION) return;
+  root.dataset.rvmEscBridge = BRIDGE_VERSION;
+  const onKeyDown = (event) => {
+    if (event.key !== 'Escape') return;
+    event.preventDefault();
+    event.stopPropagation();
+    event.stopImmediatePropagation?.();
+    handleEscape(root, viewer);
+  };
+  document.addEventListener('keydown', onKeyDown, true);
+  root._rvmEscKeyCleanup = () => document.removeEventListener('keydown', onKeyDown, true);
+}
+
+function handleEscape(root, viewer) {
+  const mode = normalizeMode(viewer?._rvmInteractionMode || viewer?._navMode || 'select');
+  cancelTransientModes(viewer);
+  if (mode !== 'select') {
+    setMode(viewer, 'select');
+    setStatusMessage(root, 'Esc: Select mode');
+    return true;
+  }
+  clearCanvasSelection(viewer, root);
+  setMode(viewer, 'select');
+  const panel = root?.querySelector?.('#rvm-attributes-panel');
+  if (panel) panel.innerHTML = '<div class="rvm-empty-state">No object selected.</div>';
+  setStatusMessage(root, 'Esc: selection cleared');
+  return true;
+}
+
+function cancelTransientModes(viewer) {
+  try { viewer?.clearMeasurement?.(); } catch (_) {}
+  viewer.measureModeEnabled = false;
+  viewer.marqueeModeEnabled = false;
+  viewer.marqueeMode = '';
+  if (viewer.marqueeElement) viewer.marqueeElement.style.display = 'none';
+  if (viewer.controls) {
+    viewer.controls.enabled = false;
+    viewer.controls.update?.();
+  }
 }
 
 function selectGeometryAtClientPoint(root, viewer, clientX, clientY, options = {}) {
@@ -135,36 +240,38 @@ function selectGeometryAtClientPoint(root, viewer, clientX, clientY, options = {
   const hits = raycaster.intersectObject(viewer.modelGroup, true);
   const hit = hits.find((item) => item?.object?.visible !== false && isPickableMesh(item.object));
   if (!hit) {
-    if (!options.additive) clearCanvasSelection(viewer, root);
+    if (!options.additive && viewer._rvmInteractionMode === 'select') clearCanvasSelection(viewer, root);
     return null;
   }
   const pickRoot = resolvePickRoot(hit.object);
-  const meshes = collectPickMeshes(pickRoot || hit.object);
+  const meshes = collectPickMeshes(pickRoot || hit.object).filter((mesh) => mesh.visible !== false);
   const id = stableObjectId(pickRoot || hit.object);
   if (!id || !meshes.length) return null;
 
-  if (!options.additive) clearCanvasSelection(viewer, root);
-  highlightMeshes(viewer, meshes);
-  writeSelectionState(viewer, id, meshes);
+  setSelectionFromObjects(root, viewer, meshes, { additive: options.additive, sourceObject: pickRoot || hit.object });
   renderCanvasSelectionDetails(root, viewer, pickRoot || hit.object, meshes, hit.point);
-  updateSelectedCount(root, meshes.length);
   return { id, object: pickRoot || hit.object, meshes, point: hit.point };
 }
 
 function isPickableMesh(obj) {
-  return Boolean(obj?.isMesh && obj.visible !== false && obj.userData?.supportSymbol !== true);
+  return Boolean(obj?.isMesh && obj.visible !== false && obj.userData?.supportSymbol !== true && obj.userData?.rvmHiddenByUser !== true);
 }
 
 function resolvePickRoot(obj) {
   let current = obj;
   let best = obj;
   while (current && current.parent) {
-    if (current.userData?.browserRvmProperties || current.userData?.sourcePath || current.userData?.displayName || current.userData?.pickable) best = current;
-    if (current.parent?.userData?.browserRvmProperties || current.parent?.userData?.sourcePath || current.parent?.userData?.displayName || current.parent?.userData?.pickable) best = current.parent;
+    if (hasPickIdentity(current)) best = current;
+    if (hasPickIdentity(current.parent)) best = current.parent;
     if (current.parent?.type === 'Scene') break;
     current = current.parent;
   }
   return best || obj;
+}
+
+function hasPickIdentity(obj) {
+  const data = obj?.userData || {};
+  return Boolean(data.browserRvmProperties || data.sourcePath || data.displayName || data.pickable || data.browserRvmAttributes);
 }
 
 function collectPickMeshes(root) {
@@ -176,19 +283,39 @@ function collectPickMeshes(root) {
 
 function stableObjectId(obj) {
   const data = obj?.userData || {};
-  return String(data.sourcePath || data.displayName || data.sourceName || data.browserRvmProperties?.sourcePath || data.browserRvmProperties?.displayName || obj?.name || obj?.uuid || '').trim();
+  const props = data.browserRvmProperties || {};
+  return String(data.sourcePath || data.displayName || data.sourceName || props.sourcePath || props.displayName || data.name || obj?.name || obj?.uuid || '').trim();
 }
 
-function clearCanvasSelection(viewer, root = null) {
+function setSelectionFromObjects(root, viewer, meshes = [], options = {}) {
+  const visibleMeshes = uniqueObjects(meshes).filter((mesh) => isPickableMesh(mesh));
+  if (!visibleMeshes.length) {
+    if (!options.additive) clearCanvasSelection(viewer, root);
+    return false;
+  }
+  if (!options.additive) clearCanvasSelection(viewer, root, { keepPanel: true });
+  highlightMeshes(viewer, visibleMeshes);
+  const id = stableObjectId(options.sourceObject || visibleMeshes[0]);
+  writeSelectionState(viewer, id, visibleMeshes);
+  updateSelectedCount(root, (viewer._rvmCanvasSelectedMeshes || []).filter((mesh) => mesh.visible !== false).length);
+  return true;
+}
+
+function clearCanvasSelection(viewer, root = null, options = {}) {
   const selected = Array.isArray(viewer?._rvmCanvasSelectedMeshes) ? viewer._rvmCanvasSelectedMeshes : [];
   for (const mesh of selected) restoreMeshMaterial(mesh);
   viewer._rvmCanvasSelectedMeshes = [];
   try { viewer.selection?.clearSelection?.(); } catch (_) {}
+  root?.querySelectorAll?.('#rvm-tree li.is-selected').forEach((row) => row.classList.remove('is-selected'));
   if (root) updateSelectedCount(root, 0);
+  if (!options.keepPanel) {
+    const panel = root?.querySelector?.('#rvm-attributes-panel');
+    if (panel) panel.innerHTML = '<div class="rvm-empty-state">No object selected.</div>';
+  }
 }
 
 function highlightMeshes(viewer, meshes = []) {
-  viewer._rvmCanvasSelectedMeshes = Array.from(new Set([...(viewer._rvmCanvasSelectedMeshes || []), ...meshes]));
+  viewer._rvmCanvasSelectedMeshes = uniqueObjects([...(viewer._rvmCanvasSelectedMeshes || []), ...meshes]);
   for (const mesh of meshes) applySelectedMaterial(mesh);
 }
 
@@ -198,8 +325,8 @@ function applySelectedMaterial(mesh) {
   mesh.userData.rvmCanvasSelectionOriginalMaterial = mesh.material;
   const cloned = materials.map((mat) => {
     const copy = mat?.clone ? mat.clone() : mat;
-    if (copy?.emissive) copy.emissive.setHex(0x2563eb);
-    if (copy?.color) copy.color.lerp(new THREE.Color(0x60a5fa), 0.45);
+    if (copy?.emissive) copy.emissive.setHex(SELECTED_EMISSIVE);
+    if (copy?.color) copy.color.lerp(new THREE.Color(SELECTED_COLOR), 0.45);
     if (copy) copy.needsUpdate = true;
     return copy;
   });
@@ -226,31 +353,75 @@ function writeSelectionState(viewer, id, meshes) {
   const ids = meshes.map((mesh) => mesh.userData?.name || mesh.name || mesh.uuid).filter(Boolean);
   if (viewer.selection) {
     viewer.selection._selectedCanonicalId = id;
-    viewer.selection._selectedCanonicalIds = [id];
+    viewer.selection._selectedCanonicalIds = [id, ...ids].filter(Boolean);
     viewer.selection._selectedRenderIds = ids;
     viewer.selection._emitSelection?.();
   }
 }
 
 function fitCurrentSelection(viewer) {
-  const meshes = Array.isArray(viewer?._rvmCanvasSelectedMeshes) && viewer._rvmCanvasSelectedMeshes.length
-    ? viewer._rvmCanvasSelectedMeshes
-    : collectMeshesForSelectionAdapter(viewer);
+  const meshes = selectedMeshes(viewer);
   const box = boxForMeshes(meshes);
   if (!box || box.isEmpty()) return false;
   viewer._fitBox?.(box);
+  viewer.controls?.update?.();
   return true;
 }
 
+function selectedMeshes(viewer) {
+  const direct = Array.isArray(viewer?._rvmCanvasSelectedMeshes) ? viewer._rvmCanvasSelectedMeshes.filter((mesh) => mesh?.visible !== false) : [];
+  if (direct.length) return uniqueObjects(direct);
+  return collectMeshesForSelectionAdapter(viewer);
+}
+
 function collectMeshesForSelectionAdapter(viewer) {
-  const ids = new Set(viewer?.selection?.getSelectionRenderIds?.() || []);
+  const ids = new Set([...(viewer?.selection?.getSelectionRenderIds?.() || []), ...(viewer?.selection?.getSelectedCanonicalIds?.() || [])].map((id) => normalizeAlias(id)));
   const meshes = [];
+  if (!ids.size) return meshes;
   viewer?.modelGroup?.traverse?.((obj) => {
     if (!isPickableMesh(obj)) return;
-    const id = obj.userData?.name || obj.name || obj.uuid;
-    if (ids.has(id)) meshes.push(obj);
+    const aliases = aliasesForMesh(obj).map(normalizeAlias).filter(Boolean);
+    if (aliases.some((alias) => ids.has(alias) || Array.from(ids).some((id) => alias.includes(id) || id.includes(alias)))) meshes.push(obj);
   });
-  return meshes;
+  return uniqueObjects(meshes);
+}
+
+function aliasesForMesh(obj) {
+  const data = obj?.userData || {};
+  const props = data.browserRvmProperties || {};
+  const attrs = data.browserRvmAttributes || data.attributes || props.attributes || {};
+  return [obj?.name, obj?.uuid, data.name, data.sourcePath, data.sourceName, data.displayName, props.sourcePath, props.displayName, attrs.NAME, attrs.RVM_OWNER_NAME, attrs.RVM_OWNER_PATH, attrs.TYPE, attrs.RVM_PRIMITIVE_KIND].filter(Boolean);
+}
+
+function hideCurrentSelection(viewer) {
+  const meshes = selectedMeshes(viewer);
+  if (!meshes.length) return false;
+  viewer._rvmHiddenByUser = viewer._rvmHiddenByUser || new Set();
+  for (const mesh of meshes) {
+    restoreMeshMaterial(mesh);
+    mesh.visible = false;
+    mesh.userData.rvmHiddenByUser = true;
+    viewer._rvmHiddenByUser.add(mesh.uuid);
+  }
+  clearCanvasSelection(viewer, document.querySelector('[data-rvm-viewer]'));
+  updateVisibleCount(document.querySelector('[data-rvm-viewer]'), viewer);
+  setStatusMessage(document.querySelector('[data-rvm-viewer]'), `Hidden ${meshes.length} selected mesh${meshes.length === 1 ? '' : 'es'}`);
+  return true;
+}
+
+function showHiddenObjects(viewer) {
+  let count = 0;
+  viewer?.modelGroup?.traverse?.((obj) => {
+    if (obj?.userData?.rvmHiddenByUser) {
+      obj.visible = true;
+      delete obj.userData.rvmHiddenByUser;
+      count += 1;
+    }
+  });
+  viewer._rvmHiddenByUser?.clear?.();
+  updateVisibleCount(document.querySelector('[data-rvm-viewer]'), viewer);
+  setStatusMessage(document.querySelector('[data-rvm-viewer]'), count ? `Shown ${count} hidden mesh${count === 1 ? '' : 'es'}` : 'No hidden meshes');
+  return true;
 }
 
 function fitAllRvm(viewer) {
@@ -266,6 +437,7 @@ function boxForMeshes(meshes = []) {
   const box = new THREE.Box3();
   let any = false;
   for (const mesh of meshes) {
+    if (!mesh || mesh.visible === false) continue;
     try {
       const itemBox = new THREE.Box3().setFromObject(mesh);
       if (itemBox && !itemBox.isEmpty()) { box.union(itemBox); any = true; }
@@ -298,6 +470,8 @@ function renderCanvasSelectionDetails(root, viewer, object, meshes, point) {
       <div class="rvm-tree-selection-title">Canvas selection</div>
       <div class="rvm-tree-action-row">
         <button type="button" class="rvm-btn" data-rvm-canvas-action="fit-selection">Fit Selection</button>
+        <button type="button" class="rvm-btn" data-rvm-canvas-action="hide-selection">Hide</button>
+        <button type="button" class="rvm-btn" data-rvm-canvas-action="show-hidden">Show Hidden</button>
         <button type="button" class="rvm-btn" data-rvm-canvas-action="clear-selection">Clear</button>
       </div>
       <div class="rvm-browser-diag-grid">${rows.map(([key, value]) => row(key, value)).join('')}</div>
@@ -305,10 +479,51 @@ function renderCanvasSelectionDetails(root, viewer, object, meshes, point) {
       <div class="rvm-browser-diag-grid">${attrRows.length ? attrRows.map(([key, value]) => row(key, value)).join('') : row('Attributes', 'No attributes on picked mesh')}</div>
     </div>`;
   panel.querySelector('[data-rvm-canvas-action="fit-selection"]')?.addEventListener('click', () => fitCurrentSelection(viewer));
-  panel.querySelector('[data-rvm-canvas-action="clear-selection"]')?.addEventListener('click', () => {
-    clearCanvasSelection(viewer, root);
-    panel.innerHTML = '<div class="rvm-empty-state">No object selected.</div>';
+  panel.querySelector('[data-rvm-canvas-action="hide-selection"]')?.addEventListener('click', () => hideCurrentSelection(viewer));
+  panel.querySelector('[data-rvm-canvas-action="show-hidden"]')?.addEventListener('click', () => showHiddenObjects(viewer));
+  panel.querySelector('[data-rvm-canvas-action="clear-selection"]')?.addEventListener('click', () => clearCanvasSelection(viewer, root));
+}
+
+function publishInteractionApi(root, viewer) {
+  globalThis.__PCF_GLB_RVM_INTERACTION__ = {
+    version: BRIDGE_VERSION,
+    setMode: (mode) => setMode(viewer, mode),
+    escape: () => handleEscape(root, viewer),
+    fitSelection: () => fitCurrentSelection(viewer),
+    hideSelection: () => hideCurrentSelection(viewer),
+    showHidden: () => showHiddenObjects(viewer),
+    clearSelection: () => clearCanvasSelection(viewer, root),
+    setSelectionFromObjects: (objects, options = {}) => setSelectionFromObjects(root, viewer, Array.from(objects || []), options),
+  };
+}
+
+function updateModeUi(root, mode) {
+  if (!root) return;
+  const normalized = normalizeMode(mode);
+  const action = actionForMode(normalized);
+  root.querySelectorAll('[data-action]').forEach((button) => {
+    button.classList.toggle('is-active', button.dataset.action === action);
   });
+  const chip = root.querySelector('#rvm-mode-chip');
+  if (chip) chip.textContent = labelForMode(normalized);
+}
+
+function actionForMode(mode) {
+  if (mode === 'orbit') return 'NAV_ORBIT';
+  if (mode === 'pan') return 'NAV_PAN';
+  if (mode === 'marquee_select') return 'MARQUEE_SELECT';
+  if (mode === 'measure_tool' || mode === 'measure') return 'MEASURE_TOOL';
+  if (mode === 'view_marquee_zoom') return 'VIEW_MARQUEE_ZOOM';
+  return 'NAV_SELECT';
+}
+
+function labelForMode(mode) {
+  if (mode === 'orbit') return 'Orbit';
+  if (mode === 'pan') return 'Pan';
+  if (mode === 'marquee_select') return 'Box Select';
+  if (mode === 'measure_tool' || mode === 'measure') return 'Measure';
+  if (mode === 'view_marquee_zoom') return 'Zoom';
+  return 'Select';
 }
 
 function updateSelectedCount(root, count) {
@@ -318,21 +533,56 @@ function updateSelectedCount(root, count) {
   if (footer) footer.textContent = String(count || 0);
 }
 
+function updateVisibleCount(root, viewer) {
+  if (!root || !viewer?.modelGroup) return;
+  let total = 0;
+  let visible = 0;
+  viewer.modelGroup.traverse((obj) => {
+    if (!obj?.isMesh) return;
+    total += 1;
+    if (obj.visible !== false) visible += 1;
+  });
+  const objects = root.querySelector('[data-rvm-status-chip="objects"]');
+  const visibleChip = root.querySelector('[data-rvm-status-chip="visible"]');
+  if (objects) objects.textContent = `Objects: ${total}`;
+  if (visibleChip) visibleChip.textContent = `Visible: ${visible}`;
+}
+
+function setStatusMessage(root, text) {
+  const el = root?.querySelector?.('#rvm-sb-msg');
+  if (el) el.textContent = text;
+}
+
+function uniqueObjects(values) { return Array.from(new Set((values || []).filter(Boolean))); }
 function normalizeAction(action) { return String(action || '').trim().toUpperCase(); }
+function normalizeAlias(value) { return String(value || '').replace(/\s+/g, ' ').trim().toLowerCase(); }
 function performanceNow() { return (typeof performance !== 'undefined' && typeof performance.now === 'function') ? performance.now() : Date.now(); }
 function fmt(value) { const n = Number(value); return Number.isFinite(n) ? n.toFixed(3) : '-'; }
 function row(key, value) { return `<div class="rvm-browser-diag-row"><span>${escapeHtml(key)}</span><b>${escapeHtml(value === undefined || value === null || value === '' ? '-' : String(value))}</b></div>`; }
 function escapeHtml(value) { return String(value ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;'); }
 
 function injectStyles() {
-  if (document.getElementById('rvm-toolbar-canvas-selection-style')) return;
-  const style = document.createElement('style');
-  style.id = 'rvm-toolbar-canvas-selection-style';
+  let style = document.getElementById('rvm-toolbar-canvas-selection-style');
+  if (!style) {
+    style = document.createElement('style');
+    style.id = 'rvm-toolbar-canvas-selection-style';
+    document.head.appendChild(style);
+  }
   style.textContent = `
     .rvm-canvas-selection-card { display: grid; gap: 8px; }
     .rvm-tree-selection-title { color: #93c5fd; font-weight: 700; font-size: 12px; letter-spacing: .04em; text-transform: uppercase; }
     .rvm-tree-action-row { display: flex; flex-wrap: wrap; gap: 6px; }
     .rvm-tree-action-row .rvm-btn { padding: 4px 8px; font-size: 12px; }
+    .rvm-tool-btn.is-active { outline: 1px solid rgba(96,165,250,.95); box-shadow: inset 0 0 0 1px rgba(96,165,250,.38); }
+    .rvm-tree { font-size: 11.5px; line-height: 1.25; }
+    .rvm-tree li[data-flat-rvm-tree-row="true"] { margin: 1px 4px; }
+    .rvm-tree-node { display: grid; grid-template-columns: max-content minmax(96px, 1fr) minmax(60px, .7fr) max-content; align-items: center; gap: 6px; width: 100%; min-height: 24px; border-radius: 6px; border: 1px solid transparent; }
+    .rvm-tree-node:hover { background: rgba(96,165,250,.12); border-color: rgba(96,165,250,.26); }
+    #rvm-tree li.is-selected > .rvm-tree-node { outline: 1px solid rgba(96,165,250,.95); background: rgba(37,99,235,.30); border-color: rgba(147,197,253,.55); }
+    .rvm-tree-node span:not(.rvm-kind):not(.rvm-tree-count) { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .rvm-kind { min-width: 42px; text-align: center; border-radius: 999px; padding: 1px 5px; background: rgba(15,23,42,.85); color: #bfdbfe; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 10px; }
+    .rvm-tree-sub { color: #94a3b8; font-size: 10.5px; }
+    .rvm-tree-count { justify-self: end; min-width: 20px; text-align: center; border-radius: 999px; padding: 1px 5px; color: #cbd5e1; background: rgba(148,163,184,.16); font-size: 10px; }
+    .rvm-empty-state { color: #94a3b8; padding: 8px; }
   `;
-  document.head.appendChild(style);
 }
