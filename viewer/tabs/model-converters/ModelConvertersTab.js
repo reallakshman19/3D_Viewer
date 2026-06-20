@@ -21,6 +21,7 @@ import { installXmlCiiLineKeySelectPatch } from './xml-cii-linekey-select-patch.
 import { installInputXmlBasicGlbBridge } from './inputxml-basic-glb-bridge.js';
 import { installXmlCiiDefaultMasterAutoload, installXmlCiiRecoveryPatch } from '../xml-cii-master-autoload-patch.js?v=20260620-rating-runtime-1';
 import { installXmlCiiPreviewLineKeyRemap } from './xml-cii-preview-linekey-remap.js?v=20260620-rating-runtime-1';
+import { installXmlCiiRuntimeOverrideSync } from './xml-cii-runtime-override-sync.js?v=20260620-rating-runtime-1';
 
 const TRACE_PREFIX = '[BM_CII_CONVERTER_TRACE]';
 
@@ -41,6 +42,7 @@ const MODEL_CONVERTER_INSTALLERS = Object.freeze([
   ['xml-cii-default-master-autoload', installXmlCiiDefaultMasterAutoload],
   ['xml-cii-recovery-patch', installXmlCiiRecoveryPatch],
   ['xml-cii-preview-linekey-remap', installXmlCiiPreviewLineKeyRemap],
+  ['xml-cii-runtime-override-sync', installXmlCiiRuntimeOverrideSync],
 ]);
 
 export function renderModelConvertersTab(container) {
