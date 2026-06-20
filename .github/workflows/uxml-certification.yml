@@ -30,7 +30,6 @@ on:
       - "viewer/js/pcf2glb/glb/enhanceSupportDirectionProxy.js"
       - "viewer/js/pcf2glb/glb/buildExportScene.js"
       - "viewer/tabs/model-converters-tab.js"
-      - "viewer/tabs/model-converters-tab.js"
       - "viewer/tabs/model-converters/converters/inputxml-to-glb.js"
       - "viewer/tests/uxml-*.test.js"
       - "viewer/tests/rvm-pcf-*.test.js"
@@ -86,7 +85,16 @@ jobs:
         run: |
           set -euo pipefail
           : > browser-rvm-unit.log
-          for test_file in viewer/tests/unit/rvm/browser-rvm-*.test.js; do
+          tests=(
+            viewer/tests/unit/rvm/browser-rvm-att-parser.test.js
+            viewer/tests/unit/rvm/browser-rvm-att-enricher.test.js
+            viewer/tests/unit/rvm/browser-rvm-parser.test.js
+            viewer/tests/unit/rvm/browser-rvm-render-scene-builder.test.js
+            viewer/tests/unit/rvm/browser-rvm-render-att-metadata.test.js
+            viewer/tests/unit/rvm/browser-rvm-load-bridge-render-scene-contract.test.js
+            viewer/tests/unit/rvm/browser-rvm-tab-fallback-contract.test.js
+          )
+          for test_file in "${tests[@]}"; do
             echo "Running ${test_file}" | tee -a browser-rvm-unit.log
             node "${test_file}" 2>&1 | tee -a browser-rvm-unit.log
           done
