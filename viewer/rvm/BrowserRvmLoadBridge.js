@@ -1,5 +1,6 @@
 import { AvevaJsonLoader } from './AvevaJsonLoader.js';
 import { parseRvmArrayBuffer } from './BrowserRvmHierarchyParser.js';
+import { enrichBrowserRvmHierarchyWithAtt } from './BrowserRvmAttEnricher.js';
 import { buildBrowserRvmRenderSceneFromHierarchy } from './BrowserRvmRenderSceneBuilder.js';
 
 const RVM_BROWSER_PARSE_DIAGNOSTICS = Symbol.for('pcf-glb-rvm-browser-parse-diagnostics-v1');
@@ -17,6 +18,12 @@ export async function loadRvmFileInBrowser(file, viewer, options = {}) {
     attText,
     maxStringScanBytes: options.maxStringScanBytes
   });
+  const attEnrichment = enrichBrowserRvmHierarchyWithAtt(parsed.hierarchy || [], attText);
+  parsed.hierarchy = attEnrichment.hierarchy;
+  parsed.diagnostics = {
+    ...(parsed.diagnostics || {}),
+    browserRvmAtt: attEnrichment.diagnostics
+  };
 
   update(`Building partial RVM scene for ${file.name}`);
   const loader = new AvevaJsonLoader();
@@ -40,6 +47,7 @@ export async function loadRvmFileInBrowser(file, viewer, options = {}) {
   }, file.name);
 
   payload.browserRvmParser = diagnostics;
+  payload.browserRvmAtt = attEnrichment.diagnostics;
   payload.browserRvmRender = renderResult?.diagnostics || null;
   payload.browserRvmRenderInstructions = renderResult?.instructionSet || null;
   payload.browserRvmHierarchyScene = hierarchyScene;
@@ -52,6 +60,7 @@ export async function loadRvmFileInBrowser(file, viewer, options = {}) {
       files: [file.name]
     },
     browserRvmParser: diagnostics,
+    browserRvmAtt: attEnrichment.diagnostics,
     browserRvmRender: renderResult?.diagnostics || null,
     browserRvmRenderScene: {
       enabled: shouldUseRenderScene,
@@ -65,6 +74,7 @@ export async function loadRvmFileInBrowser(file, viewer, options = {}) {
     ...(activeScene.userData || {}),
     browserRvmLiveRenderScene: shouldUseRenderScene,
     browserRvmParser: diagnostics,
+    browserRvmAtt: attEnrichment.diagnostics,
     browserRvmRender: renderResult?.diagnostics || null
   };
 
