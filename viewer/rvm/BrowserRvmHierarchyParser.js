@@ -1,11 +1,11 @@
 import { parseRvmArrayBuffer as parseFlatRvmArrayBuffer } from './BrowserRvmParser.js';
 
-export const BROWSER_RVM_HIERARCHY_SCHEMA = 'browser-rvm-hierarchy-wrapper/v5';
+export const BROWSER_RVM_HIERARCHY_SCHEMA = 'browser-rvm-hierarchy-wrapper/v6';
 export const BROWSER_RVM_PRIMITIVE_SEMANTICS_VERSION = 'rhbg-prim-code-map/v2';
-export const BROWSER_RVM_GEOMETRY_QUALITY_VERSION = 'rvm-geometry-quality/v1';
+export const BROWSER_RVM_GEOMETRY_QUALITY_VERSION = 'rvm-geometry-quality/v2';
 export const BROWSER_RVM_GEOMETRY_CONTRACT_VERSION = 'rvm-browser-geometry-contract/v1';
 
-const RVM_PRIM_CODE_SEMANTICS = {
+const RVM_PRIM_CODE_SEMANTICS = Object.freeze({
   2: { type: 'BOX', kind: 'BOX', primitiveClass: 'BOX' },
   3: { type: 'GASK', kind: 'TORUS', primitiveClass: 'TORUS' },
   4: { type: 'ELBOW', kind: 'ELBOW', primitiveClass: 'ELBOW' },
@@ -13,7 +13,7 @@ const RVM_PRIM_CODE_SEMANTICS = {
   7: { type: 'FLANGE', kind: 'FLANGE', primitiveClass: 'FLANGE' },
   8: { type: 'PIPE', kind: 'CYLINDER', primitiveClass: 'CYLINDER' },
   11: { type: 'INSTRUMENT', kind: 'INSTRUMENT', primitiveClass: 'INSTRUMENT' }
-};
+});
 
 export async function parseRvmArrayBuffer(arrayBuffer, options = {}) {
   const parsed = await parseFlatRvmArrayBuffer(arrayBuffer, options);
@@ -53,7 +53,7 @@ export async function parseRvmArrayBuffer(arrayBuffer, options = {}) {
 }
 
 export function groupRvmOwnerHierarchy(roots = []) {
-  return roots.map((root) => {
+  return (Array.isArray(roots) ? roots : []).map((root) => {
     const children = Array.isArray(root?.children) ? root.children : [];
     const ownerChildren = children.filter((child) => String(child?.attributes?.RVM_OWNER_NAME || '').trim());
     if (!ownerChildren.length) return root;
@@ -85,7 +85,7 @@ export function groupRvmOwnerHierarchy(roots = []) {
       let state = rootState;
       for (let depth = 0; depth < path.length; depth += 1) {
         const segment = path[depth];
-        const key = canonicalSegmentKey(segment, depth);
+        const key = `${depth}:${segment.toUpperCase()}`;
         let branch = state.childByKey.get(key);
         if (!branch) {
           branch = makeBranchNode(segment, depth, path, ownerName);
@@ -117,25 +117,12 @@ export function groupRvmOwnerHierarchy(roots = []) {
 function ownerPathFromName(ownerName) {
   const parts = String(ownerName || '')
     .split(/\s+of\s+/i)
-    .map((part) => normalizeOwnerSegment(part))
+    .map((part) => String(part || '').replace(/\s+/g, ' ').replace(/^ZONE\s+/i, 'ZONE ').trim())
     .filter(Boolean);
-  if (!parts.length) return ['RVM Objects'];
-  return parts.reverse();
-}
-
-function normalizeOwnerSegment(segment) {
-  return String(segment || '')
-    .replace(/\s+/g, ' ')
-    .replace(/^ZONE\s+/i, 'ZONE ')
-    .trim();
-}
-
-function canonicalSegmentKey(segment, depth) {
-  return `${depth}:${String(segment || '').toUpperCase()}`;
+  return parts.length ? parts.reverse() : ['RVM Objects'];
 }
 
 function makeBranchNode(segment, depth, path, ownerName) {
-  const kind = classifyBranchSegment(segment, depth);
   return {
     name: segment,
     type: 'BRANCH',
@@ -143,7 +130,7 @@ function makeBranchNode(segment, depth, path, ownerName) {
       TYPE: 'BRANCH',
       NAME: segment,
       SOURCE_FORMAT: 'RVM_BINARY_BROWSER_FALLBACK',
-      RVM_BROWSER_BRANCH_KIND: kind,
+      RVM_BROWSER_BRANCH_KIND: classifyBranchSegment(segment, depth),
       RVM_BROWSER_BRANCH_DEPTH: String(depth),
       RVM_BROWSER_BRANCH_PATH: path.slice(0, depth + 1).join(' / '),
       RVM_BROWSER_OWNER_EXAMPLE: ownerName
@@ -170,21 +157,10 @@ function enrichRvmPrimitiveLeaf(child) {
   const ownerSemantic = semanticFromOwnerName(ownerName);
   const codeSemantic = RVM_PRIM_CODE_SEMANTICS[primitiveCode];
   const semantic = ownerSemantic || codeSemantic;
+  const type = semantic?.type || child.type || attrs.TYPE || 'UNKNOWN';
+  const kind = semantic?.kind || attrs.RVM_PRIMITIVE_KIND || attrs.RVM_BROWSER_PRIMITIVE_CLASS || type;
   const geometryAttrs = geometryQualityAttributes(child);
-  const type = semantic?.type || child.type;
-  const kind = semantic?.kind || attrs.RVM_PRIMITIVE_KIND || '';
-  const contractAttrs = geometryContractAttributes(child, { type, kind, semantic, geometryAttrs });
-  if (!semantic) {
-    return {
-      ...child,
-      attributes: {
-        ...attrs,
-        ...geometryAttrs,
-        ...contractAttrs
-      }
-    };
-  }
-
+  const contractAttrs = geometryContractAttributes(child, { type, kind, geometryAttrs });
   return {
     ...child,
     type,
@@ -192,9 +168,11 @@ function enrichRvmPrimitiveLeaf(child) {
       ...attrs,
       TYPE: type,
       RVM_PRIMITIVE_KIND: kind,
-      RVM_BROWSER_PRIMITIVE_CLASS: semantic.primitiveClass || kind || type,
-      RVM_BROWSER_PRIMITIVE_SEMANTIC_SOURCE: ownerSemantic ? 'owner-name' : 'prim-code-map',
-      RVM_BROWSER_PRIMITIVE_SEMANTIC_VERSION: BROWSER_RVM_PRIMITIVE_SEMANTICS_VERSION,
+      ...(semantic ? {
+        RVM_BROWSER_PRIMITIVE_CLASS: semantic.primitiveClass || kind || type,
+        RVM_BROWSER_PRIMITIVE_SEMANTIC_SOURCE: ownerSemantic ? 'owner-name' : 'prim-code-map',
+        RVM_BROWSER_PRIMITIVE_SEMANTIC_VERSION: BROWSER_RVM_PRIMITIVE_SEMANTICS_VERSION
+      } : {}),
       ...geometryAttrs,
       ...contractAttrs
     }
@@ -234,7 +212,7 @@ function geometryQualityAttributes(child) {
   const axis = dominantAxis(dims);
   const minorDims = minorExtents(dims, axis);
   const source = String(child?.attributes?.BROWSER_PARSE_METHOD || '').trim() || 'unknown';
-  const span = dims[axis.toLowerCase()] || 0;
+  const span = dimensionForAxis(dims, axis);
   const radius = Number.parseFloat(String(child?.attributes?.HBOR ?? '')) || Math.max(Math.min(minorDims[0], minorDims[1]) * 0.5, 0);
   const approximate = /fallback|layout|string-marker|unknown/i.test(source) || span <= 0;
   return {
@@ -265,7 +243,7 @@ function geometryContractAttributes(child, { type, kind, geometryAttrs }) {
   const center = centerFromBbox(bbox);
   const dims = dimsFromBbox(bbox);
   const axis = geometryAttrs?.RVM_BROWSER_SPAN_AXIS || dominantAxis(dims);
-  const length = Number.parseFloat(geometryAttrs?.RVM_BROWSER_SPAN_LENGTH || '') || dims[axis.toLowerCase()] || 0;
+  const length = Number.parseFloat(geometryAttrs?.RVM_BROWSER_SPAN_LENGTH || '') || dimensionForAxis(dims, axis);
   const radius = Number.parseFloat(geometryAttrs?.RVM_BROWSER_RADIUS_ESTIMATE || '') || 0;
   const renderPrimitive = renderPrimitiveFor(type, kind);
   return {
@@ -300,149 +278,58 @@ function renderPrimitiveFor(type, kind) {
   return 'GENERIC_BBOX_PLACEHOLDER';
 }
 
-function centerFromBbox(bbox) {
-  return {
-    x: (bbox[0] + bbox[3]) / 2,
-    y: (bbox[1] + bbox[4]) / 2,
-    z: (bbox[2] + bbox[5]) / 2
-  };
-}
-
-function endpointsForBbox(bbox) {
-  const [minX, minY, minZ, maxX, maxY, maxZ] = bbox;
-  const dx = Math.abs(maxX - minX);
-  const dy = Math.abs(maxY - minY);
-  const dz = Math.abs(maxZ - minZ);
-  const cy = (minY + maxY) / 2;
-  const cz = (minZ + maxZ) / 2;
-  const cx = (minX + maxX) / 2;
-  if (dx >= dy && dx >= dz) return { apos: { x: minX, y: cy, z: cz }, lpos: { x: maxX, y: cy, z: cz } };
-  if (dy >= dx && dy >= dz) return { apos: { x: cx, y: minY, z: cz }, lpos: { x: cx, y: maxY, z: cz } };
-  return { apos: { x: cx, y: cy, z: minZ }, lpos: { x: cx, y: cy, z: maxZ } };
-}
-
-function stringifyVec(vec) {
-  return `${fixed(vec.x)},${fixed(vec.y)},${fixed(vec.z)}`;
-}
-
-function normalizeBbox(bbox) {
-  if (!Array.isArray(bbox) || bbox.length !== 6) return null;
-  const nums = bbox.map((value) => Number(value));
-  if (nums.some((value) => !Number.isFinite(value))) return null;
-  return [
-    Math.min(nums[0], nums[3]),
-    Math.min(nums[1], nums[4]),
-    Math.min(nums[2], nums[5]),
-    Math.max(nums[0], nums[3]),
-    Math.max(nums[1], nums[4]),
-    Math.max(nums[2], nums[5])
-  ];
-}
-
-function dimsFromBbox(bbox) {
-  return {
-    dx: Math.abs(bbox[3] - bbox[0]),
-    dy: Math.abs(bbox[4] - bbox[1]),
-    dz: Math.abs(bbox[5] - bbox[2])
-  };
-}
-
-function dominantAxis(dims) {
-  if (dims.dx >= dims.dy && dims.dx >= dims.dz) return 'X';
-  if (dims.dy >= dims.dx && dims.dy >= dims.dz) return 'Y';
-  return 'Z';
-}
-
-function minorExtents(dims, axis) {
-  if (axis === 'X') return [dims.dy, dims.dz];
-  if (axis === 'Y') return [dims.dx, dims.dz];
-  return [dims.dx, dims.dy];
-}
-
-function fixed(value) {
-  const num = Number(value);
-  if (!Number.isFinite(num)) return '0.000';
-  return num.toFixed(3);
-}
-
 function summarizeRvmPrimitiveSemantics(roots = []) {
-  const typeCounts = {};
-  const kindCounts = {};
-  const codeCounts = {};
-  const semanticSourceCounts = {};
+  const typeCounts = {}, kindCounts = {}, codeCounts = {}, semanticSourceCounts = {};
   let leafCount = 0;
-
-  const bump = (target, key) => {
-    const name = String(key || '').trim() || 'UNKNOWN';
-    target[name] = (target[name] || 0) + 1;
-  };
-
-  const walk = (node) => {
-    if (!node || typeof node !== 'object') return;
-    const attrs = node.attributes || {};
-    if (isPrimitiveLeaf(node)) {
-      leafCount += 1;
-      bump(typeCounts, attrs.TYPE || node.type);
-      bump(kindCounts, attrs.RVM_PRIMITIVE_KIND || attrs.RVM_BROWSER_PRIMITIVE_CLASS || node.type);
-      if (attrs.RVM_PRIMITIVE_CODE !== undefined && String(attrs.RVM_PRIMITIVE_CODE) !== '') bump(codeCounts, attrs.RVM_PRIMITIVE_CODE);
-      bump(semanticSourceCounts, attrs.RVM_BROWSER_PRIMITIVE_SEMANTIC_SOURCE || 'unmapped');
-    }
-    for (const child of Array.isArray(node.children) ? node.children : []) walk(child);
-  };
-
-  for (const root of roots || []) walk(root);
+  walkNodes(roots, (node) => {
+    const attrs = node?.attributes || {};
+    if (!isPrimitiveLeaf(node)) return;
+    leafCount += 1;
+    bump(typeCounts, attrs.TYPE || node.type);
+    bump(kindCounts, attrs.RVM_PRIMITIVE_KIND || attrs.RVM_BROWSER_PRIMITIVE_CLASS || node.type);
+    if (attrs.RVM_PRIMITIVE_CODE !== undefined && String(attrs.RVM_PRIMITIVE_CODE) !== '') bump(codeCounts, attrs.RVM_PRIMITIVE_CODE);
+    bump(semanticSourceCounts, attrs.RVM_BROWSER_PRIMITIVE_SEMANTIC_SOURCE || 'unmapped');
+  });
   return { typeCounts, kindCounts, codeCounts, semanticSourceCounts, leafCount };
 }
 
 function summarizeRvmGeometryQuality(roots = []) {
-  const sourceCounts = {};
-  const axisCounts = {};
-  const qualityCounts = {};
-  let leafCount = 0;
-  let missingBboxCount = 0;
-  let approximateCount = 0;
-
-  const bump = (target, key) => {
-    const name = String(key || '').trim() || 'UNKNOWN';
-    target[name] = (target[name] || 0) + 1;
-  };
-  const walk = (node) => {
-    if (!node || typeof node !== 'object') return;
-    const attrs = node.attributes || {};
-    if (isPrimitiveLeaf(node)) {
-      leafCount += 1;
-      bump(sourceCounts, attrs.RVM_BROWSER_GEOMETRY_SOURCE);
-      bump(axisCounts, attrs.RVM_BROWSER_SPAN_AXIS);
-      bump(qualityCounts, attrs.RVM_BROWSER_GEOMETRY_QUALITY);
-      if (attrs.RVM_BROWSER_GEOMETRY_QUALITY === 'missing-bbox') missingBboxCount += 1;
-      if (attrs.RVM_BROWSER_GEOMETRY_APPROXIMATE === 'true') approximateCount += 1;
-    }
-    for (const child of Array.isArray(node.children) ? node.children : []) walk(child);
-  };
-  for (const root of roots || []) walk(root);
+  const sourceCounts = {}, axisCounts = {}, qualityCounts = {};
+  let leafCount = 0, missingBboxCount = 0, approximateCount = 0;
+  walkNodes(roots, (node) => {
+    const attrs = node?.attributes || {};
+    if (!isPrimitiveLeaf(node)) return;
+    leafCount += 1;
+    bump(sourceCounts, attrs.RVM_BROWSER_GEOMETRY_SOURCE);
+    bump(axisCounts, attrs.RVM_BROWSER_SPAN_AXIS);
+    bump(qualityCounts, attrs.RVM_BROWSER_GEOMETRY_QUALITY);
+    if (attrs.RVM_BROWSER_GEOMETRY_QUALITY === 'missing-bbox') missingBboxCount += 1;
+    if (attrs.RVM_BROWSER_GEOMETRY_APPROXIMATE === 'true') approximateCount += 1;
+  });
   return { sourceCounts, axisCounts, qualityCounts, leafCount, missingBboxCount, approximateCount };
 }
 
 function summarizeRvmGeometryContracts(roots = []) {
-  const contractCounts = {};
-  const sourceCounts = {};
+  const contractCounts = {}, sourceCounts = {};
   let leafCount = 0;
-  const bump = (target, key) => {
-    const name = String(key || '').trim() || 'UNKNOWN';
-    target[name] = (target[name] || 0) + 1;
-  };
+  walkNodes(roots, (node) => {
+    const attrs = node?.attributes || {};
+    if (!isPrimitiveLeaf(node)) return;
+    leafCount += 1;
+    bump(contractCounts, attrs.RVM_BROWSER_RENDER_PRIMITIVE);
+    bump(sourceCounts, attrs.RVM_BROWSER_RENDER_SOURCE);
+  });
+  return { contractCounts, sourceCounts, leafCount };
+}
+
+function walkNodes(roots, visit) {
+  const list = Array.isArray(roots) ? roots : [roots];
   const walk = (node) => {
     if (!node || typeof node !== 'object') return;
-    const attrs = node.attributes || {};
-    if (isPrimitiveLeaf(node)) {
-      leafCount += 1;
-      bump(contractCounts, attrs.RVM_BROWSER_RENDER_PRIMITIVE);
-      bump(sourceCounts, attrs.RVM_BROWSER_RENDER_SOURCE);
-    }
+    visit(node);
     for (const child of Array.isArray(node.children) ? node.children : []) walk(child);
   };
-  for (const root of roots || []) walk(root);
-  return { contractCounts, sourceCounts, leafCount };
+  for (const root of list) walk(root);
 }
 
 function isPrimitiveLeaf(node) {
@@ -485,4 +372,64 @@ function stringifyAttributes(attrs) {
     out[key] = typeof value === 'object' ? JSON.stringify(value) : String(value);
   }
   return out;
+}
+
+function normalizeBbox(bbox) {
+  if (!Array.isArray(bbox) || bbox.length !== 6) return null;
+  const nums = bbox.map(Number);
+  if (nums.some((value) => !Number.isFinite(value))) return null;
+  return [
+    Math.min(nums[0], nums[3]), Math.min(nums[1], nums[4]), Math.min(nums[2], nums[5]),
+    Math.max(nums[0], nums[3]), Math.max(nums[1], nums[4]), Math.max(nums[2], nums[5])
+  ];
+}
+
+function dimsFromBbox(bbox) {
+  return { dx: Math.abs(bbox[3] - bbox[0]), dy: Math.abs(bbox[4] - bbox[1]), dz: Math.abs(bbox[5] - bbox[2]) };
+}
+
+function dominantAxis(dims) {
+  if (dims.dx >= dims.dy && dims.dx >= dims.dz) return 'X';
+  if (dims.dy >= dims.dx && dims.dy >= dims.dz) return 'Y';
+  return 'Z';
+}
+
+function dimensionForAxis(dims, axis) {
+  if (axis === 'X') return dims.dx;
+  if (axis === 'Y') return dims.dy;
+  return dims.dz;
+}
+
+function minorExtents(dims, axis) {
+  if (axis === 'X') return [dims.dy, dims.dz];
+  if (axis === 'Y') return [dims.dx, dims.dz];
+  return [dims.dx, dims.dy];
+}
+
+function centerFromBbox(bbox) {
+  return { x: (bbox[0] + bbox[3]) / 2, y: (bbox[1] + bbox[4]) / 2, z: (bbox[2] + bbox[5]) / 2 };
+}
+
+function endpointsForBbox(bbox) {
+  const [minX, minY, minZ, maxX, maxY, maxZ] = bbox;
+  const dims = dimsFromBbox(bbox);
+  const cx = (minX + maxX) / 2, cy = (minY + maxY) / 2, cz = (minZ + maxZ) / 2;
+  if (dims.dx >= dims.dy && dims.dx >= dims.dz) return { apos: { x: minX, y: cy, z: cz }, lpos: { x: maxX, y: cy, z: cz } };
+  if (dims.dy >= dims.dx && dims.dy >= dims.dz) return { apos: { x: cx, y: minY, z: cz }, lpos: { x: cx, y: maxY, z: cz } };
+  return { apos: { x: cx, y: cy, z: minZ }, lpos: { x: cx, y: cy, z: maxZ } };
+}
+
+function stringifyVec(vec) {
+  return `${fixed(vec.x)},${fixed(vec.y)},${fixed(vec.z)}`;
+}
+
+function bump(target, key) {
+  const name = String(key || '').trim() || 'UNKNOWN';
+  target[name] = (target[name] || 0) + 1;
+}
+
+function fixed(value) {
+  const num = Number(value);
+  if (!Number.isFinite(num)) return '0.000';
+  return num.toFixed(3);
 }
