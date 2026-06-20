@@ -1,6 +1,11 @@
 import { parseRvmArrayBuffer as parseLegacyRvmArrayBuffer } from './BrowserRvmParser.js';
 
-export const BROWSER_RVM_TRANSFORM_PARSER_SCHEMA = 'browser-rvm-transform-parser/v3-cpp-mat3x4-scaled-radius';
+export const BROWSER_RVM_TRANSFORM_PARSER_SCHEMA = 'browser-rvm-transform-parser/v4-cpp-mat3x4-facetgroup';
+
+const MAX_FACET_GROUP_POLYGONS = 400;
+const MAX_FACET_GROUP_CONTOURS = 96;
+const MAX_FACET_CONTOUR_VERTICES = 4096;
+const MAX_FACET_GROUP_VERTICES = 16000;
 
 const PRIMITIVE_KIND_NAMES = Object.freeze({
   1: 'Pyramid',
@@ -28,6 +33,11 @@ export async function parseRvmArrayBuffer(arrayBuffer, options = {}) {
     rvmPrimLegacyBounds: patch.legacyBounds,
     rvmPrimitiveKindCounts: patch.kindCounts,
     rvmNativeParamDecodedCount: patch.nativeParamDecoded,
+    rvmFacetGroupDecodedCount: patch.facetGroupDecoded,
+    rvmFacetGroupPolygonCount: patch.facetGroupPolygonCount,
+    rvmFacetGroupContourCount: patch.facetGroupContourCount,
+    rvmFacetGroupVertexCount: patch.facetGroupVertexCount,
+    rvmFacetGroupDecodeSkippedCount: patch.facetGroupDecodeSkipped,
     rvmCppMat3x4LayoutApplied: patch.applied > 0,
     rvmCppMat3x4ScaledRadiusApplied: patch.scaledRadiusApplied,
     parseFidelity: patch.applied > 0 ? 'PARTIAL_BINARY_PRIM_RECORDS_CPP_MAT3X4_WORLD_TRANSFORMED' : parsed.diagnostics?.parseFidelity
@@ -49,6 +59,11 @@ function patchHierarchyWithWorldTransforms(roots, arrayBuffer) {
   let skipped = 0;
   let nativeParamDecoded = 0;
   let scaledRadiusApplied = 0;
+  let facetGroupDecoded = 0;
+  let facetGroupDecodeSkipped = 0;
+  let facetGroupPolygonCount = 0;
+  let facetGroupContourCount = 0;
+  let facetGroupVertexCount = 0;
 
   const patchNode = (node) => {
     if (!node || typeof node !== 'object') return node;
@@ -63,6 +78,14 @@ function patchHierarchyWithWorldTransforms(roots, arrayBuffer) {
         applied += 1;
         if (geom.paramsDecoded) nativeParamDecoded += 1;
         if (geom.radiusScaledByTransform) scaledRadiusApplied += 1;
+        if (geom.facetGroupDecoded) {
+          facetGroupDecoded += 1;
+          facetGroupPolygonCount += geom.facetGroupPolygonCount || 0;
+          facetGroupContourCount += geom.facetGroupContourCount || 0;
+          facetGroupVertexCount += geom.facetGroupVertexCount || 0;
+        } else if (geom.code === 11) {
+          facetGroupDecodeSkipped += 1;
+        }
         bump(kindCounts, geom.kindName || `Kind-${geom.code}`);
         expandBounds(world, geom.bbox);
         expandBounds(legacy, geom.legacyBbox);
@@ -86,6 +109,10 @@ function patchHierarchyWithWorldTransforms(roots, arrayBuffer) {
             RVM_TRANSFORM_LAYOUT: 'cpp-mat3x4-column-major-3x4',
             RVM_LOCAL_AXIS: geom.localAxis,
             RVM_NATIVE_PRIMITIVE_PARAMS: JSON.stringify(geom.primitiveParams),
+            RVM_FACET_GROUP_DECODED: String(Boolean(geom.facetGroupDecoded)),
+            RVM_FACET_GROUP_POLYGON_COUNT: String(geom.facetGroupPolygonCount || 0),
+            RVM_FACET_GROUP_CONTOUR_COUNT: String(geom.facetGroupContourCount || 0),
+            RVM_FACET_GROUP_VERTEX_COUNT: String(geom.facetGroupVertexCount || 0),
             RVM_RADIUS_SCALE_SOURCE: geom.radiusScaleSource,
             RVM_RADIUS_SCALED_BY_TRANSFORM: String(Boolean(geom.radiusScaledByTransform)),
             APOS: stringifyVec(geom.apos),
@@ -111,13 +138,32 @@ function patchHierarchyWithWorldTransforms(roots, arrayBuffer) {
       RVM_PRIM_TRANSFORM_APPLIED_COUNT: String(applied),
       RVM_PRIM_TRANSFORM_SKIPPED_COUNT: String(skipped),
       RVM_NATIVE_PARAM_DECODED_COUNT: String(nativeParamDecoded),
+      RVM_FACET_GROUP_DECODED_COUNT: String(facetGroupDecoded),
+      RVM_FACET_GROUP_DECODE_SKIPPED_COUNT: String(facetGroupDecodeSkipped),
+      RVM_FACET_GROUP_POLYGON_COUNT: String(facetGroupPolygonCount),
+      RVM_FACET_GROUP_CONTOUR_COUNT: String(facetGroupContourCount),
+      RVM_FACET_GROUP_VERTEX_COUNT: String(facetGroupVertexCount),
       RVM_CPP_MAT3X4_SCALED_RADIUS_COUNT: String(scaledRadiusApplied),
       RVM_PRIMITIVE_KIND_COUNTS: JSON.stringify(kindCounts),
       RVM_PRIM_WORLD_BOUNDS: JSON.stringify(boundsToBbox(world)),
       RVM_PRIM_LEGACY_BOUNDS: JSON.stringify(boundsToBbox(legacy))
     };
   }
-  return { hierarchy, applied, skipped, nativeParamDecoded, scaledRadiusApplied, kindCounts, worldBounds: boundsToBbox(world), legacyBounds: boundsToBbox(legacy) };
+  return {
+    hierarchy,
+    applied,
+    skipped,
+    nativeParamDecoded,
+    scaledRadiusApplied,
+    facetGroupDecoded,
+    facetGroupDecodeSkipped,
+    facetGroupPolygonCount,
+    facetGroupContourCount,
+    facetGroupVertexCount,
+    kindCounts,
+    worldBounds: boundsToBbox(world),
+    legacyBounds: boundsToBbox(legacy)
+  };
 }
 
 function decodePrimGeometry(view, offset, legacyCode) {
@@ -142,7 +188,8 @@ function decodePrimGeometry(view, offset, legacyCode) {
   const matrix3x3 = matrix3x4.slice(0, 9);
   const origin = { x: matrix3x4[9] || 0, y: matrix3x4[10] || 0, z: matrix3x4[11] || 0 };
   const localBbox = normalizeBbox(floats.slice(12, 18));
-  const params = decodePrimitiveParams(code, floats.slice(18));
+  const paramOffset = offset + 32 + 18 * 4;
+  const params = decodePrimitiveParams(code, floats.slice(18), { view, paramOffset, end });
   if (!isReasonableBbox(localBbox)) return null;
 
   const legacyBbox = [
@@ -182,11 +229,15 @@ function decodePrimGeometry(view, offset, legacyCode) {
     version,
     kindName,
     paramsDecoded: Boolean(params?.decoded),
+    facetGroupDecoded: code === 11 && Boolean(params?.decoded && params?.facetGroup),
+    facetGroupPolygonCount: code === 11 ? Number(params?.polygonCount || 0) : 0,
+    facetGroupContourCount: code === 11 ? Number(params?.contourCount || 0) : 0,
+    facetGroupVertexCount: code === 11 ? Number(params?.vertexCount || 0) : 0,
     primitiveParams: { version, kind: code, kindName, ...(params || {}) }
   };
 }
 
-function decodePrimitiveParams(code, values = []) {
+function decodePrimitiveParams(code, values = [], context = {}) {
   const v = (i) => Number(values[i]);
   switch (code) {
     case 1:
@@ -220,9 +271,72 @@ function decodePrimitiveParams(code, values = []) {
       if (values.length < 2) return { decoded: false };
       return { decoded: true, a: v(0), b: v(1) };
     case 11:
-      return { decoded: false, facetGroup: true };
+      return decodeFacetGroupParams(context.view, context.paramOffset, context.end);
     default:
       return { decoded: false };
+  }
+}
+
+function decodeFacetGroupParams(view, offset, end) {
+  if (!view || !Number.isFinite(offset) || offset + 4 > end) return { decoded: false, facetGroup: true, reason: 'missing-facet-stream' };
+  let p = offset;
+  const readUint = () => {
+    if (p + 4 > end) throw new Error('facet-stream-eof-uint');
+    const value = view.getUint32(p, false);
+    p += 4;
+    return value;
+  };
+  const readFloat = () => {
+    if (p + 4 > end) throw new Error('facet-stream-eof-float');
+    const value = view.getFloat32(p, false);
+    p += 4;
+    return Number.isFinite(value) ? value : 0;
+  };
+  try {
+    const polygonCount = readUint();
+    if (!Number.isFinite(polygonCount) || polygonCount < 1 || polygonCount > MAX_FACET_GROUP_POLYGONS) {
+      return { decoded: false, facetGroup: true, reason: 'facet-polygon-count-cap', polygonCount };
+    }
+    const polygons = [];
+    let contourCount = 0;
+    let vertexCount = 0;
+    for (let pi = 0; pi < polygonCount; pi += 1) {
+      const contoursN = readUint();
+      if (!Number.isFinite(contoursN) || contoursN < 1 || contoursN > MAX_FACET_GROUP_CONTOURS) {
+        return { decoded: false, facetGroup: true, reason: 'facet-contour-count-cap', polygonCount, contourCount };
+      }
+      contourCount += contoursN;
+      const contours = [];
+      for (let ci = 0; ci < contoursN; ci += 1) {
+        const verticesN = readUint();
+        if (!Number.isFinite(verticesN) || verticesN < 3 || verticesN > MAX_FACET_CONTOUR_VERTICES) {
+          return { decoded: false, facetGroup: true, reason: 'facet-contour-vertex-count-cap', polygonCount, contourCount, vertexCount };
+        }
+        if (vertexCount + verticesN > MAX_FACET_GROUP_VERTICES) {
+          return { decoded: false, facetGroup: true, reason: 'facet-total-vertex-count-cap', polygonCount, contourCount, vertexCount };
+        }
+        const vertices = [];
+        const normals = [];
+        for (let vi = 0; vi < verticesN; vi += 1) {
+          vertices.push(roundNumber(readFloat()), roundNumber(readFloat()), roundNumber(readFloat()));
+          normals.push(roundNumber(readFloat()), roundNumber(readFloat()), roundNumber(readFloat()));
+        }
+        vertexCount += verticesN;
+        contours.push({ vertexCount: verticesN, vertices, normals });
+      }
+      polygons.push({ contourCount: contours.length, contours });
+    }
+    return {
+      decoded: true,
+      facetGroup: true,
+      polygonCount,
+      contourCount,
+      vertexCount,
+      byteLength: p - offset,
+      polygons
+    };
+  } catch (error) {
+    return { decoded: false, facetGroup: true, reason: error?.message || 'facet-decode-failed' };
   }
 }
 
@@ -366,7 +480,7 @@ function boundsToBbox(bounds) {
 
 function bump(target, key) {
   const name = String(key || '').trim() || 'UNKNOWN';
-  target[name] = (target[key] || 0) + 1;
+  target[name] = (target[name] || 0) + 1;
 }
 
 function stringifyVec(vec) {
