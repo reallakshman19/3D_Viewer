@@ -81,4 +81,10 @@ jobs:
         run: node viewer/tests/inputxml-glb-directional-restraints.test.js
 
       - name: Run browser RVM unit contracts
-        run: node viewer/tests/unit/rvm/browser-rvm-att-enricher.test.js
+        shell: bash
+        run: |
+          set -euo pipefail
+          for test_file in viewer/tests/unit/rvm/browser-rvm-*.test.js; do
+            echo "Running ${test_file}"
+            node "${test_file}"
+          done
