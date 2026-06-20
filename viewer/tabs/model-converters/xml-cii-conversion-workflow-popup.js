@@ -9,8 +9,8 @@
  * rendered inside this popup.
  */
 import { WorkflowModal } from './shared/WorkflowModal.js';
-import { getXmlCiiPhaseBridge } from './legacy-adapter.js?v=20260620-rating-runtime-1';
-import { renderXmlCiiPopupNativePhase } from './xml-cii-popup-native-panels.js?v=20260620-rating-runtime-1';
+import { getXmlCiiPhaseBridge } from './legacy-adapter.js?v=20260620-master-session-1';
+import { renderXmlCiiPopupNativePhase } from './xml-cii-popup-native-panels.js?v=20260620-master-session-1';
 import { XML_CII_WORKFLOW_PHASES, normalizeWorkflowPhaseId } from './WorkflowShell.js';
 
 const FLAG = '__xmlCiiConversionWorkflowPopup_phaseTabs_v1';
@@ -521,15 +521,10 @@ function installRootObservers(root, state) {
   state.selectElement?.addEventListener?.('change', state.refreshButton);
 }
 
-export function installXmlCiiConversionWorkflowPopup(container = document) {
+export function installXmlCiiConversionWorkflowPopup(root = document) {
   if (!browserReady()) return;
-  const root = markRoot(container && container.nodeType === 1 ? container : document);
-  const state = stateForRoot(root);
-
+  const state = stateForRoot(markRoot(root));
   installRootObservers(root, state);
   ensureWorkflowButton(root, state);
   installDocumentRunIntercept();
-
-  setTimeout(() => ensureWorkflowButton(root, state), 0);
-  setTimeout(() => ensureWorkflowButton(root, state), 150);
 }
