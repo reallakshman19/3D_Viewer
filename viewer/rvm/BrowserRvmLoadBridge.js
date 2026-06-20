@@ -4,6 +4,7 @@ import { enrichBrowserRvmHierarchyWithAtt } from './BrowserRvmAttEnricher.js';
 import { buildBrowserRvmRenderSceneFromHierarchy } from './BrowserRvmRenderSceneBuilder.js';
 
 const RVM_BROWSER_PARSE_DIAGNOSTICS = Symbol.for('pcf-glb-rvm-browser-parse-diagnostics-v1');
+const MANIFEST_NODE_LIMIT = 2600;
 
 export async function loadRvmFileInBrowser(file, viewer, options = {}) {
   if (!file || typeof file.arrayBuffer !== 'function') throw new Error('RVM File object is required');
@@ -11,6 +12,7 @@ export async function loadRvmFileInBrowser(file, viewer, options = {}) {
   const update = (text) => { if (statusEl) statusEl.textContent = text; };
   update(`Scanning ${file.name} in browser`);
 
+  await yieldToBrowser();
   const arrayBuffer = await file.arrayBuffer();
   const attText = options.attText || '';
   const parsed = await parseWithWorkerIfAvailable(arrayBuffer, {
@@ -18,6 +20,8 @@ export async function loadRvmFileInBrowser(file, viewer, options = {}) {
     attText,
     maxStringScanBytes: options.maxStringScanBytes
   });
+
+  await yieldToBrowser();
   const attEnrichment = enrichBrowserRvmHierarchyWithAtt(parsed.hierarchy || [], attText);
   parsed.hierarchy = attEnrichment.hierarchy;
   parsed.diagnostics = {
@@ -25,17 +29,32 @@ export async function loadRvmFileInBrowser(file, viewer, options = {}) {
     browserRvmAtt: attEnrichment.diagnostics
   };
 
-  update(`Building partial RVM scene for ${file.name}`);
-  const loader = new AvevaJsonLoader();
-  const payload = await loader.load(parsed.hierarchy, {}, options.asyncSession || makeAsyncSession(statusEl));
-  if (!payload?.gltf?.scene) throw new Error('Browser RVM fallback produced no scene.');
-
+  update(`Building responsive RVM render scene for ${file.name}`);
+  await yieldToBrowser();
   const renderResult = buildBrowserRvmRenderSceneFromHierarchy(parsed.hierarchy, {
-    name: `BrowserRvmRenderScene:${file.name || 'model.rvm'}`
+    name: `BrowserRvmRenderScene:${file.name || 'model.rvm'}`,
+    ...(options.renderOptions || {})
   });
   const shouldUseRenderScene = Boolean(renderResult?.scene && renderResult.diagnostics?.renderableCount > 0);
-  const hierarchyScene = payload.gltf.scene;
-  const activeScene = shouldUseRenderScene ? renderResult.scene : hierarchyScene;
+
+  let payload = null;
+  let hierarchyScene = null;
+  let activeScene = renderResult?.scene || null;
+  let usedDeferredHierarchyFallback = false;
+
+  if (shouldUseRenderScene && options.buildHierarchyFallback !== true) {
+    usedDeferredHierarchyFallback = true;
+    payload = makeRenderScenePayload(file, parsed.hierarchy, renderResult, attEnrichment.diagnostics);
+  } else {
+    update(`Building hierarchy fallback scene for ${file.name}`);
+    await yieldToBrowser();
+    const loader = new AvevaJsonLoader();
+    payload = await loader.load(parsed.hierarchy, {}, options.asyncSession || makeAsyncSession(statusEl));
+    if (!payload?.gltf?.scene) throw new Error('Browser RVM fallback produced no scene.');
+    hierarchyScene = payload.gltf.scene;
+    activeScene = shouldUseRenderScene ? renderResult.scene : hierarchyScene;
+  }
+
   const diagnostics = publishBrowserRvmLoadDiagnostics({
     ...(parsed.diagnostics || {}),
     browserRvmRenderSceneEnabled: shouldUseRenderScene,
@@ -44,6 +63,8 @@ export async function loadRvmFileInBrowser(file, viewer, options = {}) {
     browserRvmSkippedCount: renderResult?.diagnostics?.skippedCount || 0,
     browserRvmRenderPrimitiveCounts: renderResult?.diagnostics?.primitiveCounts || {},
     browserRvmRenderSkippedReasons: renderResult?.diagnostics?.skippedReasons || {},
+    browserRvmHierarchyFallbackDeferred: usedDeferredHierarchyFallback,
+    browserRvmResponsiveLoadPath: shouldUseRenderScene ? 'render-scene-first' : 'hierarchy-fallback'
   }, file.name);
 
   payload.browserRvmParser = diagnostics;
@@ -66,7 +87,8 @@ export async function loadRvmFileInBrowser(file, viewer, options = {}) {
       enabled: shouldUseRenderScene,
       schemaVersion: renderResult?.schemaVersion || '',
       renderableCount: renderResult?.diagnostics?.renderableCount || 0,
-      skippedCount: renderResult?.diagnostics?.skippedCount || 0
+      skippedCount: renderResult?.diagnostics?.skippedCount || 0,
+      hierarchyFallbackDeferred: usedDeferredHierarchyFallback
     }
   };
 
@@ -79,7 +101,9 @@ export async function loadRvmFileInBrowser(file, viewer, options = {}) {
   };
 
   if (viewer) {
-    viewer.ctx.identityMap = payload.identityMap;
+    update(`Committing RVM scene ${file.name}`);
+    await yieldToBrowser();
+    viewer.ctx.identityMap = payload.identityMap || new Map();
     viewer.setModel(activeScene, payload.manifest?.runtime?.upAxis || 'Z');
   }
   return payload;
@@ -130,6 +154,62 @@ async function parseWithWorkerIfAvailable(arrayBuffer, options) {
   } catch {
     return parseRvmArrayBuffer(arrayBuffer, options);
   }
+}
+
+function makeRenderScenePayload(file, hierarchy, renderResult, attDiagnostics) {
+  const nodes = flattenHierarchyForManifest(hierarchy);
+  return {
+    gltf: { scene: renderResult.scene },
+    identityMap: new Map(),
+    manifest: {
+      runtime: { upAxis: 'Z' },
+      source: {
+        format: 'RVM_BINARY_BROWSER_FALLBACK',
+        files: [file.name]
+      },
+      nodes,
+      browserRvmAtt: attDiagnostics,
+      browserRvmRender: renderResult?.diagnostics || null,
+      browserRvmResponsiveLoadPath: 'render-scene-first'
+    }
+  };
+}
+
+function flattenHierarchyForManifest(roots = []) {
+  const nodes = [];
+  const visit = (node, parentCanonicalObjectId = '', depth = 0) => {
+    if (!node || typeof node !== 'object' || nodes.length >= MANIFEST_NODE_LIMIT) return;
+    const canonicalObjectId = String(node.canonicalObjectId || node.id || node.name || `browser-rvm-${nodes.length}`);
+    nodes.push({
+      canonicalObjectId,
+      parentCanonicalObjectId,
+      sourceObjectId: node.sourceObjectId || node.id || canonicalObjectId,
+      name: node.name || canonicalObjectId,
+      kind: node.kind || node.type || node.attributes?.TYPE || 'NODE',
+      type: node.type || node.kind || node.attributes?.TYPE || 'NODE',
+      depth,
+      attributes: node.attributes && typeof node.attributes === 'object' ? node.attributes : {}
+    });
+    for (const child of Array.isArray(node.children) ? node.children : []) {
+      visit(child, canonicalObjectId, depth + 1);
+      if (nodes.length >= MANIFEST_NODE_LIMIT) break;
+    }
+  };
+  for (const root of Array.isArray(roots) ? roots : []) {
+    visit(root, '', 0);
+    if (nodes.length >= MANIFEST_NODE_LIMIT) break;
+  }
+  return nodes;
+}
+
+function yieldToBrowser() {
+  if (typeof requestIdleCallback === 'function') {
+    return new Promise((resolve) => requestIdleCallback(() => resolve(), { timeout: 120 }));
+  }
+  if (typeof requestAnimationFrame === 'function') {
+    return new Promise((resolve) => requestAnimationFrame(() => resolve()));
+  }
+  return new Promise((resolve) => setTimeout(resolve, 0));
 }
 
 function makeAsyncSession(statusEl) {
