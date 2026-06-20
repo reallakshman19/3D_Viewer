@@ -41,6 +41,38 @@ function plainObject(value) {
   return value && typeof value === 'object' && !Array.isArray(value);
 }
 
+let defaultWeightMasterRowsPromise = null;
+
+function hasWeightMasterRows(config) {
+  return Array.isArray(config?.weight?.masterRows) && config.weight.masterRows.length > 0;
+}
+
+async function loadDefaultWeightMasterRows() {
+  if (defaultWeightMasterRowsPromise) return defaultWeightMasterRowsPromise;
+  defaultWeightMasterRowsPromise = (async () => {
+    if (typeof fetch !== 'function') return [];
+    const url = new URL('../../../../../docs/Masters/wtValveweights.json', import.meta.url).href;
+    const response = await fetch(url, { cache: 'force-cache' });
+    if (!response.ok) throw new Error(`Default valve weight master load failed (${response.status})`);
+    const rows = await response.json();
+    return Array.isArray(rows) ? rows : [];
+  })().catch((error) => {
+    console.warn('XML->CII 4A: default weight master hydration failed', error);
+    return [];
+  });
+  return defaultWeightMasterRowsPromise;
+}
+
+async function ensureWeightMasterRows(config) {
+  const out = plainObject(config) ? config : {};
+  if (hasWeightMasterRows(out)) return out;
+  const rows = await loadDefaultWeightMasterRows();
+  if (!rows.length) return out;
+  out.weight = plainObject(out.weight) ? { ...out.weight } : {};
+  out.weight.masterRows = rows;
+  return out;
+}
+
 function mergeSection(out, live, sectionName, rowsKey) {
   const liveSection = plainObject(live?.[sectionName]) ? live[sectionName] : null;
   if (!liveSection) return;
@@ -74,10 +106,6 @@ function mergeRuntimeOverrides(baseConfig, liveConfig) {
   }
   if (clean(live?.rating?.defaultRating)) out.rating = { ...(out.rating || {}), defaultRating: clean(live.rating.defaultRating) };
   return out;
-}
-
-function hasWeightMasterRows(config) {
-  return Array.isArray(config?.weight?.masterRows) && config.weight.masterRows.length > 0;
 }
 
 function renderWeightMasterBlocked(contentEl) {
@@ -213,17 +241,19 @@ export function bindXmlCiiWeightMatchPhase(detailEl, { xmlFile, stagedJsonText, 
     contentEl.querySelectorAll('[data-wm-candidate]').forEach((button) => button.addEventListener('click', () => { const input = contentEl.querySelectorAll('.mc-rigid-review-input')[Number(button.dataset.wmCandidate)]; if (!input) return; input.value = button.dataset.wmWeight || ''; input.dispatchEvent(new Event('change', { bubbles: true })); }));
   };
   const compute = async () => {
-    const liveConfig = activeConfig();
+    let liveConfig = activeConfig();
     syncToggle(); drawPanel();
     const file = currentXmlFile(xmlFile);
     if (!file) { localIssues = []; contentEl.innerHTML = '<div class="model-converters-workflow-detail-note">No XML source loaded. Import an XML file first.</div>'; status('No input', 'bad'); return; }
+    liveConfig = await ensureWeightMasterRows(liveConfig);
     if (!hasWeightMasterRows(liveConfig)) { localIssues = []; renderWeightMasterBlocked(contentEl); status('Weight master not ready', 'bad'); return; }
     status('Computing…');
     try {
       const xmlText = await file.text();
       const jsonText = await stagedText(stagedJsonText);
       const enriched = await enrichXmlForCii2019(xmlText, jsonText, { dryRun: true, skipAutoWeightMatch: true });
-      const cfg = mergeRuntimeOverrides(mergeRuntimeOverrides(enriched.config || liveConfig, liveConfig), getXmlCiiPreviewRuntimeConfig());
+      const enrichedConfig = await ensureWeightMasterRows(enriched.config || liveConfig);
+      const cfg = await ensureWeightMasterRows(mergeRuntimeOverrides(mergeRuntimeOverrides(enrichedConfig, liveConfig), getXmlCiiPreviewRuntimeConfig()));
       if (!hasWeightMasterRows(cfg)) { localIssues = []; renderWeightMasterBlocked(contentEl); status('Weight master not ready', 'bad'); return; }
       localIssues = collectXmlCiiWeightMatchRows(xmlText, jsonText, cfg).map(cleanRow).filter(Boolean).map((row) => applyXmlCiiFlangeWeightFallbackToIssue(rerankWithRating(row, cfg), cfg));
       const mapped = localIssues.filter((row) => row.mapped).length;
