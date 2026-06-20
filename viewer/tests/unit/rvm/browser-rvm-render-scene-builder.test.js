@@ -3,6 +3,7 @@ import {
   BROWSER_RVM_RENDER_SCENE_SCHEMA,
   buildBrowserRvmRenderSceneFromInstructions
 } from '../../../rvm/BrowserRvmRenderSceneBuilder.js';
+import { buildResponsiveBrowserRvmRenderSceneFromInstructions } from '../../../rvm/BrowserRvmResponsiveRenderSceneBuilder.js';
 
 const base = {
   schemaVersion: 'rvm-browser-render-instructions/v2',
@@ -131,5 +132,23 @@ const emptyResult = buildBrowserRvmRenderSceneFromInstructions([{ renderPrimitiv
 assert.equal(emptyResult.diagnostics.renderableCount, 0);
 assert.equal(emptyResult.bounds.hasBounds, false);
 assert.equal(emptyResult.scene.userData.bounds.hasBounds, false);
+
+let yieldCount = 0;
+const responsive = await buildResponsiveBrowserRvmRenderSceneFromInstructions(instructions, {
+  maxRenderableObjects: 3,
+  batchSize: 2,
+  timeSliceMs: 0,
+  yieldFn: async () => { yieldCount += 1; }
+});
+assert.equal(responsive.schemaVersion, BROWSER_RVM_RENDER_SCENE_SCHEMA);
+assert.equal(responsive.scene.userData.responsiveBuilder, true);
+assert.equal(responsive.diagnostics.responsiveBuilder, true);
+assert.equal(responsive.diagnostics.renderableCount, 3);
+assert.equal(responsive.diagnostics.skippedReasons['render-budget-limit'], 6);
+assert.equal(responsive.diagnostics.performance.responsiveBuilder, true);
+assert.equal(responsive.diagnostics.performance.renderBudgetSkipped, 6);
+assert.ok(yieldCount >= 1);
+assert.equal(responsive.bounds.hasBounds, true);
+assert.equal(responsive.scene.children.length, 3);
 
 console.log('Browser RVM render scene builder test passed');

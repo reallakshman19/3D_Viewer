@@ -1,10 +1,15 @@
 import { AvevaJsonLoader } from './AvevaJsonLoader.js';
 import { parseRvmArrayBuffer } from './BrowserRvmHierarchyParser.js';
 import { enrichBrowserRvmHierarchyWithAtt } from './BrowserRvmAttEnricher.js';
-import { buildBrowserRvmRenderSceneFromHierarchy } from './BrowserRvmRenderSceneBuilder.js';
+import { buildResponsiveBrowserRvmRenderSceneFromHierarchy } from './BrowserRvmResponsiveRenderSceneBuilder.js';
 
 const RVM_BROWSER_PARSE_DIAGNOSTICS = Symbol.for('pcf-glb-rvm-browser-parse-diagnostics-v1');
-const MANIFEST_NODE_LIMIT = 2600;
+const MANIFEST_NODE_LIMIT = 900;
+const DEFAULT_RENDER_BUDGET = Object.freeze({
+  maxRenderableObjects: 2400,
+  batchSize: 48,
+  timeSliceMs: 10
+});
 
 export async function loadRvmFileInBrowser(file, viewer, options = {}) {
   if (!file || typeof file.arrayBuffer !== 'function') throw new Error('RVM File object is required');
@@ -29,11 +34,16 @@ export async function loadRvmFileInBrowser(file, viewer, options = {}) {
     browserRvmAtt: attEnrichment.diagnostics
   };
 
+  const renderBudget = normalizeRenderBudget(options);
   update(`Building responsive RVM render scene for ${file.name}`);
   await yieldToBrowser();
-  const renderResult = buildBrowserRvmRenderSceneFromHierarchy(parsed.hierarchy, {
+  const renderResult = await buildResponsiveBrowserRvmRenderSceneFromHierarchy(parsed.hierarchy, {
     name: `BrowserRvmRenderScene:${file.name || 'model.rvm'}`,
-    ...(options.renderOptions || {})
+    ...(options.renderOptions || {}),
+    ...renderBudget,
+    onProgress: ({ processed, total, renderableCount }) => {
+      update(`Building RVM scene ${processed}/${total}${Number.isFinite(renderableCount) ? ` (${renderableCount} drawn)` : ''}`);
+    }
   });
   const shouldUseRenderScene = Boolean(renderResult?.scene && renderResult.diagnostics?.renderableCount > 0);
 
@@ -64,7 +74,12 @@ export async function loadRvmFileInBrowser(file, viewer, options = {}) {
     browserRvmRenderPrimitiveCounts: renderResult?.diagnostics?.primitiveCounts || {},
     browserRvmRenderSkippedReasons: renderResult?.diagnostics?.skippedReasons || {},
     browserRvmHierarchyFallbackDeferred: usedDeferredHierarchyFallback,
-    browserRvmResponsiveLoadPath: shouldUseRenderScene ? 'render-scene-first' : 'hierarchy-fallback'
+    browserRvmResponsiveLoadPath: shouldUseRenderScene ? 'responsive-render-scene-first' : 'hierarchy-fallback',
+    browserRvmResponsiveSceneBuilder: true,
+    browserRvmRenderBudgeted: Boolean(renderResult?.diagnostics?.budgeted),
+    browserRvmMaxRenderableObjects: renderBudget.maxRenderableObjects,
+    browserRvmRenderBudgetSkipped: renderResult?.diagnostics?.skippedReasons?.['render-budget-limit'] || 0,
+    browserRvmManifestNodeLimit: MANIFEST_NODE_LIMIT
   }, file.name);
 
   payload.browserRvmParser = diagnostics;
@@ -88,7 +103,11 @@ export async function loadRvmFileInBrowser(file, viewer, options = {}) {
       schemaVersion: renderResult?.schemaVersion || '',
       renderableCount: renderResult?.diagnostics?.renderableCount || 0,
       skippedCount: renderResult?.diagnostics?.skippedCount || 0,
-      hierarchyFallbackDeferred: usedDeferredHierarchyFallback
+      hierarchyFallbackDeferred: usedDeferredHierarchyFallback,
+      responsiveBuilder: true,
+      budgeted: Boolean(renderResult?.diagnostics?.budgeted),
+      renderBudgetSkipped: renderResult?.diagnostics?.skippedReasons?.['render-budget-limit'] || 0,
+      maxRenderableObjects: renderBudget.maxRenderableObjects
     }
   };
 
@@ -97,7 +116,8 @@ export async function loadRvmFileInBrowser(file, viewer, options = {}) {
     browserRvmLiveRenderScene: shouldUseRenderScene,
     browserRvmParser: diagnostics,
     browserRvmAtt: attEnrichment.diagnostics,
-    browserRvmRender: renderResult?.diagnostics || null
+    browserRvmRender: renderResult?.diagnostics || null,
+    browserRvmResponsiveSceneBuilder: true
   };
 
   if (viewer) {
@@ -105,6 +125,7 @@ export async function loadRvmFileInBrowser(file, viewer, options = {}) {
     await yieldToBrowser();
     viewer.ctx.identityMap = payload.identityMap || new Map();
     viewer.setModel(activeScene, payload.manifest?.runtime?.upAxis || 'Z');
+    await yieldToBrowser();
   }
   return payload;
 }
@@ -170,7 +191,8 @@ function makeRenderScenePayload(file, hierarchy, renderResult, attDiagnostics) {
       nodes,
       browserRvmAtt: attDiagnostics,
       browserRvmRender: renderResult?.diagnostics || null,
-      browserRvmResponsiveLoadPath: 'render-scene-first'
+      browserRvmResponsiveLoadPath: 'responsive-render-scene-first',
+      browserRvmManifestNodeLimit: MANIFEST_NODE_LIMIT
     }
   };
 }
@@ -200,6 +222,25 @@ function flattenHierarchyForManifest(roots = []) {
     if (nodes.length >= MANIFEST_NODE_LIMIT) break;
   }
   return nodes;
+}
+
+function normalizeRenderBudget(options = {}) {
+  const renderOptions = options.renderOptions || {};
+  return {
+    maxRenderableObjects: positiveInteger(options.maxRenderableObjects ?? renderOptions.maxRenderableObjects, DEFAULT_RENDER_BUDGET.maxRenderableObjects),
+    batchSize: positiveInteger(options.batchSize ?? renderOptions.batchSize, DEFAULT_RENDER_BUDGET.batchSize),
+    timeSliceMs: positiveNumber(options.timeSliceMs ?? renderOptions.timeSliceMs, DEFAULT_RENDER_BUDGET.timeSliceMs)
+  };
+}
+
+function positiveInteger(value, fallback) {
+  const n = Number.parseInt(String(value ?? ''), 10);
+  return Number.isFinite(n) && n > 0 ? n : fallback;
+}
+
+function positiveNumber(value, fallback) {
+  const n = Number(value);
+  return Number.isFinite(n) && n >= 0 ? n : fallback;
 }
 
 function yieldToBrowser() {
