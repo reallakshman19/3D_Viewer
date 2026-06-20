@@ -155,11 +155,18 @@ function branchSampleTargets(root) {
 
 function writeSupportConfigBranchSample(root, value) {
   const input = root?.querySelector?.('[data-option-key="supportConfigJson"]') || document.querySelector('[data-option-key="supportConfigJson"]');
-  if (!input || !value) return false;
+  const sample = normalizeBranchName(value);
+  if (!input || !sample) return false;
   try {
     const cfg = JSON.parse(input.value || '{}') || {};
+    cfg.linelist = cfg.linelist && typeof cfg.linelist === 'object' ? cfg.linelist : {};
+    cfg.linelist.sampleBranchName = sample;
+
+    // Backward compatibility for older popup/tests that looked at regex.branchNameSample.
+    // The rich XML->CII(2019) workflow reads linelist.sampleBranchName as canonical.
     cfg.regex = cfg.regex && typeof cfg.regex === 'object' ? cfg.regex : {};
-    cfg.regex.branchNameSample = value;
+    cfg.regex.branchNameSample = sample;
+
     input.value = JSON.stringify(cfg, null, 2);
     input.dispatchEvent(new Event('input', { bubbles: true }));
     input.dispatchEvent(new Event('change', { bubbles: true }));
