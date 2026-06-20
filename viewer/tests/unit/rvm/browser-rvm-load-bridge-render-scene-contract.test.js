@@ -119,7 +119,8 @@ async function run() {
   assert.match(dishTessellationSource, /matrix4FromCppMat3x4[\s\S]*native-cpp-dish-tessellated/, 'Dish tessellation patch must apply Mat3x4 and mark render quality.');
   assert.match(remainingPrimitiveSource, /browser-rvm-remaining-primitives\/v2-facetgroup-tessellation/, 'Remaining primitive patch must expose facet group tessellation schema.');
   assert.match(remainingPrimitiveSource, /pyramidGeometry[\s\S]*lineBoxGeometry/, 'Remaining primitive patch must support PRIM 1 and 10.');
-  assert.match(remainingPrimitiveSource, /facetGroupGeometry[\s\S]*facetGroupTessellatedCount[\s\S]*native-cpp-facetgroup-tessellated/, 'Remaining primitive patch must tessellate PRIM 11 facet groups.');
+  assert.match(remainingPrimitiveSource, /facetGroupGeometry[\s\S]*facetGroupTessellatedCount/, 'Remaining primitive patch must tessellate PRIM 11 facet groups.');
+  assert.match(remainingPrimitiveSource, /native-cpp-facetgroup-tessellated/, 'Remaining primitive patch must mark PRIM 11 render quality.');
   assert.match(remainingPrimitiveSource, /facetGroupTriangleCount[\s\S]*facetGroupContourHoleSkippedCount/, 'Remaining primitive patch must expose facet group tessellation diagnostics.');
   assert.match(materialModeSource, /Color[\s\S]*Type[\s\S]*Source[\s\S]*Mono/, 'Material mode bridge must expose color controls.');
   assert.match(materialModeSource, /browser-rvm-material-mode\/v1[\s\S]*__PCF_GLB_RVM_MATERIAL_MODE_DIAGNOSTICS__/, 'Material mode bridge must publish diagnostics.');
