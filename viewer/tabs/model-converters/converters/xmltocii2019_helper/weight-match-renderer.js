@@ -5,7 +5,7 @@ import {
   rankXmlCiiWeightCandidates,
   valveHintLengthToleranceMm,
   valveHintMappingRows,
-} from '../../../../converters/xml-cii2019-core/weight-valve-hints.js';
+} from '../../../../converters/xml-cii2019-core/weight-valve-hints.js?v=20260620-weight-fallback-1';
 import { getXmlCiiPreviewRuntimeConfig } from '../../shared/preview-filldown.js?v=20260620-rating-runtime-1';
 
 function t(value) { return value === null || value === undefined ? '' : String(value); }
@@ -36,9 +36,28 @@ function currentDomSupportConfig() {
   return input && 'value' in input ? parseConfigText(input.value) : {};
 }
 
+function plainObject(value) {
+  return value && typeof value === 'object' && !Array.isArray(value);
+}
+
+function mergeSection(out, live, sectionName, rowsKey) {
+  const liveSection = plainObject(live?.[sectionName]) ? live[sectionName] : null;
+  if (!liveSection) return;
+  const outSection = plainObject(out?.[sectionName]) ? out[sectionName] : {};
+  out[sectionName] = { ...liveSection, ...outSection };
+  const liveRows = Array.isArray(liveSection[rowsKey]) ? liveSection[rowsKey] : [];
+  const outRows = Array.isArray(outSection[rowsKey]) ? outSection[rowsKey] : [];
+  if (liveRows.length && !outRows.length) out[sectionName][rowsKey] = liveRows;
+  if (plainObject(liveSection.fieldMap) && !plainObject(outSection.fieldMap)) out[sectionName].fieldMap = liveSection.fieldMap;
+}
+
 function mergeRuntimeOverrides(baseConfig, liveConfig) {
   const out = { ...(baseConfig || {}) };
-  const live = liveConfig && typeof liveConfig === 'object' ? liveConfig : {};
+  const live = plainObject(liveConfig) ? liveConfig : {};
+  mergeSection(out, live, 'linelist', 'masterRows');
+  mergeSection(out, live, 'pipingClass', 'masterRows');
+  mergeSection(out, live, 'material', 'mapRows');
+  mergeSection(out, live, 'weight', 'masterRows');
   const liveOverrides = live.overrides && typeof live.overrides === 'object' && !Array.isArray(live.overrides)
     ? live.overrides
     : {};
