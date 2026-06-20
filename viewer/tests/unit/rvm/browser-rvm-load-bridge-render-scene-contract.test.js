@@ -6,7 +6,7 @@ async function run() {
 
   assert.match(
     source,
-    /import\s+\{\s*buildBrowserRvmRenderSceneFromHierarchy\s*\}\s+from\s+['"]\.\/BrowserRvmRenderSceneBuilder\.js['"]/,
+    /import\s+\{\s*buildBrowserRvmRenderSceneFromHierarchy\s*\}\s+from\s+['"]\.\/BrowserRvmRenderSceneBuilder\.js['"]/, 
     'Browser RVM direct load bridge must import the render scene builder.'
   );
 
@@ -20,6 +20,24 @@ async function run() {
     source,
     /const\s+shouldUseRenderScene\s*=\s*Boolean\(renderResult\?\.scene\s*&&\s*renderResult\.diagnostics\?\.renderableCount\s*>\s*0\)/,
     'Browser RVM direct load must use the render scene only when it contains renderable geometry.'
+  );
+
+  assert.match(
+    source,
+    /const\s+diagnostics\s*=\s*publishBrowserRvmLoadDiagnostics\(\{[\s\S]*browserRvmRenderSceneEnabled:\s*shouldUseRenderScene[\s\S]*browserRvmRenderableCount:[\s\S]*browserRvmSkippedCount:/,
+    'Browser RVM direct load must publish combined parse/render diagnostics.'
+  );
+
+  assert.match(
+    source,
+    /globalThis\[RVM_BROWSER_PARSE_DIAGNOSTICS\]\s*=\s*payload[\s\S]*__PCF_GLB_RVM_BROWSER_PARSE_DIAGNOSTICS__\s*=\s*payload/,
+    'Browser RVM direct load diagnostics must update the same global diagnostics channel used by the tab panel.'
+  );
+
+  assert.match(
+    source,
+    /dispatchEvent\?\.\(new\s+CustomEvent\(['"]rvm-browser-parse-diagnostics['"],\s*\{\s*detail:\s*payload\s*\}\)\)/,
+    'Browser RVM direct load must notify the diagnostics panel after render-scene selection.'
   );
 
   assert.match(
