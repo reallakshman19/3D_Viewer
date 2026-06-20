@@ -1,10 +1,10 @@
 import { decodeTextUtf8, encodeTextUtf8, baseNameWithoutExtension } from '../core/output-utils.js';
-import { collectXmlCiiZeroRigidWeightIssues, applyXmlCiiRigidWeightOverrides } from '../../../converters/xml-cii2019-core/weight-match-model.js';
+import { collectXmlCiiZeroRigidWeightIssues, applyXmlCiiRigidWeightOverrides } from '../../../converters/xml-cii2019-core/weight-match-model.js?v=20260620-rating-override-1';
 import { buildXmlCiiNodeResolverIndex } from '../../../converters/xml-cii2019-core/sideload-resolver.js';
 import { resolveManualRestraintRows } from '../../../converters/xml-cii2019-core/sideload-restraints.js';
 import { mergeXmlCiiMatchedFacts, matchedFactsFromEnrichmentDiagnostics } from '../../../converters/xml-cii2019-core/sideload-ledger.js';
 import { applyManualMatchedFactsToEnrichedXml } from '../../../converters/xml-cii2019-core/sideload-apply.js';
-import { enrichXmlForCii2019 } from './xmltocii2019_helper/enrichment-core.js';
+import { enrichXmlForCii2019 } from './xmltocii2019_helper/enrichment-core.js?v=20260620-rating-override-1';
 
 const XML_CII_STAGE_TIMEOUT_MS = 120000;
 const MATCHED_PREVIEW_STORAGE_KEY = 'xmlCii2019.matchedPreview.lastDiagnostics.v1';
@@ -52,6 +52,34 @@ function parseSupportConfig(options = {}) {
   } catch {
     return {};
   }
+}
+
+function text(value) {
+  return value === undefined || value === null ? '' : String(value).trim();
+}
+
+function mergeRuntimeOverridesIntoConfig(targetConfig, sourceConfig) {
+  const target = targetConfig && typeof targetConfig === 'object' && !Array.isArray(targetConfig) ? targetConfig : {};
+  const source = sourceConfig && typeof sourceConfig === 'object' && !Array.isArray(sourceConfig) ? sourceConfig : {};
+  const sourceOverrides = source.overrides && typeof source.overrides === 'object' && !Array.isArray(source.overrides)
+    ? source.overrides
+    : {};
+  if (Object.keys(sourceOverrides).length) {
+    target.overrides = target.overrides && typeof target.overrides === 'object' && !Array.isArray(target.overrides)
+      ? { ...target.overrides }
+      : {};
+    for (const [bucketName, bucketValue] of Object.entries(sourceOverrides)) {
+      if (bucketValue && typeof bucketValue === 'object' && !Array.isArray(bucketValue)) {
+        target.overrides[bucketName] = { ...(target.overrides[bucketName] || {}), ...bucketValue };
+      } else if (text(bucketValue)) {
+        target.overrides[bucketName] = bucketValue;
+      }
+    }
+  }
+  if (text(source?.rating?.defaultRating)) {
+    target.rating = { ...(target.rating || {}), defaultRating: text(source.rating.defaultRating) };
+  }
+  return target;
 }
 
 function optionText(options, supportConfig, ...keys) {
@@ -190,10 +218,12 @@ export async function run(context) {
   }
 
   context.setStatus?.('Enriching XML before CII conversion...', 'running');
+  const liveSupportConfig = parseSupportConfig(runValues);
   const enriched = await withTimeout(
     enrichXmlForCii2019(originalXmlText, stagedJsonText, runValues),
     'browser-side XML enrichment',
   );
+  enriched.config = mergeRuntimeOverridesIntoConfig(enriched.config, liveSupportConfig);
   const rigidReviewLogLines = [];
   const rigidWeightIssues = collectXmlCiiZeroRigidWeightIssues(enriched.xmlText, stagedJsonText, enriched.config);
 
