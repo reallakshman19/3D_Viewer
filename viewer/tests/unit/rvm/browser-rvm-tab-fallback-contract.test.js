@@ -17,8 +17,13 @@ async function run() {
   );
   assert.match(
     bridgeSource,
+    /import\s+\{\s*loadRvmFileInBrowser\s*\}\s+from\s+['"]\.\.\/rvm\/BrowserRvmLoadBridge\.js['"]/,
+    'RVM tab bridge must route real .rvm/.rev tab loads through the render-scene browser load bridge.'
+  );
+  assert.match(
+    bridgeSource,
     /proto\.text\s*=\s*async\s+function\s+patchedRvmFileText/,
-    'RVM tab bridge must intercept .rvm/.rev file reads before JSON.parse sees raw binary.'
+    'RVM tab bridge must keep the legacy .rvm/.rev file.text interception as a defensive fallback.'
   );
   assert.match(
     bridgeSource,
@@ -34,6 +39,31 @@ async function run() {
     bridgeSource,
     /parseRvmArrayBuffer\(arrayBuffer,\s*\{\s*fileName:\s*this\.name,\s*attText\s*\}\)/,
     'RVM files must be parsed from ArrayBuffer with optional ATT sidecar text, not text-decoded binary.'
+  );
+  assert.match(
+    bridgeSource,
+    /function\s+handleDirectBrowserRvmFileInputChange\(/,
+    'RVM tab bridge must directly intercept selected .rvm/.rev files before the JSON/UXML tab loader runs.'
+  );
+  assert.match(
+    bridgeSource,
+    /event\?\.stopImmediatePropagation\?\.\(\)/,
+    'Direct browser RVM tab loading must stop the stale JSON.parse change handler for .rvm/.rev files.'
+  );
+  assert.match(
+    bridgeSource,
+    /loadRvmFileInBrowser\(rvmFile,\s*viewer,\s*\{\s*statusEl:\s*status,\s*attText\s*\}\)/,
+    'Direct RVM tab loading must use the render-scene browser fallback bridge with matched ATT sidecar text.'
+  );
+  assert.match(
+    bridgeSource,
+    /function\s+readBestAttSidecarText\(files,\s*rvmFileName\)/,
+    'RVM tab direct load must pair a same-basename ATT from the selected bundle before using cached sidecars.'
+  );
+  assert.match(
+    bridgeSource,
+    /sidecarKey\(file\.name\)\s*===\s*rvmKey/,
+    'ATT pairing must be same-basename, not any arbitrary ATT file in a multi-file selection.'
   );
   assert.match(
     bridgeSource,
