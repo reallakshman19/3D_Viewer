@@ -11,9 +11,78 @@
 
 const FILL_META_KEY = '__previewFillDown';
 const OVERRIDE_CATEGORIES = ['pipingClass', 'material', 'materialCode', 'rating', 'wallThickness', 'corrosion'];
+const RUNTIME_OVERRIDE_STORAGE_KEY = 'xmlCii2019.preview.runtimeOverrides.v1';
 
 function text(value) {
   return String(value ?? '').trim();
+}
+
+function runtimeRoot() {
+  if (typeof window === 'undefined') return null;
+  if (!window.__xmlCiiPreviewRuntimeOverrides || typeof window.__xmlCiiPreviewRuntimeOverrides !== 'object') {
+    window.__xmlCiiPreviewRuntimeOverrides = readRuntimeOverrideStore();
+  }
+  return window.__xmlCiiPreviewRuntimeOverrides;
+}
+
+function readRuntimeOverrideStore() {
+  if (typeof window === 'undefined') return { overrides: {} };
+  try {
+    const parsed = JSON.parse(window.localStorage?.getItem(RUNTIME_OVERRIDE_STORAGE_KEY) || '{}');
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : { overrides: {} };
+  } catch {
+    return { overrides: {} };
+  }
+}
+
+function writeRuntimeOverrideStore(store) {
+  if (typeof window === 'undefined' || !store || typeof store !== 'object') return;
+  try {
+    window.localStorage?.setItem(RUNTIME_OVERRIDE_STORAGE_KEY, JSON.stringify(store));
+  } catch {
+    // Storage can be blocked; the in-memory window cache still protects same-session tab switches.
+  }
+}
+
+function ensureRuntimeOverrides(store) {
+  if (!store.overrides || typeof store.overrides !== 'object' || Array.isArray(store.overrides)) store.overrides = {};
+  return store.overrides;
+}
+
+function setRuntimeBucketValue(bucketName, key, value) {
+  const cleanKey = text(key);
+  if (!cleanKey) return;
+  const store = runtimeRoot();
+  if (!store) return;
+  const overrides = ensureRuntimeOverrides(store);
+  if (!overrides[bucketName] || typeof overrides[bucketName] !== 'object' || Array.isArray(overrides[bucketName])) overrides[bucketName] = {};
+  const cleanValue = text(value);
+  if (cleanValue) overrides[bucketName][cleanKey] = cleanValue;
+  else delete overrides[bucketName][cleanKey];
+  store.updatedAt = new Date().toISOString();
+  writeRuntimeOverrideStore(store);
+}
+
+function setRuntimeProcessValue(lineKey, field, value) {
+  const cleanLineKey = text(lineKey);
+  const cleanField = text(field);
+  if (!cleanLineKey || !cleanField) return;
+  const store = runtimeRoot();
+  if (!store) return;
+  const overrides = ensureRuntimeOverrides(store);
+  if (!overrides.processData || typeof overrides.processData !== 'object' || Array.isArray(overrides.processData)) overrides.processData = {};
+  if (!overrides.processData[cleanLineKey] || typeof overrides.processData[cleanLineKey] !== 'object' || Array.isArray(overrides.processData[cleanLineKey])) overrides.processData[cleanLineKey] = {};
+  const cleanValue = text(value);
+  if (cleanValue) overrides.processData[cleanLineKey][cleanField] = cleanValue;
+  else delete overrides.processData[cleanLineKey][cleanField];
+  if (Object.keys(overrides.processData[cleanLineKey]).length === 0) delete overrides.processData[cleanLineKey];
+  store.updatedAt = new Date().toISOString();
+  writeRuntimeOverrideStore(store);
+}
+
+export function getXmlCiiPreviewRuntimeConfig() {
+  const store = runtimeRoot() || readRuntimeOverrideStore();
+  return store && typeof store === 'object' && !Array.isArray(store) ? store : { overrides: {} };
 }
 
 function ensureFillMeta(overrides) {
@@ -100,6 +169,8 @@ export function markPreviewOverrideManual({ config, ensureOverrides, field, key,
   if (!overrides[category] || typeof overrides[category] !== 'object') overrides[category] = {};
   if (cleanValue) setOverrideState(meta, category, key, 'manual', null);
   else setOverrideState(meta, category, key, 'blank', null);
+  setRuntimeBucketValue(category, key, cleanValue);
+  if (category === 'rating') setRuntimeProcessValue(key, 'rating', cleanValue);
 }
 
 export function markPreviewProcessManual({ config, ensureOverrides, field, lineKey, value }) {
@@ -108,6 +179,8 @@ export function markPreviewProcessManual({ config, ensureOverrides, field, lineK
   const cleanValue = text(value);
   if (cleanValue) setProcessState(meta, field, lineKey, 'manual', null);
   else setProcessState(meta, field, lineKey, 'blank', null);
+  setRuntimeProcessValue(lineKey, field, cleanValue);
+  if (field === 'rating') setRuntimeBucketValue('rating', lineKey, cleanValue);
 }
 
 export function applyPreviewOverrideFillDown({ host, config, ensureOverrides, field, fromRow, currentValue }) {
@@ -135,6 +208,8 @@ export function applyPreviewOverrideFillDown({ host, config, ensureOverrides, fi
       setOverrideState(meta, category, key, 'manual', null);
       if (!overrides[category]) overrides[category] = {};
       overrides[category][key] = sourceValue;
+      setRuntimeBucketValue(category, key, sourceValue);
+      if (category === 'rating') setRuntimeProcessValue(key, 'rating', sourceValue);
       continue;
     }
     if (rowIndex < fromRow) continue;
@@ -150,6 +225,8 @@ export function applyPreviewOverrideFillDown({ host, config, ensureOverrides, fi
     if (!overrides[category]) overrides[category] = {};
     overrides[category][key] = sourceValue;
     setOverrideState(meta, category, key, 'auto', sourceKey);
+    setRuntimeBucketValue(category, key, sourceValue);
+    if (category === 'rating') setRuntimeProcessValue(key, 'rating', sourceValue);
 
     const valSpan = cell.querySelector('.mc-preview-editable-val');
     if (valSpan) valSpan.textContent = sourceValue;
@@ -186,6 +263,8 @@ export function applyPreviewProcessFillDown({ host, config, ensureOverrides, fie
       setProcessState(meta, field, lineKey, 'manual', null);
       if (!overrides.processData[lineKey]) overrides.processData[lineKey] = {};
       overrides.processData[lineKey][field] = sourceValue;
+      setRuntimeProcessValue(lineKey, field, sourceValue);
+      if (field === 'rating') setRuntimeBucketValue('rating', lineKey, sourceValue);
       continue;
     }
     if (rowIndex < fromRow) continue;
@@ -201,6 +280,8 @@ export function applyPreviewProcessFillDown({ host, config, ensureOverrides, fie
     if (!overrides.processData[lineKey]) overrides.processData[lineKey] = {};
     overrides.processData[lineKey][field] = sourceValue;
     setProcessState(meta, field, lineKey, 'auto', sourceKey);
+    setRuntimeProcessValue(lineKey, field, sourceValue);
+    if (field === 'rating') setRuntimeBucketValue('rating', lineKey, sourceValue);
     input.value = sourceValue;
     input.dataset.mcFillState = 'auto';
     filled += 1;
