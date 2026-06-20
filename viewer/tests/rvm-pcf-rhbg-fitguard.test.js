@@ -27,7 +27,7 @@ check(fallbackBridgeSource.includes('fallbackObjects') && fallbackBridgeSource.i
 check(exportBridgeSource.includes('rvm-native-scene-glb-export/v1-att-extras'), 'native GLB export schema present');
 check(exportBridgeSource.includes('exportSceneToGLB') && exportBridgeSource.includes('Visible GLB'), 'native export uses GLB exporter and visible action');
 check(exportBridgeSource.includes('Selected GLB') && exportBridgeSource.includes('viewer._rvmCanvasSelectedMeshes'), 'selected native GLB export uses canvas selection');
-check(exportBridgeSource.includes('browserRvmAttributes') && exportBridgeSource.includes('GLB extras'), 'ATT/userData metadata is preserved for GLB extras');
+check(exportBridgeSource.includes('browserRvmAttributes') && exportBridgeSource.includes('glbExportSchema'), 'ATT/userData metadata is preserved as GLB node extras');
 check(exportBridgeSource.includes('__PCF_GLB_RVM_NATIVE_GLB_EXPORT_DIAGNOSTICS__'), 'native GLB export diagnostics global present');
 check(exportBridgeSource.includes('fallbackDiagnostics') && exportBridgeSource.includes('fallbackReasonCounts'), 'export audit includes primitive fallback diagnostics');
 check(appSource.includes('viewer3d-rvm-tab-renderer.js?v=20260620-rvm-native-scene-glb-export-1'), 'app loads native GLB export renderer');
