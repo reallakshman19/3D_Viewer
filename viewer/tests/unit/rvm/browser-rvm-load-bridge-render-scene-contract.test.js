@@ -89,7 +89,9 @@ async function run() {
   assert.match(interactionPatchSource, /dispatchAction[\s\S]*VIEW_FIT_ALL/, 'Toolbar patch must implement RVM actions.');
   assert.match(interactionPatchSource, /installRvmCanvasSelectionBridge[\s\S]*raycaster\.intersectObject/, 'Canvas patch must raycast rendered geometry.');
   assert.match(nativeTessellationSource, /browser-rvm-native-tessellation\/v2-diagnostics-toggle/, 'Native tessellation patch must expose diagnostics-toggle schema.');
-  assert.match(nativeTessellationSource, /setEnabled[\s\S]*localStorage[\s\S]*runNow/, 'Native tessellation must expose a toggle and rerun API.');
+  assert.match(nativeTessellationSource, /setEnabled/, 'Native tessellation must expose a setEnabled control.');
+  assert.match(nativeTessellationSource, /runNow/, 'Native tessellation must expose a rerun control.');
+  assert.match(nativeTessellationSource, /localStorage/, 'Native tessellation must persist enablement.');
   assert.match(nativeTessellationSource, /rvm-native-tessellation-diagnostics/, 'Native tessellation must dispatch diagnostics events.');
   assert.match(nativeTessellationSource, /cylinderGeometry[\s\S]*snoutGeometry[\s\S]*circularTorusGeometry/, 'Native tessellation patch must include C++ primitive geometry builders.');
   assert.match(nativeTessellationSource, /matrix4FromCppMat3x4[\s\S]*m\[0\],\s*m\[3\],\s*m\[6\],\s*m\[9\]/, 'Native tessellation must use C++ Mat3x4 row mapping.');
