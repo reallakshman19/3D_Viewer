@@ -12,7 +12,7 @@ import {
   applyRvmSupportSymbolSettings,
   getRvmSupportSymbolSettings,
 } from '../rvm-viewer/RvmSupportSymbols.js?v=20260618-rvm-rich-ui-support-kind-1';
-import '../rvm-viewer/RvmSupportIndexAttributeBridge.js?v=20260618-rvm-rich-ui-support-kind-1';
+import '../rvm-viewer/RvmSupportIndexAttributeBridge.js?v=20260620-rvm-direct-tab-1';
 
 installRvmProgressiveModelRootPatch(RvmViewer3D);
 
@@ -41,30 +41,15 @@ const ACTION_LABELS = {
   NAV_ROTATE_Z: 'Right',
   SNAP_ISO_NW: 'Iso NW',
   SNAP_ISO_NE: 'Iso NE',
-  SNAP_ISO_SW: 'Iso SW',
-  SNAP_ISO_SE: 'Iso SE',
+  SNAP_ISO_SW: 'SW',
+  SNAP_ISO_SE: 'SE',
 };
 
 const ACTION_ICONS = {
-  NAV_SELECT: '⌖',
-  NAV_ORBIT: '⟳',
-  NAV_PAN: '↔',
-  MARQUEE_SELECT: '□',
-  MEASURE_TOOL: '↕',
-  VIEW_FIT_ALL: '⛶',
-  VIEW_FIT_SELECTION: '◉',
-  VIEW_TOGGLE_PROJECTION: '▣',
-  VIEW_MARQUEE_ZOOM: '⌕',
-  SECTION_BOX: '▧',
-  SECTION_PLANE_UP: '⊥',
-  SECTION_DISABLE: '⊘',
-  NAV_PLAN_X: 'T',
-  NAV_ROTATE_Y: 'F',
-  NAV_ROTATE_Z: 'R',
-  SNAP_ISO_NW: 'NW',
-  SNAP_ISO_NE: 'NE',
-  SNAP_ISO_SW: 'SW',
-  SNAP_ISO_SE: 'SE',
+  NAV_SELECT: '⌖', NAV_ORBIT: '⟳', NAV_PAN: '↔', MARQUEE_SELECT: '□', MEASURE_TOOL: '↕',
+  VIEW_FIT_ALL: '⛶', VIEW_FIT_SELECTION: '◉', VIEW_TOGGLE_PROJECTION: '▣', VIEW_MARQUEE_ZOOM: '⌕',
+  SECTION_BOX: '▧', SECTION_PLANE_UP: '⊥', SECTION_DISABLE: '⊘',
+  NAV_PLAN_X: 'T', NAV_ROTATE_Y: 'F', NAV_ROTATE_Z: 'R', SNAP_ISO_NW: 'NW', SNAP_ISO_NE: 'NE', SNAP_ISO_SW: 'SW', SNAP_ISO_SE: 'SE',
 };
 
 const TOOL_GROUPS = [
@@ -77,12 +62,7 @@ const TOOL_GROUPS = [
 const ICON_ONLY_ACTIONS = new Set(['NAV_PLAN_X', 'NAV_ROTATE_Y', 'NAV_ROTATE_Z', 'SNAP_ISO_NW', 'SNAP_ISO_NE', 'SNAP_ISO_SW', 'SNAP_ISO_SE']);
 
 function escapeHtml(value) {
-  return String(value ?? '')
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#039;');
+  return String(value ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;');
 }
 
 function normalizeUiSupportScale(value) {
@@ -116,20 +96,8 @@ function isSupportNode(node) {
 }
 
 function supportKindFromIntent(attrs = {}) {
-  const text = [
-    attrs.CMPSUPTYPE,
-    attrs.MDSSUPPTYPE,
-    attrs.DTXR,
-    attrs.SKEY,
-    attrs.SPRE,
-    attrs.DESCRIPTION,
-    attrs.DESC,
-    attrs.NAME,
-    attrs.SUPPORT_TYPE,
-    attrs.SUPPORT_MAPPER_KIND,
-    attrs.SUPPORT_KIND,
-  ].map((value) => String(value ?? '').toUpperCase()).join(' ');
-
+  const text = [attrs.CMPSUPTYPE, attrs.MDSSUPPTYPE, attrs.DTXR, attrs.SKEY, attrs.SPRE, attrs.DESCRIPTION, attrs.DESC, attrs.NAME, attrs.SUPPORT_TYPE, attrs.SUPPORT_MAPPER_KIND, attrs.SUPPORT_KIND]
+    .map((value) => String(value ?? '').toUpperCase()).join(' ');
   if (/\bGUIDE\b|\bGDE\b|\bGUI\b|\bPG[-_ ]|\bGT0[1-4]\b|\bGT\d{1,3}\b/.test(text)) return 'GUIDE';
   if (/\bLINE\s*STOP\b|\bLINESTOP\b|\bLIMIT\s*STOP\b|\bSTOPPER\b|\bST0[6-8]\b|\bLS[-_ ]|\bSTOP\b/.test(text)) return 'LINESTOP';
   if (/\bLIMIT\b|\bLIM\b/.test(text)) return 'LIMIT';
@@ -147,14 +115,10 @@ function normalizeSupportKindsInHierarchy(nodes) {
       const oldKind = attrs.SUPPORT_KIND || attrs.SUPPORT_MAPPER_KIND || attrs.SUPPORT_TYPE || attrs.CMPSUPTYPE;
       const kind = supportKindFromIntent(attrs) || supportKindFromIntent({ ...attrs, SUPPORT_KIND: '', SUPPORT_MAPPER_KIND: '' }) || 'REST';
       if (oldKind && String(oldKind).toUpperCase() !== kind) attrs.UXML_RAW_SUPPORT_KIND = String(oldKind);
-      attrs.SUPPORT_KIND = kind;
-      attrs.SUPPORT_MAPPER_KIND = kind;
-      attrs.SUPPORT_TYPE = kind;
+      attrs.SUPPORT_KIND = kind; attrs.SUPPORT_MAPPER_KIND = kind; attrs.SUPPORT_TYPE = kind;
       if (!attrs.CMPSUPTYPE || /^(REST|SUPPORT|ATTA)$/i.test(String(attrs.CMPSUPTYPE))) attrs.CMPSUPTYPE = kind;
     }
-    for (const key of ['children', 'items', 'branches']) {
-      if (Array.isArray(node[key])) node[key].forEach(visit);
-    }
+    for (const key of ['children', 'items', 'branches']) if (Array.isArray(node[key])) node[key].forEach(visit);
   };
   (Array.isArray(nodes) ? nodes : [nodes]).forEach(visit);
   return nodes;
@@ -174,12 +138,7 @@ function parseJsonSource(text, fileName = '') {
 }
 
 function supportOptions(scaleMultiplier, labelsVisible) {
-  return {
-    scaleMultiplier: normalizeUiSupportScale(scaleMultiplier),
-    labelsVisible: Boolean(labelsVisible),
-    maxVisibleLabels: labelsVisible ? SUPPORT_MAX_LABELS : 0,
-    labelGridFactor: 2.1,
-  };
+  return { scaleMultiplier: normalizeUiSupportScale(scaleMultiplier), labelsVisible: Boolean(labelsVisible), maxVisibleLabels: labelsVisible ? SUPPORT_MAX_LABELS : 0, labelGridFactor: 2.1 };
 }
 
 async function loadJsonOrUxmlFile(file, viewer, statusEl, scaleMultiplier, labelsVisible) {
@@ -212,66 +171,29 @@ function renderShell(container) {
       <div class="rvm-capability-banner" id="rvm-capability-banner" data-mode="worker-first">RVM / REV / ATT / JSON / UXML viewer ready — direct RVM worker path</div>
       <div class="geo-top-ribbon">
         ${TOOL_GROUPS.map(renderToolGroup).join('')}
-        <div class="rvm-ribbon-section rvm-ribbon-load">
-          <label class="rvm-btn rvm-btn-file" title="Load RVM / REV / ATT / JSON / UXML">
-            <span>Load</span>
-            <input id="rvm-file-input" type="file" accept=".json,.uxml,.uxml.json,.rvm,.rev,.att" multiple data-browser-rvm-fallback="true" data-browser-rvm-att-sidecar="true" data-rvm-direct-worker-load="true" style="display:none" />
-          </label>
-        </div>
-        <div class="rvm-ribbon-section">
-          <span class="rvm-theme-shell">Support <input id="rvm-support-scale" type="range" min="0.25" max="2" step="0.25" value="${escapeHtml(scale)}" style="width:86px; accent-color:#4a9eff;"><span id="rvm-support-scale-value">${Number(scale).toFixed(2)}×</span></span>
-          <button id="rvm-support-labels" class="rvm-btn" type="button" aria-pressed="false">Labels Off</button>
-        </div>
-        <div class="rvm-ribbon-search"><input id="rvm-search-input" placeholder="Search hierarchy / support tag…" /></div>
-        <span class="mode-chip" id="rvm-mode-chip">Orbit</span>
+        <div class="rvm-ribbon-section rvm-ribbon-load"><label class="rvm-btn rvm-btn-file" title="Load RVM / REV / ATT / JSON / UXML"><span>Load</span><input id="rvm-file-input" type="file" accept=".json,.uxml,.uxml.json,.rvm,.rev,.att" multiple data-browser-rvm-fallback="true" data-browser-rvm-att-sidecar="true" data-rvm-direct-worker-load="true" style="display:none" /></label></div>
+        <div class="rvm-ribbon-section"><span class="rvm-theme-shell">Support <input id="rvm-support-scale" type="range" min="0.25" max="2" step="0.25" value="${escapeHtml(scale)}" style="width:86px; accent-color:#4a9eff;"><span id="rvm-support-scale-value">${Number(scale).toFixed(2)}×</span></span><button id="rvm-support-labels" class="rvm-btn" type="button" aria-pressed="false">Labels Off</button></div>
+        <div class="rvm-ribbon-search"><input id="rvm-search-input" placeholder="Search hierarchy / support tag…" /></div><span class="mode-chip" id="rvm-mode-chip">Orbit</span>
       </div>
-      <div id="rvm-status-strip" class="rvm-status-strip" aria-live="polite">
-        <span class="rvm-status-chip" data-rvm-status-chip="objects">Objects: 0</span>
-        <span class="rvm-status-chip" data-rvm-status-chip="visible">Visible: 0</span>
-        <span class="rvm-status-chip" data-rvm-status-chip="supports">Supports: 0</span>
-        <span class="rvm-status-chip" data-rvm-status-chip="selected">Selected: 0</span>
-        <span class="rvm-status-chip" data-rvm-status-chip="kind">Kinds: -</span>
-      </div>
+      <div id="rvm-status-strip" class="rvm-status-strip" aria-live="polite"><span class="rvm-status-chip" data-rvm-status-chip="objects">Objects: 0</span><span class="rvm-status-chip" data-rvm-status-chip="visible">Visible: 0</span><span class="rvm-status-chip" data-rvm-status-chip="supports">Supports: 0</span><span class="rvm-status-chip" data-rvm-status-chip="selected">Selected: 0</span><span class="rvm-status-chip" data-rvm-status-chip="kind">Kinds: -</span></div>
       <div class="rvm-body">
-        <aside class="rvm-left-panel">
-          <div class="rvm-panel-header">Hierarchy</div>
-          <div class="rvm-panel-filter-row"><input id="rvm-tree-filter" class="rvm-panel-filter" placeholder="Filter tree…"></div>
-          <ul id="rvm-tree" class="rvm-tree"><li class="rvm-empty-state">Load RVM / REV / ATT / JSON / UXML to view hierarchy.</li></ul>
-        </aside>
-        <section class="rvm-viewport">
-          <div id="rvm-canvas" class="rvm-canvas"></div>
-          <div class="rvm-placeholder" id="rvm-placeholder">Load RVM / REV / ATT / JSON / UXML to begin.</div>
-        </section>
-        <aside class="rvm-right-panel">
-          <div class="rvm-panel-header">Properties</div>
-          <div id="rvm-attributes-panel" class="rvm-attributes-panel"><div class="rvm-empty-state">No object selected.</div></div>
-          <div class="rvm-panel-header">Support Summary</div>
-          <div id="rvm-support-summary" class="rvm-tag-list"><div class="rvm-empty-state">No supports loaded.</div></div>
-          <div class="rvm-panel-header" data-rvm-browser-diagnostics-header="true">Browser RVM Performance</div>
-          <div id="rvm-browser-parse-diagnostics" class="rvm-tag-list rvm-browser-parse-diagnostics" aria-live="polite" data-browser-rvm-diagnostics-panel="true"><div class="rvm-empty-state">No browser RVM load yet.</div></div>
-        </aside>
+        <aside class="rvm-left-panel"><div class="rvm-panel-header">Hierarchy</div><div class="rvm-panel-filter-row"><input id="rvm-tree-filter" class="rvm-panel-filter" placeholder="Filter tree…"></div><ul id="rvm-tree" class="rvm-tree"><li class="rvm-empty-state">Load RVM / REV / ATT / JSON / UXML to view hierarchy.</li></ul></aside>
+        <section class="rvm-viewport"><div id="rvm-canvas" class="rvm-canvas"></div><div class="rvm-placeholder" id="rvm-placeholder">Load RVM / REV / ATT / JSON / UXML to begin.</div></section>
+        <aside class="rvm-right-panel"><div class="rvm-panel-header">Properties</div><div id="rvm-attributes-panel" class="rvm-attributes-panel"><div class="rvm-empty-state">No object selected.</div></div><div class="rvm-panel-header">Support Summary</div><div id="rvm-support-summary" class="rvm-tag-list"><div class="rvm-empty-state">No supports loaded.</div></div><div class="rvm-panel-header" data-rvm-browser-diagnostics-header="true">Browser RVM Performance</div><div id="rvm-browser-parse-diagnostics" class="rvm-tag-list rvm-browser-parse-diagnostics" aria-live="polite" data-browser-rvm-diagnostics-panel="true"><div class="rvm-empty-state">No browser RVM load yet.</div></div></aside>
       </div>
       <div class="viewer-statusbar"><span id="rvm-sb-msg">Ready</span><span>Selection <b id="rvm-sel-count">0</b></span></div>
-    </div>
-  `;
+    </div>`;
 }
 
-function nodeDisplayName(node) {
-  return node?.name || node?.canonicalObjectId || node?.sourceObjectId || node?.id || 'Node';
-}
-
-function nodeKind(node) {
-  return String(node?.kind || node?.attributes?.TYPE || '').toUpperCase() || 'NODE';
-}
+function nodeDisplayName(node) { return node?.name || node?.canonicalObjectId || node?.sourceObjectId || node?.id || 'Node'; }
+function nodeKind(node) { return String(node?.kind || node?.attributes?.TYPE || '').toUpperCase() || 'NODE'; }
 
 function buildNodeTree(nodes = [], options = {}) {
   const limit = options.limit || JSON_TREE_RENDER_LIMIT;
   const recursive = options.recursive !== false;
-  const byId = new Map();
   const children = new Map();
   for (const node of nodes) {
     if (!node?.canonicalObjectId) continue;
-    byId.set(node.canonicalObjectId, node);
     const parent = node.parentCanonicalObjectId || '';
     if (!children.has(parent)) children.set(parent, []);
     children.get(parent).push(node);
@@ -279,9 +201,7 @@ function buildNodeTree(nodes = [], options = {}) {
   const roots = children.get('') || nodes.filter((n) => !n.parentCanonicalObjectId).slice(0, limit);
   const renderNode = (node, depth = 0) => {
     const kids = children.get(node.canonicalObjectId) || [];
-    const childHtml = recursive && kids.length && depth < 10
-      ? `<ul>${kids.slice(0, limit).map((k) => renderNode(k, depth + 1)).join('')}</ul>`
-      : '';
+    const childHtml = recursive && kids.length && depth < 10 ? `<ul>${kids.slice(0, limit).map((k) => renderNode(k, depth + 1)).join('')}</ul>` : '';
     return `<li data-node-id="${escapeHtml(node.canonicalObjectId || '')}" data-depth="${depth}"><button type="button" class="rvm-tree-node"><span class="rvm-kind">${escapeHtml(nodeKind(node))}</span><span>${escapeHtml(nodeDisplayName(node))}</span>${kids.length ? `<span class="rvm-tree-count">${kids.length}</span>` : ''}</button>${childHtml}</li>`;
   };
   const rows = roots.slice(0, limit).map((node) => renderNode(node));
@@ -293,15 +213,9 @@ function bindToolbar(viewer, root, stateBag) {
   root.querySelectorAll('[data-action]').forEach((btn) => btn.addEventListener('click', () => {
     const action = btn.dataset.action;
     root.querySelectorAll('[data-action]').forEach((b) => b.classList.toggle('is-active', b === btn));
-    try {
-      viewer.dispatchAction?.(action);
-      viewer.setToolMode?.(action);
-      root.querySelector('#rvm-mode-chip').textContent = ACTION_LABELS[action] || action;
-    } catch (err) {
-      console.warn('[RVM tab] toolbar action failed', action, err);
-    }
+    try { viewer.dispatchAction?.(action); viewer.setToolMode?.(action); root.querySelector('#rvm-mode-chip').textContent = ACTION_LABELS[action] || action; }
+    catch (err) { console.warn('[RVM tab] toolbar action failed', action, err); }
   }));
-
   const scaleInput = root.querySelector('#rvm-support-scale');
   const labelsBtn = root.querySelector('#rvm-support-labels');
   const syncSupport = () => {
@@ -312,12 +226,7 @@ function bindToolbar(viewer, root, stateBag) {
     applyRvmSupportSymbolSettings(viewer, supportOptions(scale, labels));
   };
   scaleInput?.addEventListener('input', syncSupport);
-  labelsBtn?.addEventListener('click', () => {
-    const next = labelsBtn.getAttribute('aria-pressed') !== 'true';
-    labelsBtn.setAttribute('aria-pressed', next ? 'true' : 'false');
-    labelsBtn.textContent = next ? 'Labels On' : 'Labels Off';
-    syncSupport();
-  });
+  labelsBtn?.addEventListener('click', () => { const next = labelsBtn.getAttribute('aria-pressed') !== 'true'; labelsBtn.setAttribute('aria-pressed', next ? 'true' : 'false'); labelsBtn.textContent = next ? 'Labels On' : 'Labels Off'; syncSupport(); });
   stateBag.syncSupport = syncSupport;
 }
 
@@ -325,309 +234,88 @@ function updateStatus(root, viewer, payload = null) {
   const progressive = payload?.browserRvmRender || payload?.manifest?.browserRvmRenderScene || viewer?.modelGroup?.children?.[0]?.userData?.browserRvmRender;
   if (progressive) {
     const objects = Number(progressive.renderableCount ?? progressive.browserRvmRenderableCount ?? 0);
-    const skipped = Number(progressive.skippedCount ?? progressive.browserRvmSkippedCount ?? 0);
     const primitiveCounts = progressive.primitiveCounts || progressive.effectivePrimitiveCounts || {};
     const supportCount = Number(primitiveCounts.SUPPORT || primitiveCounts.ATTA || primitiveCounts.ANCI || 0);
-    setStatusChip(root, 'objects', `Objects: ${objects}`);
-    setStatusChip(root, 'visible', `Visible: ${objects}`);
-    setStatusChip(root, 'supports', `Supports: ${supportCount}`);
+    setStatusChip(root, 'objects', `Objects: ${objects}`); setStatusChip(root, 'visible', `Visible: ${objects}`); setStatusChip(root, 'supports', `Supports: ${supportCount}`);
     setStatusChip(root, 'selected', `Selected: ${viewer.selection?.getSelectedCanonicalIds?.().length || 0}`);
-    const kinds = Object.keys(primitiveCounts).slice(0, 4).join(', ');
-    setStatusChip(root, 'kind', `Kinds: ${kinds || '-'}`);
-    return;
+    const kinds = Object.keys(primitiveCounts).slice(0, 4).join(', '); setStatusChip(root, 'kind', `Kinds: ${kinds || '-'}`); return;
   }
-
-  let total = 0;
-  let visible = 0;
-  let supports = 0;
-  const kinds = new Set();
+  let total = 0, visible = 0, supports = 0; const kinds = new Set();
   viewer.modelGroup?.traverse((obj) => {
-    if (total >= STATUS_TRAVERSE_LIMIT) return;
-    if (!(obj?.isMesh || obj?.isLine || obj?.isPoints)) return;
-    total += 1;
-    if (obj.visible !== false) visible += 1;
+    if (total >= STATUS_TRAVERSE_LIMIT || !(obj?.isMesh || obj?.isLine || obj?.isPoints)) return;
+    total += 1; if (obj.visible !== false) visible += 1;
     const attrs = obj.userData?.attributes || obj.userData?.rawAttributes || {};
     if (isSupportNode({ attributes: attrs, type: attrs.TYPE })) supports += 1;
-    const kind = attrs.SUPPORT_KIND || attrs.TYPE || obj.userData?.renderPrimitive;
-    if (kind) kinds.add(String(kind));
+    const kind = attrs.SUPPORT_KIND || attrs.TYPE || obj.userData?.renderPrimitive; if (kind) kinds.add(String(kind));
   });
-  setStatusChip(root, 'objects', `Objects: ${total}${total >= STATUS_TRAVERSE_LIMIT ? '+' : ''}`);
-  setStatusChip(root, 'visible', `Visible: ${visible}${total >= STATUS_TRAVERSE_LIMIT ? '+' : ''}`);
-  setStatusChip(root, 'supports', `Supports: ${supports}`);
-  setStatusChip(root, 'selected', `Selected: ${viewer.selection?.getSelectedCanonicalIds?.().length || 0}`);
-  setStatusChip(root, 'kind', `Kinds: ${kinds.size ? Array.from(kinds).slice(0, 4).join(', ') : '-'}`);
+  setStatusChip(root, 'objects', `Objects: ${total}${total >= STATUS_TRAVERSE_LIMIT ? '+' : ''}`); setStatusChip(root, 'visible', `Visible: ${visible}${total >= STATUS_TRAVERSE_LIMIT ? '+' : ''}`); setStatusChip(root, 'supports', `Supports: ${supports}`); setStatusChip(root, 'selected', `Selected: ${viewer.selection?.getSelectedCanonicalIds?.().length || 0}`); setStatusChip(root, 'kind', `Kinds: ${kinds.size ? Array.from(kinds).slice(0, 4).join(', ') : '-'}`);
 }
 
-function setStatusChip(root, key, text) {
-  const el = root.querySelector(`[data-rvm-status-chip="${key}"]`);
-  if (el) el.textContent = text;
-}
+function setStatusChip(root, key, text) { const el = root.querySelector(`[data-rvm-status-chip="${key}"]`); if (el) el.textContent = text; }
+function isJsonOrUxmlFileName(fileName = '') { return /\.(json|uxml)$/i.test(String(fileName || '').trim()) || /\.uxml\.json$/i.test(String(fileName || '').trim()); }
+function isLikelyAttFileName(fileName = '') { return /\.att$/i.test(String(fileName || '').trim()); }
+function sidecarKey(fileName = '') { return String(fileName || '').trim().toLowerCase().replace(/\.[^.]+$/, ''); }
+async function readBestAttSidecarText(files, rvmFileName) { const list = Array.from(files || []); const rvmKey = sidecarKey(rvmFileName); const matching = list.find((file) => isLikelyAttFileName(file?.name) && sidecarKey(file.name) === rvmKey); if (!matching || typeof matching.text !== 'function') return ''; try { return String(await matching.text() || ''); } catch (_) { return ''; } }
 
-function isJsonOrUxmlFileName(fileName = '') {
-  return /\.(json|uxml)$/i.test(String(fileName || '').trim()) || /\.uxml\.json$/i.test(String(fileName || '').trim());
-}
-
-function isLikelyAttFileName(fileName = '') {
-  return /\.att$/i.test(String(fileName || '').trim());
-}
-
-function sidecarKey(fileName = '') {
-  return String(fileName || '').trim().toLowerCase().replace(/\.[^.]+$/, '');
-}
-
-async function readBestAttSidecarText(files, rvmFileName) {
-  const list = Array.from(files || []);
-  const rvmKey = sidecarKey(rvmFileName);
-  const matching = list.find((file) => isLikelyAttFileName(file?.name) && sidecarKey(file.name) === rvmKey);
-  if (!matching || typeof matching.text !== 'function') return '';
-  try { return String(await matching.text() || ''); } catch (_) { return ''; }
-}
-
-function makeDiagnosticsSeed(fileName) {
-  return {
-    fileName,
-    loadedJsVersion: RVM_TAB_JS_VERSION,
-    browserRvmDirectTabLoadPath: true,
-    browserRvmLegacyJsonHandlerBypassed: true,
-    browserRvmWorkerFirstPipeline: true,
-    browserRvmWorkerLoaded: undefined,
-    browserRvmWorkerMessageReceived: false,
-    browserRvmProgressiveMountSafe: true,
-    browserRvmLoadState: 'starting',
-    capturedAt: new Date().toISOString(),
-  };
-}
-
+function makeDiagnosticsSeed(fileName) { return { fileName, loadedJsVersion: RVM_TAB_JS_VERSION, browserRvmDirectTabLoadPath: true, browserRvmLegacyJsonHandlerBypassed: true, browserRvmWorkerFirstPipeline: true, browserRvmWorkerLoaded: undefined, browserRvmWorkerMessageReceived: false, browserRvmProgressiveMountSafe: true, browserRvmLoadState: 'starting', capturedAt: new Date().toISOString() }; }
 function renderDiagnostics(root, diagnostics = {}) {
-  const panel = root?.querySelector?.('#rvm-browser-parse-diagnostics');
-  if (!panel) return;
-  const timings = diagnostics.browserRvmStageTimingsMs || diagnostics.browserRvmWorkerTimingsMs || {};
-  const render = diagnostics.browserRvmRender || diagnostics.render || {};
+  const panel = root?.querySelector?.('#rvm-browser-parse-diagnostics'); if (!panel) return;
+  const timings = diagnostics.browserRvmStageTimingsMs || diagnostics.browserRvmWorkerTimingsMs || {}; const render = diagnostics.browserRvmRender || diagnostics.render || {};
   const rows = [
-    ['Loaded JS version/hash', diagnostics.loadedJsVersion || RVM_TAB_JS_VERSION],
-    ['Worker loaded', boolText(diagnostics.browserRvmWorkerLoaded ?? diagnostics.browserRvmWorkerEnabled)],
-    ['Worker message received', boolText(diagnostics.browserRvmWorkerMessageReceived ?? diagnostics.browserRvmWorkerEnabled)],
-    ['Legacy handler bypassed', boolText(diagnostics.browserRvmLegacyJsonHandlerBypassed)],
-    ['Parse time', timingText(timings['worker.parse.renderInstructions'] ?? timings.parse)],
-    ['Render-instruction time', timingText(timings.renderInstructionGeneration ?? diagnostics.browserRvmRenderInstructionMs)],
-    ['First geometry', timingText(diagnostics.browserRvmFirstGeometryMs)],
-    ['Scene creation', timingText(timings['scene.progressiveCreate'] ?? diagnostics.browserRvmSceneCreationMs)],
-    ['Objects rendered', diagnostics.browserRvmRenderableCount ?? render.renderableCount],
-    ['Skipped objects', diagnostics.browserRvmSkippedCount ?? render.skippedCount],
-    ['Tree nodes rendered', diagnostics.browserRvmTreeNodesRendered],
-    ['Max event-loop stall', timingText(diagnostics.browserRvmMaxEventLoopStallMs)],
-    ['Max single batch time', timingText(diagnostics.browserRvmMaxSingleBatchMs ?? render.maxSingleBatchMs)],
-    ['Long tasks >100 ms', diagnostics.browserRvmEventLoopStallCount],
-    ['Binary PRIM', diagnostics.binaryPrimitiveRecordCount],
-    ['Hierarchy groups', diagnostics.hierarchyGroupCount],
+    ['Loaded JS version/hash', diagnostics.loadedJsVersion || RVM_TAB_JS_VERSION], ['Worker loaded', boolText(diagnostics.browserRvmWorkerLoaded ?? diagnostics.browserRvmWorkerEnabled)], ['Worker message received', boolText(diagnostics.browserRvmWorkerMessageReceived ?? diagnostics.browserRvmWorkerEnabled)], ['Legacy handler bypassed', boolText(diagnostics.browserRvmLegacyJsonHandlerBypassed)], ['Parse time', timingText(timings['worker.parse.renderInstructions'] ?? timings.parse)], ['Render-instruction time', timingText(timings.renderInstructionGeneration ?? diagnostics.browserRvmRenderInstructionMs)], ['First geometry', timingText(diagnostics.browserRvmFirstGeometryMs)], ['Scene creation', timingText(timings['scene.progressiveCreate'] ?? diagnostics.browserRvmSceneCreationMs)], ['Objects rendered', diagnostics.browserRvmRenderableCount ?? render.renderableCount], ['Skipped objects', diagnostics.browserRvmSkippedCount ?? render.skippedCount], ['Tree nodes rendered', diagnostics.browserRvmTreeNodesRendered], ['Max event-loop stall', timingText(diagnostics.browserRvmMaxEventLoopStallMs)], ['Max single batch time', timingText(diagnostics.browserRvmMaxSingleBatchMs ?? render.maxSingleBatchMs)], ['Long tasks >100 ms', diagnostics.browserRvmEventLoopStallCount], ['Binary PRIM', diagnostics.binaryPrimitiveRecordCount], ['Hierarchy groups', diagnostics.hierarchyGroupCount],
   ];
-
-  panel.innerHTML = `
-    <div class="rvm-browser-diag-grid">
-      ${rows.map(([label, value]) => diagnosticRow(label, value)).join('')}
-    </div>
-    ${diagnostics.error ? `<div class="rvm-browser-diag-warning">${escapeHtml(diagnostics.error)}</div>` : ''}
-  `;
+  panel.innerHTML = `<div class="rvm-browser-diag-grid">${rows.map(([label, value]) => diagnosticRow(label, value)).join('')}</div>${diagnostics.error ? `<div class="rvm-browser-diag-warning">${escapeHtml(diagnostics.error)}</div>` : ''}`;
 }
-
-function diagnosticRow(label, value) {
-  return `<div class="rvm-browser-diag-row"><span>${escapeHtml(label)}</span><b>${escapeHtml(value === undefined || value === null || value === '' ? '-' : value)}</b></div>`;
-}
-
-function boolText(value) {
-  return value === undefined || value === null ? '-' : (value ? 'yes' : 'no');
-}
-
-function timingText(value) {
-  const n = Number(value);
-  return Number.isFinite(n) ? `${n.toFixed(1)} ms` : '-';
-}
+function diagnosticRow(label, value) { return `<div class="rvm-browser-diag-row"><span>${escapeHtml(label)}</span><b>${escapeHtml(value === undefined || value === null || value === '' ? '-' : value)}</b></div>`; }
+function boolText(value) { return value === undefined || value === null ? '-' : (value ? 'yes' : 'no'); }
+function timingText(value) { const n = Number(value); return Number.isFinite(n) ? `${n.toFixed(1)} ms` : '-'; }
 
 async function loadDirectBrowserRvm({ root, viewer, files, rvmFile, stateBag }) {
-  const status = root.querySelector('#rvm-sb-msg');
-  const startedAt = performance.now();
-  const diagnosticsSeed = makeDiagnosticsSeed(rvmFile.name);
-  let latestDiagnostics = { ...diagnosticsSeed };
-
-  status.textContent = `Loading ${rvmFile.name} with direct RVM worker path…`;
-  renderDiagnostics(root, latestDiagnostics);
+  const status = root.querySelector('#rvm-sb-msg'); const startedAt = performance.now(); let latestDiagnostics = makeDiagnosticsSeed(rvmFile.name);
+  status.textContent = `Loading ${rvmFile.name} with direct RVM worker path…`; renderDiagnostics(root, latestDiagnostics);
   const attText = await readBestAttSidecarText(files, rvmFile.name);
-
   const payload = await loadRvmFileInBrowser(rvmFile, viewer, {
-    statusEl: status,
-    attText,
-    signal: stateBag.abortController.signal,
-    allowMainThreadParserFallback: false,
-    buildHierarchyFallback: false,
-    renderOptions: {
-      maxRenderableObjects: 6000,
-      batchSize: 64,
-      timeSliceMs: 8,
-    },
-    onProgress: (progress = {}) => {
-      if (stateBag.abortController.signal.aborted) return;
-      const next = {
-        ...latestDiagnostics,
-        browserRvmLoadState: progress.stage || latestDiagnostics.browserRvmLoadState || 'loading',
-        browserRvmWorkerLoaded: true,
-        browserRvmWorkerMessageReceived: true,
-        browserRvmProgressProcessed: progress.processed,
-        browserRvmProgressTotal: progress.total,
-        browserRvmRenderableCount: progress.renderableCount ?? latestDiagnostics.browserRvmRenderableCount,
-        browserRvmSkippedCount: progress.skippedCount ?? latestDiagnostics.browserRvmSkippedCount,
-      };
-      if (!Number.isFinite(next.browserRvmFirstGeometryMs) && Number(progress.renderableCount) > 0) {
-        next.browserRvmFirstGeometryMs = performance.now() - startedAt;
-      }
-      latestDiagnostics = next;
-      renderDiagnostics(root, latestDiagnostics);
-    },
-    onDiagnostics: (diagnostics = {}) => {
-      latestDiagnostics = {
-        ...latestDiagnostics,
-        ...diagnostics,
-        loadedJsVersion: RVM_TAB_JS_VERSION,
-        browserRvmDirectTabLoadPath: true,
-        browserRvmLegacyJsonHandlerBypassed: true,
-        browserRvmWorkerLoaded: diagnostics.browserRvmWorkerEnabled ?? latestDiagnostics.browserRvmWorkerLoaded,
-        browserRvmWorkerMessageReceived: true,
-      };
-      renderDiagnostics(root, latestDiagnostics);
-    },
+    statusEl: status, attText, signal: stateBag.abortController.signal, allowMainThreadParserFallback: false, buildHierarchyFallback: false,
+    renderOptions: { maxRenderableObjects: 6000, batchSize: 64, timeSliceMs: 8 },
+    onProgress: (progress = {}) => { if (stateBag.abortController.signal.aborted) return; const next = { ...latestDiagnostics, browserRvmLoadState: progress.stage || latestDiagnostics.browserRvmLoadState || 'loading', browserRvmWorkerLoaded: true, browserRvmWorkerMessageReceived: true, browserRvmProgressProcessed: progress.processed, browserRvmProgressTotal: progress.total, browserRvmRenderableCount: progress.renderableCount ?? latestDiagnostics.browserRvmRenderableCount, browserRvmSkippedCount: progress.skippedCount ?? latestDiagnostics.browserRvmSkippedCount }; if (!Number.isFinite(next.browserRvmFirstGeometryMs) && Number(progress.renderableCount) > 0) next.browserRvmFirstGeometryMs = performance.now() - startedAt; latestDiagnostics = next; renderDiagnostics(root, latestDiagnostics); },
+    onDiagnostics: (diagnostics = {}) => { latestDiagnostics = { ...latestDiagnostics, ...diagnostics, loadedJsVersion: RVM_TAB_JS_VERSION, browserRvmDirectTabLoadPath: true, browserRvmLegacyJsonHandlerBypassed: true, browserRvmWorkerLoaded: diagnostics.browserRvmWorkerEnabled ?? latestDiagnostics.browserRvmWorkerLoaded, browserRvmWorkerMessageReceived: true }; renderDiagnostics(root, latestDiagnostics); },
   });
-
   if (stateBag.abortController.signal.aborted) return null;
-
   const nodes = payload.manifest?.nodes || payload.manifest?.items || payload.manifest?.runtime?.nodes || [];
-  const tree = root.querySelector('#rvm-tree');
-  if (tree) {
-    tree.innerHTML = buildNodeTree(nodes, { limit: RVM_TREE_RENDER_LIMIT, recursive: false });
-    latestDiagnostics.browserRvmTreeNodesRendered = Math.min(nodes.length, RVM_TREE_RENDER_LIMIT);
-  }
-
-  const bounds = payload.browserRvmRender?.bounds || payload.manifest?.browserRvmRenderScene?.bounds || payload.gltf?.scene?.userData?.bounds;
-  if (bounds) requestAnimationFrame(() => viewer.fitProgressiveBounds?.(bounds));
-
-  root.querySelector('#rvm-placeholder')?.remove();
-  stateBag.syncSupport?.();
-  updateStatus(root, viewer, payload);
-
-  latestDiagnostics = {
-    ...latestDiagnostics,
-    ...(payload.browserRvmParser || {}),
-    loadedJsVersion: RVM_TAB_JS_VERSION,
-    browserRvmDirectTabLoadPath: true,
-    browserRvmLegacyJsonHandlerBypassed: true,
-    browserRvmWorkerLoaded: true,
-    browserRvmWorkerMessageReceived: true,
-    browserRvmTreeNodesRendered: Math.min(nodes.length, RVM_TREE_RENDER_LIMIT),
-  };
-  renderDiagnostics(root, latestDiagnostics);
-
-  const renderCount = payload.browserRvmRender?.renderableCount ?? payload.manifest?.browserRvmRenderScene?.renderableCount;
-  status.textContent = `Loaded browser RVM ${rvmFile.name}${Number.isFinite(renderCount) ? ` (${renderCount} renderable)` : ''}`;
-  return payload;
+  const tree = root.querySelector('#rvm-tree'); if (tree) { tree.innerHTML = buildNodeTree(nodes, { limit: RVM_TREE_RENDER_LIMIT, recursive: false }); latestDiagnostics.browserRvmTreeNodesRendered = Math.min(nodes.length, RVM_TREE_RENDER_LIMIT); }
+  const bounds = payload.browserRvmRender?.bounds || payload.manifest?.browserRvmRenderScene?.bounds || payload.gltf?.scene?.userData?.bounds; if (bounds) requestAnimationFrame(() => viewer.fitProgressiveBounds?.(bounds));
+  root.querySelector('#rvm-placeholder')?.remove(); stateBag.syncSupport?.(); updateStatus(root, viewer, payload);
+  latestDiagnostics = { ...latestDiagnostics, ...(payload.browserRvmParser || {}), loadedJsVersion: RVM_TAB_JS_VERSION, browserRvmDirectTabLoadPath: true, browserRvmLegacyJsonHandlerBypassed: true, browserRvmWorkerLoaded: true, browserRvmWorkerMessageReceived: true, browserRvmTreeNodesRendered: Math.min(nodes.length, RVM_TREE_RENDER_LIMIT) }; renderDiagnostics(root, latestDiagnostics);
+  const renderCount = payload.browserRvmRender?.renderableCount ?? payload.manifest?.browserRvmRenderScene?.renderableCount; status.textContent = `Loaded browser RVM ${rvmFile.name}${Number.isFinite(renderCount) ? ` (${renderCount} renderable)` : ''}`; return payload;
 }
 
-function cancelActiveLoad(stateBag) {
-  try { stateBag.abortController?.abort?.(); } catch (_) {}
-  stateBag.abortController = null;
-}
+function cancelActiveLoad(stateBag) { try { stateBag.abortController?.abort?.(); } catch (_) {} stateBag.abortController = null; }
 
 export function mountViewer3DRvmTab(container) {
   renderShell(container);
-  const root = container.querySelector('[data-rvm-viewer]');
-  const canvas = root.querySelector('#rvm-canvas');
-  const status = root.querySelector('#rvm-sb-msg');
-  const tree = root.querySelector('#rvm-tree');
+  const root = container.querySelector('[data-rvm-viewer]'); const canvas = root.querySelector('#rvm-canvas'); const status = root.querySelector('#rvm-sb-msg'); const tree = root.querySelector('#rvm-tree');
   const viewer = new RvmViewer3D(canvas, { runtimeEvents: RuntimeEvents, autoFit: true, supportSymbols: supportOptions(initialSupportScale(), false) });
-  const stateBag = { abortController: null };
-  bindToolbar(viewer, root, stateBag);
-
+  const stateBag = { abortController: null }; bindToolbar(viewer, root, stateBag);
   root.querySelector('#rvm-file-input')?.addEventListener('change', async (event) => {
-    const files = Array.from(event.target.files || []);
-    if (!files.length) return;
-
-    cancelActiveLoad(stateBag);
-    stateBag.abortController = new AbortController();
-
+    const files = Array.from(event.target.files || []); if (!files.length) return;
+    cancelActiveLoad(stateBag); stateBag.abortController = new AbortController();
     const rvmFile = files.find((file) => isLikelyRvmFileName(file?.name));
     if (rvmFile) {
-      event.preventDefault?.();
-      event.stopPropagation?.();
-      try {
-        await loadDirectBrowserRvm({ root, viewer, files, rvmFile, stateBag });
-      } catch (err) {
-        if (stateBag.abortController?.signal?.aborted || err?.name === 'AbortError') {
-          status.textContent = `Cancelled RVM load ${rvmFile.name}`;
-          return;
-        }
-        status.textContent = `RVM load failed: ${err.message || err}`;
-        renderDiagnostics(root, {
-          ...makeDiagnosticsSeed(rvmFile.name),
-          browserRvmLoadFailed: true,
-          browserRvmWorkerLoaded: false,
-          error: err.message || String(err),
-        });
-        console.error('[RVM tab] direct worker RVM load failed', err);
-      }
+      event.preventDefault?.(); event.stopPropagation?.();
+      try { await loadDirectBrowserRvm({ root, viewer, files, rvmFile, stateBag }); }
+      catch (err) { if (stateBag.abortController?.signal?.aborted || err?.name === 'AbortError') { status.textContent = `Cancelled RVM load ${rvmFile.name}`; return; } status.textContent = `RVM load failed: ${err.message || err}`; renderDiagnostics(root, { ...makeDiagnosticsSeed(rvmFile.name), browserRvmLoadFailed: true, browserRvmWorkerLoaded: false, error: err.message || String(err) }); console.error('[RVM tab] direct worker RVM load failed', err); }
       return;
     }
-
     const jsonFile = files.find((file) => isJsonOrUxmlFileName(file?.name));
-    if (!jsonFile) {
-      const onlyAtt = files.every((file) => isLikelyAttFileName(file?.name));
-      status.textContent = onlyAtt ? 'ATT sidecar selected. Select the matching RVM/REV file with it.' : 'Unsupported RVM tab file selection.';
-      return;
-    }
-
+    if (!jsonFile) { const onlyAtt = files.every((file) => isLikelyAttFileName(file?.name)); status.textContent = onlyAtt ? 'ATT sidecar selected. Select the matching RVM/REV file with it.' : 'Unsupported RVM tab file selection.'; return; }
     status.textContent = `Loading ${jsonFile.name}…`;
-    try {
-      const payload = await loadJsonOrUxmlFile(jsonFile, viewer, status, root.querySelector('#rvm-support-scale')?.value, root.querySelector('#rvm-support-labels')?.getAttribute('aria-pressed') === 'true');
-      const nodes = payload.manifest?.nodes || payload.manifest?.items || payload.manifest?.runtime?.nodes || [];
-      tree.innerHTML = buildNodeTree(nodes, { limit: JSON_TREE_RENDER_LIMIT, recursive: true });
-      status.textContent = `Loaded ${jsonFile.name}`;
-      root.querySelector('#rvm-placeholder')?.remove();
-      stateBag.syncSupport?.();
-      updateStatus(root, viewer, payload);
-    } catch (err) {
-      status.textContent = `Load failed: ${err.message}`;
-      console.error('[RVM tab] JSON/UXML load failed', err);
-    }
+    try { const payload = await loadJsonOrUxmlFile(jsonFile, viewer, status, root.querySelector('#rvm-support-scale')?.value, root.querySelector('#rvm-support-labels')?.getAttribute('aria-pressed') === 'true'); const nodes = payload.manifest?.nodes || payload.manifest?.items || payload.manifest?.runtime?.nodes || []; tree.innerHTML = buildNodeTree(nodes, { limit: JSON_TREE_RENDER_LIMIT, recursive: true }); status.textContent = `Loaded ${jsonFile.name}`; root.querySelector('#rvm-placeholder')?.remove(); stateBag.syncSupport?.(); updateStatus(root, viewer, payload); }
+    catch (err) { status.textContent = `Load failed: ${err.message}`; console.error('[RVM tab] JSON/UXML load failed', err); }
   });
-
-  tree.addEventListener('click', (event) => {
-    const li = event.target.closest?.('li[data-node-id]');
-    if (!li) return;
-    const id = li.dataset.nodeId;
-    try {
-      viewer.selection?.set?.([id]);
-      viewer.selection?.selectByCanonicalId?.(id);
-      viewer.fitSelection?.();
-      updateStatus(root, viewer);
-    } catch (err) {
-      console.warn('[RVM tab] selection failed', err);
-    }
-  });
-
-  root.querySelector('#rvm-search-input')?.addEventListener('input', (event) => {
-    const q = event.target.value.trim().toLowerCase();
-    tree.querySelectorAll('li[data-node-id]').forEach((li) => {
-      li.style.display = !q || li.textContent.toLowerCase().includes(q) ? '' : 'none';
-    });
-  });
-
-  root.querySelector('#rvm-tree-filter')?.addEventListener('input', (event) => {
-    const q = event.target.value.trim().toLowerCase();
-    tree.querySelectorAll('li[data-node-id]').forEach((li) => {
-      li.style.display = !q || li.textContent.toLowerCase().includes(q) ? '' : 'none';
-    });
-  });
-
+  tree.addEventListener('click', (event) => { const li = event.target.closest?.('li[data-node-id]'); if (!li) return; const id = li.dataset.nodeId; try { viewer.selection?.set?.([id]); viewer.selection?.selectByCanonicalId?.(id); viewer.fitSelection?.(); updateStatus(root, viewer); } catch (err) { console.warn('[RVM tab] selection failed', err); } });
+  const bindFilter = (selector) => root.querySelector(selector)?.addEventListener('input', (event) => { const q = event.target.value.trim().toLowerCase(); tree.querySelectorAll('li[data-node-id]').forEach((li) => { li.style.display = !q || li.textContent.toLowerCase().includes(q) ? '' : 'none'; }); });
+  bindFilter('#rvm-search-input'); bindFilter('#rvm-tree-filter');
   window.__3D_RVM_VIEWER__ = viewer;
   requestAnimationFrame(() => updateStatus(root, viewer));
-  return () => {
-    cancelActiveLoad(stateBag);
-    viewer.dispose?.();
-  };
+  return () => { cancelActiveLoad(stateBag); viewer.dispose?.(); };
 }
