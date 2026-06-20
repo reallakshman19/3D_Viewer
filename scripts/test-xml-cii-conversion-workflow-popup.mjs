@@ -22,6 +22,8 @@ const legacyAdapterPath = 'viewer/tabs/model-converters/legacy-adapter.js';
 const canonicalTabPath = 'viewer/tabs/model-converters/ModelConvertersTab.js';
 const branchSyncPath = 'viewer/tabs/model-converters/xml-cii-branch-sample-sync.js';
 const previewRendererPath = 'viewer/tabs/model-converters/converters/xmltocii2019_helper/preview-renderer.js';
+const weightMatchModelPath = 'viewer/converters/xml-cii2019-core/weight-match-model.js';
+const publicIndexPath = 'viewer/tabs/model-converters/index.js';
 const tabPath = 'viewer/tabs/model-converters-tab.js';
 const tabCssPath = 'viewer/tabs/model-converters-tab.css';
 const popup = read(popupPath);
@@ -31,6 +33,8 @@ const legacyAdapter = read(legacyAdapterPath);
 const canonicalTab = read(canonicalTabPath);
 const branchSync = read(branchSyncPath);
 const previewRenderer = read(previewRendererPath);
+const weightMatchModel = read(weightMatchModelPath);
+const publicIndex = read(publicIndexPath);
 const tab = read(tabPath);
 const tabCss = read(tabCssPath);
 
@@ -39,7 +43,7 @@ assert(fs.existsSync(path.join(root, nativePanelsPath)), 'popup-native panel mod
 assert(fs.existsSync(path.join(root, workflowShellPath)), 'canonical WorkflowShell module must exist');
 assert(fs.existsSync(path.join(root, branchSyncPath)), 'branch sample sync module must exist');
 assert(popup.includes("import { WorkflowModal } from './shared/WorkflowModal.js'"), 'popup must reuse existing WorkflowModal');
-assert(popup.includes("import { renderXmlCiiPopupNativePhase } from './xml-cii-popup-native-panels.js'"), 'popup must render popup-native phase bodies');
+assert(/import \{ renderXmlCiiPopupNativePhase \} from '\.\/xml-cii-popup-native-panels\.js(?:\?v=[^']+)?'/.test(popup), 'popup must render popup-native phase bodies');
 assert(popup.includes("import { XML_CII_WORKFLOW_PHASES, normalizeWorkflowPhaseId } from './WorkflowShell.js'"), 'popup must use canonical XML CII phase registry');
 assert(tab.includes('installXmlCiiConversionWorkflowPopup'), 'model-converters-tab must expose workflow popup installer');
 
@@ -90,6 +94,11 @@ assert(previewRenderer.includes('_looksLikeNpsToken(shifted.fourth)'), 'Preview 
 assert(previewRenderer.includes('_isLikelyMaterialToken(value)'), 'Preview must not treat material token CS as piping class fallback');
 assert(previewRenderer.includes('^S\\d+'), 'Preview shifted-branch guard must recognize S-prefixed line keys');
 
+assert(weightMatchModel.includes('computeLineNoKey'), 'Weight Match must match line-list rows using configured field maps');
+assert(weightMatchModel.includes('ratingOverrideForBranch'), 'Weight Match must explicitly read manual rating overrides');
+assert(weightMatchModel.includes("config?.overrides?.processData?.[key]?.rating"), 'Weight Match must accept rating saved under processData overrides');
+assert(weightMatchModel.includes('lineKey: branchContext.lineKey'), 'Weight Match rows must carry the resolved line key for diagnostics/debugging');
+
 assert(!popup.includes('mountExistingPanel'), 'popup must not move live DOM panels by portal');
 assert(!popup.includes('new MutationObserver'), 'popup must not install MutationObserver');
 assert(popup.includes("document.addEventListener('click', interceptRun, true)"), 'popup must intercept XML->CII run click through one capture listener');
@@ -112,11 +121,14 @@ assert(tabCss.includes('span:not(.model-converters-workflow-run-status-icon)'), 
 
 const popupBridgeImport = popup.match(/legacy-adapter\.js\?v=([^'"]+)/)?.[1] || '';
 const tabBridgeImport = canonicalTab.match(/legacy-adapter\.js\?v=([^'"]+)/)?.[1] || '';
+const publicTabImport = publicIndex.match(/ModelConvertersTab\.js\?v=([^'"]+)/)?.[1] || '';
 assert(popupBridgeImport && popupBridgeImport === tabBridgeImport, 'popup and ModelConvertersTab must import the same legacy-adapter module URL');
+assert(publicTabImport && canonicalTab.includes(`legacy-adapter.js?v=${popupBridgeImport}`), 'public index and canonical tab cache keys must be bumped with rich workflow fixes');
 
 console.log('✅ XML CII phase-tab workflow popup static test passed', {
   topLevelTabs: 8,
   workflowMode: 'phase-tabs',
   branchNameSync: 'linelist.sampleBranchName',
   shiftedBranchPreview: 'lineKey/size/class guarded',
+  weightMatchRating: 'manual override propagated',
 });
