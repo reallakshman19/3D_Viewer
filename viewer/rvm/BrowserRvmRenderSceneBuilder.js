@@ -192,7 +192,7 @@ export function buildInstructionObject(instruction = {}, options = {}, context =
     child.userData = {
       ...(child.userData || {}),
       parentBrowserRvmRenderPrimitive: rawPrimitive,
-      effectiveRenderPrimitive,
+      effectiveRenderPrimitive: effectivePrimitive,
       renderQuality: object.userData.renderQuality,
       sourcePath: object.userData.sourcePath,
       displayName,
