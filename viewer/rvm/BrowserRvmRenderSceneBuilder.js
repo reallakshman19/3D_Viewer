@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { collectBrowserRvmRenderInstructions } from './BrowserRvmRenderContractAdapter.js';
 
-export const BROWSER_RVM_RENDER_SCENE_SCHEMA = 'rvm-browser-render-scene/v2';
+export const BROWSER_RVM_RENDER_SCENE_SCHEMA = 'rvm-browser-render-scene/v3';
 
 const DEFAULT_COLOR_BY_PRIMITIVE = Object.freeze({
   CYLINDER_BBOX: 0x3d74c5,
@@ -45,7 +45,8 @@ export function buildBrowserRvmRenderSceneFromInstructions(instructions = [], op
     skippedCount: 0,
     primitiveCounts: {},
     skippedReasons: {},
-    attCounts: { enriched: 0, plain: 0 }
+    attCounts: { enriched: 0, plain: 0 },
+    bounds: emptySceneBounds()
   };
 
   for (const instruction of Array.isArray(instructions) ? instructions : []) {
@@ -62,11 +63,14 @@ export function buildBrowserRvmRenderSceneFromInstructions(instructions = [], op
     group.add(mesh);
   }
 
+  diagnostics.bounds = computeSceneBounds(group);
   group.userData.diagnostics = diagnostics;
+  group.userData.bounds = diagnostics.bounds;
   return {
     schemaVersion: BROWSER_RVM_RENDER_SCENE_SCHEMA,
     scene: group,
     diagnostics,
+    bounds: diagnostics.bounds,
     instructionSet: options.instructionSet || null
   };
 }
@@ -255,6 +259,48 @@ function valveLikePlaceholder(center, axis, length, radius, material) {
     if (barrel) group.add(barrel);
   }
   return group;
+}
+
+function computeSceneBounds(group) {
+  if (!group || !group.children?.length) return emptySceneBounds();
+  group.updateMatrixWorld?.(true);
+  const box = new THREE.Box3().setFromObject(group);
+  if (box.isEmpty()) return emptySceneBounds();
+  const center = new THREE.Vector3();
+  const size = new THREE.Vector3();
+  box.getCenter(center);
+  box.getSize(size);
+  return {
+    hasBounds: true,
+    min: vectorToPlain(box.min),
+    max: vectorToPlain(box.max),
+    center: vectorToPlain(center),
+    size: vectorToPlain(size),
+    radius: Math.max(size.length() * 0.5, 0)
+  };
+}
+
+function emptySceneBounds() {
+  return {
+    hasBounds: false,
+    min: null,
+    max: null,
+    center: null,
+    size: null,
+    radius: 0
+  };
+}
+
+function vectorToPlain(vector) {
+  return {
+    x: finiteOrZero(vector.x),
+    y: finiteOrZero(vector.y),
+    z: finiteOrZero(vector.z)
+  };
+}
+
+function finiteOrZero(value) {
+  return Number.isFinite(value) ? value : 0;
 }
 
 function perpendicularTo(dir) {
