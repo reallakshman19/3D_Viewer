@@ -7,8 +7,13 @@ async function run() {
 
   assert.match(
     bridgeSource,
-    /import\s+\{\s*isLikelyRvmFileName,\s*parseRvmArrayBuffer\s*\}\s+from\s+['"]\.\.\/rvm\/BrowserRvmParser\.js['"]/,
-    'RVM tab bridge must import the browser parser fallback.'
+    /import\s+\{\s*isLikelyRvmFileName\s*\}\s+from\s+['"]\.\.\/rvm\/BrowserRvmParser\.js['"]/,
+    'RVM tab bridge must import filename detection from the browser parser fallback.'
+  );
+  assert.match(
+    bridgeSource,
+    /import\s+\{\s*parseRvmArrayBuffer\s*\}\s+from\s+['"]\.\.\/rvm\/BrowserRvmHierarchyParser\.js['"]/,
+    'RVM tab bridge must use the grouped browser hierarchy parser, not the older flat parser output.'
   );
   assert.match(
     bridgeSource,
@@ -44,6 +49,37 @@ async function run() {
     bridgeSource,
     /cacheRvmAttSidecars\(input\.files\)/,
     'RVM tab change handling must cache ATT sidecars before RVM parsing reads the file.'
+  );
+
+  assert.match(
+    bridgeSource,
+    /const\s+RVM_BROWSER_PARSE_DIAGNOSTICS\s*=\s*Symbol\.for\('pcf-glb-rvm-browser-parse-diagnostics-v1'\)/,
+    'Browser RVM parser diagnostics must be stored behind a stable symbol.'
+  );
+  assert.match(
+    bridgeSource,
+    /function\s+setLastBrowserRvmDiagnostics\(/,
+    'Browser RVM parser diagnostics must be captured after parse.'
+  );
+  assert.match(
+    bridgeSource,
+    /new\s+CustomEvent\('rvm-browser-parse-diagnostics'/,
+    'Browser RVM parser diagnostics must be emitted as a DOM event for UI refresh.'
+  );
+  assert.match(
+    bridgeSource,
+    /id\s*=\s*'rvm-browser-parse-diagnostics'/,
+    'RVM tab must receive a Browser RVM Parse diagnostics panel.'
+  );
+  assert.match(
+    bridgeSource,
+    /Binary PRIM[\s\S]*binaryPrimitiveRecordCount/,
+    'Browser RVM diagnostics panel must expose decoded binary PRIM counts.'
+  );
+  assert.match(
+    bridgeSource,
+    /Hierarchy groups[\s\S]*hierarchyGroupCount/,
+    'Browser RVM diagnostics panel must expose owner hierarchy group counts.'
   );
 
   assert.match(
