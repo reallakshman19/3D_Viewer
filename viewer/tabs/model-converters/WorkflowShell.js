@@ -1,3 +1,5 @@
+import './converters/xmltocii2019_helper/override-tab-preview-mirror.js?v=20260620-preview-override-mirror-1';
+
 /**
  * WorkflowShell — canonical XML→CII(2019) workflow phase registry.
  *
@@ -37,7 +39,7 @@ export const XML_CII_WORKFLOW_PHASES = Object.freeze([
   {
     id: 'preview',
     label: '3 Preview',
-    summary: 'Dry-run enrichment preview per branch \u2014 inspect and override approximate matches.',
+    summary: 'Dry-run enrichment preview per branch — inspect and override approximate matches.',
     state: 'Current',
   },
   {
@@ -55,7 +57,7 @@ export const XML_CII_WORKFLOW_PHASES = Object.freeze([
   {
     id: 'run',
     label: '5 Run',
-    summary: 'Run the conversion \u2014 generates enriched XML and final CII output.',
+    summary: 'Run the conversion — generates enriched XML and final CII output.',
     state: 'Current',
   },
   {
