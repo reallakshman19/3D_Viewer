@@ -14,6 +14,7 @@ async function run() {
   const dishTessellationSource = await readFile(new URL('../../../rvm/BrowserRvmDishTessellationRuntimePatch.js', import.meta.url), 'utf8');
   const remainingPrimitiveSource = await readFile(new URL('../../../rvm/BrowserRvmRemainingPrimitiveRuntimePatch.js', import.meta.url), 'utf8');
   const torusParitySource = await readFile(new URL('../../../rvm/BrowserRvmTorusParityRuntimePatch.js', import.meta.url), 'utf8');
+  const snoutParitySource = await readFile(new URL('../../../rvm/BrowserRvmSnoutParityRuntimePatch.js', import.meta.url), 'utf8');
   const workerSource = await readFile(new URL('../../../rvm/browser-rvm-worker.js', import.meta.url), 'utf8');
   const filterSource = await readFile(new URL('../../../rvm/BrowserRvmInstructionFilterV2.js', import.meta.url), 'utf8');
   const renderContractSource = await readFile(new URL('../../../rvm/BrowserRvmRenderContractAdapter.js', import.meta.url), 'utf8');
@@ -98,8 +99,9 @@ async function run() {
   assert.match(rendererSource, /BrowserRvmDishTessellationRuntimePatch\.js\?v=20260620-rvm-support-assembly-dish-1/, 'Renderer must install dish tessellation patch.');
   assert.match(rendererSource, /BrowserRvmRemainingPrimitiveRuntimePatch\.js\?v=20260620-rvm-facetgroup-1/, 'Renderer must install facet group primitive patch.');
   assert.match(rendererSource, /BrowserRvmTorusParityRuntimePatch\.js\?v=20260620-rvm-torus-parity-1/, 'Renderer must install torus parity patch.');
+  assert.match(rendererSource, /BrowserRvmSnoutParityRuntimePatch\.js\?v=20260620-rvm-snout-parity-1/, 'Renderer must install snout parity patch.');
   assert.match(rendererSource, /RvmMaterialModeBridge\.js\?v=20260620-rvm-remaining-material-modes-1/, 'Renderer must load material mode controls.');
-  assert.match(rendererSource, /viewer3d-rvm-tab\.js\?v=20260620-rvm-torus-parity-1/, 'Renderer must load the torus parity tab cache key.');
+  assert.match(rendererSource, /viewer3d-rvm-tab\.js\?v=20260620-rvm-snout-parity-1/, 'Renderer must load the snout parity tab cache key.');
   assert.match(hierarchySelectionBridgeSource, /Fit Selection[\s\S]*hide-selection[\s\S]*show-hidden/,'Hierarchy selection bridge must expose Fit Selection, Hide, and Show Hidden.');
   assert.match(interactionPatchSource, /keydown[\s\S]*Escape[\s\S]*handleEscape/, 'Toolbar patch must implement robust Esc behavior.');
   assert.match(interactionPatchSource, /dispatchAction[\s\S]*VIEW_HIDE_SELECTION[\s\S]*VIEW_SHOW_HIDDEN/, 'Toolbar patch must implement Hide and Show Hidden actions.');
@@ -129,16 +131,21 @@ async function run() {
   assert.match(torusParitySource, /torusCappedEndCount[\s\S]*torusCapTriangleCount/, 'Torus parity patch must render and diagnose capped ends.');
   assert.match(torusParitySource, /RVM_NATIVE_CIRCULAR_TORUS_CAPPED[\s\S]*RVM_NATIVE_RECTANGULAR_TORUS_CAPPED/, 'Torus parity patch must emit capped torus primitive names.');
   assert.match(torusParitySource, /__PCF_GLB_RVM_TORUS_PARITY_DIAGNOSTICS__/, 'Torus parity patch must publish global diagnostics.');
+  assert.match(snoutParitySource, /browser-rvm-snout-parity\/v1-cpp-capped-snout/, 'Snout parity patch must expose capped snout schema.');
+  assert.match(snoutParitySource, /RVM_NATIVE_SNOUT_CAPPED[\s\S]*native-cpp-capped-snout/, 'Snout parity patch must emit capped snout primitive and render quality.');
+  assert.match(snoutParitySource, /snoutTessellatedCount[\s\S]*snoutCappedEndCount[\s\S]*snoutCapTriangleCount/, 'Snout parity patch must expose tessellation diagnostics.');
+  assert.match(snoutParitySource, /bottomShearX[\s\S]*topShearY[\s\S]*matrix4FromCppMat3x4/, 'Snout parity patch must use shear and C++ Mat3x4 layout.');
+  assert.match(snoutParitySource, /__PCF_GLB_RVM_SNOUT_PARITY_DIAGNOSTICS__/, 'Snout parity patch must publish global diagnostics.');
   assert.match(materialModeSource, /Color[\s\S]*Type[\s\S]*Source[\s\S]*Mono/, 'Material mode bridge must expose color controls.');
   assert.match(materialModeSource, /browser-rvm-material-mode\/v1[\s\S]*__PCF_GLB_RVM_MATERIAL_MODE_DIAGNOSTICS__/, 'Material mode bridge must publish diagnostics.');
   assert.match(materialModeSource, /TYPE_COLORS[\s\S]*classifyObjectType[\s\S]*restoreOriginalMaterial/, 'Material mode bridge must color by type and restore source materials.');
   assert.match(nativeDiagnosticsBridgeSource, /Native Tessellation[\s\S]*Native On[\s\S]*Native Off[\s\S]*Re-run/, 'Native diagnostics bridge must expose controls.');
 
   assert.doesNotMatch(entrypointSource, /RvmBrowserRvmWorkerFirstBridge\.js/, 'The RVM freeze fix must not depend on an optional startup side-effect bridge.');
-  assert.match(entrypointSource, /core\/app\.js\?v=20260620-rvm-torus-parity-1/, 'App shell cache key must include the torus parity version.');
-  assert.match(indexHtml, /main(?:-[A-Za-z0-9_-]+)?\.js\?v=20260620-rvm-torus-parity-1/, 'GitHub Pages entrypoint must bump the app shell cache key.');
+  assert.match(entrypointSource, /core\/app\.js\?v=20260620-rvm-snout-parity-1/, 'App shell cache key must include the snout parity version.');
+  assert.match(indexHtml, /main(?:-[A-Za-z0-9_-]+)?\.js\?v=20260620-rvm-snout-parity-1/, 'GitHub Pages entrypoint must bump the app shell cache key.');
 
-  console.log('Browser RVM torus parity contract test passed');
+  console.log('Browser RVM snout parity contract test passed');
 }
 
 run();
