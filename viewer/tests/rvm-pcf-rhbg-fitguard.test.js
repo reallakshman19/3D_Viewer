@@ -23,12 +23,14 @@ const workerSource = await fs.readFile(new URL('../rvm/browser-rvm-worker.js', i
 const transformHierarchySource = await fs.readFile(new URL('../rvm/BrowserRvmHierarchyTransformParser.js', import.meta.url), 'utf8');
 const filterSource = await fs.readFile(new URL('../rvm/BrowserRvmInstructionFilterV2.js', import.meta.url), 'utf8');
 
-check(patchSource.includes('pcf-glb-rvm-progressive-model-root-patch-v2'), 'fit patch v2 present');
+check(patchSource.includes('pcf-glb-rvm-progressive-model-root-patch-v3'), 'fit patch v3 present');
+check(patchSource.includes('rendered-world-bounds'), 'progressive fit uses rendered world bounds');
+check(patchSource.includes('renderedBoundsUsed'), 'fit diagnostics expose rendered bounds usage');
 check(patchSource.includes('resolveRobustProgressiveFit'), 'robust progressive fit present');
 check(patchSource.includes('fitBoxWithoutFullSceneTraversal'), 'final fit avoids full traversal');
 check(!patchSource.includes('this._fitBox(box)'), 'final fit avoids legacy fit box');
-check(rendererSource.includes('RvmProgressiveModelRootPatch.js?v=20260620-rvm-rhbg-fitguard-1'), 'renderer loads fit guard patch');
-check(rendererSource.includes('viewer3d-rvm-tab.js?v=20260620-rvm-scale-safe-1'), 'renderer loads scale-safe tab');
+check(rendererSource.includes('RvmProgressiveModelRootPatch.js?v=20260620-rvm-final-fit-1'), 'renderer loads final-fit patch');
+check(rendererSource.includes('viewer3d-rvm-tab.js?v=20260620-rvm-final-fit-1'), 'renderer loads final-fit tab');
 check(appSource.includes('viewer3d-rvm-tab-renderer.js?v=20260620-rvm-scale-safe-1'), 'app loads scale-safe renderer');
 check(indexSource.includes('main-rhbg-fitguard.js?v=20260620-rvm-scale-safe-1'), 'html loads scale-safe entry');
 check(entrySource.includes('core/app.js?v=20260620-rvm-scale-safe-1'), 'entry loads scale-safe app');
