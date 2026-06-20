@@ -1,5 +1,6 @@
 import { decodeTextUtf8, encodeTextUtf8, baseNameWithoutExtension } from '../core/output-utils.js';
-import { collectXmlCiiZeroRigidWeightIssues, applyXmlCiiRigidWeightOverrides } from '../../../converters/xml-cii2019-core/weight-match-model.js?v=20260620-rating-override-1';
+import { collectXmlCiiZeroRigidWeightIssues, applyXmlCiiRigidWeightOverrides } from '../../../converters/xml-cii2019-core/weight-match-model.js?v=20260620-weight-fallback-1';
+import { applyXmlCiiFlangeWeightFallbackToIssues } from '../../../converters/xml-cii2019-core/flange-weight-fallback.js?v=20260620-flange-fallback-1';
 import { buildXmlCiiNodeResolverIndex } from '../../../converters/xml-cii2019-core/sideload-resolver.js';
 import { resolveManualRestraintRows } from '../../../converters/xml-cii2019-core/sideload-restraints.js';
 import { mergeXmlCiiMatchedFacts, matchedFactsFromEnrichmentDiagnostics } from '../../../converters/xml-cii2019-core/sideload-ledger.js';
@@ -225,7 +226,10 @@ export async function run(context) {
   );
   enriched.config = mergeRuntimeOverridesIntoConfig(enriched.config, liveSupportConfig);
   const rigidReviewLogLines = [];
-  const rigidWeightIssues = collectXmlCiiZeroRigidWeightIssues(enriched.xmlText, stagedJsonText, enriched.config);
+  const rigidWeightIssues = applyXmlCiiFlangeWeightFallbackToIssues(
+    collectXmlCiiZeroRigidWeightIssues(enriched.xmlText, stagedJsonText, enriched.config),
+    enriched.config,
+  );
 
   if (rigidWeightIssues.length > 0 && typeof runValues.openXmlCiiZeroRigidWeightPopup === 'function') {
     context.setStatus(`Review needed: ${rigidWeightIssues.length} rigid weight(s) are zero.`, 'running');
