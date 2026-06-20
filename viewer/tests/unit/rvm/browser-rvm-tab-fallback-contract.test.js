@@ -2,120 +2,45 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
 async function run() {
-  const bridgeSource = await readFile(new URL('../../../rvm-viewer/RvmSupportIndexAttributeBridge.js', import.meta.url), 'utf8');
+  const supportBridgeSource = await readFile(new URL('../../../rvm-viewer/RvmSupportIndexAttributeBridge.js', import.meta.url), 'utf8');
   const tabSource = await readFile(new URL('../../../tabs/viewer3d-rvm-tab.js', import.meta.url), 'utf8');
 
   assert.match(
-    bridgeSource,
-    /import\s+\{\s*isLikelyRvmFileName\s*\}\s+from\s+['"]\.\.\/rvm\/BrowserRvmParser\.js['"]/,
-    'RVM tab bridge must import filename detection from the browser parser fallback.'
+    supportBridgeSource,
+    /export\s+function\s+bridgeRvmIndexAttributesToRenderObjects\(/,
+    'Support index bridge must keep attribute enrichment for JSON/UXML/index-backed scenes.'
   );
   assert.match(
-    bridgeSource,
-    /import\s+\{\s*parseRvmArrayBuffer\s*\}\s+from\s+['"]\.\.\/rvm\/BrowserRvmHierarchyParser\.js['"]/,
-    'RVM tab bridge must use the grouped browser hierarchy parser, not the older flat parser output.'
+    supportBridgeSource,
+    /export\s+function\s+installRvmSupportIndexAttributeBridge\(/,
+    'Support index bridge must keep the setModel support-attribute merge hook.'
   );
   assert.match(
-    bridgeSource,
-    /import\s+\{\s*loadRvmFileInBrowser\s*\}\s+from\s+['"]\.\.\/rvm\/BrowserRvmLoadBridge\.js['"]/,
-    'RVM tab bridge must route real .rvm/.rev tab loads through the render-scene browser load bridge.'
+    supportBridgeSource,
+    /skippedProgressiveRvm:\s*true/,
+    'Support index bridge must not traverse progressive browser RVM scenes during first mount.'
   );
   assert.match(
-    bridgeSource,
-    /proto\.text\s*=\s*async\s+function\s+patchedRvmFileText/,
-    'RVM tab bridge must keep the legacy .rvm/.rev file.text interception as a defensive fallback.'
-  );
-  assert.match(
-    bridgeSource,
-    /isLikelyRvmFileName\(this\?\.name\)/,
-    'RVM file interception must be filename-scoped to .rvm/.rev.'
-  );
-  assert.match(
-    bridgeSource,
-    /const\s+attText\s*=\s*await\s+readCachedAttSidecarText\(this\.name\)/,
-    'RVM file interception must pass a same-basename ATT sidecar when the user selects one.'
-  );
-  assert.match(
-    bridgeSource,
-    /parseRvmArrayBuffer\(arrayBuffer,\s*\{\s*fileName:\s*this\.name,\s*attText\s*\}\)/,
-    'RVM files must be parsed from ArrayBuffer with optional ATT sidecar text, not text-decoded binary.'
-  );
-  assert.match(
-    bridgeSource,
-    /function\s+handleDirectBrowserRvmFileInputChange\(/,
-    'RVM tab bridge must directly intercept selected .rvm/.rev files before the JSON/UXML tab loader runs.'
-  );
-  assert.match(
-    bridgeSource,
-    /event\?\.stopImmediatePropagation\?\.\(\)/,
-    'Direct browser RVM tab loading must stop the stale JSON.parse change handler for .rvm/.rev files.'
-  );
-  assert.match(
-    bridgeSource,
-    /loadRvmFileInBrowser\(rvmFile,\s*viewer,\s*\{\s*statusEl:\s*status,\s*attText\s*\}\)/,
-    'Direct RVM tab loading must use the render-scene browser fallback bridge with matched ATT sidecar text.'
-  );
-  assert.match(
-    bridgeSource,
-    /function\s+readBestAttSidecarText\(files,\s*rvmFileName\)/,
-    'RVM tab direct load must pair a same-basename ATT from the selected bundle before using cached sidecars.'
-  );
-  assert.match(
-    bridgeSource,
-    /sidecarKey\(file\.name\)\s*===\s*rvmKey/,
-    'ATT pairing must be same-basename, not any arbitrary ATT file in a multi-file selection.'
-  );
-  assert.match(
-    bridgeSource,
-    /input\.setAttribute\('accept',\s*'\.json,\.uxml,\.uxml\.json,\.rvm,\.rev,\.att'\)/,
-    'RVM tab bridge must keep a defensive input accept patch for stale shells.'
-  );
-  assert.match(
-    bridgeSource,
-    /input\.setAttribute\('multiple',\s*'multiple'\)/,
-    'RVM tab bridge must allow selecting RVM and ATT together even for stale shells.'
-  );
-  assert.match(
-    bridgeSource,
-    /cacheRvmAttSidecars\(input\.files\)/,
-    'RVM tab change handling must cache ATT sidecars before RVM parsing reads the file.'
+    supportBridgeSource,
+    /RvmViewer3D\.js\?v=20260620-rvm-direct-tab-1/,
+    'Support index bridge cache key must match the direct RVM tab viewer cache key.'
   );
 
-  assert.match(
-    bridgeSource,
-    /const\s+RVM_BROWSER_PARSE_DIAGNOSTICS\s*=\s*Symbol\.for\('pcf-glb-rvm-browser-parse-diagnostics-v1'\)/,
-    'Browser RVM parser diagnostics must be stored behind a stable symbol.'
+  assert.doesNotMatch(
+    supportBridgeSource,
+    /FileCtor|proto\.text|patchedRvmFileText|parseRvmArrayBuffer|loadRvmFileInBrowser|isLikelyRvmFileName/,
+    'Support index bridge must not patch File.text or parse/load RVM files.'
   );
-  assert.match(
-    bridgeSource,
-    /function\s+setLastBrowserRvmDiagnostics\(/,
-    'Browser RVM parser diagnostics must be captured after parse.'
-  );
-  assert.match(
-    bridgeSource,
-    /new\s+CustomEvent\('rvm-browser-parse-diagnostics'/,
-    'Browser RVM parser diagnostics must be emitted as a DOM event for UI refresh.'
-  );
-  assert.match(
-    bridgeSource,
-    /id\s*=\s*'rvm-browser-parse-diagnostics'/,
-    'RVM tab must receive a Browser RVM Parse diagnostics panel.'
-  );
-  assert.match(
-    bridgeSource,
-    /Binary PRIM[\s\S]*binaryPrimitiveRecordCount/,
-    'Browser RVM diagnostics panel must expose decoded binary PRIM counts.'
-  );
-  assert.match(
-    bridgeSource,
-    /Hierarchy groups[\s\S]*hierarchyGroupCount/,
-    'Browser RVM diagnostics panel must expose owner hierarchy group counts.'
+  assert.doesNotMatch(
+    supportBridgeSource,
+    /patchRvmTabDom|addEventListener\(['"]change['"]|stopImmediatePropagation|installBrowserRvmTabFileFallback|installBrowserRvmTabDomPatch/,
+    'Support index bridge must not install DOM/file-input interception side effects.'
   );
 
   assert.match(
     tabSource,
     /title="Load RVM \/ REV \/ ATT \/ JSON \/ UXML"/,
-    'RVM tab static source must advertise RVM / REV / ATT / JSON / UXML without relying on runtime DOM patching.'
+    'RVM tab static source must advertise RVM / REV / ATT / JSON / UXML.'
   );
   assert.match(
     tabSource,
@@ -124,8 +49,8 @@ async function run() {
   );
   assert.match(
     tabSource,
-    /data-browser-rvm-fallback="true"[^>]+data-browser-rvm-att-sidecar="true"/,
-    'RVM tab static input must expose browser fallback and ATT sidecar markers.'
+    /data-rvm-direct-worker-load="true"/,
+    'RVM tab input must expose the direct worker load marker.'
   );
   assert.match(
     tabSource,
@@ -144,12 +69,42 @@ async function run() {
   );
 
   assert.match(
-    bridgeSource,
-    /installBrowserRvmTabFileFallback\(\);[\s\S]*installBrowserRvmTabDomPatch\(\);[\s\S]*installRvmSupportIndexAttributeBridge\(\);/,
-    'Browser RVM fallback installers must run when the side-effect bridge is imported by the RVM tab.'
+    tabSource,
+    /import\s+\{\s*loadRvmFileInBrowser\s*\}\s+from\s+['"]\.\.\/rvm\/BrowserRvmLoadBridge\.js\?v=20260620-rvm-direct-tab-1['"]/,
+    'The actual RVM tab must import the worker-first load bridge directly.'
+  );
+  assert.match(
+    tabSource,
+    /import\s+['"]\.\.\/rvm-viewer\/RvmSupportIndexAttributeBridge\.js\?v=20260620-rvm-direct-tab-1['"]/,
+    'The tab must not import a stale cached support bridge URL.'
+  );
+  assert.match(
+    tabSource,
+    /const\s+rvmFile\s*=\s*files\.find\(\(file\)\s*=>\s*isLikelyRvmFileName\(file\?\.name\)\)/,
+    'The actual tab change handler must branch explicitly for .rvm/.rev files.'
+  );
+  assert.match(
+    tabSource,
+    /await\s+loadDirectBrowserRvm\(\{\s*root,\s*viewer,\s*files,\s*rvmFile,\s*stateBag\s*\}\)/,
+    'The .rvm/.rev branch must call the direct worker load path.'
+  );
+  assert.match(
+    tabSource,
+    /allowMainThreadParserFallback:\s*false[\s\S]*buildHierarchyFallback:\s*false/,
+    'The direct RVM path must forbid large main-thread fallback and old hierarchy fallback.'
   );
 
-  console.log('Browser RVM tab fallback contract test passed');
+  const rvmBranchStart = tabSource.indexOf('if (rvmFile)');
+  const jsonBranchStart = tabSource.indexOf('const jsonFile', rvmBranchStart);
+  assert.ok(rvmBranchStart > 0 && jsonBranchStart > rvmBranchStart, 'The direct RVM branch must be before JSON/UXML handling.');
+  const rvmBranch = tabSource.slice(rvmBranchStart, jsonBranchStart);
+  assert.doesNotMatch(
+    rvmBranch,
+    /loadJsonOrUxmlFile|JSON\.parse|\.text\(\)/,
+    'The .rvm/.rev path must never call the JSON/UXML text loader.'
+  );
+
+  console.log('Browser RVM direct tab contract test passed');
 }
 
 run();
