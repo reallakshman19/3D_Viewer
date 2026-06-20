@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 
-const BRIDGE_VERSION = 'rvm-hierarchy-selection-bridge/v1';
+const BRIDGE_VERSION = 'rvm-hierarchy-selection-bridge/v2-fit-hide-css';
 const ATTACH_FLAG = 'rvmHierarchySelectionBridge';
 
 export function installRvmHierarchySelectionBridge() {
@@ -37,10 +37,21 @@ function bindRoot(root) {
     if (!action) return;
     const viewer = globalThis.__3D_RVM_VIEWER__;
     if (!viewer) return;
-    if (action === 'fit-selection') fitCurrentSelection(viewer);
+    const api = globalThis.__PCF_GLB_RVM_INTERACTION__;
+    if (action === 'fit-selection') {
+      if (!api?.fitSelection?.()) fitCurrentSelection(viewer);
+    }
+    if (action === 'hide-selection') {
+      if (!api?.hideSelection?.()) hideCurrentSelection(viewer, root);
+    }
+    if (action === 'show-hidden') {
+      if (!api?.showHidden?.()) showHiddenObjects(viewer, root);
+    }
     if (action === 'fit-all') viewer.fitProgressiveBounds?.(viewer._progressiveModelBounds || viewer.modelGroup?.children?.[0]?.userData?.bounds || null, { force: true });
     if (action === 'clear-selection') {
+      api?.clearSelection?.();
       viewer.selection?.clearSelection?.();
+      viewer._rvmCanvasSelectedMeshes = [];
       root.querySelectorAll('#rvm-tree li.is-selected').forEach((row) => row.classList.remove('is-selected'));
       props.innerHTML = '<div class="rvm-empty-state">No object selected.</div>';
       updateSelectionChip(root, 0);
@@ -59,12 +70,18 @@ function handleTreeSelection(root, li) {
     return;
   }
   const matches = collectMatches(viewer, id, label);
-  const renderIds = unique(matches.map((obj) => renderIdFor(obj)).filter(Boolean));
-  try {
-    viewer.selection?.clearSelection?.();
-    if (renderIds.length) viewer.selection?.selectCanonicalIds?.(renderIds);
-  } catch (error) {
-    console.warn('[RVM hierarchy bridge] selection failed', error);
+  const api = globalThis.__PCF_GLB_RVM_INTERACTION__;
+  if (matches.length && api?.setSelectionFromObjects) {
+    api.setSelectionFromObjects(matches, { sourceObject: matches[0] });
+  } else {
+    const renderIds = unique(matches.map((obj) => renderIdFor(obj)).filter(Boolean));
+    try {
+      viewer.selection?.clearSelection?.();
+      viewer._rvmCanvasSelectedMeshes = matches;
+      if (renderIds.length) viewer.selection?.selectCanonicalIds?.(renderIds);
+    } catch (error) {
+      console.warn('[RVM hierarchy bridge] selection failed', error);
+    }
   }
   fitObjects(viewer, matches);
   renderDetails(root, { id, label, matches });
@@ -88,11 +105,14 @@ function collectMatches(viewer, id, label) {
 
 function aliasesFor(obj) {
   const data = obj.userData || {};
-  const attrs = data.browserRvmAttributes || data.attributes || {};
+  const props = data.browserRvmProperties || {};
+  const attrs = data.browserRvmAttributes || data.attributes || props.attributes || {};
   return [
     data.sourcePath,
     data.sourceName,
     data.displayName,
+    props.sourcePath,
+    props.displayName,
     data.type,
     data.kind,
     obj.name,
@@ -107,7 +127,7 @@ function aliasesFor(obj) {
 }
 
 function fitObjects(viewer, objects = []) {
-  const box = boxForObjects(objects);
+  const box = boxForObjects(objects.filter((obj) => obj?.visible !== false));
   if (box && !box.isEmpty()) {
     try { viewer._fitBox?.(box); return true; }
     catch (error) { console.warn('[RVM hierarchy bridge] fit selected failed', error); }
@@ -118,13 +138,44 @@ function fitObjects(viewer, objects = []) {
 }
 
 function fitCurrentSelection(viewer) {
-  const ids = new Set(viewer?.selection?.getSelectionRenderIds?.() || []);
+  const direct = Array.isArray(viewer?._rvmCanvasSelectedMeshes) ? viewer._rvmCanvasSelectedMeshes.filter((obj) => obj?.visible !== false) : [];
+  if (direct.length) return fitObjects(viewer, direct);
+  const ids = new Set([...(viewer?.selection?.getSelectionRenderIds?.() || []), ...(viewer?.selection?.getSelectedCanonicalIds?.() || [])]);
   const objects = [];
   viewer?.modelGroup?.traverse?.((obj) => {
     if (!obj?.isMesh || obj.visible === false) return;
-    if (ids.has(renderIdFor(obj))) objects.push(obj);
+    const aliases = aliasesFor(obj);
+    if (aliases.some((alias) => ids.has(alias))) objects.push(obj);
   });
   return fitObjects(viewer, objects);
+}
+
+function hideCurrentSelection(viewer, root) {
+  const meshes = Array.isArray(viewer?._rvmCanvasSelectedMeshes) ? viewer._rvmCanvasSelectedMeshes.filter((obj) => obj?.visible !== false) : [];
+  if (!meshes.length) return false;
+  for (const mesh of meshes) {
+    mesh.visible = false;
+    mesh.userData.rvmHiddenByUser = true;
+  }
+  viewer._rvmCanvasSelectedMeshes = [];
+  viewer.selection?.clearSelection?.();
+  root.querySelector('#rvm-attributes-panel').innerHTML = '<div class="rvm-empty-state">No object selected.</div>';
+  updateSelectionChip(root, 0);
+  return true;
+}
+
+function showHiddenObjects(viewer, root) {
+  let count = 0;
+  viewer?.modelGroup?.traverse?.((obj) => {
+    if (obj?.userData?.rvmHiddenByUser) {
+      obj.visible = true;
+      delete obj.userData.rvmHiddenByUser;
+      count += 1;
+    }
+  });
+  const status = root?.querySelector?.('#rvm-sb-msg');
+  if (status) status.textContent = count ? `Shown ${count} hidden mesh${count === 1 ? '' : 'es'}` : 'No hidden meshes';
+  return true;
 }
 
 function boxForObjects(objects = []) {
@@ -143,7 +194,7 @@ function renderDetails(root, { id, label, matches, message = '' }) {
   const panel = root.querySelector('#rvm-attributes-panel');
   if (!panel) return;
   const first = matches?.[0] || null;
-  const attrs = first?.userData?.browserRvmAttributes || first?.userData?.attributes || {};
+  const attrs = first?.userData?.browserRvmAttributes || first?.userData?.attributes || first?.userData?.browserRvmProperties?.attributes || {};
   const fitBox = boxForObjects(matches || []);
   const size = fitBox ? fitBox.getSize(new THREE.Vector3()) : null;
   const rows = [
@@ -153,7 +204,7 @@ function renderDetails(root, { id, label, matches, message = '' }) {
     ['Type', first?.userData?.type || attrs.TYPE || '-'],
     ['Kind', first?.userData?.kind || attrs.RVM_PRIMITIVE_KIND || '-'],
     ['Render primitive', first?.userData?.effectiveRenderPrimitive || first?.userData?.renderPrimitive || attrs.RVM_BROWSER_RENDER_PRIMITIVE || '-'],
-    ['Source path', first?.userData?.sourcePath || '-'],
+    ['Source path', first?.userData?.sourcePath || first?.userData?.browserRvmProperties?.sourcePath || '-'],
     ['Size', size ? `${fmt(size.x)} × ${fmt(size.y)} × ${fmt(size.z)}` : '-'],
   ];
   const attrRows = Object.entries(attrs || {}).slice(0, 24).map(([key, value]) => [key, value]);
@@ -163,6 +214,8 @@ function renderDetails(root, { id, label, matches, message = '' }) {
       ${message ? `<div class="rvm-browser-diag-warning">${escapeHtml(message)}</div>` : ''}
       <div class="rvm-tree-action-row">
         <button type="button" class="rvm-btn" data-rvm-tree-action="fit-selection">Fit Selection</button>
+        <button type="button" class="rvm-btn" data-rvm-tree-action="hide-selection">Hide</button>
+        <button type="button" class="rvm-btn" data-rvm-tree-action="show-hidden">Show Hidden</button>
         <button type="button" class="rvm-btn" data-rvm-tree-action="fit-all">Fit All</button>
         <button type="button" class="rvm-btn" data-rvm-tree-action="clear-selection">Clear</button>
       </div>
@@ -189,15 +242,19 @@ function row(key, value) { return `<div class="rvm-browser-diag-row"><span>${esc
 function escapeHtml(value) { return String(value ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;'); }
 
 function injectStyles() {
-  if (document.getElementById('rvm-hierarchy-selection-bridge-style')) return;
-  const style = document.createElement('style');
-  style.id = 'rvm-hierarchy-selection-bridge-style';
+  let style = document.getElementById('rvm-hierarchy-selection-bridge-style');
+  if (!style) {
+    style = document.createElement('style');
+    style.id = 'rvm-hierarchy-selection-bridge-style';
+    document.head.appendChild(style);
+  }
   style.textContent = `
     #rvm-tree li.is-selected > .rvm-tree-node { outline: 1px solid rgba(96,165,250,.95); background: rgba(37,99,235,.28); }
     .rvm-tree-selection-card { display: grid; gap: 8px; }
     .rvm-tree-selection-title { color: #93c5fd; font-weight: 700; font-size: 12px; letter-spacing: .04em; text-transform: uppercase; }
     .rvm-tree-action-row { display: flex; flex-wrap: wrap; gap: 6px; }
     .rvm-tree-action-row .rvm-btn { padding: 4px 8px; font-size: 12px; }
+    .rvm-tree { padding: 4px 2px; }
+    .rvm-tree-node { text-align: left; }
   `;
-  document.head.appendChild(style);
 }
