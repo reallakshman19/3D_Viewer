@@ -23,6 +23,7 @@ const supportAssemblySource = await fs.readFile(new URL('../tabs/RvmSupportAssem
 const materialModeSource = await fs.readFile(new URL('../tabs/RvmMaterialModeBridge.js', import.meta.url), 'utf8');
 const remainingPrimitiveSource = await fs.readFile(new URL('../rvm/BrowserRvmRemainingPrimitiveRuntimePatch.js', import.meta.url), 'utf8');
 const torusParitySource = await fs.readFile(new URL('../rvm/BrowserRvmTorusParityRuntimePatch.js', import.meta.url), 'utf8');
+const snoutParitySource = await fs.readFile(new URL('../rvm/BrowserRvmSnoutParityRuntimePatch.js', import.meta.url), 'utf8');
 const interactionPatchSource = await fs.readFile(new URL('../tabs/RvmViewerInteractionPatch.js', import.meta.url), 'utf8');
 const visibilityToolbarSource = await fs.readFile(new URL('../tabs/RvmVisibilityToolbarBridge.js', import.meta.url), 'utf8');
 const nativeTessellationSource = await fs.readFile(new URL('../rvm/BrowserRvmNativeTessellationRuntimePatch.js', import.meta.url), 'utf8');
@@ -55,8 +56,9 @@ check(rendererSource.includes('RvmSupportAssemblyBridge.js?v=20260620-rvm-suppor
 check(rendererSource.includes('BrowserRvmDishTessellationRuntimePatch.js?v=20260620-rvm-support-assembly-dish-1'), 'renderer loads dish tessellation patch');
 check(rendererSource.includes('BrowserRvmRemainingPrimitiveRuntimePatch.js?v=20260620-rvm-facetgroup-1'), 'renderer loads facet group remaining primitive patch');
 check(rendererSource.includes('BrowserRvmTorusParityRuntimePatch.js?v=20260620-rvm-torus-parity-1'), 'renderer loads torus parity runtime patch');
+check(rendererSource.includes('BrowserRvmSnoutParityRuntimePatch.js?v=20260620-rvm-snout-parity-1'), 'renderer loads snout parity runtime patch');
 check(rendererSource.includes('RvmMaterialModeBridge.js?v=20260620-rvm-remaining-material-modes-1'), 'renderer loads material mode bridge');
-check(rendererSource.includes('viewer3d-rvm-tab.js?v=20260620-rvm-torus-parity-1'), 'renderer loads torus parity tab URL');
+check(rendererSource.includes('viewer3d-rvm-tab.js?v=20260620-rvm-snout-parity-1'), 'renderer loads snout parity tab URL');
 check(rendererSource.includes('BrowserRvmCppMat3x4WorkerPatch.js?v=20260620-rvm-facetgroup-1'), 'renderer installs facet group worker patch');
 check(interactionPatchSource.includes('keydown') && interactionPatchSource.includes('Escape') && interactionPatchSource.includes('handleEscape'), 'interaction patch implements robust Esc behavior');
 check(interactionPatchSource.includes('VIEW_HIDE_SELECTION') && interactionPatchSource.includes('VIEW_SHOW_HIDDEN'), 'interaction patch handles Hide and Show Hidden actions');
@@ -82,6 +84,11 @@ check(torusParitySource.includes('circularTorusTessellatedCount') && torusParity
 check(torusParitySource.includes('torusCappedEndCount') && torusParitySource.includes('torusCapTriangleCount'), 'torus parity patch renders and diagnoses end caps');
 check(torusParitySource.includes('RVM_NATIVE_CIRCULAR_TORUS_CAPPED') && torusParitySource.includes('RVM_NATIVE_RECTANGULAR_TORUS_CAPPED'), 'torus parity patch names capped native torus primitives');
 check(torusParitySource.includes('__PCF_GLB_RVM_TORUS_PARITY_DIAGNOSTICS__'), 'torus parity patch exposes global diagnostics');
+check(snoutParitySource.includes('browser-rvm-snout-parity/v1-cpp-capped-snout'), 'snout parity patch exposes capped snout schema');
+check(snoutParitySource.includes('RVM_NATIVE_SNOUT_CAPPED') && snoutParitySource.includes('native-cpp-capped-snout'), 'snout parity patch emits capped snout primitive and render quality');
+check(snoutParitySource.includes('snoutTessellatedCount') && snoutParitySource.includes('snoutCappedEndCount') && snoutParitySource.includes('snoutCapTriangleCount'), 'snout parity patch exposes snout tessellation diagnostics');
+check(snoutParitySource.includes('bottomShearX') && snoutParitySource.includes('topShearY') && snoutParitySource.includes('matrix4FromCppMat3x4'), 'snout parity patch uses shear and C++ Mat3x4 layout');
+check(snoutParitySource.includes('__PCF_GLB_RVM_SNOUT_PARITY_DIAGNOSTICS__'), 'snout parity patch exposes global diagnostics');
 check(materialModeSource.includes('Color') && materialModeSource.includes('Type') && materialModeSource.includes('Source') && materialModeSource.includes('Mono'), 'material mode bridge exposes color modes');
 check(materialModeSource.includes('browser-rvm-material-mode/v1') && materialModeSource.includes('__PCF_GLB_RVM_MATERIAL_MODE_DIAGNOSTICS__'), 'material mode bridge exposes diagnostics');
 check(materialModeSource.includes('TYPE_COLORS') && materialModeSource.includes('classifyObjectType') && materialModeSource.includes('restoreOriginalMaterial'), 'material mode bridge colors by type and restores source materials');
@@ -96,9 +103,9 @@ check(nativeDiagnosticsBridgeSource.includes('Native Tessellation') && nativeDia
 check(tabSource.includes("BrowserRvmLoadBridge.js?v=20260620-rvm-flat-tree-1"), 'tab keeps flat-tree direct loader while worker URL is patched');
 check(tabSource.includes('buildFlatNodeTree') && tabSource.includes('flat: true'), 'RVM tree renders flat selectable rows');
 check(!tabSource.includes('const bounds = payload.browserRvmRender?.bounds'), 'tab does not issue duplicate post-load raw-bounds fit');
-check(appSource.includes('viewer3d-rvm-tab-renderer.js?v=20260620-rvm-torus-parity-1'), 'app loads torus parity renderer');
-check(indexSource.includes('main-rhbg-fitguard.js?v=20260620-rvm-torus-parity-1'), 'html loads torus parity entry');
-check(entrySource.includes('core/app.js?v=20260620-rvm-torus-parity-1'), 'entry loads torus parity app');
+check(appSource.includes('viewer3d-rvm-tab-renderer.js?v=20260620-rvm-snout-parity-1'), 'app loads snout parity renderer');
+check(indexSource.includes('main-rhbg-fitguard.js?v=20260620-rvm-snout-parity-1'), 'html loads snout parity entry');
+check(entrySource.includes('core/app.js?v=20260620-rvm-snout-parity-1'), 'entry loads snout parity app');
 check(workerPatchSource.includes('browser-rvm-worker.js?v=20260620-rvm-facetgroup-1'), 'worker patch redirects to facet group worker URL');
 check(bridgeSource.includes('browser-rvm-worker.js?v=20260620-rvm-scale-safe-1'), 'base bridge remains scale-safe-compatible');
 check(workerSource.includes('BrowserRvmInstructionFilterV2.js?v=20260620-rvm-large-box-filter-1'), 'worker loads large-box side filter');

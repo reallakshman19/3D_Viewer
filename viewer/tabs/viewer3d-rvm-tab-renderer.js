@@ -15,6 +15,7 @@ import { installBrowserRvmNativeTessellationRuntimePatch } from '../rvm/BrowserR
 import { installBrowserRvmDishTessellationRuntimePatch } from '../rvm/BrowserRvmDishTessellationRuntimePatch.js?v=20260620-rvm-support-assembly-dish-1';
 import { installBrowserRvmRemainingPrimitiveRuntimePatch } from '../rvm/BrowserRvmRemainingPrimitiveRuntimePatch.js?v=20260620-rvm-facetgroup-1';
 import { installBrowserRvmTorusParityRuntimePatch } from '../rvm/BrowserRvmTorusParityRuntimePatch.js?v=20260620-rvm-torus-parity-1';
+import { installBrowserRvmSnoutParityRuntimePatch } from '../rvm/BrowserRvmSnoutParityRuntimePatch.js?v=20260620-rvm-snout-parity-1';
 import { installRvmNativeTessellationDiagnosticsBridge } from './RvmNativeTessellationDiagnosticsBridge.js?v=20260620-rvm-native-diagnostics-1';
 
 installBrowserRvmCppMat3x4WorkerPatch();
@@ -22,6 +23,7 @@ installBrowserRvmNativeTessellationRuntimePatch();
 installBrowserRvmDishTessellationRuntimePatch();
 installBrowserRvmRemainingPrimitiveRuntimePatch();
 installBrowserRvmTorusParityRuntimePatch();
+installBrowserRvmSnoutParityRuntimePatch();
 installRvmProgressiveModelRootPatch(RvmViewer3D);
 installRvmViewerInteractionPatch(RvmViewer3D);
 installRvmHierarchySelectionBridge();
@@ -33,4 +35,4 @@ installRvmSupportAssemblyBridge();
 installRvmMaterialModeBridge();
 installRvmNativeTessellationDiagnosticsBridge();
 
-export { mountViewer3DRvmTab as renderViewer3DRvm } from './viewer3d-rvm-tab.js?v=20260620-rvm-torus-parity-1';
+export { mountViewer3DRvmTab as renderViewer3DRvm } from './viewer3d-rvm-tab.js?v=20260620-rvm-snout-parity-1';
