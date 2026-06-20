@@ -127,9 +127,11 @@ function displayNameForNode(defaultName, attrs = {}, attAttributes = {}) {
     attAttributes.TAG,
     attAttributes.TAG_NO,
     attAttributes.TAGNO,
-    attAttributes.NAME,
-    attAttributes.EQUI,
     attAttributes.LINE,
+    attAttributes.LINE_NO,
+    attAttributes.LINENO,
+    attAttributes.EQUI,
+    attAttributes.NAME,
     attrs.NAME,
     defaultName
   ];
