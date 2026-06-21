@@ -1,4 +1,4 @@
-const BRIDGE_VERSION = '20260620-rvm-esc-hide-selection-1';
+const BRIDGE_VERSION = '20260621-rvm-perf-lazy-bridges-1';
 
 export function installRvmVisibilityToolbarBridge() {
   injectStyles();
@@ -29,6 +29,7 @@ function injectToolbar(root, viewer) {
     <div class="rvm-ribbon-button-row">
       <button class="rvm-tool-btn" data-action="VIEW_HIDE_SELECTION" type="button" title="Hide selected geometry" aria-label="Hide selected geometry"><span aria-hidden="true">◌</span><span>Hide</span></button>
       <button class="rvm-tool-btn" data-action="VIEW_SHOW_HIDDEN" type="button" title="Show hidden geometry" aria-label="Show hidden geometry"><span aria-hidden="true">◎</span><span>Show</span></button>
+      <button class="rvm-tool-btn" data-action="VIEW_CLEAR_SELECTION" type="button" title="Clear selected geometry" aria-label="Clear selected geometry"><span aria-hidden="true">×</span><span>Clear</span></button>
       <button class="rvm-tool-btn" data-action="NAV_SELECT" data-rvm-force-select="true" type="button" title="Select mode / Esc" aria-label="Select mode"><span aria-hidden="true">⌖</span><span>Select</span></button>
     </div>`;
   const search = ribbon.querySelector('.rvm-ribbon-search');
@@ -47,6 +48,11 @@ function injectToolbar(root, viewer) {
     }
     if (action === 'VIEW_SHOW_HIDDEN') {
       if (!api?.showHidden?.()) liveViewer?.dispatchAction?.(action);
+      return;
+    }
+    if (action === 'VIEW_CLEAR_SELECTION') {
+      if (!api?.clearSelection?.()) liveViewer?.clearSelection?.();
+      forceSelectUi(root);
       return;
     }
     if (action === 'NAV_SELECT') {
@@ -71,6 +77,7 @@ function injectStyles() {
     .rvm-visibility-tool-group .rvm-tool-btn span:last-child { font-size: 11px; }
     .rvm-tool-btn[data-action="VIEW_HIDE_SELECTION"] span:first-child { color: #fca5a5; }
     .rvm-tool-btn[data-action="VIEW_SHOW_HIDDEN"] span:first-child { color: #86efac; }
+    .rvm-tool-btn[data-action="VIEW_CLEAR_SELECTION"] span:first-child { color: #fcd34d; }
   `;
   document.head.appendChild(style);
 }

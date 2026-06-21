@@ -1,7 +1,7 @@
-@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap");
+/* shared-viewer-tokens.css — local/system font tokens only; no render-blocking remote @import. */
 
 :root {
-  --vc-font-body: "Inter", "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+  --vc-font-body: system-ui, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
   --vc-font-mono: "Consolas", "Courier New", monospace;
 
   --vc-shell-bg: #151b28;

@@ -1,7 +1,8 @@
-const CACHE_KEY = '20260620-rvm-bottom-diagnostics-drawer-1';
+const CACHE_KEY = '20260621-rvm-perf-lazy-bridges-1';
 const API_KEY = '__PCF_GLB_RVM_BOTTOM_DIAGNOSTICS_DRAWER__';
 
 const PANEL_SPECS = [
+  { key: 'action-errors', title: 'RVM Action Errors', selector: '[data-rvm-action-diagnostics-panel]', priority: 5 },
   { key: 'glb-selection', title: 'GLB Selection Details', selector: '[data-rvm-glb-selection-parity-panel]', priority: 10 },
   { key: 'acceptance', title: 'RVM GLB Acceptance Pack', selector: '[data-rvm-glb-acceptance-panel]', priority: 20 },
   { key: 'stagedjson', title: 'StagedJSON', selector: '[data-rvm-stagedjson-panel]', priority: 30 },
@@ -13,6 +14,7 @@ const PANEL_SPECS = [
 ];
 
 const EVENTS = [
+  'rvm-action-diagnostics',
   'rvm-glb-selection-parity-diagnostics',
   'rvm-glb-acceptance-pack-diagnostics',
   'rvm-stagedjson-export',
@@ -31,6 +33,7 @@ export function installRvmBottomDiagnosticsDrawerBridge() {
     close: () => setCollapsed(true),
     toggle: () => setCollapsed(!isCollapsed()),
     refresh: () => relocateAndSummarize(document.querySelector('[data-rvm-viewer]')),
+    destroy: (root = document.querySelector('[data-rvm-viewer]')) => destroy(root),
   };
   globalThis[API_KEY] = api;
 
@@ -48,6 +51,7 @@ export function installRvmBottomDiagnosticsDrawerBridge() {
 
 function bind(root) {
   if (!root || root.dataset.rvmBottomDiagnosticsDrawer === CACHE_KEY) return;
+  destroy(root);
   root.dataset.rvmBottomDiagnosticsDrawer = CACHE_KEY;
   ensureDrawer(root);
   relocateAndSummarize(root);
@@ -55,8 +59,20 @@ function bind(root) {
   for (const eventName of EVENTS) globalThis.addEventListener?.(eventName, schedule);
   const observer = new MutationObserver(schedule);
   observer.observe(root, { childList: true, subtree: true });
+  const cleanup = () => {
+    for (const eventName of EVENTS) globalThis.removeEventListener?.(eventName, schedule);
+    observer.disconnect();
+    if (root._rvmBottomDiagnosticsDrawerObserver === observer) delete root._rvmBottomDiagnosticsDrawerObserver;
+    if (root._rvmBottomDiagnosticsDrawerCleanup === cleanup) delete root._rvmBottomDiagnosticsDrawerCleanup;
+  };
   root._rvmBottomDiagnosticsDrawerObserver = observer;
+  root._rvmBottomDiagnosticsDrawerCleanup = cleanup;
+  root.addEventListener?.('rvm-tab-dispose', cleanup, { once: true });
   for (const delay of [250, 800, 1600, 3200, 6400]) setTimeout(schedule, delay);
+}
+
+function destroy(root) {
+  try { root?._rvmBottomDiagnosticsDrawerCleanup?.(); } catch (_) {}
 }
 
 let refreshTimer = null;
@@ -94,18 +110,13 @@ function relocateAndSummarize(root) {
   const body = drawer.querySelector('[data-rvm-bottom-diagnostics-body]');
   if (!body) return drawer;
 
-  const cards = [];
   for (const spec of PANEL_SPECS) {
     const panel = root.querySelector(spec.selector);
-    if (!panel || panel.closest('[data-rvm-bottom-diagnostics-body]') === body) {
-      if (panel) cards.push({ spec, panel });
-      continue;
-    }
+    if (!panel || panel.closest('[data-rvm-bottom-diagnostics-body]') === body) continue;
     panel.dataset.rvmBottomDiagnosticsItem = spec.key;
     panel.dataset.rvmBottomDiagnosticsTitle = spec.title;
     panel.classList.add('rvm-bottom-diagnostics-card');
     body.appendChild(panel);
-    cards.push({ spec, panel });
   }
 
   [...body.querySelectorAll('[data-rvm-bottom-diagnostics-item]')]
@@ -145,7 +156,8 @@ function summarizeDiagnostics(root) {
   const staged = globalThis.__PCF_GLB_RVM_STAGEDJSON_VALIDATION_DIAGNOSTICS__;
   const support = globalThis.__PCF_GLB_RVM_INTELLIGENT_SUPPORT_ENGINE_DIAGNOSTICS__;
   const supportAtt = globalThis.__PCF_GLB_RVM_SUPPORT_ATT_MAPPING_DIAGNOSTICS__;
-  const errors = Number(acceptance?.errors?.length || 0) + Number(staged?.errors?.length || 0);
+  const actions = globalThis.__PCF_GLB_RVM_ACTION_DIAGNOSTICS__;
+  const errors = Number(acceptance?.errors?.length || 0) + Number(staged?.errors?.length || 0) + Number(actions?.failureCount || 0);
   const warnings = Number(acceptance?.warnings?.length || 0) + Number(staged?.warnings?.length || 0);
   const acceptanceText = acceptance ? `accept ${acceptance.accepted ? 'OK' : acceptance.mode || 'idle'}` : '';
   const supportCount = Number(support?.candidateCount || 0) || Number(supportAtt?.supportMetadataMappedCount || 0) || 0;
@@ -169,7 +181,7 @@ function setCollapsed(value, root = document.querySelector('[data-rvm-viewer]'))
 }
 
 function escapeHtml(value) {
-  return String(value ?? '').replace(/[&<>\"]/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch]));
+  return String(value ?? '').replace(/[&<>"]/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch]));
 }
 
 function injectStyles() {
