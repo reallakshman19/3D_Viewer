@@ -3,7 +3,7 @@ import { RvmViewer3D } from '../rvm-viewer/RvmViewer3D.js?v=20260620-rvm-direct-
 import { installRvmProgressiveModelRootPatch } from '../rvm-viewer/RvmProgressiveModelRootPatchV5.js?v=20260620-rvm-tree-select-nohide-1';
 import { AvevaJsonLoader } from '../rvm/AvevaJsonLoader.js';
 import { isLikelyRvmFileName } from '../rvm/BrowserRvmParser.js';
-import { loadRvmFileInBrowser } from '../rvm/BrowserRvmLoadBridge.js?v=20260620-rvm-flat-tree-1';
+import { loadRvmFileInBrowser } from '../rvm/BrowserRvmLoadBridge.js?v=20260621-rvm-zone-lod-labels-1';
 import {
   convertUxmlDocumentToAvevaHierarchy,
   isUxmlDocument,
@@ -16,7 +16,7 @@ import '../rvm-viewer/RvmSupportIndexAttributeBridge.js?v=20260620-rvm-direct-ta
 
 installRvmProgressiveModelRootPatch(RvmViewer3D);
 
-const RVM_TAB_JS_VERSION = '20260621-rvm-button-hardening-1';
+const RVM_TAB_JS_VERSION = '20260621-rvm-zone-lod-labels-1';
 const SUPPORT_DEFAULT_SCALE = 1.0;
 const SUPPORT_MAX_LABELS = 18;
 const JSON_TREE_RENDER_LIMIT = 2600;
@@ -318,8 +318,10 @@ function makeDiagnosticsSeed(fileName) { return { fileName, loadedJsVersion: RVM
 function renderDiagnostics(root, diagnostics = {}) {
   const panel = root?.querySelector?.('#rvm-browser-parse-diagnostics'); if (!panel) return;
   const timings = diagnostics.browserRvmStageTimingsMs || diagnostics.browserRvmWorkerTimingsMs || {}; const render = diagnostics.browserRvmRender || diagnostics.render || {};
+  const zone = diagnostics.browserRvmZoneSelection || render.zoneSelection || null;
+  const lod = diagnostics.browserRvmLodSelection || render.lodSelection || null;
   const rows = [
-    ['Loaded JS version/hash', diagnostics.loadedJsVersion || RVM_TAB_JS_VERSION], ['Worker loaded', boolText(diagnostics.browserRvmWorkerLoaded ?? diagnostics.browserRvmWorkerEnabled)], ['Worker message received', boolText(diagnostics.browserRvmWorkerMessageReceived ?? diagnostics.browserRvmWorkerEnabled)], ['Legacy handler bypassed', boolText(diagnostics.browserRvmLegacyJsonHandlerBypassed)], ['Parse time', timingText(timings['worker.parse.renderInstructions'] ?? timings.parse)], ['Render-instruction time', timingText(timings.renderInstructionGeneration ?? diagnostics.browserRvmRenderInstructionMs)], ['First geometry', timingText(diagnostics.browserRvmFirstGeometryMs)], ['Scene creation', timingText(timings['scene.progressiveCreate'] ?? diagnostics.browserRvmSceneCreationMs)], ['Objects rendered', diagnostics.browserRvmRenderableCount ?? render.renderableCount], ['Skipped objects', diagnostics.browserRvmSkippedCount ?? render.skippedCount], ['Tree nodes rendered', diagnostics.browserRvmTreeNodesRendered], ['Max event-loop stall', timingText(diagnostics.browserRvmMaxEventLoopStallMs)], ['Max single batch time', timingText(diagnostics.browserRvmMaxSingleBatchMs ?? render.maxSingleBatchMs)], ['Long tasks >100 ms', diagnostics.browserRvmEventLoopStallCount], ['Binary PRIM', diagnostics.binaryPrimitiveRecordCount], ['Hierarchy groups', diagnostics.hierarchyGroupCount], ['Fit guard', diagnostics.browserRvmProgressiveFitGuard?.progressiveFitGuard || diagnostics.progressiveFitGuard],
+    ['Loaded JS version/hash', diagnostics.loadedJsVersion || RVM_TAB_JS_VERSION], ['Worker loaded', boolText(diagnostics.browserRvmWorkerLoaded ?? diagnostics.browserRvmWorkerEnabled)], ['Worker message received', boolText(diagnostics.browserRvmWorkerMessageReceived ?? diagnostics.browserRvmWorkerEnabled)], ['Legacy handler bypassed', boolText(diagnostics.browserRvmLegacyJsonHandlerBypassed)], ['Parse time', timingText(timings['worker.parse.renderInstructions'] ?? timings.parse)], ['Render-instruction time', timingText(timings.renderInstructionGeneration ?? diagnostics.browserRvmRenderInstructionMs)], ['First geometry', timingText(diagnostics.browserRvmFirstGeometryMs)], ['Scene creation', timingText(timings['scene.progressiveCreate'] ?? diagnostics.browserRvmSceneCreationMs)], ['Objects rendered', diagnostics.browserRvmRenderableCount ?? render.renderableCount], ['Skipped objects', diagnostics.browserRvmSkippedCount ?? render.skippedCount], ['Zone mode', zone ? `${zone.mode || 'all'} ${zone.renderedInstructionCount || ''}/${zone.originalInstructionCount || ''}` : '-'], ['LOD', lod ? `${lod.detailPercent || 100}%` : '-'], ['Tree nodes rendered', diagnostics.browserRvmTreeNodesRendered], ['Max event-loop stall', timingText(diagnostics.browserRvmMaxEventLoopStallMs)], ['Max single batch time', timingText(diagnostics.browserRvmMaxSingleBatchMs ?? render.maxSingleBatchMs)], ['Long tasks >100 ms', diagnostics.browserRvmEventLoopStallCount], ['Binary PRIM', diagnostics.binaryPrimitiveRecordCount], ['Hierarchy groups', diagnostics.hierarchyGroupCount], ['Fit guard', diagnostics.browserRvmProgressiveFitGuard?.progressiveFitGuard || diagnostics.progressiveFitGuard],
   ];
   panel.innerHTML = `<div class="rvm-browser-diag-grid">${rows.map(([label, value]) => diagnosticRow(label, value)).join('')}</div>${diagnostics.error ? `<div class="rvm-browser-diag-warning">${escapeHtml(diagnostics.error)}</div>` : ''}`;
 }
@@ -334,6 +336,7 @@ async function loadDirectBrowserRvm({ root, viewer, files, rvmFile, stateBag }) 
   const payload = await loadRvmFileInBrowser(rvmFile, viewer, {
     statusEl: status, attText, signal: stateBag.abortController.signal, allowMainThreadParserFallback: false, buildHierarchyFallback: false,
     renderOptions: { maxRenderableObjects: 6000, batchSize: 64, timeSliceMs: 8 },
+    beforeRenderInstructions: (event) => globalThis.__PCF_GLB_RVM_ZONE_LOD_LABELS__?.beforeRenderInstructions?.({ ...event, root, viewer }),
     onProgress: (progress = {}) => { if (stateBag.abortController.signal.aborted) return; const next = { ...latestDiagnostics, browserRvmLoadState: progress.stage || latestDiagnostics.browserRvmLoadState || 'loading', browserRvmWorkerLoaded: true, browserRvmWorkerMessageReceived: true, browserRvmProgressProcessed: progress.processed, browserRvmProgressTotal: progress.total, browserRvmRenderableCount: progress.renderableCount ?? latestDiagnostics.browserRvmRenderableCount, browserRvmSkippedCount: progress.skippedCount ?? latestDiagnostics.browserRvmSkippedCount }; if (!Number.isFinite(next.browserRvmFirstGeometryMs) && Number(progress.renderableCount) > 0) next.browserRvmFirstGeometryMs = performance.now() - startedAt; latestDiagnostics = next; renderDiagnostics(root, latestDiagnostics); },
     onDiagnostics: (diagnostics = {}) => { latestDiagnostics = { ...latestDiagnostics, ...diagnostics, loadedJsVersion: RVM_TAB_JS_VERSION, browserRvmDirectTabLoadPath: true, browserRvmLegacyJsonHandlerBypassed: true, browserRvmWorkerLoaded: diagnostics.browserRvmWorkerEnabled ?? latestDiagnostics.browserRvmWorkerLoaded, browserRvmWorkerMessageReceived: true }; renderDiagnostics(root, latestDiagnostics); },
   });
