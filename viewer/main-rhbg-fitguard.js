@@ -5,6 +5,7 @@ const STARTUP_SIDE_EFFECT_MODULES = [
   './tabs/model-converters/xml-cii-finalise-run-button.js?v=20260619-workflow-perf-1',
 ];
 // Legacy static-contract marker: core/app.js?v=20260620-rvm-stagedjson-validation-1
+// Active cache key: core/app.js?v=20260621-rvm-perf-lazy-bridges-1
 
 function startupMount() {
   return document.getElementById('app') || document.getElementById('app-layout') || document.getElementById('app-shell') || document.body;
@@ -39,10 +40,23 @@ async function loadStartupSideEffects() {
   return failures;
 }
 
+function scheduleDeferredStartupSideEffects() {
+  const run = () => loadStartupSideEffects().catch((error) => {
+    console.warn('[3D Viewer] deferred startup side effects failed', error);
+  });
+  if (typeof window !== 'undefined' && typeof window.requestIdleCallback === 'function') {
+    window.requestIdleCallback(run, { timeout: 1600 });
+  } else if (typeof window !== 'undefined' && typeof window.requestAnimationFrame === 'function') {
+    window.requestAnimationFrame(() => setTimeout(run, 0));
+  } else {
+    setTimeout(run, 0);
+  }
+}
+
 async function startViewer() {
-  await loadStartupSideEffects();
-  const { init } = await import('./core/app.js?v=20260620-rvm-bottom-diagnostics-drawer-1');
+  const { init } = await import('./core/app.js?v=20260621-rvm-perf-lazy-bridges-1');
   await init();
+  scheduleDeferredStartupSideEffects();
 }
 
 startViewer().catch(reportStartupError);
