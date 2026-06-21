@@ -59,6 +59,7 @@ function mapSupportMetadata(viewer) {
     missingSourcePathCount: 0,
   };
   const sourceIndex = buildSourceIndex(viewer);
+  viewer?.modelGroup?.updateMatrixWorld?.(true);
   viewer?.modelGroup?.traverse?.((obj) => {
     if (!obj?.isMesh || !obj.userData?.rvmSupportGeometryGenerated) return;
     diag.supportGeometryScannedCount += 1;
@@ -144,8 +145,9 @@ function findPanel(root) {
 }
 
 function positionText(obj) {
-  const p = obj.getWorldPosition ? obj.getWorldPosition({ x: 0, y: 0, z: 0, copy(v) { this.x = v.x; this.y = v.y; this.z = v.z; return this; } }) : obj.position;
-  const x = Number(p?.x || 0).toFixed(4), y = Number(p?.y || 0).toFixed(4), z = Number(p?.z || 0).toFixed(4);
+  const e = obj?.matrixWorld?.elements;
+  const p = e ? { x: e[12], y: e[13], z: e[14] } : (obj?.position || { x: 0, y: 0, z: 0 });
+  const x = Number(p.x || 0).toFixed(4), y = Number(p.y || 0).toFixed(4), z = Number(p.z || 0).toFixed(4);
   return `${x},${y},${z}`;
 }
 
