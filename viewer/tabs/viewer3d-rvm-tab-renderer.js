@@ -9,7 +9,8 @@
 // Active JSON/RVM PCF trigger cache key: RvmJsonPcfTriggerBridge.js?v=20260621-rvm-json-pcf-trigger-1
 // Active policy info cache key: RvmPolicyInfoBridge.js?v=20260621-rvm-policy-info-1
 // Active diagnostic collapse cache key: RvmDiagnosticPanelCollapseBridge.js?v=20260621-rvm-diagnostic-collapse-1
-// Active zone/LOD label cache key: RvmZoneLodLabelBridge.js?v=20260621-rvm-zone-lod-labels-1
+// Previous zone/LOD label cache key: RvmZoneLodLabelBridge.js?v=20260621-rvm-zone-lod-labels-1
+// Active zone preload hierarchy selector cache key: RvmZoneLodLabelBridge.js?v=20260621-rvm-preload-hierarchy-selector-1
 // Active Navis hierarchy cache key: RvmNavisHierarchyBridge.js?v=20260621-rvm-navis-hierarchy-1
 // Active native facet primary cache key: viewer3d-rvm-tab.js?v=20260621-rvm-native-facet-primary-1
 // Active zone/LOD context cache key: RvmZoneLodContextBridge.js?v=20260621-rvm-zone-lod-context-1
@@ -21,7 +22,7 @@ import { installRvmViewerInteractionPatch, installRvmCanvasSelectionBridge } fro
 import { installRvmUiInteractionPanelPatch, installRvmUiPanelBridge } from './RvmUiInteractionPanelPatch.js?v=20260621-rvm-ui-interaction-panels-1';
 import { installRvmPropertyPanelCollapseAuditBridge } from './RvmPropertyPanelCollapseAuditBridge.js?v=20260621-rvm-property-collapse-1';
 import { installRvmLabelPerformanceBridge, installRvmLabelButtonBridge } from './RvmLabelPerformanceBridge.js?v=20260621-rvm-zone-lod-labels-1';
-import { installRvmZoneLodLabelBridge } from './RvmZoneLodLabelBridge.js?v=20260621-rvm-zone-lod-labels-1';
+import { installRvmZoneLodLabelBridge } from './RvmZoneLodLabelBridge.js?v=20260621-rvm-preload-hierarchy-selector-1';
 import { installRvmNavisHierarchyBridge } from './RvmNavisHierarchyBridge.js?v=20260621-rvm-navis-hierarchy-1';
 import { installRvmZoneLodContextBridge } from './RvmZoneLodContextBridge.js?v=20260621-rvm-zone-lod-context-1';
 import { installRvmJsonPcfTriggerBridge } from './RvmJsonPcfTriggerBridge.js?v=20260621-rvm-pcf-visible-scope-1';
