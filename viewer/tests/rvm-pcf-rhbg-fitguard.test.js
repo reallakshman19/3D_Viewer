@@ -14,6 +14,7 @@ const validationBridgeSource = await fs.readFile(new URL('../tabs/RvmGlbExportVa
 const roundTripBridgeSource = await fs.readFile(new URL('../tabs/RvmGlbRoundTripValidationBridge.js', import.meta.url), 'utf8');
 const selectionParitySource = await fs.readFile(new URL('../tabs/RvmGlbSelectionParityBridge.js', import.meta.url), 'utf8');
 const supportGeometrySource = await fs.readFile(new URL('../tabs/RvmSupportGeometryBridge.js', import.meta.url), 'utf8');
+const supportAttSource = await fs.readFile(new URL('../tabs/RvmSupportAttMappingBridge.js', import.meta.url), 'utf8');
 const appSource = await fs.readFile(new URL('../core/app.js', import.meta.url), 'utf8');
 const indexSource = await fs.readFile(new URL('../index.html', import.meta.url), 'utf8');
 const entrySource = await fs.readFile(new URL('../main-rhbg-fitguard.js', import.meta.url), 'utf8');
@@ -30,7 +31,9 @@ check(rendererSource.includes('RvmGlbSelectionParityBridge.js?v=20260620-rvm-glb
 check(rendererSource.includes('installRvmGlbSelectionParityBridge()'), 'renderer installs GLB selection parity bridge');
 check(rendererSource.includes('RvmSupportGeometryBridge.js?v=20260620-rvm-support-geometry-v1'), 'renderer loads support geometry bridge');
 check(rendererSource.includes('installRvmSupportGeometryBridge()'), 'renderer installs support geometry bridge');
-check(rendererSource.includes('viewer3d-rvm-tab.js?v=20260620-rvm-support-geometry-v1'), 'renderer loads support geometry tab cache key');
+check(rendererSource.includes('RvmSupportAttMappingBridge.js?v=20260620-rvm-support-att-mapping-1'), 'renderer loads support ATT mapping bridge');
+check(rendererSource.includes('installRvmSupportAttMappingBridge()'), 'renderer installs support ATT mapping bridge');
+check(rendererSource.includes('viewer3d-rvm-tab.js?v=20260620-rvm-support-att-mapping-1'), 'renderer loads support ATT mapping tab cache key');
 check(fallbackBridgeSource.includes('rvm-primitive-fallback-review/v2-clickable-rows'), 'clickable fallback schema present');
 check(fallbackBridgeSource.includes('__PCF_GLB_RVM_PRIMITIVE_FALLBACK_DIAGNOSTICS__'), 'fallback diagnostics global present');
 check(fallbackBridgeSource.includes('selectFallback') && fallbackBridgeSource.includes('data-rvm-fallback-id'), 'fallback rows are selectable');
@@ -58,9 +61,14 @@ check(supportGeometrySource.includes('rvm-support-geometry/v1-exportable-overlay
 check(supportGeometrySource.includes('__PCF_GLB_RVM_SUPPORT_GEOMETRY_DIAGNOSTICS__'), 'support geometry diagnostics global present');
 check(supportGeometrySource.includes('SupportGeom') && supportGeometrySource.includes('Overlay') && supportGeometrySource.includes('Replace'), 'support geometry ribbon controls present');
 check(supportGeometrySource.includes('TYPE: \'SUPPORT\'') && supportGeometrySource.includes('rvmSupportGeometryGenerated'), 'generated support geometry carries export metadata');
-check(appSource.includes('viewer3d-rvm-tab-renderer.js?v=20260620-rvm-support-geometry-v1'), 'app loads support geometry renderer');
-check(indexSource.includes('main-rhbg-fitguard.js?v=20260620-rvm-support-geometry-v1'), 'index loads support geometry entrypoint');
-check(entrySource.includes('core/app.js?v=20260620-rvm-support-geometry-v1'), 'entrypoint loads support geometry app cache key');
+check(supportAttSource.includes('rvm-support-att-stagedjson-mapping/v1-support-extras'), 'support ATT mapping schema present');
+check(supportAttSource.includes('__PCF_GLB_RVM_SUPPORT_ATT_MAPPING_DIAGNOSTICS__'), 'support ATT mapping diagnostics global present');
+check(supportAttSource.includes('SupportATT') && supportAttSource.includes('supportStagedJsonRecords'), 'support ATT mapping panel and stagedJSON records present');
+check(supportAttSource.includes('supportAttMapped') && supportAttSource.includes('browserRvmAttributes'), 'support ATT mapping writes exportable node extras');
+check(supportAttSource.includes('PS_NO') && supportAttSource.includes('SUPPORT_KIND') && supportAttSource.includes('SOURCE_UUIDS'), 'support ATT fields are mapped');
+check(appSource.includes('viewer3d-rvm-tab-renderer.js?v=20260620-rvm-support-att-mapping-1'), 'app loads support ATT mapping renderer');
+check(indexSource.includes('main-rhbg-fitguard.js?v=20260620-rvm-support-att-mapping-1'), 'index loads support ATT mapping entrypoint');
+check(entrySource.includes('core/app.js?v=20260620-rvm-support-att-mapping-1'), 'entrypoint loads support ATT mapping app cache key');
 check(entrySource.includes('Promise.allSettled') && entrySource.includes('optional startup module failed'), 'guarded entrypoint remains protected');
 
 console.log(`\n${passed} passed, ${failed} failed`);
