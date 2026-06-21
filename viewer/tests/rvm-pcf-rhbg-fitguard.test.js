@@ -48,6 +48,8 @@ check(jsonPcfTriggerSource.includes('buildRvmJsonPcfRequestPayload') && jsonPcfT
 check(jsonPcfTriggerSource.includes('RuntimeEvents.RVM_EXTRACT_PCF_REQUESTED'), 'JSON/RVM PCF bridge emits extract request event');
 check(jsonPcfTriggerSource.includes("setActiveTab('rvm-json-pcf')"), 'JSON/RVM PCF bridge opens the receiver tab');
 check(jsonPcfTriggerSource.includes('sourceStatus') && jsonPcfTriggerSource.includes('missing-index'), 'JSON/RVM PCF bridge surfaces missing source index diagnostics');
+check(jsonPcfTriggerSource.includes("typeof document === 'undefined'"), 'JSON/RVM PCF bridge is safe for static Node-side imports');
+check(jsonPcfTriggerSource.includes("typeof MutationObserver === 'function'"), 'JSON/RVM PCF bridge guards mutation observer availability');
 check(labelPerfSource.includes('setRvmLabelLayerVisible'), 'label bridge exposes explicit viewer label layer toggle');
 check(labelPerfSource.includes('this.labelRenderer?.render') && labelPerfSource.includes('labelLayerVisible'), 'label bridge renders CSS2D labels only when label layer is visible');
 check(labelPerfSource.includes('LARGE_MODEL_RENDERABLE_THRESHOLD = 3000'), 'label bridge switches to large-model throttle threshold');
