@@ -51,16 +51,26 @@ export class RvmSectioning {
 
 
     buildBoxSection(modelGroup, selectionBounds) {
-        if (!modelGroup) return;
+        if (!modelGroup && !selectionBounds) return null;
         const box = selectionBounds ? selectionBounds.clone() : new THREE.Box3().setFromObject(modelGroup);
-        if (box.isEmpty()) return;
+        if (box.isEmpty()) return null;
+        return this.applyBoxSection(box, this._padding);
+    }
 
-        box.expandByScalar(this._padding); // user padding around selection
+    applyBoxSection(selectionBounds, padding = this._padding) {
+        if (!selectionBounds) return null;
+        const box = selectionBounds.clone();
+        if (box.isEmpty()) return null;
 
+        const safePadding = Number.isFinite(Number(padding)) ? Math.max(0, Number(padding)) : 0;
+        box.expandByScalar(safePadding);
+
+        this._sectionMode = 'BOX';
         this._sectionBounds = box.clone();
 
         this._applyBoxPlanes(box);
         this._renderSectionBoxVisual(box);
+        return box.clone();
     }
 
     setClipBounds({ minX, maxX, minY, maxY, minZ, maxZ }) {
@@ -69,8 +79,7 @@ export class RvmSectioning {
             new THREE.Vector3(minX, minY, minZ),
             new THREE.Vector3(maxX, maxY, maxZ)
         );
-        this._applyBoxPlanes(box);
-        this._renderSectionBoxVisual(box);
+        this.applyBoxSection(box, 0);
     }
 
 
@@ -92,7 +101,7 @@ export class RvmSectioning {
     }
 
     setSectionBoxPadding(n) {
-        this._padding = n;
+        this._padding = Math.max(0, Number(n) || 0);
         if (this._sectionMode === 'BOX') {
             this.buildBoxSection(this.modelGroup);
         }

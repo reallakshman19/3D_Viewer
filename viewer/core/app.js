@@ -13,6 +13,7 @@
 // viewer3d-rvm-tab-renderer.js?v=20260621-rvm-visibility-snapshots-1
 // viewer3d-rvm-tab-renderer.js?v=20260621-rvm-object-search-1
 // viewer3d-rvm-tab-renderer.js?v=20260621-rvm-measure-tools-1
+// viewer3d-rvm-tab-renderer.js?v=20260621-rvm-section-box-1
 // viewer3d-rvm-tab-renderer.js?v=20260621-rvm-navis-hierarchy-1
 // viewer3d-rvm-tab-renderer.js?v=20260621-rvm-native-facet-primary-1
 // viewer3d-rvm-tab-renderer.js?v=20260621-rvm-zone-lod-context-1
@@ -24,6 +25,7 @@
 // RvmVisibilitySnapshotsBridge.js?v=20260621-rvm-visibility-snapshots-1
 // RvmObjectSearchBridge.js?v=20260621-rvm-object-search-1
 // RvmMeasureBridge.js?v=20260621-rvm-measure-tools-1
+// RvmSectionBoxBridge.js?v=20260621-rvm-section-box-1
 // RvmPolicyInfoBridge.js?v=20260621-rvm-policy-info-1
 // RvmDiagnosticPanelCollapseBridge.js?v=20260621-rvm-diagnostic-collapse-1
 // RvmZoneLodLabelBridge.js?v=20260621-rvm-zone-lod-labels-1
@@ -35,6 +37,7 @@
 // BrowserRvmRenderSceneBuilder.js?v=20260621-rvm-native-facet-primary-1
 // browser-rvm-worker.js?v=20260621-rvm-native-facet-primary-1
 // BrowserRvmNativeFacetGroupPrimary.js
+// RvmSectioning.js applyBoxSection
 // const APP_ICON_URL = new URL('../assets/app-icon.svg?v=20260621-app-brand-icon-1'
 // function createBrandRail
 // app-brand-rail
@@ -46,4 +49,4 @@
 // function cleanupActiveTab
 // renderTabError
 // tabRendererCache
-export { init } from './app-label-perf-runtime.js?v=20260621-rvm-measure-tools-1';
+export { init } from './app-label-perf-runtime.js?v=20260621-rvm-section-box-1';

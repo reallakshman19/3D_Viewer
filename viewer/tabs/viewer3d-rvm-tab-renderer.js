@@ -20,6 +20,7 @@
 // Active visibility snapshots cache key: RvmVisibilitySnapshotsBridge.js?v=20260621-rvm-visibility-snapshots-1
 // Active object search cache key: RvmObjectSearchBridge.js?v=20260621-rvm-object-search-1
 // Active measure tools cache key: RvmMeasureBridge.js?v=20260621-rvm-measure-tools-1
+// Active section box cache key: RvmSectionBoxBridge.js?v=20260621-rvm-section-box-1
 import { RvmViewer3D } from '../rvm-viewer/RvmViewer3D.js?v=20260620-rvm-direct-tab-1';
 import { installRvmProgressiveModelRootPatch } from '../rvm-viewer/RvmProgressiveModelRootPatchV5.js?v=20260620-rvm-tree-select-nohide-1';
 import { installRvmHierarchySelectionBridge } from './RvmHierarchySelectionBridge.js?v=20260620-rvm-large-box-support-sync-1';
@@ -38,6 +39,7 @@ import { installRvmVisibilityToolbarBridge } from './RvmVisibilityToolbarBridge.
 import { installRvmVisibilitySnapshotsBridge } from './RvmVisibilitySnapshotsBridge.js?v=20260621-rvm-visibility-snapshots-1';
 import { installRvmObjectSearchBridge } from './RvmObjectSearchBridge.js?v=20260621-rvm-object-search-1';
 import { installRvmMeasureBridge } from './RvmMeasureBridge.js?v=20260621-rvm-measure-tools-1';
+import { installRvmSectionBoxBridge } from './RvmSectionBoxBridge.js?v=20260621-rvm-section-box-1';
 import { installRvmSelectionTreeSyncBridge } from './RvmSelectionTreeSyncBridge.js?v=20260620-rvm-large-box-support-sync-1';
 import { installRvmMaterialModeBridge } from './RvmMaterialModeBridge.js?v=20260620-rvm-remaining-material-modes-1';
 import { installRvmBottomDiagnosticsDrawerBridge } from './RvmBottomDiagnosticsDrawerBridge.js?v=20260621-rvm-perf-lazy-bridges-1';
@@ -69,6 +71,7 @@ installRvmVisibilityToolbarBridge();
 installRvmVisibilitySnapshotsBridge();
 installRvmObjectSearchBridge();
 installRvmMeasureBridge();
+installRvmSectionBoxBridge();
 installRvmSelectionTreeSyncBridge();
 installRvmMaterialModeBridge();
 installRvmBottomDiagnosticsDrawerBridge();
