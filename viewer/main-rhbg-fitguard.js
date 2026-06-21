@@ -19,7 +19,8 @@ const STARTUP_SIDE_EFFECT_MODULES = [
 // Previous cache marker: core/app.js?v=20260621-rvm-zone-lod-context-1
 // Previous cache marker: core/app.js?v=20260621-rvm-pcf-visible-scope-1
 // Previous cache marker: core/app.js?v=20260621-rvm-preload-hierarchy-selector-1
-// Active cache key: core/app.js?v=20260621-rvm-selection-details-inspector-1
+// Previous cache marker: core/app.js?v=20260621-rvm-selection-details-inspector-1
+// Active cache key: core/app.js?v=20260621-rvm-isolate-visibility-toolbar-1
 
 function startupMount() {
   return document.getElementById('app') || document.getElementById('app-layout') || document.getElementById('app-shell') || document.body;
@@ -68,7 +69,7 @@ function scheduleDeferredStartupSideEffects() {
 }
 
 async function startViewer() {
-  const { init } = await import('./core/app.js?v=20260621-rvm-selection-details-inspector-1');
+  const { init } = await import('./core/app.js?v=20260621-rvm-isolate-visibility-toolbar-1');
   await init();
   scheduleDeferredStartupSideEffects();
 }
