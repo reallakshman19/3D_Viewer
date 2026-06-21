@@ -22,6 +22,7 @@ import { installRvmGlbExportValidationBridge } from './RvmGlbExportValidationBri
 import { installRvmGlbRoundTripValidationBridge } from './RvmGlbRoundTripValidationBridge.js?v=20260620-rvm-glb-roundtrip-validation-1';
 import { installRvmGlbSelectionParityBridge } from './RvmGlbSelectionParityBridge.js?v=20260620-rvm-glb-selection-details-parity-1';
 import { installRvmGlbAcceptancePackBridge } from './RvmGlbAcceptancePackBridge.js?v=20260620-rvm-stagedjson-validation-1';
+import { installRvmBottomDiagnosticsDrawerBridge } from './RvmBottomDiagnosticsDrawerBridge.js?v=20260620-rvm-bottom-diagnostics-drawer-1';
 import { installBrowserRvmCppMat3x4WorkerPatch } from '../rvm/BrowserRvmCppMat3x4WorkerPatch.js?v=20260620-rvm-facetgroup-1';
 import { installBrowserRvmNativeTessellationRuntimePatch } from '../rvm/BrowserRvmNativeTessellationRuntimePatch.js?v=20260620-rvm-native-diagnostics-1';
 import { installBrowserRvmDishTessellationRuntimePatch } from '../rvm/BrowserRvmDishTessellationRuntimePatch.js?v=20260620-rvm-support-assembly-dish-1';
@@ -57,6 +58,7 @@ installRvmGlbExportValidationBridge();
 installRvmGlbRoundTripValidationBridge();
 installRvmGlbSelectionParityBridge();
 installRvmGlbAcceptancePackBridge();
+installRvmBottomDiagnosticsDrawerBridge();
 installRvmNativeTessellationDiagnosticsBridge();
 
-export { mountViewer3DRvmTab as renderViewer3DRvm } from './viewer3d-rvm-tab.js?v=20260620-rvm-stagedjson-validation-1';
+export { mountViewer3DRvmTab as renderViewer3DRvm } from './viewer3d-rvm-tab.js?v=20260620-rvm-bottom-diagnostics-drawer-1';
