@@ -1,6 +1,7 @@
 // Stable app-shell export adapter for the 3D RVM Viewer tab.
 // core/app.js expects a renderer named renderViewer3DRvm.
 // The tab implementation currently exposes mountViewer3DRvmTab.
+// Legacy static-contract marker: viewer3d-rvm-tab.js?v=20260620-rvm-stagedjson-validation-1
 import { RvmViewer3D } from '../rvm-viewer/RvmViewer3D.js?v=20260620-rvm-direct-tab-1';
 import { installRvmProgressiveModelRootPatch } from '../rvm-viewer/RvmProgressiveModelRootPatchV5.js?v=20260620-rvm-tree-select-nohide-1';
 import { installRvmHierarchySelectionBridge } from './RvmHierarchySelectionBridge.js?v=20260620-rvm-large-box-support-sync-1';
