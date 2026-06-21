@@ -70,13 +70,13 @@ async function run() {
 
   assert.match(
     tabSource,
-    /import\s+\{\s*loadRvmFileInBrowser\s*\}\s+from\s+['"]\.\.\/rvm\/BrowserRvmLoadBridge\.js\?v=20260620-rvm-flat-tree-1['"]/,
+    /import\s+\{\s*loadRvmFileInBrowser\s*\}\s+from\s+['"]\.\.\/rvm\/BrowserRvmLoadBridge\.js\?v=20260620-rvm-flat-tree-1['"]/, 
     'The actual RVM tab must import the current worker-first load bridge directly.'
   );
   assert.match(
     tabSource,
-    /RVM_TAB_JS_VERSION\s*=\s*['"]20260620-rvm-flat-tree-1['"]/,
-    'The RVM tab diagnostics version must identify the active flat-tree path.'
+    /RVM_TAB_JS_VERSION\s*=\s*['"](?:20260620-rvm-flat-tree-1|20260621-rvm-button-hardening-1)['"]/, 
+    'The RVM tab diagnostics version must identify the active flat-tree or button-hardened direct path.'
   );
   assert.match(
     tabSource,
@@ -85,7 +85,7 @@ async function run() {
   );
   assert.match(
     tabSource,
-    /import\s+['"]\.\.\/rvm-viewer\/RvmSupportIndexAttributeBridge\.js\?v=20260620-rvm-direct-tab-1['"]/,
+    /import\s+['"]\.\.\/rvm-viewer\/RvmSupportIndexAttributeBridge\.js\?v=20260620-rvm-direct-tab-1['"]/, 
     'The tab must not import a stale cached support bridge URL.'
   );
   assert.match(
