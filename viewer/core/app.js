@@ -121,76 +121,93 @@ async function visibleTabs() {
   }
 }
 
-function renderTabNav(nav, tabs) {
+function tabGroupFor(tabId) { return TAB_GROUPS.find((group) => group.ids.includes(tabId))?.label || ''; }
+
+function renderNav(nav, tabs, content) {
   nav.innerHTML = '';
-  const tabById = new Map(tabs.map((tab) => [tab.id, tab]));
-  const rendered = new Set();
-  for (const group of TAB_GROUPS) {
-    const groupTabs = group.ids.map((id) => tabById.get(id)).filter(Boolean);
-    if (!groupTabs.length) continue;
-    const label = document.createElement('div');
-    label.className = 'app-nav-group-label';
-    label.textContent = group.label;
-    nav.appendChild(label);
-    groupTabs.forEach((tab) => {
-      rendered.add(tab.id);
-      const btn = document.createElement('button');
-      btn.className = 'app-nav-button';
-      btn.dataset.tabId = tab.id;
-      btn.type = 'button';
-      btn.textContent = tab.label;
-      nav.appendChild(btn);
-    });
+  const groups = [];
+  for (const tab of tabs) {
+    const label = tabGroupFor(tab.id);
+    let group = groups.find((entry) => entry.label === label);
+    if (!group) { group = { label, tabs: [] }; groups.push(group); }
+    group.tabs.push(tab);
   }
-  tabs.filter((tab) => !rendered.has(tab.id)).forEach((tab) => {
-    const btn = document.createElement('button');
-    btn.className = 'app-nav-button';
-    btn.dataset.tabId = tab.id;
-    btn.type = 'button';
-    btn.textContent = tab.label;
-    nav.appendChild(btn);
-  });
+  for (const group of groups) {
+    const groupEl = document.createElement('div');
+    groupEl.className = 'app-nav-group';
+    if (group.label) {
+      const groupLabel = document.createElement('div');
+      groupLabel.className = 'app-nav-group-label';
+      groupLabel.textContent = group.label;
+      groupEl.appendChild(groupLabel);
+    }
+    for (const tab of group.tabs) {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'app-nav-button';
+      button.dataset.tabId = tab.id;
+      button.textContent = tab.label;
+      button.addEventListener('click', () => setActiveTab(tab.id));
+      groupEl.appendChild(button);
+    }
+    nav.appendChild(groupEl);
+  }
+  on(RuntimeEvents.TAB_CHANGED, async ({ tabId }) => { await activateTab(tabId, tabs, nav, content); });
 }
 
-function normalizeTabId(id) {
-  return TAB_ID_ALIASES.get(id) || id || 'viewer3d';
+function renderTabError(content, tab, error) {
+  console.error(`Failed to render tab ${tab?.id || ''}`, error);
+  hideStartupOverlay();
+  content.innerHTML = '';
+  const section = document.createElement('section');
+  section.className = 'tab-error-boundary';
+  const h2 = document.createElement('h2');
+  h2.textContent = `Unable to open ${String(tab?.label || 'tab')}`;
+  const p = document.createElement('p');
+  p.textContent = 'The tab failed to load, but navigation is still available.';
+  const pre = document.createElement('pre');
+  pre.textContent = String(error?.stack || error?.message || error);
+  section.append(h2, p, pre);
+  content.appendChild(section);
 }
 
 async function activateTab(tabId, tabs, nav, content) {
-  const normalizedId = normalizeTabId(tabId);
-  const tab = tabs.find((candidate) => candidate.id === normalizedId) || tabs[0];
+  const resolvedTabId = TAB_ID_ALIASES.get(tabId) || tabId;
+  const fallbackId = tabs[0]?.id;
+  const tab = tabs.find((item) => item.id === resolvedTabId) || tabs.find((item) => item.id === fallbackId);
   if (!tab) return;
+  if (state.activeTab === tab.id && content.firstChild) { hideStartupOverlay(); return; }
   cleanupActiveTab();
-  state.activeTab = tab.id;
-  setActiveTab(tab.id);
-  nav.querySelectorAll('.app-nav-button').forEach((btn) => btn.classList.toggle('is-active', btn.dataset.tabId === tab.id));
   content.innerHTML = '';
-  const renderer = await tab.load();
-  const maybeCleanup = await renderer(content, { state, emit, on, RuntimeEvents });
-  activeTabDestroy = typeof maybeCleanup === 'function' ? maybeCleanup : null;
-  hideStartupOverlay();
+  state.activeTab = tab.id;
+  nav.querySelectorAll('.app-nav-button').forEach((button) => { button.classList.toggle('is-active', button.dataset.tabId === tab.id); });
+  try {
+    let renderer = tabRendererCache.get(tab.id);
+    if (!renderer) { renderer = await tab.load(); tabRendererCache.set(tab.id, renderer); }
+    activeTabDestroy = renderer(content, { emit, on }) || null;
+  } catch (error) {
+    activeTabDestroy = null;
+    renderTabError(content, tab, error);
+  } finally {
+    hideStartupOverlay();
+  }
 }
 
 export async function init() {
-  const root = document.getElementById('app') || document.getElementById('app-layout') || document.body;
   initDevDebugWindow();
   loadStickyState();
-  const tabs = await visibleTabs();
-  const shell = createAppShell(root);
-  renderTabNav(shell.nav, tabs);
-  const onNavClick = (event) => {
-    const btn = event.target.closest('.app-nav-button');
-    if (!btn) return;
-    activateTab(btn.dataset.tabId, tabs, shell.nav, shell.content).catch(console.error);
-  };
-  shell.nav.addEventListener('click', onNavClick);
-  appDestroy = () => { shell.nav.removeEventListener('click', onNavClick); cleanupActiveTab(); };
-  const target = normalizeTabId(state.activeTab || location.hash.replace('#', '') || 'viewer3d');
-  await activateTab(target, tabs, shell.nav, shell.content);
-}
-
-export function destroyApp() {
-  cleanupActiveTab();
-  if (appDestroy) appDestroy();
-  appDestroy = null;
+  const mount = document.getElementById('app');
+  const root = mount || document.getElementById('app-layout') || document.body;
+  const { nav, content } = createAppShell(root);
+  try {
+    const tabs = await visibleTabs();
+    renderNav(nav, tabs, content);
+    const initialTab = TAB_ID_ALIASES.get(state.activeTab) || state.activeTab || tabs[0]?.id;
+    await activateTab(initialTab, tabs, nav, content);
+    appDestroy = () => { cleanupActiveTab(); hideStartupOverlay(); root.innerHTML = ''; };
+    emit(RuntimeEvents.APP_READY, { tabs: tabs.map((tab) => tab.id) });
+    return appDestroy;
+  } finally {
+    hideStartupOverlay();
+  }
 }
