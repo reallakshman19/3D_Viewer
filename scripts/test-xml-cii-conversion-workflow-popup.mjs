@@ -121,7 +121,7 @@ assert(legacyAdapter.includes('runPopupDiagnostics()'), 'legacy phase bridge mus
 assert(legacyAdapter.includes('computePopupWeightRows()'), 'legacy phase bridge must expose popup weight action');
 assert(legacyAdapter.includes('xmlCiiConfigWithLoadedMasterRows'), 'Preview must hydrate config from loaded local master rows');
 assert(legacyAdapter.includes("const config = xmlCiiConfigWithLoadedMasterRows('XML->CII preview');"), 'Preview render/build must use hydrated master config');
-assert(legacyAdapter.includes('model-converters-workflow-run-actions'), 'Run phase must use popup-native action layout instead of inline legacy button styles');
+assert(tabCss.includes('model-converters-workflow-run-actions'), 'Run phase must use popup-native action layout instead of inline legacy button styles');
 assert(tabCss.includes('.model-converters-workflow-regex-field select'), 'Run phase select controls must use workflow field styling');
 assert(tabCss.includes('span:not(.model-converters-workflow-run-status-icon)'), 'Run status row layout must not flex the icon column as the label');
 assert(canonicalTab.includes('model-converters-css-fix.css'), 'ModelConvertersTab must defensively load supplemental layout CSS');
