@@ -16,7 +16,7 @@ import '../rvm-viewer/RvmSupportIndexAttributeBridge.js?v=20260620-rvm-direct-ta
 
 installRvmProgressiveModelRootPatch(RvmViewer3D);
 
-const RVM_TAB_JS_VERSION = '20260620-rvm-flat-tree-1';
+const RVM_TAB_JS_VERSION = '20260621-rvm-button-hardening-1';
 const SUPPORT_DEFAULT_SCALE = 1.0;
 const SUPPORT_MAX_LABELS = 18;
 const JSON_TREE_RENDER_LIMIT = 2600;
@@ -59,6 +59,7 @@ const TOOL_GROUPS = [
   { label: 'Orient', actions: ['NAV_PLAN_X', 'NAV_ROTATE_Y', 'NAV_ROTATE_Z', 'SNAP_ISO_NW', 'SNAP_ISO_NE', 'SNAP_ISO_SW', 'SNAP_ISO_SE'] },
 ];
 
+const MODE_ACTIONS = new Set(['NAV_SELECT', 'NAV_ORBIT', 'NAV_PAN', 'MARQUEE_SELECT', 'MEASURE_TOOL', 'VIEW_MARQUEE_ZOOM']);
 const ICON_ONLY_ACTIONS = new Set(['NAV_PLAN_X', 'NAV_ROTATE_Y', 'NAV_ROTATE_Z', 'SNAP_ISO_NW', 'SNAP_ISO_NE', 'SNAP_ISO_SW', 'SNAP_ISO_SE']);
 
 function escapeHtml(value) {
@@ -252,9 +253,18 @@ function depthForNode(node, nodes) {
 function bindToolbar(viewer, root, stateBag) {
   root.querySelectorAll('[data-action]').forEach((btn) => btn.addEventListener('click', () => {
     const action = btn.dataset.action;
-    root.querySelectorAll('[data-action]').forEach((b) => b.classList.toggle('is-active', b === btn));
-    try { viewer.dispatchAction?.(action); viewer.setToolMode?.(action); root.querySelector('#rvm-mode-chip').textContent = ACTION_LABELS[action] || action; }
-    catch (err) { console.warn('[RVM tab] toolbar action failed', action, err); }
+    try {
+      let handled = false;
+      if (typeof viewer.dispatchAction === 'function') handled = viewer.dispatchAction(action) !== false;
+      if (MODE_ACTIONS.has(action) && typeof viewer.setToolMode === 'function') handled = viewer.setToolMode(action) !== false || handled;
+      if (MODE_ACTIONS.has(action)) syncActiveToolbarAction(root, action);
+      if (!handled) setStatusMessage(root, `${ACTION_LABELS[action] || action}: no applicable selection/model`);
+      if (!handled) reportRvmActionError(new Error(`${ACTION_LABELS[action] || action} did not complete`), { action, source: 'toolbar' });
+    } catch (err) {
+      setStatusMessage(root, `${ACTION_LABELS[action] || action} failed: ${err.message || err}`);
+      reportRvmActionError(err, { action, source: 'toolbar' });
+      console.warn('[RVM tab] toolbar action failed', action, err);
+    }
   }));
   const scaleInput = root.querySelector('#rvm-support-scale');
   const labelsBtn = root.querySelector('#rvm-support-labels');
@@ -268,6 +278,12 @@ function bindToolbar(viewer, root, stateBag) {
   scaleInput?.addEventListener('input', syncSupport);
   labelsBtn?.addEventListener('click', () => { const next = labelsBtn.getAttribute('aria-pressed') !== 'true'; labelsBtn.setAttribute('aria-pressed', next ? 'true' : 'false'); labelsBtn.textContent = next ? 'Labels On' : 'Labels Off'; syncSupport(); });
   stateBag.syncSupport = syncSupport;
+}
+
+function syncActiveToolbarAction(root, action) {
+  root.querySelectorAll('[data-action]').forEach((b) => b.classList.toggle('is-active', b.dataset.action === action));
+  const chip = root.querySelector('#rvm-mode-chip');
+  if (chip) chip.textContent = ACTION_LABELS[action] || action;
 }
 
 function updateStatus(root, viewer, payload = null) {
@@ -292,6 +308,7 @@ function updateStatus(root, viewer, payload = null) {
 }
 
 function setStatusChip(root, key, text) { const el = root.querySelector(`[data-rvm-status-chip="${key}"]`); if (el) el.textContent = text; }
+function setStatusMessage(root, text) { const el = root?.querySelector?.('#rvm-sb-msg'); if (el) el.textContent = text; }
 function isJsonOrUxmlFileName(fileName = '') { return /\.(json|uxml)$/i.test(String(fileName || '').trim()) || /\.uxml\.json$/i.test(String(fileName || '').trim()); }
 function isLikelyAttFileName(fileName = '') { return /\.att$/i.test(String(fileName || '').trim()); }
 function sidecarKey(fileName = '') { return String(fileName || '').trim().toLowerCase().replace(/\.[^.]+$/, ''); }
@@ -329,7 +346,31 @@ async function loadDirectBrowserRvm({ root, viewer, files, rvmFile, stateBag }) 
   const renderCount = payload.browserRvmRender?.renderableCount ?? payload.manifest?.browserRvmRenderScene?.renderableCount; status.textContent = `Loaded browser RVM ${rvmFile.name}${Number.isFinite(renderCount) ? ` (${renderCount} renderable)` : ''}`; return payload;
 }
 
+function markRvmModelLoaded(root, reason = 'model-loaded') {
+  if (root?.dataset) root.dataset.rvmModelLoaded = 'true';
+  try { globalThis.dispatchEvent?.(new CustomEvent('rvm-model-loaded', { detail: { reason, version: RVM_TAB_JS_VERSION } })); } catch (_) {}
+  try { globalThis.__PCF_GLB_RVM_BRIDGE_LOADER__?.ensurePostModel?.(reason); } catch (error) { reportRvmActionError(error, { action: 'post-model-bridge-loader', reason }); }
+}
+
+function reportRvmActionError(error, context = {}) {
+  if (typeof globalThis.__PCF_GLB_RVM_REPORT_ACTION_ERROR__ === 'function') return globalThis.__PCF_GLB_RVM_REPORT_ACTION_ERROR__(error, context);
+  console.warn('[RVM tab] action failed', context, error);
+  return null;
+}
+
 function cancelActiveLoad(stateBag) { try { stateBag.abortController?.abort?.(); } catch (_) {} stateBag.abortController = null; }
+
+function cleanupRvmTab(root, viewer, stateBag) {
+  cancelActiveLoad(stateBag);
+  try { root?.dispatchEvent?.(new CustomEvent('rvm-tab-dispose')); } catch (_) {}
+  try { root?._rvmEscKeyCleanup?.(); } catch (_) {}
+  try { root?._rvmSupportGeometryCleanup?.(); } catch (_) {}
+  try { globalThis.__PCF_GLB_RVM_BOTTOM_DIAGNOSTICS_DRAWER__?.destroy?.(root); } catch (_) {}
+  try { viewer?.dispose?.(); } catch (error) { reportRvmActionError(error, { action: 'viewer-dispose' }); }
+  if (globalThis.__3D_RVM_VIEWER__ === viewer) {
+    try { delete globalThis.__3D_RVM_VIEWER__; } catch (_) { globalThis.__3D_RVM_VIEWER__ = null; }
+  }
+}
 
 export function mountViewer3DRvmTab(container) {
   renderShell(container);
@@ -342,20 +383,20 @@ export function mountViewer3DRvmTab(container) {
     const rvmFile = files.find((file) => isLikelyRvmFileName(file?.name));
     if (rvmFile) {
       event.preventDefault?.(); event.stopPropagation?.();
-      try { await loadDirectBrowserRvm({ root, viewer, files, rvmFile, stateBag }); }
-      catch (err) { if (stateBag.abortController?.signal?.aborted || err?.name === 'AbortError') { status.textContent = `Cancelled RVM load ${rvmFile.name}`; return; } status.textContent = `RVM load failed: ${err.message || err}`; renderDiagnostics(root, { ...makeDiagnosticsSeed(rvmFile.name), browserRvmLoadFailed: true, browserRvmWorkerLoaded: false, error: err.message || String(err) }); console.error('[RVM tab] direct worker RVM load failed', err); }
+      try { const payload = await loadDirectBrowserRvm({ root, viewer, files, rvmFile, stateBag }); if (payload) markRvmModelLoaded(root, 'browser-rvm-load-success'); }
+      catch (err) { if (stateBag.abortController?.signal?.aborted || err?.name === 'AbortError') { status.textContent = `Cancelled RVM load ${rvmFile.name}`; return; } status.textContent = `RVM load failed: ${err.message || err}`; renderDiagnostics(root, { ...makeDiagnosticsSeed(rvmFile.name), browserRvmLoadFailed: true, browserRvmWorkerLoaded: false, error: err.message || String(err) }); reportRvmActionError(err, { action: 'load-rvm', fileName: rvmFile.name }); console.error('[RVM tab] direct worker RVM load failed', err); }
       return;
     }
     const jsonFile = files.find((file) => isJsonOrUxmlFileName(file?.name));
     if (!jsonFile) { const onlyAtt = files.every((file) => isLikelyAttFileName(file?.name)); status.textContent = onlyAtt ? 'ATT sidecar selected. Select the matching RVM/REV file with it.' : 'Unsupported RVM tab file selection.'; return; }
     status.textContent = `Loading ${jsonFile.name}…`;
-    try { const payload = await loadJsonOrUxmlFile(jsonFile, viewer, status, root.querySelector('#rvm-support-scale')?.value, root.querySelector('#rvm-support-labels')?.getAttribute('aria-pressed') === 'true'); const nodes = payload.manifest?.nodes || payload.manifest?.items || payload.manifest?.runtime?.nodes || []; tree.innerHTML = buildNodeTree(nodes, { limit: JSON_TREE_RENDER_LIMIT, recursive: true }); status.textContent = `Loaded ${jsonFile.name}`; root.querySelector('#rvm-placeholder')?.remove(); stateBag.syncSupport?.(); updateStatus(root, viewer, payload); }
-    catch (err) { status.textContent = `Load failed: ${err.message}`; console.error('[RVM tab] JSON/UXML load failed', err); }
+    try { const payload = await loadJsonOrUxmlFile(jsonFile, viewer, status, root.querySelector('#rvm-support-scale')?.value, root.querySelector('#rvm-support-labels')?.getAttribute('aria-pressed') === 'true'); const nodes = payload.manifest?.nodes || payload.manifest?.items || payload.manifest?.runtime?.nodes || []; tree.innerHTML = buildNodeTree(nodes, { limit: JSON_TREE_RENDER_LIMIT, recursive: true }); status.textContent = `Loaded ${jsonFile.name}`; root.querySelector('#rvm-placeholder')?.remove(); stateBag.syncSupport?.(); updateStatus(root, viewer, payload); markRvmModelLoaded(root, 'json-uxml-load-success'); }
+    catch (err) { status.textContent = `Load failed: ${err.message}`; reportRvmActionError(err, { action: 'load-json-uxml', fileName: jsonFile.name }); console.error('[RVM tab] JSON/UXML load failed', err); }
   });
-  tree.addEventListener('click', (event) => { const li = event.target.closest?.('li[data-node-id]'); if (!li) return; const id = li.dataset.nodeId; try { viewer.selection?.set?.([id]); viewer.selection?.selectByCanonicalId?.(id); viewer.fitSelection?.(); updateStatus(root, viewer); } catch (err) { console.warn('[RVM tab] selection failed', err); } });
+  tree.addEventListener('click', (event) => { const li = event.target.closest?.('li[data-node-id]'); if (!li) return; const id = li.dataset.nodeId; try { viewer.selection?.set?.([id]); viewer.selection?.selectByCanonicalId?.(id); viewer.fitSelection?.(); updateStatus(root, viewer); } catch (err) { reportRvmActionError(err, { action: 'tree-selection', nodeId: id }); console.warn('[RVM tab] selection failed', err); } });
   const bindFilter = (selector) => root.querySelector(selector)?.addEventListener('input', (event) => { const q = event.target.value.trim().toLowerCase(); tree.querySelectorAll('li[data-node-id]').forEach((li) => { li.style.display = !q || li.textContent.toLowerCase().includes(q) ? '' : 'none'; }); });
   bindFilter('#rvm-search-input'); bindFilter('#rvm-tree-filter');
   window.__3D_RVM_VIEWER__ = viewer;
   requestAnimationFrame(() => updateStatus(root, viewer));
-  return () => { cancelActiveLoad(stateBag); viewer.dispose?.(); };
+  return () => cleanupRvmTab(root, viewer, stateBag);
 }

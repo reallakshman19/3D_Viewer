@@ -1,5 +1,5 @@
-const CACHE_KEY = '20260620-rvm-support-att-mapping-1';
-const SCHEMA = 'rvm-support-att-stagedjson-mapping/v1-support-extras';
+const CACHE_KEY = '20260621-rvm-button-hardening-1';
+const SCHEMA = 'rvm-support-att-stagedjson-mapping/v2-prerequisite-diagnostics';
 const GLOBAL_KEY = '__PCF_GLB_RVM_SUPPORT_ATT_MAPPING_DIAGNOSTICS__';
 
 export function installRvmSupportAttMappingBridge() {
@@ -40,9 +40,13 @@ function injectControls(root, viewer) {
     if (!scan && !json) return;
     event.preventDefault();
     event.stopPropagation();
-    const diag = mapSupportMetadata(viewer);
-    render(root, diag);
-    if (json) downloadJson(diag, `rvm-support-att-mapping-${Date.now()}.json`);
+    try {
+      const diag = mapSupportMetadata(viewer);
+      render(root, diag);
+      if (json) downloadJson(diag, `rvm-support-att-mapping-${Date.now()}.json`);
+    } catch (error) {
+      reportActionError(error, { action: 'support-att', mode: scan ? 'scan' : 'json' });
+    }
   });
 }
 
@@ -57,11 +61,13 @@ function mapSupportMetadata(viewer) {
     supportKindCounts: {},
     missingSourceUuidCount: 0,
     missingSourcePathCount: 0,
+    prerequisite: { requiresGeneratedSupportGeometry: true, generatedSupportGeometryFound: false },
   };
   const sourceIndex = buildSourceIndex(viewer);
   viewer?.modelGroup?.updateMatrixWorld?.(true);
   viewer?.modelGroup?.traverse?.((obj) => {
     if (!obj?.isMesh || !obj.userData?.rvmSupportGeometryGenerated) return;
+    diag.prerequisite.generatedSupportGeometryFound = true;
     diag.supportGeometryScannedCount += 1;
     const mapped = toSupportAttRecord(obj, sourceIndex);
     applyMappedMetadata(obj, mapped);
@@ -72,6 +78,12 @@ function mapSupportMetadata(viewer) {
     if (!mapped.SOURCE_UUIDS?.length) diag.missingSourceUuidCount += 1;
     if (!mapped.SOURCE_PATH) diag.missingSourcePathCount += 1;
   });
+  if (!diag.prerequisite.generatedSupportGeometryFound) {
+    diag.prerequisite.message = 'SupportATT requires generated support geometry. Run SupportGeom → Overlay or Replace first.';
+    const root = document.querySelector('[data-rvm-viewer]');
+    const status = root?.querySelector?.('#rvm-sb-msg');
+    if (status) status.textContent = diag.prerequisite.message;
+  }
   globalThis[GLOBAL_KEY] = diag;
   return diag;
 }
@@ -137,7 +149,8 @@ function render(root, diag) {
     panel.appendChild(section);
   }
   const kinds = Object.entries(diag.supportKindCounts).map(([k, v]) => `${escapeHtml(k)}:${v}`).join(' · ') || 'none';
-  section.innerHTML = `<h3>Support ATT Mapping</h3><div class="rvm-support-att-grid"><span>Scanned</span><b>${diag.supportGeometryScannedCount}</b><span>Mapped</span><b>${diag.supportMetadataMappedCount}</b><span>Kinds</span><b>${kinds}</b></div><div class="rvm-support-att-hint">Mapped support geometry now carries ATT/stagedJSON-style support fields in node extras for GLB export.</div>`;
+  const hint = diag.prerequisite?.message || 'Mapped support geometry now carries ATT/stagedJSON-style support fields in node extras for GLB export.';
+  section.innerHTML = `<h3>Support ATT Mapping</h3><div class="rvm-support-att-grid"><span>Scanned</span><b>${diag.supportGeometryScannedCount}</b><span>Mapped</span><b>${diag.supportMetadataMappedCount}</b><span>Kinds</span><b>${kinds}</b></div><div class="rvm-support-att-hint">${escapeHtml(hint)}</div>`;
 }
 
 function findPanel(root) {
@@ -163,6 +176,7 @@ function normalizeSupportKind(value) {
 }
 
 function bump(obj, key) { obj[key] = (obj[key] || 0) + 1; }
+function reportActionError(error, context) { try { globalThis.__PCF_GLB_RVM_REPORT_ACTION_ERROR__?.(error, context); } catch (_) {} console.warn('[RVM SupportATT] action failed', context, error); }
 function escapeHtml(value) { return String(value).replace(/[&<>"]/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch])); }
 function downloadJson(payload, filename) { const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' }); const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = filename; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 2000); }
 function injectStyles() { if (document.getElementById('rvm-support-att-mapping-style')) return; const style = document.createElement('style'); style.id = 'rvm-support-att-mapping-style'; style.textContent = '.rvm-support-att-panel{margin-top:10px;padding:10px;border:1px solid rgba(148,163,184,.25);border-radius:10px;background:rgba(15,23,42,.65)}.rvm-support-att-panel h3{margin:0 0 8px;font-size:12px;color:#e2e8f0}.rvm-support-att-grid{display:grid;grid-template-columns:auto 1fr;gap:4px 8px;font-size:11px}.rvm-support-att-grid span{color:#94a3b8}.rvm-support-att-grid b{color:#f8fafc;font-weight:700}.rvm-support-att-hint{margin-top:8px;font-size:10px;color:#93c5fd;line-height:1.35}'; document.head.appendChild(style); }
