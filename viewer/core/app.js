@@ -11,6 +11,7 @@
 // viewer3d-rvm-tab-renderer.js?v=20260621-rvm-selection-details-inspector-1
 // viewer3d-rvm-tab-renderer.js?v=20260621-rvm-isolate-visibility-toolbar-1
 // viewer3d-rvm-tab-renderer.js?v=20260621-rvm-visibility-snapshots-1
+// viewer3d-rvm-tab-renderer.js?v=20260621-rvm-object-search-1
 // viewer3d-rvm-tab-renderer.js?v=20260621-rvm-navis-hierarchy-1
 // viewer3d-rvm-tab-renderer.js?v=20260621-rvm-native-facet-primary-1
 // viewer3d-rvm-tab-renderer.js?v=20260621-rvm-zone-lod-context-1
@@ -20,6 +21,7 @@
 // RvmSelectionDetailsInspectorBridge.js?v=20260621-rvm-selection-details-inspector-1
 // RvmVisibilityToolbarBridge.js?v=20260621-rvm-isolate-visibility-toolbar-1
 // RvmVisibilitySnapshotsBridge.js?v=20260621-rvm-visibility-snapshots-1
+// RvmObjectSearchBridge.js?v=20260621-rvm-object-search-1
 // RvmPolicyInfoBridge.js?v=20260621-rvm-policy-info-1
 // RvmDiagnosticPanelCollapseBridge.js?v=20260621-rvm-diagnostic-collapse-1
 // RvmZoneLodLabelBridge.js?v=20260621-rvm-zone-lod-labels-1
@@ -42,4 +44,4 @@
 // function cleanupActiveTab
 // renderTabError
 // tabRendererCache
-export { init } from './app-label-perf-runtime.js?v=20260621-rvm-visibility-snapshots-1';
+export { init } from './app-label-perf-runtime.js?v=20260621-rvm-object-search-1';
