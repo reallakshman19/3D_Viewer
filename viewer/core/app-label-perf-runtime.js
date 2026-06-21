@@ -22,7 +22,9 @@ const TAB_ID_ALIASES = new Map([
   ['universal-xml', 'universal-xml'], ['xml-compare', 'xml-compare'], ['psnm-utility', 'psnm-utility'],
 ]);
 const TAB_ICONS = new Map([
-  ['viewer3d', 'cube'], ['viewer3d-rvm', 'pipe'], ['model-converters', 'convert'], ['basic-glb-pcf', 'pipe'], ['pcfx-converter', 'convert'], ['model-exchange', 'exchange'], ['interchange-config', 'gear'], ['support-mapping-config', 'support'], ['adapter-mapping', 'map'], ['rvm-json-pcf', 'convert'], ['universal-xml', 'xml'], ['xml-compare', 'compare'], ['psnm-utility', 'tool'],
+  ['viewer3d', 'cube'], ['viewer3d-rvm', 'pipe'], ['model-converters', 'convert'], ['basic-glb-pcf', 'pipe'],
+  ['pcfx-converter', 'convert'], ['model-exchange', 'exchange'], ['interchange-config', 'gear'], ['support-mapping-config', 'support'],
+  ['adapter-mapping', 'map'], ['rvm-json-pcf', 'convert'], ['universal-xml', 'xml'], ['xml-compare', 'compare'], ['psnm-utility', 'tool'],
 ]);
 const TAB_ICON_SVGS = {
   cube: '<path d="M4 7.5 12 3l8 4.5v9L12 21l-8-4.5v-9Z"/><path d="M4 7.5 12 12l8-4.5M12 12v9"/>',
@@ -40,12 +42,48 @@ let activeTabDestroy = null;
 let appDestroy = null;
 const tabRendererCache = new Map();
 
-function cleanupActiveTab() { if (!activeTabDestroy) return; try { activeTabDestroy(); } catch (error) { console.warn('Tab cleanup failed', error); } finally { activeTabDestroy = null; } }
-function hideStartupOverlay() { try { hideLoading(); } catch {} const overlay = document.getElementById('app-loading-overlay'); if (overlay) { overlay.classList.remove('is-visible'); overlay.setAttribute('aria-hidden', 'true'); } }
-function pickRenderer(module, exportName, tabId) { const renderer = module?.[exportName]; if (typeof renderer !== 'function') throw new Error(`Tab ${tabId} did not export renderer ${exportName}`); return renderer; }
-async function loadPsnmUtilityRenderer() { await Promise.allSettled([import('../tabs/psnm-utility/psnm-ui-p2-enhancements.js?v=20260609-p2-1'), import('../tabs/psnm-utility/psnm-phase4c-hardening.js?v=20260609-phase4c-1'), import('../tabs/psnm-utility/psnm-phase4d-persistence.js?v=20260609-phase4d-1')]); return import('../tabs/psnm-utility-tab.js?v=20260613-psnm-anchor-no-blocker-1').then((module) => pickRenderer(module, 'renderPSNM_UtilityTab', 'psnm-utility')); }
-async function loadRvmViewerRenderer() { const results = await Promise.allSettled(RVM_RENDERER_PREFLIGHT_MODULES.map((specifier) => import(specifier))); results.forEach((result, index) => { if (result.status === 'rejected') console.warn(`[3D Viewer] optional RVM preflight module failed: ${RVM_RENDERER_PREFLIGHT_MODULES[index]}`, result.reason); }); return import('../tabs/viewer3d-rvm-tab-renderer.js?v=20260621-rvm-section-box-1').then((module) => pickRenderer(module, 'renderViewer3DRvm', 'viewer3d-rvm')); }
-async function loadBasicGlbPcfRenderer() { await import('../js/pcf2glb/ui/basicGlbPcfUiEnhancer.js?v=20260618-resizable-properties-1'); return import('../js/pcf2glb/ui/BasicGlbPcfPanel.js?v=20260618-resizable-properties-1').then((module) => pickRenderer(module, 'renderBasicGlbPcfPanel', 'basic-glb-pcf')); }
+function cleanupActiveTab() {
+  if (!activeTabDestroy) return;
+  try { activeTabDestroy(); } catch (error) { console.warn('Tab cleanup failed', error); }
+  finally { activeTabDestroy = null; }
+}
+
+function hideStartupOverlay() {
+  try { hideLoading(); } catch {}
+  const overlay = document.getElementById('app-loading-overlay');
+  if (overlay) {
+    overlay.classList.remove('is-visible');
+    overlay.setAttribute('aria-hidden', 'true');
+  }
+}
+
+function pickRenderer(module, exportName, tabId) {
+  const renderer = module?.[exportName];
+  if (typeof renderer !== 'function') throw new Error(`Tab ${tabId} did not export renderer ${exportName}`);
+  return renderer;
+}
+
+async function loadPsnmUtilityRenderer() {
+  await Promise.allSettled([
+    import('../tabs/psnm-utility/psnm-ui-p2-enhancements.js?v=20260609-p2-1'),
+    import('../tabs/psnm-utility/psnm-phase4c-hardening.js?v=20260609-phase4c-1'),
+    import('../tabs/psnm-utility/psnm-phase4d-persistence.js?v=20260609-phase4d-1'),
+  ]);
+  return import('../tabs/psnm-utility-tab.js?v=20260613-psnm-anchor-no-blocker-1').then((module) => pickRenderer(module, 'renderPSNM_UtilityTab', 'psnm-utility'));
+}
+
+async function loadRvmViewerRenderer() {
+  const results = await Promise.allSettled(RVM_RENDERER_PREFLIGHT_MODULES.map((specifier) => import(specifier)));
+  results.forEach((result, index) => {
+    if (result.status === 'rejected') console.warn(`[3D Viewer] optional RVM preflight module failed: ${RVM_RENDERER_PREFLIGHT_MODULES[index]}`, result.reason);
+  });
+  return import('../tabs/viewer3d-rvm-tab-renderer.js?v=20260621-rvm-selection-sets-1').then((module) => pickRenderer(module, 'renderViewer3DRvm', 'viewer3d-rvm'));
+}
+
+async function loadBasicGlbPcfRenderer() {
+  await import('../js/pcf2glb/ui/basicGlbPcfUiEnhancer.js?v=20260618-resizable-properties-1');
+  return import('../js/pcf2glb/ui/BasicGlbPcfPanel.js?v=20260618-resizable-properties-1').then((module) => pickRenderer(module, 'renderBasicGlbPcfPanel', 'basic-glb-pcf'));
+}
 
 const TABS = [
   { id: 'viewer3d', label: '3D Viewer', load: () => import('../tabs/viewer3d-tab.js?v=20260518-statusbar-theme-12').then((module) => pickRenderer(module, 'renderViewer3D', 'viewer3d')) },
@@ -69,12 +107,158 @@ const TAB_GROUPS = [
   { label: 'Utilities', ids: ['psnm-utility'] },
 ];
 
-function createAppShell(root) { root.innerHTML = ''; const shell = document.createElement('div'); shell.className = 'app-shell'; const nav = document.createElement('nav'); nav.className = 'app-nav'; nav.setAttribute('aria-label', 'Application tabs'); const content = document.createElement('main'); content.className = 'app-content'; shell.append(nav, content); root.appendChild(shell); return { nav, content }; }
-async function visibleTabs() { try { const response = await fetch(TAB_VISIBILITY_URL, { cache: 'no-store' }); if (!response.ok) throw new Error(`HTTP ${response.status}`); const config = await response.json(); const hidden = new Set(Array.isArray(config?.hiddenTabs) ? config.hiddenTabs : []); return TABS.filter((tab) => !hidden.has(tab.id)); } catch { return TABS; } }
+function createAppShell(root) {
+  root.innerHTML = '';
+  const shell = document.createElement('div');
+  shell.className = 'app-shell';
+  const nav = document.createElement('nav');
+  nav.className = 'app-nav';
+  nav.setAttribute('aria-label', 'Application tabs');
+  const content = document.createElement('main');
+  content.className = 'app-content';
+  shell.append(nav, content);
+  root.appendChild(shell);
+  return { nav, content };
+}
+
+async function visibleTabs() {
+  try {
+    const response = await fetch(TAB_VISIBILITY_URL, { cache: 'no-store' });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const config = await response.json();
+    const hidden = new Set(Array.isArray(config?.hiddenTabs) ? config.hiddenTabs : []);
+    return TABS.filter((tab) => !hidden.has(tab.id));
+  } catch {
+    return TABS;
+  }
+}
+
 function tabGroupFor(tabId) { return TAB_GROUPS.find((group) => group.ids.includes(tabId))?.label || ''; }
-function createBrandRail() { const brand = document.createElement('div'); brand.className = 'app-brand-rail'; brand.setAttribute('aria-label', 'PCF GLB RVM Viewer'); const icon = document.createElement('img'); icon.className = 'app-brand-icon'; icon.src = APP_ICON_URL; icon.alt = ''; icon.decoding = 'async'; icon.loading = 'eager'; icon.setAttribute('aria-hidden', 'true'); const copy = document.createElement('div'); copy.className = 'app-brand-copy'; const title = document.createElement('div'); title.className = 'app-brand-title'; title.textContent = 'PCF GLB Viewer'; const sub = document.createElement('div'); sub.className = 'app-brand-subtitle'; sub.textContent = 'RVM • GLB • XML Review'; copy.append(title, sub); brand.append(icon, copy); return brand; }
-function createTabIcon(tabId) { const iconKey = TAB_ICONS.get(tabId) || 'cube'; const span = document.createElement('span'); span.className = `app-tab-icon app-tab-icon-${iconKey}`; span.setAttribute('aria-hidden', 'true'); span.innerHTML = `<svg viewBox="0 0 24 24" focusable="false" role="img"><g fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">${TAB_ICON_SVGS[iconKey] || TAB_ICON_SVGS.cube}</g></svg>`; return span; }
-function renderNav(nav, tabs, content) { nav.innerHTML = ''; nav.appendChild(createBrandRail()); const groups = []; for (const tab of tabs) { const label = tabGroupFor(tab.id); let group = groups.find((entry) => entry.label === label); if (!group) { group = { label, tabs: [] }; groups.push(group); } group.tabs.push(tab); } for (const group of groups) { const groupEl = document.createElement('div'); groupEl.className = 'app-nav-group'; if (group.label) { const groupLabel = document.createElement('div'); groupLabel.className = 'app-nav-group-label'; groupLabel.textContent = group.label; groupEl.appendChild(groupLabel); } for (const tab of group.tabs) { const button = document.createElement('button'); button.type = 'button'; button.className = 'app-nav-button'; button.dataset.tabId = tab.id; button.setAttribute('aria-label', tab.label); button.appendChild(createTabIcon(tab.id)); const label = document.createElement('span'); label.className = 'app-tab-label'; label.textContent = tab.label; button.appendChild(label); button.addEventListener('click', () => setActiveTab(tab.id)); groupEl.appendChild(button); } nav.appendChild(groupEl); } on(RuntimeEvents.TAB_CHANGED, async ({ tabId }) => { await activateTab(tabId, tabs, nav, content); }); }
-function renderTabError(content, tab, error) { console.error(`Failed to render tab ${tab?.id || ''}`, error); hideStartupOverlay(); content.innerHTML = ''; const section = document.createElement('section'); section.className = 'tab-error-boundary'; const h2 = document.createElement('h2'); h2.textContent = `Unable to open ${String(tab?.label || 'tab')}`; const p = document.createElement('p'); p.textContent = 'The tab failed to load, but navigation is still available.'; const pre = document.createElement('pre'); pre.textContent = String(error?.stack || error?.message || error); section.append(h2, p, pre); content.appendChild(section); }
-async function activateTab(tabId, tabs, nav, content) { const resolvedTabId = TAB_ID_ALIASES.get(tabId) || tabId; const fallbackId = tabs[0]?.id; const tab = tabs.find((item) => item.id === resolvedTabId) || tabs.find((item) => item.id === fallbackId); if (!tab) return; if (state.activeTab === tab.id && content.firstChild) { hideStartupOverlay(); return; } cleanupActiveTab(); content.innerHTML = ''; state.activeTab = tab.id; nav.querySelectorAll('.app-nav-button').forEach((button) => { button.classList.toggle('is-active', button.dataset.tabId === tab.id); }); try { let renderer = tabRendererCache.get(tab.id); if (!renderer) { renderer = await tab.load(); tabRendererCache.set(tab.id, renderer); } activeTabDestroy = renderer(content, { emit, on }) || null; } catch (error) { activeTabDestroy = null; renderTabError(content, tab, error); } finally { hideStartupOverlay(); } }
-export async function init() { initDevDebugWindow(); const root = document.getElementById('app') || document.getElementById('app-layout') || document.body; const { nav, content } = createAppShell(root); const tabs = await visibleTabs(); renderNav(nav, tabs, content); loadStickyState(); const initial = TAB_ID_ALIASES.get(state.activeTab) || state.activeTab || tabs[0]?.id; setActiveTab(initial); appDestroy = () => { cleanupActiveTab(); nav.innerHTML = ''; content.innerHTML = ''; }; return appDestroy; }
+
+function createBrandRail() {
+  const brand = document.createElement('div');
+  brand.className = 'app-brand-rail';
+  brand.setAttribute('aria-label', 'PCF GLB RVM Viewer');
+  const icon = document.createElement('img');
+  icon.className = 'app-brand-icon';
+  icon.src = APP_ICON_URL;
+  icon.alt = '';
+  icon.decoding = 'async';
+  icon.loading = 'eager';
+  icon.setAttribute('aria-hidden', 'true');
+  const copy = document.createElement('div');
+  copy.className = 'app-brand-copy';
+  const title = document.createElement('div');
+  title.className = 'app-brand-title';
+  title.textContent = 'PCF GLB Viewer';
+  const sub = document.createElement('div');
+  sub.className = 'app-brand-subtitle';
+  sub.textContent = 'RVM • GLB • XML Review';
+  copy.append(title, sub);
+  brand.append(icon, copy);
+  return brand;
+}
+
+function createTabIcon(tabId) {
+  const iconKey = TAB_ICONS.get(tabId) || 'cube';
+  const span = document.createElement('span');
+  span.className = `app-tab-icon app-tab-icon-${iconKey}`;
+  span.setAttribute('aria-hidden', 'true');
+  span.innerHTML = `<svg viewBox="0 0 24 24" focusable="false" role="img"><g fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">${TAB_ICON_SVGS[iconKey] || TAB_ICON_SVGS.cube}</g></svg>`;
+  return span;
+}
+
+function renderNav(nav, tabs, content) {
+  nav.innerHTML = '';
+  nav.appendChild(createBrandRail());
+  const groups = [];
+  for (const tab of tabs) {
+    const label = tabGroupFor(tab.id);
+    let group = groups.find((entry) => entry.label === label);
+    if (!group) { group = { label, tabs: [] }; groups.push(group); }
+    group.tabs.push(tab);
+  }
+  for (const group of groups) {
+    const groupEl = document.createElement('div');
+    groupEl.className = 'app-nav-group';
+    if (group.label) {
+      const groupLabel = document.createElement('div');
+      groupLabel.className = 'app-nav-group-label';
+      groupLabel.textContent = group.label;
+      groupEl.appendChild(groupLabel);
+    }
+    for (const tab of group.tabs) {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'app-nav-button';
+      button.dataset.tabId = tab.id;
+      button.setAttribute('aria-label', tab.label);
+      button.appendChild(createTabIcon(tab.id));
+      const label = document.createElement('span');
+      label.className = 'app-tab-label';
+      label.textContent = tab.label;
+      button.appendChild(label);
+      button.addEventListener('click', () => setActiveTab(tab.id));
+      groupEl.appendChild(button);
+    }
+    nav.appendChild(groupEl);
+  }
+  on(RuntimeEvents.TAB_CHANGED, async ({ tabId }) => { await activateTab(tabId, tabs, nav, content); });
+}
+
+function renderTabError(content, tab, error) {
+  console.error(`Failed to render tab ${tab?.id || ''}`, error);
+  hideStartupOverlay();
+  content.innerHTML = '';
+  const section = document.createElement('section');
+  section.className = 'tab-error-boundary';
+  const h2 = document.createElement('h2');
+  h2.textContent = `Unable to open ${String(tab?.label || 'tab')}`;
+  const p = document.createElement('p');
+  p.textContent = 'The tab failed to load, but navigation is still available.';
+  const pre = document.createElement('pre');
+  pre.textContent = String(error?.stack || error?.message || error);
+  section.append(h2, p, pre);
+  content.appendChild(section);
+}
+
+async function activateTab(tabId, tabs, nav, content) {
+  const resolvedTabId = TAB_ID_ALIASES.get(tabId) || tabId;
+  const fallbackId = tabs[0]?.id;
+  const tab = tabs.find((item) => item.id === resolvedTabId) || tabs.find((item) => item.id === fallbackId);
+  if (!tab) return;
+  if (state.activeTab === tab.id && content.firstChild) {
+    hideStartupOverlay();
+    return;
+  }
+  cleanupActiveTab();
+  content.innerHTML = '';
+  state.activeTab = tab.id;
+  nav.querySelectorAll('.app-nav-button').forEach((button) => { button.classList.toggle('is-active', button.dataset.tabId === tab.id); });
+  try {
+    let renderer = tabRendererCache.get(tab.id);
+    if (!renderer) {
+      renderer = await tab.load();
+      tabRendererCache.set(tab.id, renderer);
+    }
+    activeTabDestroy = renderer(content, { emit, on }) || null;
+  } catch (error) {
+    activeTabDestroy = null;
+    renderTabError(content, tab, error);
+  } finally {
+    hideStartupOverlay();
+  }
+}
+
+export async function init() {
+  initDevDebugWindow();
+  const root = document.getElementById('app') || document.getElementById('app-layout') || document.body;
+  const { nav, content } = createAppShell(root);
+  const tabs = await visibleTabs();
+  renderNav(nav, tabs, content);
+  loadStickyState();
+  const initial = TAB_ID_ALIASES.get(state.activeTab) || state.activeTab || tabs[0]?.id;
+  setActiveTab(initial);
+  appDestroy = () => { cleanupActiveTab(); nav.innerHTML = ''; content.innerHTML = ''; };
+  return appDestroy;
+}
