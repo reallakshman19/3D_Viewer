@@ -70,13 +70,18 @@ async function run() {
 
   assert.match(
     tabSource,
-    /import\s+\{\s*loadRvmFileInBrowser\s*\}\s+from\s+['"]\.\.\/rvm\/BrowserRvmLoadBridge\.js\?v=20260620-rvm-flat-tree-1['"]/, 
-    'The actual RVM tab must import the current worker-first load bridge directly.'
+    /import\s+\{\s*loadRvmFileInBrowser\s*\}\s+from\s+['"]\.\.\/rvm\/BrowserRvmLoadBridge\.js\?v=20260621-rvm-zone-lod-labels-1['"]/, 
+    'The actual RVM tab must import the current worker-first zone/LOD load bridge directly.'
   );
   assert.match(
     tabSource,
-    /RVM_TAB_JS_VERSION\s*=\s*['"](?:20260620-rvm-flat-tree-1|20260621-rvm-button-hardening-1)['"]/, 
-    'The RVM tab diagnostics version must identify the active flat-tree or button-hardened direct path.'
+    /RVM_TAB_JS_VERSION\s*=\s*['"]20260621-rvm-zone-lod-labels-1['"]/, 
+    'The RVM tab diagnostics version must identify the active zone/LOD direct path.'
+  );
+  assert.match(
+    tabSource,
+    /beforeRenderInstructions[\s\S]*__PCF_GLB_RVM_ZONE_LOD_LABELS__/,
+    'The direct RVM branch must pass the pre-render zone/LOD instruction hook.'
   );
   assert.match(
     tabSource,
