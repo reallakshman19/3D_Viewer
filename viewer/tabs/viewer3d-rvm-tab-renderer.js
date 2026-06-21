@@ -18,6 +18,7 @@
 // Active selection details inspector cache key: RvmSelectionDetailsInspectorBridge.js?v=20260621-rvm-selection-details-inspector-1
 // Active isolate/visibility toolbar cache key: RvmVisibilityToolbarBridge.js?v=20260621-rvm-isolate-visibility-toolbar-1
 // Active visibility snapshots cache key: RvmVisibilitySnapshotsBridge.js?v=20260621-rvm-visibility-snapshots-1
+// Active object search cache key: RvmObjectSearchBridge.js?v=20260621-rvm-object-search-1
 import { RvmViewer3D } from '../rvm-viewer/RvmViewer3D.js?v=20260620-rvm-direct-tab-1';
 import { installRvmProgressiveModelRootPatch } from '../rvm-viewer/RvmProgressiveModelRootPatchV5.js?v=20260620-rvm-tree-select-nohide-1';
 import { installRvmHierarchySelectionBridge } from './RvmHierarchySelectionBridge.js?v=20260620-rvm-large-box-support-sync-1';
@@ -34,6 +35,7 @@ import { installRvmPolicyInfoBridge } from './RvmPolicyInfoBridge.js?v=20260621-
 import { installRvmDiagnosticPanelCollapseBridge } from './RvmDiagnosticPanelCollapseBridge.js?v=20260621-rvm-diagnostic-collapse-1';
 import { installRvmVisibilityToolbarBridge } from './RvmVisibilityToolbarBridge.js?v=20260621-rvm-isolate-visibility-toolbar-1';
 import { installRvmVisibilitySnapshotsBridge } from './RvmVisibilitySnapshotsBridge.js?v=20260621-rvm-visibility-snapshots-1';
+import { installRvmObjectSearchBridge } from './RvmObjectSearchBridge.js?v=20260621-rvm-object-search-1';
 import { installRvmSelectionTreeSyncBridge } from './RvmSelectionTreeSyncBridge.js?v=20260620-rvm-large-box-support-sync-1';
 import { installRvmMaterialModeBridge } from './RvmMaterialModeBridge.js?v=20260620-rvm-remaining-material-modes-1';
 import { installRvmBottomDiagnosticsDrawerBridge } from './RvmBottomDiagnosticsDrawerBridge.js?v=20260621-rvm-perf-lazy-bridges-1';
@@ -63,6 +65,7 @@ installRvmHierarchySelectionBridge();
 installRvmCanvasSelectionBridge();
 installRvmVisibilityToolbarBridge();
 installRvmVisibilitySnapshotsBridge();
+installRvmObjectSearchBridge();
 installRvmSelectionTreeSyncBridge();
 installRvmMaterialModeBridge();
 installRvmBottomDiagnosticsDrawerBridge();
