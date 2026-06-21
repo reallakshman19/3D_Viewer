@@ -2,35 +2,22 @@
 // core/app.js expects a renderer named renderViewer3DRvm.
 // The tab implementation currently exposes mountViewer3DRvmTab.
 // Legacy static-contract marker: viewer3d-rvm-tab.js?v=20260620-rvm-stagedjson-validation-1
+// Active cache key: viewer3d-rvm-tab.js?v=20260621-rvm-perf-lazy-bridges-1
 import { RvmViewer3D } from '../rvm-viewer/RvmViewer3D.js?v=20260620-rvm-direct-tab-1';
 import { installRvmProgressiveModelRootPatch } from '../rvm-viewer/RvmProgressiveModelRootPatchV5.js?v=20260620-rvm-tree-select-nohide-1';
 import { installRvmHierarchySelectionBridge } from './RvmHierarchySelectionBridge.js?v=20260620-rvm-large-box-support-sync-1';
-import { installRvmViewerInteractionPatch, installRvmCanvasSelectionBridge } from './RvmViewerInteractionPatch.js?v=20260620-rvm-esc-hide-selection-1';
+import { installRvmViewerInteractionPatch, installRvmCanvasSelectionBridge } from './RvmViewerInteractionPatch.js?v=20260621-rvm-perf-lazy-bridges-1';
 import { installRvmVisibilityToolbarBridge } from './RvmVisibilityToolbarBridge.js?v=20260620-rvm-esc-hide-selection-1';
 import { installRvmSelectionTreeSyncBridge } from './RvmSelectionTreeSyncBridge.js?v=20260620-rvm-large-box-support-sync-1';
-import { installRvmSupportSummaryBridge } from './RvmSupportSummaryBridge.js?v=20260620-rvm-support-symbol-mode-1';
-import { installRvmSupportAssemblyBridge } from './RvmSupportAssemblyBridge.js?v=20260620-rvm-support-assembly-dish-1';
-import { installRvmIntelligentSupportEngineBridge } from './RvmIntelligentSupportEngineBridge.js?v=20260620-rvm-intelligent-support-engine-1';
-import { installRvmSupportGeometryBridge } from './RvmSupportGeometryBridge.js?v=20260620-rvm-support-geometry-v1';
-import { installRvmSupportAttMappingBridge } from './RvmSupportAttMappingBridge.js?v=20260620-rvm-support-att-mapping-1';
-import { installRvmStagedJsonExportBridge } from './RvmStagedJsonExportBridge.js?v=20260620-rvm-stagedjson-export-1';
-import { installRvmStagedJsonValidationBridge } from './RvmStagedJsonValidationBridge.js?v=20260620-rvm-stagedjson-validation-1';
 import { installRvmMaterialModeBridge } from './RvmMaterialModeBridge.js?v=20260620-rvm-remaining-material-modes-1';
-import { installRvmPrimitiveFallbackBridge } from './RvmPrimitiveFallbackBridge.js?v=20260620-rvm-primitive-fallback-clickable-1';
-import { installRvmNativeSceneGlbExportBridge } from './RvmNativeSceneGlbExportBridge.js?v=20260620-rvm-glb-component-hierarchy-v3-1';
-import { installRvmGlbExportProfileBridge } from './RvmGlbExportProfileBridge.js?v=20260620-rvm-glb-export-profile-units-1';
-import { installRvmGlbExportValidationBridge } from './RvmGlbExportValidationBridge.js?v=20260620-rvm-glb-export-validation-1';
-import { installRvmGlbRoundTripValidationBridge } from './RvmGlbRoundTripValidationBridge.js?v=20260620-rvm-glb-roundtrip-validation-1';
-import { installRvmGlbSelectionParityBridge } from './RvmGlbSelectionParityBridge.js?v=20260620-rvm-glb-selection-details-parity-1';
-import { installRvmGlbAcceptancePackBridge } from './RvmGlbAcceptancePackBridge.js?v=20260620-rvm-stagedjson-validation-1';
-import { installRvmBottomDiagnosticsDrawerBridge } from './RvmBottomDiagnosticsDrawerBridge.js?v=20260620-rvm-bottom-diagnostics-drawer-1';
+import { installRvmBottomDiagnosticsDrawerBridge } from './RvmBottomDiagnosticsDrawerBridge.js?v=20260621-rvm-perf-lazy-bridges-1';
+import { installRvmDeferredBridgeLoader } from './RvmDeferredBridgeLoader.js?v=20260621-rvm-perf-lazy-bridges-1';
 import { installBrowserRvmCppMat3x4WorkerPatch } from '../rvm/BrowserRvmCppMat3x4WorkerPatch.js?v=20260620-rvm-facetgroup-1';
 import { installBrowserRvmNativeTessellationRuntimePatch } from '../rvm/BrowserRvmNativeTessellationRuntimePatch.js?v=20260620-rvm-native-diagnostics-1';
 import { installBrowserRvmDishTessellationRuntimePatch } from '../rvm/BrowserRvmDishTessellationRuntimePatch.js?v=20260620-rvm-support-assembly-dish-1';
 import { installBrowserRvmRemainingPrimitiveRuntimePatch } from '../rvm/BrowserRvmRemainingPrimitiveRuntimePatch.js?v=20260620-rvm-facetgroup-1';
 import { installBrowserRvmTorusParityRuntimePatch } from '../rvm/BrowserRvmTorusParityRuntimePatch.js?v=20260620-rvm-torus-parity-1';
 import { installBrowserRvmSnoutParityRuntimePatch } from '../rvm/BrowserRvmSnoutParityRuntimePatch.js?v=20260620-rvm-snout-parity-1';
-import { installRvmNativeTessellationDiagnosticsBridge } from './RvmNativeTessellationDiagnosticsBridge.js?v=20260620-rvm-native-diagnostics-1';
 
 installBrowserRvmCppMat3x4WorkerPatch();
 installBrowserRvmNativeTessellationRuntimePatch();
@@ -44,22 +31,8 @@ installRvmHierarchySelectionBridge();
 installRvmCanvasSelectionBridge();
 installRvmVisibilityToolbarBridge();
 installRvmSelectionTreeSyncBridge();
-installRvmSupportSummaryBridge();
-installRvmSupportAssemblyBridge();
-installRvmIntelligentSupportEngineBridge();
-installRvmSupportGeometryBridge();
-installRvmSupportAttMappingBridge();
-installRvmStagedJsonExportBridge();
-installRvmStagedJsonValidationBridge();
 installRvmMaterialModeBridge();
-installRvmPrimitiveFallbackBridge();
-installRvmNativeSceneGlbExportBridge();
-installRvmGlbExportProfileBridge();
-installRvmGlbExportValidationBridge();
-installRvmGlbRoundTripValidationBridge();
-installRvmGlbSelectionParityBridge();
-installRvmGlbAcceptancePackBridge();
 installRvmBottomDiagnosticsDrawerBridge();
-installRvmNativeTessellationDiagnosticsBridge();
+installRvmDeferredBridgeLoader();
 
-export { mountViewer3DRvmTab as renderViewer3DRvm } from './viewer3d-rvm-tab.js?v=20260620-rvm-bottom-diagnostics-drawer-1';
+export { mountViewer3DRvmTab as renderViewer3DRvm } from './viewer3d-rvm-tab.js?v=20260621-rvm-perf-lazy-bridges-1';
