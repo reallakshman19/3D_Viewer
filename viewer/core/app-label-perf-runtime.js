@@ -77,7 +77,7 @@ async function loadRvmViewerRenderer() {
   results.forEach((result, index) => {
     if (result.status === 'rejected') console.warn(`[3D Viewer] optional RVM preflight module failed: ${RVM_RENDERER_PREFLIGHT_MODULES[index]}`, result.reason);
   });
-  return import('../tabs/viewer3d-rvm-tab-renderer.js?v=20260621-rvm-selection-sets-1').then((module) => pickRenderer(module, 'renderViewer3DRvm', 'viewer3d-rvm'));
+  return import('../tabs/viewer3d-rvm-tab-renderer.js?v=20260621-rvm-report-export-1').then((module) => pickRenderer(module, 'renderViewer3DRvm', 'viewer3d-rvm'));
 }
 
 async function loadBasicGlbPcfRenderer() {
