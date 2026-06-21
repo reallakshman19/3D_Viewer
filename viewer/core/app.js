@@ -5,6 +5,14 @@ import { hideLoading } from './loading.js';
 import { initDevDebugWindow } from '../debug/dev-debug-window.js';
 
 const TAB_VISIBILITY_URL = new URL('../config/tab-visibility.json', import.meta.url).href;
+const RVM_RENDERER_PREFLIGHT_MODULES = [
+  '../rvm/RvmFileLoadedBridge.js?v=20260618-modular-rvm-file-loaded-1',
+  '../rvm/AvevaJsonVisibleFallbackPatch.js?v=20260618-staged-visible-fallback-1',
+  '../rvm-viewer/RvmSupportSymbols.js?v=20260618-support-kind-authority-1',
+  '../rvm-viewer/RvmSupportIndexAttributeBridge.js?v=20260620-rvm-direct-tab-1',
+  '../tabs/viewer3d-rvm-file-dialog-singleton.js?v=20260618-rvm-file-dialog-singleton-1',
+  '../tabs/viewer3d-rvm-uxml-import-addon.js?v=20260618-support-kind-authority-1',
+];
 
 const TAB_ID_ALIASES = new Map([
   ['viewer', 'viewer3d'], ['viewer3d', 'viewer3d'], ['rvm-viewer', 'viewer3d-rvm'], ['viewer3d-rvm', 'viewer3d-rvm'],
@@ -14,8 +22,6 @@ const TAB_ID_ALIASES = new Map([
   ['universal-xml', 'universal-xml'], ['xml-compare', 'xml-compare'], ['psnm-utility', 'psnm-utility'],
 ]);
 
-// Lifecycle isolation contract checked by viewer/tests/app-entrypoint-static.test.js.
-// activeTabDestroy is only for the mounted tab; appDestroy is only for full app teardown.
 let activeTabDestroy = null;
 let appDestroy = null;
 const tabRendererCache = new Map();
@@ -53,13 +59,11 @@ async function loadPsnmUtilityRenderer() {
 }
 
 async function loadRvmViewerRenderer() {
-  await import('../rvm/RvmFileLoadedBridge.js?v=20260618-modular-rvm-file-loaded-1');
-  await import('../rvm/AvevaJsonVisibleFallbackPatch.js?v=20260618-staged-visible-fallback-1');
-  await import('../rvm-viewer/RvmSupportSymbols.js?v=20260618-support-kind-authority-1');
-  await import('../rvm-viewer/RvmSupportIndexAttributeBridge.js?v=20260620-rvm-direct-tab-1');
-  await import('../tabs/viewer3d-rvm-file-dialog-singleton.js?v=20260618-rvm-file-dialog-singleton-1');
-  await import('../tabs/viewer3d-rvm-uxml-import-addon.js?v=20260618-support-kind-authority-1');
-  return import('../tabs/viewer3d-rvm-tab-renderer.js?v=20260620-rvm-bottom-diagnostics-drawer-1')
+  const results = await Promise.allSettled(RVM_RENDERER_PREFLIGHT_MODULES.map((specifier) => import(specifier)));
+  results.forEach((result, index) => {
+    if (result.status === 'rejected') console.warn(`[3D Viewer] optional RVM preflight module failed: ${RVM_RENDERER_PREFLIGHT_MODULES[index]}`, result.reason);
+  });
+  return import('../tabs/viewer3d-rvm-tab-renderer.js?v=20260621-rvm-perf-lazy-bridges-1')
     .then((module) => pickRenderer(module, 'renderViewer3DRvm', 'viewer3d-rvm'));
 }
 
@@ -154,7 +158,17 @@ function renderNav(nav, tabs, content) {
 function renderTabError(content, tab, error) {
   console.error(`Failed to render tab ${tab?.id || ''}`, error);
   hideStartupOverlay();
-  content.innerHTML = `<section class="tab-error-boundary"><h2>Unable to open ${String(tab?.label || 'tab')}</h2><p>The tab failed to load, but navigation is still available.</p><pre>${String(error?.stack || error?.message || error)}</pre></section>`;
+  content.innerHTML = '';
+  const section = document.createElement('section');
+  section.className = 'tab-error-boundary';
+  const h2 = document.createElement('h2');
+  h2.textContent = `Unable to open ${String(tab?.label || 'tab')}`;
+  const p = document.createElement('p');
+  p.textContent = 'The tab failed to load, but navigation is still available.';
+  const pre = document.createElement('pre');
+  pre.textContent = String(error?.stack || error?.message || error);
+  section.append(h2, p, pre);
+  content.appendChild(section);
 }
 
 async function activateTab(tabId, tabs, nav, content) {
