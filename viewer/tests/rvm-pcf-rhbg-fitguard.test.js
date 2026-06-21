@@ -10,6 +10,7 @@ function check(condition, label) {
 const rendererSource = await fs.readFile(new URL('../tabs/viewer3d-rvm-tab-renderer.js', import.meta.url), 'utf8');
 const tabSource = await fs.readFile(new URL('../tabs/viewer3d-rvm-tab.js', import.meta.url), 'utf8');
 const uiPanelSource = await fs.readFile(new URL('../tabs/RvmUiInteractionPanelPatch.js', import.meta.url), 'utf8');
+const propertyCollapseSource = await fs.readFile(new URL('../tabs/RvmPropertyPanelCollapseAuditBridge.js', import.meta.url), 'utf8');
 const deferredSource = await fs.readFile(new URL('../tabs/RvmDeferredBridgeLoader.js', import.meta.url), 'utf8');
 const drawerSource = await fs.readFile(new URL('../tabs/RvmBottomDiagnosticsDrawerBridge.js', import.meta.url), 'utf8');
 const supportGeomSource = await fs.readFile(new URL('../tabs/RvmSupportGeometryBridge.js', import.meta.url), 'utf8');
@@ -24,8 +25,10 @@ check(rendererSource.includes('RvmDeferredBridgeLoader.js?v=20260621-rvm-button-
 check(rendererSource.includes('RvmVisibilityToolbarBridge.js?v=20260621-rvm-perf-lazy-bridges-1'), 'renderer uses bumped visibility toolbar bridge cache key');
 check(rendererSource.includes('viewer3d-rvm-tab.js?v=20260621-rvm-button-hardening-1'), 'renderer exports button-hardening RVM tab cache key');
 check(rendererSource.includes('RvmUiInteractionPanelPatch.js?v=20260621-rvm-ui-interaction-panels-1'), 'renderer loads RVM UI interaction panel hardening bridge');
+check(rendererSource.includes('RvmPropertyPanelCollapseAuditBridge.js?v=20260621-rvm-property-collapse-1'), 'renderer loads property panel collapse audit bridge');
 check(rendererSource.includes('installRvmUiInteractionPanelPatch(RvmViewer3D)'), 'renderer patches RVM viewer interactions before mount');
 check(rendererSource.includes('installRvmUiPanelBridge()'), 'renderer installs RVM panel bridge');
+check(rendererSource.includes('installRvmPropertyPanelCollapseAuditBridge()'), 'renderer installs property panel collapse audit bridge');
 check(rendererSource.includes('installRvmDeferredBridgeLoader()'), 'renderer installs deferred bridge loader');
 check(!rendererSource.includes('installRvmStagedJsonExportBridge()'), 'renderer avoids eager stagedJSON bridge install');
 check(!rendererSource.includes('installRvmNativeSceneGlbExportBridge()'), 'renderer avoids eager GLB bridge install');
@@ -38,6 +41,13 @@ check(uiPanelSource.includes('buildSelectionAnchoredSectionBox'), 'UI bridge anc
 check(uiPanelSource.includes('moveLoadFirst'), 'UI bridge moves Load control to the left-most ribbon position');
 check(uiPanelSource.includes('upgradeRightPanelSections'), 'UI bridge upgrades properties sections to collapsible/resizable panels');
 check(uiPanelSource.includes('Browser RVM Performance|Native Tessellation|Primitive Fallback Review'), 'diagnostic property panels default collapsed');
+check(propertyCollapseSource.includes('installRvmPropertyPanelCollapseAuditBridge'), 'property collapse bridge exports installer');
+check(propertyCollapseSource.includes('wrapDirectPropertyHeaders'), 'property collapse bridge wraps direct property headers');
+check(propertyCollapseSource.includes('rvm-property-collapse-icon'), 'property collapse bridge gives every subpanel a visible collapse icon');
+check(propertyCollapseSource.includes('aria-expanded'), 'property collapse bridge synchronizes accessible expanded state');
+check(propertyCollapseSource.includes('DEFAULT_COLLAPSED_SECTION_RE'), 'property collapse bridge centralizes diagnostic default collapse policy');
+check(propertyCollapseSource.includes('rvm-hierarchy-font-reduced'), 'property collapse bridge marks hierarchy tree for smaller font');
+check(propertyCollapseSource.includes('font-size: 9px !important'), 'hierarchy listed components are reduced by 2px from 11px to 9px');
 check(tabSource.includes('function markRvmModelLoaded'), 'RVM tab explicitly marks successful model loads');
 check(tabSource.includes('rvm-model-loaded'), 'RVM tab dispatches model-loaded event');
 check(tabSource.includes('ensurePostModel'), 'RVM tab wakes post-model deferred bridges');
@@ -66,13 +76,14 @@ check(stagedJsonSource.includes('hiddenReplaceSideEffect: false'), 'StagedJSON S
 check(!stagedJsonSource.includes("localStorage.setItem('rvm_support_geometry_mode_v1', 'replace')"), 'StagedJSON Support no longer forces SupportGeom Replace in localStorage');
 check(indexSource.includes('main-rhbg-fitguard.js?v=20260620-rvm-stagedjson-validation-1'), 'legacy entry cache marker remains');
 check(indexSource.includes('main-rhbg-fitguard.js?v=20260621-rvm-button-hardening-1'), 'button-hardening entry cache marker remains');
-check(indexSource.includes('main-rhbg-fitguard.js?v=20260621-rvm-ui-interaction-panels-1'), 'index uses RVM UI interaction entry cache key');
+check(indexSource.includes('main-rhbg-fitguard.js?v=20260621-rvm-ui-interaction-panels-1'), 'UI interaction entry cache marker remains');
+check(indexSource.includes('main-rhbg-fitguard.js?v=20260621-rvm-property-collapse-1'), 'index uses RVM property collapse entry cache key');
 check(indexSource.includes('styles/app-shell-header-fix.css?v=20260621-rvm-ui-interaction-panels-1'), 'index loads app shell header layout fix CSS');
-check(entrySource.includes('core/app.js?v=20260621-rvm-ui-interaction-panels-1'), 'entrypoint uses RVM UI interaction app cache key');
+check(entrySource.includes('core/app.js?v=20260621-rvm-property-collapse-1'), 'entrypoint uses RVM property collapse app cache key');
 check(entrySource.includes('scheduleDeferredStartupSideEffects'), 'entrypoint defers optional startup side effects');
 check(appSource.includes('RVM_RENDERER_PREFLIGHT_MODULES'), 'app declares RVM preflight module list');
 check(appSource.includes('Promise.allSettled(RVM_RENDERER_PREFLIGHT_MODULES'), 'app preflight imports are parallel');
-check(appSource.includes('viewer3d-rvm-tab-renderer.js?v=20260621-rvm-ui-interaction-panels-1'), 'app uses RVM UI interaction renderer cache key');
+check(appSource.includes('viewer3d-rvm-tab-renderer.js?v=20260621-rvm-property-collapse-1'), 'app uses RVM property collapse renderer cache key');
 check(appHeaderCss.includes('flex-direction: column'), 'app shell CSS forces header layout column');
 check(appHeaderCss.includes('body .app-nav'), 'app shell CSS overrides cramped side-nav fallback');
 
