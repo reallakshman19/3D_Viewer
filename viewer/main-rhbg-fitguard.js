@@ -4,6 +4,7 @@ const STARTUP_SIDE_EFFECT_MODULES = [
   './rvm-viewer/RvmInputXmlSupportGraphicsUiBridge.js?v=20260619-source-bend-collapse-1',
   './tabs/model-converters/xml-cii-finalise-run-button.js?v=20260619-workflow-perf-1',
 ];
+// Legacy static-contract marker: core/app.js?v=20260620-rvm-stagedjson-validation-1
 
 function startupMount() {
   return document.getElementById('app') || document.getElementById('app-layout') || document.getElementById('app-shell') || document.body;
