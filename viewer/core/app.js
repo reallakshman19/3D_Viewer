@@ -278,7 +278,7 @@ export async function init() {
     const tabs = await visibleTabs();
     renderNav(nav, tabs, content);
     const initialTab = TAB_ID_ALIASES.get(state.activeTab) || state.activeTab || tabs[0]?.id;
-    await activateTab(initialTab, tabs, content ? nav : nav, content);
+    await activateTab(initialTab, tabs, nav, content);
     appDestroy = () => { cleanupActiveTab(); hideStartupOverlay(); root.innerHTML = ''; };
     emit(RuntimeEvents.APP_READY, { tabs: tabs.map((tab) => tab.id) });
     return appDestroy;
