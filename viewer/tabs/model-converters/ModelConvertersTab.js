@@ -57,6 +57,19 @@ function markStylesReady(container) {
   if (root) root.dataset.modelConvertersCss = '20260621-model-converters-css-1';
 }
 
+function installSafely(name, installer, container) {
+  try {
+    installer(container);
+  } catch (error) {
+    console.warn(`${TRACE_PREFIX} Optional installer failed: ${name}`, error);
+  }
+}
+
+function scheduleInstaller(name, installer, container) {
+  const run = () => installSafely(name, installer, container);
+  setTimeout(run, 0);
+}
+
 /**
  * Ordered installer pairs. Each entry is [debugName, installerFn].
  * Adding a new popup/bridge: append one entry here — no other changes needed.
@@ -78,15 +91,11 @@ const MODEL_CONVERTER_INSTALLERS = Object.freeze([
   ['xml-cii-master-preserve-patch', installXmlCiiMasterPreservePatch],
 ]);
 
-export function renderModelConvertersTab(container) {
+export function renderModelConvertersTab(container, ctx) {
   ensureModelConvertersStyles();
-  renderLegacyModelConvertersTab(container);
+  renderLegacyModelConvertersTab(container, ctx);
   markStylesReady(container);
   for (const [name, install] of MODEL_CONVERTER_INSTALLERS) {
-    try {
-      install(container);
-    } catch (error) {
-      console.warn(`${TRACE_PREFIX} installer failed: ${name}`, error);
-    }
+    scheduleInstaller(name, install, container);
   }
 }
