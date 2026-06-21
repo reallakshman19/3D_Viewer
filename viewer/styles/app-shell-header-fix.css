@@ -1,0 +1,72 @@
+/* app-shell-header-fix.css — force main app tabs to render as a full-width header. */
+html,
+body {
+  width: 100%;
+  min-width: 0;
+}
+
+body #app-layout,
+body .app-shell {
+  width: 100%;
+  min-width: 0;
+  min-height: 100vh;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+body #app-layout > .app-shell {
+  flex: 1 1 auto;
+}
+
+body .app-nav {
+  width: 100%;
+  flex: 0 0 auto;
+  min-width: 0;
+  min-height: 42px;
+  max-height: 96px;
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;
+  gap: 8px;
+  padding: 0 10px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  background: linear-gradient(180deg, #111d2d 0%, #0b1422 100%);
+  border-right: 0;
+  border-bottom: 1px solid rgba(255,255,255,.14);
+  box-shadow: 0 1px 5px rgba(0,0,0,.32);
+}
+
+body .app-nav-group {
+  display: inline-flex;
+  align-items: stretch;
+  flex: 0 0 auto;
+  gap: 1px;
+}
+
+body .app-nav-button,
+body .app-nav button[data-tab-id] {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: auto;
+  min-height: 42px;
+  margin: 0;
+  padding: 0 12px;
+  border: 0;
+  border-bottom: 3px solid transparent;
+  border-radius: 0;
+  background: transparent;
+  white-space: nowrap;
+  text-align: center;
+}
+
+body .app-content {
+  flex: 1 1 auto;
+  min-height: 0;
+  min-width: 0;
+  width: 100%;
+  overflow: hidden;
+}
