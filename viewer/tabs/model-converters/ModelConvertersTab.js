@@ -25,22 +25,28 @@ import { installXmlCiiRuntimeOverrideSync } from './xml-cii-runtime-override-syn
 import { installXmlCiiMasterPreservePatch } from './xml-cii-master-preserve-patch.js?v=20260620-master-session-1';
 
 const TRACE_PREFIX = '[BM_CII_CONVERTER_TRACE]';
-const STYLE_ID = 'model-converters-tab-css';
-const STYLE_HREF = './tabs/model-converters-tab.css?v=20260621-model-converters-css-1';
+const STYLE_LINKS = Object.freeze([
+  ['model-converters-tab-css', './tabs/model-converters-tab.css?v=20260621-model-converters-css-1'],
+  ['model-converters-css-fix', './tabs/model-converters-css-fix.css?v=20260621-model-converters-css-1'],
+]);
 
-function ensureModelConvertersStyles() {
-  if (typeof document === 'undefined') return;
-  const existing = document.getElementById(STYLE_ID);
+function ensureStylesheet(id, href) {
+  const existing = document.getElementById(id);
   if (existing) {
-    if (existing.getAttribute('href') !== STYLE_HREF) existing.setAttribute('href', STYLE_HREF);
+    if (existing.getAttribute('href') !== href) existing.setAttribute('href', href);
     return;
   }
   const link = document.createElement('link');
-  link.id = STYLE_ID;
+  link.id = id;
   link.rel = 'stylesheet';
-  link.href = STYLE_HREF;
+  link.href = href;
   link.dataset.owner = 'model-converters-tab';
   document.head.appendChild(link);
+}
+
+function ensureModelConvertersStyles() {
+  if (typeof document === 'undefined') return;
+  for (const [id, href] of STYLE_LINKS) ensureStylesheet(id, href);
 }
 
 function markStylesReady(container) {
