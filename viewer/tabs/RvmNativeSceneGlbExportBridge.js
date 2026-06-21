@@ -1,8 +1,8 @@
 import * as THREE from 'three';
 import { exportSceneToGLB } from '../js/pcf2glb/glb/exportSceneToGLB.js';
 
-const VERSION = 'rvm-native-scene-glb-export/v2-pipeline-preflight';
-const CACHE_KEY = '20260620-rvm-glb-export-logic-v2-1';
+const VERSION = 'rvm-native-scene-glb-export/v3-component-hierarchy';
+const CACHE_KEY = '20260620-rvm-glb-component-hierarchy-v3-1';
 const GLOBAL_KEY = '__PCF_GLB_RVM_NATIVE_GLB_EXPORT_DIAGNOSTICS__';
 const API_KEY = '__PCF_GLB_RVM_NATIVE_GLB_EXPORT__';
 
@@ -101,48 +101,79 @@ function prepareExportScene(viewer, scope = 'visible', options = {}) {
   const collection = collectSourceMeshes(viewer, scope);
   const scene = new THREE.Scene();
   scene.name = `RVM native scene export ${scope}`;
-  scene.userData = {
+  scene.userData = serializable({
     exporter: VERSION,
     cacheKey: CACHE_KEY,
     scope,
     source: 'rendered-upgraded-threejs-scene',
     capturedAt: new Date().toISOString(),
-    exportLogic: 'collect-visible-or-selected-normalize-metadata-clone-world-transform-serialize-glb',
-  };
+    exportLogic: 'collect-visible-or-selected-normalize-metadata-build-component-hierarchy-clone-world-transform-serialize-glb',
+    componentHierarchySchema: 'rvm-glb-component-hierarchy/v1',
+  });
+  const rootGroup = new THREE.Group();
+  rootGroup.name = 'RVM_EXPORT_ROOT';
+  rootGroup.userData = serializable({
+    exporterRoot: true,
+    exporter: VERSION,
+    cacheKey: CACHE_KEY,
+    scope,
+    source: 'rendered-upgraded-threejs-scene',
+    componentHierarchySchema: 'rvm-glb-component-hierarchy/v1',
+  });
+  scene.add(rootGroup);
+
   const componentGroups = new Map();
   const audit = baseAudit(scope, options);
   audit.rejectedCandidateCount = collection.rejected.length;
   audit.rejectedReasons = summarizeRejected(collection.rejected);
+
   for (const source of collection.objects) {
     const attrs = attrsFor(source);
     const props = source.userData?.browserRvmProperties || {};
     const key = componentKey(source, attrs, props);
-    let group = componentGroups.get(key);
-    if (!group) {
-      group = new THREE.Group();
-      group.name = safeName(key || 'RVM_COMPONENT');
+    let entry = componentGroups.get(key);
+    if (!entry) {
+      const index = componentGroups.size + 1;
+      const component = componentMetadata(source, attrs, props, key, index);
+      const group = new THREE.Group();
+      group.name = component.groupName;
       group.userData = serializable({
         exporterComponentGroup: true,
+        componentHierarchySchema: 'rvm-glb-component-hierarchy/v1',
+        glbExportSchema: VERSION,
+        glbExportCacheKey: CACHE_KEY,
+        componentIndex: index,
         componentKey: key,
-        NAME: attrs.RVM_OWNER_NAME || attrs.NAME || props.displayName || source.name,
-        TYPE: attrs.TYPE || props.type || source.userData?.type,
-        COMPONENT_ID: attrs.COMPONENT_ID || attrs.RVM_OWNER_NAME || key,
-        sourcePath: props.sourcePath || source.userData?.sourcePath || attrs.RVM_OWNER_PATH,
+        glbExportNodePath: `RVM_EXPORT_ROOT/${component.groupName}`,
+        ...component.extras,
       });
-      componentGroups.set(key, group);
-      scene.add(group);
+      entry = { group, component, meshCount: 0, primitiveCounts: {}, typeCounts: {}, metadataFieldCounts: {} };
+      componentGroups.set(key, entry);
+      rootGroup.add(group);
       audit.componentCount += 1;
+      audit.componentGroups.push(componentAuditBase(component, key, index));
+      bump(audit.componentKeyCounts, key || 'UNKNOWN');
+      bump(audit.componentTypeCounts, component.extras.TYPE || 'UNKNOWN');
     }
+
     const normalized = normalizedMetadata(source, attrs, props);
-    const clone = cloneExportObject(source, attrs, props, normalized);
+    const meshIndex = entry.meshCount + 1;
+    const nodeName = primitiveNodeName(entry.component, source, attrs, props, normalized, meshIndex);
+    const nodePath = `RVM_EXPORT_ROOT/${entry.component.groupName}/${nodeName}`;
+    const clone = cloneExportObject(source, attrs, props, normalized, { nodeName, nodePath, meshIndex, component: entry.component });
     if (!clone) {
       audit.skippedCount += 1;
       bump(audit.skippedReasons, 'clone-failed');
       continue;
     }
-    group.add(clone);
+    entry.group.add(clone);
+    entry.meshCount += 1;
+    bump(entry.primitiveCounts, String(normalized.RVM_PRIMITIVE_CODE || normalized.RVM_PRIMITIVE_KIND_NAME || 'UNKNOWN'));
+    bump(entry.typeCounts, String(normalized.TYPE || 'UNKNOWN'));
+    bumpMetadataCounts({ metadataFieldCounts: entry.metadataFieldCounts }, normalized);
+
     audit.meshCount += 1;
-    audit.exportedObjects.push(objectAudit(source, attrs, props, normalized));
+    audit.exportedObjects.push(objectAudit(source, attrs, props, normalized, { nodeName, nodePath, component: entry.component, meshIndex }));
     updateAuditBounds(audit, source);
     bump(audit.primitiveKindCounts, String(normalized.RVM_PRIMITIVE_CODE || normalized.RVM_PRIMITIVE_KIND_NAME || 'UNKNOWN'));
     bump(audit.typeCounts, String(normalized.TYPE || 'UNKNOWN'));
@@ -153,6 +184,17 @@ function prepareExportScene(viewer, scope = 'visible', options = {}) {
       bump(audit.fallbackReasonCounts, fallbackReason(source, attrs));
     }
   }
+
+  finalizeComponentGroups(audit, componentGroups);
+  rootGroup.userData.componentCount = audit.componentCount;
+  rootGroup.userData.meshCount = audit.meshCount;
+  rootGroup.userData.componentGroups = audit.componentGroups.map((entry) => ({
+    componentIndex: entry.componentIndex,
+    componentId: entry.componentId,
+    name: entry.name,
+    type: entry.type,
+    meshCount: entry.meshCount,
+  }));
   audit.boundsFinite = boundsFinite(audit.worldBounds);
   audit.pipelineStageStatus = stageStatus(audit);
   audit.preflight = runPreflight(audit, options);
@@ -194,12 +236,12 @@ function hasRenderableGeometry(geometry) {
   return Number(geometry?.index?.count || 0) > 0;
 }
 
-function cloneExportObject(source, attrs, props, normalized) {
+function cloneExportObject(source, attrs, props, normalized, naming = {}) {
   try {
     const clone = source.clone(false);
     clone.geometry = source.geometry?.clone?.() || source.geometry;
     clone.material = cloneMaterial(source);
-    clone.name = safeName(props.displayName || attrs.NAME || source.name || source.uuid);
+    clone.name = safeName(naming.nodeName || props.displayName || attrs.NAME || source.name || source.uuid);
     clone.userData = serializable({
       ...source.userData,
       browserRvmAttributes: attrs,
@@ -208,6 +250,13 @@ function cloneExportObject(source, attrs, props, normalized) {
       glbExportSchema: VERSION,
       glbExportCacheKey: CACHE_KEY,
       glbExportSourceUuid: source.uuid,
+      glbExportComponentIndex: naming.component?.index || 0,
+      glbExportComponentId: naming.component?.extras?.COMPONENT_ID || normalized.COMPONENT_ID || '',
+      glbExportComponentName: naming.component?.extras?.NAME || normalized.RVM_OWNER_NAME || normalized.NAME || '',
+      glbExportComponentType: naming.component?.extras?.TYPE || normalized.TYPE || '',
+      glbExportMeshIndexInComponent: naming.meshIndex || 0,
+      glbExportNodeName: clone.name,
+      glbExportNodePath: naming.nodePath || clone.name,
       glbExportRenderPrimitive: source.userData?.effectiveRenderPrimitive || source.userData?.renderPrimitive || attrs.RVM_BROWSER_RENDER_PRIMITIVE,
       glbExportRenderQuality: source.userData?.renderQuality || '',
       glbExportPrimitiveCode: attrs.RVM_PRIMITIVE_CODE || '',
@@ -268,6 +317,82 @@ function componentKey(obj, attrs, props) {
   return String(attrs.COMPONENT_ID || attrs.RVM_OWNER_NAME || attrs.RVM_OWNER_PATH || props.sourcePath || props.displayName || obj.userData?.sourcePath || obj.name || obj.uuid || 'RVM_COMPONENT');
 }
 
+function componentMetadata(obj, attrs, props, key, index) {
+  const ownerName = attrs.RVM_OWNER_NAME || attrs.NAME || props.displayName || obj.userData?.displayName || obj.name || `COMPONENT_${index}`;
+  const type = attrs.TYPE || props.type || obj.userData?.type || attrs.RVM_PRIMITIVE_KIND || 'UNKNOWN';
+  const componentId = attrs.COMPONENT_ID || attrs.RVM_OWNER_NAME || stableId(key, index);
+  const sourcePath = props.sourcePath || obj.userData?.sourcePath || attrs.RVM_OWNER_PATH || '';
+  const groupName = safeName(`${pad(index, 4)}_${String(type || 'UNKNOWN').toUpperCase()}_${componentId || ownerName}`);
+  return {
+    index,
+    groupName,
+    key,
+    extras: serializable({
+      NAME: ownerName,
+      TYPE: type,
+      COMPONENT_ID: componentId,
+      RVM_OWNER_NAME: attrs.RVM_OWNER_NAME || '',
+      RVM_OWNER_PATH: attrs.RVM_OWNER_PATH || sourcePath,
+      SOURCE_PATH: sourcePath,
+      MATERIAL: attrs.MATERIAL || '',
+      SPEC: attrs.SPEC || '',
+      RATING: attrs.RATING || '',
+    }),
+  };
+}
+
+function componentAuditBase(component, key, index) {
+  return {
+    componentIndex: index,
+    componentKey: key,
+    componentId: component.extras.COMPONENT_ID || '',
+    name: component.extras.NAME || '',
+    type: component.extras.TYPE || '',
+    sourcePath: component.extras.SOURCE_PATH || component.extras.RVM_OWNER_PATH || '',
+    groupName: component.groupName,
+    meshCount: 0,
+    primitiveKindCounts: {},
+    typeCounts: {},
+    metadataFieldCounts: {},
+  };
+}
+
+function primitiveNodeName(component, source, attrs, props, normalized, meshIndex) {
+  const primitiveCode = normalized.RVM_PRIMITIVE_CODE || normalized.RVM_PRIMITIVE_KIND_NAME || 'UNK';
+  const byteOffset = normalized.RVM_BYTE_OFFSET ? `@${normalized.RVM_BYTE_OFFSET}` : '';
+  const primitiveName = props.displayName || attrs.NAME || source.name || `${component.extras.TYPE || 'RVM'}_${primitiveCode}`;
+  return safeName(`${pad(meshIndex, 3)}_PRIM${primitiveCode}${byteOffset}_${primitiveName}`);
+}
+
+function finalizeComponentGroups(audit, componentGroups) {
+  const groups = Array.from(componentGroups.values());
+  for (const entry of groups) {
+    entry.group.userData.componentMeshCount = entry.meshCount;
+    entry.group.userData.primitiveKindCounts = serializable(entry.primitiveCounts);
+    entry.group.userData.typeCounts = serializable(entry.typeCounts);
+    entry.group.userData.metadataFieldCounts = serializable(entry.metadataFieldCounts);
+    const auditEntry = audit.componentGroups.find((item) => item.componentIndex === entry.component.index);
+    if (auditEntry) {
+      auditEntry.meshCount = entry.meshCount;
+      auditEntry.primitiveKindCounts = serializable(entry.primitiveCounts);
+      auditEntry.typeCounts = serializable(entry.typeCounts);
+      auditEntry.metadataFieldCounts = serializable(entry.metadataFieldCounts);
+    }
+  }
+  audit.componentHierarchy = {
+    schema: 'rvm-glb-component-hierarchy/v1',
+    rootNodeName: 'RVM_EXPORT_ROOT',
+    componentNodeCount: groups.length,
+    componentMeshCounts: groups.map((entry) => ({
+      componentIndex: entry.component.index,
+      componentId: entry.component.extras.COMPONENT_ID || '',
+      name: entry.component.extras.NAME || '',
+      type: entry.component.extras.TYPE || '',
+      meshCount: entry.meshCount,
+    })),
+  };
+}
+
 function baseAudit(scope, options = {}) {
   return {
     schemaVersion: VERSION,
@@ -275,12 +400,13 @@ function baseAudit(scope, options = {}) {
     capturedAt: new Date().toISOString(),
     scope,
     source: 'rendered-upgraded-threejs-scene',
-    exportLogicVersion: 2,
+    exportLogicVersion: 3,
     pipelineStages: [
       'collect-source-meshes',
       'normalize-rvm-att-metadata',
+      'build-component-node-hierarchy',
+      'deterministic-node-naming',
       'clone-world-transformed-rendered-objects',
-      'group-by-component',
       'preflight-gate',
       'gltfexporter-binary-glb',
       'audit-json',
@@ -305,11 +431,15 @@ function baseAudit(scope, options = {}) {
     fallbackObjectCount: 0,
     primitiveKindCounts: {},
     typeCounts: {},
+    componentKeyCounts: {},
+    componentTypeCounts: {},
     geometryTypeCounts: {},
     fallbackReasonCounts: {},
     skippedReasons: {},
     rejectedReasons: {},
     metadataFieldCounts: {},
+    componentGroups: [],
+    componentHierarchy: null,
     worldBounds: { min: [Infinity, Infinity, Infinity], max: [-Infinity, -Infinity, -Infinity], size: [0, 0, 0] },
     boundsFinite: false,
     preflight: null,
@@ -322,14 +452,20 @@ function baseAudit(scope, options = {}) {
   };
 }
 
-function objectAudit(obj, attrs, props, normalized) {
+function objectAudit(obj, attrs, props, normalized, naming = {}) {
   const box = new THREE.Box3().setFromObject(obj);
   const size = box.getSize(new THREE.Vector3());
   return {
     uuid: obj.uuid,
     name: normalized.NAME || props.displayName || attrs.NAME || obj.name || obj.uuid,
     type: normalized.TYPE || '',
-    componentId: normalized.COMPONENT_ID || '',
+    componentIndex: naming.component?.index || 0,
+    componentId: naming.component?.extras?.COMPONENT_ID || normalized.COMPONENT_ID || '',
+    componentName: naming.component?.extras?.NAME || '',
+    componentType: naming.component?.extras?.TYPE || '',
+    meshIndexInComponent: naming.meshIndex || 0,
+    glbNodeName: naming.nodeName || '',
+    glbNodePath: naming.nodePath || '',
     primitiveCode: normalized.RVM_PRIMITIVE_CODE || '',
     primitiveKindName: normalized.RVM_PRIMITIVE_KIND_NAME || '',
     renderPrimitive: normalized.RVM_BROWSER_RENDER_PRIMITIVE || '',
@@ -367,9 +503,11 @@ function runPreflight(audit, options = {}) {
   if (audit.meshCount < 1) errors.push('no-exportable-meshes');
   if (options.blockInvalidBounds !== false && !audit.boundsFinite) errors.push('invalid-world-bounds');
   if (options.blockFallbacks && audit.fallbackObjectCount > 0) errors.push('fallback-objects-present');
+  if (audit.componentCount < 1) errors.push('no-component-hierarchy');
   if (audit.fallbackObjectCount > 0) warnings.push('fallback-objects-exported');
   if (!audit.metadataFieldCounts.TYPE) warnings.push('no-type-metadata');
   if (!audit.metadataFieldCounts.NAME) warnings.push('no-name-metadata');
+  if (!audit.metadataFieldCounts.COMPONENT_ID && !audit.metadataFieldCounts.RVM_OWNER_NAME) warnings.push('weak-component-id-metadata');
   if (audit.skippedCount > 0) warnings.push('objects-skipped-during-clone');
   return {
     status: errors.length ? 'fail' : warnings.length ? 'warn' : 'pass',
@@ -383,6 +521,8 @@ function stageStatus(audit) {
     sourceCollected: audit.meshCount + audit.skippedCount > 0,
     metadataNormalized: Object.keys(audit.metadataFieldCounts).length > 0,
     componentGrouped: audit.componentCount > 0,
+    componentHierarchyBuilt: Boolean(audit.componentHierarchy?.componentNodeCount),
+    deterministicNodeNaming: audit.exportedObjects.every((item) => Boolean(item.glbNodeName && item.glbNodePath)),
     boundsComputed: audit.boundsFinite,
     fallbackAudited: true,
   };
@@ -442,9 +582,12 @@ function downloadPlan() {
     preflight: prepared.audit.preflight,
     meshCount: prepared.audit.meshCount,
     componentCount: prepared.audit.componentCount,
+    componentHierarchy: prepared.audit.componentHierarchy,
+    componentGroups: prepared.audit.componentGroups,
     fallbackObjectCount: prepared.audit.fallbackObjectCount,
     primitiveKindCounts: prepared.audit.primitiveKindCounts,
     typeCounts: prepared.audit.typeCounts,
+    componentTypeCounts: prepared.audit.componentTypeCounts,
     metadataFieldCounts: prepared.audit.metadataFieldCounts,
     worldBounds: prepared.audit.worldBounds,
   });
@@ -487,10 +630,16 @@ function serializable(value) {
   try { return JSON.parse(JSON.stringify(value ?? {})); } catch (_) { return {}; }
 }
 
+function stableId(value, index) {
+  const text = String(value || `COMPONENT_${index}`).replace(/[^a-zA-Z0-9_-]+/g, '_').replace(/^_+|_+$/g, '');
+  return text || `COMPONENT_${index}`;
+}
+
 function safeName(value) { return String(value || 'RVM_OBJECT').replace(/[\u0000-\u001f<>:"/\\|?*]+/g, '_').slice(0, 180); }
 function unique(items) { return Array.from(new Set(items)); }
 function bump(map, key) { const name = String(key || '').trim() || 'UNKNOWN'; map[name] = (map[name] || 0) + 1; }
 function round(value) { return Math.round(Number(value || 0) * 1e6) / 1e6; }
+function pad(value, width) { return String(Math.max(0, Number(value) || 0)).padStart(width, '0'); }
 
 function injectStyles() {
   if (document.getElementById('rvm-native-scene-glb-export-style')) return;
