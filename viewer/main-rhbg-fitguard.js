@@ -6,7 +6,8 @@ const STARTUP_SIDE_EFFECT_MODULES = [
 ];
 // Legacy static-contract marker: core/app.js?v=20260620-rvm-stagedjson-validation-1
 // Previous cache marker: core/app.js?v=20260621-rvm-perf-lazy-bridges-1
-// Active cache key: core/app.js?v=20260621-rvm-button-hardening-1
+// Previous cache marker: core/app.js?v=20260621-rvm-button-hardening-1
+// Active cache key: core/app.js?v=20260621-rvm-ui-interaction-panels-1
 
 function startupMount() {
   return document.getElementById('app') || document.getElementById('app-layout') || document.getElementById('app-shell') || document.body;
@@ -55,7 +56,7 @@ function scheduleDeferredStartupSideEffects() {
 }
 
 async function startViewer() {
-  const { init } = await import('./core/app.js?v=20260621-rvm-button-hardening-1');
+  const { init } = await import('./core/app.js?v=20260621-rvm-ui-interaction-panels-1');
   await init();
   scheduleDeferredStartupSideEffects();
 }
