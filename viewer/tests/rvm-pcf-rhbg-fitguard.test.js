@@ -25,6 +25,7 @@ const selectionDetailsSource = await fs.readFile(new URL('../tabs/RvmSelectionDe
 const visibilityToolbarSource = await fs.readFile(new URL('../tabs/RvmVisibilityToolbarBridge.js', import.meta.url), 'utf8');
 const visibilitySnapshotsSource = await fs.readFile(new URL('../tabs/RvmVisibilitySnapshotsBridge.js', import.meta.url), 'utf8');
 const objectSearchSource = await fs.readFile(new URL('../tabs/RvmObjectSearchBridge.js', import.meta.url), 'utf8');
+const measureSource = await fs.readFile(new URL('../tabs/RvmMeasureBridge.js', import.meta.url), 'utf8');
 const navisHierarchySource = await fs.readFile(new URL('../tabs/RvmNavisHierarchyBridge.js', import.meta.url), 'utf8');
 const labelPerfSource = await fs.readFile(new URL('../tabs/RvmLabelPerformanceBridge.js', import.meta.url), 'utf8');
 const uiPanelSource = await fs.readFile(new URL('../tabs/RvmUiInteractionPanelPatch.js', import.meta.url), 'utf8');
@@ -39,6 +40,8 @@ check(rendererSource.includes('RvmVisibilityToolbarBridge.js?v=20260621-rvm-isol
 check(rendererSource.includes('RvmVisibilitySnapshotsBridge.js?v=20260621-rvm-visibility-snapshots-1'), 'renderer loads visibility snapshots bridge');
 check(rendererSource.includes('RvmObjectSearchBridge.js?v=20260621-rvm-object-search-1'), 'renderer loads object search bridge');
 check(rendererSource.includes('installRvmObjectSearchBridge()'), 'renderer installs object search bridge');
+check(rendererSource.includes('RvmMeasureBridge.js?v=20260621-rvm-measure-tools-1'), 'renderer loads measure bridge');
+check(rendererSource.includes('installRvmMeasureBridge()'), 'renderer installs measure bridge');
 check(rendererSource.includes('RvmJsonPcfTriggerBridge.js?v=20260621-rvm-pcf-visible-scope-1'), 'renderer loads visible-scope PCF trigger bridge');
 check(!rendererSource.includes('installRvmStagedJsonExportBridge()'), 'renderer avoids eager stagedJSON bridge install');
 check(!rendererSource.includes('installRvmNativeSceneGlbExportBridge()'), 'renderer avoids eager GLB bridge install');
@@ -52,6 +55,15 @@ check(objectSearchSource.includes('fitObjects') && objectSearchSource.includes('
 check(objectSearchSource.includes('rvmHiddenByObjectSearch') && objectSearchSource.includes('__PCF_GLB_RVM_VISIBILITY__'), 'object search bridge integrates hide/isolate visibility state');
 check(objectSearchSource.includes('__PCF_GLB_RVM_OBJECT_SEARCH__'), 'object search bridge publishes global API');
 check(objectSearchSource.includes("typeof document === 'undefined'"), 'object search bridge is safe for static Node-side imports');
+
+check(measureSource.includes("BRIDGE_VERSION = '20260621-rvm-measure-tools-1'"), 'measure bridge exposes cache/version marker');
+check(measureSource.includes('Measure') && measureSource.includes('Extents') && measureSource.includes('Distance'), 'measure bridge exposes toolbar measurement actions');
+check(measureSource.includes('measureSelectionExtents') && measureSource.includes('measureCenterDistance'), 'measure bridge exposes extent and center distance functions');
+check(measureSource.includes('THREE.Box3') && measureSource.includes('THREE.Vector3'), 'measure bridge computes bbox and vector metrics');
+check(measureSource.includes('LineBasicMaterial') && measureSource.includes('RVM measurement overlay'), 'measure bridge renders lightweight distance overlay line');
+check(measureSource.includes('MAX_MEASURE_OBJECTS') && measureSource.includes('MAX_SELECTION_SCAN_OBJECTS'), 'measure bridge caps selected-object measurement scans');
+check(measureSource.includes('__PCF_GLB_RVM_MEASURE__'), 'measure bridge publishes global API');
+check(measureSource.includes("typeof document === 'undefined'"), 'measure bridge is safe for static Node-side imports');
 
 check(visibilityToolbarSource.includes("BRIDGE_VERSION = '20260621-rvm-isolate-visibility-toolbar-1'"), 'visibility toolbar exposes isolate bridge version');
 check(visibilityToolbarSource.includes('Isolate') && visibilityToolbarSource.includes('Show All'), 'visibility toolbar exposes isolate and show-all actions');
@@ -137,14 +149,18 @@ check(indexSource.includes('main-rhbg-fitguard.js?v=20260621-rvm-preload-hierarc
 check(indexSource.includes('main-rhbg-fitguard.js?v=20260621-rvm-selection-details-inspector-1'), 'index keeps selection details inspector entry marker');
 check(indexSource.includes('main-rhbg-fitguard.js?v=20260621-rvm-isolate-visibility-toolbar-1'), 'index keeps isolate visibility toolbar entry marker');
 check(indexSource.includes('main-rhbg-fitguard.js?v=20260621-rvm-visibility-snapshots-1'), 'index keeps visibility snapshots entry cache key');
-check(indexSource.includes('main-rhbg-fitguard.js?v=20260621-rvm-object-search-1'), 'index uses object search entry cache key');
+check(indexSource.includes('main-rhbg-fitguard.js?v=20260621-rvm-object-search-1'), 'index keeps object search entry cache marker');
+check(indexSource.includes('main-rhbg-fitguard.js?v=20260621-rvm-measure-tools-1'), 'index uses measure tools entry cache key');
 check(entrySource.includes('core/app.js?v=20260621-rvm-native-facet-primary-1'), 'entrypoint keeps native facet primary app cache marker');
 check(entrySource.includes('core/app.js?v=20260621-rvm-visibility-snapshots-1'), 'entrypoint keeps visibility snapshots app cache key');
-check(entrySource.includes('core/app.js?v=20260621-rvm-object-search-1'), 'entrypoint uses object search app cache key');
+check(entrySource.includes('core/app.js?v=20260621-rvm-object-search-1'), 'entrypoint keeps object search app cache key');
+check(entrySource.includes('core/app.js?v=20260621-rvm-measure-tools-1'), 'entrypoint uses measure tools app cache key');
 check(appSource.includes('viewer3d-rvm-tab-renderer.js?v=20260621-rvm-visibility-snapshots-1'), 'app keeps visibility snapshots renderer cache marker');
-check(appSource.includes('viewer3d-rvm-tab-renderer.js?v=20260621-rvm-object-search-1'), 'app uses object search renderer cache marker');
-check(runtimeSource.includes('viewer3d-rvm-tab-renderer.js?v=20260621-rvm-object-search-1'), 'runtime imports object search renderer cache key');
+check(appSource.includes('viewer3d-rvm-tab-renderer.js?v=20260621-rvm-object-search-1'), 'app keeps object search renderer cache marker');
+check(appSource.includes('viewer3d-rvm-tab-renderer.js?v=20260621-rvm-measure-tools-1'), 'app uses measure tools renderer cache marker');
+check(runtimeSource.includes('viewer3d-rvm-tab-renderer.js?v=20260621-rvm-measure-tools-1'), 'runtime imports measure tools renderer cache key');
 check(appSource.includes('RvmObjectSearchBridge.js?v=20260621-rvm-object-search-1'), 'app keeps object search bridge marker');
+check(appSource.includes('RvmMeasureBridge.js?v=20260621-rvm-measure-tools-1'), 'app keeps measure bridge marker');
 check(appSource.includes('RvmVisibilitySnapshotsBridge.js?v=20260621-rvm-visibility-snapshots-1'), 'app keeps visibility snapshots bridge marker');
 check(appSource.includes('BrowserRvmLoadBridge.js?v=20260621-rvm-native-facet-primary-1'), 'app keeps native facet load bridge marker');
 check(appSource.includes('BrowserRvmNativeFacetGroupPrimary.js'), 'app keeps native facet module marker');
