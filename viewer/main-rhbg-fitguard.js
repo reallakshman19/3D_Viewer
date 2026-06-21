@@ -40,7 +40,7 @@ async function loadStartupSideEffects() {
 
 async function startViewer() {
   await loadStartupSideEffects();
-  const { init } = await import('./core/app.js?v=20260620-rvm-stagedjson-export-1');
+  const { init } = await import('./core/app.js?v=20260620-rvm-stagedjson-validation-1');
   await init();
 }
 
