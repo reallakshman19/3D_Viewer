@@ -7,10 +7,12 @@
 // viewer3d-rvm-tab-renderer.js?v=20260621-rvm-json-pcf-trigger-1
 // viewer3d-rvm-tab-renderer.js?v=20260621-rvm-policy-info-1
 // viewer3d-rvm-tab-renderer.js?v=20260621-rvm-zone-lod-labels-1
+// viewer3d-rvm-tab-renderer.js?v=20260621-rvm-navis-hierarchy-1
 // RvmJsonPcfTriggerBridge.js?v=20260621-rvm-json-pcf-trigger-1
 // RvmPolicyInfoBridge.js?v=20260621-rvm-policy-info-1
 // RvmDiagnosticPanelCollapseBridge.js?v=20260621-rvm-diagnostic-collapse-1
 // RvmZoneLodLabelBridge.js?v=20260621-rvm-zone-lod-labels-1
+// RvmNavisHierarchyBridge.js?v=20260621-rvm-navis-hierarchy-1
 // BrowserRvmLoadBridge.js?v=20260621-rvm-zone-lod-labels-1
 // const APP_ICON_URL = new URL('../assets/app-icon.svg?v=20260621-app-brand-icon-1'
 // function createBrandRail
@@ -23,4 +25,4 @@
 // function cleanupActiveTab
 // renderTabError
 // tabRendererCache
-export { init } from './app-label-perf-runtime.js?v=20260621-rvm-zone-lod-labels-1';
+export { init } from './app-label-perf-runtime.js?v=20260621-rvm-navis-hierarchy-1';
