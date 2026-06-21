@@ -14,7 +14,7 @@ import { installRvmSupportGeometryBridge } from './RvmSupportGeometryBridge.js?v
 import { installRvmSupportAttMappingBridge } from './RvmSupportAttMappingBridge.js?v=20260620-rvm-support-att-mapping-1';
 import { installRvmMaterialModeBridge } from './RvmMaterialModeBridge.js?v=20260620-rvm-remaining-material-modes-1';
 import { installRvmPrimitiveFallbackBridge } from './RvmPrimitiveFallbackBridge.js?v=20260620-rvm-primitive-fallback-clickable-1';
-import { installRvmNativeSceneGlbExportBridge } from './RvmNativeSceneGlbExportBridge.js?v=20260620-rvm-native-scene-glb-export-1';
+import { installRvmNativeSceneGlbExportBridge } from './RvmNativeSceneGlbExportBridge.js?v=20260620-rvm-glb-export-logic-v2-1';
 import { installRvmGlbExportValidationBridge } from './RvmGlbExportValidationBridge.js?v=20260620-rvm-glb-export-validation-1';
 import { installRvmGlbRoundTripValidationBridge } from './RvmGlbRoundTripValidationBridge.js?v=20260620-rvm-glb-roundtrip-validation-1';
 import { installRvmGlbSelectionParityBridge } from './RvmGlbSelectionParityBridge.js?v=20260620-rvm-glb-selection-details-parity-1';
@@ -53,4 +53,4 @@ installRvmGlbSelectionParityBridge();
 installRvmGlbAcceptancePackBridge();
 installRvmNativeTessellationDiagnosticsBridge();
 
-export { mountViewer3DRvmTab as renderViewer3DRvm } from './viewer3d-rvm-tab.js?v=20260620-rvm-glb-acceptance-pack-1';
+export { mountViewer3DRvmTab as renderViewer3DRvm } from './viewer3d-rvm-tab.js?v=20260620-rvm-glb-export-logic-v2-1';
