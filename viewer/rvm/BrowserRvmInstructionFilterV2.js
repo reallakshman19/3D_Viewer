@@ -1,12 +1,12 @@
-export const BROWSER_RVM_INSTRUCTION_FILTER_SCHEMA = 'browser-rvm-instruction-filter/v3-large-box-side';
+export const BROWSER_RVM_INSTRUCTION_FILTER_SCHEMA = 'browser-rvm-instruction-filter/v4-plant-primitive-visible';
 
 const DEFAULT_OPTIONS = Object.freeze({
   enabled: true,
   maxAbsoluteDiagonal: 5000,
   protectPipeRackLikeOwners: true,
-  hideOversizedPrimitiveBoxes: true,
-  maxPrimitiveBoxSide: 10,
-  maxPrimitiveBoxSideUnit: 'model-units-assumed-meters',
+  hideOversizedPrimitiveBoxes: false,
+  maxPrimitiveBoxSide: 50000,
+  maxPrimitiveBoxSideUnit: 'model-units-mm-safe',
 });
 
 const PROTECTED_OWNER_RE = /\b(PIPE|BRANCH|VALVE|FLANGE|ELBOW|TEE|GASKET|REDUCER|NOZZLE|INSTRUMENT|SUPPORT|STRAINER|CAP|STRUCTURE|FRAME|STEEL|PLATFORM|RACK)\b/i;
@@ -29,9 +29,11 @@ export function filterBrowserRvmRenderInstructions(instructionSet = {}, options 
 
   for (const instruction of source) {
     const item = classifyInstruction(instruction);
-    const oversizedPrimitiveBox = opts.hideOversizedPrimitiveBoxes !== false
+    const oversizedPrimitiveBox = opts.hideOversizedPrimitiveBoxes === true
       && item.boxish
       && !item.supportLike
+      && !item.protectedOwner
+      && item.hideCandidate
       && item.maxSide > boxSideThreshold;
     const oversizedNonPiping = item.diagonal > diagonalThreshold && item.hideCandidate;
     const hide = oversizedPrimitiveBox || oversizedNonPiping;
@@ -57,10 +59,10 @@ export function filterBrowserRvmRenderInstructions(instructionSet = {}, options 
     threshold: round(diagonalThreshold),
     maxPrimitiveBoxSide: round(boxSideThreshold),
     maxPrimitiveBoxSideUnit: opts.maxPrimitiveBoxSideUnit || DEFAULT_OPTIONS.maxPrimitiveBoxSideUnit,
-    hideOversizedPrimitiveBoxes: opts.hideOversizedPrimitiveBoxes !== false,
+    hideOversizedPrimitiveBoxes: opts.hideOversizedPrimitiveBoxes === true,
     skippedReasons: summarizeSkipped(skipped),
     oversizedNonPipingHidden: skipped.length,
-    policy: 'hide-primitive-box-cuboids-with-any-side-over-configured-threshold-plus-absurd-civil-box-filter',
+    policy: 'keep-valid-plant-primitives-visible-hide-only-absurd-unprotected-non-piping-boxes',
   });
 }
 
@@ -95,6 +97,7 @@ function classifyInstruction(instruction = {}) {
     diagonal,
     maxSide,
     boxish,
+    protectedOwner,
     supportLike,
     hideCandidate,
     reason: civilOwner ? 'absurd-civil-owner' : equipmentOwner ? 'absurd-equipment-owner' : 'absurd-unprotected-box',

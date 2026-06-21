@@ -1,11 +1,11 @@
 import { parseRvmArrayBuffer } from './BrowserRvmHierarchyTransformParser.js?v=20260620-rvm-facetgroup-1';
 import { enrichBrowserRvmHierarchyWithAtt } from './BrowserRvmAttEnricher.js';
 import { collectBrowserRvmRenderInstructions } from './BrowserRvmRenderContractAdapter.js';
-import { filterBrowserRvmRenderInstructions } from './BrowserRvmInstructionFilterV2.js?v=20260620-rvm-large-box-filter-1';
+import { filterBrowserRvmRenderInstructions } from './BrowserRvmInstructionFilterV2.js?v=20260621-rvm-zero-geometry-1';
 
 // BrowserRvmHierarchyTransformParser.js?v=20260620-rvm-facetgroup-1 repairs transformed APOS/LPOS/HBOR contracts and decodes PRIM 11 facet-group payloads using the C++ parser layout.
 const DEFAULT_MANIFEST_NODE_LIMIT = 900;
-const DEFAULT_MAX_PRIMITIVE_BOX_SIDE = 10;
+const DEFAULT_MAX_PRIMITIVE_BOX_SIDE = 50000;
 const KEEP_ATTRIBUTE_NAMES = new Set([
   'TYPE', 'NAME', 'RVM_PRIMITIVE_KIND', 'RVM_PRIMITIVE_KIND_NAME', 'RVM_BYTE_OFFSET', 'RVM_PRIMITIVE_CODE', 'RVM_RECORD_TAG',
   'RVM_OWNER_NAME', 'RVM_OWNER_PATH', 'BROWSER_PARSE_METHOD', 'BROWSER_PARSE_CONFIDENCE', 'RVM_PRIM_TRANSFORM_APPLIED',
@@ -13,8 +13,8 @@ const KEEP_ATTRIBUTE_NAMES = new Set([
   'RVM_NATIVE_PARAMS_DECODED', 'RVM_RADIUS_SCALE_SOURCE', 'RVM_RADIUS_SCALED_BY_TRANSFORM', 'RVM_FACET_GROUP_DECODED',
   'RVM_FACET_GROUP_POLYGON_COUNT', 'RVM_FACET_GROUP_CONTOUR_COUNT', 'RVM_FACET_GROUP_VERTEX_COUNT', 'RVM_BROWSER_RENDER_PRIMITIVE',
   'RVM_BROWSER_RENDER_SOURCE', 'RVM_BROWSER_GEOMETRY_CONTRACT_VERSION', 'RVM_BROWSER_ATT_ENRICHED', 'RVM_BROWSER_ATT_ATTRIBUTE_COUNT',
-  'RVM_BROWSER_BBOX', 'RVM_BROWSER_LENGTH', 'RVM_BROWSER_RADIUS', 'RVM_BROWSER_DIAMETER', 'RVM_BROWSER_SCALE_SAFE_CONTRACT',
-  'RVM_BROWSER_SCALE_SAFE_CONTRACT_SCHEMA', 'RVM_BROWSER_SUPPORT_HINT', 'RVM_BROWSER_SUPPORT_KIND'
+  'RVM_BROWSER_BBOX', 'RVM_BROWSER_CENTER', 'RVM_BROWSER_AXIS_START', 'RVM_BROWSER_AXIS_END', 'RVM_BROWSER_LENGTH', 'RVM_BROWSER_RADIUS',
+  'RVM_BROWSER_DIAMETER', 'RVM_BROWSER_SCALE_SAFE_CONTRACT', 'RVM_BROWSER_SCALE_SAFE_CONTRACT_SCHEMA', 'RVM_BROWSER_SUPPORT_HINT', 'RVM_BROWSER_SUPPORT_KIND'
 ]);
 
 self.onmessage = async (event) => {
@@ -41,7 +41,7 @@ self.onmessage = async (event) => {
       enabled: options.hideOversizedNonPiping !== false,
       maxAbsoluteDiagonal: 5000,
       protectPipeRackLikeOwners: true,
-      hideOversizedPrimitiveBoxes: options.hideOversizedPrimitiveBoxes !== false,
+      hideOversizedPrimitiveBoxes: options.hideOversizedPrimitiveBoxes === true,
       maxPrimitiveBoxSide: positiveNumber(options.maxPrimitiveBoxSide, DEFAULT_MAX_PRIMITIVE_BOX_SIDE),
     });
     const compactInstructionSet = compactInstructionSetForTransfer(filteredInstructionSet);

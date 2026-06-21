@@ -16,6 +16,8 @@ const drawerSource = await fs.readFile(new URL('../tabs/RvmBottomDiagnosticsDraw
 const supportGeomSource = await fs.readFile(new URL('../tabs/RvmSupportGeometryBridge.js', import.meta.url), 'utf8');
 const supportAttSource = await fs.readFile(new URL('../tabs/RvmSupportAttMappingBridge.js', import.meta.url), 'utf8');
 const stagedJsonSource = await fs.readFile(new URL('../tabs/RvmStagedJsonExportBridge.js', import.meta.url), 'utf8');
+const workerSource = await fs.readFile(new URL('../rvm/browser-rvm-worker.js', import.meta.url), 'utf8');
+const instructionFilterSource = await fs.readFile(new URL('../rvm/BrowserRvmInstructionFilterV2.js', import.meta.url), 'utf8');
 const indexSource = await fs.readFile(new URL('../index.html', import.meta.url), 'utf8');
 const entrySource = await fs.readFile(new URL('../main-rhbg-fitguard.js', import.meta.url), 'utf8');
 const appSource = await fs.readFile(new URL('../core/app.js', import.meta.url), 'utf8');
@@ -59,6 +61,15 @@ check(tabSource.includes('_rvmEscKeyCleanup'), 'RVM tab cleans Escape listener')
 check(tabSource.includes('_rvmSupportGeometryCleanup'), 'RVM tab cleans support geometry interval');
 check(tabSource.includes('MODE_ACTIONS'), 'RVM tab separates mode buttons from one-shot actions');
 check(tabSource.includes('__PCF_GLB_RVM_REPORT_ACTION_ERROR__'), 'RVM tab routes button errors to action diagnostics');
+check(workerSource.includes('BrowserRvmInstructionFilterV2.js?v=20260621-rvm-zero-geometry-1'), 'RVM worker uses zero-geometry-safe instruction filter cache key');
+check(workerSource.includes('DEFAULT_MAX_PRIMITIVE_BOX_SIDE = 50000'), 'RVM worker no longer treats 10 model units as an oversized primitive side');
+check(workerSource.includes('hideOversizedPrimitiveBoxes: options.hideOversizedPrimitiveBoxes === true'), 'RVM worker keeps primitive boxes visible unless oversized primitive hiding is explicitly opted in');
+check(workerSource.includes('RVM_BROWSER_CENTER') && workerSource.includes('RVM_BROWSER_AXIS_START') && workerSource.includes('RVM_BROWSER_AXIS_END'), 'RVM worker preserves render-position attributes in compact diagnostics');
+check(instructionFilterSource.includes("browser-rvm-instruction-filter/v4-plant-primitive-visible"), 'instruction filter exposes plant-primitive-visible schema');
+check(instructionFilterSource.includes('hideOversizedPrimitiveBoxes: false'), 'instruction filter defaults primitive box hiding off');
+check(instructionFilterSource.includes('maxPrimitiveBoxSide: 50000'), 'instruction filter uses millimetre-safe primitive side guard');
+check(instructionFilterSource.includes('&& !item.protectedOwner'), 'instruction filter protects pipe/structure/rack-like plant owners from primitive side hiding');
+check(instructionFilterSource.includes('keep-valid-plant-primitives-visible-hide-only-absurd-unprotected-non-piping-boxes'), 'instruction filter policy keeps valid plant primitives visible');
 check(deferredSource.includes('postModel'), 'deferred loader has post-model group');
 check(deferredSource.includes('refreshRootInstallEpoch'), 'deferred loader resets bridge cache for new tab roots');
 check(deferredSource.includes('RvmSupportGeometryBridge.js?v=20260621-rvm-button-hardening-1'), 'deferred loader imports hardened support geometry bridge');
