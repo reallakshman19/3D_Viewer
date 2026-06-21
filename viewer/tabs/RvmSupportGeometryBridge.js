@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 
-const CACHE_KEY = '20260620-rvm-support-geometry-v1';
-const VERSION = 'rvm-support-geometry/v1-exportable-overlay';
+const CACHE_KEY = '20260621-rvm-button-hardening-1';
+const VERSION = 'rvm-support-geometry/v2-button-hardening';
 const ROOT_NAME = '__RVM_EXPORTABLE_SUPPORT_GEOMETRY__';
 const STORAGE_KEY = 'rvm_support_geometry_mode_v1';
 const GLOBAL_KEY = '__PCF_GLB_RVM_SUPPORT_GEOMETRY_DIAGNOSTICS__';
@@ -24,9 +24,11 @@ export function installRvmSupportGeometryBridge() {
 }
 
 function bind(root, viewer) {
-  if (!root || root.dataset.rvmSupportGeometryBridge === CACHE_KEY) return;
+  if (!root) return;
+  if (root.dataset.rvmSupportGeometryBridge === CACHE_KEY) return;
+  root._rvmSupportGeometryCleanup?.();
   root.dataset.rvmSupportGeometryBridge = CACHE_KEY;
-  injectControls(root, viewer);
+  injectControls(root);
   let last = '';
   const tick = () => {
     const mode = getMode(root);
@@ -39,9 +41,17 @@ function bind(root, viewer) {
     publish(diag);
     const key = `${mode}|${candidates.map((c) => `${c.uuid}:${c.object.visible}`).sort().join('|')}|${diag.generatedMeshCount}`;
     if (key !== last) { last = key; updatePanel(root, diag); }
+    return diag;
   };
   const timer = setInterval(tick, 1400);
-  root._rvmSupportGeometryCleanup = () => clearInterval(timer);
+  const cleanup = () => {
+    clearInterval(timer);
+    if (root._rvmSupportGeometryRebuildNow === tick) delete root._rvmSupportGeometryRebuildNow;
+    if (root._rvmSupportGeometryCleanup === cleanup) delete root._rvmSupportGeometryCleanup;
+  };
+  root._rvmSupportGeometryRebuildNow = tick;
+  root._rvmSupportGeometryCleanup = cleanup;
+  root.addEventListener?.('rvm-tab-dispose', cleanup, { once: true });
   for (const delay of [180, 900, 2200, 4500]) setTimeout(tick, delay);
 }
 
@@ -59,8 +69,16 @@ function injectControls(root) {
     const reportBtn = event.target?.closest?.('[data-rvm-support-geometry-report]');
     if (!modeBtn && !reportBtn) return;
     event.preventDefault(); event.stopPropagation();
-    if (modeBtn) setMode(root, modeBtn.dataset.rvmSupportGeometryMode);
-    else downloadJson(globalThis[GLOBAL_KEY] || { schema: VERSION, empty: true }, `rvm-support-geometry-${Date.now()}.json`);
+    try {
+      if (modeBtn) {
+        setMode(root, modeBtn.dataset.rvmSupportGeometryMode);
+        root._rvmSupportGeometryRebuildNow?.();
+      } else {
+        downloadJson(globalThis[GLOBAL_KEY] || { schema: VERSION, empty: true }, `rvm-support-geometry-${Date.now()}.json`);
+      }
+    } catch (error) {
+      reportActionError(error, { action: 'support-geometry', mode: modeBtn?.dataset?.rvmSupportGeometryMode || 'json' });
+    }
   });
 }
 
@@ -129,7 +147,7 @@ function rebuildGeometry(viewer, assemblies, mode) {
   if (mode === 'off' || !viewer?.modelGroup) return diag;
   const root = new THREE.Group();
   root.name = ROOT_NAME;
-  root.userData = { rvmSupportGeometryRoot: true, rvmSupportGeometryGenerated: true, supportSymbol: true, schema: VERSION };
+  root.userData = { rvmSupportGeometryRoot: true, rvmSupportGeometryGenerated: true, schema: VERSION, displayName: 'Generated Support Geometry' };
   for (const assembly of assemblies) {
     bump(diag.kindCounts, assembly.kind);
     diag.sourceObjectCount += assembly.items.length;
@@ -177,7 +195,7 @@ function buildSupportGeometry(assembly) {
 
 function meta(assembly, part) {
   const first = assembly.items[0]?.object;
-  return { rvmSupportGeometryGenerated: true, supportSymbol: true, TYPE: 'SUPPORT', RVM_PRIMITIVE_KIND: 'SUPPORT', supportKind: assembly.kind, supportGeometryPart: part, sourceUuids: assembly.items.map((i) => i.uuid), sourcePath: first?.userData?.sourcePath || first?.userData?.browserRvmProperties?.sourcePath || '', displayName: `Support ${assembly.kind}` };
+  return { rvmSupportGeometryGenerated: true, TYPE: 'SUPPORT', RVM_PRIMITIVE_KIND: 'SUPPORT', supportKind: assembly.kind, supportGeometryPart: part, sourceUuids: assembly.items.map((i) => i.uuid), sourcePath: first?.userData?.sourcePath || first?.userData?.browserRvmProperties?.sourcePath || '', displayName: `Support ${assembly.kind}` };
 }
 
 function post(a, b, r, color, userData) { const dir = b.clone().sub(a); const mesh = new THREE.Mesh(new THREE.CylinderGeometry(r, r, Math.max(dir.length(), 0.01), 12), mat(color)); mesh.position.copy(a.clone().lerp(b, 0.5)); mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir.lengthSq() ? dir.clone().normalize() : new THREE.Vector3(0, 1, 0)); mesh.userData = userData; mesh.name = `SUPPORT_${userData.supportGeometryPart}`; return mesh; }
@@ -209,10 +227,11 @@ function perpendicular(axis) { const t = Math.abs(axis.y) < 0.8 ? new THREE.Vect
 function secondDim(size) { return [Math.abs(size.x), Math.abs(size.y), Math.abs(size.z)].sort((a, b) => b - a)[1] || 0.12; }
 function countMeshes(root) { let n = 0; root.traverse?.((o) => { if (o.isMesh) n += 1; }); return n; }
 function dispose(root) { root?.traverse?.((o) => { o.geometry?.dispose?.(); const mats = Array.isArray(o.material) ? o.material : (o.material ? [o.material] : []); mats.forEach((m) => m?.dispose?.()); }); }
-function setMode(root, mode) { const v = ['off', 'overlay', 'replace'].includes(mode) ? mode : 'off'; root.dataset.rvmSupportGeometryMode = v; try { localStorage.setItem(STORAGE_KEY, v); } catch {} }
+function setMode(root, mode) { const v = ['off', 'overlay', 'replace'].includes(mode) ? mode : 'off'; root.dataset.rvmSupportGeometryMode = v; root.dataset.rvmSupportGeometryUserSet = 'true'; try { localStorage.setItem(STORAGE_KEY, v); } catch {} }
 function getMode(root) { if (root?.dataset?.rvmSupportGeometryMode) return root.dataset.rvmSupportGeometryMode; let v = 'off'; try { v = localStorage.getItem(STORAGE_KEY) || 'off'; } catch {} return ['off', 'overlay', 'replace'].includes(v) ? v : 'off'; }
-function updatePanel(root, d) { root.querySelectorAll('[data-rvm-support-geometry-mode]').forEach((b) => b.classList.toggle('is-active', b.dataset.rvmSupportGeometryMode === d.mode)); const s = root.querySelector('#rvm-sb-msg'); if (s && d.mode !== 'off') s.textContent = `Support geometry ${d.mode}: ${d.generatedMeshCount} generated mesh(es)`; }
+function updatePanel(root, d) { root.querySelectorAll('[data-rvm-support-geometry-mode]').forEach((b) => b.classList.toggle('is-active', b.dataset.rvmSupportGeometryMode === d.mode)); const s = root.querySelector('#rvm-sb-msg'); if (s) s.textContent = d.mode === 'off' ? 'Support geometry off' : `Support geometry ${d.mode}: ${d.generatedMeshCount} generated mesh(es)`; }
 function publish(d) { globalThis[GLOBAL_KEY] = d; try { globalThis.dispatchEvent?.(new CustomEvent('rvm-support-geometry-diagnostics', { detail: d })); } catch {} }
+function reportActionError(error, context) { try { globalThis.__PCF_GLB_RVM_REPORT_ACTION_ERROR__?.(error, context); } catch (_) {} console.warn('[RVM SupportGeom] action failed', context, error); }
 function downloadJson(value, name) { const blob = new Blob([JSON.stringify(value, null, 2)], { type: 'application/json' }); const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 1500); }
 function bump(map, key) { const k = String(key || 'UNKNOWN_SUPPORT'); map[k] = (map[k] || 0) + 1; }
 function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
