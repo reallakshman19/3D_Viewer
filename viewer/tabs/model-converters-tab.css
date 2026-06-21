@@ -63,7 +63,8 @@
 
 .model-converters-label input,
 .model-converters-label select,
-.model-converters-file input {
+.model-converters-file input,
+.model-converters-workflow-regex-field select {
   background: #182334;
   color: #e6edf5;
   border: 1px solid #31455f;
@@ -250,6 +251,24 @@
   flex-wrap: wrap;
   gap: 8px;
   align-items: center;
+  flex: 0 0 auto;
+}
+
+.model-converters-workflow-run-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.model-converters-workflow-run-status-row span:not(.model-converters-workflow-run-status-icon) {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.model-converters-workflow-run-status-icon {
   flex: 0 0 auto;
 }
 
