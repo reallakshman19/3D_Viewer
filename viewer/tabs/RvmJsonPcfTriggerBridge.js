@@ -115,15 +115,19 @@ function triggerJsonRvmPcf(root, requestedScope) {
 }
 
 function scan() {
+  if (typeof document === 'undefined') return;
   document.querySelectorAll?.('[data-rvm-viewer]').forEach(installSection);
 }
 
 export function installRvmJsonPcfTriggerBridge() {
+  if (typeof document === 'undefined') return;
   if (globalThis[INSTALL_FLAG]) return;
   globalThis[INSTALL_FLAG] = true;
   scan();
-  const observer = new MutationObserver(scan);
-  observer.observe(document.documentElement, { childList: true, subtree: true });
+  if (typeof MutationObserver === 'function') {
+    const observer = new MutationObserver(scan);
+    observer.observe(document.documentElement, { childList: true, subtree: true });
+  }
   globalThis.__PCF_GLB_RVM_JSON_PCF_TRIGGER_BRIDGE__ = {
     version: '20260621-rvm-json-pcf-trigger-1',
     scan,
