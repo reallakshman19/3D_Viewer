@@ -17,6 +17,7 @@
 // viewer3d-rvm-tab-renderer.js?v=20260621-rvm-selection-sets-1
 // viewer3d-rvm-tab-renderer.js?v=20260621-rvm-report-export-1
 // viewer3d-rvm-tab-renderer.js?v=20260621-rvm-model-health-1
+// viewer3d-rvm-tab-renderer.js?v=20260621-rvm-health-issues-1
 // viewer3d-rvm-tab-renderer.js?v=20260621-rvm-navis-hierarchy-1
 // viewer3d-rvm-tab-renderer.js?v=20260621-rvm-native-facet-primary-1
 // viewer3d-rvm-tab-renderer.js?v=20260621-rvm-zone-lod-context-1
@@ -32,6 +33,8 @@
 // RvmSelectionSetsBridge.js?v=20260621-rvm-selection-sets-1
 // RvmReportExportBridge.js?v=20260621-rvm-report-export-1
 // RvmModelHealthBridge.js?v=20260621-rvm-model-health-1
+// RvmModelHealthBridge.js?v=20260621-rvm-health-issues-1
+// RvmModelHealthIssuesBridge.js?v=20260621-rvm-health-issues-1
 // RvmPolicyInfoBridge.js?v=20260621-rvm-policy-info-1
 // RvmDiagnosticPanelCollapseBridge.js?v=20260621-rvm-diagnostic-collapse-1
 // RvmZoneLodLabelBridge.js?v=20260621-rvm-zone-lod-labels-1
@@ -55,8 +58,10 @@
 // function cleanupActiveTab
 // renderTabError
 // tabRendererCache
-import { installRvmModelHealthBridge } from '../tabs/RvmModelHealthBridge.js?v=20260621-rvm-model-health-1';
+import { installRvmModelHealthBridge } from '../tabs/RvmModelHealthBridge.js?v=20260621-rvm-health-issues-1';
+import { installRvmModelHealthIssuesBridge } from '../tabs/RvmModelHealthIssuesBridge.js?v=20260621-rvm-health-issues-1';
 
 installRvmModelHealthBridge();
+installRvmModelHealthIssuesBridge();
 
-export { init } from './app-label-perf-runtime.js?v=20260621-rvm-model-health-1';
+export { init } from './app-label-perf-runtime.js?v=20260621-rvm-health-issues-1';
