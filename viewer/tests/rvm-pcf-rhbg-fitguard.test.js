@@ -28,6 +28,7 @@ const visibilitySnapshotsSource = await fs.readFile(new URL('../tabs/RvmVisibili
 const objectSearchSource = await fs.readFile(new URL('../tabs/RvmObjectSearchBridge.js', import.meta.url), 'utf8');
 const measureSource = await fs.readFile(new URL('../tabs/RvmMeasureBridge.js', import.meta.url), 'utf8');
 const sectionBoxSource = await fs.readFile(new URL('../tabs/RvmSectionBoxBridge.js', import.meta.url), 'utf8');
+const selectionSetsSource = await fs.readFile(new URL('../tabs/RvmSelectionSetsBridge.js', import.meta.url), 'utf8');
 const navisHierarchySource = await fs.readFile(new URL('../tabs/RvmNavisHierarchyBridge.js', import.meta.url), 'utf8');
 const labelPerfSource = await fs.readFile(new URL('../tabs/RvmLabelPerformanceBridge.js', import.meta.url), 'utf8');
 const uiPanelSource = await fs.readFile(new URL('../tabs/RvmUiInteractionPanelPatch.js', import.meta.url), 'utf8');
@@ -44,9 +45,22 @@ check(rendererSource.includes('RvmMeasureBridge.js?v=20260621-rvm-measure-tools-
 check(rendererSource.includes('installRvmMeasureBridge()'), 'renderer installs measure bridge');
 check(rendererSource.includes('RvmSectionBoxBridge.js?v=20260621-rvm-section-box-1'), 'renderer loads selected section box bridge');
 check(rendererSource.includes('installRvmSectionBoxBridge()'), 'renderer installs selected section box bridge');
+check(rendererSource.includes('RvmSelectionSetsBridge.js?v=20260621-rvm-selection-sets-1'), 'renderer loads selection sets bridge');
+check(rendererSource.includes('installRvmSelectionSetsBridge()'), 'renderer installs selection sets bridge');
 check(rendererSource.includes('RvmJsonPcfTriggerBridge.js?v=20260621-rvm-pcf-visible-scope-1'), 'renderer loads visible-scope PCF trigger bridge');
 check(!rendererSource.includes('installRvmStagedJsonExportBridge()'), 'renderer avoids eager stagedJSON bridge install');
 check(!rendererSource.includes('installRvmNativeSceneGlbExportBridge()'), 'renderer avoids eager GLB bridge install');
+
+check(selectionSetsSource.includes("BRIDGE_VERSION = '20260621-rvm-selection-sets-1'"), 'selection sets bridge exposes cache/version marker');
+check(selectionSetsSource.includes('MAX_SELECTION_SETS') && selectionSetsSource.includes('MAX_SET_OBJECT_IDS'), 'selection sets bridge bounds saved sets and object IDs');
+check(selectionSetsSource.includes('Save Set') && selectionSetsSource.includes('Selection sets'), 'selection sets bridge exposes toolbar and summary labels');
+check(selectionSetsSource.includes('captureSelectionSet') && selectionSetsSource.includes('applySetAction'), 'selection sets bridge captures and restores set actions');
+check(selectionSetsSource.includes('localStorage') && selectionSetsSource.includes('STORAGE_PREFIX'), 'selection sets bridge persists per-file state');
+check(selectionSetsSource.includes('RuntimeEvents.RVM_NODE_SELECTED'), 'selection sets bridge drives details through selection event');
+check(selectionSetsSource.includes('__PCF_GLB_RVM_SELECTION_SETS__'), 'selection sets bridge publishes global API');
+check(selectionSetsSource.includes("typeof document === 'undefined'"), 'selection sets bridge is safe for static Node-side imports');
+check(selectionSetsSource.includes('globalThis.__PCF_GLB_RVM_VISIBILITY__?.isolateSelection'), 'selection sets bridge reuses visibility isolate action');
+check(selectionSetsSource.includes('globalThis.__PCF_GLB_RVM_VISIBILITY__?.hideSelection'), 'selection sets bridge reuses visibility hide action');
 
 check(sectionBoxSource.includes("BRIDGE_VERSION = '20260621-rvm-section-box-1'"), 'section box bridge exposes cache/version marker');
 check(sectionBoxSource.includes('Clip') && sectionBoxSource.includes('Sel Box') && sectionBoxSource.includes('Model'), 'section box bridge exposes toolbar actions');
@@ -103,10 +117,11 @@ check(navisHierarchySource.includes('installRvmNavisHierarchyBridge'), 'Navis hi
 check(uiPanelSource.includes('applyUniversalMouseContract'), 'universal mouse contract remains present');
 check(propertyCollapseSource.includes('rvm-property-collapse-icon'), 'property panel collapse icons remain present');
 
-check(indexSource.includes('main-rhbg-fitguard.js?v=20260621-rvm-section-box-1'), 'index uses section box entry cache key');
-check(entrySource.includes('core/app.js?v=20260621-rvm-section-box-1'), 'entrypoint uses section box app cache key');
-check(appSource.includes('viewer3d-rvm-tab-renderer.js?v=20260621-rvm-section-box-1'), 'app uses section box renderer cache marker');
-check(runtimeSource.includes('viewer3d-rvm-tab-renderer.js?v=20260621-rvm-section-box-1'), 'runtime imports section box renderer cache key');
+check(indexSource.includes('main-rhbg-fitguard.js?v=20260621-rvm-selection-sets-1'), 'index uses selection sets entry cache key');
+check(entrySource.includes('core/app.js?v=20260621-rvm-selection-sets-1'), 'entrypoint uses selection sets app cache key');
+check(appSource.includes('viewer3d-rvm-tab-renderer.js?v=20260621-rvm-selection-sets-1'), 'app uses selection sets renderer cache marker');
+check(runtimeSource.includes('viewer3d-rvm-tab-renderer.js?v=20260621-rvm-selection-sets-1'), 'runtime imports selection sets renderer cache key');
+check(appSource.includes('RvmSelectionSetsBridge.js?v=20260621-rvm-selection-sets-1'), 'app keeps selection sets bridge marker');
 check(appSource.includes('RvmSectionBoxBridge.js?v=20260621-rvm-section-box-1'), 'app keeps section box bridge marker');
 check(appSource.includes('RvmMeasureBridge.js?v=20260621-rvm-measure-tools-1'), 'app keeps measure bridge marker');
 check(appSource.includes('BrowserRvmLoadBridge.js?v=20260621-rvm-native-facet-primary-1'), 'app keeps native facet load bridge marker');
