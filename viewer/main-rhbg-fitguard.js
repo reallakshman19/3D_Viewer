@@ -11,7 +11,8 @@ const STARTUP_SIDE_EFFECT_MODULES = [
 // Previous cache marker: core/app.js?v=20260621-rvm-property-collapse-1
 // Previous cache marker: core/app.js?v=20260621-app-brand-icon-1
 // Previous cache marker: core/app.js?v=20260621-rvm-label-perf-1
-// Active cache key: core/app.js?v=20260621-rvm-json-pcf-trigger-1
+// Previous cache marker: core/app.js?v=20260621-rvm-json-pcf-trigger-1
+// Active cache key: core/app.js?v=20260621-rvm-policy-info-1
 
 function startupMount() {
   return document.getElementById('app') || document.getElementById('app-layout') || document.getElementById('app-shell') || document.body;
@@ -60,7 +61,7 @@ function scheduleDeferredStartupSideEffects() {
 }
 
 async function startViewer() {
-  const { init } = await import('./core/app.js?v=20260621-rvm-json-pcf-trigger-1');
+  const { init } = await import('./core/app.js?v=20260621-rvm-policy-info-1');
   await init();
   scheduleDeferredStartupSideEffects();
 }
