@@ -1,7 +1,11 @@
 import * as THREE from 'three';
 import { collectBrowserRvmRenderInstructions } from './BrowserRvmRenderContractAdapter.js';
+import {
+  buildNativeFacetGroupObject,
+  hasDecodedNativeFacetGroup,
+} from './BrowserRvmNativeFacetGroupPrimary.js';
 
-export const BROWSER_RVM_RENDER_SCENE_SCHEMA = 'rvm-browser-render-scene/v5-bbox-placeholder-safe';
+export const BROWSER_RVM_RENDER_SCENE_SCHEMA = 'rvm-browser-render-scene/v6-native-facetgroup-primary';
 
 const DEFAULT_COLOR_BY_PRIMITIVE = Object.freeze({
   CYLINDER_BBOX: 0x3d74c5,
@@ -12,6 +16,7 @@ const DEFAULT_COLOR_BY_PRIMITIVE = Object.freeze({
   STRUCTURE_BBOX: 0x7b8794,
   STRUCTURE_SOLID: 0x7b8794,
   FACET_GROUP_BBOX_PLACEHOLDER: 0x4b5563,
+  RVM_NATIVE_FACET_GROUP: 0x73808f,
   TORUS_BBOX_PLACEHOLDER: 0x444444,
   TORUS_RING: 0x444444,
   CONE_BBOX_PLACEHOLDER: 0x8f8f8f,
@@ -75,6 +80,9 @@ export function buildBrowserRvmRenderSceneFromInstructions(instructions = [], op
     attCounts: { enriched: 0, plain: 0 },
     bboxPromotedSolidsBlockedCount: 0,
     placeholderWireframeCount: 0,
+    nativeFacetGroupPrimaryCount: 0,
+    nativeFacetGroupPolygonCount: 0,
+    nativeFacetGroupTriangleCount: 0,
     renderOptions: publicRenderOptions(renderOptions),
     performance: emptyPerformanceDiagnostics(),
     bounds: emptySceneBounds()
@@ -98,10 +106,15 @@ export function buildBrowserRvmRenderSceneFromInstructions(instructions = [], op
 
     diagnostics.renderableCount += 1;
     bump(diagnostics.primitiveCounts, rawPrimitive || 'UNKNOWN');
-    bump(diagnostics.effectivePrimitiveCounts, effectivePrimitive || rawPrimitive || 'UNKNOWN');
-    bump(diagnostics.renderQualityCounts, renderQualityFor(rawPrimitive, effectivePrimitive));
+    bump(diagnostics.effectivePrimitiveCounts, mesh.userData?.effectiveRenderPrimitive || effectivePrimitive || rawPrimitive || 'UNKNOWN');
+    bump(diagnostics.renderQualityCounts, mesh.userData?.renderQuality || renderQualityFor(rawPrimitive, effectivePrimitive));
     if (mesh.userData?.bboxPromotedSolidBlocked) diagnostics.bboxPromotedSolidsBlockedCount += 1;
     if (mesh.userData?.browserRvmBboxPlaceholderWireframe) diagnostics.placeholderWireframeCount += 1;
+    if (mesh.userData?.browserRvmNativeFacetGroupPrimary) {
+      diagnostics.nativeFacetGroupPrimaryCount += 1;
+      diagnostics.nativeFacetGroupPolygonCount += Number(mesh.userData.browserRvmNativeFacetGroupPolygonCount || 0);
+      diagnostics.nativeFacetGroupTriangleCount += Number(mesh.userData.browserRvmNativeFacetGroupTriangleCount || 0);
+    }
     if (instruction.att?.enriched) diagnostics.attCounts.enriched += 1;
     else diagnostics.attCounts.plain += 1;
     group.add(mesh);
@@ -135,37 +148,42 @@ export function buildInstructionObject(instruction = {}, options = {}, context =
     ? instruction.radius
     : Math.max(length * 0.08, 1);
 
-  if (!center) return null;
-
-  const material = materialForPrimitive(rawPrimitive, effectivePrimitive, options, context);
+  const renderOptions = options.renderOptions || normalizeRenderOptions(options);
+  const material = materialForPrimitive(rawPrimitive, effectivePrimitive, { ...options, ...renderOptions }, context);
 
   let object = null;
-  if ((effectivePrimitive === 'BOX_SOLID' || effectivePrimitive === 'STRUCTURE_SOLID') && start && end) {
+  if (effectivePrimitive === 'RVM_NATIVE_FACET_GROUP') {
+    object = buildNativeFacetGroupObject(instruction, material, context);
+  }
+
+  if (!object && !center) return null;
+
+  if (!object && (effectivePrimitive === 'BOX_SOLID' || effectivePrimitive === 'STRUCTURE_SOLID') && start && end) {
     object = boxFromInstruction(instruction, center, length, radius, material, context);
-  } else if (isBboxPlaceholderPrimitive(effectivePrimitive)) {
+  } else if (!object && isBboxPlaceholderPrimitive(effectivePrimitive)) {
     object = bboxWireframeObject(instruction, center, effectivePrimitive, options, context);
     if (!object) {
       const geometry = cachedGeometry(context, `placeholder-sphere:${fixed(radius)}:10`, () => new THREE.SphereGeometry(Math.max(radius, 1), 10, 8));
       object = new THREE.Mesh(geometry, material);
       object.position.copy(center);
     }
-  } else if (effectivePrimitive === 'TORUS_RING') {
+  } else if (!object && effectivePrimitive === 'TORUS_RING') {
     object = torusGeometryObject(center, axis, length, radius, material, context);
-  } else if (effectivePrimitive === 'CONE_FRUSTUM') {
+  } else if (!object && effectivePrimitive === 'CONE_FRUSTUM') {
     object = frustumObject(center, axis, length, radius, material, context);
-  } else if (effectivePrimitive === 'ELBOW_TORUS_ARC') {
+  } else if (!object && effectivePrimitive === 'ELBOW_TORUS_ARC') {
     object = elbowObject(center, axis, length, radius, material, context);
-  } else if (effectivePrimitive === 'TEE_COMPOSITE') {
+  } else if (!object && effectivePrimitive === 'TEE_COMPOSITE') {
     object = teeObject(center, axis, length, radius, material, context);
-  } else if (effectivePrimitive === 'FLANGE_DISC') {
+  } else if (!object && effectivePrimitive === 'FLANGE_DISC') {
     object = flangeObject(center, axis, length, radius, material, context);
-  } else if (effectivePrimitive === 'SUPPORT_STAND') {
+  } else if (!object && effectivePrimitive === 'SUPPORT_STAND') {
     object = supportObject(center, axis, length, radius, material, context);
-  } else if (effectivePrimitive === 'VALVE_COMPOSITE' || effectivePrimitive === 'INSTRUMENT_BODY') {
+  } else if (!object && (effectivePrimitive === 'VALVE_COMPOSITE' || effectivePrimitive === 'INSTRUMENT_BODY')) {
     object = valveLikeObject(center, axis, length, radius, material, context);
-  } else if (start && end) {
+  } else if (!object && start && end) {
     object = cylinderBetween(start, end, radius, material, 16, context);
-  } else {
+  } else if (!object) {
     const geometry = cachedGeometry(context, `sphere:${fixed(radius)}:16`, () => new THREE.SphereGeometry(radius, 16, 16));
     object = new THREE.Mesh(geometry, material);
     object.position.copy(center);
@@ -173,11 +191,12 @@ export function buildInstructionObject(instruction = {}, options = {}, context =
 
   if (!object) return null;
   const displayName = String(instruction.displayName || instruction.sourcePath || instruction.sourceName || rawPrimitive).trim() || rawPrimitive;
-  const renderQuality = renderQualityFor(rawPrimitive, effectivePrimitive);
+  const actualEffectivePrimitive = object.userData?.effectiveRenderPrimitive || effectivePrimitive;
+  const renderQuality = object.userData?.renderQuality || renderQualityFor(rawPrimitive, actualEffectivePrimitive);
   const properties = browserRvmPropertiesFor(instruction, {
     displayName,
     rawPrimitive,
-    effectivePrimitive,
+    effectivePrimitive: actualEffectivePrimitive,
     renderQuality
   });
   object.name = displayName;
@@ -190,9 +209,9 @@ export function buildInstructionObject(instruction = {}, options = {}, context =
     type: instruction.type || 'UNKNOWN',
     kind: instruction.kind || 'UNKNOWN',
     renderPrimitive: rawPrimitive,
-    effectiveRenderPrimitive: effectivePrimitive,
+    effectiveRenderPrimitive: actualEffectivePrimitive,
     renderQuality,
-    bboxPromotedSolidBlocked: isStructurePlaceholderPromotionBlocked(rawPrimitive, instruction, effectivePrimitive),
+    bboxPromotedSolidBlocked: isStructurePlaceholderPromotionBlocked(rawPrimitive, instruction, actualEffectivePrimitive),
     browserRvmBboxPlaceholderWireframe: Boolean(object.userData?.browserRvmBboxPlaceholderWireframe),
     renderSource: instruction.renderSource || '',
     contractVersion: instruction.contractVersion || '',
@@ -208,7 +227,7 @@ export function buildInstructionObject(instruction = {}, options = {}, context =
     child.userData = {
       ...(child.userData || {}),
       parentBrowserRvmRenderPrimitive: rawPrimitive,
-      effectiveRenderPrimitive: effectivePrimitive,
+      effectiveRenderPrimitive: actualEffectivePrimitive,
       renderQuality: object.userData.renderQuality,
       bboxPromotedSolidBlocked: object.userData.bboxPromotedSolidBlocked,
       sourcePath: object.userData.sourcePath,
@@ -348,9 +367,7 @@ function valveLikeObject(center, axis, length, radius, material, context = null)
   if (axis && axis.length() > 1e-6) {
     const dir = axis.clone().normalize();
     const half = Math.max((length || radius * 4) * 0.35, radius * 1.5);
-    const start = dir.clone().multiplyScalar(-half);
-    const end = dir.clone().multiplyScalar(half);
-    const barrel = cylinderBetween(start, end, Math.max(radius * 0.62, 0.5), material, 14, context);
+    const barrel = cylinderBetween(dir.clone().multiplyScalar(-half), dir.clone().multiplyScalar(half), Math.max(radius * 0.62, 0.5), material, 14, context);
     if (barrel) group.add(barrel);
   }
   return group;
@@ -360,6 +377,7 @@ function effectivePrimitiveFor(rawPrimitive, instruction = {}) {
   const primitive = primitiveName(rawPrimitive);
   const type = String(instruction.type || '').toUpperCase();
   const kind = String(instruction.kind || '').toUpperCase();
+  if (primitive === 'FACET_GROUP_BBOX_PLACEHOLDER' && hasDecodedNativeFacetGroup(instruction)) return 'RVM_NATIVE_FACET_GROUP';
   if (primitive === 'CYLINDER_BBOX' || primitive === 'PIPE_BBOX' || type === 'PIPE' || kind === 'CYLINDER') return 'PIPE_CYLINDER';
   if (primitive === 'BOX_BBOX' || type === 'BOX') return 'BOX_SOLID';
   if (primitive === 'STRUCTURE_BBOX') return 'STRUCTURE_SOLID';
@@ -391,6 +409,7 @@ function isStructurePlaceholderPromotionBlocked(rawPrimitive, instruction = {}, 
 function renderQualityFor(rawPrimitive, effectivePrimitive) {
   const raw = primitiveName(rawPrimitive);
   const effective = primitiveName(effectivePrimitive);
+  if (effective === 'RVM_NATIVE_FACET_GROUP') return 'native-facetgroup-primary';
   if (/UNKNOWN|GENERIC/.test(effective)) return 'generic-placeholder';
   if (/PLACEHOLDER/.test(effective)) return 'placeholder-wireframe-diagnostic';
   if (/BBOX_PLACEHOLDER/.test(raw) && !/PLACEHOLDER/.test(effective)) return 'bbox-promoted-geometry';
@@ -400,7 +419,7 @@ function renderQualityFor(rawPrimitive, effectivePrimitive) {
 
 function shouldRenderPrimitive(rawPrimitive, effectivePrimitive, options) {
   const quality = renderQualityFor(rawPrimitive, effectivePrimitive);
-  const exact = !/placeholder/i.test(quality) || /promoted|derived|direct/i.test(quality);
+  const exact = !/placeholder/i.test(quality) || /promoted|derived|direct|native/i.test(quality);
   const unknown = /UNKNOWN|GENERIC/.test(String(effectivePrimitive || '').toUpperCase());
   if (unknown && !options.showUnknown) return false;
   if (options.renderMode === 'exact' && !exact) return false;
@@ -411,16 +430,17 @@ function shouldRenderPrimitive(rawPrimitive, effectivePrimitive, options) {
 }
 
 function normalizeRenderOptions(options = {}) {
-  const renderMode = ['all', 'exact', 'placeholder'].includes(options.renderMode) ? options.renderMode : DEFAULT_RENDER_OPTIONS.renderMode;
+  const src = options.renderOptions && typeof options.renderOptions === 'object' ? options.renderOptions : options;
+  const renderMode = ['all', 'exact', 'placeholder'].includes(src.renderMode) ? src.renderMode : DEFAULT_RENDER_OPTIONS.renderMode;
   return {
     ...DEFAULT_RENDER_OPTIONS,
-    ...options,
+    ...src,
     renderMode,
-    showExact: options.showExact !== false,
-    showPlaceholders: options.showPlaceholders !== false,
-    showUnknown: options.showUnknown !== false,
-    cacheGeometries: options.cacheGeometries !== false,
-    cacheMaterials: options.cacheMaterials !== false
+    showExact: src.showExact !== false,
+    showPlaceholders: src.showPlaceholders !== false,
+    showUnknown: src.showUnknown !== false,
+    cacheGeometries: src.cacheGeometries !== false,
+    cacheMaterials: src.cacheMaterials !== false
   };
 }
 
@@ -432,7 +452,8 @@ function publicRenderOptions(options = {}) {
     showUnknown: Boolean(options.showUnknown),
     cacheGeometries: Boolean(options.cacheGeometries),
     cacheMaterials: Boolean(options.cacheMaterials),
-    bboxPlaceholderPolicy: 'wireframe-diagnostic-not-solid-geometry'
+    bboxPlaceholderPolicy: 'wireframe-diagnostic-not-solid-geometry',
+    nativeFacetGroupPrimary: true
   };
 }
 
@@ -498,9 +519,7 @@ function cachedGeometry(context, key, factory) {
 
 function estimateGeometryBytes(geometry) {
   let total = 0;
-  for (const attr of Object.values(geometry?.attributes || {})) {
-    if (attr?.array?.byteLength) total += attr.array.byteLength;
-  }
+  for (const attr of Object.values(geometry?.attributes || {})) if (attr?.array?.byteLength) total += attr.array.byteLength;
   if (geometry?.index?.array?.byteLength) total += geometry.index.array.byteLength;
   return total;
 }
@@ -553,6 +572,7 @@ function browserRvmPropertiesFor(instruction = {}, { displayName, rawPrimitive, 
     renderQuality,
     bboxPromotedSolidBlocked: isStructurePlaceholderPromotionBlocked(rawPrimitive, instruction, effectivePrimitive),
     bboxPlaceholderPolicy: isBboxPlaceholderPrimitive(effectivePrimitive) ? 'wireframe-diagnostic-not-solid-geometry' : '',
+    nativeFacetGroupPrimary: effectivePrimitive === 'RVM_NATIVE_FACET_GROUP',
     att: instruction.att && typeof instruction.att === 'object' ? { ...instruction.att } : null,
     attAttributes: clonePlainObject(instruction.attAttributes),
     attributes: clonePlainObject(instruction.attributes)
@@ -622,11 +642,7 @@ function midPoint(a, b) {
 function bboxCenter(value) {
   const bbox = parseBbox(value);
   if (!bbox) return null;
-  return new THREE.Vector3(
-    (bbox[0] + bbox[3]) * 0.5,
-    (bbox[1] + bbox[4]) * 0.5,
-    (bbox[2] + bbox[5]) * 0.5,
-  );
+  return new THREE.Vector3((bbox[0] + bbox[3]) * 0.5, (bbox[1] + bbox[4]) * 0.5, (bbox[2] + bbox[5]) * 0.5);
 }
 
 function parseBbox(value) {
@@ -659,6 +675,7 @@ function bump(target, key) {
 function skipReason(instruction) {
   if (!instruction || typeof instruction !== 'object') return 'invalid-instruction';
   if (!instruction.center && !instruction.axisStart && !instruction.axisEnd && !instruction.bbox && !instruction.rawBbox) return 'missing-position';
+  if (primitiveName(instruction.renderPrimitive) === 'FACET_GROUP_BBOX_PLACEHOLDER' && !hasDecodedNativeFacetGroup(instruction)) return 'native-facetgroup-unavailable';
   return 'unsupported-geometry';
 }
 
