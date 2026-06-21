@@ -18,6 +18,7 @@ const indexSource = await fs.readFile(new URL('../index.html', import.meta.url),
 const entrySource = await fs.readFile(new URL('../main-rhbg-fitguard.js', import.meta.url), 'utf8');
 const appSource = await fs.readFile(new URL('../core/app.js', import.meta.url), 'utf8');
 const zoneLodSource = await fs.readFile(new URL('../tabs/RvmZoneLodLabelBridge.js', import.meta.url), 'utf8');
+const zoneLodContextSource = await fs.readFile(new URL('../tabs/RvmZoneLodContextBridge.js', import.meta.url), 'utf8');
 const navisHierarchySource = await fs.readFile(new URL('../tabs/RvmNavisHierarchyBridge.js', import.meta.url), 'utf8');
 const labelPerfSource = await fs.readFile(new URL('../tabs/RvmLabelPerformanceBridge.js', import.meta.url), 'utf8');
 const uiPanelSource = await fs.readFile(new URL('../tabs/RvmUiInteractionPanelPatch.js', import.meta.url), 'utf8');
@@ -26,8 +27,10 @@ const propertyCollapseSource = await fs.readFile(new URL('../tabs/RvmPropertyPan
 check(rendererSource.includes('viewer3d-rvm-tab.js?v=20260621-rvm-native-facet-primary-1'), 'renderer exports native facet primary RVM tab cache key');
 check(rendererSource.includes('RvmZoneLodLabelBridge.js?v=20260621-rvm-zone-lod-labels-1'), 'renderer keeps zone/LOD bridge');
 check(rendererSource.includes('RvmNavisHierarchyBridge.js?v=20260621-rvm-navis-hierarchy-1'), 'renderer keeps Navis hierarchy bridge');
+check(rendererSource.includes('RvmZoneLodContextBridge.js?v=20260621-rvm-zone-lod-context-1'), 'renderer loads hierarchy zone LOD context bridge');
 check(rendererSource.includes('installRvmZoneLodLabelBridge()'), 'renderer installs zone/LOD bridge');
 check(rendererSource.includes('installRvmNavisHierarchyBridge()'), 'renderer installs Navis hierarchy bridge');
+check(rendererSource.includes('installRvmZoneLodContextBridge()'), 'renderer installs hierarchy zone LOD context bridge');
 check(!rendererSource.includes('installRvmStagedJsonExportBridge()'), 'renderer avoids eager stagedJSON bridge install');
 check(!rendererSource.includes('installRvmNativeSceneGlbExportBridge()'), 'renderer avoids eager GLB bridge install');
 
@@ -75,13 +78,25 @@ check(instructionFilterSource.includes('maxPrimitiveBoxSide: 50000'), 'instructi
 
 check(zoneLodSource.includes('filterInstructionSet'), 'zone bridge still filters instructions before WebGL mesh creation');
 check(navisHierarchySource.includes('installRvmNavisHierarchyBridge'), 'Navis hierarchy bridge remains installed');
+check(zoneLodContextSource.includes('installRvmZoneLodContextBridge'), 'hierarchy zone LOD context bridge exports installer');
+check(zoneLodContextSource.includes('contextmenu'), 'hierarchy zone LOD context bridge binds right-click context menu');
+check(zoneLodContextSource.includes('rvm_zone_lod_context_v1:'), 'hierarchy zone LOD context bridge persists per-file overrides');
+check(zoneLodContextSource.includes('Render branch at 50%') && zoneLodContextSource.includes('Render branch at 25%'), 'hierarchy context menu exposes 50% and 25% branch detail actions');
+check(zoneLodContextSource.includes('Hide branch') && zoneLodContextSource.includes('Reset all saved overrides'), 'hierarchy context menu exposes hide and reset actions');
+check(zoneLodContextSource.includes('applyPersistedOverrides'), 'hierarchy zone LOD context bridge reapplies saved overrides after model load');
+check(zoneLodContextSource.includes('rvmZoneLodOriginalVisible'), 'hierarchy zone LOD context bridge preserves original object visibility');
+check(zoneLodContextSource.includes('typeof document === \'undefined\''), 'hierarchy zone LOD context bridge is safe for static Node-side imports');
 check(labelPerfSource.includes('applyScopedSupportLabelVisibility'), 'labels remain scoped to selected branch');
 check(uiPanelSource.includes('applyUniversalMouseContract'), 'universal mouse contract remains present');
 check(propertyCollapseSource.includes('rvm-property-collapse-icon'), 'property panel collapse icons remain present');
 
-check(indexSource.includes('main-rhbg-fitguard.js?v=20260621-rvm-native-facet-primary-1'), 'index uses native facet primary entry cache key');
-check(entrySource.includes('core/app.js?v=20260621-rvm-native-facet-primary-1'), 'entrypoint uses native facet primary app cache key');
-check(appSource.includes('viewer3d-rvm-tab-renderer.js?v=20260621-rvm-native-facet-primary-1'), 'app uses native facet primary renderer cache key');
+check(indexSource.includes('main-rhbg-fitguard.js?v=20260621-rvm-native-facet-primary-1'), 'index keeps native facet primary entry cache marker');
+check(indexSource.includes('main-rhbg-fitguard.js?v=20260621-rvm-zone-lod-context-1'), 'index uses zone LOD context entry cache key');
+check(entrySource.includes('core/app.js?v=20260621-rvm-native-facet-primary-1'), 'entrypoint keeps native facet primary app cache marker');
+check(entrySource.includes('core/app.js?v=20260621-rvm-zone-lod-context-1'), 'entrypoint uses zone LOD context app cache key');
+check(appSource.includes('viewer3d-rvm-tab-renderer.js?v=20260621-rvm-native-facet-primary-1'), 'app keeps native facet primary renderer cache marker');
+check(appSource.includes('viewer3d-rvm-tab-renderer.js?v=20260621-rvm-zone-lod-context-1'), 'app uses zone LOD context renderer cache key');
+check(appSource.includes('RvmZoneLodContextBridge.js?v=20260621-rvm-zone-lod-context-1'), 'app keeps zone LOD context bridge cache marker');
 check(appSource.includes('BrowserRvmLoadBridge.js?v=20260621-rvm-native-facet-primary-1'), 'app keeps native facet load bridge marker');
 check(appSource.includes('BrowserRvmRenderSceneBuilder.js?v=20260621-rvm-native-facet-primary-1'), 'app keeps native facet render builder marker');
 check(appSource.includes('browser-rvm-worker.js?v=20260621-rvm-native-facet-primary-1'), 'app keeps native facet worker marker');
