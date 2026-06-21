@@ -7,6 +7,7 @@ const LARGE_MODEL_RENDERABLE_THRESHOLD = 3000;
 const SMALL_MODEL_FRAME_MS = 33;
 const LARGE_MODEL_FRAME_MS = 66;
 const IDLE_HEARTBEAT_MS = 500;
+const LABEL_CONFIRM_THRESHOLD = 28;
 
 export function installRvmLabelPerformanceBridge(RvmViewer3D) {
   const proto = RvmViewer3D?.prototype;
@@ -95,18 +96,52 @@ function bindRoot(root) {
     event.stopImmediatePropagation();
 
     const next = button.getAttribute('aria-pressed') !== 'true';
-    setButtonState(button, next);
-    setActiveViewerLabelLayer(next);
-
     const viewer = globalThis.__3D_RVM_VIEWER__;
-    try {
-      viewer?.setSupportSymbolLabelsVisible?.(next);
-      if (next && typeof viewer?.setSupportSymbolOptions === 'function') {
-        viewer.setSupportSymbolOptions({ labelsVisible: true, maxVisibleLabels: 18 });
+
+    if (next) {
+      const scopeIds = selectedCanonicalIds(viewer);
+      if (!scopeIds.length) {
+        setStatus(root, 'Labels are scoped: select a hierarchy/canvas item first, then switch Labels On.', true);
+        setButtonState(button, false);
+        setActiveViewerLabelLayer(false);
+        return;
       }
+
+      const estimated = estimateScopedLabelCount(viewer, scopeIds);
+      if (estimated > LABEL_CONFIRM_THRESHOLD) {
+        const ok = window.confirm?.(`This selected hierarchy has about ${estimated} label candidate(s). Continue with scoped labels?`);
+        if (!ok) {
+          setStatus(root, `Labels cancelled. Refine hierarchy selection below ${LABEL_CONFIRM_THRESHOLD} labels.`, true);
+          setButtonState(button, false);
+          setActiveViewerLabelLayer(false);
+          return;
+        }
+      }
+
+      setButtonState(button, true);
+      try {
+        viewer?.setSupportSymbolLabelsVisible?.(true);
+        if (typeof viewer?.setSupportSymbolOptions === 'function') {
+          viewer.setSupportSymbolOptions({ labelsVisible: true, maxVisibleLabels: Math.max(LABEL_CONFIRM_THRESHOLD, estimated || 18) });
+        }
+        applyScopedSupportLabelVisibility(viewer, scopeIds, true);
+        setActiveViewerLabelLayer(true);
+        setStatus(root, `Labels On for selected hierarchy scope (${scopeIds.length} selection id${scopeIds.length === 1 ? '' : 's'}).`);
+        viewer?.requestRvmRender?.();
+      } catch (error) {
+        console.warn('[RVM labels] scoped label toggle failed', error);
+      }
+      return;
+    }
+
+    setButtonState(button, false);
+    setActiveViewerLabelLayer(false);
+    try {
+      viewer?.setSupportSymbolLabelsVisible?.(false);
+      applyScopedSupportLabelVisibility(viewer, [], false);
       viewer?.requestRvmRender?.();
     } catch (error) {
-      console.warn('[RVM labels] label toggle failed', error);
+      console.warn('[RVM labels] label hide failed', error);
     }
   }, true);
 
@@ -120,7 +155,22 @@ function setButtonState(button, visible) {
   button.setAttribute('aria-pressed', visible ? 'true' : 'false');
   button.textContent = visible ? 'Labels On' : 'Labels Off';
   button.classList.toggle('is-active', !!visible);
-  button.title = visible ? 'Hide RVM labels' : 'Show RVM labels';
+  button.title = visible ? 'Hide scoped RVM labels' : 'Show labels for the selected hierarchy branch';
+}
+
+function setStatus(root, message, warning = false) {
+  const el = root?.querySelector?.('#rvm-sb-msg');
+  if (!el) return;
+  el.textContent = message;
+  el.style.color = warning ? '#ffcf70' : '';
+}
+
+function selectedCanonicalIds(viewer) {
+  const fromViewer = viewer?.selection?.getSelectedCanonicalIds?.();
+  if (Array.isArray(fromViewer) && fromViewer.length) return fromViewer.filter(Boolean).map(String);
+  const fromState = globalThis?.__PCF_GLB_STATE__?.rvm?.selection?.canonicalObjectIds;
+  if (Array.isArray(fromState) && fromState.length) return fromState.filter(Boolean).map(String);
+  return [];
 }
 
 function setActiveViewerLabelLayer(visible) {
@@ -137,6 +187,51 @@ function setViewerLabelLayerVisible(viewer, visible) {
     el.style.display = visible ? '' : 'none';
     el.style.pointerEvents = 'none';
   }
+}
+
+function labelSearchText(labelObject) {
+  const parent = labelObject?.parent || {};
+  const attrs = parent.userData?.attributes || parent.userData?.rawAttributes || {};
+  return [
+    labelObject?.name,
+    parent.name,
+    parent.userData?.canonicalObjectId,
+    parent.userData?.sourceObjectId,
+    parent.userData?.supportTag,
+    attrs.NAME,
+    attrs.RVM_OWNER_NAME,
+    attrs.RVM_OWNER_PATH,
+    attrs.SUPPORT_TAG,
+    attrs.CMPSUPREFN,
+  ].map((value) => String(value || '')).join(' ');
+}
+
+function labelMatchesScope(labelObject, scopeIds = []) {
+  if (!scopeIds.length) return false;
+  const text = labelSearchText(labelObject);
+  return scopeIds.some((id) => id && text.includes(id));
+}
+
+function estimateScopedLabelCount(viewer, scopeIds = []) {
+  let count = 0;
+  viewer?.scene?.traverse?.((obj) => {
+    if (!obj?.userData?.supportSymbolLabel) return;
+    if (labelMatchesScope(obj, scopeIds)) count += 1;
+  });
+  return count;
+}
+
+function applyScopedSupportLabelVisibility(viewer, scopeIds = [], visible = true) {
+  let shown = 0;
+  viewer?.scene?.traverse?.((obj) => {
+    if (!obj?.userData?.supportSymbolLabel || !obj.element) return;
+    const eligible = obj.userData.supportSymbolLabelEligible !== false;
+    const scoped = labelMatchesScope(obj, scopeIds);
+    obj.element.style.display = visible && eligible && scoped ? 'block' : 'none';
+    if (obj.element.style.display !== 'none') shown += 1;
+  });
+  viewer.__rvmScopedLabelDiagnostics = { shown, scopeIds: [...scopeIds], threshold: LABEL_CONFIRM_THRESHOLD };
+  return shown;
 }
 
 function resolveRenderableEstimate(viewer) {

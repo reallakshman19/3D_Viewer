@@ -56,7 +56,15 @@ export async function loadRvmFileInBrowser(file, viewer, options = {}) {
     }));
     checkAbort(signal);
 
-    const instructionSet = ensureFilteredInstructionSet(parsed.instructionSet || { instructions: [], count: 0, diagnostics: {} }, renderBudget);
+    const preselectedInstructionSet = await selectInstructionSetBeforeRender(parsed.instructionSet || { instructions: [], count: 0, diagnostics: {} }, {
+      file,
+      parsed,
+      renderBudget,
+      options,
+      signal,
+      update,
+    });
+    const instructionSet = ensureFilteredInstructionSet(preselectedInstructionSet, renderBudget);
     const instructions = Array.isArray(instructionSet.instructions) ? instructionSet.instructions : [];
     const filterDiagnostics = instructionSet.diagnostics?.oversizedNonPipingFilter || null;
     activeScene = makeProgressiveSceneRoot(file, parsed, renderBudget, filterDiagnostics);
@@ -104,6 +112,8 @@ export async function loadRvmFileInBrowser(file, viewer, options = {}) {
       browserRvmRenderSchemaVersion: renderResult?.schemaVersion || '',
       browserRvmOriginalInstructionCount: parsed.diagnostics?.browserRvmOriginalInstructionCount || instructionSet.diagnostics?.originalInstructionCount || instructionSet.count,
       browserRvmInstructionCount: instructionSet.count || instructions.length,
+      browserRvmZoneSelection: instructionSet.diagnostics?.zoneSelection || null,
+      browserRvmLodSelection: instructionSet.diagnostics?.lodSelection || null,
       browserRvmOversizedNonPipingSkippedCount: filterDiagnostics?.skippedCount || parsed.diagnostics?.browserRvmOversizedNonPipingSkippedCount || 0,
       browserRvmOversizedNonPipingFilter: filterDiagnostics || parsed.diagnostics?.browserRvmOversizedNonPipingFilter || null,
       browserRvmScaleSafeContract: parsed.diagnostics?.browserRvmScaleSafeContract || null,
@@ -111,7 +121,7 @@ export async function loadRvmFileInBrowser(file, viewer, options = {}) {
       browserRvmSkippedCount: renderResult?.diagnostics?.skippedCount || 0,
       browserRvmRenderPrimitiveCounts: renderResult?.diagnostics?.primitiveCounts || {},
       browserRvmRenderSkippedReasons: renderResult?.diagnostics?.skippedReasons || {},
-      browserRvmResponsiveLoadPath: 'worker-instructions-scale-safe-progressive-render-scene-first',
+      browserRvmResponsiveLoadPath: 'worker-instructions-zone-select-lod-progressive-render-scene-first',
       browserRvmResponsiveSceneBuilder: true,
       browserRvmRenderBudgeted: Boolean(renderResult?.diagnostics?.budgeted),
       browserRvmMaxRenderableObjects: renderBudget.maxRenderableObjects,
@@ -139,6 +149,8 @@ export async function loadRvmFileInBrowser(file, viewer, options = {}) {
       browserRvmRender: renderResult?.diagnostics || null,
       browserRvmResponsiveSceneBuilder: true,
       browserRvmProgressiveRenderEnabled: true,
+      browserRvmZoneSelection: instructionSet.diagnostics?.zoneSelection || null,
+      browserRvmLodSelection: instructionSet.diagnostics?.lodSelection || null,
       browserRvmOversizedNonPipingFilter: filterDiagnostics || null,
       browserRvmScaleSafeContract: parsed.diagnostics?.browserRvmScaleSafeContract || null,
     };
@@ -279,6 +291,54 @@ async function parseCompactOnMainThreadIfSmall(arrayBuffer, options = {}, reason
   };
 }
 
+async function selectInstructionSetBeforeRender(instructionSet, context = {}) {
+  const options = context.options || {};
+  if (typeof options.beforeRenderInstructions !== 'function') return instructionSet;
+  checkAbort(context.signal);
+  context.update?.(`Preparing zone/detail selection for ${context.file?.name || 'RVM'}…`);
+  try {
+    const selected = await options.beforeRenderInstructions({
+      instructionSet,
+      file: context.file,
+      parsed: context.parsed,
+      renderBudget: context.renderBudget,
+      diagnostics: context.parsed?.diagnostics || {},
+    });
+    checkAbort(context.signal);
+    if (!selected) return instructionSet;
+    if (selected.instructionSet) return normalizeSelectedInstructionSet(instructionSet, selected.instructionSet);
+    return normalizeSelectedInstructionSet(instructionSet, selected);
+  } catch (error) {
+    if (isAbortError(error)) throw error;
+    console.warn('[BrowserRVM] pre-render instruction selection failed; rendering full instruction set', error);
+    return {
+      ...instructionSet,
+      diagnostics: {
+        ...(instructionSet.diagnostics || {}),
+        zoneSelection: {
+          schemaVersion: 'browser-rvm-zone-selection/v1-failed-open',
+          failedOpen: true,
+          error: error?.message || String(error),
+        },
+      },
+    };
+  }
+}
+
+function normalizeSelectedInstructionSet(original, selected = {}) {
+  const instructions = Array.isArray(selected.instructions) ? selected.instructions : original.instructions;
+  return {
+    ...original,
+    ...selected,
+    instructions,
+    count: instructions?.length || 0,
+    diagnostics: {
+      ...(original.diagnostics || {}),
+      ...(selected.diagnostics || {}),
+    },
+  };
+}
+
 function ensureFilteredInstructionSet(instructionSet, options = {}) {
   if (instructionSet?.diagnostics?.oversizedNonPipingFilter) return instructionSet;
   return filterBrowserRvmRenderInstructions(instructionSet, { enabled: options.hideOversizedNonPiping !== false });
@@ -307,6 +367,8 @@ async function buildProgressiveBrowserRvmRenderSceneFromInstructions(instruction
     originalInstructionCount: instructionSet.diagnostics?.originalInstructionCount || list.length,
     oversizedNonPipingFilter: filterDiagnostics,
     oversizedNonPipingSkippedCount: filterDiagnostics?.skippedCount || 0,
+    zoneSelection: instructionSet.diagnostics?.zoneSelection || null,
+    lodSelection: instructionSet.diagnostics?.lodSelection || null,
     renderableCount: 0,
     skippedCount: filterDiagnostics?.skippedCount || 0,
     primitiveCounts: {},
@@ -421,7 +483,7 @@ function makeRenderScenePayload(file, manifestNodes, renderResult, attDiagnostic
       nodes: Array.isArray(manifestNodes) ? manifestNodes : [],
       browserRvmAtt: attDiagnostics,
       browserRvmRender: renderResult?.diagnostics || null,
-      browserRvmResponsiveLoadPath: 'worker-instructions-scale-safe-progressive-render-scene-first',
+      browserRvmResponsiveLoadPath: 'worker-instructions-zone-select-lod-progressive-render-scene-first',
       browserRvmRenderInstructions: instructionSet?.diagnostics || null,
       browserRvmManifestNodeLimit: MANIFEST_NODE_LIMIT,
       browserRvmRenderScene: {
@@ -430,6 +492,8 @@ function makeRenderScenePayload(file, manifestNodes, renderResult, attDiagnostic
         renderableCount: renderResult?.diagnostics?.renderableCount || 0,
         skippedCount: renderResult?.diagnostics?.skippedCount || 0,
         oversizedNonPipingSkippedCount: renderResult?.diagnostics?.oversizedNonPipingSkippedCount || 0,
+        zoneSelection: instructionSet?.diagnostics?.zoneSelection || null,
+        lodSelection: instructionSet?.diagnostics?.lodSelection || null,
         responsiveBuilder: true,
         progressiveRenderEnabled: true,
       }
