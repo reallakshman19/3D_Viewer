@@ -13,6 +13,7 @@ import { installRvmIntelligentSupportEngineBridge } from './RvmIntelligentSuppor
 import { installRvmSupportGeometryBridge } from './RvmSupportGeometryBridge.js?v=20260620-rvm-support-geometry-v1';
 import { installRvmSupportAttMappingBridge } from './RvmSupportAttMappingBridge.js?v=20260620-rvm-support-att-mapping-1';
 import { installRvmStagedJsonExportBridge } from './RvmStagedJsonExportBridge.js?v=20260620-rvm-stagedjson-export-1';
+import { installRvmStagedJsonValidationBridge } from './RvmStagedJsonValidationBridge.js?v=20260620-rvm-stagedjson-validation-1';
 import { installRvmMaterialModeBridge } from './RvmMaterialModeBridge.js?v=20260620-rvm-remaining-material-modes-1';
 import { installRvmPrimitiveFallbackBridge } from './RvmPrimitiveFallbackBridge.js?v=20260620-rvm-primitive-fallback-clickable-1';
 import { installRvmNativeSceneGlbExportBridge } from './RvmNativeSceneGlbExportBridge.js?v=20260620-rvm-glb-component-hierarchy-v3-1';
@@ -20,7 +21,7 @@ import { installRvmGlbExportProfileBridge } from './RvmGlbExportProfileBridge.js
 import { installRvmGlbExportValidationBridge } from './RvmGlbExportValidationBridge.js?v=20260620-rvm-glb-export-validation-1';
 import { installRvmGlbRoundTripValidationBridge } from './RvmGlbRoundTripValidationBridge.js?v=20260620-rvm-glb-roundtrip-validation-1';
 import { installRvmGlbSelectionParityBridge } from './RvmGlbSelectionParityBridge.js?v=20260620-rvm-glb-selection-details-parity-1';
-import { installRvmGlbAcceptancePackBridge } from './RvmGlbAcceptancePackBridge.js?v=20260620-rvm-stagedjson-export-1';
+import { installRvmGlbAcceptancePackBridge } from './RvmGlbAcceptancePackBridge.js?v=20260620-rvm-stagedjson-validation-1';
 import { installBrowserRvmCppMat3x4WorkerPatch } from '../rvm/BrowserRvmCppMat3x4WorkerPatch.js?v=20260620-rvm-facetgroup-1';
 import { installBrowserRvmNativeTessellationRuntimePatch } from '../rvm/BrowserRvmNativeTessellationRuntimePatch.js?v=20260620-rvm-native-diagnostics-1';
 import { installBrowserRvmDishTessellationRuntimePatch } from '../rvm/BrowserRvmDishTessellationRuntimePatch.js?v=20260620-rvm-support-assembly-dish-1';
@@ -47,6 +48,7 @@ installRvmIntelligentSupportEngineBridge();
 installRvmSupportGeometryBridge();
 installRvmSupportAttMappingBridge();
 installRvmStagedJsonExportBridge();
+installRvmStagedJsonValidationBridge();
 installRvmMaterialModeBridge();
 installRvmPrimitiveFallbackBridge();
 installRvmNativeSceneGlbExportBridge();
@@ -57,4 +59,4 @@ installRvmGlbSelectionParityBridge();
 installRvmGlbAcceptancePackBridge();
 installRvmNativeTessellationDiagnosticsBridge();
 
-export { mountViewer3DRvmTab as renderViewer3DRvm } from './viewer3d-rvm-tab.js?v=20260620-rvm-stagedjson-export-1';
+export { mountViewer3DRvmTab as renderViewer3DRvm } from './viewer3d-rvm-tab.js?v=20260620-rvm-stagedjson-validation-1';
