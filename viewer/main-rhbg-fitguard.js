@@ -40,7 +40,7 @@ async function loadStartupSideEffects() {
 
 async function startViewer() {
   await loadStartupSideEffects();
-  const { init } = await import('./core/app.js?v=20260620-rvm-glb-acceptance-pack-1');
+  const { init } = await import('./core/app.js?v=20260620-rvm-glb-export-logic-v2-1');
   await init();
 }
 
