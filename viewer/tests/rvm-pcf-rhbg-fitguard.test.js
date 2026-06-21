@@ -21,6 +21,7 @@ const supportGeomSource = await fs.readFile(new URL('../tabs/RvmSupportGeometryB
 const supportAttSource = await fs.readFile(new URL('../tabs/RvmSupportAttMappingBridge.js', import.meta.url), 'utf8');
 const stagedJsonSource = await fs.readFile(new URL('../tabs/RvmStagedJsonExportBridge.js', import.meta.url), 'utf8');
 const browserLoadSource = await fs.readFile(new URL('../rvm/BrowserRvmLoadBridge.js', import.meta.url), 'utf8');
+const renderBuilderSource = await fs.readFile(new URL('../rvm/BrowserRvmRenderSceneBuilder.js', import.meta.url), 'utf8');
 const workerSource = await fs.readFile(new URL('../rvm/browser-rvm-worker.js', import.meta.url), 'utf8');
 const instructionFilterSource = await fs.readFile(new URL('../rvm/BrowserRvmInstructionFilterV2.js', import.meta.url), 'utf8');
 const indexSource = await fs.readFile(new URL('../index.html', import.meta.url), 'utf8');
@@ -53,6 +54,13 @@ check(browserLoadSource.includes('selectInstructionSetBeforeRender'), 'browser R
 check(browserLoadSource.includes('browserRvmZoneSelection'), 'browser RVM diagnostics include zone selection');
 check(browserLoadSource.includes('browserRvmLodSelection'), 'browser RVM diagnostics include LOD selection');
 check(browserLoadSource.includes('worker-instructions-zone-select-lod-progressive-render-scene-first'), 'browser RVM responsive load path identifies zone/LOD render path');
+
+check(renderBuilderSource.includes('rvm-browser-render-scene/v5-bbox-placeholder-safe'), 'render scene builder exposes bbox-placeholder-safe schema');
+check(renderBuilderSource.includes("if (type === 'STRUCTURE')") && renderBuilderSource.includes('isBboxPlaceholderPrimitive(primitive)'), 'render scene builder guards STRUCTURE placeholder promotion');
+check(renderBuilderSource.includes('wireframe-diagnostic-not-solid-geometry'), 'bbox placeholders are rendered as diagnostic wireframes');
+check(renderBuilderSource.includes('bboxPromotedSolidBlocked'), 'render objects flag blocked bbox-to-solid promotions');
+check(renderBuilderSource.includes('new THREE.EdgesGeometry'), 'bbox placeholder fallback uses edges geometry instead of solid box geometry');
+check(!renderBuilderSource.includes("primitive === 'STRUCTURE_BBOX' || type === 'STRUCTURE'"), 'render builder no longer promotes every STRUCTURE type to solid box');
 
 check(zoneLodSource.includes('LARGE_FILE_THRESHOLD_BYTES = 8 * 1024 * 1024'), 'zone selector defaults to large-file threshold');
 check(zoneLodSource.includes('showZoneSelector'), 'zone bridge opens searchable multi-zone selector');

@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { collectBrowserRvmRenderInstructions } from './BrowserRvmRenderContractAdapter.js';
 
-export const BROWSER_RVM_RENDER_SCENE_SCHEMA = 'rvm-browser-render-scene/v4';
+export const BROWSER_RVM_RENDER_SCENE_SCHEMA = 'rvm-browser-render-scene/v5-bbox-placeholder-safe';
 
 const DEFAULT_COLOR_BY_PRIMITIVE = Object.freeze({
   CYLINDER_BBOX: 0x3d74c5,
@@ -11,6 +11,7 @@ const DEFAULT_COLOR_BY_PRIMITIVE = Object.freeze({
   BOX_SOLID: 0x657083,
   STRUCTURE_BBOX: 0x7b8794,
   STRUCTURE_SOLID: 0x7b8794,
+  FACET_GROUP_BBOX_PLACEHOLDER: 0x4b5563,
   TORUS_BBOX_PLACEHOLDER: 0x444444,
   TORUS_RING: 0x444444,
   CONE_BBOX_PLACEHOLDER: 0x8f8f8f,
@@ -23,6 +24,7 @@ const DEFAULT_COLOR_BY_PRIMITIVE = Object.freeze({
   VALVE_COMPOSITE: 0xcc2222,
   FLANGE_BBOX_PLACEHOLDER: 0x9a9a9a,
   FLANGE_DISC: 0x9a9a9a,
+  DISH_BBOX_PLACEHOLDER: 0x4b5563,
   INSTRUMENT_BBOX_PLACEHOLDER: 0xb53f3f,
   INSTRUMENT_BODY: 0xb53f3f,
   SUPPORT_BBOX_PLACEHOLDER: 0xb68b3c,
@@ -71,6 +73,8 @@ export function buildBrowserRvmRenderSceneFromInstructions(instructions = [], op
     renderQualityCounts: {},
     skippedReasons: {},
     attCounts: { enriched: 0, plain: 0 },
+    bboxPromotedSolidsBlockedCount: 0,
+    placeholderWireframeCount: 0,
     renderOptions: publicRenderOptions(renderOptions),
     performance: emptyPerformanceDiagnostics(),
     bounds: emptySceneBounds()
@@ -96,6 +100,8 @@ export function buildBrowserRvmRenderSceneFromInstructions(instructions = [], op
     bump(diagnostics.primitiveCounts, rawPrimitive || 'UNKNOWN');
     bump(diagnostics.effectivePrimitiveCounts, effectivePrimitive || rawPrimitive || 'UNKNOWN');
     bump(diagnostics.renderQualityCounts, renderQualityFor(rawPrimitive, effectivePrimitive));
+    if (mesh.userData?.bboxPromotedSolidBlocked) diagnostics.bboxPromotedSolidsBlockedCount += 1;
+    if (mesh.userData?.browserRvmBboxPlaceholderWireframe) diagnostics.placeholderWireframeCount += 1;
     if (instruction.att?.enriched) diagnostics.attCounts.enriched += 1;
     else diagnostics.attCounts.plain += 1;
     group.add(mesh);
@@ -120,7 +126,7 @@ export function buildInstructionObject(instruction = {}, options = {}, context =
   const effectivePrimitive = effectivePrimitiveFor(rawPrimitive, instruction);
   const start = vec3(instruction.axisStart);
   const end = vec3(instruction.axisEnd);
-  const center = vec3(instruction.center) || midPoint(start, end);
+  const center = vec3(instruction.center) || midPoint(start, end) || bboxCenter(instruction.bbox || instruction.rawBbox);
   const axis = start && end ? new THREE.Vector3().subVectors(end, start) : null;
   const length = Number.isFinite(instruction.length) && instruction.length > 0
     ? instruction.length
@@ -136,6 +142,13 @@ export function buildInstructionObject(instruction = {}, options = {}, context =
   let object = null;
   if ((effectivePrimitive === 'BOX_SOLID' || effectivePrimitive === 'STRUCTURE_SOLID') && start && end) {
     object = boxFromInstruction(instruction, center, length, radius, material, context);
+  } else if (isBboxPlaceholderPrimitive(effectivePrimitive)) {
+    object = bboxWireframeObject(instruction, center, effectivePrimitive, options, context);
+    if (!object) {
+      const geometry = cachedGeometry(context, `placeholder-sphere:${fixed(radius)}:10`, () => new THREE.SphereGeometry(Math.max(radius, 1), 10, 8));
+      object = new THREE.Mesh(geometry, material);
+      object.position.copy(center);
+    }
   } else if (effectivePrimitive === 'TORUS_RING') {
     object = torusGeometryObject(center, axis, length, radius, material, context);
   } else if (effectivePrimitive === 'CONE_FRUSTUM') {
@@ -160,11 +173,12 @@ export function buildInstructionObject(instruction = {}, options = {}, context =
 
   if (!object) return null;
   const displayName = String(instruction.displayName || instruction.sourcePath || instruction.sourceName || rawPrimitive).trim() || rawPrimitive;
+  const renderQuality = renderQualityFor(rawPrimitive, effectivePrimitive);
   const properties = browserRvmPropertiesFor(instruction, {
     displayName,
     rawPrimitive,
     effectivePrimitive,
-    renderQuality: renderQualityFor(rawPrimitive, effectivePrimitive)
+    renderQuality
   });
   object.name = displayName;
   object.userData = {
@@ -177,7 +191,9 @@ export function buildInstructionObject(instruction = {}, options = {}, context =
     kind: instruction.kind || 'UNKNOWN',
     renderPrimitive: rawPrimitive,
     effectiveRenderPrimitive: effectivePrimitive,
-    renderQuality: renderQualityFor(rawPrimitive, effectivePrimitive),
+    renderQuality,
+    bboxPromotedSolidBlocked: isStructurePlaceholderPromotionBlocked(rawPrimitive, instruction, effectivePrimitive),
+    browserRvmBboxPlaceholderWireframe: Boolean(object.userData?.browserRvmBboxPlaceholderWireframe),
     renderSource: instruction.renderSource || '',
     contractVersion: instruction.contractVersion || '',
     pickable: true,
@@ -194,6 +210,7 @@ export function buildInstructionObject(instruction = {}, options = {}, context =
       parentBrowserRvmRenderPrimitive: rawPrimitive,
       effectiveRenderPrimitive: effectivePrimitive,
       renderQuality: object.userData.renderQuality,
+      bboxPromotedSolidBlocked: object.userData.bboxPromotedSolidBlocked,
       sourcePath: object.userData.sourcePath,
       displayName,
       pickable: true,
@@ -231,6 +248,25 @@ function boxFromInstruction(instruction, center, length, radius, material, conte
   const mesh = new THREE.Mesh(geometry, material);
   mesh.position.copy(center);
   return mesh;
+}
+
+function bboxWireframeObject(instruction, center, effectivePrimitive, options = {}, context = null) {
+  const bbox = parseBbox(instruction.bbox || instruction.rawBbox);
+  if (!bbox) return null;
+  const width = Math.max(Math.abs(bbox[3] - bbox[0]), 0.001);
+  const height = Math.max(Math.abs(bbox[4] - bbox[1]), 0.001);
+  const depth = Math.max(Math.abs(bbox[5] - bbox[2]), 0.001);
+  const boxGeometry = cachedGeometry(context, `bbox-box:${fixed(width)}:${fixed(height)}:${fixed(depth)}`, () => new THREE.BoxGeometry(width, height, depth));
+  const edgesGeometry = cachedGeometry(context, `bbox-edges:${fixed(width)}:${fixed(height)}:${fixed(depth)}`, () => new THREE.EdgesGeometry(boxGeometry));
+  const material = lineMaterialForPrimitive(effectivePrimitive, options, context);
+  const line = new THREE.LineSegments(edgesGeometry, material);
+  line.position.copy(center);
+  line.userData = {
+    ...(line.userData || {}),
+    browserRvmBboxPlaceholderWireframe: true,
+    bboxPlaceholderPolicy: 'wireframe-diagnostic-not-solid-geometry',
+  };
+  return line;
 }
 
 function torusGeometryObject(center, axis, length, radius, material, context = null) {
@@ -326,7 +362,11 @@ function effectivePrimitiveFor(rawPrimitive, instruction = {}) {
   const kind = String(instruction.kind || '').toUpperCase();
   if (primitive === 'CYLINDER_BBOX' || primitive === 'PIPE_BBOX' || type === 'PIPE' || kind === 'CYLINDER') return 'PIPE_CYLINDER';
   if (primitive === 'BOX_BBOX' || type === 'BOX') return 'BOX_SOLID';
-  if (primitive === 'STRUCTURE_BBOX' || type === 'STRUCTURE') return 'STRUCTURE_SOLID';
+  if (primitive === 'STRUCTURE_BBOX') return 'STRUCTURE_SOLID';
+  if (type === 'STRUCTURE') {
+    if (isBboxPlaceholderPrimitive(primitive)) return primitive || 'GENERIC_BBOX_PLACEHOLDER';
+    return 'STRUCTURE_SOLID';
+  }
   if (primitive === 'TORUS_BBOX_PLACEHOLDER' || type === 'GASK' || kind === 'TORUS') return 'TORUS_RING';
   if (primitive === 'CONE_BBOX_PLACEHOLDER' || type === 'REDUCER' || kind === 'CONE') return 'CONE_FRUSTUM';
   if (primitive === 'ELBOW_BBOX_PLACEHOLDER' || type === 'ELBOW' || kind === 'ELBOW') return 'ELBOW_TORUS_ARC';
@@ -338,11 +378,21 @@ function effectivePrimitiveFor(rawPrimitive, instruction = {}) {
   return primitive || 'GENERIC_BBOX_PLACEHOLDER';
 }
 
+function isBboxPlaceholderPrimitive(value) {
+  return /BBOX_PLACEHOLDER/.test(primitiveName(value));
+}
+
+function isStructurePlaceholderPromotionBlocked(rawPrimitive, instruction = {}, effectivePrimitive = '') {
+  return String(instruction.type || '').toUpperCase() === 'STRUCTURE'
+    && isBboxPlaceholderPrimitive(rawPrimitive)
+    && primitiveName(effectivePrimitive) === primitiveName(rawPrimitive);
+}
+
 function renderQualityFor(rawPrimitive, effectivePrimitive) {
   const raw = primitiveName(rawPrimitive);
   const effective = primitiveName(effectivePrimitive);
   if (/UNKNOWN|GENERIC/.test(effective)) return 'generic-placeholder';
-  if (/PLACEHOLDER/.test(effective)) return 'placeholder';
+  if (/PLACEHOLDER/.test(effective)) return 'placeholder-wireframe-diagnostic';
   if (/BBOX_PLACEHOLDER/.test(raw) && !/PLACEHOLDER/.test(effective)) return 'bbox-promoted-geometry';
   if (/BBOX/.test(raw) && !/BBOX/.test(effective)) return 'bbox-derived-geometry';
   return 'direct-geometry';
@@ -381,7 +431,8 @@ function publicRenderOptions(options = {}) {
     showPlaceholders: Boolean(options.showPlaceholders),
     showUnknown: Boolean(options.showUnknown),
     cacheGeometries: Boolean(options.cacheGeometries),
-    cacheMaterials: Boolean(options.cacheMaterials)
+    cacheMaterials: Boolean(options.cacheMaterials),
+    bboxPlaceholderPolicy: 'wireframe-diagnostic-not-solid-geometry'
   };
 }
 
@@ -403,7 +454,7 @@ function makeRenderContext(renderOptions = DEFAULT_RENDER_OPTIONS) {
 function materialForPrimitive(rawPrimitive, effectivePrimitive, options = {}, context = null) {
   const color = colorForPrimitive(effectivePrimitive, options, rawPrimitive);
   const transparent = renderQualityFor(rawPrimitive, effectivePrimitive).includes('placeholder');
-  const opacity = transparent ? 0.84 : 1;
+  const opacity = transparent ? 0.42 : 1;
   const key = `mat:${color}:${transparent}:${opacity}`;
   if (context?.renderOptions?.cacheMaterials !== false && context?.materialCache) {
     if (context.materialCache.has(key)) {
@@ -413,6 +464,21 @@ function materialForPrimitive(rawPrimitive, effectivePrimitive, options = {}, co
     context.stats.materialCacheMisses += 1;
   }
   const material = new THREE.MeshStandardMaterial({ color, roughness: 0.68, metalness: 0.12, transparent, opacity });
+  if (context?.renderOptions?.cacheMaterials !== false && context?.materialCache) context.materialCache.set(key, material);
+  return material;
+}
+
+function lineMaterialForPrimitive(effectivePrimitive, options = {}, context = null) {
+  const color = colorForPrimitive(effectivePrimitive, options, effectivePrimitive);
+  const key = `line:${color}:bbox-placeholder-wireframe`;
+  if (context?.renderOptions?.cacheMaterials !== false && context?.materialCache) {
+    if (context.materialCache.has(key)) {
+      context.stats.materialCacheHits += 1;
+      return context.materialCache.get(key);
+    }
+    context.stats.materialCacheMisses += 1;
+  }
+  const material = new THREE.LineBasicMaterial({ color, transparent: true, opacity: 0.35 });
   if (context?.renderOptions?.cacheMaterials !== false && context?.materialCache) context.materialCache.set(key, material);
   return material;
 }
@@ -443,7 +509,7 @@ function performanceDiagnosticsFor(context, group) {
   let meshObjectCount = 0;
   let groupObjectCount = 0;
   group?.traverse?.((object) => {
-    if (object?.isMesh) meshObjectCount += 1;
+    if (object?.isMesh || object?.isLineSegments) meshObjectCount += 1;
     if (object?.isGroup) groupObjectCount += 1;
   });
   return {
@@ -485,6 +551,8 @@ function browserRvmPropertiesFor(instruction = {}, { displayName, rawPrimitive, 
     renderPrimitive: rawPrimitive,
     effectiveRenderPrimitive: effectivePrimitive,
     renderQuality,
+    bboxPromotedSolidBlocked: isStructurePlaceholderPromotionBlocked(rawPrimitive, instruction, effectivePrimitive),
+    bboxPlaceholderPolicy: isBboxPlaceholderPrimitive(effectivePrimitive) ? 'wireframe-diagnostic-not-solid-geometry' : '',
     att: instruction.att && typeof instruction.att === 'object' ? { ...instruction.att } : null,
     attAttributes: clonePlainObject(instruction.attAttributes),
     attributes: clonePlainObject(instruction.attributes)
@@ -551,6 +619,16 @@ function midPoint(a, b) {
   return new THREE.Vector3().addVectors(a, b).multiplyScalar(0.5);
 }
 
+function bboxCenter(value) {
+  const bbox = parseBbox(value);
+  if (!bbox) return null;
+  return new THREE.Vector3(
+    (bbox[0] + bbox[3]) * 0.5,
+    (bbox[1] + bbox[4]) * 0.5,
+    (bbox[2] + bbox[5]) * 0.5,
+  );
+}
+
 function parseBbox(value) {
   if (Array.isArray(value) && value.length >= 6) {
     const nums = value.slice(0, 6).map(Number);
@@ -580,7 +658,7 @@ function bump(target, key) {
 
 function skipReason(instruction) {
   if (!instruction || typeof instruction !== 'object') return 'invalid-instruction';
-  if (!instruction.center && !instruction.axisStart && !instruction.axisEnd) return 'missing-position';
+  if (!instruction.center && !instruction.axisStart && !instruction.axisEnd && !instruction.bbox && !instruction.rawBbox) return 'missing-position';
   return 'unsupported-geometry';
 }
 
