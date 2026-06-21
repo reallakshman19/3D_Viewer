@@ -63,7 +63,7 @@ async function loadRvmViewerRenderer() {
   results.forEach((result, index) => {
     if (result.status === 'rejected') console.warn(`[3D Viewer] optional RVM preflight module failed: ${RVM_RENDERER_PREFLIGHT_MODULES[index]}`, result.reason);
   });
-  return import('../tabs/viewer3d-rvm-tab-renderer.js?v=20260621-rvm-ui-interaction-panels-1')
+  return import('../tabs/viewer3d-rvm-tab-renderer.js?v=20260621-rvm-property-collapse-1')
     .then((module) => pickRenderer(module, 'renderViewer3DRvm', 'viewer3d-rvm'));
 }
 
