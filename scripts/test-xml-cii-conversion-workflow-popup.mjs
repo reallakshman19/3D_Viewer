@@ -8,6 +8,11 @@ function read(rel) {
   return fs.readFileSync(path.join(root, rel), 'utf8');
 }
 
+function readIfExists(rel) {
+  const abs = path.join(root, rel);
+  return fs.existsSync(abs) ? fs.readFileSync(abs, 'utf8') : '';
+}
+
 function assert(condition, message) {
   if (!condition) {
     console.error(`❌ ${message}`);
@@ -26,6 +31,7 @@ const weightMatchModelPath = 'viewer/converters/xml-cii2019-core/weight-match-mo
 const publicIndexPath = 'viewer/tabs/model-converters/index.js';
 const tabPath = 'viewer/tabs/model-converters-tab.js';
 const tabCssPath = 'viewer/tabs/model-converters-tab.css';
+const supplementalTabCssPath = 'viewer/tabs/model-converters-css-fix.css';
 const popup = read(popupPath);
 const nativePanels = read(nativePanelsPath);
 const workflowShell = read(workflowShellPath);
@@ -36,7 +42,7 @@ const previewRenderer = read(previewRendererPath);
 const weightMatchModel = read(weightMatchModelPath);
 const publicIndex = read(publicIndexPath);
 const tab = read(tabPath);
-const tabCss = read(tabCssPath);
+const tabCss = `${read(tabCssPath)}\n${readIfExists(supplementalTabCssPath)}`;
 
 assert(fs.existsSync(path.join(root, popupPath)), 'workflow popup module must exist');
 assert(fs.existsSync(path.join(root, nativePanelsPath)), 'popup-native panel module must exist');
@@ -118,6 +124,7 @@ assert(legacyAdapter.includes("const config = xmlCiiConfigWithLoadedMasterRows('
 assert(legacyAdapter.includes('model-converters-workflow-run-actions'), 'Run phase must use popup-native action layout instead of inline legacy button styles');
 assert(tabCss.includes('.model-converters-workflow-regex-field select'), 'Run phase select controls must use workflow field styling');
 assert(tabCss.includes('span:not(.model-converters-workflow-run-status-icon)'), 'Run status row layout must not flex the icon column as the label');
+assert(canonicalTab.includes('model-converters-css-fix.css'), 'ModelConvertersTab must defensively load supplemental layout CSS');
 
 const popupBridgeImport = popup.match(/legacy-adapter\.js\?v=([^'"]+)/)?.[1] || '';
 const tabBridgeImport = canonicalTab.match(/legacy-adapter\.js\?v=([^'"]+)/)?.[1] || '';
@@ -131,4 +138,5 @@ console.log('✅ XML CII phase-tab workflow popup static test passed', {
   branchNameSync: 'linelist.sampleBranchName',
   shiftedBranchPreview: 'lineKey/size/class guarded',
   weightMatchRating: 'manual override propagated',
+  supplementalCss: 'model-converters-css-fix.css',
 });
