@@ -10,6 +10,7 @@ import { installRvmSelectionTreeSyncBridge } from './RvmSelectionTreeSyncBridge.
 import { installRvmSupportSummaryBridge } from './RvmSupportSummaryBridge.js?v=20260620-rvm-support-symbol-mode-1';
 import { installRvmSupportAssemblyBridge } from './RvmSupportAssemblyBridge.js?v=20260620-rvm-support-assembly-dish-1';
 import { installRvmSupportGeometryBridge } from './RvmSupportGeometryBridge.js?v=20260620-rvm-support-geometry-v1';
+import { installRvmSupportAttMappingBridge } from './RvmSupportAttMappingBridge.js?v=20260620-rvm-support-att-mapping-1';
 import { installRvmMaterialModeBridge } from './RvmMaterialModeBridge.js?v=20260620-rvm-remaining-material-modes-1';
 import { installRvmPrimitiveFallbackBridge } from './RvmPrimitiveFallbackBridge.js?v=20260620-rvm-primitive-fallback-clickable-1';
 import { installRvmNativeSceneGlbExportBridge } from './RvmNativeSceneGlbExportBridge.js?v=20260620-rvm-native-scene-glb-export-1';
@@ -39,6 +40,7 @@ installRvmSelectionTreeSyncBridge();
 installRvmSupportSummaryBridge();
 installRvmSupportAssemblyBridge();
 installRvmSupportGeometryBridge();
+installRvmSupportAttMappingBridge();
 installRvmMaterialModeBridge();
 installRvmPrimitiveFallbackBridge();
 installRvmNativeSceneGlbExportBridge();
@@ -47,4 +49,4 @@ installRvmGlbRoundTripValidationBridge();
 installRvmGlbSelectionParityBridge();
 installRvmNativeTessellationDiagnosticsBridge();
 
-export { mountViewer3DRvmTab as renderViewer3DRvm } from './viewer3d-rvm-tab.js?v=20260620-rvm-support-geometry-v1';
+export { mountViewer3DRvmTab as renderViewer3DRvm } from './viewer3d-rvm-tab.js?v=20260620-rvm-support-att-mapping-1';
