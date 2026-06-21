@@ -25,6 +25,31 @@ import { installXmlCiiRuntimeOverrideSync } from './xml-cii-runtime-override-syn
 import { installXmlCiiMasterPreservePatch } from './xml-cii-master-preserve-patch.js?v=20260620-master-session-1';
 
 const TRACE_PREFIX = '[BM_CII_CONVERTER_TRACE]';
+const STYLE_ID = 'model-converters-tab-css';
+const STYLE_HREF = './tabs/model-converters-tab.css?v=20260621-model-converters-css-1';
+
+function ensureModelConvertersStyles() {
+  if (typeof document === 'undefined') return;
+  const existing = document.getElementById(STYLE_ID);
+  if (existing) {
+    if (existing.getAttribute('href') !== STYLE_HREF) existing.setAttribute('href', STYLE_HREF);
+    return;
+  }
+  const link = document.createElement('link');
+  link.id = STYLE_ID;
+  link.rel = 'stylesheet';
+  link.href = STYLE_HREF;
+  link.dataset.owner = 'model-converters-tab';
+  document.head.appendChild(link);
+}
+
+function markStylesReady(container) {
+  if (!container) return;
+  container.classList.add('model-converters-style-ready');
+  container.dataset.modelConvertersCss = '20260621-model-converters-css-1';
+  const root = container.querySelector?.('.model-converters-root');
+  if (root) root.dataset.modelConvertersCss = '20260621-model-converters-css-1';
+}
 
 /**
  * Ordered installer pairs. Each entry is [debugName, installerFn].
@@ -48,7 +73,9 @@ const MODEL_CONVERTER_INSTALLERS = Object.freeze([
 ]);
 
 export function renderModelConvertersTab(container) {
+  ensureModelConvertersStyles();
   renderLegacyModelConvertersTab(container);
+  markStylesReady(container);
   for (const [name, install] of MODEL_CONVERTER_INSTALLERS) {
     try {
       install(container);
