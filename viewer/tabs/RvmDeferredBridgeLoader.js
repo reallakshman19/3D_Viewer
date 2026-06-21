@@ -25,6 +25,7 @@ const BRIDGE_GROUPS = Object.freeze({
 const loadedSpecs = new Map();
 const groupPromises = new Map();
 let modelLoadedListenerInstalled = false;
+let modelReadyPollStarted = false;
 let actionDiagnosticsInstalled = false;
 
 export function installRvmDeferredBridgeLoader() {
@@ -39,6 +40,7 @@ export function installRvmDeferredBridgeLoader() {
   globalThis[API_KEY] = api;
   installRvmBridgeActionDiagnostics();
   installModelLoadedListener();
+  startModelReadyPolling(api);
   afterFirstPaint(() => {
     const root = document.querySelector('[data-rvm-viewer]');
     if (root?.dataset?.rvmModelLoaded === 'true') api.ensurePostModel('already-loaded-after-first-paint');
@@ -74,7 +76,6 @@ async function loadAndInstall(spec, reason) {
   const api = installer();
   const entry = { id: spec.id, version: VERSION, reason, installedAt: new Date().toISOString(), api: Boolean(api) };
   loadedSpecs.set(spec.id, entry);
-  setStatus(`RVM bridge ready: ${spec.id}`);
   return entry;
 }
 
@@ -84,6 +85,25 @@ function installModelLoadedListener() {
   globalThis.addEventListener('rvm-model-loaded', () => {
     afterFirstPaint(() => ensureRvmBridgeGroup('postModel', 'rvm-model-loaded'));
   });
+}
+
+function startModelReadyPolling(api) {
+  if (modelReadyPollStarted) return;
+  modelReadyPollStarted = true;
+  let attempts = 0;
+  const tick = () => {
+    attempts += 1;
+    const root = document.querySelector('[data-rvm-viewer]');
+    const viewer = globalThis.__3D_RVM_VIEWER__;
+    const modelReady = Boolean(root && viewer?.modelGroup?.children?.length);
+    if (modelReady) {
+      root.dataset.rvmModelLoaded = 'true';
+      afterFirstPaint(() => api.ensurePostModel('detected-model-group'));
+      return;
+    }
+    if (attempts < 240) setTimeout(tick, 500);
+  };
+  afterFirstPaint(tick);
 }
 
 function clearSupportGeometryStickyMode() {
@@ -149,11 +169,6 @@ function updateActionDiagnosticsPanel(root, diagnostics) {
     : '<div class="rvm-empty-state">No action errors.</div>';
 }
 
-function setStatus(text) {
-  const status = document.querySelector('[data-rvm-viewer] #rvm-sb-msg');
-  if (status) status.textContent = text;
-}
-
 function refreshDiagnosticsDrawer() {
   try { globalThis.__PCF_GLB_RVM_BOTTOM_DIAGNOSTICS_DRAWER__?.refresh?.(); } catch (_) {}
 }
@@ -168,5 +183,5 @@ function afterFirstPaint(fn) {
 }
 
 function escapeHtml(value) {
-  return String(value ?? '').replace(/[&<>\"]/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch]));
+  return String(value ?? '').replace(/[&<>"]/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch]));
 }
