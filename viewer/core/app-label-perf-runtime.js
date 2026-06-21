@@ -77,7 +77,7 @@ async function loadRvmViewerRenderer() {
   results.forEach((result, index) => {
     if (result.status === 'rejected') console.warn(`[3D Viewer] optional RVM preflight module failed: ${RVM_RENDERER_PREFLIGHT_MODULES[index]}`, result.reason);
   });
-  return import('../tabs/viewer3d-rvm-tab-renderer.js?v=20260621-rvm-selection-sets-1').then((module) => pickRenderer(module, 'renderViewer3DRvm', 'viewer3d-rvm'));
+  return import('../tabs/viewer3d-rvm-tab-renderer.js?v=20260621-rvm-report-export-1').then((module) => pickRenderer(module, 'renderViewer3DRvm', 'viewer3d-rvm'));
 }
 
 async function loadBasicGlbPcfRenderer() {
@@ -157,108 +157,4 @@ function createBrandRail() {
   copy.append(title, sub);
   brand.append(icon, copy);
   return brand;
-}
-
-function createTabIcon(tabId) {
-  const iconKey = TAB_ICONS.get(tabId) || 'cube';
-  const span = document.createElement('span');
-  span.className = `app-tab-icon app-tab-icon-${iconKey}`;
-  span.setAttribute('aria-hidden', 'true');
-  span.innerHTML = `<svg viewBox="0 0 24 24" focusable="false" role="img"><g fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">${TAB_ICON_SVGS[iconKey] || TAB_ICON_SVGS.cube}</g></svg>`;
-  return span;
-}
-
-function renderNav(nav, tabs, content) {
-  nav.innerHTML = '';
-  nav.appendChild(createBrandRail());
-  const groups = [];
-  for (const tab of tabs) {
-    const label = tabGroupFor(tab.id);
-    let group = groups.find((entry) => entry.label === label);
-    if (!group) { group = { label, tabs: [] }; groups.push(group); }
-    group.tabs.push(tab);
-  }
-  for (const group of groups) {
-    const groupEl = document.createElement('div');
-    groupEl.className = 'app-nav-group';
-    if (group.label) {
-      const groupLabel = document.createElement('div');
-      groupLabel.className = 'app-nav-group-label';
-      groupLabel.textContent = group.label;
-      groupEl.appendChild(groupLabel);
-    }
-    for (const tab of group.tabs) {
-      const button = document.createElement('button');
-      button.type = 'button';
-      button.className = 'app-nav-button';
-      button.dataset.tabId = tab.id;
-      button.setAttribute('aria-label', tab.label);
-      button.appendChild(createTabIcon(tab.id));
-      const label = document.createElement('span');
-      label.className = 'app-tab-label';
-      label.textContent = tab.label;
-      button.appendChild(label);
-      button.addEventListener('click', () => setActiveTab(tab.id));
-      groupEl.appendChild(button);
-    }
-    nav.appendChild(groupEl);
-  }
-  on(RuntimeEvents.TAB_CHANGED, async ({ tabId }) => { await activateTab(tabId, tabs, nav, content); });
-}
-
-function renderTabError(content, tab, error) {
-  console.error(`Failed to render tab ${tab?.id || ''}`, error);
-  hideStartupOverlay();
-  content.innerHTML = '';
-  const section = document.createElement('section');
-  section.className = 'tab-error-boundary';
-  const h2 = document.createElement('h2');
-  h2.textContent = `Unable to open ${String(tab?.label || 'tab')}`;
-  const p = document.createElement('p');
-  p.textContent = 'The tab failed to load, but navigation is still available.';
-  const pre = document.createElement('pre');
-  pre.textContent = String(error?.stack || error?.message || error);
-  section.append(h2, p, pre);
-  content.appendChild(section);
-}
-
-async function activateTab(tabId, tabs, nav, content) {
-  const resolvedTabId = TAB_ID_ALIASES.get(tabId) || tabId;
-  const fallbackId = tabs[0]?.id;
-  const tab = tabs.find((item) => item.id === resolvedTabId) || tabs.find((item) => item.id === fallbackId);
-  if (!tab) return;
-  if (state.activeTab === tab.id && content.firstChild) {
-    hideStartupOverlay();
-    return;
-  }
-  cleanupActiveTab();
-  content.innerHTML = '';
-  state.activeTab = tab.id;
-  nav.querySelectorAll('.app-nav-button').forEach((button) => { button.classList.toggle('is-active', button.dataset.tabId === tab.id); });
-  try {
-    let renderer = tabRendererCache.get(tab.id);
-    if (!renderer) {
-      renderer = await tab.load();
-      tabRendererCache.set(tab.id, renderer);
-    }
-    activeTabDestroy = renderer(content, { emit, on }) || null;
-  } catch (error) {
-    activeTabDestroy = null;
-    renderTabError(content, tab, error);
-  } finally {
-    hideStartupOverlay();
-  }
-}
-
-export async function init() {
-  initDevDebugWindow();
-  const root = document.getElementById('app') || document.getElementById('app-layout') || document.body;
-  const { nav, content } = createAppShell(root);
-  const tabs = await visibleTabs();
-  renderNav(nav, tabs, content);
-  loadStickyState();
-  const initial = TAB_ID_ALIASES.get(state.activeTab) || state.activeTab || tabs[0]?.id;
-  setActiveTab(initial);
-  appDestroy = () => { cleanupActiveTab(); nav.innerHTML = ''; content.innerHTML = ''; };
-  return appDestroy;
 }
