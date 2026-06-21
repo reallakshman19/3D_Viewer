@@ -13,6 +13,7 @@ const exportBridgeSource = await fs.readFile(new URL('../tabs/RvmNativeSceneGlbE
 const validationBridgeSource = await fs.readFile(new URL('../tabs/RvmGlbExportValidationBridge.js', import.meta.url), 'utf8');
 const roundTripBridgeSource = await fs.readFile(new URL('../tabs/RvmGlbRoundTripValidationBridge.js', import.meta.url), 'utf8');
 const selectionParitySource = await fs.readFile(new URL('../tabs/RvmGlbSelectionParityBridge.js', import.meta.url), 'utf8');
+const supportGeometrySource = await fs.readFile(new URL('../tabs/RvmSupportGeometryBridge.js', import.meta.url), 'utf8');
 const appSource = await fs.readFile(new URL('../core/app.js', import.meta.url), 'utf8');
 const indexSource = await fs.readFile(new URL('../index.html', import.meta.url), 'utf8');
 const entrySource = await fs.readFile(new URL('../main-rhbg-fitguard.js', import.meta.url), 'utf8');
@@ -27,7 +28,9 @@ check(rendererSource.includes('RvmGlbRoundTripValidationBridge.js?v=20260620-rvm
 check(rendererSource.includes('installRvmGlbRoundTripValidationBridge()'), 'renderer installs GLB round-trip validation bridge');
 check(rendererSource.includes('RvmGlbSelectionParityBridge.js?v=20260620-rvm-glb-selection-details-parity-1'), 'renderer loads GLB selection parity bridge');
 check(rendererSource.includes('installRvmGlbSelectionParityBridge()'), 'renderer installs GLB selection parity bridge');
-check(rendererSource.includes('viewer3d-rvm-tab.js?v=20260620-rvm-glb-selection-details-parity-1'), 'renderer loads GLB selection parity tab cache key');
+check(rendererSource.includes('RvmSupportGeometryBridge.js?v=20260620-rvm-support-geometry-v1'), 'renderer loads support geometry bridge');
+check(rendererSource.includes('installRvmSupportGeometryBridge()'), 'renderer installs support geometry bridge');
+check(rendererSource.includes('viewer3d-rvm-tab.js?v=20260620-rvm-support-geometry-v1'), 'renderer loads support geometry tab cache key');
 check(fallbackBridgeSource.includes('rvm-primitive-fallback-review/v2-clickable-rows'), 'clickable fallback schema present');
 check(fallbackBridgeSource.includes('__PCF_GLB_RVM_PRIMITIVE_FALLBACK_DIAGNOSTICS__'), 'fallback diagnostics global present');
 check(fallbackBridgeSource.includes('selectFallback') && fallbackBridgeSource.includes('data-rvm-fallback-id'), 'fallback rows are selectable');
@@ -51,9 +54,13 @@ check(selectionParitySource.includes('__PCF_GLB_RVM_GLB_SELECTION_PARITY_DIAGNOS
 check(selectionParitySource.includes('GLTFLoader') && selectionParitySource.includes('glbExportSourceUuid'), 'GLB selection parity parses node extras and source UUIDs');
 check(selectionParitySource.includes('selectSourceUuid') && selectionParitySource.includes('setSelectionFromObjects'), 'GLB selection parity rows can select original RVM source objects');
 check(selectionParitySource.includes('browserRvmAttributes') && selectionParitySource.includes('nodesWithAtt'), 'GLB selection parity validates ATT metadata presence');
-check(appSource.includes('viewer3d-rvm-tab-renderer.js?v=20260620-rvm-glb-selection-details-parity-1'), 'app loads GLB selection parity renderer');
-check(indexSource.includes('main-rhbg-fitguard.js?v=20260620-rvm-glb-selection-details-parity-1'), 'index loads GLB selection parity entrypoint');
-check(entrySource.includes('core/app.js?v=20260620-rvm-glb-selection-details-parity-1'), 'entrypoint loads GLB selection parity app cache key');
+check(supportGeometrySource.includes('rvm-support-geometry/v1-exportable-overlay'), 'support geometry schema present');
+check(supportGeometrySource.includes('__PCF_GLB_RVM_SUPPORT_GEOMETRY_DIAGNOSTICS__'), 'support geometry diagnostics global present');
+check(supportGeometrySource.includes('SupportGeom') && supportGeometrySource.includes('Overlay') && supportGeometrySource.includes('Replace'), 'support geometry ribbon controls present');
+check(supportGeometrySource.includes('TYPE: \'SUPPORT\'') && supportGeometrySource.includes('rvmSupportGeometryGenerated'), 'generated support geometry carries export metadata');
+check(appSource.includes('viewer3d-rvm-tab-renderer.js?v=20260620-rvm-support-geometry-v1'), 'app loads support geometry renderer');
+check(indexSource.includes('main-rhbg-fitguard.js?v=20260620-rvm-support-geometry-v1'), 'index loads support geometry entrypoint');
+check(entrySource.includes('core/app.js?v=20260620-rvm-support-geometry-v1'), 'entrypoint loads support geometry app cache key');
 check(entrySource.includes('Promise.allSettled') && entrySource.includes('optional startup module failed'), 'guarded entrypoint remains protected');
 
 console.log(`\n${passed} passed, ${failed} failed`);
