@@ -7,6 +7,8 @@
 // Active property-panel cache key: RvmPropertyPanelCollapseAuditBridge.js?v=20260621-rvm-property-collapse-1
 // Active label performance cache key: RvmLabelPerformanceBridge.js?v=20260621-rvm-label-perf-1
 // Active JSON/RVM PCF trigger cache key: RvmJsonPcfTriggerBridge.js?v=20260621-rvm-json-pcf-trigger-1
+// Active policy info cache key: RvmPolicyInfoBridge.js?v=20260621-rvm-policy-info-1
+// Active diagnostic collapse cache key: RvmDiagnosticPanelCollapseBridge.js?v=20260621-rvm-diagnostic-collapse-1
 import { RvmViewer3D } from '../rvm-viewer/RvmViewer3D.js?v=20260620-rvm-direct-tab-1';
 import { installRvmProgressiveModelRootPatch } from '../rvm-viewer/RvmProgressiveModelRootPatchV5.js?v=20260620-rvm-tree-select-nohide-1';
 import { installRvmHierarchySelectionBridge } from './RvmHierarchySelectionBridge.js?v=20260620-rvm-large-box-support-sync-1';
@@ -15,6 +17,8 @@ import { installRvmUiInteractionPanelPatch, installRvmUiPanelBridge } from './Rv
 import { installRvmPropertyPanelCollapseAuditBridge } from './RvmPropertyPanelCollapseAuditBridge.js?v=20260621-rvm-property-collapse-1';
 import { installRvmLabelPerformanceBridge, installRvmLabelButtonBridge } from './RvmLabelPerformanceBridge.js?v=20260621-rvm-label-perf-1';
 import { installRvmJsonPcfTriggerBridge } from './RvmJsonPcfTriggerBridge.js?v=20260621-rvm-json-pcf-trigger-1';
+import { installRvmPolicyInfoBridge } from './RvmPolicyInfoBridge.js?v=20260621-rvm-policy-info-1';
+import { installRvmDiagnosticPanelCollapseBridge } from './RvmDiagnosticPanelCollapseBridge.js?v=20260621-rvm-diagnostic-collapse-1';
 import { installRvmVisibilityToolbarBridge } from './RvmVisibilityToolbarBridge.js?v=20260621-rvm-perf-lazy-bridges-1';
 import { installRvmSelectionTreeSyncBridge } from './RvmSelectionTreeSyncBridge.js?v=20260620-rvm-large-box-support-sync-1';
 import { installRvmMaterialModeBridge } from './RvmMaterialModeBridge.js?v=20260620-rvm-remaining-material-modes-1';
@@ -48,5 +52,7 @@ installRvmUiPanelBridge();
 installRvmPropertyPanelCollapseAuditBridge();
 installRvmLabelButtonBridge();
 installRvmJsonPcfTriggerBridge();
+installRvmPolicyInfoBridge();
+installRvmDiagnosticPanelCollapseBridge();
 
 export { mountViewer3DRvmTab as renderViewer3DRvm } from './viewer3d-rvm-tab.js?v=20260621-rvm-button-hardening-1';
