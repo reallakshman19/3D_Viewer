@@ -17,6 +17,7 @@ const instructionFilterSource = await fs.readFile(new URL('../rvm/BrowserRvmInst
 const indexSource = await fs.readFile(new URL('../index.html', import.meta.url), 'utf8');
 const entrySource = await fs.readFile(new URL('../main-rhbg-fitguard.js', import.meta.url), 'utf8');
 const appSource = await fs.readFile(new URL('../core/app.js', import.meta.url), 'utf8');
+const jsonPcfTriggerSource = await fs.readFile(new URL('../tabs/RvmJsonPcfTriggerBridge.js', import.meta.url), 'utf8');
 const zoneLodSource = await fs.readFile(new URL('../tabs/RvmZoneLodLabelBridge.js', import.meta.url), 'utf8');
 const zoneLodContextSource = await fs.readFile(new URL('../tabs/RvmZoneLodContextBridge.js', import.meta.url), 'utf8');
 const navisHierarchySource = await fs.readFile(new URL('../tabs/RvmNavisHierarchyBridge.js', import.meta.url), 'utf8');
@@ -28,11 +29,20 @@ check(rendererSource.includes('viewer3d-rvm-tab.js?v=20260621-rvm-native-facet-p
 check(rendererSource.includes('RvmZoneLodLabelBridge.js?v=20260621-rvm-zone-lod-labels-1'), 'renderer keeps zone/LOD bridge');
 check(rendererSource.includes('RvmNavisHierarchyBridge.js?v=20260621-rvm-navis-hierarchy-1'), 'renderer keeps Navis hierarchy bridge');
 check(rendererSource.includes('RvmZoneLodContextBridge.js?v=20260621-rvm-zone-lod-context-1'), 'renderer loads hierarchy zone LOD context bridge');
+check(rendererSource.includes('RvmJsonPcfTriggerBridge.js?v=20260621-rvm-pcf-visible-scope-1'), 'renderer loads visible-scope PCF trigger bridge');
 check(rendererSource.includes('installRvmZoneLodLabelBridge()'), 'renderer installs zone/LOD bridge');
 check(rendererSource.includes('installRvmNavisHierarchyBridge()'), 'renderer installs Navis hierarchy bridge');
 check(rendererSource.includes('installRvmZoneLodContextBridge()'), 'renderer installs hierarchy zone LOD context bridge');
+check(rendererSource.includes('installRvmJsonPcfTriggerBridge()'), 'renderer installs visible-scope PCF trigger bridge');
 check(!rendererSource.includes('installRvmStagedJsonExportBridge()'), 'renderer avoids eager stagedJSON bridge install');
 check(!rendererSource.includes('installRvmNativeSceneGlbExportBridge()'), 'renderer avoids eager GLB bridge install');
+
+check(jsonPcfTriggerSource.includes('Visible → PCF'), 'PCF trigger exposes visible-geometry scope button');
+check(jsonPcfTriggerSource.includes('SYNTHETIC_INDEX_SCHEMA'), 'PCF trigger can synthesize an extract index from rendered objects');
+check(jsonPcfTriggerSource.includes('renderedObjectNodes') && jsonPcfTriggerSource.includes('MAX_SYNTHETIC_INDEX_NODES'), 'PCF trigger builds bounded rendered-object index');
+check(jsonPcfTriggerSource.includes('visibleCanonicalIdsFromViewer'), 'PCF trigger collects only currently visible objects for visible scope');
+check(jsonPcfTriggerSource.includes('selectedVisibleOnly'), 'PCF trigger records visible-scope extraction state');
+check(jsonPcfTriggerSource.includes("version: '20260621-rvm-pcf-visible-scope-1'"), 'PCF trigger exposes visible-scope bridge version');
 
 check(tabSource.includes('BrowserRvmLoadBridge.js?v=20260621-rvm-native-facet-primary-1'), 'RVM tab imports native facet primary load bridge cache key');
 check(tabSource.includes("RVM_TAB_JS_VERSION = '20260621-rvm-native-facet-primary-1'"), 'RVM tab diagnostics version identifies native facet primary path');
@@ -91,11 +101,15 @@ check(uiPanelSource.includes('applyUniversalMouseContract'), 'universal mouse co
 check(propertyCollapseSource.includes('rvm-property-collapse-icon'), 'property panel collapse icons remain present');
 
 check(indexSource.includes('main-rhbg-fitguard.js?v=20260621-rvm-native-facet-primary-1'), 'index keeps native facet primary entry cache marker');
-check(indexSource.includes('main-rhbg-fitguard.js?v=20260621-rvm-zone-lod-context-1'), 'index uses zone LOD context entry cache key');
+check(indexSource.includes('main-rhbg-fitguard.js?v=20260621-rvm-zone-lod-context-1'), 'index keeps zone LOD context entry cache marker');
+check(indexSource.includes('main-rhbg-fitguard.js?v=20260621-rvm-pcf-visible-scope-1'), 'index uses visible-scope PCF trigger entry cache key');
 check(entrySource.includes('core/app.js?v=20260621-rvm-native-facet-primary-1'), 'entrypoint keeps native facet primary app cache marker');
-check(entrySource.includes('core/app.js?v=20260621-rvm-zone-lod-context-1'), 'entrypoint uses zone LOD context app cache key');
+check(entrySource.includes('core/app.js?v=20260621-rvm-zone-lod-context-1'), 'entrypoint keeps zone LOD context app cache marker');
+check(entrySource.includes('core/app.js?v=20260621-rvm-pcf-visible-scope-1'), 'entrypoint uses visible-scope PCF trigger app cache key');
 check(appSource.includes('viewer3d-rvm-tab-renderer.js?v=20260621-rvm-native-facet-primary-1'), 'app keeps native facet primary renderer cache marker');
-check(appSource.includes('viewer3d-rvm-tab-renderer.js?v=20260621-rvm-zone-lod-context-1'), 'app uses zone LOD context renderer cache key');
+check(appSource.includes('viewer3d-rvm-tab-renderer.js?v=20260621-rvm-zone-lod-context-1'), 'app keeps zone LOD context renderer cache marker');
+check(appSource.includes('viewer3d-rvm-tab-renderer.js?v=20260621-rvm-pcf-visible-scope-1'), 'app uses visible-scope PCF renderer cache key');
+check(appSource.includes('RvmJsonPcfTriggerBridge.js?v=20260621-rvm-pcf-visible-scope-1'), 'app keeps visible-scope PCF bridge cache marker');
 check(appSource.includes('RvmZoneLodContextBridge.js?v=20260621-rvm-zone-lod-context-1'), 'app keeps zone LOD context bridge cache marker');
 check(appSource.includes('BrowserRvmLoadBridge.js?v=20260621-rvm-native-facet-primary-1'), 'app keeps native facet load bridge marker');
 check(appSource.includes('BrowserRvmRenderSceneBuilder.js?v=20260621-rvm-native-facet-primary-1'), 'app keeps native facet render builder marker');
