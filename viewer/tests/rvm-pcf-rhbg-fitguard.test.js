@@ -11,6 +11,7 @@ const rendererSource = await fs.readFile(new URL('../tabs/viewer3d-rvm-tab-rende
 const tabSource = await fs.readFile(new URL('../tabs/viewer3d-rvm-tab.js', import.meta.url), 'utf8');
 const labelPerfSource = await fs.readFile(new URL('../tabs/RvmLabelPerformanceBridge.js', import.meta.url), 'utf8');
 const zoneLodSource = await fs.readFile(new URL('../tabs/RvmZoneLodLabelBridge.js', import.meta.url), 'utf8');
+const navisHierarchySource = await fs.readFile(new URL('../tabs/RvmNavisHierarchyBridge.js', import.meta.url), 'utf8');
 const jsonPcfTriggerSource = await fs.readFile(new URL('../tabs/RvmJsonPcfTriggerBridge.js', import.meta.url), 'utf8');
 const uiPanelSource = await fs.readFile(new URL('../tabs/RvmUiInteractionPanelPatch.js', import.meta.url), 'utf8');
 const propertyCollapseSource = await fs.readFile(new URL('../tabs/RvmPropertyPanelCollapseAuditBridge.js', import.meta.url), 'utf8');
@@ -36,10 +37,12 @@ check(rendererSource.includes('RvmUiInteractionPanelPatch.js?v=20260621-rvm-ui-i
 check(rendererSource.includes('RvmPropertyPanelCollapseAuditBridge.js?v=20260621-rvm-property-collapse-1'), 'renderer loads property collapse bridge');
 check(rendererSource.includes('RvmLabelPerformanceBridge.js?v=20260621-rvm-zone-lod-labels-1'), 'renderer loads scoped label performance bridge');
 check(rendererSource.includes('RvmZoneLodLabelBridge.js?v=20260621-rvm-zone-lod-labels-1'), 'renderer loads zone/LOD label bridge');
+check(rendererSource.includes('RvmNavisHierarchyBridge.js?v=20260621-rvm-navis-hierarchy-1'), 'renderer loads Navis-style hierarchy bridge');
 check(rendererSource.includes('RvmJsonPcfTriggerBridge.js?v=20260621-rvm-json-pcf-trigger-1'), 'renderer loads JSON/RVM PCF trigger bridge');
 check(rendererSource.includes('RvmPolicyInfoBridge.js?v=20260621-rvm-policy-info-1'), 'renderer loads policy info bridge');
 check(rendererSource.includes('RvmDiagnosticPanelCollapseBridge.js?v=20260621-rvm-diagnostic-collapse-1'), 'renderer loads diagnostic collapse bridge');
 check(rendererSource.includes('installRvmZoneLodLabelBridge()'), 'renderer installs zone/LOD bridge');
+check(rendererSource.includes('installRvmNavisHierarchyBridge()'), 'renderer installs Navis-style hierarchy bridge');
 check(rendererSource.includes('installRvmLabelButtonBridge()'), 'renderer installs label button bridge');
 check(rendererSource.includes('installRvmJsonPcfTriggerBridge()'), 'renderer installs JSON/RVM PCF trigger bridge');
 check(!rendererSource.includes('installRvmStagedJsonExportBridge()'), 'renderer avoids eager stagedJSON bridge install');
@@ -59,6 +62,15 @@ check(zoneLodSource.includes('Detail') && zoneLodSource.includes('100%') && zone
 check(zoneLodSource.includes('filterInstructionSet'), 'zone bridge filters render instructions before WebGL mesh creation');
 check(zoneLodSource.includes('lodSelection'), 'zone bridge records LOD diagnostics');
 check(zoneLodSource.includes('zoneSelection'), 'zone bridge records zone diagnostics');
+
+check(navisHierarchySource.includes('installRvmNavisHierarchyBridge'), 'Navis hierarchy bridge exports installer');
+check(navisHierarchySource.includes('buildHierarchyModel'), 'Navis hierarchy bridge builds hierarchy from rendered RVM objects');
+check(navisHierarchySource.includes('rvm-model-loaded'), 'Navis hierarchy bridge refreshes after model load');
+check(navisHierarchySource.includes('rvm-navis-expander'), 'Navis hierarchy bridge renders expand/collapse controls');
+check(navisHierarchySource.includes('MAX_CHILDREN_PER_BRANCH'), 'Navis hierarchy bridge caps lazy child expansion');
+check(navisHierarchySource.includes('MAX_SEARCH_RESULTS'), 'Navis hierarchy bridge caps search output');
+check(navisHierarchySource.includes('selectCanonicalIds'), 'Navis hierarchy bridge selects branch objects through RVM selection adapter');
+check(navisHierarchySource.includes('rvm-navis-hierarchy-style'), 'Navis hierarchy bridge injects scoped hierarchy styling');
 
 check(labelPerfSource.includes('LABEL_CONFIRM_THRESHOLD = 28'), 'label bridge warns before high label count');
 check(labelPerfSource.includes('select a hierarchy/canvas item first'), 'label bridge requires selected hierarchy/canvas scope');
@@ -114,11 +126,15 @@ check(instructionFilterSource.includes("browser-rvm-instruction-filter/v4-plant-
 check(instructionFilterSource.includes('hideOversizedPrimitiveBoxes: false'), 'instruction filter defaults primitive box hiding off');
 check(instructionFilterSource.includes('maxPrimitiveBoxSide: 50000'), 'instruction filter uses millimetre-safe primitive side guard');
 
-check(indexSource.includes('main-rhbg-fitguard.js?v=20260621-rvm-zone-lod-labels-1'), 'index uses RVM zone/LOD labels entry cache key');
-check(entrySource.includes('core/app.js?v=20260621-rvm-zone-lod-labels-1'), 'entrypoint uses RVM zone/LOD labels app cache key');
+check(indexSource.includes('main-rhbg-fitguard.js?v=20260621-rvm-zone-lod-labels-1'), 'index keeps RVM zone/LOD labels entry cache marker');
+check(indexSource.includes('main-rhbg-fitguard.js?v=20260621-rvm-navis-hierarchy-1'), 'index uses Navis hierarchy entry cache key');
+check(entrySource.includes('core/app.js?v=20260621-rvm-zone-lod-labels-1'), 'entrypoint keeps RVM zone/LOD labels app cache marker');
+check(entrySource.includes('core/app.js?v=20260621-rvm-navis-hierarchy-1'), 'entrypoint uses Navis hierarchy app cache key');
 check(entrySource.includes('scheduleDeferredStartupSideEffects'), 'entrypoint defers optional startup side effects');
-check(appSource.includes('viewer3d-rvm-tab-renderer.js?v=20260621-rvm-zone-lod-labels-1'), 'app uses RVM zone/LOD labels renderer cache key');
+check(appSource.includes('viewer3d-rvm-tab-renderer.js?v=20260621-rvm-zone-lod-labels-1'), 'app keeps RVM zone/LOD labels renderer cache marker');
+check(appSource.includes('viewer3d-rvm-tab-renderer.js?v=20260621-rvm-navis-hierarchy-1'), 'app uses Navis hierarchy renderer cache key');
 check(appSource.includes('RvmZoneLodLabelBridge.js?v=20260621-rvm-zone-lod-labels-1'), 'app keeps RVM zone/LOD bridge marker');
+check(appSource.includes('RvmNavisHierarchyBridge.js?v=20260621-rvm-navis-hierarchy-1'), 'app keeps Navis hierarchy bridge marker');
 check(appSource.includes('BrowserRvmLoadBridge.js?v=20260621-rvm-zone-lod-labels-1'), 'app keeps RVM zone/LOD load bridge marker');
 check(appSource.includes('RVM_RENDERER_PREFLIGHT_MODULES'), 'app declares RVM preflight module list');
 check(appSource.includes('Promise.allSettled(RVM_RENDERER_PREFLIGHT_MODULES'), 'app preflight imports are parallel');
