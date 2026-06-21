@@ -20,6 +20,8 @@ const indexSource = await fs.readFile(new URL('../index.html', import.meta.url),
 const entrySource = await fs.readFile(new URL('../main-rhbg-fitguard.js', import.meta.url), 'utf8');
 const appSource = await fs.readFile(new URL('../core/app.js', import.meta.url), 'utf8');
 const appHeaderCss = await fs.readFile(new URL('../styles/app-shell-header-fix.css', import.meta.url), 'utf8');
+const appIconSource = await fs.readFile(new URL('../assets/app-icon.svg', import.meta.url), 'utf8');
+const manifestSource = await fs.readFile(new URL('../site.webmanifest', import.meta.url), 'utf8');
 
 check(rendererSource.includes('RvmDeferredBridgeLoader.js?v=20260621-rvm-button-hardening-1'), 'renderer loads button-hardening deferred bridge loader');
 check(rendererSource.includes('RvmVisibilityToolbarBridge.js?v=20260621-rvm-perf-lazy-bridges-1'), 'renderer uses bumped visibility toolbar bridge cache key');
@@ -77,15 +79,31 @@ check(!stagedJsonSource.includes("localStorage.setItem('rvm_support_geometry_mod
 check(indexSource.includes('main-rhbg-fitguard.js?v=20260620-rvm-stagedjson-validation-1'), 'legacy entry cache marker remains');
 check(indexSource.includes('main-rhbg-fitguard.js?v=20260621-rvm-button-hardening-1'), 'button-hardening entry cache marker remains');
 check(indexSource.includes('main-rhbg-fitguard.js?v=20260621-rvm-ui-interaction-panels-1'), 'UI interaction entry cache marker remains');
-check(indexSource.includes('main-rhbg-fitguard.js?v=20260621-rvm-property-collapse-1'), 'index uses RVM property collapse entry cache key');
-check(indexSource.includes('styles/app-shell-header-fix.css?v=20260621-rvm-ui-interaction-panels-1'), 'index loads app shell header layout fix CSS');
-check(entrySource.includes('core/app.js?v=20260621-rvm-property-collapse-1'), 'entrypoint uses RVM property collapse app cache key');
+check(indexSource.includes('main-rhbg-fitguard.js?v=20260621-rvm-property-collapse-1'), 'property collapse entry cache marker remains');
+check(indexSource.includes('main-rhbg-fitguard.js?v=20260621-app-brand-icon-1'), 'index uses app brand icon entry cache key');
+check(indexSource.includes('styles/app-shell-header-fix.css?v=20260621-app-brand-icon-1'), 'index loads branded app shell header CSS');
+check(indexSource.includes('rel="icon" type="image/svg+xml" href="./assets/app-icon.svg?v=20260621-app-brand-icon-1"'), 'index wires SVG favicon');
+check(indexSource.includes('rel="manifest" href="./site.webmanifest?v=20260621-app-brand-icon-1"'), 'index wires PWA manifest');
+check(indexSource.includes('<meta name="theme-color" content="#07111F">'), 'index declares app theme color');
+check(entrySource.includes('core/app.js?v=20260621-app-brand-icon-1'), 'entrypoint uses app brand icon app cache key');
 check(entrySource.includes('scheduleDeferredStartupSideEffects'), 'entrypoint defers optional startup side effects');
 check(appSource.includes('RVM_RENDERER_PREFLIGHT_MODULES'), 'app declares RVM preflight module list');
 check(appSource.includes('Promise.allSettled(RVM_RENDERER_PREFLIGHT_MODULES'), 'app preflight imports are parallel');
 check(appSource.includes('viewer3d-rvm-tab-renderer.js?v=20260621-rvm-property-collapse-1'), 'app uses RVM property collapse renderer cache key');
+check(appSource.includes("const APP_ICON_URL = new URL('../assets/app-icon.svg?v=20260621-app-brand-icon-1'"), 'app uses cache-busted brand icon asset');
+check(appSource.includes('function createBrandRail'), 'app shell renders a dedicated brand rail');
+check(appSource.includes('app-brand-rail'), 'app shell uses branded header class');
+check(appSource.includes('function createTabIcon'), 'app shell renders professional tab icons');
+check(appSource.includes('app-tab-icon'), 'app tab buttons include icon slots');
+check(appSource.includes("button.setAttribute('aria-label', tab.label)"), 'app tab icons preserve accessible tab labels');
 check(appHeaderCss.includes('flex-direction: column'), 'app shell CSS forces header layout column');
 check(appHeaderCss.includes('body .app-nav'), 'app shell CSS overrides cramped side-nav fallback');
+check(appHeaderCss.includes('.app-brand-rail'), 'app shell CSS styles branded header rail');
+check(appHeaderCss.includes('.app-brand-icon'), 'app shell CSS styles the app icon in the header');
+check(appHeaderCss.includes('.app-tab-icon'), 'app shell CSS styles icon-bearing app tabs');
+check(appIconSource.includes('#2EE6C8') && appIconSource.includes('#FFB84D') && appIconSource.includes('RVM'), 'SVG icon contains pipe, section plane, and RVM mark');
+check(manifestSource.includes('"name": "PCF GLB RVM Viewer"'), 'manifest names the professional viewer app');
+check(manifestSource.includes('"src": "assets/app-icon.svg?v=20260621-app-brand-icon-1"'), 'manifest reuses the SVG app icon');
 
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed > 0) process.exit(1);
