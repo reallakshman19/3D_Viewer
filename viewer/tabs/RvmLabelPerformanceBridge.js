@@ -65,6 +65,7 @@ export function installRvmLabelPerformanceBridge(RvmViewer3D) {
 }
 
 export function installRvmLabelButtonBridge() {
+  if (typeof document === 'undefined') return;
   const bindAll = () => {
     document.querySelectorAll?.('[data-rvm-viewer]')?.forEach((root) => bindRoot(root));
   };
@@ -72,8 +73,10 @@ export function installRvmLabelButtonBridge() {
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', bindAll, { once: true });
   else bindAll();
 
-  const observer = new MutationObserver(bindAll);
-  observer.observe(document.documentElement || document.body, { childList: true, subtree: true });
+  if (typeof MutationObserver !== 'undefined') {
+    const observer = new MutationObserver(bindAll);
+    observer.observe(document.documentElement || document.body, { childList: true, subtree: true });
+  }
 }
 
 function bindRoot(root) {
