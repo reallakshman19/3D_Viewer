@@ -103,8 +103,7 @@ export class RvmSectioning {
     setSectionBoxPadding(n) {
         this._padding = Math.max(0, Number(n) || 0);
         if (this._sectionMode === 'BOX') {
-            const sourceBox = this._sectionBounds ? this._sectionBounds.clone().expandByScalar(-this._padding) : null;
-            this.buildBoxSection(this.modelGroup, sourceBox || undefined);
+            this.buildBoxSection(this.modelGroup);
         }
     }
 
