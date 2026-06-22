@@ -21,6 +21,7 @@
 // viewer3d-rvm-tab-renderer.js?v=20260622-geometry-mapping-1
 // viewer3d-rvm-tab-renderer.js?v=20260622-geometry-profile-ui-1
 // viewer3d-rvm-tab-renderer.js?v=20260622-geometry-calc-canvas-1
+// viewer3d-rvm-tab-renderer.js?v=20260622-geometry-input-resolver-1
 // viewer3d-rvm-tab-renderer.js?v=20260621-rvm-model-health-1
 // viewer3d-rvm-tab-renderer.js?v=20260621-rvm-health-issues-1
 // viewer3d-rvm-tab-renderer.js?v=20260621-rvm-navis-hierarchy-1
@@ -45,6 +46,8 @@
 // GeometryMappingProfiles.js?v=20260622-geometry-profile-ui-1
 // GeometryCalculationCanvasBridge.js?v=20260622-geometry-calc-canvas-1
 // GeometryCalculationModuleRegistry.js?v=20260622-geometry-calc-canvas-1
+// GeometryCalculationInputBridge.js?v=20260622-geometry-input-resolver-1
+// GeometryCalculationInputResolver.js?v=20260622-geometry-input-resolver-1
 // GeometryImportHierarchyModel.js?v=20260622-geometry-import-tree-1
 // GeometryMappingEngine.js?v=20260622-geometry-mapping-1
 // RenderedGeometrySnapshotBuilder.js?v=20260622-geometry-workspace-1
@@ -58,6 +61,7 @@
 // app-label-perf-runtime.js?v=20260622-geometry-mapping-1
 // app-label-perf-runtime.js?v=20260622-geometry-profile-ui-1
 // app-label-perf-runtime.js?v=20260622-geometry-calc-canvas-1
+// app-label-perf-runtime.js?v=20260622-geometry-input-resolver-1
 // app-tab-click-state-bridge.js?v=20260622-tab-click-state-1
 // RvmPolicyInfoBridge.js?v=20260621-rvm-policy-info-1
 // RvmDiagnosticPanelCollapseBridge.js?v=20260621-rvm-diagnostic-collapse-1
@@ -86,6 +90,7 @@ import { installAppTabClickStateBridge } from './app-tab-click-state-bridge.js?v
 import { installGeometryExportWorkspaceBridge } from '../geometry-workspace/GeometryExportWorkspaceBridge.js?v=20260622-geometry-mapping-1';
 import { installGeometryMappingProfileBridge } from '../geometry-workspace/GeometryMappingProfileBridge.js?v=20260622-geometry-profile-ui-1';
 import { installGeometryCalculationCanvasBridge } from '../geometry-workspace/GeometryCalculationCanvasBridge.js?v=20260622-geometry-calc-canvas-1';
+import { installGeometryCalculationInputBridge } from '../geometry-workspace/GeometryCalculationInputBridge.js?v=20260622-geometry-input-resolver-1';
 import { installRvmModelHealthBridge } from '../tabs/RvmModelHealthBridge.js?v=20260621-rvm-health-issues-1';
 import { installRvmModelHealthIssuesBridge } from '../tabs/RvmModelHealthIssuesBridge.js?v=20260621-rvm-health-issues-1';
 import { installBrowserRvmNativeFacetGhostPanelPatch } from '../rvm/BrowserRvmNativeFacetGhostPanelPatch.js?v=20260622-rvm-facet-ghost-panels-1';
@@ -94,8 +99,9 @@ installAppTabClickStateBridge();
 installGeometryExportWorkspaceBridge();
 installGeometryMappingProfileBridge();
 installGeometryCalculationCanvasBridge();
+installGeometryCalculationInputBridge();
 installRvmModelHealthBridge();
 installRvmModelHealthIssuesBridge();
 installBrowserRvmNativeFacetGhostPanelPatch();
 
-export { init } from './app-label-perf-runtime.js?v=20260622-geometry-calc-canvas-1';
+export { init } from './app-label-perf-runtime.js?v=20260622-geometry-input-resolver-1';
