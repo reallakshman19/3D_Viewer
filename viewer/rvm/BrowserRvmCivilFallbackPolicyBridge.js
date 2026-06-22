@@ -1,7 +1,11 @@
 import * as THREE from 'three';
+import {
+  classifySmartCivilFacetObject,
+  smartCivilPolicyUserData,
+} from './BrowserRvmSmartCivilFacetPolicy.js';
 
-const INSTALL_FLAG = Symbol.for('pcf-glb-rvm-civil-fallback-policy-v2');
-const VERSION = '20260622-rvm-civil-grid-fdns-panel-fallback-2';
+const INSTALL_FLAG = Symbol.for('pcf-glb-rvm-civil-fallback-policy-v3');
+const VERSION = '20260622-rvm-smart-civil-code11-default-off-1';
 const GLOBAL_KEY = '__PCF_GLB_RVM_CIVIL_FALLBACK_POLICY__';
 const DIAG_KEY = '__PCF_GLB_RVM_CIVIL_FALLBACK_POLICY_DIAGNOSTICS__';
 const LARGE_MAX_DIM = 700;
@@ -52,22 +56,35 @@ function runPolicy(state) {
 }
 
 function classifyCivilFallback(obj) {
+  const smart = classifySmartCivilFacetObject(obj);
+  if (smart?.deferNativeTessellation) {
+    const smartData = smartCivilPolicyUserData(smart);
+    return {
+      kind: smart.kind,
+      action: smart.action === 'hidden' ? 'hide' : 'wireframe',
+      opacity: smart.action === 'hidden' ? 0 : 0.10,
+      userData: {
+        ...smartData,
+        geometryPolicy: smart.policy,
+        materialPolicy: 'smart-civil-code11-default-off-runtime',
+        rvmCivilFallbackKind: smart.kind,
+      },
+    };
+  }
+
   const data = obj.userData || {};
   const text = sourceText(obj, data);
-  const kind = civilKind(text);
+  const kind = genericCivilKind(text);
   if (!kind) return null;
   if (!isLargeEnvelope(obj)) return null;
 
   const primitive = String(data.effectiveRenderPrimitive || data.effectivePrimitive || data.renderPrimitive || data.renderKind || '').toUpperCase();
-  const code = Number(data.primitiveCode || data.browserRvmPrimitiveCode || data.rvmPrimitiveCode || data.browserRvmNativePrimitiveCode || 0);
-  const nativeFacetLike = data.browserRvmNativeFacetGroupPrimary || /NATIVE_FACET_GROUP|FACET/.test(primitive) || code === 11;
   const fallbackLike = /BBOX|BOX|PLACEHOLDER|GENERIC|UNKNOWN|STRUCTURE/.test(primitive) || data.browserRvmBboxPlaceholderWireframe || data.bboxPromotedSolidBlocked;
-  const civilPanelLike = nativeFacetLike && /PANEL|FRAME|FRMWORK|FRAMEWORK|SBFRAMEWORK|FDNS|FOUNDATION|PAVE|GRID|GRAD|ROAD|PITS/.test(text);
-  if (!fallbackLike && !civilPanelLike) return null;
+  if (!fallbackLike) return null;
 
-  if (kind === 'GRID') return policy('GRID', 'hide', 'grid-container-or-code11-panel-hidden-not-grid-line-geometry', 0.08);
-  if (kind === 'FDNS') return policy('FDNS', 'wireframe', 'foundation-code11-or-bbox-container-wireframe-not-solid-foundation', 0.12);
-  if (kind === 'PANEL') return policy('PANEL', 'wireframe', 'large-civil-panel-code11-wireframe-diagnostic-not-solid-box', 0.10);
+  if (kind === 'GRID') return policy('GRID', 'hide', 'grid-or-reference-container-hidden-diagnostic', 0.08);
+  if (kind === 'FOUNDATION') return policy('FOUNDATION', 'wireframe', 'foundation-or-concrete-container-wireframe-not-solid', 0.12);
+  if (kind === 'PANEL_FRAME') return policy('PANEL_FRAME', 'wireframe', 'large-panel-frame-container-wireframe-diagnostic-not-solid-box', 0.10);
   return policy(kind, 'wireframe', `${kind.toLowerCase()}-civil-container-wireframe-diagnostic`, 0.14);
 }
 
@@ -108,13 +125,12 @@ function sourceText(obj, data) {
   ].filter(Boolean).join('/').toUpperCase();
 }
 
-function civilKind(text) {
-  if (/(^|[-_/])GRID($|[-_/])|CU-CI-GRID/.test(text)) return 'GRID';
-  if (/(^|[-_/])FDNS($|[-_/])|FOUNDATION|CU-CI-FDNS/.test(text)) return 'FDNS';
-  if (/(^|[-_/])ROAD($|[-_/])|CU-CI-ROAD/.test(text)) return 'ROAD';
-  if (/(^|[-_/])GRAD($|[-_/])|CU-CI-GRAD/.test(text)) return 'GRAD';
-  if (/(^|[-_/])PITS($|[-_/])|CU-CI-PITS/.test(text)) return 'PITS';
-  if (/PANEL|FRMWORK|FRAMEWORK|SBFRAMEWORK|PAVE/.test(text)) return 'PANEL';
+function genericCivilKind(text) {
+  if (/\b(GRID|GRIDS|GRDLN|GRIDLINE|GRATING|GRATE|DATUM|AXIS|REFERENCE|SETTINGOUT)\b/.test(text)) return 'GRID';
+  if (/\b(FDNS|FDN|FOUND|FOUNDATION|FOOTING|PILE|PILECAP|SLAB|BASESLAB|PEDESTAL|PLINTH|ANCHORBLOCK|CONCRETE|RCC|PCC)\b/.test(text)) return 'FOUNDATION';
+  if (/\b(PAVE|PAVEMENT|ROAD|CURB|KERB|GRAD|GRADE|DRAIN|TRENCH|PIT|PITS|DUCTBANK|CULVERT|CHANNEL|SUMP|BUND)\b/.test(text)) return 'EARTHWORK';
+  if (/\b(PANEL|FRAMEWORK|FRMWORK|SBFRAMEWORK|WALL|FLOOR|DECK|ROOF|PLATE|SHEET|CLADDING|FENCE|BARRIER)\b/.test(text)) return 'PANEL_FRAME';
+  if (/\b(STRUCTURE|STRUCTURAL|CIVIL|BUILDING|ARCH|ARCHITECTURAL)\b/.test(text)) return 'STRUCTURE';
   return '';
 }
 
