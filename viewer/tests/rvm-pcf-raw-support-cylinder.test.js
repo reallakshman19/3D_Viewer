@@ -20,8 +20,8 @@ const bottomDiagnosticsSource = await read('../tabs/RvmBottomDiagnosticsDrawerBr
 const purgeBridgeSource = await read('../tabs/RvmRetiredSupportToolsPurgeBridge.js');
 
 check(
-  adapterSource.includes('rvm-browser-render-instructions/v4-preserve-raw-support-cylinders'),
-  'render adapter schema records raw support cylinder preservation'
+  adapterSource.includes('rvm-browser-render-instructions/v5-raw-first-support-primitives'),
+  'render adapter schema records raw-first support primitive preservation'
 );
 
 check(
