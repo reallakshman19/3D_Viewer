@@ -1,4 +1,6 @@
-const FLAG = '__xmlCiiRegexTokenSelectPatch_v2';
+import { getXmlCiiPhaseBridge } from './legacy-adapter.js?v=20260622-regex-pos-persist-1';
+
+const FLAG = '__xmlCiiRegexTokenSelectPatch_v3';
 const SUPPORT_CONFIG_SELECTOR = '[data-option-key="supportConfigJson"]';
 const LEGACY_ATTR = 'data-xml-cii-regex-path';
 const NATIVE_ATTR = 'data-native-regex-path';
@@ -19,6 +21,7 @@ function clean(value) { return text(value).replace(/\s+/g, ' ').trim(); }
 function normalizePositionValue(value) { const first = clean(value).split(/[,+]/)[0]?.trim() || ''; const numeric = Number(first); return Number.isFinite(numeric) && numeric > 0 ? String(Math.round(numeric)) : ''; }
 function isAttrTarget(element, path) { return (element?.getAttribute?.(LEGACY_ATTR) || element?.getAttribute?.(NATIVE_ATTR) || '') === path; }
 function pathAttr(element) { return element?.getAttribute?.(LEGACY_ATTR) ? LEGACY_ATTR : NATIVE_ATTR; }
+function positionInputType(path) { return path === PATHS.size || path === PATHS.pipingClass ? 'number' : 'text'; }
 
 function readSupportConfig() {
   const input = document.querySelector(SUPPORT_CONFIG_SELECTOR);
@@ -62,7 +65,17 @@ function correctedPosition(path, tokens, configured) {
 }
 function optionHtml(tokens, selected) { const safeSelected = normalizePositionValue(selected) || '1'; const values = new Set(tokens.map((_, index) => String(index + 1))); if (safeSelected && !values.has(safeSelected)) values.add(safeSelected); return Array.from(values).sort((a, b) => Number(a) - Number(b)).map((pos) => { const token = tokens[Number(pos) - 1] || '(not found)'; return `<option value="${attr(pos)}" ${pos === safeSelected ? 'selected' : ''}>${esc(pos)} — ${esc(token)}</option>`; }).join(''); }
 function setSiblingPreview(select, tokens) { const position = Number(normalizePositionValue(select.value)); const token = Number.isFinite(position) ? (tokens[position - 1] || '') : ''; const row = select.closest('tr'); const strong = row?.querySelector?.('.mc-regex-preview-cell strong, td:last-child strong') || select.parentElement?.querySelector?.('strong'); if (strong) strong.textContent = token || '—'; }
-function persistPosition(path, value) { const { config } = readSupportConfig(); setPath(config, path, value); writeSupportConfig(config); }
+function persistPosition(path, value) {
+  const pos = normalizePositionValue(value) || clean(value);
+  const bridge = getXmlCiiPhaseBridge?.();
+  if (bridge && typeof bridge.setPopupConfigValue === 'function') {
+    bridge.setPopupConfigValue(path, pos, positionInputType(path));
+    return true;
+  }
+  const { config } = readSupportConfig();
+  setPath(config, path, pos);
+  return writeSupportConfig(config);
+}
 
 function shouldPatchElement(element) { if (!element || element.dataset.xmlCiiTokenSelectPatched === 'true') return false; const path = element.getAttribute?.(LEGACY_ATTR) || element.getAttribute?.(NATIVE_ATTR) || ''; return [PATHS.lineKey, PATHS.size, PATHS.pipingClass].includes(path); }
 function patchOne(element) {
