@@ -38,7 +38,7 @@ export function buildRvmRenderedObjectInventory(root, options = {}) {
     else counts.nonSelectable += 1;
     if (entry.isFallback) counts.fallback += 1;
     if (entry.isNative) counts.native += 1;
-    if (!entry.sourcePath && !entry.canonicalId) counts.unmapped += 1;
+    if (!entry.sourceMapped) counts.unmapped += 1;
     bump(byCategory, entry.category);
     bump(byRenderKind, entry.renderKind || 'UNKNOWN');
     bump(byPrimitiveCode, entry.primitiveCode || 'UNKNOWN');
@@ -65,8 +65,10 @@ export function renderedObjectEntry(object, index = 0) {
   const primitiveCode = stringFirst(data.primitiveCode, data.browserRvmNativePrimitiveCode, attrs.RVM_PRIMITIVE_CODE, attrs.RVM_NATIVE_PRIMITIVE_KIND);
   const renderKind = stringFirst(data.renderKind, data.effectivePrimitive, data.effectiveRenderPrimitive, data.renderPrimitive, data.parentBrowserRvmRenderPrimitive, attrs.RVM_BROWSER_RENDER_PRIMITIVE, attrs.RVM_PRIMITIVE_KIND, object?.name, 'UNKNOWN');
   const sourcePath = stringFirst(data.sourcePath, props.sourcePath, props.SourcePath, attrs.RVM_OWNER_PATH, attrs.RVM_SOURCE_PATH, '');
-  const canonicalId = stringFirst(data.canonicalId, data.canonicalObjectId, data.sourceObjectId, props.canonicalId, data.name, object?.name, object?.uuid, '');
-  const reviewName = stringFirst(data.reviewName, data.displayName, data.sourceName, props.displayName, props.sourceName, attrs.RVM_REVIEW_NAME, attrs.NAME, object?.name, canonicalId, '');
+  const sourceCanonicalId = stringFirst(data.canonicalId, data.canonicalObjectId, data.sourceObjectId, props.canonicalId, data.name, '');
+  const canonicalId = sourceCanonicalId || stringFirst(object?.name, object?.uuid, '');
+  const sourceReviewName = stringFirst(data.reviewName, data.displayName, data.sourceName, props.displayName, props.sourceName, attrs.RVM_REVIEW_NAME, attrs.NAME, '');
+  const reviewName = sourceReviewName || stringFirst(object?.name, canonicalId, '');
   const dtxr = stringFirst(data.DTXR_POS, data.DTXR, attrs.DTXR_POS, attrs.DTXR, attrs.DESC, attrs.DESCRIPTION, attrs.NAME, '');
   const dtxrPs = stringFirst(data.DTXR_PS, data.DTXRPS, attrs.DTXR_PS, attrs.DTXRPS, attrs.PS, attrs.PS_TAG, attrs.SUPPORT_TAG, '');
   const pickable = data.pickable !== false;
@@ -80,7 +82,7 @@ export function renderedObjectEntry(object, index = 0) {
   const category = classifyRvmObjectCategory({ renderKind, primitiveCode, reviewName, sourcePath, dtxr, dtxrPs, text });
   const isFallback = /FALLBACK|BBOX|PLACEHOLDER|DIAGNOSTIC/.test(normalizeText(`${renderKind} ${geometryPolicy} ${fallbackReason}`));
   const isNative = /RVM_NATIVE|NATIVE|FACET|TORUS/.test(normalizeText(`${renderKind} ${geometryPolicy}`));
-  const sourceMapped = Boolean(sourcePath || canonicalId || reviewName);
+  const sourceMapped = Boolean(sourcePath || sourceCanonicalId || sourceReviewName || dtxr || dtxrPs);
   const failureReasons = failureReasonsFor({ visible, selectable, sourceMapped, isFallback, nonSelectableReason, fallbackReason, geometryPolicy, renderKind, primitiveCode });
 
   return {
@@ -109,7 +111,7 @@ export function renderedObjectEntry(object, index = 0) {
     geometryPolicy,
     materialPolicy,
     failureReasons,
-    matchKeys: buildMatchKeys({ canonicalId, sourcePath, reviewName, dtxr, dtxrPs }),
+    matchKeys: buildMatchKeys({ canonicalId: sourceCanonicalId || canonicalId, sourcePath, reviewName, dtxr, dtxrPs }),
   };
 }
 
@@ -180,5 +182,5 @@ function stringFirst(...values) {
 
 function bump(target, key) {
   const safe = String(key || 'UNKNOWN').trim() || 'UNKNOWN';
-  target[safe] = (target[safe] || 0) + 1;
+  target[safe] = (target[key] || 0) + 1;
 }
