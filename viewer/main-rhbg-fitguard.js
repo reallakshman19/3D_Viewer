@@ -4,6 +4,7 @@ const STARTUP_SIDE_EFFECT_MODULES = [
   './rvm-viewer/RvmInputXmlSupportGraphicsUiBridge.js?v=20260619-source-bend-collapse-1',
   './tabs/model-converters/xml-cii-finalise-run-button.js?v=20260619-workflow-perf-1',
 ];
+// Previous cache marker: core/app.js?v=20260622-geometry-enriched-stagedjson-1
 // Previous cache marker: core/app.js?v=20260622-geometry-support-load-inputs-1
 // Active cache key: core/app.js?v=20260622-pipe-support-load-input-hydrator-1
 function startupMount() { return document.getElementById('app') || document.getElementById('app-layout') || document.getElementById('app-shell') || document.body; }
