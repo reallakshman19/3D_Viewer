@@ -23,6 +23,7 @@
 // viewer3d-rvm-tab-renderer.js?v=20260622-geometry-calc-canvas-1
 // viewer3d-rvm-tab-renderer.js?v=20260622-geometry-input-resolver-1
 // viewer3d-rvm-tab-renderer.js?v=20260622-geometry-enrichment-1
+// viewer3d-rvm-tab-renderer.js?v=20260622-geometry-enriched-stagedjson-1
 // viewer3d-rvm-tab-renderer.js?v=20260621-rvm-model-health-1
 // viewer3d-rvm-tab-renderer.js?v=20260621-rvm-health-issues-1
 // viewer3d-rvm-tab-renderer.js?v=20260621-rvm-navis-hierarchy-1
@@ -51,6 +52,8 @@
 // GeometryCalculationInputResolver.js?v=20260622-geometry-input-resolver-1
 // GeometryEnrichmentBridge.js?v=20260622-geometry-enrichment-1
 // GeometryEnrichmentResolver.js?v=20260622-geometry-enrichment-1
+// GeometryEnrichedStagedJsonBridge.js?v=20260622-geometry-enriched-stagedjson-1
+// GeometryEnrichedStagedJsonExporter.js?v=20260622-geometry-enriched-stagedjson-1
 // GeometryImportHierarchyModel.js?v=20260622-geometry-import-tree-1
 // GeometryMappingEngine.js?v=20260622-geometry-mapping-1
 // RenderedGeometrySnapshotBuilder.js?v=20260622-geometry-workspace-1
@@ -66,6 +69,7 @@
 // app-label-perf-runtime.js?v=20260622-geometry-calc-canvas-1
 // app-label-perf-runtime.js?v=20260622-geometry-input-resolver-1
 // app-label-perf-runtime.js?v=20260622-geometry-enrichment-1
+// app-label-perf-runtime.js?v=20260622-geometry-enriched-stagedjson-1
 // app-tab-click-state-bridge.js?v=20260622-tab-click-state-1
 // RvmPolicyInfoBridge.js?v=20260621-rvm-policy-info-1
 // RvmDiagnosticPanelCollapseBridge.js?v=20260621-rvm-diagnostic-collapse-1
@@ -96,6 +100,7 @@ import { installGeometryMappingProfileBridge } from '../geometry-workspace/Geome
 import { installGeometryCalculationCanvasBridge } from '../geometry-workspace/GeometryCalculationCanvasBridge.js?v=20260622-geometry-calc-canvas-1';
 import { installGeometryCalculationInputBridge } from '../geometry-workspace/GeometryCalculationInputBridge.js?v=20260622-geometry-input-resolver-1';
 import { installGeometryEnrichmentBridge } from '../geometry-workspace/GeometryEnrichmentBridge.js?v=20260622-geometry-enrichment-1';
+import { installGeometryEnrichedStagedJsonBridge } from '../geometry-workspace/GeometryEnrichedStagedJsonBridge.js?v=20260622-geometry-enriched-stagedjson-1';
 import { installRvmModelHealthBridge } from '../tabs/RvmModelHealthBridge.js?v=20260621-rvm-health-issues-1';
 import { installRvmModelHealthIssuesBridge } from '../tabs/RvmModelHealthIssuesBridge.js?v=20260621-rvm-health-issues-1';
 import { installBrowserRvmNativeFacetGhostPanelPatch } from '../rvm/BrowserRvmNativeFacetGhostPanelPatch.js?v=20260622-rvm-facet-ghost-panels-1';
@@ -106,8 +111,9 @@ installGeometryMappingProfileBridge();
 installGeometryCalculationCanvasBridge();
 installGeometryCalculationInputBridge();
 installGeometryEnrichmentBridge();
+installGeometryEnrichedStagedJsonBridge();
 installRvmModelHealthBridge();
 installRvmModelHealthIssuesBridge();
 installBrowserRvmNativeFacetGhostPanelPatch();
 
-export { init } from './app-label-perf-runtime.js?v=20260622-geometry-enrichment-1';
+export { init } from './app-label-perf-runtime.js?v=20260622-geometry-enriched-stagedjson-1';
