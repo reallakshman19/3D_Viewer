@@ -1,13 +1,16 @@
 import * as THREE from 'three';
 
-const CACHE_KEY = '20260622-rvm-raw-support-cylinder-guard-1';
+const CACHE_KEY = '20260622-rvm-raw-support-cylinder-guard-2-hide-inputxml-prims';
 const GLOBAL_KEY = '__PCF_GLB_RVM_RAW_SUPPORT_CYLINDER_GUARD__';
+const RAW_INPUTXML_SUPPORT_PRIMITIVES_KEY = 'rvm.rawInputXmlSupportPrimitives';
 const SUPPORT_SYMBOL_ROOTS = new Set([
+  '__RVM_SUPPORT_SYMBOLS__',
   '__RVM_GEOMETRY_SUPPORT_SYMBOLS__',
   '__RVM_SUPPORT_ASSEMBLY_MARKERS__'
 ]);
 const PIPE_LIKE_RE = /\b(PE_\d+_(PIPE|BEND|ELBOW|VALVE|FLANGE|TEE|GASKET|REDUCER)|PIPE|BEND|ELBOW|VALVE|FLANGE|TEE)\b/i;
 const SUPPORT_LIKE_RE = /\b(INPUTXML-\d+-(REST|GUIDE|LINESTOP|STOP|ANCHOR|SUPPORT)|SUPPORT|REST|GUIDE|LINE\s*STOP|LINESTOP|ANCHOR|SHOE)\b/i;
+const INPUTXML_SUPPORT_PRIM_RE = /\bINPUTXML[-_ ]?\d+[-_ ]?(REST|GUIDE|LINESTOP|LINE\s*STOP|STOP|ANCHOR|LIMIT|LIM|SUPPORT|SHOE)\b/i;
 
 export function installRvmRawSupportCylinderGuardBridge() {
   let attempts = 0;
@@ -34,10 +37,12 @@ function bind(root, viewer) {
 
 function applyGuard(root, viewer) {
   const diag = {
-    schema: 'rvm-raw-support-cylinder-guard/v1',
+    schema: 'rvm-raw-support-cylinder-guard/v2-hide-inputxml-raw-support-primitives',
     cacheKey: CACHE_KEY,
     convertedSupportStandCount: 0,
     protectedRawCylinderCount: 0,
+    hiddenInputXmlRawSupportPrimitiveCount: 0,
+    restoredInputXmlRawSupportPrimitiveCount: 0,
     clearedPipeLikeSupportCandidateCount: 0,
     removedRawModeSymbolRootCount: 0,
     hiddenPipeLikeGeneratedSymbolCount: 0,
@@ -45,6 +50,7 @@ function applyGuard(root, viewer) {
   };
 
   const supportMode = String(root?.dataset?.rvmSupportMode || '').toLowerCase() || currentSupportMode();
+  const showRawInputXmlSupportPrimitives = rawInputXmlSupportPrimitivesEnabled();
   if (supportMode === 'raw') removeSupportSymbolRoots(viewer, diag);
 
   viewer?.modelGroup?.updateMatrixWorld?.(true);
@@ -55,6 +61,15 @@ function applyGuard(root, viewer) {
       clearSupportCandidateFlags(obj);
       diag.clearedPipeLikeSupportCandidateCount += 1;
       return;
+    }
+    if (isInputXmlGeneratedRawSupportPrimitive(obj, text)) {
+      if (showRawInputXmlSupportPrimitives) {
+        if (restoreInputXmlRawSupportPrimitive(obj)) diag.restoredInputXmlRawSupportPrimitiveCount += 1;
+      } else {
+        hideInputXmlRawSupportPrimitive(obj);
+        diag.hiddenInputXmlRawSupportPrimitiveCount += 1;
+        return;
+      }
     }
     if (!isRawSupportCylinderPreserved(obj)) return;
     diag.protectedRawCylinderCount += 1;
@@ -83,13 +98,20 @@ function applyGuard(root, viewer) {
 }
 
 function removeSupportSymbolRoots(viewer, diag) {
-  if (!viewer?.scene) return;
+  removeSupportSymbolRootsFrom(viewer?.scene, diag);
+  removeSupportSymbolRootsFrom(viewer?.modelGroup, diag);
+}
+
+function removeSupportSymbolRootsFrom(parent, diag) {
+  if (!parent?.getObjectByName) return;
   for (const name of SUPPORT_SYMBOL_ROOTS) {
-    const root = viewer.scene.getObjectByName(name);
-    if (!root) continue;
-    viewer.scene.remove(root);
-    disposeObject(root);
-    diag.removedRawModeSymbolRootCount += 1;
+    let root = parent.getObjectByName(name);
+    while (root) {
+      root.parent?.remove?.(root);
+      disposeObject(root);
+      diag.removedRawModeSymbolRootCount += 1;
+      root = parent.getObjectByName(name);
+    }
   }
 }
 
@@ -134,6 +156,38 @@ function isRawSupportCylinderPreserved(obj) {
   return String(attrs.RVM_BROWSER_SUPPORT_RAW_CYLINDER_PRESERVED || obj.userData?.RVM_BROWSER_SUPPORT_RAW_CYLINDER_PRESERVED || '').toLowerCase() === 'true';
 }
 
+function isInputXmlGeneratedRawSupportPrimitive(obj, text = objectText(obj)) {
+  const attrs = attrsFor(obj);
+  const recordTag = String(attrs.RVM_RECORD_TAG || '').toUpperCase();
+  const code = Number.parseInt(String(attrs.RVM_PRIMITIVE_CODE ?? attrs.RVM_BINARY_PRIMITIVE_CODE ?? '').trim(), 10);
+  const primitive = String(attrs.RVM_BROWSER_RENDER_PRIMITIVE || obj?.userData?.renderPrimitive || obj?.userData?.effectiveRenderPrimitive || '').toUpperCase();
+  const nativeLike = recordTag === 'PRIM'
+    || Number.isFinite(code)
+    || /RVM_(NATIVE_)?(CYLINDER|PYRAMID|BOX|SPHERE)|PIPE_CYLINDER|CYLINDER_BBOX/.test(primitive)
+    || /^\s*RVM\s+(CYLINDER|PYRAMID|BOX|SPHERE|TORUS|SNOUT|FACET)/i.test(String(obj?.name || ''));
+  return nativeLike && INPUTXML_SUPPORT_PRIM_RE.test(String(text || ''));
+}
+
+function hideInputXmlRawSupportPrimitive(obj) {
+  const data = obj.userData || {};
+  obj.visible = false;
+  data.rvmHiddenInputXmlRawSupportPrimitive = true;
+  data.pickable = false;
+  data.selectable = false;
+  data.nonSelectableReason = 'InputXML-generated raw support primitive hidden by default; enable rvm.rawInputXmlSupportPrimitives to inspect file support markers';
+}
+
+function restoreInputXmlRawSupportPrimitive(obj) {
+  const data = obj.userData || {};
+  if (!data.rvmHiddenInputXmlRawSupportPrimitive) return false;
+  obj.visible = true;
+  data.rvmHiddenInputXmlRawSupportPrimitive = false;
+  data.pickable = true;
+  data.selectable = true;
+  delete data.nonSelectableReason;
+  return true;
+}
+
 function isPipeLikeFalseSupport(obj, text) {
   if (!PIPE_LIKE_RE.test(text)) return false;
   if (SUPPORT_LIKE_RE.test(text)) return false;
@@ -176,6 +230,8 @@ function objectText(obj) {
     obj?.userData?.effectiveRenderPrimitive,
     attrs.NAME,
     attrs.TYPE,
+    attrs.RVM_RECORD_TAG,
+    attrs.RVM_PRIMITIVE_CODE,
     attrs.RVM_OWNER_NAME,
     attrs.RVM_OWNER_PATH,
     attrs.RVM_BROWSER_SUPPORT_KIND,
@@ -221,9 +277,17 @@ function firstMaterial(obj) {
 function currentSupportMode() {
   try {
     const saved = localStorage.getItem('rvm_support_render_mode_v1') || '';
-    return ['raw', 'symbol', 'both'].includes(saved) ? saved : 'both';
+    return ['raw', 'symbol', 'both'].includes(saved) ? saved : 'raw';
   } catch (_) {
-    return 'both';
+    return 'raw';
+  }
+}
+
+function rawInputXmlSupportPrimitivesEnabled() {
+  try {
+    return localStorage.getItem(RAW_INPUTXML_SUPPORT_PRIMITIVES_KEY) === 'on';
+  } catch (_) {
+    return false;
   }
 }
 
