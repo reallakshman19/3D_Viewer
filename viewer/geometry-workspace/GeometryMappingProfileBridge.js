@@ -35,12 +35,14 @@ function activeMappedObjects() {
 
 function applyAndRefresh() {
   const api = workspaceApi();
+  const state = workspaceState();
   const mapping = currentMapping();
   if (!api || !mapping) return null;
   decisions = normalizeGeometryMappingDecisions(decisions);
   const next = applyGeometryMappingDecisions(mapping, decisions);
-  api.setMapping?.(next, decisions);
-  api.refresh?.();
+  state.mapping = next;
+  state.mappingProfileDecisions = decisions;
+  api.open?.();
   renderProfileDialog();
   return next;
 }
