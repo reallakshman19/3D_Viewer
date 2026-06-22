@@ -59,6 +59,24 @@ const blocked = calculateSupportLoadsForPipeInput(baseInput);
 check(blocked.status === 'BLOCKED', 'formula engine blocks unlocked pipe input');
 check(blocked.reason === 'pipe-input-not-locked-for-calculation', 'blocked reason is lock gate, not missing data');
 
+const staleModel = {
+  ...baseModel,
+  hydratedObjects: baseModel.hydratedObjects.map(object => {
+    if (object.id === 'PIPE-8-P25168') return { ...object, calculatedFields: { ...(object.calculatedFields || {}), supportLoads: { stale: true } } };
+    if (object.id === 'SUP-GUIDE-001') return { ...object, calculatedFields: { ...(object.calculatedFields || {}), supportLoadReference: { stale: true } } };
+    return object;
+  })
+};
+const staleBlockedResults = calculateSupportLoadResultsFromInputModel(staleModel, { evaluatedAt: '2026-06-22T00:30:00.000Z' });
+const stalePipe = staleBlockedResults.calculatedObjects.find(object => object.id === 'PIPE-8-P25168');
+const staleGuide = staleBlockedResults.calculatedObjects.find(object => object.id === 'SUP-GUIDE-001');
+check(staleBlockedResults.status === 'BLOCKED', 'unlocked model remains blocked during writeback audit');
+check(!stalePipe.calculatedFields?.supportLoads, 'blocked recalculation clears stale pipe supportLoads');
+check(!staleGuide.calculatedFields?.supportLoadReference, 'blocked recalculation clears stale support reference');
+check(staleBlockedResults.writebackAudit.stalePipeResultClearedCount === 1, 'writeback audit counts stale pipe result cleanup');
+check(staleBlockedResults.writebackAudit.staleSupportReferenceClearedCount === 1, 'writeback audit counts stale support reference cleanup');
+check(staleBlockedResults.writebackAudit.inputPackageMutatedCount === 0, 'writeback audit detects no input mutation during blocked cleanup');
+
 const lockedState = lockReadySupportLoadInputs(baseModel, {}, { reviewedAt: '2026-06-22T01:00:00.000Z' });
 const lockedModel = applySupportLoadInputReview(baseModel, lockedState);
 check(lockedModel.pipeInputs[0].readiness.readyForCalculation === true, 'review lock opens calculation gate');
@@ -67,6 +85,10 @@ const results = calculateSupportLoadResultsFromInputModel(lockedModel, { evaluat
 check(results.status === 'CALCULATED', 'locked inputs calculate successfully');
 check(results.calculatedPipeCount === 1, 'one pipe result calculated');
 check(results.supportResultCount === 2, 'two support references receive result rows');
+check(results.writebackAudit.status === 'OK', 'writeback audit status is OK');
+check(results.writebackAudit.inputPackageMutatedCount === 0, 'calculated writeback does not mutate pipe input packages');
+check(results.writebackAudit.pipeCalculatedWriteCount === 1, 'writeback audit counts pipe calculated field write');
+check(results.writebackAudit.supportCalculatedWriteCount === 2, 'writeback audit counts support reference writes');
 
 const calc = results.pipeResults[0].calculatedFields;
 near(calc.vertical.opeVA, 6050, 0.0001, 'OPE_V_A uses operating fluid plus pipe weight and AutoSpan');
@@ -86,6 +108,8 @@ check(lineStopSupport?.guide === null, 'line-stop support row does not receive g
 
 const pipeObject = results.calculatedObjects.find(object => object.id === 'PIPE-8-P25168');
 check(pipeObject.calculatedFields.supportLoads.lineStop.lineStopH === 8800, 'calculated fields are written separately to pipe object');
+check(pipeObject.calculatedFields.supportLoads.writebackAudit.target === 'calculatedFields.supportLoads', 'pipe result writeback target is audited');
+check(!pipeObject.calculatedFields.supportLoads.attributes, 'pipe result does not copy input attributes into calculated fields');
 check(pipeObject.attributes.supportLoadInput.readiness.readyForCalculation === true, 'input package remains preserved after writeback');
 
 if (failed) {
