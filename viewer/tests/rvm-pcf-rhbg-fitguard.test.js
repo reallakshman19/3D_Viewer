@@ -21,6 +21,7 @@ const loadSource = await read('../rvm/BrowserRvmLoadBridge.js');
 const renderBuilderSource = await read('../rvm/BrowserRvmRenderSceneBuilder.js');
 const workerSource = await read('../rvm/browser-rvm-worker.js');
 const nativeFacetSource = await read('../rvm/BrowserRvmNativeFacetGroupPrimary.js');
+const facetGhostSource = await read('../rvm/BrowserRvmNativeFacetGhostPanelPatch.js');
 const healthSource = await read('../tabs/RvmModelHealthBridge.js');
 const healthIssuesSource = await read('../tabs/RvmModelHealthIssuesBridge.js');
 const reportSource = await read('../tabs/RvmReportExportBridge.js');
@@ -37,9 +38,16 @@ check(rendererSource.includes('RvmModelHealthBridge.js?v=20260621-rvm-health-iss
 check(rendererSource.includes('RvmModelHealthIssuesBridge.js?v=20260621-rvm-health-issues-1'), 'renderer loads model health issues bridge');
 check(rendererSource.includes('installRvmModelHealthBridge()'), 'renderer installs model health bridge');
 check(rendererSource.includes('installRvmModelHealthIssuesBridge()'), 'renderer installs health issues bridge');
+check(rendererSource.includes('BrowserRvmNativeFacetGhostPanelPatch.js?v=20260622-rvm-facet-ghost-panels-1'), 'renderer loads native facet ghost panel patch');
+check(rendererSource.includes('installBrowserRvmNativeFacetGhostPanelPatch()'), 'renderer installs native facet ghost panel patch');
 check(rendererSource.includes('RvmReportExportBridge.js?v=20260621-rvm-report-export-1'), 'renderer keeps report export bridge');
 check(rendererSource.includes('RvmJsonPcfTriggerBridge.js?v=20260621-rvm-pcf-visible-scope-1'), 'renderer keeps visible-scope PCF bridge');
 check(rendererSource.includes('RvmZoneLodLabelBridge.js?v=20260621-rvm-preload-hierarchy-selector-1'), 'renderer keeps preload zone selector');
+
+check(facetGhostSource.includes("browser-rvm-native-facet-ghost-panels/v1"), 'native facet ghost patch exposes schema marker');
+check(facetGhostSource.includes('THIN_PANEL_RATIO') && facetGhostSource.includes('LARGE_PANEL_LONG_EDGE'), 'native facet ghost patch classifies large thin panels');
+check(facetGhostSource.includes('facet-holes-filled-by-fan-triangulation'), 'native facet ghost patch downgrades hole-risk facet groups');
+check(facetGhostSource.includes('__PCF_GLB_RVM_NATIVE_FACET_GHOST_PANELS__'), 'native facet ghost patch publishes global API');
 
 check(healthSource.includes("BRIDGE_VERSION = '20260621-rvm-model-health-1'"), 'health bridge keeps base version marker');
 check(healthSource.includes('MAX_HEALTH_SCAN_OBJECTS') && healthSource.includes('LABEL_SOFT_LIMIT') && healthSource.includes('LABEL_HARD_LIMIT'), 'health bridge bounds scans and label risk');
@@ -69,18 +77,18 @@ check(zoneSource.includes('buildPreloadHierarchyZones'), 'zone selector remains 
 check(tabSource.includes('beforeRenderInstructions'), 'RVM tab keeps pre-render hook');
 check(loadSource.includes('BrowserRvmRenderSceneBuilder.js?v=20260621-rvm-native-facet-primary-1'), 'load bridge keeps native facet renderer');
 check(workerSource.includes('RVM_TRANSFORM_3X4'), 'worker preserves transform matrix');
-check(nativeFacetSource.includes('browser-rvm-native-facetgroup-primary/v1'), 'native facet module remains present');
+check(nativeFacetSource.includes('browser-rvm-native-facetgroup-primary/v2-ghost-panels'), 'native facet module uses ghost-panel schema');
+check(nativeFacetSource.includes('native-facetgroup-ghost-panel') && nativeFacetSource.includes('wireframe-only-hole-contour-risk'), 'native facet primary ghosts risky panels');
 check(renderBuilderSource.includes('RVM_NATIVE_FACET_GROUP'), 'render builder keeps native facet primary path');
 check(renderBuilderSource.includes('wireframe-diagnostic-not-solid-geometry'), 'bbox placeholders remain diagnostic wireframes');
 check(!renderBuilderSource.includes("primitive === 'STRUCTURE_BBOX' || type === 'STRUCTURE'"), 'unconditional structure slab promotion remains blocked');
 
-check(indexSource.includes('main-rhbg-fitguard.js?v=20260621-rvm-health-issues-1'), 'index uses health issues entry cache key');
-check(entrySource.includes('core/app.js?v=20260621-rvm-health-issues-1'), 'entrypoint uses health issues app cache key');
-check(appSource.includes('RvmModelHealthBridge.js?v=20260621-rvm-health-issues-1'), 'app side-loads cache-busted model health bridge');
-check(appSource.includes('RvmModelHealthIssuesBridge.js?v=20260621-rvm-health-issues-1'), 'app side-loads health issues bridge');
-check(appSource.includes('installRvmModelHealthIssuesBridge()'), 'app installs health issues bridge independent of renderer cache');
-check(appSource.includes('app-label-perf-runtime.js?v=20260621-rvm-health-issues-1'), 'app delegates through health issues runtime cache key');
-check(runtimeSource.includes('viewer3d-rvm-tab-renderer.js?v=20260621-rvm-report-export-1'), 'runtime remains compatible with report-export renderer cache');
+check(indexSource.includes('main-rhbg-fitguard.js?v=20260622-rvm-facet-ghost-panels-1'), 'index uses facet ghost entry cache key');
+check(entrySource.includes('core/app.js?v=20260622-rvm-facet-ghost-panels-1'), 'entrypoint uses facet ghost app cache key');
+check(appSource.includes('BrowserRvmNativeFacetGhostPanelPatch.js?v=20260622-rvm-facet-ghost-panels-1'), 'app side-loads native facet ghost patch');
+check(appSource.includes('installBrowserRvmNativeFacetGhostPanelPatch()'), 'app installs native facet ghost patch independent of renderer cache');
+check(appSource.includes('app-label-perf-runtime.js?v=20260622-rvm-facet-ghost-panels-1'), 'app delegates through facet ghost runtime cache key');
+check(runtimeSource.includes('viewer3d-rvm-tab-renderer.js?v=20260622-rvm-facet-ghost-panels-1'), 'runtime uses facet ghost renderer cache');
 
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed > 0) process.exit(1);
