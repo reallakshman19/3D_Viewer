@@ -23,6 +23,7 @@ const renderBuilderSource = await read('../rvm/BrowserRvmRenderSceneBuilder.js')
 const workerSource = await read('../rvm/browser-rvm-worker.js');
 const nativeFacetSource = await read('../rvm/BrowserRvmNativeFacetGroupPrimary.js');
 const smartCivilFacetSource = await read('../rvm/BrowserRvmSmartCivilFacetPolicy.js');
+const remainingPrimitiveSource = await read('../rvm/BrowserRvmRemainingPrimitiveRuntimePatch.js');
 const facetGhostSource = await read('../rvm/BrowserRvmNativeFacetGhostPanelPatch.js');
 const healthSource = await read('../tabs/RvmModelHealthBridge.js');
 const healthIssuesSource = await read('../tabs/RvmModelHealthIssuesBridge.js');
@@ -84,6 +85,10 @@ check(nativeFacetSource.includes('browser-rvm-native-facetgroup-primary/v3-smart
 check(nativeFacetSource.includes('classifySmartCivilFacetInstruction') && nativeFacetSource.includes('smartCivilPolicyUserData'), 'native facet primary defers smart civil code-11 facets before tessellation');
 check(smartCivilFacetSource.includes('PROCESS_TERMS') && smartCivilFacetSource.includes('CIVIL_TERMS'), 'smart civil policy is taxonomy/geometry based, not project-name hardcoded');
 check(smartCivilFacetSource.includes('deferNativeTessellation') && smartCivilFacetSource.includes('wireframe-proxy'), 'smart civil policy supports default-off and proxy modes');
+check(remainingPrimitiveSource.includes("browser-rvm-remaining-primitives/v3-line-wire-diagnostics"), 'remaining primitive patch exposes code-10 line-wire schema');
+check(!remainingPrimitiveSource.includes('function lineBoxGeometry'), 'RVM code-10 Line/GENSEC primitives are not converted into solid boxes');
+check(remainingPrimitiveSource.includes('RVM_NATIVE_GRID_LINE_DIAGNOSTIC') && remainingPrimitiveSource.includes('code10-grid-reference-line-default-off'), 'RVM code-10 grid/reference lines default to diagnostic/off policy');
+check(remainingPrimitiveSource.includes('lineBoxGeometryAvoided') && remainingPrimitiveSource.includes('LineSegments'), 'RVM code-10 diagnostics report box-geometry avoidance and use lines');
 check(renderBuilderSource.includes('RVM_NATIVE_FACET_GROUP'), 'render builder keeps native facet primary path');
 check(renderBuilderSource.includes('wireframe-diagnostic-not-solid-geometry'), 'bbox placeholders remain diagnostic wireframes');
 check(!renderBuilderSource.includes("primitive === 'STRUCTURE_BBOX' || type === 'STRUCTURE'"), 'unconditional structure slab promotion remains blocked');
