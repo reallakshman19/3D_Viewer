@@ -74,3 +74,6 @@ jobs:
 
       - name: Verify support-load report export
         run: node viewer/tests/rvm-geometry-workspace-support-load-report.test.js
+
+      - name: Verify enriched stagedJSON support-load export
+        run: node viewer/tests/rvm-geometry-workspace-enriched-stagedjson-support-loads.test.js
