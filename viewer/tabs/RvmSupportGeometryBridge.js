@@ -1,9 +1,9 @@
 import * as THREE from 'three';
 
-const CACHE_KEY = '20260621-rvm-button-hardening-1';
-const VERSION = 'rvm-support-geometry/v2-button-hardening';
+const CACHE_KEY = '20260622-rvm-support-geometry-raw-default-1';
+const VERSION = 'rvm-support-geometry/v3-raw-default-opt-in';
 const ROOT_NAME = '__RVM_EXPORTABLE_SUPPORT_GEOMETRY__';
-const STORAGE_KEY = 'rvm_support_geometry_mode_v1';
+const STORAGE_KEY = 'rvm_support_geometry_mode_v2';
 const GLOBAL_KEY = '__PCF_GLB_RVM_SUPPORT_GEOMETRY_DIAGNOSTICS__';
 const WORDS = /\b(SUPPORT|SUPP|GUIDE|ANCHOR|LINE\s*STOP|LINESTOP|LIMIT\s*STOP|LIMIT|REST|SHOE|HANGER|SPRING|CLAMP|TRUNNION|SADDLE|DUMMY|U[-_ ]?BOLT|STANCHION|PEDESTAL|POST|BASE\s*PLATE)\b/i;
 const PIPE = /\b(PIPE|CYLINDER|ELBOW|BEND|TEE|VALVE|FLANGE|GASKET|REDUCER|TORUS|SPHERE)\b/i;
@@ -32,8 +32,8 @@ function bind(root, viewer) {
   let last = '';
   const tick = () => {
     const mode = getMode(root);
-    const candidates = collectCandidates(viewer);
-    const assemblies = groupCandidates(candidates);
+    const candidates = mode === 'off' ? [] : collectCandidates(viewer);
+    const assemblies = mode === 'off' ? [] : groupCandidates(candidates);
     const diag = rebuildGeometry(viewer, assemblies, mode);
     diag.candidateCount = candidates.length;
     diag.assemblyCount = assemblies.length;
@@ -90,7 +90,7 @@ function collectCandidates(viewer) {
     if (obj.userData?.rvmHiddenByUser) return;
     const attrs = attrsFor(obj);
     const text = supportText(obj, attrs);
-    const explicit = obj.userData?.rvmSupportCandidate || obj.userData?.RVM_BROWSER_SUPPORT_HINT === 'true' || WORDS.test(text);
+    const explicit = obj.userData?.rvmSupportCandidate || attrs.RVM_BROWSER_SUPPORT_HINT === 'true' || WORDS.test(text);
     const typeText = `${attrs.TYPE || ''} ${obj.userData?.type || ''} ${obj.userData?.kind || ''} ${attrs.RVM_PRIMITIVE_KIND || ''}`;
     if (!explicit && PIPE.test(typeText)) return;
     const box = worldBox(obj);
@@ -143,11 +143,11 @@ function toAssembly(items) {
 function rebuildGeometry(viewer, assemblies, mode) {
   restoreRaw(viewer);
   removeRoot(viewer);
-  const diag = { schema: VERSION, cacheKey: CACHE_KEY, generatedMeshCount: 0, rawHiddenCount: 0, kindCounts: {}, sourceObjectCount: 0, generatedRoot: ROOT_NAME };
+  const diag = { schema: VERSION, cacheKey: CACHE_KEY, generatedMeshCount: 0, rawHiddenCount: 0, kindCounts: {}, sourceObjectCount: 0, generatedRoot: ROOT_NAME, rawDefaultStorageKey: STORAGE_KEY };
   if (mode === 'off' || !viewer?.modelGroup) return diag;
   const root = new THREE.Group();
   root.name = ROOT_NAME;
-  root.userData = { rvmSupportGeometryRoot: true, rvmSupportGeometryGenerated: true, schema: VERSION, displayName: 'Generated Support Geometry' };
+  root.userData = { rvmSupportGeometryRoot: true, rvmSupportGeometryGenerated: true, schema: VERSION, displayName: 'Generated Support Geometry', optInOnly: true };
   for (const assembly of assemblies) {
     bump(diag.kindCounts, assembly.kind);
     diag.sourceObjectCount += assembly.items.length;

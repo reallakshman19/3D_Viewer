@@ -142,5 +142,6 @@ installRvmLeftPanelResizeCollapseBridge();
 installRvmLeafSelectionIdentityBridge();
 installRvmDeferredBridgeLoader();
 installRvmUiPanelBridge();
+installRvmUiEventSafetyBridge();
 
 export { mountViewer3DRvmTab as renderViewer3DRvm } from './viewer3d-rvm-tab.js?v=20260622-rvm-smart-civil-code11-defer-1';

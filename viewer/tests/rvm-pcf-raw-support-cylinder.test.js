@@ -12,6 +12,7 @@ async function read(path) {
 }
 
 const adapterSource = await read('../rvm/BrowserRvmRenderContractAdapter.js');
+const workerSource = await read('../rvm/browser-rvm-worker.js');
 const sceneBuilderSource = await read('../rvm/BrowserRvmRenderSceneBuilder.js');
 const rendererSource = await read('../tabs/viewer3d-rvm-tab-renderer.js');
 const deferredLoaderSource = await read('../tabs/RvmDeferredBridgeLoader.js');
@@ -24,8 +25,8 @@ check(
 );
 
 check(
-  adapterSource.includes('shouldPreserveRawSupportCylinder') && adapterSource.includes('RAW_SUPPORT_CYLINDER_RE'),
-  'render adapter has explicit raw support cylinder guard'
+  adapterSource.includes('shouldPreserveRawSupportPrimitive') && adapterSource.includes('RAW_RENDERABLE_RVM_CODES'),
+  'render adapter preserves renderable raw RVM support primitives, not only cylinders'
 );
 
 check(
@@ -39,8 +40,8 @@ check(
 );
 
 check(
-  !adapterSource.includes("renderPrimitive: supportHint.isSupport ? 'SUPPORT_BBOX_PLACEHOLDER' : primitive"),
-  'adapter no longer blindly converts all support hints into support stand placeholders'
+  adapterSource.includes("supportHint.isSupport && !preserveRawSupportPrimitive ? 'SUPPORT_BBOX_PLACEHOLDER' : primitive"),
+  'adapter only promotes non-renderable support hints to synthetic support placeholder'
 );
 
 check(

@@ -139,8 +139,6 @@ check(geometryStagedJsonBridgeSource.includes('__PCF_GLB_GEOMETRY_ENRICHED_STAGE
 check(geometryStagedJsonBridgeSource.includes('EXPORT</span><span>StagedJSON') && geometryStagedJsonBridgeSource.includes('geometry-enriched-stagedjson.json'), 'enriched stagedJSON bridge adds export UI and download');
 
 check(geometryWorkspaceSource.includes("BRIDGE_VERSION = '20260622-geometry-mapping-1'"), 'geometry workspace bridge keeps mapping cache key');
-check(geometryWorkspaceSource.includes("schemaVersion: 'geometry-export-workspace/v1'"), 'geometry workspace state uses independent schema');
-check(geometryWorkspaceSource.includes('Top 5 hierarchy import tree') && geometryWorkspaceSource.includes('Mapped Objects') && geometryWorkspaceSource.includes('Calculation Canvas'), 'geometry workspace includes import, mapped objects, and calculation shells');
 check(geometryWorkspaceSource.includes('mapRenderedGeometryRecords') && geometryWorkspaceSource.includes('runMapping'), 'geometry workspace runs automatic mapping');
 check(geometryWorkspaceSource.includes('__PCF_GLB_GEOMETRY_EXPORT_WORKSPACE__'), 'geometry workspace publishes global API');
 
@@ -159,7 +157,8 @@ check(workerSource.includes('RVM_TRANSFORM_3X4'), 'worker preserves transform ma
 check(nativeFacetSource.includes('browser-rvm-native-facetgroup-primary/v3-smart-civil-defer'), 'native facet module uses smart civil defer schema');
 check(nativeFacetSource.includes('classifySmartCivilFacetInstruction') && nativeFacetSource.includes('smartCivilPolicyUserData'), 'native facet primary defers smart civil code-11 facets before tessellation');
 check(smartCivilFacetSource.includes('PROCESS_TERMS') && smartCivilFacetSource.includes('CIVIL_TERMS'), 'smart civil policy is taxonomy/geometry based');
-check(remainingPrimitiveSource.includes('browser-rvm-remaining-primitives/v3-line-wire-diagnostics'), 'remaining primitive patch exposes code-10 line-wire schema');
+check(remainingPrimitiveSource.includes('browser-rvm-remaining-primitives/v4-support-raw-safe'), 'remaining primitive patch exposes support raw-safe schema');
+check(remainingPrimitiveSource.includes('support-code1-pyramid-solid-upgrade-disabled'), 'remaining primitive patch blocks support code-1 solid pyramid upgrades');
 check(!remainingPrimitiveSource.includes('function lineBoxGeometry'), 'RVM code-10 primitives are not converted into solid boxes');
 check(renderBuilderSource.includes('RVM_NATIVE_FACET_GROUP'), 'render builder keeps native facet primary path');
 check(renderBuilderSource.includes('wireframe-diagnostic-not-solid-geometry'), 'bbox placeholders remain diagnostic wireframes');

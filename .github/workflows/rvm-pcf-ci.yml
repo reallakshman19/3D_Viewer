@@ -9,6 +9,11 @@ on:
       - 'viewer/converters/xml-cii2019-core/**'
       - 'viewer/rvm-viewer/RvmProgressiveModelRootPatch.js'
       - 'viewer/rvm/BrowserRvmRenderContractAdapter.js'
+      - 'viewer/rvm/BrowserRvmRemainingPrimitiveRuntimePatch.js'
+      - 'viewer/tabs/RvmSupportSummaryBridge.js'
+      - 'viewer/tabs/RvmSupportGeometryBridge.js'
+      - 'viewer/tabs/RvmSupportAttMappingBridge.js'
+      - 'viewer/tabs/RvmIntelligentSupportEngineBridge.js'
       - 'viewer/tabs/model-converters/workflow/**'
       - 'viewer/tabs/rvm-json-pcf-*.js'
       - 'viewer/tabs/viewer3d-rvm-tab.js'
@@ -63,3 +68,9 @@ jobs:
 
       - name: Verify support-load input overrides
         run: node viewer/tests/rvm-geometry-workspace-support-load-input-overrides.test.js
+
+      - name: Verify support-load formula engine
+        run: node viewer/tests/rvm-geometry-workspace-support-load-formulas.test.js
+
+      - name: Verify support-load report export
+        run: node viewer/tests/rvm-geometry-workspace-support-load-report.test.js
