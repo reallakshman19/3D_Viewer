@@ -22,6 +22,8 @@ const loadSource = await read('../rvm/BrowserRvmLoadBridge.js');
 const renderBuilderSource = await read('../rvm/BrowserRvmRenderSceneBuilder.js');
 const workerSource = await read('../rvm/browser-rvm-worker.js');
 const nativeFacetSource = await read('../rvm/BrowserRvmNativeFacetGroupPrimary.js');
+const smartCivilFacetSource = await read('../rvm/BrowserRvmSmartCivilFacetPolicy.js');
+const remainingPrimitiveSource = await read('../rvm/BrowserRvmRemainingPrimitiveRuntimePatch.js');
 const facetGhostSource = await read('../rvm/BrowserRvmNativeFacetGhostPanelPatch.js');
 const healthSource = await read('../tabs/RvmModelHealthBridge.js');
 const healthIssuesSource = await read('../tabs/RvmModelHealthIssuesBridge.js');
@@ -49,6 +51,7 @@ check(rendererSource.includes('RvmJsonPcfTriggerBridge.js?v=20260621-rvm-pcf-vis
 check(rendererSource.includes('RvmZoneLodLabelBridge.js?v=20260621-rvm-preload-hierarchy-selector-1'), 'renderer keeps preload zone selector');
 check(rendererSource.includes('RvmDtxrGeometryCoverageBridge.js?v=20260622-rvm-dtxr-coverage-1'), 'renderer loads DTXR geometry coverage bridge');
 check(rendererSource.includes('installRvmDtxrGeometryCoverageBridge()'), 'renderer installs DTXR geometry coverage bridge');
+check(rendererSource.includes('BrowserRvmCivilFallbackPolicyBridge.js?v=20260622-rvm-smart-civil-code11-default-off-1'), 'renderer loads smart civil fallback policy bridge');
 
 check(facetGhostSource.includes("browser-rvm-native-facet-ghost-panels/v1"), 'native facet ghost patch exposes schema marker');
 check(facetGhostSource.includes('THIN_PANEL_RATIO') && facetGhostSource.includes('LARGE_PANEL_LONG_EDGE'), 'native facet ghost patch classifies large thin panels');
@@ -94,8 +97,14 @@ check(zoneSource.includes('buildPreloadHierarchyZones'), 'zone selector remains 
 check(tabSource.includes('beforeRenderInstructions'), 'RVM tab keeps pre-render hook');
 check(loadSource.includes('BrowserRvmRenderSceneBuilder.js?v=20260621-rvm-native-facet-primary-1'), 'load bridge keeps native facet renderer');
 check(workerSource.includes('RVM_TRANSFORM_3X4'), 'worker preserves transform matrix');
-check(nativeFacetSource.includes('browser-rvm-native-facetgroup-primary/v2-ghost-panels'), 'native facet module uses ghost-panel schema');
-check(nativeFacetSource.includes('native-facetgroup-ghost-panel') && nativeFacetSource.includes('wireframe-only-hole-contour-risk'), 'native facet primary ghosts risky panels');
+check(nativeFacetSource.includes('browser-rvm-native-facetgroup-primary/v3-smart-civil-defer'), 'native facet module uses smart civil defer schema');
+check(nativeFacetSource.includes('classifySmartCivilFacetInstruction') && nativeFacetSource.includes('smartCivilPolicyUserData'), 'native facet primary defers smart civil code-11 facets before tessellation');
+check(smartCivilFacetSource.includes('PROCESS_TERMS') && smartCivilFacetSource.includes('CIVIL_TERMS'), 'smart civil policy is taxonomy/geometry based, not project-name hardcoded');
+check(smartCivilFacetSource.includes('deferNativeTessellation') && smartCivilFacetSource.includes('wireframe-proxy'), 'smart civil policy supports default-off and proxy modes');
+check(remainingPrimitiveSource.includes("browser-rvm-remaining-primitives/v3-line-wire-diagnostics"), 'remaining primitive patch exposes code-10 line-wire schema');
+check(!remainingPrimitiveSource.includes('function lineBoxGeometry'), 'RVM code-10 Line/GENSEC primitives are not converted into solid boxes');
+check(remainingPrimitiveSource.includes('RVM_NATIVE_GRID_LINE_DIAGNOSTIC') && remainingPrimitiveSource.includes('code10-grid-reference-line-default-off'), 'RVM code-10 grid/reference lines default to diagnostic/off policy');
+check(remainingPrimitiveSource.includes('lineBoxGeometryAvoided') && remainingPrimitiveSource.includes('LineSegments'), 'RVM code-10 diagnostics report box-geometry avoidance and use lines');
 check(renderBuilderSource.includes('RVM_NATIVE_FACET_GROUP'), 'render builder keeps native facet primary path');
 check(renderBuilderSource.includes('wireframe-diagnostic-not-solid-geometry'), 'bbox placeholders remain diagnostic wireframes');
 check(!renderBuilderSource.includes("primitive === 'STRUCTURE_BBOX' || type === 'STRUCTURE'"), 'unconditional structure slab promotion remains blocked');
