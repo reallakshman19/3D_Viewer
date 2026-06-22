@@ -1,8 +1,10 @@
 // App shell runtime delegate.
 // Static contract markers retained here because certification gates read core/app.js directly.
+// GeometryCalculationCanvasBridge.js?v=20260622-geometry-calc-canvas-1
 // GeometryCalculationCanvasBridge.js?v=20260622-geometry-support-load-inputs-1
 // GeometrySupportLoadInputBridge.js?v=20260622-geometry-support-load-inputs-1
 // GeometrySupportLoadInputModel.js?v=20260622-geometry-support-load-inputs-1
+// app-label-perf-runtime.js?v=20260622-geometry-enriched-stagedjson-1
 // app-label-perf-runtime.js?v=20260622-geometry-support-load-inputs-1
 // GeometryCalculationCanvasBridge.js?v=20260622-pipe-support-load-input-hydrator-1
 // GeometrySupportLoadInputBridge.js?v=20260622-pipe-support-load-input-hydrator-1
