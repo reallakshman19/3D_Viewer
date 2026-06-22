@@ -44,6 +44,8 @@
 // RvmModelHealthBridge.js?v=20260621-rvm-health-issues-1
 // RvmModelHealthIssuesBridge.js?v=20260621-rvm-health-issues-1
 // BrowserRvmNativeFacetGhostPanelPatch.js?v=20260622-rvm-facet-ghost-panels-1
+// app-label-perf-runtime.js?v=20260622-geometry-workspace-1
+// app-label-perf-runtime.js?v=20260622-geometry-import-tree-1
 // app-tab-click-state-bridge.js?v=20260622-tab-click-state-1
 // RvmPolicyInfoBridge.js?v=20260621-rvm-policy-info-1
 // RvmDiagnosticPanelCollapseBridge.js?v=20260621-rvm-diagnostic-collapse-1
