@@ -12,11 +12,14 @@
 // Active zone/LOD label cache key: RvmZoneLodLabelBridge.js?v=20260621-rvm-zone-lod-labels-1
 // Active preload hierarchy selector cache key: RvmZoneLodLabelBridge.js?v=20260621-rvm-preload-hierarchy-selector-1
 // Previous zone density selector cache key: RvmZoneDensitySelectorBridge.js?v=20260622-rvm-zone-density-selector-2
-// Active zone density selector cache key: RvmZoneDensitySelectorBridgeV4.js?v=20260622-rvm-zone-density-selector-4
+// Previous zone density selector cache key: RvmZoneDensitySelectorBridgeV4.js?v=20260622-rvm-zone-density-selector-4
+// Active synthetic Navis zone density selector cache key: RvmZoneDensitySelectorBridgeV5.js?v=20260622-rvm-zone-density-selector-5
 // Active deep source path recovery cache key: RvmDeepSourcePathRecoveryBridge.js?v=20260622-rvm-deep-source-path-recovery-1
 // Active left panel resize/collapse cache key: RvmLeftPanelResizeCollapseBridge.js?v=20260622-rvm-left-panel-resize-collapse-1
 // Active leaf selection identity cache key: RvmLeafSelectionIdentityBridge.js?v=20260622-rvm-leaf-selection-identity-1
 // Active leaf canvas pick cache key: RvmLeafCanvasPickBridge.js?v=20260622-rvm-leaf-canvas-pick-orbit-guard-1
+// Active canvas single-pick guard cache key: RvmCanvasSelectionSinglePickGuardBridge.js?v=20260622-rvm-canvas-single-pick-guard-1
+// Active support assembly marker mode cache key: RvmSupportAssemblyMarkerModeBridge.js?v=20260622-rvm-support-assembly-markers-off-1
 // Active selection details inspector cache key: RvmSelectionDetailsInspectorBridge.js?v=20260621-rvm-selection-details-inspector-1
 // Active isolate/visibility toolbar cache key: RvmVisibilityToolbarBridge.js?v=20260621-rvm-isolate-visibility-toolbar-1
 // Active visibility snapshots cache key: RvmVisibilitySnapshotsBridge.js?v=20260621-rvm-visibility-snapshots-1
@@ -43,12 +46,14 @@ import { RvmViewer3D } from '../rvm-viewer/RvmViewer3D.js?v=20260622-rvm-leaf-pi
 import { installRvmProgressiveModelRootPatch } from '../rvm-viewer/RvmProgressiveModelRootPatchV5.js?v=20260620-rvm-tree-select-nohide-1';
 import { installRvmHierarchySelectionBridge } from './RvmHierarchySelectionBridge.js?v=20260620-rvm-large-box-support-sync-1';
 import { installRvmViewerInteractionPatch, installRvmCanvasSelectionBridge } from './RvmViewerInteractionPatch.js?v=20260621-rvm-button-hardening-1';
+import { installRvmCanvasSelectionSinglePickGuardBridge } from './RvmCanvasSelectionSinglePickGuardBridge.js?v=20260622-rvm-canvas-single-pick-guard-1';
+import { installRvmSupportAssemblyMarkerModeBridge } from './RvmSupportAssemblyMarkerModeBridge.js?v=20260622-rvm-support-assembly-markers-off-1';
 import { installRvmUiInteractionPanelPatch, installRvmUiPanelBridge } from './RvmUiInteractionPanelPatch.js?v=20260621-rvm-ui-interaction-panels-1';
 import { installRvmPropertyPanelCollapseAuditBridge } from './RvmPropertyPanelCollapseAuditBridge.js?v=20260621-rvm-property-collapse-1';
 import { installRvmLabelPerformanceBridge, installRvmLabelButtonBridge } from './RvmLabelPerformanceBridge.js?v=20260621-rvm-zone-lod-labels-1';
 import { installRvmZoneLodLabelBridge } from './RvmZoneLodLabelBridge.js?v=20260621-rvm-preload-hierarchy-selector-1';
 import { installRvmDeepSourcePathRecoveryBridge } from './RvmDeepSourcePathRecoveryBridge.js?v=20260622-rvm-deep-source-path-recovery-1';
-import { installRvmZoneDensitySelectorBridge } from './RvmZoneDensitySelectorBridgeV4.js?v=20260622-rvm-zone-density-selector-4';
+import { installRvmZoneDensitySelectorBridge } from './RvmZoneDensitySelectorBridgeV5.js?v=20260622-rvm-zone-density-selector-5';
 import { installRvmNavisHierarchyBridge } from './RvmNavisHierarchyBridge.js?v=20260621-rvm-navis-hierarchy-1';
 import { installRvmZoneLodContextBridge } from './RvmZoneLodContextBridge.js?v=20260621-rvm-zone-lod-context-1';
 import { installRvmSelectionDetailsInspectorBridge } from './RvmSelectionDetailsInspectorBridge.js?v=20260621-rvm-selection-details-inspector-1';
@@ -108,6 +113,8 @@ installRvmSelectionDetailsInspectorBridge();
 installRvmHierarchySelectionBridge();
 installRvmLeafCanvasPickBridge();
 installRvmCanvasSelectionBridge();
+installRvmCanvasSelectionSinglePickGuardBridge();
+installRvmSupportAssemblyMarkerModeBridge();
 installRvmVisibilityToolbarBridge();
 installRvmVisibilitySnapshotsBridge();
 installRvmObjectSearchBridge();
