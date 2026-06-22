@@ -17,7 +17,7 @@ import { installInputXmlPropertyTransferUi } from './inputxml-property-transfer-
 import { installRvmAttrUxmlAddon } from './rvmattr-uxml-addon.js?v=20260618-port-bore-contract-1';
 import { installXmlCiiConversionWorkflowPopup } from './xml-cii-conversion-workflow-popup.js?v=20260620-master-session-1';
 import { installXmlCiiBranchSampleSync } from './xml-cii-branch-sample-sync.js?v=20260620-rating-runtime-1';
-import { installXmlCiiLineKeySelectPatch } from './xml-cii-linekey-select-patch.js?v=20260620-rating-runtime-1';
+import { installXmlCiiLineKeySelectPatch } from './xml-cii-linekey-select-patch.js?v=20260622-regex-pos-persist-1';
 import { installInputXmlBasicGlbBridge } from './inputxml-basic-glb-bridge.js';
 import { installXmlCiiDefaultMasterAutoload, installXmlCiiRecoveryPatch } from '../xml-cii-master-autoload-patch.js?v=20260620-master-session-1';
 import { installXmlCiiPreviewLineKeyRemap } from './xml-cii-preview-linekey-remap.js?v=20260620-rating-runtime-1';
