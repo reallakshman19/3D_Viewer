@@ -34,6 +34,8 @@
 // Active geometry mapping profile cache key: GeometryMappingProfileBridge.js?v=20260622-geometry-profile-ui-1
 // Active geometry mapping engine cache key: GeometryMappingEngine.js?v=20260622-geometry-mapping-1
 // Active geometry mapping profile helper cache key: GeometryMappingProfiles.js?v=20260622-geometry-profile-ui-1
+// Active geometry calculation canvas cache key: GeometryCalculationCanvasBridge.js?v=20260622-geometry-calc-canvas-1
+// Active geometry calculation module registry cache key: GeometryCalculationModuleRegistry.js?v=20260622-geometry-calc-canvas-1
 // Previous model health cache key: RvmModelHealthBridge.js?v=20260621-rvm-model-health-1
 // Active health issues cache key: RvmModelHealthIssuesBridge.js?v=20260621-rvm-health-issues-1
 // Active Navis hierarchy cache key: RvmNavisHierarchyBridge.js?v=20260621-rvm-navis-hierarchy-1
@@ -75,6 +77,7 @@ import { installRvmSelectionSetsBridge } from './RvmSelectionSetsBridge.js?v=202
 import { installRvmReportExportBridge } from './RvmReportExportBridge.js?v=20260621-rvm-report-export-1';
 import { installGeometryExportWorkspaceBridge } from '../geometry-workspace/GeometryExportWorkspaceBridge.js?v=20260622-geometry-mapping-1';
 import { installGeometryMappingProfileBridge } from '../geometry-workspace/GeometryMappingProfileBridge.js?v=20260622-geometry-profile-ui-1';
+import { installGeometryCalculationCanvasBridge } from '../geometry-workspace/GeometryCalculationCanvasBridge.js?v=20260622-geometry-calc-canvas-1';
 import { installRvmModelHealthBridge } from './RvmModelHealthBridge.js?v=20260621-rvm-health-issues-1';
 import { installRvmModelHealthIssuesBridge } from './RvmModelHealthIssuesBridge.js?v=20260621-rvm-health-issues-1';
 import { installRvmSelectionTreeSyncBridge } from './RvmSelectionTreeSyncBridge.js?v=20260620-rvm-large-box-support-sync-1';
@@ -132,6 +135,7 @@ installRvmSelectionSetsBridge();
 installRvmReportExportBridge();
 installGeometryExportWorkspaceBridge();
 installGeometryMappingProfileBridge();
+installGeometryCalculationCanvasBridge();
 installRvmModelHealthBridge();
 installRvmModelHealthIssuesBridge();
 installRvmDtxrGeometryCoverageBridge();
