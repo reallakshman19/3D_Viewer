@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 
-const INSTALL_FLAG = Symbol.for('pcf-glb-rvm-civil-fallback-policy-v1');
-const VERSION = '20260622-rvm-civil-grid-fdns-fallback-1';
+const INSTALL_FLAG = Symbol.for('pcf-glb-rvm-civil-fallback-policy-v2');
+const VERSION = '20260622-rvm-civil-grid-fdns-panel-fallback-2';
 const GLOBAL_KEY = '__PCF_GLB_RVM_CIVIL_FALLBACK_POLICY__';
 const DIAG_KEY = '__PCF_GLB_RVM_CIVIL_FALLBACK_POLICY_DIAGNOSTICS__';
 const LARGE_MAX_DIM = 700;
@@ -13,10 +13,10 @@ export function installBrowserRvmCivilFallbackPolicyBridge() {
   globalThis[INSTALL_FLAG] = state;
   globalThis[GLOBAL_KEY] = state;
   const schedule = () => setTimeout(() => runPolicy(state), 0);
-  for (const event of ['rvm-model-loaded', 'rvm-render-policy-diagnostics', 'rvm-browser-parse-diagnostics']) {
+  for (const event of ['rvm-model-loaded', 'rvm-render-policy-diagnostics', 'rvm-browser-parse-diagnostics', 'rvm-native-facet-diagnostics']) {
     try { globalThis.addEventListener?.(event, schedule); } catch (_) {}
   }
-  for (const delay of [300, 900, 1800, 3600]) setTimeout(schedule, delay);
+  for (const delay of [300, 900, 1800, 3600, 7200]) setTimeout(schedule, delay);
   return state;
 }
 
@@ -35,7 +35,7 @@ export function runBrowserRvmCivilFallbackPolicy(modelGroup = globalThis.__3D_RV
       obj.visible = false;
       diagnostics.hiddenCount += 1;
     } else if (policy.action === 'wireframe') {
-      applyWireframe(obj);
+      applyWireframe(obj, policy.opacity);
       diagnostics.wireframeCount += 1;
     }
   });
@@ -56,19 +56,26 @@ function classifyCivilFallback(obj) {
   const text = sourceText(obj, data);
   const kind = civilKind(text);
   if (!kind) return null;
-  const primitive = String(data.effectiveRenderPrimitive || data.effectivePrimitive || data.renderPrimitive || data.renderKind || '').toUpperCase();
-  const fallbackLike = /BBOX|BOX|PLACEHOLDER|GENERIC|UNKNOWN|STRUCTURE/.test(primitive) || data.browserRvmBboxPlaceholderWireframe || data.bboxPromotedSolidBlocked;
-  if (!fallbackLike) return null;
   if (!isLargeEnvelope(obj)) return null;
-  if (kind === 'GRID') return policy('GRID', 'hide', 'grid-container-bbox-fallback-hidden-not-grid-line-geometry');
-  if (kind === 'FDNS') return policy('FDNS', 'wireframe', 'foundation-container-bbox-fallback-wireframe-not-solid-foundation');
-  return policy(kind, 'wireframe', `${kind.toLowerCase()}-container-bbox-fallback-wireframe`);
+
+  const primitive = String(data.effectiveRenderPrimitive || data.effectivePrimitive || data.renderPrimitive || data.renderKind || '').toUpperCase();
+  const code = Number(data.primitiveCode || data.browserRvmPrimitiveCode || data.rvmPrimitiveCode || data.browserRvmNativePrimitiveCode || 0);
+  const nativeFacetLike = data.browserRvmNativeFacetGroupPrimary || /NATIVE_FACET_GROUP|FACET/.test(primitive) || code === 11;
+  const fallbackLike = /BBOX|BOX|PLACEHOLDER|GENERIC|UNKNOWN|STRUCTURE/.test(primitive) || data.browserRvmBboxPlaceholderWireframe || data.bboxPromotedSolidBlocked;
+  const civilPanelLike = nativeFacetLike && /PANEL|FRAME|FRMWORK|FRAMEWORK|SBFRAMEWORK|FDNS|FOUNDATION|PAVE|GRID|GRAD|ROAD|PITS/.test(text);
+  if (!fallbackLike && !civilPanelLike) return null;
+
+  if (kind === 'GRID') return policy('GRID', 'hide', 'grid-container-or-code11-panel-hidden-not-grid-line-geometry', 0.08);
+  if (kind === 'FDNS') return policy('FDNS', 'wireframe', 'foundation-code11-or-bbox-container-wireframe-not-solid-foundation', 0.12);
+  if (kind === 'PANEL') return policy('PANEL', 'wireframe', 'large-civil-panel-code11-wireframe-diagnostic-not-solid-box', 0.10);
+  return policy(kind, 'wireframe', `${kind.toLowerCase()}-civil-container-wireframe-diagnostic`, 0.14);
 }
 
-function policy(kind, action, reason) {
+function policy(kind, action, reason, opacity = 0.18) {
   return {
     kind,
     action,
+    opacity,
     userData: {
       pickable: false,
       selectable: false,
@@ -84,7 +91,21 @@ function policy(kind, action, reason) {
 function sourceText(obj, data) {
   const attrs = data.browserRvmAttributes || data.attributes || {};
   const props = data.browserRvmProperties || {};
-  return [obj.name, data.displayName, data.sourceName, data.sourcePath, props.sourcePath, props.SourcePath, attrs.RVM_OWNER_PATH, attrs.RVM_OWNER_NAME, attrs.NAME, attrs.TYPE].filter(Boolean).join('/').toUpperCase();
+  return [
+    obj.name,
+    data.displayName,
+    data.sourceName,
+    data.sourcePath,
+    data.reviewName,
+    props.sourcePath,
+    props.SourcePath,
+    props.displayName,
+    attrs.RVM_OWNER_PATH,
+    attrs.RVM_OWNER_NAME,
+    attrs.NAME,
+    attrs.TYPE,
+    attrs.RVM_PRIMITIVE_KIND,
+  ].filter(Boolean).join('/').toUpperCase();
 }
 
 function civilKind(text) {
@@ -93,6 +114,7 @@ function civilKind(text) {
   if (/(^|[-_/])ROAD($|[-_/])|CU-CI-ROAD/.test(text)) return 'ROAD';
   if (/(^|[-_/])GRAD($|[-_/])|CU-CI-GRAD/.test(text)) return 'GRAD';
   if (/(^|[-_/])PITS($|[-_/])|CU-CI-PITS/.test(text)) return 'PITS';
+  if (/PANEL|FRMWORK|FRAMEWORK|SBFRAMEWORK|PAVE/.test(text)) return 'PANEL';
   return '';
 }
 
@@ -106,7 +128,7 @@ function isLargeEnvelope(obj) {
   return maxDim >= LARGE_MAX_DIM || diagonal >= LARGE_DIAGONAL;
 }
 
-function applyWireframe(obj) {
+function applyWireframe(obj, opacity = 0.18) {
   obj.traverse?.((child) => {
     if (!child?.material || !child.isMesh) return;
     const mats = Array.isArray(child.material) ? child.material : [child.material];
@@ -114,7 +136,7 @@ function applyWireframe(obj) {
       const cloned = mat?.clone ? mat.clone() : new THREE.MeshBasicMaterial({ color: 0x94a3b8 });
       cloned.wireframe = true;
       cloned.transparent = true;
-      cloned.opacity = 0.18;
+      cloned.opacity = opacity;
       cloned.depthWrite = false;
       return cloned;
     });
