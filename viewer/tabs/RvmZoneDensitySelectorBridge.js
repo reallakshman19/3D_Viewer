@@ -3,9 +3,9 @@ import {
   flattenHierarchyNodes,
   normalizeRvmReviewPath,
   topLevelSelectablePaths,
-} from './RvmHierarchyModelBuilder.js?v=20260622-rvm-zone-density-selector-2';
+} from './RvmHierarchyModelBuilder.js?v=20260622-rvm-zone-density-selector-3';
 
-const INSTALL_FLAG = Symbol.for('pcf-glb-rvm-zone-density-selector-v2');
+const INSTALL_FLAG = Symbol.for('pcf-glb-rvm-zone-density-selector-v3');
 const STYLE_ID = 'rvm-zone-density-selector-style';
 const LARGE_FILE_THRESHOLD_BYTES = 8 * 1024 * 1024;
 const ZONE_STORAGE_KEY = 'rvm_zone_density_last_selection_v1';
@@ -20,7 +20,7 @@ export function installRvmZoneDensitySelectorBridge() {
   if (globalThis[INSTALL_FLAG]) return globalThis[INSTALL_FLAG];
   injectStyles();
   const state = {
-    version: '20260622-rvm-zone-density-selector-2',
+    version: '20260622-rvm-zone-density-selector-3',
     beforeRenderInstructions,
     buildSelectorRows,
   };
@@ -62,7 +62,7 @@ export function buildSelectorRows({ instructions = [], manifestNodes = [], fileN
     let cur = '';
     for (let i = 0; i < Math.min(normalized.parts.length, MAX_LEVEL + 1); i += 1) {
       cur += `/${normalized.parts[i]}`;
-      const key = cur.replace(/\/+/g, '/');
+      const key = cur.replace(/\/+/, '/');
       const entry = rowMap.get(key) || {
         key,
         path: key,
@@ -196,7 +196,7 @@ function manifestPathForNode(node = {}, byId = new Map()) {
   while (cur && !seen.has(cur.canonicalObjectId || cur.sourceObjectId || cur.id || cur.name)) {
     seen.add(cur.canonicalObjectId || cur.sourceObjectId || cur.id || cur.name);
     const name = cur.name || cur.attributes?.NAME || cur.attributes?.RVM_NAME || cur.canonicalObjectId;
-    if (name) parts.push(String(name).replace(/^\/+/, ''));
+    if (name) parts.push(String(name).replace(/^\/+/g, ''));
     const parentKey = cur.parentCanonicalObjectId || cur.parentSourceObjectId || cur.parentId || cur.attributes?.PARENT_CANONICAL_OBJECT_ID || cur.attributes?.PARENT_ID;
     cur = parentKey ? byId.get(String(parentKey)) : null;
   }
@@ -204,11 +204,38 @@ function manifestPathForNode(node = {}, byId = new Map()) {
 }
 
 function pathForInstruction(instruction = {}, fileName = '', manifestContext = null) {
-  const manifestPath = manifestContext ? manifestPathForInstruction(instruction, manifestContext) : '';
-  if (manifestPath) return normalizeRvmReviewPath(manifestPath, { fileName }).displayPath;
   const attrs = instruction.attributes || {};
-  const raw = instruction.sourcePath || attrs.RVM_OWNER_PATH || attrs.RVM_OWNER_NAME || attrs.PATH || attrs.FULL_PATH || attrs.NAME || instruction.displayName || instruction.sourceName || 'Unzoned';
-  return normalizeRvmReviewPath(raw, { fileName, displayName: instruction.displayName || attrs.NAME || '' }).displayPath;
+  const raw = rawPathForInstruction(instruction);
+  const manifestPath = manifestContext ? manifestPathForInstruction(instruction, manifestContext) : '';
+  if (manifestPath) {
+    const manifestNormalized = normalizeRvmReviewPath(manifestPath, { fileName }).displayPath;
+    if (raw) {
+      const rawNormalized = normalizeRvmReviewPath(raw, { fileName, displayName: instruction.displayName || attrs.NAME || '' }).displayPath;
+      const manifestDepth = manifestNormalized.split('/').filter(Boolean).length;
+      const rawDepth = rawNormalized.split('/').filter(Boolean).length;
+      if (rawDepth > Math.max(1, manifestDepth)) return rawNormalized;
+    }
+    return manifestNormalized;
+  }
+  return normalizeRvmReviewPath(raw || 'Unzoned', { fileName, displayName: instruction.displayName || attrs.NAME || '' }).displayPath;
+}
+
+function rawPathForInstruction(instruction = {}) {
+  const attrs = instruction.attributes || {};
+  const props = instruction.browserRvmProperties || {};
+  return String(
+    instruction.sourcePath
+      || props.sourcePath
+      || props.SourcePath
+      || attrs.RVM_OWNER_PATH
+      || attrs.RVM_OWNER_NAME
+      || attrs.PATH
+      || attrs.FULL_PATH
+      || attrs.NAME
+      || instruction.displayName
+      || instruction.sourceName
+      || ''
+  ).trim();
 }
 
 async function showZoneDensitySelector({ file, rows, instructionCount }) {
