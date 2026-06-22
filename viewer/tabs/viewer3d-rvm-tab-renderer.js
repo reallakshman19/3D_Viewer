@@ -29,6 +29,7 @@
 // Active native facet primary cache key: viewer3d-rvm-tab.js?v=20260622-rvm-smart-civil-code11-defer-1
 // Active native facet ghost panel cache key: BrowserRvmNativeFacetGhostPanelPatch.js?v=20260622-rvm-facet-ghost-panels-1
 // Active render policy cache key: BrowserRvmRenderPolicyBridge.js?v=20260622-rvm-render-policy-1
+// Previous civil fallback policy cache key: BrowserRvmCivilFallbackPolicyBridge.js?v=20260622-rvm-smart-civil-code11-default-off-1
 // Active civil fallback policy cache key: BrowserRvmCivilFallbackPolicyBridge.js?v=20260622-rvm-smart-civil-policy-tooltip-1
 // Active debug pick cache key: BrowserRvmPickDiagnosticsBridge.js?v=20260622-rvm-debug-pick-1
 // Active native torus/elbow cache key: BrowserRvmTorusParityRuntimePatch.js?v=20260622-rvm-native-torus-line-elbows-1
