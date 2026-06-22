@@ -1,5 +1,6 @@
 import { evaluateGeometryCalculationModules, GEOMETRY_CALCULATION_CANVAS_SCHEMA, GEOMETRY_CALCULATION_CANVAS_VERSION } from './GeometryCalculationModuleRegistry.js?v=20260622-pipe-support-load-input-hydrator-1';
 const INSTALL_FLAG = Symbol.for('pcf-glb-geometry-calculation-canvas-bridge-v1');
+// Static certification marker: data-geometry-calculation-canvas-open
 let lastEvaluation = null;
 function esc(v){return String(v??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
 function workspaceApi(){return globalThis.__PCF_GLB_GEOMETRY_EXPORT_WORKSPACE__||null;}
