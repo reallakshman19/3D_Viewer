@@ -21,7 +21,8 @@ function workspaceState() {
 function activeMappedObjects() {
   const state = workspaceState();
   const active = state.activeObjectIds instanceof Set ? state.activeObjectIds : new Set(state.activeObjectIds || []);
-  const objects = Array.isArray(state.mapping?.mappedObjects) ? state.mapping.mappedObjects : [];
+  const resolved = Array.isArray(state.calculationResolvedObjects) ? state.calculationResolvedObjects : null;
+  const objects = resolved || (Array.isArray(state.mapping?.mappedObjects) ? state.mapping.mappedObjects : []);
   return active.size ? objects.filter((object) => active.has(object.sourceId || object.id)) : objects;
 }
 
@@ -78,11 +79,13 @@ function renderRows(evaluation) {
 function renderCalculationDialog() {
   const dialog = currentDialog();
   if (!dialog) return;
+  const state = workspaceState();
   const activeCount = activeMappedObjects().length;
+  const resolvedCount = Array.isArray(state.calculationResolvedObjects) ? state.calculationResolvedObjects.length : 0;
   const evaluation = lastEvaluation;
   dialog.querySelector('[data-gcc-body]').innerHTML = `
-    <div class="gcc-toolbar"><button type="button" data-gcc-run="true">Run Validation</button><button type="button" data-gcc-open-workspace="true">Open Workspace</button><button type="button" data-gcc-export="true">Export Validation JSON</button><span>${activeCount} active mapped object(s)</span></div>
-    <p class="gcc-note">Calculation Canvas validates module readiness only. It does not fabricate process, schedule, material, weight, or load values.</p>
+    <div class="gcc-toolbar"><button type="button" data-gcc-run="true">Run Validation</button><button type="button" data-gcc-open-inputs="true">Open Inputs</button><button type="button" data-gcc-open-workspace="true">Open Workspace</button><button type="button" data-gcc-export="true">Export Validation JSON</button><span>${activeCount} active mapped object(s) · ${resolvedCount} input-resolved</span></div>
+    <p class="gcc-note">Calculation Canvas validates module readiness only. Use INPUT → Data to resolve supplied schedule/material/process/weight fields. It does not fabricate process, schedule, material, weight, or load values.</p>
     ${renderSummary(evaluation)}
     ${renderModuleCards(evaluation)}
     <h4>Support Load Readiness Rows</h4>
@@ -100,6 +103,7 @@ function ensureDialog() {
   dialog.addEventListener('click', (event) => {
     if (event.target?.closest?.('[data-gcc-close]')) { dialog.classList.remove('is-open'); return; }
     if (event.target?.closest?.('[data-gcc-run]')) { evaluateActiveGeometry(); return; }
+    if (event.target?.closest?.('[data-gcc-open-inputs]')) { globalThis.__PCF_GLB_GEOMETRY_CALCULATION_INPUTS__?.open?.(); return; }
     if (event.target?.closest?.('[data-gcc-open-workspace]')) { workspaceApi()?.open?.(); return; }
     if (event.target?.closest?.('[data-gcc-export]')) { downloadEvaluation(); }
   }, true);
@@ -138,7 +142,7 @@ function injectToolbar(root) {
   button.innerHTML = '<span aria-hidden="true">CALC</span><span>Modules</span>';
   section.querySelector('.rvm-ribbon-button-row')?.appendChild(button);
   const summary = section.querySelector('.geometry-export-workspace-summary');
-  if (summary) summary.textContent = 'Raw geometry · mapping profiles · calc readiness';
+  if (summary) summary.textContent = 'Raw geometry · mapping profiles · calc inputs · readiness';
 }
 
 function injectStyles() {
