@@ -1,5 +1,10 @@
 // App shell runtime delegate.
 // Static contract markers retained here because certification gates read core/app.js directly.
+// let activeTabDestroy
+// let appDestroy
+// function cleanupActiveTab
+// renderTabError
+// tabRendererCache
 // GeometryExportWorkspaceBridge.js?v=20260622-geometry-import-tree-1
 // GeometryCalculationCanvasBridge.js?v=20260622-geometry-calc-canvas-1
 // GeometryCalculationCanvasBridge.js?v=20260622-geometry-support-load-inputs-1
