@@ -81,7 +81,7 @@ check(tabSource.includes('beforeRenderInstructions'), 'RVM tab keeps pre-render 
 check(loadSource.includes('BrowserRvmRenderSceneBuilder.js?v=20260621-rvm-native-facet-primary-1'), 'load bridge keeps native facet renderer');
 check(workerSource.includes('RVM_TRANSFORM_3X4'), 'worker preserves transform matrix');
 check(nativeFacetSource.includes('browser-rvm-native-facetgroup-primary/v3-smart-civil-defer'), 'native facet module uses smart civil defer schema');
-check(nativeFacetSource.includes('classifySmartCivilFacetInstruction') && nativeFacetSource.includes('browserRvmSmartCivilFacetDeferred'), 'native facet primary defers smart civil code-11 facets before tessellation');
+check(nativeFacetSource.includes('classifySmartCivilFacetInstruction') && nativeFacetSource.includes('smartCivilPolicyUserData'), 'native facet primary defers smart civil code-11 facets before tessellation');
 check(smartCivilFacetSource.includes('PROCESS_TERMS') && smartCivilFacetSource.includes('CIVIL_TERMS'), 'smart civil policy is taxonomy/geometry based, not project-name hardcoded');
 check(smartCivilFacetSource.includes('deferNativeTessellation') && smartCivilFacetSource.includes('wireframe-proxy'), 'smart civil policy supports default-off and proxy modes');
 check(renderBuilderSource.includes('RVM_NATIVE_FACET_GROUP'), 'render builder keeps native facet primary path');
