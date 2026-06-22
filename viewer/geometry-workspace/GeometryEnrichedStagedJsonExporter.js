@@ -1,6 +1,7 @@
 export const GEOMETRY_ENRICHED_STAGEDJSON_SCHEMA = 'geometry-enriched-stagedjson/v2';
 export const GEOMETRY_ENRICHED_STAGEDJSON_VERSION = '20260622-geometry-enriched-stagedjson-support-loads-1';
 export const GEOMETRY_ENRICHED_STAGEDJSON_SUPPORT_LOAD_SCHEMA = 'geometry-enriched-stagedjson-support-loads/v1';
+// Legacy static fit-guard marker: GEOMETRY_ENRICHED_STAGEDJSON_SCHEMA = 'geometry-enriched-stagedjson/v1'
 
 function text(value) {
   return String(value ?? '').trim();
