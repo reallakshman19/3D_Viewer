@@ -28,6 +28,7 @@
 // Active section box cache key: RvmSectionBoxBridge.js?v=20260621-rvm-section-box-1
 // Active selection sets cache key: RvmSelectionSetsBridge.js?v=20260621-rvm-selection-sets-1
 // Active report export cache key: RvmReportExportBridge.js?v=20260621-rvm-report-export-1
+// Active geometry export workspace cache key: GeometryExportWorkspaceBridge.js?v=20260622-geometry-workspace-1
 // Previous model health cache key: RvmModelHealthBridge.js?v=20260621-rvm-model-health-1
 // Active health issues cache key: RvmModelHealthIssuesBridge.js?v=20260621-rvm-health-issues-1
 // Active Navis hierarchy cache key: RvmNavisHierarchyBridge.js?v=20260621-rvm-navis-hierarchy-1
@@ -67,6 +68,7 @@ import { installRvmMeasureBridge } from './RvmMeasureBridge.js?v=20260621-rvm-me
 import { installRvmSectionBoxBridge } from './RvmSectionBoxBridge.js?v=20260621-rvm-section-box-1';
 import { installRvmSelectionSetsBridge } from './RvmSelectionSetsBridge.js?v=20260621-rvm-selection-sets-1';
 import { installRvmReportExportBridge } from './RvmReportExportBridge.js?v=20260621-rvm-report-export-1';
+import { installGeometryExportWorkspaceBridge } from '../geometry-workspace/GeometryExportWorkspaceBridge.js?v=20260622-geometry-workspace-1';
 import { installRvmModelHealthBridge } from './RvmModelHealthBridge.js?v=20260621-rvm-health-issues-1';
 import { installRvmModelHealthIssuesBridge } from './RvmModelHealthIssuesBridge.js?v=20260621-rvm-health-issues-1';
 import { installRvmSelectionTreeSyncBridge } from './RvmSelectionTreeSyncBridge.js?v=20260620-rvm-large-box-support-sync-1';
@@ -122,6 +124,7 @@ installRvmMeasureBridge();
 installRvmSectionBoxBridge();
 installRvmSelectionSetsBridge();
 installRvmReportExportBridge();
+installGeometryExportWorkspaceBridge();
 installRvmModelHealthBridge();
 installRvmModelHealthIssuesBridge();
 installRvmDtxrGeometryCoverageBridge();

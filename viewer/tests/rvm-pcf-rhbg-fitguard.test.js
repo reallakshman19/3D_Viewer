@@ -28,6 +28,9 @@ const facetGhostSource = await read('../rvm/BrowserRvmNativeFacetGhostPanelPatch
 const healthSource = await read('../tabs/RvmModelHealthBridge.js');
 const healthIssuesSource = await read('../tabs/RvmModelHealthIssuesBridge.js');
 const reportSource = await read('../tabs/RvmReportExportBridge.js');
+const geometryWorkspaceSource = await read('../geometry-workspace/GeometryExportWorkspaceBridge.js');
+const geometrySnapshotSource = await read('../geometry-workspace/RenderedGeometrySnapshotBuilder.js');
+const geometryFieldsSource = await read('../geometry-workspace/RenderedGeometryFieldDiscovery.js');
 const pcfSource = await read('../tabs/RvmJsonPcfTriggerBridge.js');
 const visibilitySource = await read('../tabs/RvmVisibilityToolbarBridge.js');
 const setsSource = await read('../tabs/RvmSelectionSetsBridge.js');
@@ -52,6 +55,8 @@ check(rendererSource.includes('installRvmModelHealthIssuesBridge()'), 'renderer 
 check(rendererSource.includes('BrowserRvmNativeFacetGhostPanelPatch.js?v=20260622-rvm-facet-ghost-panels-1'), 'renderer loads native facet ghost panel patch');
 check(rendererSource.includes('installBrowserRvmNativeFacetGhostPanelPatch()'), 'renderer installs native facet ghost panel patch');
 check(rendererSource.includes('RvmReportExportBridge.js?v=20260621-rvm-report-export-1'), 'renderer keeps report export bridge');
+check(rendererSource.includes('GeometryExportWorkspaceBridge.js?v=20260622-geometry-workspace-1'), 'renderer loads geometry export workspace bridge');
+check(rendererSource.includes('installGeometryExportWorkspaceBridge()'), 'renderer installs geometry export workspace bridge');
 check(rendererSource.includes('RvmJsonPcfTriggerBridge.js?v=20260621-rvm-pcf-visible-scope-1'), 'renderer keeps visible-scope PCF bridge');
 check(rendererSource.includes('RvmZoneLodLabelBridge.js?v=20260621-rvm-preload-hierarchy-selector-1'), 'renderer keeps preload zone selector');
 check(rendererSource.includes('RvmDeepSourcePathRecoveryBridge.js?v=20260622-rvm-deep-source-path-recovery-1'), 'renderer loads deep source path recovery bridge');
@@ -109,6 +114,16 @@ check(healthIssuesSource.includes('__PCF_GLB_RVM_HEALTH_ISSUES__'), 'health issu
 check(healthIssuesSource.includes("typeof document === 'undefined'"), 'health issues bridge is safe for static imports');
 
 check(reportSource.includes('__PCF_GLB_RVM_REPORT_EXPORT__') && reportSource.includes('MAX_EXPORT_ROWS'), 'report export remains bounded and public');
+check(geometrySnapshotSource.includes("RENDERED_GEOMETRY_SNAPSHOT_SCHEMA = 'rendered-geometry-snapshot/v1'"), 'geometry snapshot builder exposes schema marker');
+check(geometrySnapshotSource.includes('buildRenderedGeometrySnapshot') && geometrySnapshotSource.includes('modelGroup?.traverse'), 'geometry snapshot builder imports from rendered scene objects');
+check(geometrySnapshotSource.includes('sourceViewer: \'3D_RVM_VIEWER\'') && geometrySnapshotSource.includes('rawFields') && geometrySnapshotSource.includes('derivedFields'), 'geometry snapshot records include raw and derived geometry fields');
+check(geometryFieldsSource.includes("RENDERED_GEOMETRY_FIELD_DISCOVERY_SCHEMA = 'geometry-field-discovery/v1'"), 'field discovery exposes schema marker');
+check(geometryFieldsSource.includes('discoverRenderedGeometryFields') && geometryFieldsSource.includes('selectDefaultTableFields'), 'field discovery supports dynamic table columns');
+check(geometryFieldsSource.includes('dimension-mm') && geometryFieldsSource.includes('identifier'), 'field discovery infers dimensions and identifiers');
+check(geometryWorkspaceSource.includes("schemaVersion: 'geometry-export-workspace/v1'"), 'geometry workspace state uses independent workspace schema');
+check(geometryWorkspaceSource.includes('Top 5 hierarchy import tree') && geometryWorkspaceSource.includes('Mapping Preview') && geometryWorkspaceSource.includes('Calculation Canvas'), 'geometry workspace includes import, mapping, and calculation canvas shells');
+check(geometryWorkspaceSource.includes('__PCF_GLB_GEOMETRY_EXPORT_WORKSPACE__'), 'geometry workspace publishes global API');
+check(geometryWorkspaceSource.includes('data-geometry-export-workspace-open') && geometryWorkspaceSource.includes('Export</span>'), 'geometry workspace adds toolbar export geometry icon');
 check(pcfSource.includes('Visible → PCF') && pcfSource.includes('SYNTHETIC_INDEX_SCHEMA'), 'PCF trigger keeps visible synthetic index path');
 check(visibilitySource.includes('__PCF_GLB_RVM_VISIBILITY__'), 'visibility toolbar global API remains present');
 check(setsSource.includes('__PCF_GLB_RVM_SELECTION_SETS__') && setsSource.includes('MAX_SET_OBJECT_IDS'), 'selection sets remain bounded');
@@ -133,8 +148,8 @@ check(renderBuilderSource.includes('RVM_NATIVE_FACET_GROUP'), 'render builder ke
 check(renderBuilderSource.includes('wireframe-diagnostic-not-solid-geometry'), 'bbox placeholders remain diagnostic wireframes');
 check(!renderBuilderSource.includes("primitive === 'STRUCTURE_BBOX' || type === 'STRUCTURE'"), 'unconditional structure slab promotion remains blocked');
 
-check(indexSource.includes('main-rhbg-fitguard.js?v=20260622-tab-click-state-1'), 'index uses tab click entry cache key');
-check(entrySource.includes('core/app.js?v=20260622-tab-click-state-1'), 'entrypoint uses tab click app cache key');
+check(indexSource.includes('main-rhbg-fitguard.js?v=20260622-geometry-workspace-1'), 'index uses geometry workspace entry cache key');
+check(entrySource.includes('core/app.js?v=20260622-geometry-workspace-1'), 'entrypoint uses geometry workspace app cache key');
 check(entrySource.includes('await init(startupMount())'), 'entrypoint passes resolved mount root into init');
 check(appSource.includes('app-tab-click-state-bridge.js?v=20260622-tab-click-state-1'), 'app side-loads tab click state bridge');
 check(appSource.includes('installAppTabClickStateBridge()'), 'app installs tab click state bridge before runtime delegate');
@@ -142,8 +157,8 @@ check(tabClickBridgeSource.includes('RuntimeEvents.TAB_CHANGED'), 'tab click sta
 check(tabClickBridgeSource.includes('state.activeTabId = tabId'), 'tab click state bridge synchronizes active tab id');
 check(appSource.includes('BrowserRvmNativeFacetGhostPanelPatch.js?v=20260622-rvm-facet-ghost-panels-1'), 'app side-loads native facet ghost patch');
 check(appSource.includes('installBrowserRvmNativeFacetGhostPanelPatch()'), 'app installs native facet ghost patch independent of renderer cache');
-check(appSource.includes('app-label-perf-runtime.js?v=20260622-tab-click-state-1'), 'app delegates through tab click runtime cache key');
-check(runtimeSource.includes('viewer3d-rvm-tab-renderer.js?v=20260622-rvm-facet-ghost-panels-1'), 'runtime uses facet ghost renderer cache');
+check(appSource.includes('app-label-perf-runtime.js?v=20260622-geometry-workspace-1'), 'app delegates through geometry workspace runtime cache key');
+check(runtimeSource.includes('viewer3d-rvm-tab-renderer.js?v=20260622-geometry-workspace-1'), 'runtime uses geometry workspace renderer cache');
 
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed > 0) process.exit(1);
