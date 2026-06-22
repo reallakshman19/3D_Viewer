@@ -12,6 +12,7 @@ on:
       - 'viewer/tabs/rvm-json-pcf-*.js'
       - 'viewer/tabs/viewer3d-rvm-tab.js'
       - 'viewer/tabs/viewer3d-rvm-tab-renderer.js'
+      - 'viewer/geometry-workspace/**'
       - 'viewer/core/app.js'
       - 'viewer/index.html'
       - 'viewer/main-rhbg-fitguard.js'
@@ -19,6 +20,7 @@ on:
       - 'viewer/core/event-bus.js'
       - 'viewer/core/state.js'
       - 'viewer/tests/rvm-pcf-*.test.js'
+      - 'viewer/tests/rvm-geometry-workspace-*.test.js'
       - '.github/workflows/rvm-pcf-ci.yml'
   workflow_dispatch:
 
@@ -51,3 +53,6 @@ jobs:
 
       - name: Verify RHBG RVM fit guard
         run: node viewer/tests/rvm-pcf-rhbg-fitguard.test.js
+
+      - name: Verify geometry workspace import tree
+        run: node viewer/tests/rvm-geometry-workspace-import-tree.test.js
