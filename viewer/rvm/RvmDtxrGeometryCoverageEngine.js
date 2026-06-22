@@ -3,7 +3,7 @@ import {
   buildMatchKeys,
   classifyRvmObjectCategory,
   normalizeMatchKey,
-} from './RvmRenderedObjectInventory.js?v=20260622-rvm-dtxr-coverage-1';
+} from './RvmRenderedObjectInventory.js';
 
 export const RVM_DTXR_GEOMETRY_COVERAGE_SCHEMA = 'rvm-dtxr-geometry-coverage/v1';
 
