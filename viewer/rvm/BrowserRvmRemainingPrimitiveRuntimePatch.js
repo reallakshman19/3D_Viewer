@@ -1,13 +1,16 @@
 import * as THREE from 'three';
 
-export const BROWSER_RVM_REMAINING_PRIMITIVE_SCHEMA = 'browser-rvm-remaining-primitives/v2-facetgroup-tessellation';
+export const BROWSER_RVM_REMAINING_PRIMITIVE_SCHEMA = 'browser-rvm-remaining-primitives/v3-line-wire-diagnostics';
 
-const PATCH_FLAG = Symbol.for('pcf-glb-rvm-remaining-primitive-runtime-patch-v2-facetgroup');
-const UPGRADE_FLAG = Symbol.for('pcf-glb-rvm-remaining-primitive-upgraded-v2');
+const PATCH_FLAG = Symbol.for('pcf-glb-rvm-remaining-primitive-runtime-patch-v3-line-wire');
+const UPGRADE_FLAG = Symbol.for('pcf-glb-rvm-remaining-primitive-upgraded-v3');
 const GLOBAL_STATE_KEY = '__PCF_GLB_RVM_REMAINING_PRIMITIVES__';
 const GLOBAL_DIAGNOSTICS_KEY = '__PCF_GLB_RVM_REMAINING_PRIMITIVES_DIAGNOSTICS__';
 const MAX_OBJECTS = 8000;
 const FACET_GROUP_RENDER_QUALITY = 'native-cpp-facetgroup-tessellated';
+
+const GRID_LINE_TERMS = /\b(GRID|GRIDS|GRIDLINE|GENSEC|REFERENCE|AXIS|EASTING|EASTINGS|NORTHING|NORTHINGS|SETTINGOUT|DATUM)\b/i;
+const CIVIL_LINE_CONTEXT_TERMS = /\b(STRUCTURE|STRUCTURAL|FRMWORK|FRAMEWORK|SBFRAMEWORK|PANEL|PAVE|ROAD|FOUNDATION|FDNS|CIVIL)\b/i;
 
 export function installBrowserRvmRemainingPrimitiveRuntimePatch() {
   if (globalThis[PATCH_FLAG]) return globalThis[PATCH_FLAG];
@@ -79,7 +82,7 @@ export function upgradeRvmRemainingPrimitives(root) {
     }
     if (code !== 1 && code !== 10 && code !== 11) return;
     diagnostics.candidateCount += 1;
-    const native = buildNativeObject(code, params, matrix, materialForSource(object), diagnostics);
+    const native = buildNativeObject(code, params, matrix, materialForSource(object), diagnostics, object);
     if (!native) {
       diagnostics.skippedCount += 1;
       bump(diagnostics.skippedReasons, `unsupported-kind-${code}`);
@@ -103,15 +106,14 @@ export function upgradeRvmRemainingPrimitives(root) {
   return diagnostics;
 }
 
-function buildNativeObject(code, params, matrix3x4, material, diagnostics) {
+function buildNativeObject(code, params, matrix3x4, material, diagnostics, source = null) {
+  if (code === 10) return buildCode10LineObject(params, matrix3x4, material, diagnostics, source);
+
   let geometry = null;
   let primitive = '';
   if (code === 1) {
     geometry = pyramidGeometry(params);
     primitive = 'RVM_NATIVE_PYRAMID';
-  } else if (code === 10) {
-    geometry = lineBoxGeometry(params);
-    primitive = 'RVM_NATIVE_LINE';
   } else if (code === 11) {
     geometry = facetGroupGeometry(params, diagnostics);
     primitive = 'RVM_NATIVE_FACET_GROUP';
@@ -132,6 +134,116 @@ function buildNativeObject(code, params, matrix3x4, material, diagnostics) {
   };
   mesh[UPGRADE_FLAG] = true;
   return mesh;
+}
+
+function buildCode10LineObject(params, matrix3x4, material, diagnostics, source = null) {
+  const policy = classifyCode10LinePolicy(source, params);
+  if (policy.action === 'hidden') {
+    diagnostics.lineHiddenDiagnosticCount += 1;
+    bump(diagnostics.skippedReasons, policy.reason);
+    const group = new THREE.Group();
+    group.name = 'RVM_NATIVE_LINE_HIDDEN_DIAGNOSTIC';
+    group.visible = false;
+    group.userData = linePolicyUserData(policy, 'RVM_NATIVE_LINE');
+    group[UPGRADE_FLAG] = true;
+    return group;
+  }
+
+  const geometry = lineSegmentGeometry(params, source);
+  if (!geometry) return null;
+  geometry.applyMatrix4(matrix4FromCppMat3x4(matrix3x4));
+  geometry.computeBoundingBox();
+  geometry.computeBoundingSphere();
+  const line = new THREE.LineSegments(geometry, lineMaterialForSource(material, policy));
+  line.name = policy.gridLike ? 'RVM_NATIVE_GRID_LINE_DIAGNOSTIC' : 'RVM_NATIVE_LINE';
+  line.userData = {
+    schemaVersion: BROWSER_RVM_REMAINING_PRIMITIVE_SCHEMA,
+    browserRvmRemainingPrimitiveUpgraded: true,
+    browserRvmRemainingPrimitiveSchema: BROWSER_RVM_REMAINING_PRIMITIVE_SCHEMA,
+    effectiveRenderPrimitive: 'RVM_NATIVE_LINE',
+    renderQuality: policy.gridLike ? 'native-code10-grid-line-wire-diagnostic' : 'native-code10-line-wire',
+    ...linePolicyUserData(policy, 'RVM_NATIVE_LINE'),
+  };
+  line[UPGRADE_FLAG] = true;
+  diagnostics.lineWireDiagnosticCount += 1;
+  if (policy.gridLike) diagnostics.lineGridDiagnosticCount += 1;
+  return line;
+}
+
+function linePolicyUserData(policy = {}, primitive = 'RVM_NATIVE_LINE') {
+  return {
+    browserRvmCode10LinePolicy: true,
+    browserRvmCode10LinePolicyVersion: BROWSER_RVM_REMAINING_PRIMITIVE_SCHEMA,
+    browserRvmCode10LineGridLike: Boolean(policy.gridLike),
+    browserRvmCode10LineAction: policy.action || 'wire',
+    browserRvmLineBoxAvoided: true,
+    effectiveRenderPrimitive: primitive,
+    pickable: false,
+    selectable: false,
+    nonSelectableReason: policy.reason || 'rvm-code10-line-wire-diagnostic',
+    fallbackReason: policy.reason || 'rvm-code10-line-wire-diagnostic',
+    geometryPolicy: policy.action === 'hidden' ? 'code10-line-hidden-diagnostic' : 'code10-line-wire-not-box',
+    materialPolicy: 'line-basic-diagnostic',
+  };
+}
+
+function classifyCode10LinePolicy(source = null, params = {}) {
+  const text = [
+    source?.name,
+    source?.userData?.displayName,
+    source?.userData?.sourceName,
+    source?.userData?.sourcePath,
+    source?.userData?.browserRvmProperties?.sourcePath,
+    source?.userData?.browserRvmProperties?.displayName,
+    source?.userData?.browserRvmAttributes?.RVM_OWNER_PATH,
+    source?.userData?.browserRvmAttributes?.RVM_OWNER_NAME,
+    source?.userData?.browserRvmAttributes?.NAME,
+    params?.kindName,
+  ].filter(Boolean).join('/');
+  const upper = String(text || '').toUpperCase();
+  const bbox = parseNumericArray(source?.userData?.browserRvmAttributes?.RVM_LOCAL_BBOX || source?.userData?.browserRvmAttributes?.BBOX, 6);
+  const dims = dimsFromBbox(bbox);
+  const longThin = dims.maxDim >= 500 && dims.midDim <= Math.max(20, dims.maxDim * 0.04);
+  const gridLike = GRID_LINE_TERMS.test(upper) || (CIVIL_LINE_CONTEXT_TERMS.test(upper) && longThin);
+  if (gridLike) {
+    return {
+      action: 'hidden',
+      gridLike: true,
+      reason: 'code10-grid-reference-line-default-off',
+    };
+  }
+  return {
+    action: 'wire',
+    gridLike: false,
+    reason: 'code10-line-rendered-as-wire-not-box',
+  };
+}
+
+function lineSegmentGeometry(params = {}, source = null) {
+  const bbox = parseNumericArray(source?.userData?.browserRvmAttributes?.RVM_LOCAL_BBOX || source?.userData?.browserRvmAttributes?.BBOX, 6);
+  if (bbox) {
+    const [minX, minY, minZ, maxX, maxY, maxZ] = bbox;
+    const dx = Math.abs(maxX - minX), dy = Math.abs(maxY - minY), dz = Math.abs(maxZ - minZ);
+    const cx = (minX + maxX) * 0.5, cy = (minY + maxY) * 0.5, cz = (minZ + maxZ) * 0.5;
+    if (dx >= dy && dx >= dz) return lineGeometry([minX, cy, cz, maxX, cy, cz]);
+    if (dy >= dx && dy >= dz) return lineGeometry([cx, minY, cz, cx, maxY, cz]);
+    return lineGeometry([cx, cy, minZ, cx, cy, maxZ]);
+  }
+  const a = positive(Math.abs(params.a), 0.001);
+  const b = positive(Math.abs(params.b), a);
+  const length = Math.max(a, b, 0.001);
+  return lineGeometry([0, 0, -length * 0.5, 0, 0, length * 0.5]);
+}
+
+function lineGeometry(values) {
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.Float32BufferAttribute(values, 3));
+  return geometry;
+}
+
+function lineMaterialForSource(material, policy = {}) {
+  const color = material?.color?.getHex ? material.color.getHex() : (policy.gridLike ? 0x7dd3fc : 0x93c5fd);
+  return new THREE.LineBasicMaterial({ color, transparent: true, opacity: policy.gridLike ? 0.32 : 0.62, depthWrite: false });
 }
 
 function pyramidGeometry(params) {
@@ -156,14 +268,6 @@ function pyramidGeometry(params) {
   quad(indices, 2, 6, 7, 3);
   quad(indices, 3, 7, 4, 0);
   return bufferGeometry(positions, indices);
-}
-
-function lineBoxGeometry(params) {
-  const a = positive(Math.abs(params.a), 0.001);
-  const b = positive(Math.abs(params.b), a);
-  const length = Math.max(a, b, 0.001);
-  const thickness = Math.max(Math.min(a, b) * 0.04, length * 0.01, 0.001);
-  return new THREE.BoxGeometry(thickness, thickness, length);
 }
 
 function facetGroupGeometry(params, diagnostics) {
@@ -240,7 +344,10 @@ function replaceObject(source, native, params, code) {
     previousRenderQuality: source.userData?.renderQuality || '',
     effectiveRenderPrimitive: native.userData.effectiveRenderPrimitive,
     renderQuality: native.userData.renderQuality,
-    pickable: true,
+    pickable: native.userData.pickable === false ? false : true,
+    selectable: native.userData.selectable === false ? false : native.userData.selectable,
+    nonSelectableReason: native.userData.nonSelectableReason || source.userData?.nonSelectableReason || '',
+    fallbackReason: native.userData.fallbackReason || source.userData?.fallbackReason || '',
   };
   const index = parent.children.indexOf(source);
   if (index >= 0) parent.children[index] = native;
@@ -261,6 +368,10 @@ function makeDiagnostics(extra = {}) {
     skippedCount: 0,
     pyramidTessellatedCount: 0,
     lineTessellatedCount: 0,
+    lineWireDiagnosticCount: 0,
+    lineGridDiagnosticCount: 0,
+    lineHiddenDiagnosticCount: 0,
+    lineBoxGeometryAvoided: true,
     facetGroupTessellatedCount: 0,
     facetGroupRenderQuality: FACET_GROUP_RENDER_QUALITY,
     facetGroupUnsupportedCount: 0,
@@ -292,6 +403,9 @@ function annotateViewer(viewer, diagnostics) {
       remainingPrimitiveUpgradedCount: diagnostics.upgradedCount,
       facetGroupTessellatedCount: diagnostics.facetGroupTessellatedCount,
       facetGroupUnsupportedCount: diagnostics.facetGroupUnsupportedCount,
+      lineWireDiagnosticCount: diagnostics.lineWireDiagnosticCount,
+      lineGridDiagnosticCount: diagnostics.lineGridDiagnosticCount,
+      lineHiddenDiagnosticCount: diagnostics.lineHiddenDiagnosticCount,
     };
   }
 }
@@ -316,6 +430,11 @@ function materialForSource(object) {
   object?.traverse?.((child) => { if (!material && child?.isMesh && child.material) material = Array.isArray(child.material) ? child.material[0] : child.material; });
   if (!material && object?.material) material = Array.isArray(object.material) ? object.material[0] : object.material;
   return material?.clone?.() || material || new THREE.MeshStandardMaterial({ color: 0x64748b, roughness: 0.72, metalness: 0.08 });
+}
+function dimsFromBbox(bbox = null) {
+  if (!Array.isArray(bbox) || bbox.length < 6) return { maxDim: 0, midDim: 0, minDim: 0 };
+  const dims = [Math.abs(bbox[3] - bbox[0]), Math.abs(bbox[4] - bbox[1]), Math.abs(bbox[5] - bbox[2])].sort((a, b) => a - b);
+  return { minDim: dims[0] || 0, midDim: dims[1] || 0, maxDim: dims[2] || 0 };
 }
 function parseNativeParams(value) { if (!value) return null; try { return JSON.parse(String(value)); } catch (_) { return null; } }
 function parseNumericArray(value, expected) {
