@@ -5,6 +5,8 @@ import { currentInputXmlNodeGraph, inputXmlPoint } from './RvmInputXmlAutoBendGr
 
 const ROOT_NAME = '__RVM_SUPPORT_SYMBOLS__';
 const TRUE_SUPPORT_TYPES = new Set(['ATTA', 'ANCI', 'SUPPORT', 'PIPE_SUPPORT', 'PIPESUPPORT']);
+const SOURCE_SUPPORT_TYPES = new Set(['ATTA', 'ANCI']);
+const RENDERED_SUPPORT_TYPES = new Set(['SUPPORT', 'PIPE_SUPPORT', 'PIPESUPPORT']);
 const KIND_COLORS = {
   REST: 0x5ee56a,
   GUIDE: 0x42d7ff,
@@ -153,11 +155,37 @@ function kind(a) {
   if (sourceKind) return sourceKind;
   return 'UNRESOLVED';
 }
+function isRvmPrimitiveLeaf(n) {
+  const a = n?.attributes || {};
+  const text = [n?.name, n?.canonicalObjectId, a.NAME, a.RVM_RECORD_TAG, a.RVM_PRIMITIVE_CODE, a.RVM_BYTE_OFFSET, a.RVM_NATIVE_PRIMITIVE_PARAMS].map(str).join(' ');
+  return up(a.RVM_RECORD_TAG) === 'PRIM'
+    || Boolean(str(a.RVM_PRIMITIVE_CODE).trim())
+    || Boolean(str(a.RVM_BYTE_OFFSET).trim())
+    || Boolean(str(a.RVM_NATIVE_PRIMITIVE_PARAMS).trim())
+    || /^\s*RVM\s+(CYLINDER|BOX|PYRAMID|SPHERE|TORUS|SNOUT|FACET)/i.test(text);
+}
+function hasSourceSupportRecordAttrs(a) {
+  return Boolean(
+    str(a.SOURCE_RESTRAINT_ID).trim()
+    || str(a.SOURCE_RESTRAINT_TYPE).trim()
+    || str(a.SOURCE_RESTRAINT_NAME).trim()
+    || str(a.SOURCE_RESTRAINT_LABEL).trim()
+    || str(a.UXML_RAW_SUPPORT_KIND).trim()
+  );
+}
 function isInputXmlSupport(n) {
   const a = n?.attributes || {};
   const type = up(n?.type || n?.kind || a.TYPE || a.RAW_TYPE);
   if (!TRUE_SUPPORT_TYPES.has(type)) return false;
-  return /INPUTXML/i.test([n?.name, n?.canonicalObjectId, a.SOURCE_FORMAT, a.SOURCE_CONVERTER, a.SOURCE_FILE, a.SOURCE_RESTRAINT_ID, a.NAME, a.SUPPORT_TAG].map(str).join(' ')) || Boolean(a.SOURCE_RESTRAINT_ID);
+  // Raw RVM PRIM leaves are already renderable geometry. Do not treat them as
+  // source support records again, otherwise the viewer generates a duplicate
+  // overlay that can escape from the pipe/support anchor.
+  if (isRvmPrimitiveLeaf(n)) return false;
+  if (RENDERED_SUPPORT_TYPES.has(type) && !hasSourceSupportRecordAttrs(a)) return false;
+  if (SOURCE_SUPPORT_TYPES.has(type) || hasSourceSupportRecordAttrs(a)) {
+    return /INPUTXML/i.test([n?.name, n?.canonicalObjectId, a.SOURCE_FORMAT, a.SOURCE_CONVERTER, a.SOURCE_FILE, a.SOURCE_RESTRAINT_ID, a.NAME, a.SUPPORT_TAG].map(str).join(' ')) || Boolean(a.SOURCE_RESTRAINT_ID);
+  }
+  return false;
 }
 function inputXmlSupportNodes() {
   const nodes = Array.isArray(state?.rvm?.index?.nodes) ? state.rvm.index.nodes : [];
@@ -198,7 +226,7 @@ function addLabel(g, label, p, len, visible) {
   g.add(css);
 }
 function removeOld(viewer) {
-  const old = viewer?.scene?.getObjectByName(ROOT_NAME);
+  const old = viewer?.scene?.getObjectByName(ROOT_NAME) || viewer?.modelGroup?.getObjectByName?.(ROOT_NAME);
   if (!old) return;
   old.parent?.remove?.(old);
   old.traverse((o) => {
@@ -265,12 +293,12 @@ function makeSymbol(node, index, viewer, options) {
   const renderId = str(node.canonicalObjectId || node.sourceObjectId || node.id || tag || `SUPPORT-${index + 1}`);
   const t = supportAxis(a, placement).normalize();
   const od = attachedOd(a, placement);
-  const gap = Math.max(num(a.SUPPORT_GAP_MM ?? a.GAP_MM ?? a.GAP, 0), 0);
-  const mul = Math.max(0.25, Math.min(4, Number(options?.scaleMultiplier || 3)));
-  const cr = od * 0.5;
-  const len = Math.max(od * 0.55, 28) * mul;
-  const rad = Math.max(od * 0.035, 1.2) * mul;
-  const lane = Math.max(od * 2 / 3, 20) * mul;
+  const gap = Math.min(Math.max(num(a.SUPPORT_GAP_MM ?? a.GAP_MM ?? a.GAP, 0), 0), 40);
+  const mul = Math.max(0.25, Math.min(1.5, Number(options?.scaleMultiplier || 0.75)));
+  const cr = Math.min(od * 0.5, 250);
+  const len = Math.min(Math.max(od * 0.35, 28), 180) * mul;
+  const rad = Math.min(Math.max(od * 0.018, 1.2), 8) * mul;
+  const lane = Math.min(Math.max(od * 0.45, 20), 160) * mul;
   const color = KIND_COLORS[k] || KIND_COLORS.UNRESOLVED;
   const g = new THREE.Group();
   g.name = `SUPPORT_SYMBOL_${tag}`;
@@ -329,20 +357,37 @@ function updateRvmSupportSummaryDom(viewer, diagnostics) {
 }
 
 export function applyInputXmlSupportGraphicsOverlay(viewer, options = {}) {
-  if (!viewer?.scene || !hasInputXmlModel()) return null;
-  const supports = inputXmlSupportNodes();
+  if (!viewer?.scene) return null;
   removeOld(viewer);
+  const enabled = options.supportSymbolsEnabled === true || options.inputXmlSupportGraphicsEnabled === true || options.enabled === true;
+  if (!enabled) {
+    const diagnostics = {
+      created: 0,
+      scanned: 0,
+      inputXmlSupportGraphics: false,
+      inputXmlSupportGraphicsDisabled: true,
+      disabledReason: 'raw-rvm-support-primitives-are-default',
+    };
+    viewer.supportSymbolDiagnostics = diagnostics;
+    return diagnostics;
+  }
+  if (!hasInputXmlModel()) return null;
+  const supports = inputXmlSupportNodes();
   const root = new THREE.Group();
   root.name = ROOT_NAME;
   root.userData.supportSymbolRoot = true;
   root.userData.inputXmlSupportGraphics = true;
   supports.forEach((supportNode, index) => { const symbol = makeSymbol(supportNode, index, viewer, options); if (symbol) root.add(symbol); });
-  if (viewer.modelGroup) {
-    viewer.modelGroup.add(root);
-    viewer.modelGroup.updateMatrixWorld(true);
-    viewer.selection?.updateModelGroup?.(viewer.modelGroup);
+  if (root.children.length > 0) {
+    if (viewer.modelGroup) {
+      viewer.modelGroup.add(root);
+      viewer.modelGroup.updateMatrixWorld(true);
+      viewer.selection?.updateModelGroup?.(viewer.modelGroup);
+    } else {
+      viewer.scene.add(root);
+    }
   } else {
-    viewer.scene.add(root);
+    root.clear();
   }
   const counts = {};
   let nodeSnapped = 0;
@@ -351,7 +396,7 @@ export function applyInputXmlSupportGraphicsOverlay(viewer, options = {}) {
     counts[supportKind] = (counts[supportKind] || 0) + 1;
     if (child.userData?.supportPlacementSource === 'NODE_GRAPH') nodeSnapped += 1;
   });
-  viewer.supportSymbolDiagnostics = { created: root.children.length, scanned: supports.length, inputXmlSupportGraphics: true, inputXmlNodeGraphSnap: true, nodeSnapped, kindCounts: counts, labelsVisible: Boolean(options.labelsVisible), scaleMultiplier: options.scaleMultiplier };
+  viewer.supportSymbolDiagnostics = { created: root.children.length, scanned: supports.length, inputXmlSupportGraphics: true, inputXmlNodeGraphSnap: true, nodeSnapped, kindCounts: counts, labelsVisible: Boolean(options.labelsVisible), scaleMultiplier: options.scaleMultiplier, rawPrimitiveLeavesExcluded: true };
   updateRvmSupportSummaryDom(viewer, viewer.supportSymbolDiagnostics);
   return viewer.supportSymbolDiagnostics;
 }
