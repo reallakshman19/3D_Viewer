@@ -31,15 +31,22 @@ export class RvmSelectionAdapter {
     const hits = this.raycaster.intersectObject(this.modelGroup, true);
     this._lastIntersections = hits.slice(0, 24).map((hit) => this._intersectionSummary(hit));
     const additive = event.ctrlKey || event.shiftKey || event.metaKey;
-    const hit = hits.find((item) => item?.object?.isMesh && item.object.visible && this._isSelectableObject(item.object));
-    if (hit) { const renderId = this._renderIdFor(hit.object); if (renderId) { this._handlePick(renderId, additive); return; } }
+    const hit = hits.find((item) => item?.object?.visible && this._isRenderableObject(item.object) && this._isSelectableObject(item.object));
+    if (hit) {
+      const renderId = this._renderIdFor(hit.object);
+      if (renderId) { this._handlePick(renderId, additive); return; }
+    }
     const diagnostic = hits.find((item) => item?.object?.visible && !this._isSelectableObject(item.object));
     this._lastNonSelectableHit = diagnostic ? this._intersectionSummary(diagnostic) : null;
     if (this._lastNonSelectableHit && !additive) { emit(RuntimeEvents.RVM_NODE_SELECTED, { canonicalId: null, canonicalIds: [], renderObjectIds: [], diagnosticHit: this._lastNonSelectableHit }); return; }
     if (!additive) { this.clearSelection(); emit(RuntimeEvents.RVM_NODE_SELECTED, { canonicalId: null, canonicalIds: [], renderObjectIds: [] }); }
   }
+  _isRenderableObject(object) { return Boolean(object?.isMesh || object?.isLine || object?.isLineSegments || object?.isPoints); }
   _isSelectableObject(object) { const data = object?.userData || {}; return data.pickable !== false && data.selectable !== false && !data.nonSelectableReason; }
-  _renderIdFor(object) { return object?.userData?.name || object?.userData?.canonicalId || object?.name || object?.uuid || ''; }
+  _renderIdFor(object) {
+    const data = object?.userData || {};
+    return String(data.renderObjectId || data.leafRenderObjectId || object?.uuid || data.canonicalId || data.name || object?.name || '').trim();
+  }
   _intersectionSummary(hit) { const object = hit?.object || {}; const data = object.userData || {}; return { distance: Number(hit?.distance || 0), name: object.name || '', uuid: object.uuid || '', renderId: this._renderIdFor(object), renderKind: data.renderKind || data.effectivePrimitive || data.effectiveRenderPrimitive || data.renderPrimitive || '', sourcePath: data.sourcePath || data.browserRvmProperties?.sourcePath || data.browserRvmProperties?.SourcePath || '', canonicalId: data.canonicalId || data.name || object.name || object.uuid || '', pickable: data.pickable !== false, selectable: data.selectable !== false, nonSelectableReason: data.nonSelectableReason || '' }; }
   _handlePick(renderId, additive = false) { const canonicalId = this.identityMap?.canonicalFromRender?.(renderId) || renderId; if (additive) this.toggleCanonicalId(canonicalId); else this.selectByCanonicalId(canonicalId); }
   selectByCanonicalId(canonicalId) { this.clearSelection(); this._selectedCanonicalId = canonicalId; this._selectedCanonicalIds = [canonicalId]; this._selectedRenderIds = this.identityMap?.renderIdsFromCanonical?.(canonicalId) || [canonicalId]; this._highlight(this._selectedRenderIds, COLORS.SELECTED); this._emitSelection(); }
@@ -54,8 +61,8 @@ export class RvmSelectionAdapter {
   highlightSearchResults(canonicalIds) { const renderIds = []; for (const id of canonicalIds) renderIds.push(...(this.identityMap?.renderIdsFromCanonical?.(id) || [id])); this._highlight(renderIds, COLORS.SEARCH_RESULT); }
   clearSelection() { this._restoreMaterials(); this._selectedCanonicalId = null; this._selectedCanonicalIds = []; this._selectedRenderIds = []; }
   getSelectionRenderIds() { return this._selectedRenderIds; }
-  _highlight(renderIds, color) { const set = new Set(renderIds); this.modelGroup?.traverse?.((obj) => { if (obj.isMesh && this._isSelectableObject(obj) && set.has(this._renderIdFor(obj))) this._setEmissive(obj, color); }); }
+  _highlight(renderIds, color) { const set = new Set(renderIds); this.modelGroup?.traverse?.((obj) => { if (this._isRenderableObject(obj) && this._isSelectableObject(obj) && set.has(this._renderIdFor(obj))) this._setEmissive(obj, color); }); }
   _setEmissive(mesh, color) { const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material]; const id = this._renderIdFor(mesh); if (!this._originalMaterials.has(id)) this._originalMaterials.set(id, materials.map((m) => (m?.emissive ? m.emissive.getHex() : null))); for (const mat of materials) if (mat?.emissive) mat.emissive.set(color); }
-  _restoreMaterials() { this.modelGroup?.traverse?.((obj) => { if (!obj.isMesh) return; const id = this._renderIdFor(obj); const originals = this._originalMaterials.get(id); if (!originals) return; const materials = Array.isArray(obj.material) ? obj.material : [obj.material]; materials.forEach((mat, index) => { if (mat?.emissive && originals[index] !== null) mat.emissive.setHex(originals[index]); }); }); this._originalMaterials.clear(); }
+  _restoreMaterials() { this.modelGroup?.traverse?.((obj) => { if (!this._isRenderableObject(obj)) return; const id = this._renderIdFor(obj); const originals = this._originalMaterials.get(id); if (!originals) return; const materials = Array.isArray(obj.material) ? obj.material : [obj.material]; materials.forEach((mat, index) => { if (mat?.emissive && originals[index] !== null) mat.emissive.setHex(originals[index]); }); }); this._originalMaterials.clear(); }
   dispose() { this.clearSelection(); this.domElement.removeEventListener('pointerdown', this._onPointerDown); }
 }
