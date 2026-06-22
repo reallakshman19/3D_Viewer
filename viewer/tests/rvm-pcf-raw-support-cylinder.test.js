@@ -17,6 +17,8 @@ const sceneBuilderSource = await read('../rvm/BrowserRvmRenderSceneBuilder.js');
 const remainingPatchSource = await read('../rvm/BrowserRvmRemainingPrimitiveRuntimePatch.js');
 const supportSummarySource = await read('../tabs/RvmSupportSummaryBridge.js');
 const supportGeomSource = await read('../tabs/RvmSupportGeometryBridge.js');
+const rendererSource = await read('../tabs/viewer3d-rvm-tab-renderer.js');
+const uiSafetySource = await read('../tabs/RvmUiEventSafetyBridge.js');
 
 check(
   adapterSource.includes('rvm-browser-render-instructions/v5-raw-first-support-primitives'),
@@ -68,8 +70,23 @@ check(
   'adapter no longer blindly converts all support hints into support stand placeholders'
 );
 
+check(
+  rendererSource.includes('RvmUiEventSafetyBridge.js?v=20260622-rvm-ui-event-safety-1') && rendererSource.includes('installRvmUiEventSafetyBridge()'),
+  'RVM renderer installs the UI event safety bridge after other RVM bridges'
+);
+
+check(
+  uiSafetySource.includes('data-rvm-navis-visible-checkbox') && uiSafetySource.includes('contextmenu') && uiSafetySource.includes('setBranchVisible'),
+  'UI safety bridge restores hierarchy checkbox, right-click, and hide/show actions'
+);
+
+check(
+  uiSafetySource.includes("viewer.controls.enabled = isOrbit || isPan") && uiSafetySource.includes("canvas.style.pointerEvents = 'auto'") && uiSafetySource.includes('purgeStaleInteractionOverlays'),
+  'UI safety bridge repairs orbit/pan controls and purges stale event-blocking overlays after model load'
+);
+
 if (failed) {
   console.error(`FAILURES: ${failed}`);
   process.exit(1);
 }
-console.log(`All raw-first support viewer checks passed (${passed}).`);
+console.log(`All raw-first support and UI safety viewer checks passed (${passed}).`);
