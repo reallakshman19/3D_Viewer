@@ -3,9 +3,9 @@ import {
   flattenHierarchyNodes,
   normalizeRvmReviewPath,
   topLevelSelectablePaths,
-} from './RvmHierarchyModelBuilder.js?v=20260622-rvm-zone-density-selector-1';
+} from './RvmHierarchyModelBuilder.js?v=20260622-rvm-zone-density-selector-2';
 
-const INSTALL_FLAG = Symbol.for('pcf-glb-rvm-zone-density-selector-v1');
+const INSTALL_FLAG = Symbol.for('pcf-glb-rvm-zone-density-selector-v2');
 const STYLE_ID = 'rvm-zone-density-selector-style';
 const LARGE_FILE_THRESHOLD_BYTES = 8 * 1024 * 1024;
 const ZONE_STORAGE_KEY = 'rvm_zone_density_last_selection_v1';
@@ -20,7 +20,7 @@ export function installRvmZoneDensitySelectorBridge() {
   if (globalThis[INSTALL_FLAG]) return globalThis[INSTALL_FLAG];
   injectStyles();
   const state = {
-    version: '20260622-rvm-zone-density-selector-1',
+    version: '20260622-rvm-zone-density-selector-2',
     beforeRenderInstructions,
     buildSelectorRows,
   };
@@ -56,42 +56,59 @@ async function beforeRenderInstructions({ instructionSet, file, parsed, root } =
 export function buildSelectorRows({ instructions = [], manifestNodes = [], fileName = 'RVM model' } = {}) {
   const rowMap = new Map();
   const source = Array.isArray(manifestNodes) && manifestNodes.length ? 'preload-manifest' : 'instructions';
+  const manifestContext = buildManifestContext(manifestNodes);
   const addPath = (path, count = 0, meta = {}) => {
     const normalized = normalizeRvmReviewPath(path, { fileName, displayName: meta.name || '' });
     let cur = '';
     for (let i = 0; i < Math.min(normalized.parts.length, MAX_LEVEL + 1); i += 1) {
       cur += `/${normalized.parts[i]}`;
       const key = cur.replace(/\/+/g, '/');
-      const entry = rowMap.get(key) || { key, path: key, name: `/${normalized.parts[i]}`, count: 0, primitiveCount: 0, depth: i, source, type: i === 0 ? 'ZONE' : 'NODE' };
+      const entry = rowMap.get(key) || {
+        key,
+        path: key,
+        parentPath: parentPathFor(key),
+        name: `/${normalized.parts[i]}`,
+        count: 0,
+        primitiveCount: 0,
+        depth: i,
+        source,
+        type: i === 0 ? 'ZONE' : 'NODE',
+        manifestOnly: true,
+      };
       entry.count += count;
       entry.primitiveCount += count;
+      entry.manifestOnly = entry.manifestOnly && count <= 0;
       if (meta.type) entry.type = meta.type;
+      if (meta.source) entry.source = meta.source;
       rowMap.set(key, entry);
     }
   };
 
   if (Array.isArray(manifestNodes) && manifestNodes.length) {
-    const byId = new Map(manifestNodes.map((node) => [node.canonicalObjectId, node]));
     for (const node of manifestNodes) {
-      const path = manifestPathForNode(node, byId);
-      if (path) addPath(path, 0, { type: node.type || node.kind || node.attributes?.TYPE || 'NODE', name: node.name });
+      const path = manifestPathForNode(node, manifestContext.byId);
+      if (path) addPath(path, 0, { type: node.type || node.kind || node.attributes?.TYPE || 'NODE', name: node.name, source: 'preload-manifest' });
     }
   }
 
-  for (const instruction of instructions) addPath(pathForInstruction(instruction, fileName), 1, { type: instruction?.type || instruction?.kind || 'NODE' });
+  for (const instruction of instructions) {
+    const path = pathForInstruction(instruction, fileName, manifestContext);
+    addPath(path, 1, { type: instruction?.type || instruction?.kind || 'NODE', source: 'instructions' });
+  }
 
-  const rows = [...rowMap.values()].filter((row) => row.depth <= MAX_LEVEL && row.count > 0);
+  const rows = [...rowMap.values()].filter((row) => row.depth <= MAX_LEVEL && (row.count > 0 || row.source === 'preload-manifest'));
   if (!rows.length) {
     const fallbackRows = buildFlatRowsFromInstructions(instructions, fileName);
     fallbackRows.selectorSource = 'instructions';
     return fallbackRows;
   }
   const model = buildRvmHierarchyModelFromZoneRows(rows, { fileName, source });
-  const flat = flattenHierarchyNodes(model.rootNode)
+  const allNodes = flattenHierarchyNodes(model.rootNode)
     .filter((node) => node.level >= 0 && node.level <= MAX_LEVEL)
     .map((node) => ({
       key: node.path,
       path: node.path,
+      parentPath: parentPathFor(node.path),
       name: node.name,
       count: node.count,
       primitiveCount: node.primitiveCount,
@@ -99,8 +116,18 @@ export function buildSelectorRows({ instructions = [], manifestNodes = [], fileN
       childCount: node.childCount,
       type: node.type,
       source,
-    }))
-    .slice(0, MAX_SELECTOR_ROWS);
+      hasChildren: node.childCount > 0,
+    }));
+  const top = allNodes.filter((row) => row.depth === 0).sort((a, b) => sortZoneRows(a, b));
+  const allowed = new Set();
+  for (const row of top) {
+    allowed.add(row.key);
+    for (const child of allNodes.filter((item) => item.key !== row.key && item.key.startsWith(`${row.key}/`)).sort((a, b) => sortZoneRows(a, b))) {
+      allowed.add(child.key);
+    }
+    if (allowed.size >= MAX_SELECTOR_ROWS) break;
+  }
+  const flat = allNodes.filter((row) => allowed.has(row.key)).sort((a, b) => rowOrder(a, b)).slice(0, MAX_SELECTOR_ROWS);
   flat.selectorSource = source;
   flat.topPaths = topLevelSelectablePaths(model.rootNode, 3);
   return flat;
@@ -111,33 +138,76 @@ function buildFlatRowsFromInstructions(instructions, fileName) {
   for (const instruction of instructions) {
     const normalized = normalizeRvmReviewPath(pathForInstruction(instruction, fileName), { fileName });
     const key = normalized.parts.length ? `/${normalized.parts.slice(0, MAX_LEVEL + 1).join('/')}` : '/Unzoned';
-    const entry = map.get(key) || { key, path: key, name: key.split('/').pop() || key, count: 0, primitiveCount: 0, depth: Math.max(0, key.split('/').filter(Boolean).length - 1), source: 'instructions', type: instruction?.type || 'NODE' };
+    const entry = map.get(key) || { key, path: key, parentPath: parentPathFor(key), name: key.split('/').pop() || key, count: 0, primitiveCount: 0, depth: Math.max(0, key.split('/').filter(Boolean).length - 1), source: 'instructions', type: instruction?.type || 'NODE' };
     entry.count += 1;
     entry.primitiveCount += 1;
     map.set(key, entry);
   }
-  return [...map.values()].sort((a, b) => a.depth - b.depth || b.count - a.count || a.key.localeCompare(b.key)).slice(0, MAX_SELECTOR_ROWS);
+  return [...map.values()].sort((a, b) => rowOrder(a, b)).slice(0, MAX_SELECTOR_ROWS);
+}
+
+function buildManifestContext(manifestNodes = []) {
+  const byId = new Map();
+  for (const node of Array.isArray(manifestNodes) ? manifestNodes : []) {
+    const keys = [
+      node.canonicalObjectId,
+      node.sourceObjectId,
+      node.renderObjectId,
+      node.id,
+      node.key,
+      node.attributes?.CANONICAL_OBJECT_ID,
+      node.attributes?.SOURCE_OBJECT_ID,
+      node.attributes?.RVM_OBJECT_ID,
+      node.attributes?.ID,
+    ].filter(Boolean).map(String);
+    for (const key of keys) byId.set(key, node);
+  }
+  return { byId };
+}
+
+function manifestPathForInstruction(instruction = {}, context = {}) {
+  const attrs = instruction.attributes || {};
+  const candidates = [
+    instruction.canonicalObjectId,
+    instruction.sourceObjectId,
+    instruction.renderObjectId,
+    instruction.id,
+    attrs.CANONICAL_OBJECT_ID,
+    attrs.SOURCE_OBJECT_ID,
+    attrs.RVM_OBJECT_ID,
+    attrs.ID,
+  ].filter(Boolean).map(String);
+  for (const key of candidates) {
+    const node = context.byId?.get?.(key);
+    if (!node) continue;
+    const path = manifestPathForNode(node, context.byId);
+    if (path) return path;
+  }
+  return '';
 }
 
 function manifestPathForNode(node = {}, byId = new Map()) {
   const attrs = node.attributes || {};
-  const direct = attrs.RVM_OWNER_PATH || attrs.RVM_OWNER_NAME || node.path || node.name || attrs.NAME || node.canonicalObjectId;
+  const direct = attrs.RVM_OWNER_PATH || attrs.RVM_OWNER_NAME || node.path || attrs.PATH || attrs.FULL_PATH;
   if (String(direct || '').includes('/')) return direct;
   const parts = [];
   let cur = node;
   const seen = new Set();
-  while (cur && !seen.has(cur.canonicalObjectId)) {
-    seen.add(cur.canonicalObjectId);
-    const name = cur.name || cur.attributes?.NAME || cur.canonicalObjectId;
+  while (cur && !seen.has(cur.canonicalObjectId || cur.sourceObjectId || cur.id || cur.name)) {
+    seen.add(cur.canonicalObjectId || cur.sourceObjectId || cur.id || cur.name);
+    const name = cur.name || cur.attributes?.NAME || cur.attributes?.RVM_NAME || cur.canonicalObjectId;
     if (name) parts.push(String(name).replace(/^\/+/, ''));
-    cur = cur.parentCanonicalObjectId ? byId.get(cur.parentCanonicalObjectId) : null;
+    const parentKey = cur.parentCanonicalObjectId || cur.parentSourceObjectId || cur.parentId || cur.attributes?.PARENT_CANONICAL_OBJECT_ID || cur.attributes?.PARENT_ID;
+    cur = parentKey ? byId.get(String(parentKey)) : null;
   }
   return `/${parts.reverse().filter(Boolean).join('/')}`;
 }
 
-function pathForInstruction(instruction = {}, fileName = '') {
+function pathForInstruction(instruction = {}, fileName = '', manifestContext = null) {
+  const manifestPath = manifestContext ? manifestPathForInstruction(instruction, manifestContext) : '';
+  if (manifestPath) return normalizeRvmReviewPath(manifestPath, { fileName }).displayPath;
   const attrs = instruction.attributes || {};
-  const raw = instruction.sourcePath || attrs.RVM_OWNER_PATH || attrs.RVM_OWNER_NAME || attrs.NAME || instruction.displayName || instruction.sourceName || 'Unzoned';
+  const raw = instruction.sourcePath || attrs.RVM_OWNER_PATH || attrs.RVM_OWNER_NAME || attrs.PATH || attrs.FULL_PATH || attrs.NAME || instruction.displayName || instruction.sourceName || 'Unzoned';
   return normalizeRvmReviewPath(raw, { fileName, displayName: instruction.displayName || attrs.NAME || '' }).displayPath;
 }
 
@@ -152,17 +222,19 @@ async function showZoneDensitySelector({ file, rows, instructionCount }) {
     overlay.innerHTML = `
       <div class="rvm-zone-density-modal" role="dialog" aria-modal="true" aria-label="Select RVM hierarchy zones and density">
         <div class="rvm-zone-density-head">
-          <div><b>Large RVM load: choose top hierarchy zones to render</b><p>${esc(file?.name || 'RVM file')} has ${instructionCount} render instruction(s). Selector source: ${esc(rows.selectorSource || 'instructions')}. Showing top ${MAX_LEVEL + 1} hierarchy levels only.</p></div>
+          <div><b>Large RVM load: choose hierarchy zones to render</b><p>${esc(file?.name || 'RVM file')} has ${instructionCount} render instruction(s). Selector source: ${esc(rows.selectorSource || 'instructions')}. Showing first ${MAX_LEVEL + 1} hierarchy levels only; use + to expand.</p></div>
           <button type="button" data-zone-density-action="all">Render all</button>
         </div>
         <div class="rvm-zone-density-toolbar">
           <input data-zone-density-search placeholder="Search top hierarchy zones…" />
           <button type="button" data-zone-density-action="check-visible">Check visible</button>
           <button type="button" data-zone-density-action="top3">Top 3</button>
+          <button type="button" data-zone-density-action="expand-all">Expand all</button>
+          <button type="button" data-zone-density-action="collapse-all">Collapse</button>
           <button type="button" data-zone-density-action="clear">Clear</button>
           <label>Default <select data-zone-density-default>${densityOptionsHtml(Number(storageGet(GLOBAL_DETAIL_STORAGE_KEY, '100')))}</select></label>
         </div>
-        <div class="rvm-zone-density-list">
+        <div class="rvm-zone-density-list" role="tree">
           ${rows.map((row) => zoneRowHtml(row, defaultSelected.has(row.key), defaultDensities[row.key] || 100)).join('')}
         </div>
         <div class="rvm-zone-density-foot"><span data-zone-density-summary></span><button type="button" class="rvm-zone-density-primary" data-zone-density-action="selected">Render selected zones</button></div>
@@ -189,8 +261,30 @@ async function showZoneDensitySelector({ file, rows, instructionCount }) {
         else if (checked === 0 && !box.dataset.directChecked) box.checked = false;
       }
     };
+    const applyVisibility = () => {
+      const q = search?.value?.trim?.().toLowerCase?.() || '';
+      const allRows = [...overlay.querySelectorAll('[data-zone-density-row]')];
+      const matched = new Set();
+      if (q) {
+        for (const row of allRows) if (row.dataset.zoneSearch.includes(q)) {
+          matched.add(row.dataset.zonePath);
+          const parts = row.dataset.zonePath.split('/').filter(Boolean);
+          let path = '';
+          for (const part of parts) { path += `/${part}`; matched.add(path); }
+        }
+      }
+      allRows.forEach((row) => {
+        const parent = row.dataset.zoneParent || '';
+        const visibleBySearch = !q || matched.has(row.dataset.zonePath);
+        const visibleByExpansion = !parent || q || isAncestorExpanded(row, allRows);
+        row.style.display = visibleBySearch && visibleByExpansion ? '' : 'none';
+        const button = row.querySelector('[data-zone-density-toggle]');
+        if (button) button.textContent = row.dataset.zoneExpanded === 'true' ? '−' : '+';
+      });
+    };
     const update = () => {
       updateTreeState();
+      applyVisibility();
       const picked = selectedZones();
       if (summary) summary.textContent = `${picked.length} zone(s) selected · ${visibleRows().length} visible · per-zone density supports 25/50/100/250%`;
       const primary = overlay.querySelector('[data-zone-density-action="selected"]');
@@ -222,6 +316,15 @@ async function showZoneDensitySelector({ file, rows, instructionCount }) {
       update();
     });
     overlay.addEventListener('click', (event) => {
+      const toggle = event.target?.closest?.('[data-zone-density-toggle]');
+      if (toggle) {
+        event.preventDefault();
+        event.stopPropagation();
+        const row = toggle.closest('[data-zone-density-row]');
+        if (row) row.dataset.zoneExpanded = row.dataset.zoneExpanded === 'true' ? 'false' : 'true';
+        update();
+        return;
+      }
       const action = event.target?.closest?.('[data-zone-density-action]')?.dataset.zoneDensityAction;
       if (!action) return;
       event.preventDefault();
@@ -229,6 +332,7 @@ async function showZoneDensitySelector({ file, rows, instructionCount }) {
       if (action === 'clear') { boxes().forEach((box) => { box.checked = false; box.indeterminate = false; box.dataset.directChecked = ''; }); update(); }
       if (action === 'check-visible') { visibleRows().forEach((row) => { const box = row.querySelector('[data-zone-density-key]'); if (box) { box.checked = true; box.dataset.directChecked = 'true'; } }); update(); }
       if (action === 'top3') { const top = new Set(topRows(rows, 3).map((row) => row.key)); boxes().forEach((box) => { box.checked = top.has(box.dataset.zoneDensityKey); box.dataset.directChecked = box.checked ? 'true' : ''; }); update(); }
+      if (action === 'expand-all' || action === 'collapse-all') { overlay.querySelectorAll('[data-zone-density-row]').forEach((row) => { row.dataset.zoneExpanded = action === 'expand-all' ? 'true' : 'false'; }); update(); }
       if (action === 'selected') {
         const picked = selectedZones();
         const zoneDensities = densities();
@@ -237,33 +341,30 @@ async function showZoneDensitySelector({ file, rows, instructionCount }) {
         close({ mode: 'selected', selectedZones: picked, zoneDensities, selectorSource: rows.selectorSource || 'instructions' });
       }
     });
-    search?.addEventListener('input', () => {
-      const q = search.value.trim().toLowerCase();
-      const allRows = [...overlay.querySelectorAll('[data-zone-density-row]')];
-      const matched = new Set();
-      if (q) {
-        for (const row of allRows) if (row.dataset.zoneSearch.includes(q)) {
-          matched.add(row.dataset.zonePath);
-          const parts = row.dataset.zonePath.split('/').filter(Boolean);
-          let path = '';
-          for (const part of parts) { path += `/${part}`; matched.add(path); }
-        }
-      }
-      allRows.forEach((row) => { row.style.display = !q || matched.has(row.dataset.zonePath) ? '' : 'none'; });
-      update();
-    });
+    search?.addEventListener('input', update);
     update();
   });
 }
 
+function isAncestorExpanded(row, allRows) {
+  const parent = row.dataset.zoneParent || '';
+  if (!parent) return true;
+  const parentRow = allRows.find((item) => item.dataset.zonePath === parent);
+  if (!parentRow || parentRow.dataset.zoneExpanded !== 'true') return false;
+  return isAncestorExpanded(parentRow, allRows);
+}
+
 function zoneRowHtml(row, checked, density) {
   const depth = Math.max(0, Math.min(MAX_LEVEL, Number(row.depth || 0)));
-  return `<label class="rvm-zone-density-row" data-zone-density-row="true" data-zone-depth="${depth}" data-zone-path="${esc(row.key)}" data-zone-search="${esc(`${row.key} ${row.type || ''}`.toLowerCase())}" style="--zone-depth:${depth}">
+  const hasChildren = Boolean(row.hasChildren || Number(row.childCount || 0) > 0);
+  const expanded = depth === 0 ? 'false' : 'false';
+  return `<div class="rvm-zone-density-row" data-zone-density-row="true" data-zone-depth="${depth}" data-zone-path="${esc(row.key)}" data-zone-parent="${esc(row.parentPath || parentPathFor(row.key))}" data-zone-expanded="${expanded}" data-zone-search="${esc(`${row.key} ${row.type || ''}`.toLowerCase())}" role="treeitem" aria-level="${depth + 1}" style="--zone-depth:${depth}">
+    <button type="button" class="rvm-zone-density-toggle" data-zone-density-toggle="true" ${hasChildren ? '' : 'disabled'} aria-label="Toggle ${esc(row.key)}">${hasChildren ? '+' : ''}</button>
     <input type="checkbox" data-zone-density-key="${esc(row.key)}" ${checked ? 'checked data-direct-checked="true"' : ''} />
     <span class="rvm-zone-density-name"><span class="rvm-zone-density-indent"></span>${esc(row.key)}</span>
     <span class="rvm-zone-density-count">${Number(row.count || 0)}</span>
     <select data-zone-density-percent="${esc(row.key)}" title="Render density for ${esc(row.key)}">${densityOptionsHtml(density)}</select>
-  </label>`;
+  </div>`;
 }
 
 function densityOptionsHtml(current) {
@@ -296,7 +397,7 @@ export function applyZoneDensitySelection(instructionSet = {}, selection = {}) {
     diagnostics: {
       ...(instructionSet.diagnostics || {}),
       zoneSelection: {
-        schemaVersion: 'browser-rvm-zone-selection/v3-density-hierarchy',
+        schemaVersion: 'browser-rvm-zone-selection/v4-density-tree',
         selectorSource: selection.selectorSource || 'instructions',
         enabled: true,
         mode: selectedZones.length ? 'selected' : 'all',
@@ -349,6 +450,27 @@ function defaultDensityMap(rows = [], saved = {}) {
   return out;
 }
 
+function parentPathFor(path = '') {
+  const parts = String(path || '').split('/').filter(Boolean);
+  if (parts.length <= 1) return '';
+  return `/${parts.slice(0, -1).join('/')}`;
+}
+
+function sortZoneRows(a, b) {
+  return Number(b.count || 0) - Number(a.count || 0) || String(a.key).localeCompare(String(b.key), undefined, { numeric: true, sensitivity: 'base' });
+}
+
+function rowOrder(a, b) {
+  const partsA = String(a.key || '').split('/').filter(Boolean);
+  const partsB = String(b.key || '').split('/').filter(Boolean);
+  const len = Math.min(partsA.length, partsB.length);
+  for (let i = 0; i < len; i += 1) {
+    const cmp = partsA[i].localeCompare(partsB[i], undefined, { numeric: true, sensitivity: 'base' });
+    if (cmp) return cmp;
+  }
+  return partsA.length - partsB.length;
+}
+
 function statusForSelection(file, zone = {}) {
   if (!zone?.enabled) return '';
   return `Loaded ${file?.name || 'RVM'} zone mode ${zone.mode}: ${zone.renderedInstructionCount}/${zone.originalInstructionCount} instructions after zone/density filtering.`;
@@ -378,8 +500,9 @@ function injectStyles() {
     .rvm-zone-density-modal{width:min(980px,calc(100vw - 40px));max-height:min(800px,calc(100vh - 40px));background:#101827;border:1px solid rgba(126,190,255,.36);border-radius:14px;box-shadow:0 30px 80px rgba(0,0,0,.58);display:flex;flex-direction:column;overflow:hidden}
     .rvm-zone-density-head,.rvm-zone-density-toolbar,.rvm-zone-density-foot{display:flex;gap:10px;align-items:center;padding:12px;border-bottom:1px solid rgba(126,190,255,.18)}
     .rvm-zone-density-head{justify-content:space-between}.rvm-zone-density-head p{margin:4px 0 0;color:#9fb4d2;font-size:12px}.rvm-zone-density-toolbar input{flex:1;min-width:180px}.rvm-zone-density-toolbar input,.rvm-zone-density-toolbar select,.rvm-zone-density-row select{background:#0b1220;color:#e8f3ff;border:1px solid rgba(126,190,255,.35);border-radius:7px;padding:6px}
-    .rvm-zone-density-list{overflow:auto;padding:8px;display:grid;gap:4px}.rvm-zone-density-row{display:grid;grid-template-columns:auto minmax(0,1fr) auto auto;gap:9px;align-items:center;padding:7px 8px;border:1px solid rgba(148,163,184,.14);border-radius:8px;background:rgba(255,255,255,.035)}
+    .rvm-zone-density-list{overflow:auto;padding:8px;display:grid;gap:4px}.rvm-zone-density-row{display:grid;grid-template-columns:24px auto minmax(0,1fr) auto auto;gap:9px;align-items:center;padding:7px 8px;border:1px solid rgba(148,163,184,.14);border-radius:8px;background:rgba(255,255,255,.035)}
     .rvm-zone-density-row[data-zone-depth="0"]{background:rgba(74,144,226,.15);border-color:rgba(126,190,255,.28);font-weight:700}.rvm-zone-density-row[data-zone-depth="1"]{background:rgba(59,130,246,.08)}
+    .rvm-zone-density-toggle{width:22px;height:22px;display:inline-grid;place-items:center;background:#0b1220!important;color:#e8f3ff!important;border:1px solid rgba(126,190,255,.35)!important;border-radius:5px!important;padding:0!important;font-weight:800}.rvm-zone-density-toggle:disabled{opacity:.2;color:transparent!important}
     .rvm-zone-density-name{display:flex;align-items:center;gap:4px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.rvm-zone-density-indent{display:inline-block;width:calc(var(--zone-depth,0) * 18px);flex:0 0 calc(var(--zone-depth,0) * 18px)}.rvm-zone-density-count{color:#9fd0ff;font-size:12px}.rvm-zone-density-foot{justify-content:space-between;border-top:1px solid rgba(126,190,255,.18);border-bottom:0}.rvm-zone-density-modal button{background:#1f2b45;color:#e8f3ff;border:1px solid rgba(126,190,255,.35);border-radius:8px;padding:7px 10px}.rvm-zone-density-primary{background:#2563eb!important}.rvm-zone-density-primary:disabled{opacity:.45}`;
   document.head.appendChild(style);
 }
