@@ -1,8 +1,14 @@
 import * as THREE from 'three';
 
-export const BROWSER_RVM_NATIVE_FACET_GROUP_PRIMARY_SCHEMA = 'browser-rvm-native-facetgroup-primary/v1';
+export const BROWSER_RVM_NATIVE_FACET_GROUP_PRIMARY_SCHEMA = 'browser-rvm-native-facetgroup-primary/v2-ghost-panels';
 
 const FACET_GROUP_RENDER_QUALITY = 'native-facetgroup-primary';
+const FACET_GROUP_GHOST_RENDER_QUALITY = 'native-facetgroup-ghost-panel';
+const FACET_GROUP_WIREFRAME_RENDER_QUALITY = 'native-facetgroup-wireframe-risk-guard';
+const THIN_PANEL_RATIO = 0.035;
+const LARGE_PANEL_LONG_EDGE = 900;
+const LARGE_PANEL_DIAGONAL = 1400;
+const EDGE_VERTEX_CAP = 18000;
 
 export function hasDecodedNativeFacetGroup(instruction = {}) {
   const native = nativeFacetGroupSpecForInstruction(instruction);
@@ -18,23 +24,121 @@ export function buildNativeFacetGroupObject(instruction = {}, material = null, c
   geometry.computeBoundingBox();
   geometry.computeBoundingSphere();
   geometry.computeVertexNormals?.();
+
+  const policy = nativeFacetDisplayPolicy(geometry, native);
   if (context?.stats) context.stats.estimatedGeometryBytes += estimateGeometryBytes(geometry);
-  const mesh = new THREE.Mesh(geometry, material || new THREE.MeshStandardMaterial({ color: 0x4b5563, roughness: 0.7, metalness: 0.08 }));
+
+  const baseMaterial = material || new THREE.MeshStandardMaterial({ color: 0x4b5563, roughness: 0.7, metalness: 0.08 });
+  const facetMaterial = materialForNativeFacetGroup(baseMaterial, policy);
+  const mesh = new THREE.Mesh(geometry, facetMaterial);
   mesh.name = 'RVM_NATIVE_FACET_GROUP';
-  mesh.userData = {
-    ...(mesh.userData || {}),
+
+  if (!policy.wireframeOnly && !policy.ghosted) {
+    stampNativeFacetUserData(mesh, native, policy);
+    return mesh;
+  }
+
+  const group = new THREE.Group();
+  group.name = policy.wireframeOnly ? 'RVM_NATIVE_FACET_GROUP_WIREFRAME' : 'RVM_NATIVE_FACET_GROUP_GHOST';
+  if (!policy.wireframeOnly) group.add(mesh);
+
+  const edges = nativeFacetEdgesObject(geometry, baseMaterial, context);
+  if (edges) group.add(edges);
+  stampNativeFacetUserData(group, native, policy);
+  return group;
+}
+
+function stampNativeFacetUserData(object, native, policy) {
+  object.userData = {
+    ...(object.userData || {}),
     schemaVersion: BROWSER_RVM_NATIVE_FACET_GROUP_PRIMARY_SCHEMA,
     browserRvmNativeFacetGroupPrimary: true,
     browserRvmNativeFacetGroupSchema: BROWSER_RVM_NATIVE_FACET_GROUP_PRIMARY_SCHEMA,
     browserRvmNativeFacetGroupPolygonCount: native.stats.polygonCount,
     browserRvmNativeFacetGroupTriangleCount: native.stats.triangleCount,
     browserRvmNativeFacetGroupContourHoleSkippedCount: native.stats.holeSkippedCount,
+    browserRvmNativeFacetGroupGhosted: Boolean(policy.ghosted),
+    browserRvmNativeFacetGroupWireframeOnly: Boolean(policy.wireframeOnly),
+    browserRvmNativeFacetGroupRiskReason: policy.reason || '',
+    browserRvmNativeFacetGroupDisplayPolicy: policy.policy,
     browserRvmRemainingPrimitiveUpgraded: true,
     effectiveRenderPrimitive: 'RVM_NATIVE_FACET_GROUP',
-    renderQuality: FACET_GROUP_RENDER_QUALITY,
+    renderQuality: policy.renderQuality || FACET_GROUP_RENDER_QUALITY,
     pickable: true,
   };
-  return mesh;
+}
+
+function nativeFacetDisplayPolicy(geometry, native) {
+  const box = geometry?.boundingBox;
+  const size = box ? new THREE.Vector3().subVectors(box.max, box.min) : new THREE.Vector3();
+  const dims = [Math.abs(size.x), Math.abs(size.y), Math.abs(size.z)].sort((a, b) => a - b);
+  const minDim = dims[0] || 0;
+  const midDim = dims[1] || 0;
+  const maxDim = dims[2] || 0;
+  const diagonal = Math.hypot(size.x, size.y, size.z);
+  const thinRatio = maxDim > 0 ? minDim / maxDim : 1;
+  const largeThinPanel = maxDim >= LARGE_PANEL_LONG_EDGE && diagonal >= LARGE_PANEL_DIAGONAL && thinRatio <= THIN_PANEL_RATIO;
+  const contourHoleRisk = Number(native?.stats?.holeSkippedCount || 0) > 0;
+  const complexFanRisk = Number(native?.stats?.triangleCount || 0) > 80 && thinRatio <= THIN_PANEL_RATIO && midDim > 0;
+  const vertexCount = geometry?.attributes?.position?.count || 0;
+  const tooLargeForEdges = vertexCount > EDGE_VERTEX_CAP;
+
+  if (contourHoleRisk) {
+    return {
+      policy: 'wireframe-only-hole-contour-risk',
+      wireframeOnly: !tooLargeForEdges,
+      ghosted: tooLargeForEdges,
+      reason: 'facet-group-with-holes-would-fill-voids',
+      renderQuality: FACET_GROUP_WIREFRAME_RENDER_QUALITY,
+    };
+  }
+  if (largeThinPanel || complexFanRisk) {
+    return {
+      policy: 'ghost-large-thin-facet-panel',
+      wireframeOnly: false,
+      ghosted: true,
+      reason: largeThinPanel ? 'large-thin-panel' : 'complex-thin-fan',
+      renderQuality: FACET_GROUP_GHOST_RENDER_QUALITY,
+    };
+  }
+  return {
+    policy: 'solid-native-facetgroup',
+    wireframeOnly: false,
+    ghosted: false,
+    reason: '',
+    renderQuality: FACET_GROUP_RENDER_QUALITY,
+  };
+}
+
+function materialForNativeFacetGroup(material, policy) {
+  const out = material?.clone ? material.clone() : new THREE.MeshStandardMaterial({ color: 0x4b5563, roughness: 0.7, metalness: 0.08 });
+  out.side = THREE.DoubleSide;
+  if (policy?.ghosted || policy?.wireframeOnly) {
+    out.transparent = true;
+    out.opacity = policy.wireframeOnly ? 0.12 : 0.24;
+    out.depthWrite = false;
+    out.polygonOffset = true;
+    out.polygonOffsetFactor = 1;
+    out.polygonOffsetUnits = 1;
+  }
+  return out;
+}
+
+function nativeFacetEdgesObject(geometry, material, context = null) {
+  if (!geometry) return null;
+  const positionCount = geometry?.attributes?.position?.count || 0;
+  if (positionCount > EDGE_VERTEX_CAP) return null;
+  const key = `native-facet-edges:${positionCount}:${geometry.index?.count || 0}`;
+  const edgesGeometry = cachedGeometry(context, key, () => new THREE.EdgesGeometry(geometry, 24));
+  const color = material?.color?.getHex ? material.color.getHex() : 0x7dd3fc;
+  const lineMaterial = new THREE.LineBasicMaterial({ color, transparent: true, opacity: 0.68, depthWrite: false });
+  const line = new THREE.LineSegments(edgesGeometry, lineMaterial);
+  line.name = 'RVM_NATIVE_FACET_GROUP_EDGES';
+  line.userData = {
+    browserRvmNativeFacetGroupEdges: true,
+    pickable: false,
+  };
+  return line;
 }
 
 function nativeFacetGroupSpecForInstruction(instruction = {}) {
@@ -143,6 +247,20 @@ function parseNumericArray(value, expected) {
   if (!Array.isArray(arr) || arr.length < expected) return null;
   const out = arr.slice(0, expected).map(Number);
   return out.every(Number.isFinite) ? out : null;
+}
+
+function cachedGeometry(context, key, factory) {
+  if (context?.renderOptions?.cacheGeometries !== false && context?.geometryCache) {
+    if (context.geometryCache.has(key)) {
+      context.stats.geometryCacheHits += 1;
+      return context.geometryCache.get(key);
+    }
+    context.stats.geometryCacheMisses += 1;
+    const geometry = factory();
+    context.geometryCache.set(key, geometry);
+    return geometry;
+  }
+  return factory();
 }
 
 function estimateGeometryBytes(geometry) {
