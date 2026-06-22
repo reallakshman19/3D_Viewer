@@ -54,7 +54,6 @@ const zoneSource = await read('../tabs/RvmZoneLodLabelBridge.js');
 const deepPathSource = await read('../tabs/RvmDeepSourcePathRecoveryBridge.js');
 const zoneDensityV5Source = await read('../tabs/RvmZoneDensitySelectorBridgeV5.js');
 const geometricFallbackSource = await read('../rvm/BrowserRvmGeometricFallbackPolicyBridge.js');
-const markerModeSource = await read('../tabs/RvmSupportAssemblyMarkerModeBridge.js');
 const singlePickGuardSource = await read('../tabs/RvmCanvasSelectionSinglePickGuardBridge.js');
 
 check(rendererSource.includes('RvmModelHealthBridge.js?v=20260621-rvm-health-issues-1'), 'renderer loads cache-busted model health bridge');
@@ -69,14 +68,14 @@ check(rendererSource.includes('RvmJsonPcfTriggerBridge.js?v=20260621-rvm-pcf-vis
 check(rendererSource.includes('RvmZoneLodLabelBridge.js?v=20260621-rvm-preload-hierarchy-selector-1'), 'renderer keeps preload zone selector');
 check(rendererSource.includes('RvmDeepSourcePathRecoveryBridge.js?v=20260622-rvm-deep-source-path-recovery-1'), 'renderer loads deep source path recovery bridge');
 check(rendererSource.includes('RvmZoneDensitySelectorBridgeV5.js?v=20260622-rvm-zone-density-selector-5'), 'renderer loads synthetic Navis zone density selector v5');
-check(rendererSource.includes('RvmSupportAssemblyMarkerModeBridge.js?v=20260622-rvm-support-assembly-markers-off-1'), 'renderer loads support assembly marker mode bridge');
+check(!rendererSource.includes('RvmSupportAssemblyMarkerModeBridge'), 'renderer keeps retired support assembly marker bridge removed');
 check(rendererSource.includes('RvmCanvasSelectionSinglePickGuardBridge.js?v=20260622-rvm-canvas-single-pick-guard-1'), 'renderer loads canvas single-pick guard bridge');
+check(rendererSource.includes('RvmLeafCanvasPickBridge.js?v=20260622-rvm-leaf-canvas-pick-orbit-guard-2'), 'renderer loads navigation-safe leaf canvas pick bridge');
 
 check(deepPathSource.includes('recoverRvmDeepSourcePathFromInstruction') && deepPathSource.includes('isWeakRvmSourcePath'), 'deep path bridge recovers shallow paths');
 check(zoneDensityV5Source.includes('browser-rvm-zone-selection/v6-synthetic-navis-density-tree'), 'zone density selector exposes synthetic Navis tree schema');
 check(geometricFallbackSource.includes('__PCF_GLB_RVM_GEOMETRIC_FALLBACK_POLICY__'), 'geometric fallback bridge publishes diagnostics API');
 check(geometricFallbackSource.includes('huge-anonymous-box-diagnostic-hidden'), 'geometric fallback hides huge anonymous box diagnostics');
-check(markerModeSource.includes("return 'off'") && markerModeSource.includes('support-assembly-markers-default-off'), 'support assembly contact rings default off');
 check(singlePickGuardSource.includes('trimCurrentSelection') && singlePickGuardSource.includes('collectHighlighted'), 'canvas single-pick guard trims stale multi-highlight state');
 
 check(facetGhostSource.includes('browser-rvm-native-facet-ghost-panels/v1'), 'native facet ghost patch exposes schema marker');

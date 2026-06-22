@@ -17,7 +17,7 @@
 // Active deep source path recovery cache key: RvmDeepSourcePathRecoveryBridge.js?v=20260622-rvm-deep-source-path-recovery-1
 // Active left panel resize/collapse cache key: RvmLeftPanelResizeCollapseBridge.js?v=20260622-rvm-left-panel-resize-collapse-1
 // Active leaf selection identity cache key: RvmLeafSelectionIdentityBridge.js?v=20260622-rvm-leaf-selection-identity-1
-// Active leaf canvas pick cache key: RvmLeafCanvasPickBridge.js?v=20260622-rvm-leaf-canvas-pick-orbit-guard-1
+// Active leaf canvas pick cache key: RvmLeafCanvasPickBridge.js?v=20260622-rvm-leaf-canvas-pick-orbit-guard-2
 // Active canvas single-pick guard cache key: RvmCanvasSelectionSinglePickGuardBridge.js?v=20260622-rvm-canvas-single-pick-guard-1
 // Active retired support tools purge cache key: RvmRetiredSupportToolsPurgeBridge.js?v=20260622-rvm-retired-support-tools-purge-1
 // Active UI event safety cache key: RvmUiEventSafetyBridge.js?v=20260622-rvm-ui-event-safety-2
@@ -85,7 +85,7 @@ import { installRvmBottomDiagnosticsDrawerBridge } from './RvmBottomDiagnosticsD
 import { installRvmDeferredBridgeLoader } from './RvmDeferredBridgeLoader.js?v=20260622-rvm-support-tools-retired-1';
 import { installRvmLeftPanelResizeCollapseBridge } from './RvmLeftPanelResizeCollapseBridge.js?v=20260622-rvm-left-panel-resize-collapse-1';
 import { installRvmLeafSelectionIdentityBridge } from './RvmLeafSelectionIdentityBridge.js?v=20260622-rvm-leaf-selection-identity-1';
-import { installRvmLeafCanvasPickBridge } from './RvmLeafCanvasPickBridge.js?v=20260622-rvm-leaf-canvas-pick-orbit-guard-1';
+import { installRvmLeafCanvasPickBridge } from './RvmLeafCanvasPickBridge.js?v=20260622-rvm-leaf-canvas-pick-orbit-guard-2';
 import { installBrowserRvmCppMat3x4WorkerPatch } from '../rvm/BrowserRvmCppMat3x4WorkerPatch.js?v=20260620-rvm-facetgroup-1';
 import { installBrowserRvmNativeTessellationRuntimePatch } from '../rvm/BrowserRvmNativeTessellationRuntimePatch.js?v=20260620-rvm-native-diagnostics-1';
 import { installBrowserRvmNativeFacetGhostPanelPatch } from '../rvm/BrowserRvmNativeFacetGhostPanelPatch.js?v=20260622-rvm-facet-ghost-panels-1';

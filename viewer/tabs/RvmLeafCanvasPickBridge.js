@@ -2,8 +2,8 @@ import * as THREE from 'three';
 import { emit } from '../core/event-bus.js';
 import { RuntimeEvents } from '../contracts/runtime-events.js';
 
-const INSTALL_FLAG = Symbol.for('pcf-glb-rvm-leaf-canvas-pick-v1');
-const VERSION = '20260622-rvm-leaf-canvas-pick-orbit-guard-1';
+const INSTALL_FLAG = Symbol.for('pcf-glb-rvm-leaf-canvas-pick-v2-navigation-safe');
+const VERSION = '20260622-rvm-leaf-canvas-pick-orbit-guard-2';
 const CLICK_TOLERANCE = 5;
 const SELECTED_COLOR = 0x60a5fa;
 const SELECTED_EMISSIVE = 0x2563eb;
@@ -51,10 +51,10 @@ function bindActiveViewer(state = globalThis[INSTALL_FLAG]) {
     const mode = currentMode(viewer);
     if (event.button !== 0) return;
     if (mode !== 'select') {
-      // RVM click selection must not run while the user is orbiting/panning.
-      // Block later canvas-selection listeners, but leave the document-level OrbitControls pointer-up intact.
-      event.stopPropagation();
-      event.stopImmediatePropagation?.();
+      // Selection must not run in orbit/pan/marquee/measure modes, but those tools
+      // need pointerup to continue to OrbitControls, RvmViewer3D marquee/measure handlers,
+      // and document-level listeners.  Do not stop propagation here.
+      down = null;
       return;
     }
     if (!down) return;
