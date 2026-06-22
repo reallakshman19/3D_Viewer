@@ -48,7 +48,7 @@ const hierarchy = [
 ];
 
 const instructionSet = collectBrowserRvmRenderInstructions(hierarchy);
-assert.equal(instructionSet.schemaVersion, 'rvm-browser-render-instructions/v3-support-hints');
+assert.equal(instructionSet.schemaVersion, 'rvm-browser-render-instructions/v4-preserve-raw-support-cylinders');
 assert.equal(instructionSet.count, 1);
 assert.equal(instructionSet.diagnostics.attCounts.enriched, 1);
 assert.equal(instructionSet.diagnostics.supportHintCount, 0);
