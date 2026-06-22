@@ -14,6 +14,7 @@ async function read(path) {
 const rendererSource = await read('../tabs/viewer3d-rvm-tab-renderer.js');
 const appSource = await read('../core/app.js');
 const runtimeSource = await read('../core/app-label-perf-runtime.js');
+const tabClickBridgeSource = await read('../core/app-tab-click-state-bridge.js');
 const entrySource = await read('../main-rhbg-fitguard.js');
 const indexSource = await read('../index.html');
 const tabSource = await read('../tabs/viewer3d-rvm-tab.js');
@@ -83,12 +84,16 @@ check(renderBuilderSource.includes('RVM_NATIVE_FACET_GROUP'), 'render builder ke
 check(renderBuilderSource.includes('wireframe-diagnostic-not-solid-geometry'), 'bbox placeholders remain diagnostic wireframes');
 check(!renderBuilderSource.includes("primitive === 'STRUCTURE_BBOX' || type === 'STRUCTURE'"), 'unconditional structure slab promotion remains blocked');
 
-check(indexSource.includes('main-rhbg-fitguard.js?v=20260622-app-root-startup-1'), 'index uses app root startup entry cache key');
-check(entrySource.includes('core/app.js?v=20260622-rvm-facet-ghost-panels-1'), 'entrypoint uses facet ghost app cache key');
+check(indexSource.includes('main-rhbg-fitguard.js?v=20260622-tab-click-state-1'), 'index uses tab click entry cache key');
+check(entrySource.includes('core/app.js?v=20260622-tab-click-state-1'), 'entrypoint uses tab click app cache key');
 check(entrySource.includes('await init(startupMount())'), 'entrypoint passes resolved mount root into init');
+check(appSource.includes('app-tab-click-state-bridge.js?v=20260622-tab-click-state-1'), 'app side-loads tab click state bridge');
+check(appSource.includes('installAppTabClickStateBridge()'), 'app installs tab click state bridge before runtime delegate');
+check(tabClickBridgeSource.includes('RuntimeEvents.TAB_CHANGED'), 'tab click state bridge listens for tab changes');
+check(tabClickBridgeSource.includes('state.activeTabId = tabId'), 'tab click state bridge synchronizes active tab id');
 check(appSource.includes('BrowserRvmNativeFacetGhostPanelPatch.js?v=20260622-rvm-facet-ghost-panels-1'), 'app side-loads native facet ghost patch');
 check(appSource.includes('installBrowserRvmNativeFacetGhostPanelPatch()'), 'app installs native facet ghost patch independent of renderer cache');
-check(appSource.includes('app-label-perf-runtime.js?v=20260622-rvm-facet-ghost-panels-1'), 'app delegates through facet ghost runtime cache key');
+check(appSource.includes('app-label-perf-runtime.js?v=20260622-tab-click-state-1'), 'app delegates through tab click runtime cache key');
 check(runtimeSource.includes('viewer3d-rvm-tab-renderer.js?v=20260622-rvm-facet-ghost-panels-1'), 'runtime uses facet ghost renderer cache');
 
 console.log(`\n${passed} passed, ${failed} failed`);
