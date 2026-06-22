@@ -5,15 +5,43 @@ import {
 } from './BrowserRvmSmartCivilFacetPolicy.js';
 
 const INSTALL_FLAG = Symbol.for('pcf-glb-rvm-civil-fallback-policy-v3');
-const VERSION = '20260622-rvm-smart-civil-code11-default-off-1';
+const VERSION = '20260622-rvm-smart-civil-code11-default-off-2';
 const GLOBAL_KEY = '__PCF_GLB_RVM_CIVIL_FALLBACK_POLICY__';
 const DIAG_KEY = '__PCF_GLB_RVM_CIVIL_FALLBACK_POLICY_DIAGNOSTICS__';
 const LARGE_MAX_DIM = 700;
 const LARGE_DIAGONAL = 1400;
 
+const POLICY_INFO = Object.freeze({
+  primitiveCodes: Object.freeze([
+    'RVM PRIM code 10: Line/GENSEC/reference-line primitives; grid-like lines default hidden diagnostic, otherwise wire line.',
+    'RVM PRIM code 11: Facet group/polygon mesh primitives; civil-style large panels/foundations/grids default hidden or wireframe proxy.',
+  ]),
+  triggerTerms: Object.freeze({
+    GRID: ['GRID', 'GRIDS', 'GRDLN', 'GRIDLINE', 'GRATING', 'GRATE', 'DATUM', 'AXIS', 'REFERENCE', 'SETTINGOUT'],
+    FOUNDATION: ['FDNS', 'FDN', 'FOUND', 'FOUNDATION', 'FOOTING', 'PILE', 'PILECAP', 'SLAB', 'BASESLAB', 'PEDESTAL', 'PLINTH', 'ANCHORBLOCK', 'CONCRETE', 'RCC', 'PCC'],
+    EARTHWORK: ['PAVE', 'PAVEMENT', 'ROAD', 'CURB', 'KERB', 'GRAD', 'GRADE', 'DRAIN', 'TRENCH', 'PIT', 'PITS', 'DUCTBANK', 'CULVERT', 'CHANNEL', 'SUMP', 'BUND'],
+    PANEL_FRAME: ['PANEL', 'FRAMEWORK', 'FRMWORK', 'SBFRAMEWORK', 'WALL', 'FLOOR', 'DECK', 'ROOF', 'PLATE', 'SHEET', 'CLADDING', 'FENCE', 'BARRIER'],
+    STRUCTURE: ['STRUCTURE', 'STRUCTURAL', 'CIVIL', 'BUILDING', 'ARCH', 'ARCHITECTURAL'],
+  }),
+  protectionTerms: Object.freeze(['PIPE', 'PIPING', 'ELBOW', 'BEND', 'TEE', 'OLET', 'BRANCH', 'FLANGE', 'VALVE', 'NOZZLE', 'GASKET', 'REDUCER', 'CAP', 'COUPLING', 'INSTRUMENT', 'PUMP', 'VESSEL', 'DRUM', 'TANK', 'EXCHANGER', 'EQUIPMENT', 'SUPPORT', 'HANGER', 'SPRING', 'GUIDE', 'STOP', 'ANCHOR', 'SHOE']),
+  geometryTriggers: Object.freeze([
+    `large bbox if max dimension >= ${LARGE_MAX_DIM} or diagonal >= ${LARGE_DIAGONAL}`,
+    'smart code-11 classifier also checks huge/planar/thin/broad/complex/hole-risk facet groups',
+  ]),
+});
+
+const TOOLTIP_TEXT = policyTooltipText(POLICY_INFO);
+
 export function installBrowserRvmCivilFallbackPolicyBridge() {
   if (globalThis[INSTALL_FLAG]) return globalThis[INSTALL_FLAG];
-  const state = { version: VERSION, runs: 0, lastDiagnostics: null, runNow: () => runPolicy(state) };
+  const state = {
+    version: VERSION,
+    runs: 0,
+    lastDiagnostics: null,
+    policyInfo: POLICY_INFO,
+    tooltip: TOOLTIP_TEXT,
+    runNow: () => runPolicy(state),
+  };
   globalThis[INSTALL_FLAG] = state;
   globalThis[GLOBAL_KEY] = state;
   const schedule = () => setTimeout(() => runPolicy(state), 0);
@@ -21,6 +49,7 @@ export function installBrowserRvmCivilFallbackPolicyBridge() {
     try { globalThis.addEventListener?.(event, schedule); } catch (_) {}
   }
   for (const delay of [300, 900, 1800, 3600, 7200]) setTimeout(schedule, delay);
+  installCivilPolicyInfoUi();
   return state;
 }
 
@@ -68,6 +97,7 @@ function classifyCivilFallback(obj) {
         geometryPolicy: smart.policy,
         materialPolicy: 'smart-civil-code11-default-off-runtime',
         rvmCivilFallbackKind: smart.kind,
+        browserRvmCivilFallbackTooltip: TOOLTIP_TEXT,
       },
     };
   }
@@ -101,6 +131,7 @@ function policy(kind, action, reason, opacity = 0.18) {
       geometryPolicy: action === 'hide' ? 'civil-container-hidden-diagnostic' : 'civil-container-wireframe-diagnostic',
       materialPolicy: 'civil-fallback-diagnostic',
       rvmCivilFallbackKind: kind,
+      browserRvmCivilFallbackTooltip: TOOLTIP_TEXT,
     },
   };
 }
@@ -161,5 +192,92 @@ function applyWireframe(obj, opacity = 0.18) {
 }
 
 function baseDiagnostics() {
-  return { version: VERSION, capturedAt: new Date().toISOString(), scannedCount: 0, policyCount: 0, hiddenCount: 0, wireframeCount: 0, byKind: {} };
+  return {
+    version: VERSION,
+    capturedAt: new Date().toISOString(),
+    scannedCount: 0,
+    policyCount: 0,
+    hiddenCount: 0,
+    wireframeCount: 0,
+    byKind: {},
+    policyInfo: {
+      primitiveCodes: POLICY_INFO.primitiveCodes,
+      triggerKinds: Object.keys(POLICY_INFO.triggerTerms || {}),
+      protectionTermCount: POLICY_INFO.protectionTerms?.length || 0,
+      geometryTriggerCount: POLICY_INFO.geometryTriggers?.length || 0,
+    },
+  };
+}
+
+function installCivilPolicyInfoUi() {
+  if (typeof document === 'undefined') return;
+  injectCivilPolicyInfoStyles();
+  const scan = () => document.querySelectorAll('[data-rvm-viewer]').forEach(injectCivilPolicyInfoToolbar);
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', scan, { once: true });
+  else setTimeout(scan, 0);
+  try {
+    const observer = new MutationObserver(scan);
+    observer.observe(document.documentElement, { childList: true, subtree: true });
+  } catch (_) {}
+  try { globalThis.addEventListener?.('rvm-model-loaded', () => setTimeout(scan, 260)); } catch (_) {}
+}
+
+function injectCivilPolicyInfoToolbar(root) {
+  const ribbon = root?.querySelector?.('.geo-top-ribbon');
+  if (!ribbon || ribbon.querySelector('.rvm-civil-policy-info-tool-group')) return;
+  const section = document.createElement('div');
+  section.className = 'rvm-ribbon-section rvm-tool-group rvm-civil-policy-info-tool-group';
+  section.innerHTML = `
+    <span class="rvm-ribbon-label">Civil Ref</span>
+    <div class="rvm-ribbon-button-row">
+      <button type="button" class="rvm-tool-btn rvm-civil-policy-info-btn" data-rvm-civil-policy-info="true" aria-label="Civil reference default-off policy details" title="${escAttr(TOOLTIP_TEXT)}">
+        <span aria-hidden="true">ⓘ</span><span>Policy</span>
+      </button>
+    </div>`;
+  const anchor = ribbon.querySelector('.rvm-zone-lod-section') || ribbon.querySelector('.rvm-dtxr-coverage-tool-group') || ribbon.querySelector('.rvm-model-health-tool-group');
+  if (anchor?.nextSibling) ribbon.insertBefore(section, anchor.nextSibling);
+  else ribbon.appendChild(section);
+  section.querySelector('[data-rvm-civil-policy-info]')?.addEventListener('click', () => {
+    setStatus(root, 'Civil Ref policy: code-10 reference lines and smart code-11 civil facets default off/wireframe. Hover ⓘ for trigger/protection terms.');
+  });
+}
+
+function injectCivilPolicyInfoStyles() {
+  if (document.getElementById('rvm-civil-policy-info-style')) return;
+  const style = document.createElement('style');
+  style.id = 'rvm-civil-policy-info-style';
+  style.textContent = `
+    .rvm-civil-policy-info-tool-group .rvm-civil-policy-info-btn{min-width:70px}
+    .rvm-civil-policy-info-tool-group .rvm-civil-policy-info-btn span:first-child{font-weight:700}
+  `;
+  document.head.appendChild(style);
+}
+
+function setStatus(root, message, warning = false) {
+  const el = root?.querySelector?.('#rvm-sb-msg');
+  if (!el) return;
+  el.textContent = message;
+  el.style.color = warning ? '#ffcf70' : '';
+}
+
+function policyTooltipText(info) {
+  const triggerText = Object.entries(info.triggerTerms)
+    .map(([kind, words]) => `${kind}: ${words.join(', ')}`)
+    .join(' | ');
+  return [
+    'Smart civil/reference default-off policy',
+    ...info.primitiveCodes,
+    `Trigger words: ${triggerText}`,
+    `Protected process terms: ${info.protectionTerms.join(', ')}`,
+    `Geometry: ${info.geometryTriggers.join('; ')}`,
+    'Project-specific names are not used; this is taxonomy + geometry based.',
+  ].join('\n');
+}
+
+function escAttr(value) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
 }
