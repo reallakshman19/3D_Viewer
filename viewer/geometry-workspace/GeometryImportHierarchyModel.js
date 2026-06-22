@@ -1,4 +1,5 @@
 export const GEOMETRY_IMPORT_TREE_SCHEMA = 'geometry-import-hierarchy/v1';
+export const GEOMETRY_IMPORT_HIERARCHY_SCHEMA = 'geometry-import-hierarchy/v1';
 
 const DEFAULT_MAX_DEPTH = 5;
 const DEFAULT_MAX_VISIBLE_ROWS = 500;
