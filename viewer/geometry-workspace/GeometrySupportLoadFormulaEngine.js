@@ -1,6 +1,8 @@
 export const SUPPORT_LOAD_FORMULA_SCHEMA = 'support-load-formula-results/v1';
-export const SUPPORT_LOAD_FORMULA_VERSION = '20260622-access-support-load-formula-1';
+export const SUPPORT_LOAD_FORMULA_VERSION = '20260622-access-support-load-formula-writeback-audit-1';
 export const SUPPORT_LOAD_FORMULA_PROFILE_ID = 'ACCESS_TEMP_WALL_WEIGHTED_V1';
+export const SUPPORT_LOAD_RESULT_WRITEBACK_SCHEMA = 'support-load-result-writeback-audit/v1';
+export const SUPPORT_LOAD_RESULT_WRITEBACK_VERSION = '20260622-support-load-result-writeback-audit-1';
 
 export const SUPPORT_LOAD_FORMULA_INFO_TEXT = `Support Load Formula — Access Temperature / Wall Weighted Profile
 
@@ -38,6 +40,8 @@ GetRoundedNum(1000 × 0.0209 × (3.14 ÷ 32 × (Dia_mm^4 - (Dia_mm - WallThickne
 Notes:
 - Calculation reads only locked pipe.attributes.supportLoadInput packages.
 - No master lookup, enrichment, association, or missing-value fabrication is performed inside this formula engine.
+- Result writeback is restricted to calculatedFields.supportLoads and calculatedFields.supportLoadReference.
+- Blocked recalculation clears stale support-load calculated fields rather than leaving old results on objects.
 - TempfnC(T) defaults to identity T for this profile until a project-specific temperature function table is supplied.`;
 
 function text(value) { return String(value ?? '').trim(); }
@@ -62,6 +66,41 @@ function inputKey(input) {
 function getRoundStep(input) { return number(input?.formulaProfile?.roundStep) || 50; }
 function getRoundMajor(input) { return number(input?.formulaProfile?.roundMajor) || 100; }
 function getRoundMode(input) { return text(input?.formulaProfile?.roundMode || 'up').toLowerCase(); }
+function stableJson(value) {
+  try { return JSON.stringify(value ?? null); } catch { return '__unserializable__'; }
+}
+function supportLoadInputSnapshot(object) {
+  return stableJson(object?.attributes?.supportLoadInput || null);
+}
+function calculatedFieldCount(calculatedFields) {
+  return Object.keys(calculatedFields || {}).length;
+}
+function removeCalculatedKey(calculatedFields, key) {
+  if (!calculatedFields || typeof calculatedFields !== 'object' || !(key in calculatedFields)) return calculatedFields || null;
+  const next = { ...calculatedFields };
+  delete next[key];
+  return calculatedFieldCount(next) ? next : null;
+}
+function withCalculatedFields(object, calculatedFields) {
+  const next = { ...object };
+  if (calculatedFields && calculatedFieldCount(calculatedFields)) next.calculatedFields = calculatedFields;
+  else delete next.calculatedFields;
+  return next;
+}
+function writebackMarker({ target, inputKeyValue, sourceObjectId, status, evaluatedAt }) {
+  return freezeDeep({
+    schema: SUPPORT_LOAD_RESULT_WRITEBACK_SCHEMA,
+    version: SUPPORT_LOAD_RESULT_WRITEBACK_VERSION,
+    target,
+    status,
+    inputSource: 'pipe.attributes.supportLoadInput',
+    inputKey: text(inputKeyValue),
+    sourceObjectId: text(sourceObjectId),
+    evaluatedAt: evaluatedAt || null,
+    inputMutation: 'FORBIDDEN',
+    allowedCalculatedFields: ['calculatedFields.supportLoads', 'calculatedFields.supportLoadReference']
+  });
+}
 export function getRoundedNum(value, major = 100, step = 50, mode = 'up') {
   const numeric = number(value);
   const roundStep = number(step) || 50;
@@ -203,35 +242,72 @@ function pipeSupportRows(pipeResult, input) {
     applies: { vertical: true, guide: supportAppliesGuide(ref), lineStop: supportAppliesLineStop(ref) }
   }));
 }
-function writeResultsToObjects(objects, pipeResults, supportRows) {
+function writeResultsToObjects(objects, pipeResults, supportRows, options = {}) {
   const byPipe = new Map(pipeResults.map(result => [result.sourceObjectId, result]));
   const bySupport = new Map(supportRows.map(row => [row.supportId, row]));
-  return freezeDeep((Array.isArray(objects) ? objects : []).map(object => {
+  const audit = {
+    schema: SUPPORT_LOAD_RESULT_WRITEBACK_SCHEMA,
+    version: SUPPORT_LOAD_RESULT_WRITEBACK_VERSION,
+    evaluatedAt: options.evaluatedAt || null,
+    status: 'OK',
+    inputMutationPolicy: 'FORBIDDEN',
+    allowedWriteTargets: ['calculatedFields.supportLoads', 'calculatedFields.supportLoadReference'],
+    objectCount: Array.isArray(objects) ? objects.length : 0,
+    pipeCalculatedWriteCount: 0,
+    supportCalculatedWriteCount: 0,
+    stalePipeResultClearedCount: 0,
+    staleSupportReferenceClearedCount: 0,
+    inputPackagePreservedCount: 0,
+    inputPackageMutatedCount: 0
+  };
+  const calculatedObjects = (Array.isArray(objects) ? objects : []).map(object => {
+    const beforeInput = supportLoadInputSnapshot(object);
     const id = objectId(object);
     const pipeResult = byPipe.get(id);
-    if (pipeResult?.status === 'CALCULATED') {
-      return { ...object, calculatedFields: { ...(object.calculatedFields || {}), supportLoads: pipeResult.calculatedFields } };
-    }
     const supportResult = bySupport.get(id);
-    if (supportResult?.status === 'CALCULATED') {
-      return { ...object, calculatedFields: { ...(object.calculatedFields || {}), supportLoadReference: supportResult } };
+    let next = object;
+    if (pipeResult?.status === 'CALCULATED') {
+      const marker = writebackMarker({ target: 'calculatedFields.supportLoads', inputKeyValue: pipeResult.inputKey, sourceObjectId: pipeResult.sourceObjectId, status: 'WRITTEN', evaluatedAt: options.evaluatedAt });
+      const supportLoads = { ...pipeResult.calculatedFields, writebackAudit: marker };
+      next = { ...object, calculatedFields: { ...(object.calculatedFields || {}), supportLoads } };
+      audit.pipeCalculatedWriteCount += 1;
+    } else if (pipeResult) {
+      const cleaned = removeCalculatedKey(object.calculatedFields, 'supportLoads');
+      next = withCalculatedFields(object, cleaned);
+      if (cleaned !== object.calculatedFields) audit.stalePipeResultClearedCount += 1;
     }
-    return object;
-  }));
+    if (supportResult?.status === 'CALCULATED') {
+      const marker = writebackMarker({ target: 'calculatedFields.supportLoadReference', inputKeyValue: supportResult.associatedPipeId, sourceObjectId: supportResult.supportId, status: 'WRITTEN', evaluatedAt: options.evaluatedAt });
+      const supportLoadReference = { ...supportResult, writebackAudit: marker };
+      next = { ...next, calculatedFields: { ...(next.calculatedFields || {}), supportLoadReference } };
+      audit.supportCalculatedWriteCount += 1;
+    } else if (supportResult) {
+      const cleaned = removeCalculatedKey(next.calculatedFields, 'supportLoadReference');
+      next = withCalculatedFields(next, cleaned);
+      if (cleaned !== next.calculatedFields) audit.staleSupportReferenceClearedCount += 1;
+    }
+    const afterInput = supportLoadInputSnapshot(next);
+    if (beforeInput === afterInput) audit.inputPackagePreservedCount += 1;
+    else audit.inputPackageMutatedCount += 1;
+    return next;
+  });
+  if (audit.inputPackageMutatedCount > 0) audit.status = 'INPUT_MUTATION_DETECTED';
+  return freezeDeep({ calculatedObjects, writebackAudit: audit });
 }
 export function calculateSupportLoadResultsFromInputModel(model, options = {}) {
+  const evaluatedAt = options.evaluatedAt || new Date().toISOString();
   const pipeInputs = Array.isArray(model?.pipeInputs) ? model.pipeInputs : [];
   const pipeResults = pipeInputs.map(input => calculateSupportLoadsForPipeInput(input));
   const byKey = new Map(pipeInputs.map(input => [inputKey(input), input]));
   const supportRows = pipeResults.flatMap(result => pipeSupportRows(result, byKey.get(result.inputKey)));
-  const calculatedObjects = writeResultsToObjects(model?.hydratedObjects || [], pipeResults, supportRows);
+  const writeback = writeResultsToObjects(model?.hydratedObjects || [], pipeResults, supportRows, { evaluatedAt });
   const calculatedCount = pipeResults.filter(result => result.status === 'CALCULATED').length;
   const blockedCount = pipeResults.length - calculatedCount;
   return freezeDeep({
     schema: SUPPORT_LOAD_FORMULA_SCHEMA,
     version: SUPPORT_LOAD_FORMULA_VERSION,
     profileId: SUPPORT_LOAD_FORMULA_PROFILE_ID,
-    evaluatedAt: options.evaluatedAt || new Date().toISOString(),
+    evaluatedAt,
     status: pipeResults.length === 0 ? 'EMPTY' : blockedCount ? 'BLOCKED' : 'CALCULATED',
     pipeInputCount: pipeResults.length,
     calculatedPipeCount: calculatedCount,
@@ -239,12 +315,14 @@ export function calculateSupportLoadResultsFromInputModel(model, options = {}) {
     supportResultCount: supportRows.length,
     pipeResults,
     supportRows,
-    calculatedObjects,
+    calculatedObjects: writeback.calculatedObjects,
+    writebackAudit: writeback.writebackAudit,
     formulaInfo: SUPPORT_LOAD_FORMULA_INFO_TEXT,
     assumptions: [
       'Formula engine reads only locked pipe.attributes.supportLoadInput packages.',
       'TempfnC(TEMP_EXP_C1) defaults to identity until a project-specific function table is supplied.',
-      'Line Stop formula intentionally preserves the legacy Access Dia - WALL_THICK expression.'
+      'Line Stop formula intentionally preserves the legacy Access Dia - WALL_THICK expression.',
+      'Result writeback is restricted to calculatedFields.supportLoads and calculatedFields.supportLoadReference.'
     ]
   });
 }
