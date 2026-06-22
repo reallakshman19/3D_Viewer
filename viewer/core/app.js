@@ -25,6 +25,7 @@
 // GeometrySupportLoadReportBridge.js?v=20260622-support-load-result-report-1
 // GeometrySupportLoadFormulaEngine.js?v=20260622-support-load-result-writeback-audit-1
 // GeometrySupportLoadFormulaBridge.js?v=20260622-support-load-result-writeback-audit-1
+// GeometryEnrichedStagedJsonBridge.js?v=20260622-geometry-enriched-stagedjson-1
 // GeometryEnrichedStagedJsonExporter.js?v=20260622-geometry-enriched-stagedjson-support-loads-1
 // GeometryEnrichedStagedJsonBridge.js?v=20260622-geometry-enriched-stagedjson-support-loads-1
 // app-label-perf-runtime.js?v=20260622-pipe-support-load-input-hydrator-1
