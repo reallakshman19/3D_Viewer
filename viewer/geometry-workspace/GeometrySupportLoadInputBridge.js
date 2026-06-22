@@ -1,4 +1,4 @@
-import { buildGeometrySupportLoadInputModel, exampleSupportLoadInputObjects, GEOMETRY_SUPPORT_LOAD_INPUT_SCHEMA, GEOMETRY_SUPPORT_LOAD_INPUT_VERSION, PIPE_SUPPORT_LOAD_INPUT_SCHEMA } from './GeometrySupportLoadInputModel.js?v=20260622-pipe-support-load-input-hydrator-1';
+import { buildGeometrySupportLoadInputModel, exampleSupportLoadInputObjects, GEOMETRY_SUPPORT_LOAD_INPUT_SCHEMA, GEOMETRY_SUPPORT_LOAD_INPUT_VERSION, PIPE_SUPPORT_LOAD_INPUT_SCHEMA } from './GeometrySupportLoadInputModel.js?v=20260622-pipe-support-load-input-hydrator-2';
 import { applySupportLoadInputReview, lockReadySupportLoadInputs, unlockSupportLoadInputs, supportLoadInputReviewKey, SUPPORT_LOAD_INPUT_REVIEW_SCHEMA, SUPPORT_LOAD_INPUT_REVIEW_VERSION } from './GeometrySupportLoadInputReview.js?v=20260622-input-review-override-lock-1';
 import { SUPPORT_LOAD_INPUT_OVERRIDE_FIELDS, SUPPORT_LOAD_INPUT_OVERRIDE_SCHEMA, SUPPORT_LOAD_INPUT_OVERRIDE_VERSION, setSupportLoadInputOverride, clearSupportLoadInputOverride } from './GeometrySupportLoadInputOverrides.js?v=20260622-input-override-1';
 const INSTALL_FLAG=Symbol.for('pcf-glb-geometry-support-load-input-bridge-v3');let lastModel=null;
