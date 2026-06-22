@@ -21,6 +21,7 @@
 // Active canvas single-pick guard cache key: RvmCanvasSelectionSinglePickGuardBridge.js?v=20260622-rvm-canvas-single-pick-guard-1
 // Active retired support tools purge cache key: RvmRetiredSupportToolsPurgeBridge.js?v=20260622-rvm-retired-support-tools-purge-1
 // Active UI event safety cache key: RvmUiEventSafetyBridge.js?v=20260622-rvm-ui-event-safety-2
+// Active CSS overlay off cache key: RvmCssOverlayOffBridge.js?v=20260622-rvm-css-overlays-off-1
 // Active selection details inspector cache key: RvmSelectionDetailsInspectorBridge.js?v=20260621-rvm-selection-details-inspector-1
 // Active isolate/visibility toolbar cache key: RvmVisibilityToolbarBridge.js?v=20260621-rvm-isolate-visibility-toolbar-1
 // Active visibility snapshots cache key: RvmVisibilitySnapshotsBridge.js?v=20260621-rvm-visibility-snapshots-1
@@ -56,6 +57,7 @@ import { installRvmViewerInteractionPatch, installRvmCanvasSelectionBridge } fro
 import { installRvmCanvasSelectionSinglePickGuardBridge } from './RvmCanvasSelectionSinglePickGuardBridge.js?v=20260622-rvm-canvas-single-pick-guard-1';
 import { installRvmRetiredSupportToolsPurgeBridge } from './RvmRetiredSupportToolsPurgeBridge.js?v=20260622-rvm-retired-support-tools-purge-1';
 import { installRvmUiEventSafetyBridge } from './RvmUiEventSafetyBridge.js?v=20260622-rvm-ui-event-safety-2';
+import { installRvmCssOverlayOffBridge } from './RvmCssOverlayOffBridge.js?v=20260622-rvm-css-overlays-off-1';
 import { installRvmUiInteractionPanelPatch, installRvmUiPanelBridge } from './RvmUiInteractionPanelPatch.js?v=20260621-rvm-ui-interaction-panels-1';
 import { installRvmPropertyPanelCollapseAuditBridge } from './RvmPropertyPanelCollapseAuditBridge.js?v=20260621-rvm-property-collapse-1';
 import { installRvmLabelPerformanceBridge, installRvmLabelButtonBridge } from './RvmLabelPerformanceBridge.js?v=20260621-rvm-zone-lod-labels-1';
@@ -145,5 +147,6 @@ installRvmLeafSelectionIdentityBridge();
 installRvmDeferredBridgeLoader();
 installRvmUiPanelBridge();
 installRvmUiEventSafetyBridge();
+installRvmCssOverlayOffBridge();
 
 export { mountViewer3DRvmTab as renderViewer3DRvm } from './viewer3d-rvm-tab.js?v=20260622-rvm-smart-civil-code11-defer-1';
