@@ -18,20 +18,40 @@ html,body{height:100%;margin:0;background:#090f1a;color:#dce8f4;font-family:syst
 <link rel="stylesheet" href="styles/viewer3d.css?v=20260518-statusbar-theme-12">
 <link rel="stylesheet" href="tabs/model-converters-tab.css?v=20260621-model-converters-css-1">
 <link rel="stylesheet" href="tabs/model-converters-css-fix.css?v=20260621-model-converters-css-1">
-<link rel="stylesheet" href="tabs/basic-glb-pcf-tab.css?v=20260617-basic-glb-pcf-css-1">
-<link rel="stylesheet" href="tabs/pcfx-converter-tab.css?v=20260618-pcfx-converter-tab-css-1">
-<link rel="stylesheet" href="tabs/viewer3d-rvm-tab.css?v=20260620-rvm-statusbar-css-1">
-<link rel="stylesheet" href="tabs/rvm-json-pcf-extract-tab.css?v=20260621-rvm-json-pcf-workflow-style-1">
-<link rel="stylesheet" href="tabs/universal-xml-tab.css?v=20260617-universal-xml-css-1">
-<link rel="stylesheet" href="tabs/xml-compare-tab.css?v=20260617-xml-compare-css-1">
-<link rel="stylesheet" href="tabs/model-exchange-tab.css?v=20260618-model-exchange-css-1">
-<link rel="stylesheet" href="tabs/interchange-config-tab.css?v=20260618-interchange-config-css-1">
-<link rel="stylesheet" href="tabs/support-mapping-config-tab.css?v=20260618-support-mapping-config-css-1">
-<link rel="stylesheet" href="tabs/psnm-utility-tab.css?v=20260613-psnm-css-1">
+<link rel="stylesheet" href="tabs/viewer3d-rvm-tab.css?v=20260620-rvm-direct-tab-1">
+<link rel="preconnect" href="//unpkg.com" crossorigin>
+<script type="importmap">
+{"imports":{"three":"https:\/\/unpkg.com\/three@0.160.1\/build\/three.module.js","three/addons\/":"https:\/\/unpkg.com\/three@0.160.1\/examples\/jsm\/","gltf-exporter":"https:\/\/unpkg.com\/three@0.160.1\/examples\/jsm\/exporters\/GLTFExporter.js","mdb-reader":"https:\/\/esm.sh\/mdb-reader@2","buffer":"https:\/\/esm.sh\/buffer@6","xlsx":"https:\/\/cdn.jsdelivr.net\/npm\/xlsx@0.18.5\/+esm"}}
+</script>
 </head>
 <body>
-<div id="app-loading-overlay" class="is-visible" aria-hidden="false"><div><div id="app-loading-label">Loading viewer...</div></div></div>
 <div id="app-layout"><nav id="tab-bar"></nav><main id="tab-content"></main></div>
+<div id="app-loading-overlay" aria-live="polite" aria-label="Loading"><div class="app-loading-spinner" aria-hidden="true"></div><span class="app-loading-label" id="app-loading-label">Loading…</span></div>
+<div id="app-toast-container" aria-live="assertive" role="status"></div>
+<!-- Legacy static-contract marker: main-rhbg-fitguard.js?v=20260620-rvm-stagedjson-validation-1 -->
+<!-- Previous cache marker: main-rhbg-fitguard.js?v=20260621-rvm-perf-lazy-bridges-1 -->
+<!-- Previous cache marker: main-rhbg-fitguard.js?v=20260621-rvm-button-hardening-1 -->
+<!-- Previous cache marker: main-rhbg-fitguard.js?v=20260621-rvm-ui-interaction-panels-1 -->
+<!-- Previous cache marker: main-rhbg-fitguard.js?v=20260621-rvm-property-collapse-1 -->
+<!-- Previous cache marker: main-rhbg-fitguard.js?v=20260621-app-brand-icon-1 -->
+<!-- Previous cache marker: main-rhbg-fitguard.js?v=20260621-rvm-label-perf-1 -->
+<!-- Previous cache marker: main-rhbg-fitguard.js?v=20260621-rvm-json-pcf-trigger-1 -->
+<!-- Previous cache marker: main-rhbg-fitguard.js?v=20260621-rvm-policy-info-1 -->
+<!-- Previous cache marker: main-rhbg-fitguard.js?v=20260621-rvm-zone-lod-labels-1 -->
+<!-- Previous cache marker: main-rhbg-fitguard.js?v=20260621-rvm-navis-hierarchy-1 -->
+<!-- Previous cache marker: main-rhbg-fitguard.js?v=20260621-rvm-native-facet-primary-1 -->
+<!-- Previous cache marker: main-rhbg-fitguard.js?v=20260621-rvm-zone-lod-context-1 -->
+<!-- Previous cache marker: main-rhbg-fitguard.js?v=20260621-rvm-pcf-visible-scope-1 -->
+<!-- Previous cache marker: main-rhbg-fitguard.js?v=20260621-rvm-preload-hierarchy-selector-1 -->
+<!-- Previous cache marker: main-rhbg-fitguard.js?v=20260621-rvm-selection-details-inspector-1 -->
+<!-- Previous cache marker: main-rhbg-fitguard.js?v=20260621-rvm-isolate-visibility-toolbar-1 -->
+<!-- Previous cache marker: main-rhbg-fitguard.js?v=20260621-rvm-visibility-snapshots-1 -->
+<!-- Previous cache marker: main-rhbg-fitguard.js?v=20260621-rvm-object-search-1 -->
+<!-- Previous cache marker: main-rhbg-fitguard.js?v=20260621-rvm-measure-tools-1 -->
+<!-- Previous cache marker: main-rhbg-fitguard.js?v=20260621-rvm-section-box-1 -->
+<!-- Previous cache marker: main-rhbg-fitguard.js?v=20260621-rvm-selection-sets-1 -->
+<!-- Previous cache marker: main-rhbg-fitguard.js?v=20260621-rvm-report-export-1 -->
+<!-- Previous cache marker: main-rhbg-fitguard.js?v=20260621-rvm-model-health-1 -->
 <!-- Previous cache marker: main-rhbg-fitguard.js?v=20260621-rvm-health-issues-1 -->
 <!-- Previous cache marker: main-rhbg-fitguard.js?v=20260622-rvm-facet-ghost-panels-1 -->
 <!-- Previous cache marker: main-rhbg-fitguard.js?v=20260622-app-root-startup-1 -->
