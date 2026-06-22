@@ -39,6 +39,8 @@ const geometryCalcRegistrySource = await read('../geometry-workspace/GeometryCal
 const geometryCalcBridgeSource = await read('../geometry-workspace/GeometryCalculationCanvasBridge.js');
 const geometryInputResolverSource = await read('../geometry-workspace/GeometryCalculationInputResolver.js');
 const geometryInputBridgeSource = await read('../geometry-workspace/GeometryCalculationInputBridge.js');
+const geometryEnrichmentResolverSource = await read('../geometry-workspace/GeometryEnrichmentResolver.js');
+const geometryEnrichmentBridgeSource = await read('../geometry-workspace/GeometryEnrichmentBridge.js');
 const pcfSource = await read('../tabs/RvmJsonPcfTriggerBridge.js');
 const visibilitySource = await read('../tabs/RvmVisibilityToolbarBridge.js');
 const setsSource = await read('../tabs/RvmSelectionSetsBridge.js');
@@ -118,6 +120,15 @@ check(geometryInputBridgeSource.includes('data-geometry-calculation-input-open')
 check(geometryInputBridgeSource.includes('Apply Inputs') && geometryInputBridgeSource.includes('Export Resolved JSON'), 'geometry input bridge applies and exports resolved inputs');
 check(geometryInputBridgeSource.includes('does not fabricate missing calculation data'), 'geometry input bridge states no fabrication policy');
 
+check(geometryEnrichmentResolverSource.includes("GEOMETRY_ENRICHMENT_RESOLVER_SCHEMA = 'geometry-enrichment-resolver/v1'"), 'geometry enrichment resolver exposes schema marker');
+check(geometryEnrichmentResolverSource.includes('parseRenderedBranchIdentity') && geometryEnrichmentResolverSource.includes('deriveLineKeyFromBranchName'), 'geometry enrichment resolver adapts XML-CII branch identity logic');
+check(geometryEnrichmentResolverSource.includes('detectLineListFieldMap') && geometryEnrichmentResolverSource.includes('normalizeLineListRow'), 'geometry enrichment resolver adapts rich line-list mapping');
+check(geometryEnrichmentResolverSource.includes('buildPipingClassIndex') && geometryEnrichmentResolverSource.includes('resolveBranchProcessData'), 'geometry enrichment resolver reuses piping class/process resolver logic');
+check(geometryEnrichmentResolverSource.includes('pressureKPa') && geometryEnrichmentResolverSource.includes('hydroPressureKPa') && geometryEnrichmentResolverSource.includes('corrosionAllowanceMm'), 'geometry enrichment resolver stores process and piping fields');
+check(geometryEnrichmentBridgeSource.includes('__PCF_GLB_GEOMETRY_ENRICHMENT__'), 'geometry enrichment bridge publishes global API');
+check(geometryEnrichmentBridgeSource.includes('data-geometry-enrichment-open') && geometryEnrichmentBridgeSource.includes('ENRICH</span><span>Resolve'), 'geometry enrichment bridge adds resolve toolbar button');
+check(geometryEnrichmentBridgeSource.includes('Write Back to Canvas') && geometryEnrichmentBridgeSource.includes('geometryEnrichment'), 'geometry enrichment bridge writes enrichment to canvas objects');
+
 check(geometryWorkspaceSource.includes("BRIDGE_VERSION = '20260622-geometry-mapping-1'"), 'geometry workspace bridge keeps mapping cache key');
 check(geometryWorkspaceSource.includes("schemaVersion: 'geometry-export-workspace/v1'"), 'geometry workspace state uses independent schema');
 check(geometryWorkspaceSource.includes('Top 5 hierarchy import tree') && geometryWorkspaceSource.includes('Mapped Objects') && geometryWorkspaceSource.includes('Calculation Canvas'), 'geometry workspace includes import, mapped objects, and calculation shells');
@@ -145,8 +156,8 @@ check(renderBuilderSource.includes('RVM_NATIVE_FACET_GROUP'), 'render builder ke
 check(renderBuilderSource.includes('wireframe-diagnostic-not-solid-geometry'), 'bbox placeholders remain diagnostic wireframes');
 check(!renderBuilderSource.includes("primitive === 'STRUCTURE_BBOX' || type === 'STRUCTURE'"), 'unconditional structure slab promotion remains blocked');
 
-check(indexSource.includes('main-rhbg-fitguard.js?v=20260622-geometry-input-resolver-1'), 'index uses geometry input resolver entry cache key');
-check(entrySource.includes('core/app.js?v=20260622-geometry-input-resolver-1'), 'entrypoint uses geometry input resolver app cache key');
+check(indexSource.includes('main-rhbg-fitguard.js?v=20260622-geometry-enrichment-1'), 'index uses geometry enrichment entry cache key');
+check(entrySource.includes('core/app.js?v=20260622-geometry-enrichment-1'), 'entrypoint uses geometry enrichment app cache key');
 check(entrySource.includes('await init(startupMount())'), 'entrypoint passes resolved mount root into init');
 check(appSource.includes('app-tab-click-state-bridge.js?v=20260622-tab-click-state-1'), 'app side-loads tab click state bridge');
 check(appSource.includes('installAppTabClickStateBridge()'), 'app installs tab click state bridge before runtime delegate');
@@ -156,9 +167,10 @@ check(appSource.includes('GeometryExportWorkspaceBridge.js?v=20260622-geometry-m
 check(appSource.includes('GeometryMappingProfileBridge.js?v=20260622-geometry-profile-ui-1'), 'app side-loads geometry mapping profile bridge');
 check(appSource.includes('GeometryCalculationCanvasBridge.js?v=20260622-geometry-calc-canvas-1'), 'app side-loads geometry calculation canvas bridge');
 check(appSource.includes('GeometryCalculationInputBridge.js?v=20260622-geometry-input-resolver-1'), 'app side-loads geometry calculation input bridge');
-check(appSource.includes('installGeometryMappingProfileBridge()') && appSource.includes('installGeometryCalculationCanvasBridge()') && appSource.includes('installGeometryCalculationInputBridge()'), 'app installs geometry profile, calculation, and input bridges');
+check(appSource.includes('GeometryEnrichmentBridge.js?v=20260622-geometry-enrichment-1'), 'app side-loads geometry enrichment bridge');
+check(appSource.includes('installGeometryMappingProfileBridge()') && appSource.includes('installGeometryCalculationCanvasBridge()') && appSource.includes('installGeometryCalculationInputBridge()') && appSource.includes('installGeometryEnrichmentBridge()'), 'app installs geometry profile, calculation, input, and enrichment bridges');
 check(appSource.includes('BrowserRvmNativeFacetGhostPanelPatch.js?v=20260622-rvm-facet-ghost-panels-1'), 'app side-loads native facet ghost patch');
-check(appSource.includes('app-label-perf-runtime.js?v=20260622-geometry-input-resolver-1'), 'app delegates through geometry input resolver runtime cache key');
+check(appSource.includes('app-label-perf-runtime.js?v=20260622-geometry-enrichment-1'), 'app delegates through geometry enrichment runtime cache key');
 check(runtimeSource.includes('viewer3d-rvm-tab-renderer.js?v=20260622-geometry-workspace-1') || runtimeSource.includes('viewer3d-rvm-tab-renderer.js?v=20260622-geometry-mapping-1') || runtimeSource.includes('viewer3d-rvm-tab-renderer.js?v=20260622-geometry-profile-ui-1'), 'runtime keeps RVM renderer cache chain');
 
 console.log(`\n${passed} passed, ${failed} failed`);
