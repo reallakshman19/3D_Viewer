@@ -81,6 +81,23 @@ await test('model-converters-tab.js is a thin shim (<= 20 non-blank lines)', () 
   );
 });
 
+await test('InputXML RVM converter lazy-loads its runner', () => {
+  const src = readFileSync(path.join(root, 'viewer/tabs/model-converters/converters/inputxml-to-rvm.js'), 'utf8');
+  assert.equal(
+    src.includes("import { run as runInputXmlToRvm }"),
+    false,
+    'inputxml-to-rvm.js must not statically import the runner at module top level.',
+  );
+  assert.ok(
+    src.includes("import('../../../converters/inputxml-rvm/inputxml-to-rvm-runner.js')"),
+    'inputxml-to-rvm.js should dynamic-import the runner only when run().',
+  );
+  assert.ok(
+    src.includes('await loadInputXmlToRvmRun()'),
+    'run() should await the lazy runner before executing this converter.',
+  );
+});
+
 // ---------------------------------------------------------------------------
 // 3. WorkflowShell: phase definitions and ordering
 // ---------------------------------------------------------------------------
