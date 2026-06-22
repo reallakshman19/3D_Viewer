@@ -69,6 +69,11 @@ check(
   'RVM tab renderer installs retired support tools purge bridge'
 );
 
+check(
+  rendererSource.includes("import { installRvmUiEventSafetyBridge }") && rendererSource.includes('installRvmUiEventSafetyBridge()'),
+  'RVM tab renderer imports and installs UI event safety bridge'
+);
+
 for (const retiredSelector of [
   'data-rvm-support-att-panel',
   'data-rvm-support-engine-panel',
