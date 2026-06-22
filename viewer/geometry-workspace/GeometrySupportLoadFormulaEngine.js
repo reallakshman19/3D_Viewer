@@ -75,8 +75,11 @@ function supportLoadInputSnapshot(object) {
 function calculatedFieldCount(calculatedFields) {
   return Object.keys(calculatedFields || {}).length;
 }
+function hasOwn(object, key) {
+  return Boolean(object && typeof object === 'object' && Object.prototype.hasOwnProperty.call(object, key));
+}
 function removeCalculatedKey(calculatedFields, key) {
-  if (!calculatedFields || typeof calculatedFields !== 'object' || !(key in calculatedFields)) return calculatedFields || null;
+  if (!calculatedFields || typeof calculatedFields !== 'object' || !hasOwn(calculatedFields, key)) return calculatedFields || null;
   const next = { ...calculatedFields };
   delete next[key];
   return calculatedFieldCount(next) ? next : null;
@@ -272,9 +275,10 @@ function writeResultsToObjects(objects, pipeResults, supportRows, options = {}) 
       next = { ...object, calculatedFields: { ...(object.calculatedFields || {}), supportLoads } };
       audit.pipeCalculatedWriteCount += 1;
     } else if (pipeResult) {
+      const hadStalePipeResult = hasOwn(object.calculatedFields, 'supportLoads');
       const cleaned = removeCalculatedKey(object.calculatedFields, 'supportLoads');
       next = withCalculatedFields(object, cleaned);
-      if (cleaned !== object.calculatedFields) audit.stalePipeResultClearedCount += 1;
+      if (hadStalePipeResult) audit.stalePipeResultClearedCount += 1;
     }
     if (supportResult?.status === 'CALCULATED') {
       const marker = writebackMarker({ target: 'calculatedFields.supportLoadReference', inputKeyValue: supportResult.associatedPipeId, sourceObjectId: supportResult.supportId, status: 'WRITTEN', evaluatedAt: options.evaluatedAt });
@@ -282,9 +286,10 @@ function writeResultsToObjects(objects, pipeResults, supportRows, options = {}) 
       next = { ...next, calculatedFields: { ...(next.calculatedFields || {}), supportLoadReference } };
       audit.supportCalculatedWriteCount += 1;
     } else if (supportResult) {
+      const hadStaleSupportReference = hasOwn(next.calculatedFields, 'supportLoadReference');
       const cleaned = removeCalculatedKey(next.calculatedFields, 'supportLoadReference');
       next = withCalculatedFields(next, cleaned);
-      if (cleaned !== next.calculatedFields) audit.staleSupportReferenceClearedCount += 1;
+      if (hadStaleSupportReference) audit.staleSupportReferenceClearedCount += 1;
     }
     const afterInput = supportLoadInputSnapshot(next);
     if (beforeInput === afterInput) audit.inputPackagePreservedCount += 1;
