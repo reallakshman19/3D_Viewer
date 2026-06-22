@@ -3,7 +3,8 @@ import { refreshInputXmlGraphics } from './RvmInputXmlAutoBendGraphics.js?v=2026
 
 const PANEL_KEY_LEFT = 'rvm.panel.left.width.v2';
 const PANEL_KEY_RIGHT = 'rvm.panel.right.width.v2';
-const INPUTXML_SCALE_DEFAULT = 3;
+const INPUTXML_SCALE_DEFAULT = 0.75;
+const INPUTXML_SUPPORT_SYMBOLS_KEY = 'rvm.inputxml.supportSymbols';
 
 function findViewer() {
   return window.__rvmInputXmlSupportGraphicsViewer || null;
@@ -28,7 +29,7 @@ function writeBool(key, value) {
 
 function normalizeScale(value) {
   const n = Number(value);
-  return Number.isFinite(n) ? Math.max(0.25, Math.min(4, n)) : INPUTXML_SCALE_DEFAULT;
+  return Number.isFinite(n) ? Math.max(0.25, Math.min(1.5, n)) : INPUTXML_SCALE_DEFAULT;
 }
 
 function optionsFromUi() {
@@ -37,10 +38,12 @@ function optionsFromUi() {
   const scale = normalizeScale(scaleEl?.value);
   const labelsVisible = r?.querySelector?.('#rvm-support-labels')?.getAttribute?.('aria-pressed') === 'true';
   const autoBendEnabled = r?.querySelector?.('#rvm-inputxml-auto-bend')?.checked ?? readBool('rvm.inputxml.autoBend', true);
+  const supportSymbolsEnabled = r?.querySelector?.('#rvm-inputxml-support-symbols')?.checked ?? readBool(INPUTXML_SUPPORT_SYMBOLS_KEY, false);
   return {
     scaleMultiplier: scale,
     labelsVisible,
     autoBendEnabled,
+    supportSymbolsEnabled,
   };
 }
 
@@ -69,12 +72,11 @@ function ensureSupportScaleDefaults(r) {
   const scale = r?.querySelector?.('#rvm-support-scale');
   const value = r?.querySelector?.('#rvm-support-scale-value');
   if (!scale) return;
-  scale.max = '4';
+  scale.max = '1.5';
   scale.step = '0.25';
   if (r.dataset.inputXmlScaleDefaultApplied !== 'true') {
     const current = Number(scale.value);
-    // Earlier test builds persisted 0.75/1.00 as the default. Normalize those to the requested 3x.
-    if (!Number.isFinite(current) || current <= 1.0) scale.value = String(INPUTXML_SCALE_DEFAULT);
+    if (!Number.isFinite(current) || current <= 0 || current > 1.5) scale.value = String(INPUTXML_SCALE_DEFAULT);
     r.dataset.inputXmlScaleDefaultApplied = 'true';
   }
   const normalized = normalizeScale(scale.value);
@@ -100,10 +102,12 @@ function injectControls() {
   host.className = 'rvm-ribbon-section rvm-inputxml-controls';
   const autoBend = readBool('rvm.inputxml.autoBend', true);
   const axisOn = readBool('rvm.canvasAxis.visible', true);
+  const supportSymbols = readBool(INPUTXML_SUPPORT_SYMBOLS_KEY, false);
   const vAxis = currentAxis('rvm.inputxml.verticalAxis', 'Y');
   const nAxis = currentAxis('rvm.inputxml.northAxis', 'X');
   host.innerHTML = `
     <label class="rvm-inputxml-check"><input id="rvm-inputxml-auto-bend" type="checkbox" ${autoBend ? 'checked' : ''}> Auto Bend</label>
+    <label class="rvm-inputxml-check"><input id="rvm-inputxml-support-symbols" type="checkbox" ${supportSymbols ? 'checked' : ''}> Support symbols</label>
     <label class="rvm-inputxml-check"><input id="rvm-canvas-axis-toggle" type="checkbox" ${axisOn ? 'checked' : ''}> Axis</label>
     ${selectHtml('rvm-inputxml-vertical-axis', vAxis, 'Vertical', ['X','Y','Z'])}
     ${selectHtml('rvm-inputxml-north-axis', nAxis, 'North', ['X','Y','Z'])}
@@ -174,6 +178,7 @@ document.addEventListener('input', (event) => {
   const id = event.target?.id || '';
   if (id === 'rvm-support-scale') refresh();
   if (id === 'rvm-inputxml-auto-bend') { writeBool('rvm.inputxml.autoBend', event.target.checked); refresh(); }
+  if (id === 'rvm-inputxml-support-symbols') { writeBool(INPUTXML_SUPPORT_SYMBOLS_KEY, event.target.checked); refresh(); }
   if (id === 'rvm-canvas-axis-toggle') { writeBool('rvm.canvasAxis.visible', event.target.checked); refresh(); }
   if (id === 'rvm-inputxml-vertical-axis') { try { localStorage.setItem('rvm.inputxml.verticalAxis', event.target.value); } catch {}; refresh(); }
   if (id === 'rvm-inputxml-north-axis') { try { localStorage.setItem('rvm.inputxml.northAxis', event.target.value); } catch {}; refresh(); }
