@@ -1,9 +1,9 @@
 import * as THREE from 'three';
 
-export const BROWSER_RVM_REMAINING_PRIMITIVE_SCHEMA = 'browser-rvm-remaining-primitives/v3-line-wire-diagnostics';
+export const BROWSER_RVM_REMAINING_PRIMITIVE_SCHEMA = 'browser-rvm-remaining-primitives/v4-support-raw-safe';
 
-const PATCH_FLAG = Symbol.for('pcf-glb-rvm-remaining-primitive-runtime-patch-v3-line-wire');
-const UPGRADE_FLAG = Symbol.for('pcf-glb-rvm-remaining-primitive-upgraded-v3');
+const PATCH_FLAG = Symbol.for('pcf-glb-rvm-remaining-primitive-runtime-patch-v4-support-raw-safe');
+const UPGRADE_FLAG = Symbol.for('pcf-glb-rvm-remaining-primitive-upgraded-v4');
 const GLOBAL_STATE_KEY = '__PCF_GLB_RVM_REMAINING_PRIMITIVES__';
 const GLOBAL_DIAGNOSTICS_KEY = '__PCF_GLB_RVM_REMAINING_PRIMITIVES_DIAGNOSTICS__';
 const MAX_OBJECTS = 8000;
@@ -11,6 +11,7 @@ const FACET_GROUP_RENDER_QUALITY = 'native-cpp-facetgroup-tessellated';
 
 const GRID_LINE_TERMS = /\b(GRID|GRIDS|GRIDLINE|GENSEC|REFERENCE|AXIS|EASTING|EASTINGS|NORTHING|NORTHINGS|SETTINGOUT|DATUM)\b/i;
 const CIVIL_LINE_CONTEXT_TERMS = /\b(STRUCTURE|STRUCTURAL|FRMWORK|FRAMEWORK|SBFRAMEWORK|PANEL|PAVE|ROAD|FOUNDATION|FDNS|CIVIL)\b/i;
+const SUPPORT_TERMS = /\b(SUPPORT|SUPP|GUIDE|ANCHOR|LINE\s*STOP|LINESTOP|LIMIT\s*STOP|REST|SHOE|HANGER|SPRING|CLAMP|TRUNNION|DUMMY|SADDLE|STANCHION|PEDESTAL|BASE\s*PLATE)\b/i;
 
 export function installBrowserRvmRemainingPrimitiveRuntimePatch() {
   if (globalThis[PATCH_FLAG]) return globalThis[PATCH_FLAG];
@@ -66,11 +67,22 @@ export function upgradeRvmRemainingPrimitives(root) {
       return;
     }
     const attrs = object.userData?.browserRvmAttributes || object.userData?.attributes || object.userData?.browserRvmProperties?.attributes || null;
+    if (isGeneratedSupportOrChild(object, attrs)) {
+      diagnostics.generatedSupportUpgradeSkippedCount += 1;
+      bump(diagnostics.skippedReasons, 'generated-support-or-support-placeholder-not-native-upgraded');
+      return;
+    }
     const params = parseNativeParams(attrs?.RVM_NATIVE_PRIMITIVE_PARAMS);
     const matrix = parseNumericArray(attrs?.RVM_TRANSFORM_3X4, 12);
     const code = Number(params?.kind || attrs?.RVM_PRIMITIVE_CODE);
     if (!Number.isFinite(code)) return;
     bump(diagnostics.kindCounts, params?.kindName || attrs?.RVM_PRIMITIVE_KIND_NAME || `Kind-${code}`);
+
+    if (code === 1 && isSupportLikeObject(object, attrs)) {
+      diagnostics.supportCode1SolidUpgradeSkippedCount += 1;
+      bump(diagnostics.skippedReasons, 'support-code1-pyramid-solid-upgrade-disabled');
+      return;
+    }
 
     if (!params?.decoded || !matrix) {
       if (code === 11) {
@@ -104,6 +116,44 @@ export function upgradeRvmRemainingPrimitives(root) {
     bump(diagnostics.skippedReasons, 'upgrade-object-limit');
   }
   return diagnostics;
+}
+
+function isGeneratedSupportOrChild(object, attrs = {}) {
+  const data = object?.userData || {};
+  const parentPrimitive = String(data.parentBrowserRvmRenderPrimitive || '').toUpperCase();
+  const effective = String(data.effectiveRenderPrimitive || '').toUpperCase();
+  const raw = String(data.renderPrimitive || attrs?.RVM_BROWSER_RENDER_PRIMITIVE || '').toUpperCase();
+  return Boolean(
+    data.supportSymbol ||
+    data.rvmSupportSymbolGenerated ||
+    data.rvmSupportGeometryGenerated ||
+    parentPrimitive === 'SUPPORT_BBOX_PLACEHOLDER' ||
+    raw === 'SUPPORT_BBOX_PLACEHOLDER' ||
+    effective === 'SUPPORT_STAND'
+  );
+}
+
+function isSupportLikeObject(object, attrs = {}) {
+  const data = object?.userData || {};
+  const props = data.browserRvmProperties || {};
+  if (String(attrs?.RVM_BROWSER_SUPPORT_HINT || data.RVM_BROWSER_SUPPORT_HINT || '').toLowerCase() === 'true') return true;
+  if (String(attrs?.RVM_BROWSER_SUPPORT_RAW_PRIMITIVE_PRESERVED || '').toLowerCase() === 'true') return true;
+  if (String(data.type || attrs?.TYPE || '').toUpperCase() === 'SUPPORT') return true;
+  const text = [
+    object?.name,
+    data.displayName,
+    data.sourcePath,
+    props.displayName,
+    props.sourcePath,
+    attrs?.NAME,
+    attrs?.TYPE,
+    attrs?.RVM_OWNER_NAME,
+    attrs?.RVM_OWNER_PATH,
+    attrs?.RVM_BROWSER_SUPPORT_KIND,
+    attrs?.SUPPORT_KIND,
+    attrs?.SUPPORT_TYPE,
+  ].map((value) => String(value || '')).join(' ');
+  return SUPPORT_TERMS.test(text);
 }
 
 function buildNativeObject(code, params, matrix3x4, material, diagnostics, source = null) {
@@ -366,6 +416,8 @@ function makeDiagnostics(extra = {}) {
     upgradedCount: 0,
     alreadyUpgradedCount: 0,
     skippedCount: 0,
+    generatedSupportUpgradeSkippedCount: 0,
+    supportCode1SolidUpgradeSkippedCount: 0,
     pyramidTessellatedCount: 0,
     lineTessellatedCount: 0,
     lineWireDiagnosticCount: 0,
@@ -401,6 +453,8 @@ function annotateViewer(viewer, diagnostics) {
       ...root.userData.browserRvmRender,
       remainingPrimitiveDiagnostics: diagnostics,
       remainingPrimitiveUpgradedCount: diagnostics.upgradedCount,
+      remainingPrimitiveGeneratedSupportSkippedCount: diagnostics.generatedSupportUpgradeSkippedCount,
+      supportCode1SolidUpgradeSkippedCount: diagnostics.supportCode1SolidUpgradeSkippedCount,
       facetGroupTessellatedCount: diagnostics.facetGroupTessellatedCount,
       facetGroupUnsupportedCount: diagnostics.facetGroupUnsupportedCount,
       lineWireDiagnosticCount: diagnostics.lineWireDiagnosticCount,
