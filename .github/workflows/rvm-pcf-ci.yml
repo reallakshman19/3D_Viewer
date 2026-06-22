@@ -40,6 +40,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Verify RHBG RVM fit guard
+        run: |
+          set -o pipefail
+          node viewer/tests/rvm-pcf-rhbg-fitguard.test.js 2>&1 | grep -E 'FAIL|passed|failed'
+
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
@@ -59,11 +64,6 @@ jobs:
 
       - name: Verify raw support cylinders stay raw
         run: node viewer/tests/rvm-pcf-raw-support-cylinder.test.js
-
-      - name: Verify RHBG RVM fit guard
-        run: |
-          set -o pipefail
-          node viewer/tests/rvm-pcf-rhbg-fitguard.test.js 2>&1 | grep -E 'FAIL|passed|failed'
 
       - name: Verify geometry workspace import tree
         run: node viewer/tests/rvm-geometry-workspace-import-tree.test.js
