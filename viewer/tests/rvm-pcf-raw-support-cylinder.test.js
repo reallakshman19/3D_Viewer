@@ -13,9 +13,13 @@ async function read(path) {
 
 const adapterSource = await read('../rvm/BrowserRvmRenderContractAdapter.js');
 const sceneBuilderSource = await read('../rvm/BrowserRvmRenderSceneBuilder.js');
+const rendererSource = await read('../tabs/viewer3d-rvm-tab-renderer.js');
+const deferredLoaderSource = await read('../tabs/RvmDeferredBridgeLoader.js');
+const bottomDiagnosticsSource = await read('../tabs/RvmBottomDiagnosticsDrawerBridge.js');
+const purgeBridgeSource = await read('../tabs/RvmRetiredSupportToolsPurgeBridge.js');
 
 check(
-  adapterSource.includes("rvm-browser-render-instructions/v4-preserve-raw-support-cylinders"),
+  adapterSource.includes('rvm-browser-render-instructions/v4-preserve-raw-support-cylinders'),
   'render adapter schema records raw support cylinder preservation'
 );
 
@@ -25,12 +29,12 @@ check(
 );
 
 check(
-  adapterSource.includes("code === 8") && adapterSource.includes('RVM_BROWSER_SUPPORT_RAW_CYLINDER_PRESERVED'),
+  adapterSource.includes('code === 8') && adapterSource.includes('RVM_BROWSER_SUPPORT_RAW_CYLINDER_PRESERVED'),
   'RVM code-8 support cylinders are preserved as raw cylinders'
 );
 
 check(
-  adapterSource.includes("support-preserved-rvm-cylinder-raw") && adapterSource.includes("support-hint-promoted-contract"),
+  adapterSource.includes('support-preserved-rvm-cylinder-raw') && adapterSource.includes('support-hint-promoted-contract'),
   'adapter distinguishes preserved raw cylinders from promoted support placeholders'
 );
 
@@ -44,8 +48,52 @@ check(
   'scene builder resolves cylinder primitives before support stand placeholders'
 );
 
+for (const retired of [
+  'RvmSupportSummaryBridge',
+  'RvmSupportAssemblyBridge',
+  'RvmIntelligentSupportEngineBridge',
+  'RvmSupportGeometryBridge',
+  'RvmSupportAttMappingBridge',
+]) {
+  check(!deferredLoaderSource.includes(retired), `deferred loader does not import retired ${retired}`);
+}
+
+check(
+  !rendererSource.includes('RvmSupportAssemblyMarkerModeBridge') && !rendererSource.includes('RvmRawSupportCylinderGuardBridge'),
+  'RVM tab renderer no longer installs support marker/raw-support guard bridges'
+);
+
+check(
+  rendererSource.includes('RvmRetiredSupportToolsPurgeBridge') && rendererSource.includes('installRvmRetiredSupportToolsPurgeBridge()'),
+  'RVM tab renderer installs retired support tools purge bridge'
+);
+
+for (const retiredSelector of [
+  'data-rvm-support-att-panel',
+  'data-rvm-support-engine-panel',
+  'data-rvm-support-geometry-panel',
+  'rvm-support-att-mapping-diagnostics',
+  'rvm-intelligent-support-engine-diagnostics',
+  'rvm-support-geometry-diagnostics',
+]) {
+  check(!bottomDiagnosticsSource.includes(retiredSelector), `bottom diagnostics drawer excludes ${retiredSelector}`);
+}
+
+for (const retiredRoot of [
+  '__RVM_GEOMETRY_SUPPORT_SYMBOLS__',
+  '__RVM_SUPPORT_ASSEMBLY_MARKERS__',
+  '__RVM_EXPORTABLE_SUPPORT_GEOMETRY__',
+]) {
+  check(purgeBridgeSource.includes(retiredRoot), `purge bridge removes retired scene root ${retiredRoot}`);
+}
+
+check(
+  purgeBridgeSource.includes('#rvm-support-summary') && purgeBridgeSource.includes('#rvm-support-scale') && purgeBridgeSource.includes('#rvm-support-labels'),
+  'purge bridge removes legacy support summary and support-scale UI nodes'
+);
+
 if (failed) {
   console.error(`FAILURES: ${failed}`);
   process.exit(1);
 }
-console.log(`All raw support cylinder checks passed (${passed}).`);
+console.log(`All raw support cylinder and retired support-tool checks passed (${passed}).`);
