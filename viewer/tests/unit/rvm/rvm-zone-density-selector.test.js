@@ -35,6 +35,34 @@ assert.ok(manifestRows.some((row) => row.key === '/BTRM-1000-CU-CI/BTRM-1000-CU-
 assert.ok(manifestRows.some((row) => row.key === '/BTRM-1000-CU-SU'), 'sibling SU top-level row should be present even before direct instructions are counted');
 assert.ok(manifestRows.some((row) => row.key === '/BTRM-1000-CU-PI'), 'sibling PI top-level row should be present even before direct instructions are counted');
 
+const shallowManifestRows = buildSelectorRows({
+  instructions: [
+    {
+      canonicalObjectId: 'eq-leaf',
+      sourcePath: '/STRUCTURE/BTRM-1000-CU-CI/BTRM-1000-CU-CI-01-GRID-EASTINGS/FRMWORK 1/GENSEC 11',
+      type: 'STRUCTURE',
+      renderPrimitive: 'RVM_NATIVE_LINE',
+      displayName: 'GENSEC 11',
+    },
+    {
+      canonicalObjectId: 'eq-pipe',
+      sourcePath: '/EQUIPMENT/BTRM-1000-CU-PI/PUMP-001',
+      type: 'EQUIPMENT',
+      renderPrimitive: 'RVM_NATIVE_FACET_GROUP',
+      displayName: 'PUMP-001',
+    },
+  ],
+  manifestNodes: [
+    { canonicalObjectId: 'eq-root', name: 'EQUIPMENT' },
+    { canonicalObjectId: 'eq-leaf', parentCanonicalObjectId: 'eq-root', name: 'EQUIPMENT' },
+    { canonicalObjectId: 'eq-pipe', parentCanonicalObjectId: 'eq-root', name: 'EQUIPMENT' },
+  ],
+  fileName: 'GAS_2026Apr26-0828.rvm',
+});
+assert.ok(shallowManifestRows.some((row) => row.key === '/BTRM-1000-CU-CI'), 'deep owner path should win over shallow manifest /EQUIPMENT for zone selection');
+assert.ok(shallowManifestRows.some((row) => row.key === '/BTRM-1000-CU-CI/BTRM-1000-CU-CI-01-GRID-EASTINGS'), 'GRID-EASTINGS child should be shown from instruction path');
+assert.ok(shallowManifestRows.some((row) => row.key === '/EQUIPMENT'), 'real EQUIPMENT rows should still be retained');
+
 const filtered = applyZoneDensitySelection({ instructions }, {
   mode: 'selected',
   selectedZones: ['/BTRM-1000-CU-PI', '/BTRM-1000-CU-CI'],

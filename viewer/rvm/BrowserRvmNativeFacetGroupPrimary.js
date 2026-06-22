@@ -1,6 +1,11 @@
 import * as THREE from 'three';
+import {
+  buildSmartCivilFacetProxyObject,
+  classifySmartCivilFacetInstruction,
+  smartCivilPolicyUserData,
+} from './BrowserRvmSmartCivilFacetPolicy.js';
 
-export const BROWSER_RVM_NATIVE_FACET_GROUP_PRIMARY_SCHEMA = 'browser-rvm-native-facetgroup-primary/v2-ghost-panels';
+export const BROWSER_RVM_NATIVE_FACET_GROUP_PRIMARY_SCHEMA = 'browser-rvm-native-facetgroup-primary/v3-smart-civil-defer';
 
 const FACET_GROUP_RENDER_QUALITY = 'native-facetgroup-primary';
 const FACET_GROUP_GHOST_RENDER_QUALITY = 'native-facetgroup-ghost-panel';
@@ -18,6 +23,36 @@ export function hasDecodedNativeFacetGroup(instruction = {}) {
 export function buildNativeFacetGroupObject(instruction = {}, material = null, context = null) {
   const native = nativeFacetGroupSpecForInstruction(instruction);
   if (!native) return null;
+
+  const smartCivilPolicy = classifySmartCivilFacetInstruction(instruction, native);
+  if (smartCivilPolicy?.deferNativeTessellation) {
+    const proxy = buildSmartCivilFacetProxyObject(instruction, native, smartCivilPolicy, material, context);
+    if (proxy) {
+      const proxyQuality = smartCivilPolicy.action === 'wireframe-proxy'
+        ? 'smart-civil-code11-wireframe-proxy'
+        : 'smart-civil-code11-hidden-deferred';
+      stampNativeFacetUserData(proxy, native, {
+        policy: smartCivilPolicy.policy,
+        wireframeOnly: smartCivilPolicy.action === 'wireframe-proxy',
+        ghosted: false,
+        reason: smartCivilPolicy.reason,
+        renderQuality: proxyQuality,
+      });
+      proxy.userData = {
+        ...(proxy.userData || {}),
+        ...smartCivilPolicyUserData(smartCivilPolicy),
+        effectiveRenderPrimitive: 'RVM_NATIVE_FACET_GROUP',
+        renderQuality: proxyQuality,
+      };
+      if (context?.stats) {
+        context.stats.smartCivilFacetDeferredCount = (context.stats.smartCivilFacetDeferredCount || 0) + 1;
+        context.stats.smartCivilFacetDeferredPolygons = (context.stats.smartCivilFacetDeferredPolygons || 0) + Number(native.stats?.polygonCount || 0);
+        context.stats.smartCivilFacetDeferredTriangles = (context.stats.smartCivilFacetDeferredTriangles || 0) + Number(native.stats?.triangleCount || 0);
+      }
+      return proxy;
+    }
+  }
+
   const geometry = facetGroupGeometry(native.params);
   if (!geometry) return null;
   geometry.applyMatrix4(matrix4FromCppMat3x4(native.matrix3x4));

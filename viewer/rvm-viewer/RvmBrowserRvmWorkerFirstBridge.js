@@ -1,5 +1,5 @@
 import { isLikelyRvmFileName } from '../rvm/BrowserRvmParser.js';
-import { loadRvmFileInBrowser } from '../rvm/BrowserRvmLoadBridge.js?v=20260620-rvm-worker-first-1';
+import { loadRvmFileInBrowser } from '../rvm/BrowserRvmLoadBridge.js?v=20260622-rvm-smart-civil-code11-defer-1';
 import { applyRvmSupportSymbolSettings } from './RvmSupportSymbols.js?v=20260618-support-kind-authority-1';
 
 const INSTALL_FLAG = Symbol.for('pcf-glb-rvm-worker-first-direct-bridge-v1');
@@ -118,142 +118,69 @@ async function loadWorkerFirstRvm({ root, viewer, files, rvmFile, abortControlle
       return;
     }
     setStatus(status, `RVM worker-first load failed: ${error?.message || error}`);
-    renderWorkerDiagnostics({
-      fileName: rvmFile.name,
-      browserRvmWorkerFirstPipeline: true,
-      browserRvmLoadFailed: true,
-      error: error?.message || String(error)
-    }, root);
-    console.error('[BrowserRVM] worker-first direct load failed', error);
+    console.warn('[BrowserRVM] worker-first load failed', error);
   } finally {
-    if (root?.[ACTIVE_JOB]?.abortController === abortController) root[ACTIVE_JOB] = null;
+    if (root?.[ACTIVE_JOB]?.abortController === abortController) delete root[ACTIVE_JOB];
   }
 }
 
+async function readBestAttSidecarText(files, rvmName) {
+  const base = String(rvmName || '').replace(/\.[^.]+$/, '').toLowerCase();
+  const att = files.find((file) => String(file?.name || '').toLowerCase() === `${base}.att`) || files.find((file) => String(file?.name || '').toLowerCase().endsWith('.att'));
+  if (!att || typeof att.text !== 'function') return '';
+  try { return await att.text(); } catch (_) { return ''; }
+}
+
 function cancelActiveJob(root) {
-  try { root?.[ACTIVE_JOB]?.abortController?.abort?.(); } catch (_) {}
-}
-
-function setStatus(status, text) {
-  if (status) status.textContent = text;
-}
-
-function isLikelyAttFileName(fileName = '') {
-  return /\.att$/i.test(String(fileName || '').trim());
-}
-
-function sidecarKey(fileName = '') {
-  return String(fileName || '').trim().toLowerCase().replace(/\.[^.]+$/, '');
-}
-
-async function readBestAttSidecarText(files, rvmFileName) {
-  const list = Array.from(files || []);
-  const rvmKey = sidecarKey(rvmFileName);
-  const matching = list.find((file) => isLikelyAttFileName(file?.name) && sidecarKey(file.name) === rvmKey);
-  if (!matching || typeof matching.text !== 'function') return '';
-  try { return String(await matching.text() || ''); } catch (_) { return ''; }
+  const job = root?.[ACTIVE_JOB];
+  try { job?.abortController?.abort?.(); } catch (_) {}
 }
 
 function browserSupportOptions(root) {
-  const rawScale = Number(root?.querySelector?.('#rvm-support-scale')?.value);
-  const scale = Number.isFinite(rawScale) ? Math.max(0.25, Math.min(2.0, rawScale)) : 1.0;
-  const labelsVisible = root?.querySelector?.('#rvm-support-labels')?.getAttribute('aria-pressed') === 'true';
   return {
-    scaleMultiplier: scale,
-    labelsVisible,
-    maxVisibleLabels: labelsVisible ? 18 : 0,
-    labelGridFactor: 2.1
+    enabled: root?.querySelector?.('#rvm-support-symbols-toggle')?.checked !== false,
+    glyphs: root?.querySelector?.('#rvm-support-symbol-glyphs-toggle')?.checked !== false,
+    labels: root?.querySelector?.('#rvm-support-symbol-labels-toggle')?.checked === true,
+    supportOnly: root?.querySelector?.('#rvm-support-symbols-only-toggle')?.checked === true,
   };
 }
 
 function updateRvmTabTreeFromPayload(root, payload) {
   const tree = root?.querySelector?.('#rvm-tree');
-  if (!tree) return;
-  const nodes = payload?.manifest?.nodes || payload?.manifest?.items || payload?.manifest?.runtime?.nodes || [];
-  tree.innerHTML = buildVirtualTree(nodes);
-}
-
-function buildVirtualTree(nodes = []) {
-  const list = Array.isArray(nodes) ? nodes : [];
-  const roots = list.filter((node) => !node?.parentCanonicalObjectId).slice(0, MAX_TREE_ROWS);
-  const rows = (roots.length ? roots : list.slice(0, MAX_TREE_ROWS)).map((node) => {
-    const id = escapeHtml(node?.canonicalObjectId || node?.sourceObjectId || node?.id || '');
-    const kind = escapeHtml(String(node?.kind || node?.type || node?.attributes?.TYPE || 'NODE').toUpperCase());
-    const name = escapeHtml(node?.name || node?.canonicalObjectId || node?.sourceObjectId || 'RVM node');
-    return `<li data-node-id="${id}" data-depth="0"><button type="button" class="rvm-tree-node"><span class="rvm-kind">${kind}</span><span>${name}</span></button></li>`;
-  });
-  const suffix = list.length > MAX_TREE_ROWS ? `<li class="rvm-empty-state">Tree capped at ${MAX_TREE_ROWS} rows during progressive RVM load. Use search/properties after render.</li>` : '';
-  return rows.join('') + suffix || '<li class="rvm-empty-state">No hierarchy nodes.</li>';
-}
-
-function ensureWorkerDiagnosticsPanel(root = document) {
-  if (!root?.querySelector) return null;
-  const doc = root.ownerDocument || document;
-  let panel = root.querySelector('#rvm-browser-parse-diagnostics') || doc.querySelector('#rvm-browser-parse-diagnostics');
-  if (panel) return panel;
-  const rightPanel = root.querySelector('.rvm-right-panel') || doc.querySelector('.rvm-right-panel');
-  if (!rightPanel) return null;
-
-  const header = doc.createElement('div');
-  header.className = 'rvm-panel-header';
-  header.textContent = 'Browser RVM Performance';
-  header.setAttribute('data-rvm-browser-diagnostics-header', 'true');
-
-  panel = doc.createElement('div');
-  panel.id = 'rvm-browser-parse-diagnostics';
-  panel.className = 'rvm-tag-list rvm-browser-parse-diagnostics';
-  panel.setAttribute('aria-live', 'polite');
-  panel.setAttribute('data-browser-rvm-diagnostics-panel', 'true');
-  panel.innerHTML = '<div class="rvm-empty-state">No browser RVM load yet.</div>';
-
-  rightPanel.append(header, panel);
-  return panel;
+  if (!tree || !payload?.manifest?.nodes) return;
+  const nodes = payload.manifest.nodes.slice(0, MAX_TREE_ROWS);
+  tree.innerHTML = nodes.map((node) => `<button type="button" class="rvm-tree-row" data-rvm-source-object-id="${esc(node.sourceObjectId || node.canonicalObjectId || '')}"><span class="rvm-tree-indent" style="width:${Math.min(Number(node.depth || 0), 12) * 10}px"></span><span class="rvm-tree-kind">${esc(node.kind || node.type || 'RVM')}</span><span class="rvm-tree-name">${esc(node.name || node.canonicalObjectId || 'RVM node')}</span></button>`).join('') || '<div class="rvm-empty-state">No RVM hierarchy nodes found.</div>';
 }
 
 function renderWorkerDiagnostics(diagnostics = {}, root = document) {
-  if (!diagnostics || typeof diagnostics !== 'object') return;
-  const panel = ensureWorkerDiagnosticsPanel(root);
+  const panel = root?.querySelector?.('#rvm-browser-parse-diagnostics');
   if (!panel) return;
-  const timings = diagnostics.browserRvmStageTimingsMs || diagnostics.browserRvmWorkerTimingsMs || {};
-  panel.innerHTML = `
-    <div class="rvm-browser-diag-grid">
-      ${diagnosticRow('File', diagnostics.fileName)}
-      ${diagnosticRow('State', diagnostics.browserRvmLoadState || (diagnostics.browserRvmLoadFailed ? 'failed' : 'loaded'))}
-      ${diagnosticRow('Worker enabled', boolText(diagnostics.browserRvmWorkerEnabled))}
-      ${diagnosticRow('Progressive render', boolText(diagnostics.browserRvmProgressiveRenderEnabled))}
-      ${diagnosticRow('Parse time', timingText(timings['worker.parse.renderInstructions'] ?? timings.parse))}
-      ${diagnosticRow('Instruction time', timingText(timings.renderInstructionGeneration))}
-      ${diagnosticRow('Scene creation', timingText(timings['scene.progressiveCreate']))}
-      ${diagnosticRow('Objects', diagnostics.browserRvmRenderableCount)}
-      ${diagnosticRow('Skipped', diagnostics.browserRvmSkippedCount)}
-      ${diagnosticRow('Max event-loop stall', timingText(diagnostics.browserRvmMaxEventLoopStallMs))}
-      ${diagnosticRow('Binary PRIM', diagnostics.binaryPrimitiveRecordCount)}
-      ${diagnosticRow('Hierarchy groups', diagnostics.hierarchyGroupCount)}
-    </div>
-    ${diagnostics.error ? `<div class="rvm-browser-diag-warning">${escapeHtml(diagnostics.error)}</div>` : ''}
-  `;
+  const rows = [
+    ['Loaded JS version/hash', '20260622-rvm-smart-civil-code11-defer-1'],
+    ['Worker loaded', bool(diagnostics.browserRvmWorkerEnabled)],
+    ['Worker message received', bool(diagnostics.browserRvmWorkerFirstPipeline)],
+    ['Legacy handler bypassed', bool(diagnostics.browserRvmWorkerFirstPipeline)],
+    ['Parse time', ms(diagnostics.browserRvmStageTimingsMs?.['worker.parse.renderInstructions'])],
+    ['Render-instruction time', ms(diagnostics.browserRvmStageTimingsMs?.['scene.progressiveCreate'])],
+    ['First geometry', ms(diagnostics.browserRvmStageTimingsMs?.['scene.progressiveCreate'])],
+    ['Objects rendered', diagnostics.browserRvmRenderableCount ?? '-'],
+    ['Skipped objects', diagnostics.browserRvmSkippedCount ?? '-'],
+    ['Native facet groups', diagnostics.browserRvmNativeFacetGroupPrimaryCount ?? '-'],
+    ['Zone mode', zoneText(diagnostics.browserRvmZoneSelection)],
+    ['LOD', lodText(diagnostics.browserRvmLodSelection)],
+    ['Tree nodes rendered', root?.querySelectorAll?.('#rvm-tree .rvm-tree-row')?.length ?? '-'],
+    ['Max event-loop stall', ms(diagnostics.browserRvmMaxEventLoopStallMs)],
+    ['Long tasks >100 ms', diagnostics.browserRvmEventLoopStallCount ?? '-'],
+    ['Binary PRIM', diagnostics.browserRvmPrimitiveCounts?.PRIM ?? diagnostics.primitiveCounts?.PRIM ?? '-'],
+    ['Hierarchy groups', diagnostics.browserRvmHierarchyCounts?.CNTB ?? diagnostics.hierarchyCounts?.CNTB ?? '-'],
+    ['Fit guard', diagnostics.browserRvmScaleSafeContract?.fitGuard || '-'],
+  ];
+  panel.innerHTML = `<div class="rvm-browser-diag-grid">${rows.map(([label, value]) => `<div class="rvm-browser-diag-row"><span>${esc(label)}</span><b>${esc(value)}</b></div>`).join('')}</div>`;
 }
 
-function diagnosticRow(label, value) {
-  return `<div class="rvm-browser-diag-row"><span>${escapeHtml(label)}</span><b>${escapeHtml(value === undefined || value === null || value === '' ? '-' : value)}</b></div>`;
-}
-
-function boolText(value) {
-  return value === undefined || value === null ? '-' : (value ? 'yes' : 'no');
-}
-
-function timingText(value) {
-  const n = Number(value);
-  return Number.isFinite(n) ? `${n.toFixed(1)} ms` : '-';
-}
-
-function escapeHtml(value) {
-  return String(value ?? '')
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#039;');
-}
-
-installBrowserRvmWorkerFirstBridge();
+function zoneText(selection) { if (!selection) return 'all'; if (selection.mode === 'selected') return `selected ${selection.selectedCount || 0}/${selection.originalCount || ''}`; return `${selection.mode || 'all'} ${selection.filteredCount || selection.originalCount || ''}/${selection.originalCount || ''}`; }
+function lodText(selection) { if (!selection) return '100%'; return `${selection.percent || selection.detailPercent || 100}%`; }
+function setStatus(el, text) { if (el) el.textContent = text; }
+function bool(value) { return value ? 'yes' : 'no'; }
+function ms(value) { const n = Number(value); return Number.isFinite(n) ? `${n.toFixed(1)} ms` : '-'; }
+function esc(value) { return String(value ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;'); }
