@@ -182,5 +182,5 @@ function stringFirst(...values) {
 
 function bump(target, key) {
   const safe = String(key || 'UNKNOWN').trim() || 'UNKNOWN';
-  target[safe] = (target[key] || 0) + 1;
+  target[safe] = (target[safe] || 0) + 1;
 }
