@@ -72,6 +72,9 @@ jobs:
       - name: Verify support-load formula engine
         run: node viewer/tests/rvm-geometry-workspace-support-load-formulas.test.js
 
+      - name: Verify support-load Access benchmark
+        run: node viewer/tests/rvm-geometry-workspace-support-load-access-benchmark.test.js
+
       - name: Verify support-load report export
         run: node viewer/tests/rvm-geometry-workspace-support-load-report.test.js
 
