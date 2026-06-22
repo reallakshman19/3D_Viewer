@@ -68,3 +68,6 @@ jobs:
 
       - name: Verify support-load input overrides
         run: node viewer/tests/rvm-geometry-workspace-support-load-input-overrides.test.js
+
+      - name: Verify support-load formula engine
+        run: node viewer/tests/rvm-geometry-workspace-support-load-formulas.test.js
