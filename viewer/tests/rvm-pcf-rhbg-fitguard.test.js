@@ -42,6 +42,8 @@ const geometricFallbackSource = await read('../rvm/BrowserRvmGeometricFallbackPo
 const coverageBridgeSource = await read('../rvm/RvmDtxrGeometryCoverageBridge.js');
 const coverageEngineSource = await read('../rvm/RvmDtxrGeometryCoverageEngine.js');
 const renderedInventorySource = await read('../rvm/RvmRenderedObjectInventory.js');
+const markerModeSource = await read('../tabs/RvmSupportAssemblyMarkerModeBridge.js');
+const singlePickGuardSource = await read('../tabs/RvmCanvasSelectionSinglePickGuardBridge.js');
 
 check(rendererSource.includes('RvmModelHealthBridge.js?v=20260621-rvm-health-issues-1'), 'renderer loads cache-busted model health bridge');
 check(rendererSource.includes('RvmModelHealthIssuesBridge.js?v=20260621-rvm-health-issues-1'), 'renderer loads model health issues bridge');
@@ -59,6 +61,10 @@ check(rendererSource.includes('installRvmDtxrGeometryCoverageBridge()'), 'render
 check(rendererSource.includes('BrowserRvmCivilFallbackPolicyBridge.js?v=20260622-rvm-smart-civil-policy-tooltip-1'), 'renderer loads smart civil fallback policy bridge');
 check(rendererSource.includes('BrowserRvmGeometricFallbackPolicyBridge.js?v=20260622-rvm-geometric-fallback-policy-1'), 'renderer loads geometric fallback policy bridge');
 check(rendererSource.includes('installBrowserRvmGeometricFallbackPolicyBridge()'), 'renderer installs geometric fallback policy bridge');
+check(rendererSource.includes('RvmSupportAssemblyMarkerModeBridge.js?v=20260622-rvm-support-assembly-markers-off-1'), 'renderer loads support assembly marker mode bridge');
+check(rendererSource.includes('installRvmSupportAssemblyMarkerModeBridge()'), 'renderer installs support assembly marker mode bridge');
+check(rendererSource.includes('RvmCanvasSelectionSinglePickGuardBridge.js?v=20260622-rvm-canvas-single-pick-guard-1'), 'renderer loads canvas single-pick guard bridge');
+check(rendererSource.includes('installRvmCanvasSelectionSinglePickGuardBridge()'), 'renderer installs canvas single-pick guard bridge');
 
 check(deepPathSource.includes('recoverRvmDeepSourcePathFromInstruction') && deepPathSource.includes('isWeakRvmSourcePath'), 'deep path bridge recovers shallow /EQUIPMENT and /STRUCTURE paths');
 check(zoneDensityV5Source.includes('browser-rvm-zone-selection/v6-synthetic-navis-density-tree'), 'zone density selector v5 exposes synthetic Navis tree schema');
@@ -66,6 +72,10 @@ check(zoneDensityV5Source.includes('expandPlantPart') && zoneDensityV5Source.inc
 check(zoneDensityV5Source.includes('RvmZoneDensitySelectorBridgeV5.js') === false, 'zone density selector v5 is a module, not a self-loader');
 check(geometricFallbackSource.includes('__PCF_GLB_RVM_GEOMETRIC_FALLBACK_POLICY__'), 'geometric fallback bridge publishes diagnostics API');
 check(geometricFallbackSource.includes('huge-anonymous-box-diagnostic-hidden'), 'geometric fallback hides huge anonymous box diagnostics');
+check(markerModeSource.includes("return 'off'") && markerModeSource.includes('support-assembly-markers-default-off'), 'support assembly contact rings default off');
+check(markerModeSource.includes('__RVM_SUPPORT_ASSEMBLY_MARKERS__') && markerModeSource.includes('Assembly markers'), 'support assembly marker bridge controls ring/dot overlay visibility');
+check(singlePickGuardSource.includes('trimCurrentSelection') && singlePickGuardSource.includes('collectHighlighted'), 'canvas single-pick guard trims stale multi-highlight state');
+check(singlePickGuardSource.includes('ctrlKey || event.shiftKey || event.metaKey') && singlePickGuardSource.includes('viewer._rvmCanvasSelectedMeshes = kept ? [kept] : []'), 'canvas single-pick guard preserves intentional additive selection only');
 
 check(facetGhostSource.includes("browser-rvm-native-facet-ghost-panels/v1"), 'native facet ghost patch exposes schema marker');
 check(facetGhostSource.includes('THIN_PANEL_RATIO') && facetGhostSource.includes('LARGE_PANEL_LONG_EDGE'), 'native facet ghost patch classifies large thin panels');
