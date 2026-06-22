@@ -36,6 +36,9 @@ const measureSource = await read('../tabs/RvmMeasureBridge.js');
 const searchSource = await read('../tabs/RvmObjectSearchBridge.js');
 const labelsSource = await read('../tabs/RvmLabelPerformanceBridge.js');
 const zoneSource = await read('../tabs/RvmZoneLodLabelBridge.js');
+const coverageBridgeSource = await read('../rvm/RvmDtxrGeometryCoverageBridge.js');
+const coverageEngineSource = await read('../rvm/RvmDtxrGeometryCoverageEngine.js');
+const renderedInventorySource = await read('../rvm/RvmRenderedObjectInventory.js');
 
 check(rendererSource.includes('RvmModelHealthBridge.js?v=20260621-rvm-health-issues-1'), 'renderer loads cache-busted model health bridge');
 check(rendererSource.includes('RvmModelHealthIssuesBridge.js?v=20260621-rvm-health-issues-1'), 'renderer loads model health issues bridge');
@@ -46,6 +49,8 @@ check(rendererSource.includes('installBrowserRvmNativeFacetGhostPanelPatch()'), 
 check(rendererSource.includes('RvmReportExportBridge.js?v=20260621-rvm-report-export-1'), 'renderer keeps report export bridge');
 check(rendererSource.includes('RvmJsonPcfTriggerBridge.js?v=20260621-rvm-pcf-visible-scope-1'), 'renderer keeps visible-scope PCF bridge');
 check(rendererSource.includes('RvmZoneLodLabelBridge.js?v=20260621-rvm-preload-hierarchy-selector-1'), 'renderer keeps preload zone selector');
+check(rendererSource.includes('RvmDtxrGeometryCoverageBridge.js?v=20260622-rvm-dtxr-coverage-1'), 'renderer loads DTXR geometry coverage bridge');
+check(rendererSource.includes('installRvmDtxrGeometryCoverageBridge()'), 'renderer installs DTXR geometry coverage bridge');
 check(rendererSource.includes('BrowserRvmCivilFallbackPolicyBridge.js?v=20260622-rvm-smart-civil-code11-default-off-1'), 'renderer loads smart civil fallback policy bridge');
 
 check(facetGhostSource.includes("browser-rvm-native-facet-ghost-panels/v1"), 'native facet ghost patch exposes schema marker');
@@ -60,6 +65,17 @@ check(healthSource.includes('nativeFacetObjects') && healthSource.includes('fall
 check(healthSource.includes('pcfReadiness') && healthSource.includes('synthetic-render-index-available'), 'health bridge reports PCF readiness');
 check(healthSource.includes('__PCF_GLB_RVM_MODEL_HEALTH__'), 'health bridge publishes global API');
 check(healthSource.includes("typeof document === 'undefined'"), 'health bridge is safe for static imports');
+
+check(coverageBridgeSource.includes("BRIDGE_VERSION = '20260622-rvm-dtxr-coverage-1'"), 'DTXR coverage bridge exposes version marker');
+check(coverageBridgeSource.includes('__PCF_GLB_RVM_DTXR_COVERAGE__'), 'DTXR coverage bridge publishes global API');
+check(coverageBridgeSource.includes('collectRvmDtxrGeometryCoverageFromScene'), 'DTXR coverage bridge collects scene coverage');
+check(coverageBridgeSource.includes('Core Geometry Coverage') && coverageBridgeSource.includes('Export JSON'), 'DTXR coverage bridge renders and exports coverage panel');
+check(coverageEngineSource.includes("rvm-dtxr-geometry-coverage/v1"), 'DTXR coverage engine exposes schema marker');
+check(coverageEngineSource.includes('PIPE') && coverageEngineSource.includes('ELBOW') && coverageEngineSource.includes('SUPPORT'), 'DTXR coverage engine tracks core geometry categories');
+check(coverageEngineSource.includes('EXPECTED_RECORD_NOT_RENDERED') && coverageEngineSource.includes('FALLBACK_ONLY'), 'DTXR coverage engine reports missing and fallback-only geometry');
+check(renderedInventorySource.includes("rvm-rendered-object-inventory/v1"), 'rendered inventory exposes schema marker');
+check(renderedInventorySource.includes('buildRvmRenderedObjectInventory') && renderedInventorySource.includes('classifyRvmObjectCategory'), 'rendered inventory exports collector and classifier');
+check(renderedInventorySource.includes('DTXR_POS') && renderedInventorySource.includes('DTXR_PS'), 'rendered inventory extracts DTXR component and support keys');
 
 check(healthIssuesSource.includes("BRIDGE_VERSION = '20260621-rvm-health-issues-1'"), 'health issues bridge exposes version marker');
 check(healthIssuesSource.includes('collectRvmHealthIssues') && healthIssuesSource.includes('renderIssues'), 'health issues bridge classifies and renders issues');

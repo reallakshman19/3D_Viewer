@@ -32,6 +32,7 @@
 // Active civil fallback policy cache key: BrowserRvmCivilFallbackPolicyBridge.js?v=20260622-rvm-smart-civil-code11-default-off-1
 // Active debug pick cache key: BrowserRvmPickDiagnosticsBridge.js?v=20260622-rvm-debug-pick-1
 // Active native torus/elbow cache key: BrowserRvmTorusParityRuntimePatch.js?v=20260622-rvm-native-torus-line-elbows-1
+// Active DTXR coverage cache key: RvmDtxrGeometryCoverageBridge.js?v=20260622-rvm-dtxr-coverage-1
 // Active zone/LOD context cache key: RvmZoneLodContextBridge.js?v=20260621-rvm-zone-lod-context-1
 // Active visible-scope PCF trigger cache key: RvmJsonPcfTriggerBridge.js?v=20260621-rvm-pcf-visible-scope-1
 import { RvmViewer3D } from '../rvm-viewer/RvmViewer3D.js?v=20260622-rvm-leaf-picking-2';
@@ -75,6 +76,7 @@ import { installBrowserRvmDishTessellationRuntimePatch } from '../rvm/BrowserRvm
 import { installBrowserRvmRemainingPrimitiveRuntimePatch } from '../rvm/BrowserRvmRemainingPrimitiveRuntimePatch.js?v=20260620-rvm-facetgroup-1';
 import { installBrowserRvmTorusParityRuntimePatch } from '../rvm/BrowserRvmTorusParityRuntimePatch.js?v=20260622-rvm-native-torus-line-elbows-1';
 import { installBrowserRvmSnoutParityRuntimePatch } from '../rvm/BrowserRvmSnoutParityRuntimePatch.js?v=20260620-rvm-snout-parity-1';
+import { installRvmDtxrGeometryCoverageBridge } from '../rvm/RvmDtxrGeometryCoverageBridge.js?v=20260622-rvm-dtxr-coverage-1';
 
 installBrowserRvmCppMat3x4WorkerPatch();
 installBrowserRvmNativeTessellationRuntimePatch();
@@ -107,6 +109,7 @@ installRvmSelectionSetsBridge();
 installRvmReportExportBridge();
 installRvmModelHealthBridge();
 installRvmModelHealthIssuesBridge();
+installRvmDtxrGeometryCoverageBridge();
 installRvmSelectionTreeSyncBridge();
 installRvmMaterialModeBridge();
 installRvmBottomDiagnosticsDrawerBridge();
