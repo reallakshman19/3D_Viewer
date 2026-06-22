@@ -18,6 +18,7 @@ const rendererSource = await read('../tabs/viewer3d-rvm-tab-renderer.js');
 const deferredLoaderSource = await read('../tabs/RvmDeferredBridgeLoader.js');
 const bottomDiagnosticsSource = await read('../tabs/RvmBottomDiagnosticsDrawerBridge.js');
 const purgeBridgeSource = await read('../tabs/RvmRetiredSupportToolsPurgeBridge.js');
+const leafCanvasPickSource = await read('../tabs/RvmLeafCanvasPickBridge.js');
 
 check(
   adapterSource.includes('rvm-browser-render-instructions/v5-raw-first-support-primitives'),
@@ -74,6 +75,18 @@ check(
   'RVM tab renderer imports and installs UI event safety bridge'
 );
 
+check(
+  rendererSource.includes('RvmLeafCanvasPickBridge.js?v=20260622-rvm-leaf-canvas-pick-orbit-guard-2'),
+  'RVM tab renderer loads navigation-safe leaf canvas pick bridge'
+);
+
+check(
+  leafCanvasPickSource.includes("if (mode !== 'select')")
+    && leafCanvasPickSource.includes('Do not stop propagation here.')
+    && !leafCanvasPickSource.includes('Block later canvas-selection listeners'),
+  'leaf canvas pick bridge lets orbit/pan/marquee/measure pointerup propagate'
+);
+
 for (const retiredSelector of [
   'data-rvm-support-att-panel',
   'data-rvm-support-engine-panel',
@@ -102,4 +115,4 @@ if (failed) {
   console.error(`FAILURES: ${failed}`);
   process.exit(1);
 }
-console.log(`All raw support cylinder and retired support-tool checks passed (${passed}).`);
+console.log(`All raw support cylinder, retired support-tool, and canvas navigation checks passed (${passed}).`);
