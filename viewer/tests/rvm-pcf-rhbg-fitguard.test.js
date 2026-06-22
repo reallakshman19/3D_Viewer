@@ -83,8 +83,9 @@ check(renderBuilderSource.includes('RVM_NATIVE_FACET_GROUP'), 'render builder ke
 check(renderBuilderSource.includes('wireframe-diagnostic-not-solid-geometry'), 'bbox placeholders remain diagnostic wireframes');
 check(!renderBuilderSource.includes("primitive === 'STRUCTURE_BBOX' || type === 'STRUCTURE'"), 'unconditional structure slab promotion remains blocked');
 
-check(indexSource.includes('main-rhbg-fitguard.js?v=20260622-rvm-facet-ghost-panels-1'), 'index uses facet ghost entry cache key');
+check(indexSource.includes('main-rhbg-fitguard.js?v=20260622-app-root-startup-1'), 'index uses app root startup entry cache key');
 check(entrySource.includes('core/app.js?v=20260622-rvm-facet-ghost-panels-1'), 'entrypoint uses facet ghost app cache key');
+check(entrySource.includes('await init(startupMount())'), 'entrypoint passes resolved mount root into init');
 check(appSource.includes('BrowserRvmNativeFacetGhostPanelPatch.js?v=20260622-rvm-facet-ghost-panels-1'), 'app side-loads native facet ghost patch');
 check(appSource.includes('installBrowserRvmNativeFacetGhostPanelPatch()'), 'app installs native facet ghost patch independent of renderer cache');
 check(appSource.includes('app-label-perf-runtime.js?v=20260622-rvm-facet-ghost-panels-1'), 'app delegates through facet ghost runtime cache key');
