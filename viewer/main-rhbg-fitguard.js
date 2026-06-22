@@ -37,7 +37,8 @@ const STARTUP_SIDE_EFFECT_MODULES = [
 // Previous cache marker: core/app.js?v=20260622-geometry-mapping-1
 // Previous cache marker: core/app.js?v=20260622-geometry-profile-ui-1
 // Previous cache marker: core/app.js?v=20260622-geometry-calc-canvas-1
-// Active cache key: core/app.js?v=20260622-geometry-input-resolver-1
+// Previous cache marker: core/app.js?v=20260622-geometry-input-resolver-1
+// Active cache key: core/app.js?v=20260622-geometry-enrichment-1
 
 function startupMount() {
   return document.getElementById('app') || document.getElementById('app-layout') || document.getElementById('app-shell') || document.body;
@@ -86,7 +87,7 @@ function scheduleDeferredStartupSideEffects() {
 }
 
 async function startViewer() {
-  const { init } = await import('./core/app.js?v=20260622-geometry-input-resolver-1');
+  const { init } = await import('./core/app.js?v=20260622-geometry-enrichment-1');
   await init(startupMount());
   scheduleDeferredStartupSideEffects();
 }
