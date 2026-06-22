@@ -9,13 +9,8 @@
 // Active JSON/RVM PCF trigger cache key: RvmJsonPcfTriggerBridge.js?v=20260621-rvm-json-pcf-trigger-1
 // Active policy info cache key: RvmPolicyInfoBridge.js?v=20260621-rvm-policy-info-1
 // Active diagnostic collapse cache key: RvmDiagnosticPanelCollapseBridge.js?v=20260621-rvm-diagnostic-collapse-1
-// Previous zone/LOD label cache key: RvmZoneLodLabelBridge.js?v=20260621-rvm-zone-lod-labels-1
-// Active zone preload hierarchy selector cache key: RvmZoneLodLabelBridge.js?v=20260621-rvm-preload-hierarchy-selector-1
-// Active Navis hierarchy cache key: RvmNavisHierarchyBridge.js?v=20260621-rvm-navis-hierarchy-1
-// Active native facet primary cache key: viewer3d-rvm-tab.js?v=20260621-rvm-native-facet-primary-1
-// Active native facet ghost panel cache key: BrowserRvmNativeFacetGhostPanelPatch.js?v=20260622-rvm-facet-ghost-panels-1
-// Active zone/LOD context cache key: RvmZoneLodContextBridge.js?v=20260621-rvm-zone-lod-context-1
-// Active visible-scope PCF trigger cache key: RvmJsonPcfTriggerBridge.js?v=20260621-rvm-pcf-visible-scope-1
+// Active zone/LOD label cache key: RvmZoneLodLabelBridge.js?v=20260621-rvm-zone-lod-labels-1
+// Active preload hierarchy selector cache key: RvmZoneLodLabelBridge.js?v=20260621-rvm-preload-hierarchy-selector-1
 // Active selection details inspector cache key: RvmSelectionDetailsInspectorBridge.js?v=20260621-rvm-selection-details-inspector-1
 // Active isolate/visibility toolbar cache key: RvmVisibilityToolbarBridge.js?v=20260621-rvm-isolate-visibility-toolbar-1
 // Active visibility snapshots cache key: RvmVisibilitySnapshotsBridge.js?v=20260621-rvm-visibility-snapshots-1
@@ -26,6 +21,13 @@
 // Active report export cache key: RvmReportExportBridge.js?v=20260621-rvm-report-export-1
 // Previous model health cache key: RvmModelHealthBridge.js?v=20260621-rvm-model-health-1
 // Active health issues cache key: RvmModelHealthIssuesBridge.js?v=20260621-rvm-health-issues-1
+// Active Navis hierarchy cache key: RvmNavisHierarchyBridge.js?v=20260621-rvm-navis-hierarchy-1
+// Active native facet primary cache key: viewer3d-rvm-tab.js?v=20260621-rvm-native-facet-primary-1
+// Active native facet ghost panel cache key: BrowserRvmNativeFacetGhostPanelPatch.js?v=20260622-rvm-facet-ghost-panels-1
+// Active render policy cache key: BrowserRvmRenderPolicyBridge.js?v=20260622-rvm-render-policy-1
+// Active debug pick cache key: BrowserRvmPickDiagnosticsBridge.js?v=20260622-rvm-debug-pick-1
+// Active zone/LOD context cache key: RvmZoneLodContextBridge.js?v=20260621-rvm-zone-lod-context-1
+// Active visible-scope PCF trigger cache key: RvmJsonPcfTriggerBridge.js?v=20260621-rvm-pcf-visible-scope-1
 import { RvmViewer3D } from '../rvm-viewer/RvmViewer3D.js?v=20260620-rvm-direct-tab-1';
 import { installRvmProgressiveModelRootPatch } from '../rvm-viewer/RvmProgressiveModelRootPatchV5.js?v=20260620-rvm-tree-select-nohide-1';
 import { installRvmHierarchySelectionBridge } from './RvmHierarchySelectionBridge.js?v=20260620-rvm-large-box-support-sync-1';
@@ -56,6 +58,8 @@ import { installRvmDeferredBridgeLoader } from './RvmDeferredBridgeLoader.js?v=2
 import { installBrowserRvmCppMat3x4WorkerPatch } from '../rvm/BrowserRvmCppMat3x4WorkerPatch.js?v=20260620-rvm-facetgroup-1';
 import { installBrowserRvmNativeTessellationRuntimePatch } from '../rvm/BrowserRvmNativeTessellationRuntimePatch.js?v=20260620-rvm-native-diagnostics-1';
 import { installBrowserRvmNativeFacetGhostPanelPatch } from '../rvm/BrowserRvmNativeFacetGhostPanelPatch.js?v=20260622-rvm-facet-ghost-panels-1';
+import { installBrowserRvmRenderPolicyBridge } from '../rvm/BrowserRvmRenderPolicyBridge.js?v=20260622-rvm-render-policy-1';
+import { installBrowserRvmPickDiagnosticsBridge } from '../rvm/BrowserRvmPickDiagnosticsBridge.js?v=20260622-rvm-debug-pick-1';
 import { installBrowserRvmDishTessellationRuntimePatch } from '../rvm/BrowserRvmDishTessellationRuntimePatch.js?v=20260620-rvm-support-assembly-dish-1';
 import { installBrowserRvmRemainingPrimitiveRuntimePatch } from '../rvm/BrowserRvmRemainingPrimitiveRuntimePatch.js?v=20260620-rvm-facetgroup-1';
 import { installBrowserRvmTorusParityRuntimePatch } from '../rvm/BrowserRvmTorusParityRuntimePatch.js?v=20260620-rvm-torus-parity-1';
@@ -64,6 +68,8 @@ import { installBrowserRvmSnoutParityRuntimePatch } from '../rvm/BrowserRvmSnout
 installBrowserRvmCppMat3x4WorkerPatch();
 installBrowserRvmNativeTessellationRuntimePatch();
 installBrowserRvmNativeFacetGhostPanelPatch();
+installBrowserRvmRenderPolicyBridge();
+installBrowserRvmPickDiagnosticsBridge();
 installBrowserRvmDishTessellationRuntimePatch();
 installBrowserRvmRemainingPrimitiveRuntimePatch();
 installBrowserRvmTorusParityRuntimePatch();
@@ -98,4 +104,4 @@ installRvmJsonPcfTriggerBridge();
 installRvmPolicyInfoBridge();
 installRvmDiagnosticPanelCollapseBridge();
 
-export { mountViewer3DRvmTab as renderViewer3DRvm } from './viewer3d-rvm-tab.js?v=20260622-rvm-facet-ghost-panels-1';
+export { mountViewer3DRvmTab as renderViewer3DRvm } from './viewer3d-rvm-tab.js?v=20260621-rvm-native-facet-primary-1';
