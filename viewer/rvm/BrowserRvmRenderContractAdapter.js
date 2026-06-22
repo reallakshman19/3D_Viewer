@@ -1,4 +1,4 @@
-export const BROWSER_RVM_RENDER_INSTRUCTION_SCHEMA = 'rvm-browser-render-instructions/v4-preserve-raw-support-cylinders';
+export const BROWSER_RVM_RENDER_INSTRUCTION_SCHEMA = 'rvm-browser-render-instructions/v5-raw-first-support-primitives';
 
 const INTERNAL_ATTRIBUTE_PREFIXES = Object.freeze([
   'BROWSER_RVM_',
@@ -20,7 +20,8 @@ const INTERNAL_ATTRIBUTE_NAMES = Object.freeze(new Set([
 ]));
 
 const SUPPORT_HINT_RE = /\b(SUPPORT|SUPP|GUIDE|ANCHOR|LINE\s*STOP|LINESTOP|STOPPER|LIMIT\s*STOP|REST|SHOE|HANGER|SPRING|CLAMP|TRUNNION|DUMMY|U[-_ ]?BOLT|SADDLE)\b/i;
-const RAW_SUPPORT_CYLINDER_RE = /^(CYLINDER_BBOX|PIPE_BBOX|PIPE_CYLINDER|RVM_NATIVE_CYLINDER)$/i;
+const RAW_RENDERABLE_PRIMITIVE_RE = /^(CYLINDER_BBOX|PIPE_BBOX|PIPE_CYLINDER|RVM_NATIVE_CYLINDER|BOX_BBOX|BOX_SOLID|CONE_BBOX_PLACEHOLDER|CONE_FRUSTUM|DISH_BBOX_PLACEHOLDER|TORUS_BBOX_PLACEHOLDER|ELBOW_BBOX_PLACEHOLDER|FACET_GROUP_BBOX_PLACEHOLDER|RVM_NATIVE_FACET_GROUP|GENERIC_BBOX_PLACEHOLDER)$/i;
+const RAW_RENDERABLE_RVM_CODES = new Set([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]);
 
 export function collectBrowserRvmRenderInstructions(roots = []) {
   const list = [];
@@ -35,17 +36,23 @@ export function collectBrowserRvmRenderInstructions(roots = []) {
       const att = summarizeBrowserRvmAtt(attrs);
       const attAttributes = extractBrowserRvmAttAttributes(attrs, att.enriched);
       const supportHint = supportHintFor(node, attrs, attAttributes, nodePath);
-      const preserveRawSupportCylinder = supportHint.isSupport && shouldPreserveRawSupportCylinder(primitive, attrs);
+      const preserveRawSupportPrimitive = supportHint.isSupport && shouldPreserveRawSupportPrimitive(primitive, attrs);
       if (supportHint.isSupport) {
         attributes.RVM_BROWSER_SUPPORT_HINT = 'true';
         attributes.RVM_BROWSER_SUPPORT_KIND = supportHint.kind;
-        if (preserveRawSupportCylinder) {
-          attributes.RVM_BROWSER_SUPPORT_RAW_CYLINDER_PRESERVED = 'true';
-          attributes.RVM_BROWSER_SUPPORT_RAW_CYLINDER_POLICY = 'support-preserved-rvm-cylinder-raw';
+        if (preserveRawSupportPrimitive) {
+          attributes.RVM_BROWSER_SUPPORT_RAW_PRIMITIVE_PRESERVED = 'true';
+          attributes.RVM_BROWSER_SUPPORT_RAW_PRIMITIVE_POLICY = 'support-preserved-rvm-primitive-raw-first';
+          if (shouldPreserveRawSupportCylinder(primitive, attrs)) {
+            attributes.RVM_BROWSER_SUPPORT_RAW_CYLINDER_PRESERVED = 'true';
+            attributes.RVM_BROWSER_SUPPORT_RAW_CYLINDER_POLICY = 'support-preserved-rvm-cylinder-raw';
+          }
         }
       }
-      const normalizedType = supportHint.isSupport ? 'SUPPORT' : String(attrs.TYPE || node.type || 'UNKNOWN');
-      const normalizedKind = supportHint.isSupport ? supportHint.kind : String(attrs.RVM_PRIMITIVE_KIND || attrs.RVM_BROWSER_PRIMITIVE_CLASS || attrs.TYPE || node.type || 'UNKNOWN');
+      const sourceType = String(attrs.TYPE || node.type || 'UNKNOWN');
+      const sourceKind = String(attrs.RVM_PRIMITIVE_KIND || attrs.RVM_BROWSER_PRIMITIVE_CLASS || attrs.TYPE || node.type || 'UNKNOWN');
+      const normalizedType = supportHint.isSupport && !preserveRawSupportPrimitive ? 'SUPPORT' : sourceType;
+      const normalizedKind = supportHint.isSupport && !preserveRawSupportPrimitive ? supportHint.kind : sourceKind;
       list.push({
         schemaVersion: BROWSER_RVM_RENDER_INSTRUCTION_SCHEMA,
         sourcePath: nodePath,
@@ -53,9 +60,9 @@ export function collectBrowserRvmRenderInstructions(roots = []) {
         displayName: displayNameForNode(name, attrs, attAttributes),
         type: normalizedType,
         kind: normalizedKind,
-        renderPrimitive: supportHint.isSupport && !preserveRawSupportCylinder ? 'SUPPORT_BBOX_PLACEHOLDER' : primitive,
+        renderPrimitive: supportHint.isSupport && !preserveRawSupportPrimitive ? 'SUPPORT_BBOX_PLACEHOLDER' : primitive,
         renderSource: supportHint.isSupport
-          ? (preserveRawSupportCylinder ? 'support-preserved-rvm-cylinder-raw' : 'support-hint-promoted-contract')
+          ? (preserveRawSupportPrimitive ? 'support-preserved-rvm-primitive-raw' : 'support-hint-promoted-contract')
           : String(attrs.RVM_BROWSER_RENDER_SOURCE || 'unknown'),
         contractVersion: String(attrs.RVM_BROWSER_GEOMETRY_CONTRACT_VERSION || ''),
         center: parseVec3(attrs.RVM_BROWSER_CENTER),
@@ -88,12 +95,16 @@ function summarize(list) {
   const attCounts = { enriched: 0, plain: 0 };
   let supportHintCount = 0;
   let supportRawCylinderPreservedCount = 0;
+  let supportRawPrimitivePreservedCount = 0;
+  let supportPromotedPlaceholderCount = 0;
   for (const item of list) {
     bump(contractCounts, item.renderPrimitive);
     bump(kindCounts, item.kind);
     bump(sourceCounts, item.renderSource);
-    if (item.type === 'SUPPORT' || item.attributes?.RVM_BROWSER_SUPPORT_HINT === 'true') supportHintCount += 1;
+    if (item.attributes?.RVM_BROWSER_SUPPORT_HINT === 'true') supportHintCount += 1;
     if (item.attributes?.RVM_BROWSER_SUPPORT_RAW_CYLINDER_PRESERVED === 'true') supportRawCylinderPreservedCount += 1;
+    if (item.attributes?.RVM_BROWSER_SUPPORT_RAW_PRIMITIVE_PRESERVED === 'true') supportRawPrimitivePreservedCount += 1;
+    if (item.renderPrimitive === 'SUPPORT_BBOX_PLACEHOLDER') supportPromotedPlaceholderCount += 1;
     if (item.att?.enriched) attCounts.enriched += 1;
     else attCounts.plain += 1;
   }
@@ -105,6 +116,8 @@ function summarize(list) {
     sourceCounts,
     supportHintCount,
     supportRawCylinderPreservedCount,
+    supportRawPrimitivePreservedCount,
+    supportPromotedPlaceholderCount,
     attCounts
   };
 }
@@ -145,13 +158,25 @@ function supportHintFor(node, attrs = {}, attAttributes = {}, nodePath = '') {
   return { isSupport: true, kind: supportKindFromText(text) };
 }
 
+function shouldPreserveRawSupportPrimitive(primitive, attrs = {}) {
+  const primitiveText = String(primitive || '').trim();
+  const code = Number.parseInt(String(attrs.RVM_PRIMITIVE_CODE ?? attrs.RVM_BINARY_PRIMITIVE_CODE ?? '').trim(), 10);
+  const primitiveClass = String(attrs.RVM_BROWSER_PRIMITIVE_CLASS || attrs.RVM_PRIMITIVE_KIND || attrs.RVM_PRIMITIVE_KIND_NAME || '').toUpperCase();
+  const renderSource = String(attrs.RVM_BROWSER_RENDER_SOURCE || '').toLowerCase();
+  if (Number.isFinite(code) && RAW_RENDERABLE_RVM_CODES.has(code)) return true;
+  if (RAW_RENDERABLE_PRIMITIVE_RE.test(primitiveText)) return true;
+  if (/CYLINDER|PYRAMID|BOX|CONE|SPHERE|FACET|TORUS|DISH|LINE/.test(primitiveClass)) return true;
+  if (/native|exact|cpp-mat3x4|transform-axis-contract/.test(renderSource)) return true;
+  return false;
+}
+
 function shouldPreserveRawSupportCylinder(primitive, attrs = {}) {
   const primitiveText = String(primitive || '').trim();
   const code = Number.parseInt(String(attrs.RVM_PRIMITIVE_CODE ?? attrs.RVM_BINARY_PRIMITIVE_CODE ?? '').trim(), 10);
   const primitiveClass = String(attrs.RVM_BROWSER_PRIMITIVE_CLASS || attrs.RVM_PRIMITIVE_KIND || '').toUpperCase();
   const renderSource = String(attrs.RVM_BROWSER_RENDER_SOURCE || '').toLowerCase();
   if (code === 8) return true;
-  if (RAW_SUPPORT_CYLINDER_RE.test(primitiveText)) return true;
+  if (/^(CYLINDER_BBOX|PIPE_BBOX|PIPE_CYLINDER|RVM_NATIVE_CYLINDER)$/i.test(primitiveText)) return true;
   if (primitiveClass === 'CYLINDER') return true;
   if (/native.*cylinder|cylinder.*native|exact.*cylinder/.test(renderSource)) return true;
   return false;
