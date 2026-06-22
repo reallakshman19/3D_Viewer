@@ -78,6 +78,7 @@ function makeNode(id, label, depth, kind = '') {
     count: 0,
     objectIds: new Set(),
     canonicalIds: new Set(),
+    disabledObjectIds: new Set(),
     children: new Map(),
     parent: null,
   };
@@ -90,9 +91,11 @@ function addObjectToTree(rootNode, nodeById, objectById, obj) {
   const canonicalId = objectCanonicalId(obj);
   if (canonicalId) objectById.set(canonicalId, obj);
   const parts = cleanPathParts(objectPath(obj), objectLabel(obj));
+  const disabled = obj?.userData?.rvmBranchDisabledByUser === true;
   let current = rootNode;
   current.count += 1;
   current.objectIds.add(renderId);
+  if (disabled) current.disabledObjectIds.add(renderId);
   if (canonicalId) current.canonicalIds.add(canonicalId);
   let key = rootNode.id;
 
@@ -108,6 +111,7 @@ function addObjectToTree(rootNode, nodeById, objectById, obj) {
     }
     child.count += 1;
     child.objectIds.add(renderId);
+    if (disabled) child.disabledObjectIds.add(renderId);
     if (canonicalId) child.canonicalIds.add(canonicalId);
     current = child;
   }
@@ -120,7 +124,7 @@ function buildHierarchyModel(viewer) {
   let objectCount = 0;
   viewer?.modelGroup?.traverse?.((obj) => {
     if (!(obj?.isMesh || obj?.isLine || obj?.isLineSegments || obj?.isPoints)) return;
-    if (obj.userData?.pickable === false || obj.userData?.rvmBranchDisabledByUser === true) return;
+    if (obj.userData?.pickable === false && obj.userData?.rvmBranchDisabledByUser !== true) return;
     objectCount += 1;
     addObjectToTree(rootNode, nodeById, objectById, obj);
   });
@@ -145,15 +149,16 @@ function nodeIcon(node) {
 function nodeRowHtml(node, expanded = false) {
   const hasChildren = node.children.size > 0;
   const depth = Math.max(0, node.depth);
+  const allOff = node.objectIds.size > 0 && node.disabledObjectIds.size >= node.objectIds.size;
   return `
     <li ${TREE_ROW_ATTR}="true" data-node-id="${esc(node.id)}" data-rvm-navis-depth="${depth}" data-rvm-navis-label="${esc(node.label.toLowerCase())}">
-      <div class="rvm-navis-row ${expanded ? 'is-expanded' : ''}" style="--rvm-navis-depth:${depth}">
+      <div class="rvm-navis-row ${expanded ? 'is-expanded' : ''} ${allOff ? 'is-branch-off' : ''}" style="--rvm-navis-depth:${depth}">
         <button type="button" class="rvm-navis-expander" data-rvm-navis-toggle="${esc(node.id)}" ${hasChildren ? '' : 'disabled'} aria-label="${expanded ? 'Collapse' : 'Expand'} ${esc(node.label)}">${hasChildren ? (expanded ? '−' : '+') : ''}</button>
         <button type="button" class="rvm-navis-select" data-rvm-navis-select="${esc(node.id)}" title="Select / fit ${esc(node.label)}">
           <span class="rvm-navis-icon" aria-hidden="true">${nodeIcon(node)}</span>
           <span class="rvm-kind">${esc(node.kind)}</span>
           <span class="rvm-navis-label">${esc(node.label)}</span>
-          <span class="rvm-tree-count">${node.count}</span>
+          <span class="rvm-tree-count">${node.count}${allOff ? ' off' : ''}</span>
         </button>
         <button type="button" class="rvm-navis-branch-off" data-rvm-navis-off="${esc(node.id)}" title="Turn off this branch: remove from render, picking and selection">Off</button>
         <button type="button" class="rvm-navis-branch-on" data-rvm-navis-on="${esc(node.id)}" title="Turn branch back on">On</button>
@@ -214,17 +219,17 @@ function selectNode(root, node) {
   const model = root?.__rvmNavisHierarchyModel;
   if (!viewer || !node || !model) return;
   const ids = [...node.objectIds].slice(0, MAX_BRANCH_SELECTION_IDS);
-  const objects = ids.map((id) => model.objectById.get(id)).filter(Boolean);
+  const objects = ids.map((id) => model.objectById.get(id)).filter((obj) => obj && obj.userData?.rvmBranchDisabledByUser !== true);
   if (!ids.length || !objects.length) {
-    setStatus(root, `No rendered objects under ${node.label}.`, true);
+    setStatus(root, `No active rendered objects under ${node.label}.`, true);
     return;
   }
   try {
     viewer._rvmCanvasSelectedMeshes = objects;
-    viewer.selection?.selectCanonicalIds?.(ids, { additive: false });
+    viewer.selection?.selectCanonicalIds?.(objects.map(objectRenderId).filter(Boolean), { additive: false });
     viewer.fitSelection?.();
-    setStatus(root, `Selected ${ids.length}${node.objectIds.size > ids.length ? '+' : ''} object(s) under ${node.label}.`);
-    syncTreeSelection(root, { renderObjectIds: ids, canonicalIds: [...node.canonicalIds] });
+    setStatus(root, `Selected ${objects.length}${node.objectIds.size > objects.length ? '+' : ''} active object(s) under ${node.label}.`);
+    syncTreeSelection(root, { renderObjectIds: objects.map(objectRenderId).filter(Boolean), canonicalIds: [...node.canonicalIds] });
   } catch (error) {
     setStatus(root, `Hierarchy selection failed: ${error?.message || error}`, true);
     console.warn('[RVM hierarchy] selection failed', error);
@@ -393,7 +398,7 @@ function installStyles() {
   style.textContent = `
     .rvm-tree .rvm-navis-summary{display:flex;align-items:center;gap:6px;padding:6px 8px;margin:2px 4px 6px;border:1px solid rgba(126,190,255,.18);border-radius:6px;background:rgba(59,130,246,.08);font-size:10px;color:#bcd8ff}.rvm-tree .rvm-navis-summary b{color:#fff}.rvm-tree .rvm-navis-summary small{color:#7f94b7}
     .rvm-tree .rvm-navis-children{list-style:none;margin:0;padding:0}.rvm-tree [data-rvm-navis-node-row]{list-style:none;margin:1px 0;padding:0}.rvm-navis-row{display:grid;grid-template-columns:16px minmax(0,1fr) auto auto;align-items:center;gap:2px;min-width:0;padding-left:calc(var(--rvm-navis-depth,0) * 12px)}
-    .rvm-navis-row.is-selected{background:rgba(96,165,250,.18);outline:1px solid rgba(96,165,250,.55);border-radius:4px}.rvm-navis-expander{width:16px;height:18px;line-height:14px;display:inline-grid;place-items:center;border:1px solid rgba(126,190,255,.30);border-radius:3px;background:#101a2b;color:#bcd8ff;font-size:11px;padding:0}.rvm-navis-expander:disabled{opacity:.35;border-color:transparent;background:transparent}
+    .rvm-navis-row.is-selected{background:rgba(96,165,250,.18);outline:1px solid rgba(96,165,250,.55);border-radius:4px}.rvm-navis-row.is-branch-off{opacity:.58}.rvm-navis-expander{width:16px;height:18px;line-height:14px;display:inline-grid;place-items:center;border:1px solid rgba(126,190,255,.30);border-radius:3px;background:#101a2b;color:#bcd8ff;font-size:11px;padding:0}.rvm-navis-expander:disabled{opacity:.35;border-color:transparent;background:transparent}
     .rvm-navis-select{min-width:0;display:grid;grid-template-columns:auto auto minmax(0,1fr) auto;align-items:center;gap:4px;height:20px;border:1px solid rgba(126,190,255,.13);border-radius:4px;background:rgba(255,255,255,.035);color:#d9e9ff;text-align:left;font-size:9px;padding:2px 5px}.rvm-navis-select:hover{border-color:#60a5fa;background:rgba(59,130,246,.18)}
     .rvm-navis-branch-off,.rvm-navis-branch-on{height:18px;border:1px solid rgba(148,163,184,.22);border-radius:4px;background:#111827;color:#dbeafe;font-size:8px;padding:1px 4px}.rvm-navis-branch-off{color:#fecaca}.rvm-navis-branch-on{color:#bbf7d0}
     .rvm-navis-icon{color:#83b7ff;font-size:10px}.rvm-navis-label{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.rvm-tree .rvm-kind{font-size:8px;line-height:1;padding:2px 4px;border-radius:999px;background:#20324c;color:#bcd8ff}.rvm-tree .rvm-tree-count{font-size:8px;color:#94a3b8;margin-left:auto}
