@@ -1,12 +1,14 @@
 import { buildRenderedGeometrySnapshot, buildRenderedGeometrySnapshotSummary } from './RenderedGeometrySnapshotBuilder.js?v=20260622-geometry-workspace-1';
 import { discoverRenderedGeometryFields, selectDefaultTableFields, valueAtPath } from './RenderedGeometryFieldDiscovery.js?v=20260622-geometry-workspace-1';
 import { buildGeometryImportHierarchy, flattenGeometryImportHierarchy, collectObjectIdsForHierarchyPaths, countCheckedHierarchyObjects } from './GeometryImportHierarchyModel.js?v=20260622-geometry-import-tree-1';
+import { mapRenderedGeometryRecords } from './GeometryMappingEngine.js?v=20260622-geometry-mapping-1';
 
 const INSTALL_FLAG = Symbol.for('pcf-glb-rvm-geometry-export-workspace-v1');
-const BRIDGE_VERSION = '20260622-geometry-import-tree-1';
+const BRIDGE_VERSION = '20260622-geometry-mapping-1';
 const MAX_TABLE_ROWS = 300;
 const MAX_HIERARCHY_DEPTH = 5;
 const MAX_HIERARCHY_ROWS = 500;
+const MAX_MAPPED_ROWS = 300;
 
 let workspaceState = {
   schemaVersion: 'geometry-export-workspace/v1',
@@ -15,6 +17,7 @@ let workspaceState = {
   summary: null,
   fieldDiscovery: null,
   hierarchyTree: null,
+  mapping: null,
   checkedHierarchyPaths: new Set(),
   expandedHierarchyPaths: new Set(['__ROOT__']),
   activeObjectIds: new Set(),
@@ -59,8 +62,18 @@ function getActiveRecords() {
   return records.filter((record) => active.has(record.id));
 }
 
+function getActiveMappedObjects() {
+  const active = workspaceState.activeObjectIds;
+  return ensureArray(workspaceState.mapping?.mappedObjects).filter((object) => active.has(object.sourceId || object.id));
+}
+
 function selectedTreeObjectIds() {
   return collectObjectIdsForHierarchyPaths(workspaceState.hierarchyTree, workspaceState.checkedHierarchyPaths);
+}
+
+function rebuildMapping(records = ensureArray(workspaceState.snapshot?.records)) {
+  workspaceState.mapping = mapRenderedGeometryRecords(records);
+  return workspaceState.mapping;
 }
 
 function importSnapshot(scope = 'visible') {
@@ -71,6 +84,7 @@ function importSnapshot(scope = 'visible') {
     maxDepth: MAX_HIERARCHY_DEPTH,
     rootName: snapshot.modelName || 'Rendered Geometry'
   });
+  const mapping = mapRenderedGeometryRecords(snapshot.records);
   workspaceState = {
     schemaVersion: 'geometry-export-workspace/v1',
     import: {
@@ -84,13 +98,14 @@ function importSnapshot(scope = 'visible') {
     summary,
     fieldDiscovery,
     hierarchyTree,
+    mapping,
     checkedHierarchyPaths: new Set(),
     expandedHierarchyPaths: new Set(['__ROOT__']),
     activeObjectIds: allRecordIds(snapshot),
     hierarchySearch: '',
   };
   renderWorkspace();
-  setStatus(`Geometry Workspace: imported ${snapshot.recordCount}${snapshot.capped ? '+' : ''} ${scope} rendered object(s).`, snapshot.capped);
+  setStatus(`Geometry Workspace: imported ${snapshot.recordCount}${snapshot.capped ? '+' : ''} ${scope} rendered object(s); auto-mapped ${mapping.mappedCount}.`, snapshot.capped);
   return workspaceState;
 }
 
@@ -98,16 +113,22 @@ function renderSummary() {
   const state = workspaceState;
   const summary = state.summary;
   const fieldDiscovery = state.fieldDiscovery;
+  const mapping = state.mapping;
   if (!summary) return '<div class="gew-empty">No geometry imported yet. Choose Selected, Visible, or Full rendered model.</div>';
   const activeCount = getActiveRecords().length;
+  const activeMapped = getActiveMappedObjects();
   const checkedCount = countCheckedHierarchyObjects(state.hierarchyTree, state.checkedHierarchyPaths);
   const topClasses = Object.entries(summary.byClass || {}).slice(0, 8).map(([key, value]) => `<span>${esc(key)} <b>${value}</b></span>`).join('');
   return `
     <div class="gew-summary-grid">
       <div><b>${summary.recordCount}${summary.capped ? '+' : ''}</b><span>objects</span></div>
       <div><b>${activeCount}</b><span>active import list</span></div>
-      <div><b>${fieldDiscovery?.fieldCount || 0}</b><span>fields</span></div>
+      <div><b>${fieldDiscovery?.fieldCount || 0}</b><span>dynamic fields</span></div>
+      <div><b>${mapping?.mappedCount || 0}</b><span>auto-mapped</span></div>
+      <div><b>${mapping?.summary?.supportCount || 0}</b><span>support candidates</span></div>
+      <div><b>${mapping?.summary?.pipeCount || 0}</b><span>pipe candidates</span></div>
       <div><b>${checkedCount}</b><span>checked tree objects</span></div>
+      <div><b>${activeMapped.length}</b><span>mapped active rows</span></div>
     </div>
     <div class="gew-class-chips">${topClasses || '<span>No class summary</span>'}</div>`;
 }
@@ -152,7 +173,7 @@ function renderHierarchy() {
       const expanded = row.path === '__ROOT__' || workspaceState.expandedHierarchyPaths.has(row.path) || workspaceState.hierarchySearch;
       const activeState = nodeActiveState(row);
       return `<div class="gew-hrow ${activeState}" style="--indent:${Math.max(0, row.level - 1)}" data-gew-hrow="${esc(row.path)}">
-        <button type="button" class="gew-hrow-toggle" data-gew-toggle-path="${esc(row.path)}" ${hasChildren ? '' : 'disabled'}>${hasChildren ? (expanded ? '−' : '+') : '·'}</button>
+        <button type="button" class="gew-hrow-toggle" data-gew-toggle-path="${esc(row.path)}" ${hasChildren ? '' : 'disabled'}>${hasChildren ? (expanded ? '-' : '+') : '·'}</button>
         <input type="checkbox" data-gew-hpath="${esc(row.path)}" ${nodeCheckedState(row)} aria-label="Check hierarchy node ${esc(row.name)}">
         <span title="${esc(row.path)}">${esc(row.name || row.path)}</span>
         <b>${row.count}</b>
@@ -186,20 +207,56 @@ function renderRawTable() {
 }
 
 function renderMappingPreview() {
-  const fields = ensureArray(workspaceState.fieldDiscovery?.fieldSet);
-  if (!fields.length) return '<div class="gew-empty">Import geometry to preview mapping candidates.</div>';
-  const candidates = [
-    ['supportType', ['rawFields.DTXR', 'rawFields.SUPPORT_KIND', 'rawFields.SUPPORT_TYPE', 'rawFields.CMPSUPTYPE', 'rawFields.MDSSUPPTYPE']],
-    ['supportTag', ['rawFields.REF', 'rawFields.NAME', 'rawFields.SUPPORT_TAG']],
-    ['pipe.odMm', ['rawFields.ATTACHED_PIPE_OD', 'rawFields.DIAMETER', 'rawFields.BORE']],
-    ['pipe.wallThicknessMm', ['rawFields.WALL_THICK', 'rawFields.WT']],
-    ['material', ['rawFields.MATERIAL', 'rawFields.MATL']],
-  ];
-  const fieldPaths = new Set(fields.map((field) => field.path));
-  return `<div class="gew-map-list">${candidates.map(([target, paths]) => {
-    const found = paths.find((path) => fieldPaths.has(path));
-    return `<div class="gew-map-row"><b>${esc(target)}</b><span>${found ? `candidate: ${esc(found)}` : 'unmapped'}</span></div>`;
-  }).join('')}</div>`;
+  const mapping = workspaceState.mapping;
+  if (!mapping) return '<div class="gew-empty">Import geometry to run automatic mapping.</div>';
+  const activeMapped = getActiveMappedObjects();
+  const rows = activeMapped.slice(0, MAX_MAPPED_ROWS);
+  const coverage = ensureArray(mapping.fieldCoverage).slice(0, 12);
+  const coverageHtml = coverage.map((row) => `<div class="gew-map-row"><b>${esc(row.targetField)}</b><span>${row.mappedCount} mapped · ${esc(row.rules.join(', '))}</span></div>`).join('');
+  const tableRows = rows.map((object) => `<tr>
+    <td>${esc(object.displayName)}</td>
+    <td>${esc(object.family)}</td>
+    <td>${esc(object.support?.supportType || '')}</td>
+    <td>${esc(object.support?.supportTag || '')}</td>
+    <td>${esc(object.pipe?.odMm ?? '')}</td>
+    <td>${esc(object.pipe?.wallThicknessMm ?? '')}</td>
+    <td>${esc(object.lineNo || '')}</td>
+    <td>${esc(object.mappingStatus)}</td>
+    <td>${esc(object.mappingConfidence)}</td>
+  </tr>`).join('');
+  return `
+    <div class="gew-map-summary">
+      <div><b>${mapping.profileId}</b><span>mapping profile</span></div>
+      <div><b>${mapping.mappedCount}</b><span>mapped records</span></div>
+      <div><b>${mapping.unmappedCount}</b><span>unmapped records</span></div>
+      <div><b>${activeMapped.length}</b><span>active mapped records</span></div>
+    </div>
+    <h4>Mapping coverage</h4>
+    <div class="gew-map-list">${coverageHtml || '<div class="gew-empty">No mapping coverage yet.</div>'}</div>
+    <h4>Mapped active objects</h4>
+    <div class="gew-table-note">Showing ${rows.length} of ${activeMapped.length} active mapped objects. Mapping is automatic and auditable; user-confirmed profiles come next.</div>
+    <div class="gew-table-wrap"><table><thead><tr><th>Object</th><th>Family</th><th>Support Type</th><th>Support Tag</th><th>Pipe OD mm</th><th>Wall mm</th><th>Line</th><th>Status</th><th>Confidence</th></tr></thead><tbody>${tableRows}</tbody></table></div>`;
+}
+
+function renderCalculationCanvas() {
+  const activeMapped = getActiveMappedObjects();
+  const supportRows = activeMapped.filter((object) => object.family === 'SUPPORT');
+  const withOd = supportRows.filter((object) => Number(object.pipe?.odMm) > 0).length;
+  return `<div class="gew-calc-shell">
+    <h4>Calculation Canvas shell</h4>
+    <p class="gew-note">Support Load module will consume confirmed mapped objects. This phase only produces automatic canonical mapping and audit data.</p>
+    <div class="gew-map-summary">
+      <div><b>${supportRows.length}</b><span>support candidates</span></div>
+      <div><b>${withOd}</b><span>support rows with pipe OD</span></div>
+      <div><b>${activeMapped.length}</b><span>active mapped objects</span></div>
+      <div><b>${workspaceState.mapping?.profileId || 'none'}</b><span>mapping profile</span></div>
+    </div>
+    <ul class="gew-checklist">
+      <li>Required for support loads: support type, support position, attached pipe OD, wall/schedule, material/process data.</li>
+      <li>No fabricated calculation values are produced here.</li>
+      <li>Next phase adds user confirmation and saved mapping profiles.</li>
+    </ul>
+  </div>`;
 }
 
 function renderWorkspace() {
@@ -213,8 +270,8 @@ function renderWorkspace() {
       <div class="gew-subgrid"><div><h4>Top 5 hierarchy import tree</h4>${renderHierarchy()}</div><div><h4>Dynamic field discovery</h4>${renderFieldDiscovery()}</div></div>
     </section>
     <section data-gew-tab-panel="raw">${renderRawTable()}</section>
-    <section data-gew-tab-panel="mapping"><h4>Automatic mapping candidates</h4>${renderMappingPreview()}<p class="gew-note">Mapping is preview-only in PR-2. Calculation modules will consume confirmed mappings in later phases.</p></section>
-    <section data-gew-tab-panel="calc"><div class="gew-empty">Calculation Canvas shell. Next phases add mapping profiles, resolvers, and support-load modules.</div></section>`;
+    <section data-gew-tab-panel="mapping"><h4>Automatic mapping engine</h4>${renderMappingPreview()}</section>
+    <section data-gew-tab-panel="calc">${renderCalculationCanvas()}</section>`;
   setActiveTab(dialog, dialog.dataset.gewActiveTab || 'import');
 }
 
@@ -235,26 +292,26 @@ function ensureDialog() {
   dialog.innerHTML = `
     <div class="gew-card" role="dialog" aria-modal="false" aria-label="Geometry Export Workspace">
       <div class="gew-head">
-        <div><b>Export Geometry Workspace</b><small>${esc(BRIDGE_VERSION)} · rendered graphics snapshot · hierarchy import layer</small></div>
-        <button type="button" data-gew-close="true" aria-label="Close geometry workspace">×</button>
+        <div><b>Export Geometry Workspace</b><small>${esc(BRIDGE_VERSION)} · rendered graphics snapshot · dynamic mapping engine</small></div>
+        <button type="button" data-gew-close="true" aria-label="Close geometry workspace">x</button>
       </div>
       <div class="gew-toolbar">
         <label>Source <select data-gew-import-scope><option value="selected">Canvas selection</option><option value="visible" selected>Visible rendered geometry</option><option value="all">Full rendered model</option></select></label>
         <button type="button" data-gew-import="true">Import</button>
         <button type="button" data-gew-refresh="true">Refresh</button>
-        <button type="button" data-gew-export-json="true">Export Snapshot JSON</button>
+        <button type="button" data-gew-run-mapping="true">Auto Map</button>
+        <button type="button" data-gew-export-json="true">Export Workspace JSON</button>
       </div>
       <nav class="gew-tabs">
         <button type="button" data-gew-tab="import" class="is-active">Import</button>
         <button type="button" data-gew-tab="raw">Raw Geometry</button>
-        <button type="button" data-gew-tab="mapping">Mapping Preview</button>
+        <button type="button" data-gew-tab="mapping">Mapped Objects</button>
         <button type="button" data-gew-tab="calc">Calculation Canvas</button>
       </nav>
       <div class="gew-body" data-gew-body></div>
     </div>`;
   document.body.appendChild(dialog);
   bindDialog(dialog);
-  renderWorkspace();
   return dialog;
 }
 
@@ -323,6 +380,16 @@ function toggleExpanded(path) {
   renderWorkspace();
 }
 
+function runMapping() {
+  if (!workspaceState.snapshot) {
+    setStatus('Geometry Workspace: import geometry before mapping.', true);
+    return;
+  }
+  rebuildMapping(workspaceState.snapshot.records);
+  renderWorkspace();
+  setStatus(`Geometry Workspace: auto-mapped ${workspaceState.mapping.mappedCount} rendered object(s).`, false);
+}
+
 function bindDialog(dialog) {
   dialog.addEventListener('click', (event) => {
     if (event.target?.closest?.('[data-gew-close]')) { closeDialog(); return; }
@@ -330,6 +397,7 @@ function bindDialog(dialog) {
     if (tab) { setActiveTab(dialog, tab); return; }
     if (event.target?.closest?.('[data-gew-import]')) { importSnapshot(activeScope(dialog)); return; }
     if (event.target?.closest?.('[data-gew-refresh]')) { if (workspaceState.snapshot) importSnapshot(workspaceState.snapshot.scope); else renderWorkspace(); return; }
+    if (event.target?.closest?.('[data-gew-run-mapping]')) { runMapping(); return; }
     if (event.target?.closest?.('[data-gew-export-json]')) { downloadSnapshot(); return; }
     const togglePath = event.target?.closest?.('[data-gew-toggle-path]')?.dataset?.gewTogglePath;
     if (togglePath) { event.preventDefault(); event.stopPropagation(); toggleExpanded(togglePath); return; }
@@ -370,10 +438,10 @@ function injectToolbar(root) {
   section.innerHTML = `
     <span class="rvm-ribbon-label">Geometry</span>
     <div class="rvm-ribbon-button-row">
-      <button type="button" class="rvm-tool-btn" data-geometry-export-workspace-open="true" title="Open rendered geometry export workspace"><span aria-hidden="true">⇲</span><span>Export</span></button>
-      <button type="button" class="rvm-tool-btn" data-geometry-export-workspace-quick-visible="true" title="Import visible rendered geometry into workspace"><span aria-hidden="true">RAW</span><span>Visible</span></button>
+      <button type="button" class="rvm-tool-btn" data-geometry-export-workspace-open="true" title="Open rendered geometry export workspace"><span aria-hidden="true">RAW</span><span>Export</span></button>
+      <button type="button" class="rvm-tool-btn" data-geometry-export-workspace-quick-visible="true" title="Import visible rendered geometry into workspace"><span aria-hidden="true">MAP</span><span>Visible</span></button>
     </div>
-    <div class="geometry-export-workspace-summary">Raw geometry · top-5 import tree · dynamic fields</div>`;
+    <div class="geometry-export-workspace-summary">Raw geometry · top-5 tree · mapping engine</div>`;
 }
 
 function injectStyles() {
@@ -381,7 +449,7 @@ function injectStyles() {
   const style = document.createElement('style');
   style.id = 'geometry-export-workspace-style';
   style.textContent = `
-    .geometry-export-workspace-summary{margin-top:3px;color:#94a3b8;font-size:9.5px;white-space:nowrap}.geometry-export-workspace-dialog{position:fixed;inset:0;display:none;align-items:flex-start;justify-content:center;padding:64px 18px 18px;background:rgba(2,6,23,.50);z-index:12250}.geometry-export-workspace-dialog.is-open{display:flex}.gew-card{width:min(1240px,calc(100vw - 44px));max-height:calc(100vh - 88px);display:grid;grid-template-rows:auto auto auto minmax(0,1fr);gap:10px;border:1px solid rgba(126,190,255,.28);border-radius:14px;background:#0b1424;box-shadow:0 24px 80px rgba(0,0,0,.52);padding:12px;color:#dbeafe}.gew-head{display:flex;align-items:center;justify-content:space-between}.gew-head b{font-size:15px;color:#bfdbfe}.gew-head small{display:block;color:#7f94b7;font-size:10px}.gew-head button{border:1px solid rgba(148,163,184,.30);background:#111827;color:#e5e7eb;border-radius:8px;width:30px;height:28px}.gew-toolbar,.gew-tabs,.gew-hierarchy-toolbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.gew-toolbar label{display:flex;align-items:center;gap:6px;color:#bcd8ff;font-size:12px}.gew-toolbar select,.gew-toolbar button,.gew-tabs button,.gew-hierarchy-toolbar button,.gew-hierarchy-toolbar input{border:1px solid rgba(126,190,255,.24);border-radius:8px;background:#132238;color:#dbeafe;padding:7px 10px}.gew-hierarchy-toolbar input{flex:1;min-width:180px}.gew-tabs button.is-active{background:#1d4ed8;color:#fff}.gew-body{min-height:0;overflow:auto;border:1px solid rgba(126,190,255,.12);border-radius:10px;background:rgba(255,255,255,.025);padding:10px}.gew-empty{padding:18px;border:1px dashed rgba(148,163,184,.22);border-radius:10px;color:#9fb3cc;text-align:center}.gew-summary-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin-bottom:8px}.gew-summary-grid div{border:1px solid rgba(126,190,255,.15);border-radius:9px;padding:8px;background:rgba(255,255,255,.035)}.gew-summary-grid b{display:block;color:#dbeafe}.gew-summary-grid span{display:block;color:#8ea8c8;font-size:11px}.gew-class-chips{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px}.gew-class-chips span{border:1px solid rgba(126,190,255,.18);border-radius:999px;padding:4px 7px;background:#111827;color:#bfd7ff;font-size:11px}.gew-subgrid{display:grid;grid-template-columns:minmax(360px,1fr) minmax(320px,1fr);gap:10px}.gew-subgrid h4,.gew-body h4{margin:0 0 8px;color:#bfdbfe}.gew-hierarchy-status{margin:6px 0;color:#9fb3cc;font-size:11px}.gew-hierarchy-list,.gew-field-list,.gew-map-list{display:grid;gap:5px;max-height:430px;overflow:auto}.gew-hrow{display:grid;grid-template-columns:24px auto minmax(0,1fr) auto;gap:7px;align-items:center;padding:6px 8px 6px calc(8px + var(--indent,0)*16px);border:1px solid rgba(126,190,255,.13);border-radius:8px;background:#111827;color:#dbeafe;font-size:12px}.gew-hrow.all-active{border-color:rgba(59,130,246,.58);background:rgba(37,99,235,.16)}.gew-hrow.part-active{border-color:rgba(234,179,8,.46);background:rgba(234,179,8,.07)}.gew-hrow-toggle{width:22px;height:22px;border:1px solid rgba(126,190,255,.24);border-radius:6px;background:#0f1b2d;color:#bfdbfe}.gew-hrow-toggle:disabled{opacity:.45}.gew-hrow span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.gew-hrow b{font-size:11px;color:#93c5fd}.gew-field-row,.gew-map-row{border:1px solid rgba(126,190,255,.13);border-radius:8px;background:#111827;padding:7px;display:grid;gap:3px}.gew-field-row b,.gew-map-row b{font-size:12px;color:#dbeafe}.gew-field-row span,.gew-map-row span,.gew-field-row small{font-size:11px;color:#9fb3cc;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.gew-table-note,.gew-note{margin:0 0 8px;color:#9fb3cc;font-size:11px}.gew-table-wrap{overflow:auto;max-height:500px}.gew-table-wrap table{border-collapse:collapse;min-width:100%;font-size:11px}.gew-table-wrap th,.gew-table-wrap td{border:1px solid rgba(126,190,255,.13);padding:5px 7px;text-align:left;white-space:nowrap;max-width:260px;overflow:hidden;text-overflow:ellipsis}.gew-table-wrap th{position:sticky;top:0;background:#132238;color:#bfdbfe;z-index:1}
+    .geometry-export-workspace-summary{margin-top:3px;color:#94a3b8;font-size:9.5px;white-space:nowrap}.geometry-export-workspace-dialog{position:fixed;inset:0;display:none;align-items:flex-start;justify-content:center;padding:64px 18px 18px;background:rgba(2,6,23,.50);z-index:12250}.geometry-export-workspace-dialog.is-open{display:flex}.gew-card{width:min(1240px,calc(100vw - 44px));max-height:calc(100vh - 88px);display:grid;grid-template-rows:auto auto auto minmax(0,1fr);gap:10px;border:1px solid rgba(126,190,255,.28);border-radius:14px;background:#0b1424;box-shadow:0 24px 80px rgba(0,0,0,.52);padding:12px;color:#dbeafe}.gew-head{display:flex;align-items:center;justify-content:space-between}.gew-head b{font-size:15px;color:#bfdbfe}.gew-head small{display:block;color:#7f94b7;font-size:10px}.gew-head button{border:1px solid rgba(148,163,184,.30);background:#111827;color:#e5e7eb;border-radius:8px;width:30px;height:28px}.gew-toolbar,.gew-tabs,.gew-hierarchy-toolbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.gew-toolbar label{display:flex;align-items:center;gap:6px;color:#bcd8ff;font-size:12px}.gew-toolbar select,.gew-toolbar button,.gew-tabs button,.gew-hierarchy-toolbar button,.gew-hierarchy-toolbar input{border:1px solid rgba(126,190,255,.24);border-radius:8px;background:#132238;color:#dbeafe;padding:7px 10px}.gew-hierarchy-toolbar input{flex:1;min-width:180px}.gew-tabs button.is-active{background:#1d4ed8;color:#fff}.gew-body{min-height:0;overflow:auto;border:1px solid rgba(126,190,255,.12);border-radius:10px;background:rgba(255,255,255,.025);padding:10px}.gew-empty{padding:18px;border:1px dashed rgba(148,163,184,.22);border-radius:10px;color:#9fb3cc;text-align:center}.gew-summary-grid,.gew-map-summary{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin-bottom:8px}.gew-summary-grid div,.gew-map-summary div{border:1px solid rgba(126,190,255,.15);border-radius:9px;padding:8px;background:rgba(255,255,255,.035)}.gew-summary-grid b,.gew-map-summary b{display:block;color:#dbeafe;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.gew-summary-grid span,.gew-map-summary span{display:block;color:#8ea8c8;font-size:11px}.gew-class-chips{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px}.gew-class-chips span{border:1px solid rgba(126,190,255,.18);border-radius:999px;padding:4px 7px;background:#111827;color:#bfd7ff;font-size:11px}.gew-subgrid{display:grid;grid-template-columns:minmax(360px,1fr) minmax(320px,1fr);gap:10px}.gew-subgrid h4,.gew-body h4{margin:0 0 8px;color:#bfdbfe}.gew-hierarchy-status{margin:6px 0;color:#9fb3cc;font-size:11px}.gew-hierarchy-list,.gew-field-list,.gew-map-list{display:grid;gap:5px;max-height:430px;overflow:auto}.gew-hrow{display:grid;grid-template-columns:24px auto minmax(0,1fr) auto;gap:7px;align-items:center;padding:6px 8px 6px calc(8px + var(--indent,0)*16px);border:1px solid rgba(126,190,255,.13);border-radius:8px;background:#111827;color:#dbeafe;font-size:12px}.gew-hrow.all-active{border-color:rgba(59,130,246,.58);background:rgba(37,99,235,.16)}.gew-hrow.part-active{border-color:rgba(234,179,8,.46);background:rgba(234,179,8,.07)}.gew-hrow-toggle{width:22px;height:22px;border:1px solid rgba(126,190,255,.24);border-radius:6px;background:#0f1b2d;color:#bfdbfe}.gew-hrow-toggle:disabled{opacity:.45}.gew-hrow span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.gew-hrow b{font-size:11px;color:#93c5fd}.gew-field-row,.gew-map-row{border:1px solid rgba(126,190,255,.13);border-radius:8px;background:#111827;padding:7px;display:grid;gap:3px}.gew-field-row b,.gew-map-row b{font-size:12px;color:#dbeafe}.gew-field-row span,.gew-map-row span,.gew-field-row small{font-size:11px;color:#9fb3cc;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.gew-table-note,.gew-note{margin:0 0 8px;color:#9fb3cc;font-size:11px}.gew-table-wrap{overflow:auto;max-height:500px}.gew-table-wrap table{border-collapse:collapse;min-width:100%;font-size:11px}.gew-table-wrap th,.gew-table-wrap td{border:1px solid rgba(126,190,255,.13);padding:5px 7px;text-align:left;white-space:nowrap;max-width:260px;overflow:hidden;text-overflow:ellipsis}.gew-table-wrap th{position:sticky;top:0;background:#132238;color:#bfdbfe;z-index:1}.gew-checklist{color:#b7c8de;font-size:12px;line-height:1.55}
   `;
   document.head.appendChild(style);
 }
@@ -427,13 +495,15 @@ export function installGeometryExportWorkspaceBridge() {
     version: BRIDGE_VERSION,
     open: openDialog,
     importSnapshot,
+    runMapping,
     state: () => workspaceState,
     serializableState,
     schemas: {
       workspace: 'geometry-export-workspace/v1',
       snapshot: 'rendered-geometry-snapshot/v1',
       fieldDiscovery: 'geometry-field-discovery/v1',
-      hierarchy: 'geometry-import-hierarchy/v1'
+      hierarchy: 'geometry-import-hierarchy/v1',
+      mapping: 'geometry-mapping-engine/v1'
     }
   };
 }
