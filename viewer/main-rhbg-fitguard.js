@@ -79,7 +79,7 @@ function scheduleDeferredStartupSideEffects() {
 
 async function startViewer() {
   const { init } = await import('./core/app.js?v=20260622-rvm-facet-ghost-panels-1');
-  await init();
+  await init(startupMount());
   scheduleDeferredStartupSideEffects();
 }
 
