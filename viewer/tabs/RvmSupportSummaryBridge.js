@@ -1,8 +1,8 @@
 import * as THREE from 'three';
 
-const BRIDGE_VERSION = '20260620-rvm-support-symbol-mode-1';
+const BRIDGE_VERSION = '20260622-rvm-support-raw-default-1';
 const SUPPORT_SYMBOL_ROOT = '__RVM_GEOMETRY_SUPPORT_SYMBOLS__';
-const SUPPORT_MODE_STORAGE_KEY = 'rvm_support_render_mode_v1';
+const SUPPORT_MODE_STORAGE_KEY = 'rvm_support_render_mode_v2';
 const SUPPORT_WORDS_RE = /\b(SUPPORT|SUPP|GUIDE|ANCHOR|LINE\s*STOP|LINESTOP|LIMIT\s*STOP|LIMIT|REST|SHOE|HANGER|SPRING|CLAMP|TRUNNION|SADDLE|DUMMY|U[-_ ]?BOLT|STANCHION|PEDESTAL|POST|BASE\s*PLATE)\b/i;
 const SUPPORT_KIND_COLORS = Object.freeze({
   REST: 0x5ee56a,
@@ -57,7 +57,7 @@ function collectSupportObjects(viewer) {
   const out = [];
   viewer?.modelGroup?.updateMatrixWorld?.(true);
   viewer?.modelGroup?.traverse?.((obj) => {
-    if (!obj?.isMesh || obj.userData?.supportSymbol || obj.userData?.rvmSupportSymbolGenerated) return;
+    if (!obj?.isMesh || obj.userData?.supportSymbol || obj.userData?.rvmSupportSymbolGenerated || obj.userData?.rvmSupportGeometryGenerated) return;
     if (obj.userData?.rvmHiddenByUser) return;
     const candidate = classifySupportCandidate(obj);
     if (!candidate.support) return;
@@ -173,37 +173,58 @@ function rebuildSupportSymbols(viewer, supports, mode) {
     disposeObject(previous);
   }
 
-  const symbolRoot = new THREE.Group();
-  symbolRoot.name = SUPPORT_SYMBOL_ROOT;
-  symbolRoot.userData.rvmSupportSymbolRoot = true;
-  symbolRoot.userData.supportSymbol = true;
-  symbolRoot.visible = mode !== 'raw';
-
   const kindCounts = {};
-  let symbolCount = 0;
-  let rawHiddenCount = 0;
   let geometryCount = 0;
   let metadataCount = 0;
-
   for (const obj of supports) {
     const candidate = classifySupportCandidate(obj);
     if (!candidate.support) continue;
     const kind = normalizeSupportKind(candidate.kind || obj.userData?.rvmSupportCandidateKind || 'UNKNOWN_SUPPORT');
     kindCounts[kind] = (kindCounts[kind] || 0) + 1;
     if (candidate.byGeometry) geometryCount += 1; else metadataCount += 1;
+    if (obj.userData.rvmRawSupportSuppressedByMode) {
+      obj.visible = true;
+      delete obj.userData.rvmRawSupportSuppressedByMode;
+    }
+  }
+
+  if (mode === 'raw') {
+    return {
+      schema: 'rvm-support-symbol-mode/v2-raw-default',
+      mode,
+      supportDetectedCount: supports.length,
+      supportHintCount: metadataCount,
+      supportByGeometryCount: geometryCount,
+      supportSymbolRenderedCount: 0,
+      supportRawBoxSuppressedCount: 0,
+      symbolCount: 0,
+      rawHiddenCount: 0,
+      kindCounts,
+      rawDefaultNoGeneratedRoot: true,
+    };
+  }
+
+  const symbolRoot = new THREE.Group();
+  symbolRoot.name = SUPPORT_SYMBOL_ROOT;
+  symbolRoot.userData.rvmSupportSymbolRoot = true;
+  symbolRoot.userData.supportSymbol = true;
+  symbolRoot.visible = true;
+
+  let symbolCount = 0;
+  let rawHiddenCount = 0;
+  for (const obj of supports) {
+    const candidate = classifySupportCandidate(obj);
+    if (!candidate.support) continue;
+    const kind = normalizeSupportKind(candidate.kind || obj.userData?.rvmSupportCandidateKind || 'UNKNOWN_SUPPORT');
     const symbol = buildSupportSymbolForObject(obj, kind, candidate.reason);
     if (symbol) {
       symbolRoot.add(symbol);
       symbolCount += 1;
     }
-
     if (mode === 'symbol') {
       if (obj.visible !== false) rawHiddenCount += 1;
       obj.userData.rvmRawSupportSuppressedByMode = true;
       obj.visible = false;
-    } else if (obj.userData.rvmRawSupportSuppressedByMode) {
-      obj.visible = true;
-      delete obj.userData.rvmRawSupportSuppressedByMode;
     }
   }
 
@@ -211,7 +232,7 @@ function rebuildSupportSymbols(viewer, supports, mode) {
   else disposeObject(symbolRoot);
 
   return {
-    schema: 'rvm-support-symbol-mode/v1',
+    schema: 'rvm-support-symbol-mode/v2-raw-default',
     mode,
     supportDetectedCount: supports.length,
     supportHintCount: metadataCount,
@@ -336,7 +357,7 @@ function makeSpring(center, axis, radius, length, color) {
 }
 
 function setSupportMode(root, mode) {
-  const normalized = ['raw', 'symbol', 'both'].includes(mode) ? mode : 'both';
+  const normalized = ['raw', 'symbol', 'both'].includes(mode) ? mode : 'raw';
   root.dataset.rvmSupportMode = normalized;
   try { localStorage.setItem(SUPPORT_MODE_STORAGE_KEY, normalized); } catch (_) {}
   root.dataset.rvmSupportSummaryBridge = '';
@@ -344,9 +365,9 @@ function setSupportMode(root, mode) {
 
 function getSupportMode(root) {
   if (root?.dataset?.rvmSupportMode) return root.dataset.rvmSupportMode;
-  let saved = 'both';
-  try { saved = localStorage.getItem(SUPPORT_MODE_STORAGE_KEY) || 'both'; } catch (_) {}
-  const normalized = ['raw', 'symbol', 'both'].includes(saved) ? saved : 'both';
+  let saved = 'raw';
+  try { saved = localStorage.getItem(SUPPORT_MODE_STORAGE_KEY) || 'raw'; } catch (_) {}
+  const normalized = ['raw', 'symbol', 'both'].includes(saved) ? saved : 'raw';
   if (root) root.dataset.rvmSupportMode = normalized;
   return normalized;
 }
