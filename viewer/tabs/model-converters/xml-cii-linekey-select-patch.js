@@ -1,4 +1,4 @@
-import { getXmlCiiPhaseBridge } from './legacy-adapter.js?v=20260622-regex-pos-persist-1';
+import { getXmlCiiPhaseBridge } from './legacy-adapter.js?v=20260620-master-session-1';
 
 const FLAG = '__xmlCiiRegexTokenSelectPatch_v3';
 const SUPPORT_CONFIG_SELECTOR = '[data-option-key="supportConfigJson"]';
