@@ -33,6 +33,8 @@ const geometrySnapshotSource = await read('../geometry-workspace/RenderedGeometr
 const geometryFieldsSource = await read('../geometry-workspace/RenderedGeometryFieldDiscovery.js');
 const geometryHierarchySource = await read('../geometry-workspace/GeometryImportHierarchyModel.js');
 const geometryMappingSource = await read('../geometry-workspace/GeometryMappingEngine.js');
+const geometryProfilesSource = await read('../geometry-workspace/GeometryMappingProfiles.js');
+const geometryProfileBridgeSource = await read('../geometry-workspace/GeometryMappingProfileBridge.js');
 const pcfSource = await read('../tabs/RvmJsonPcfTriggerBridge.js');
 const visibilitySource = await read('../tabs/RvmVisibilityToolbarBridge.js');
 const setsSource = await read('../tabs/RvmSelectionSetsBridge.js');
@@ -57,8 +59,9 @@ check(rendererSource.includes('BrowserRvmNativeFacetGhostPanelPatch.js?v=2026062
 check(rendererSource.includes('installBrowserRvmNativeFacetGhostPanelPatch()'), 'renderer installs native facet ghost panel patch');
 check(rendererSource.includes('RvmReportExportBridge.js?v=20260621-rvm-report-export-1'), 'renderer keeps report export bridge');
 check(rendererSource.includes('GeometryExportWorkspaceBridge.js?v=20260622-geometry-mapping-1'), 'renderer loads geometry mapping workspace bridge');
-check(rendererSource.includes('GeometryMappingEngine.js?v=20260622-geometry-mapping-1'), 'renderer exposes geometry mapping cache marker');
-check(rendererSource.includes('installGeometryExportWorkspaceBridge()'), 'renderer installs geometry export workspace bridge');
+check(rendererSource.includes('GeometryMappingProfileBridge.js?v=20260622-geometry-profile-ui-1'), 'renderer loads geometry mapping profile bridge');
+check(rendererSource.includes('GeometryMappingProfiles.js?v=20260622-geometry-profile-ui-1'), 'renderer exposes geometry mapping profile cache marker');
+check(rendererSource.includes('installGeometryExportWorkspaceBridge()') && rendererSource.includes('installGeometryMappingProfileBridge()'), 'renderer installs geometry workspace and profile bridges');
 check(rendererSource.includes('RvmJsonPcfTriggerBridge.js?v=20260621-rvm-pcf-visible-scope-1'), 'renderer keeps visible-scope PCF bridge');
 check(rendererSource.includes('RvmZoneLodLabelBridge.js?v=20260621-rvm-preload-hierarchy-selector-1'), 'renderer keeps preload zone selector');
 check(rendererSource.includes('RvmDeepSourcePathRecoveryBridge.js?v=20260622-rvm-deep-source-path-recovery-1'), 'renderer loads deep source path recovery bridge');
@@ -102,7 +105,13 @@ check(geometryMappingSource.includes('DEFAULT_GEOMETRY_MAPPING_PROFILE') && geom
 check(geometryMappingSource.includes('support-guide') && geometryMappingSource.includes('support-line-stop') && geometryMappingSource.includes('support-rest'), 'geometry mapping engine classifies support types');
 check(geometryMappingSource.includes('parseDimensionToMm') && geometryMappingSource.includes('dimensionToMm'), 'geometry mapping engine parses dimensions to mm');
 check(geometryMappingSource.includes('mappingAudit') && geometryMappingSource.includes('mappingConfidence'), 'geometry mapping engine emits audit and confidence');
-check(geometryWorkspaceSource.includes("BRIDGE_VERSION = '20260622-geometry-mapping-1'"), 'geometry workspace bridge uses mapping cache key');
+check(geometryProfilesSource.includes("GEOMETRY_MAPPING_PROFILE_SCHEMA = 'geometry-mapping-user-profile/v1'"), 'geometry mapping profiles expose schema marker');
+check(geometryProfilesSource.includes('applyGeometryMappingDecisions') && geometryProfilesSource.includes('CONFIRMED') && geometryProfilesSource.includes('REJECTED') && geometryProfilesSource.includes('USER_OVERRIDDEN'), 'geometry mapping profiles apply confirm/reject/override decisions');
+check(geometryProfilesSource.includes('saveGeometryMappingProfile') && geometryProfilesSource.includes('listGeometryMappingProfiles'), 'geometry mapping profiles save and list profiles');
+check(geometryProfileBridgeSource.includes('__PCF_GLB_GEOMETRY_MAPPING_PROFILE__'), 'geometry mapping profile bridge publishes global API');
+check(geometryProfileBridgeSource.includes('data-gmp-confirm') && geometryProfileBridgeSource.includes('data-gmp-reject') && geometryProfileBridgeSource.includes('data-gmp-support-type'), 'geometry mapping profile bridge supports confirm/reject/override UI');
+check(geometryProfileBridgeSource.includes('Save Profile') && geometryProfileBridgeSource.includes('Saved profiles'), 'geometry mapping profile bridge supports save/load UI');
+check(geometryWorkspaceSource.includes("BRIDGE_VERSION = '20260622-geometry-mapping-1'"), 'geometry workspace bridge keeps mapping cache key');
 check(geometryWorkspaceSource.includes("schemaVersion: 'geometry-export-workspace/v1'"), 'geometry workspace state uses independent schema');
 check(geometryWorkspaceSource.includes('Top 5 hierarchy import tree') && geometryWorkspaceSource.includes('Mapped Objects') && geometryWorkspaceSource.includes('Calculation Canvas'), 'geometry workspace includes import, mapped objects, and calculation shells');
 check(geometryWorkspaceSource.includes('mapRenderedGeometryRecords') && geometryWorkspaceSource.includes('runMapping'), 'geometry workspace runs automatic mapping');
@@ -130,17 +139,19 @@ check(renderBuilderSource.includes('RVM_NATIVE_FACET_GROUP'), 'render builder ke
 check(renderBuilderSource.includes('wireframe-diagnostic-not-solid-geometry'), 'bbox placeholders remain diagnostic wireframes');
 check(!renderBuilderSource.includes("primitive === 'STRUCTURE_BBOX' || type === 'STRUCTURE'"), 'unconditional structure slab promotion remains blocked');
 
-check(indexSource.includes('main-rhbg-fitguard.js?v=20260622-geometry-mapping-1'), 'index uses geometry mapping entry cache key');
-check(entrySource.includes('core/app.js?v=20260622-geometry-mapping-1'), 'entrypoint uses geometry mapping app cache key');
+check(indexSource.includes('main-rhbg-fitguard.js?v=20260622-geometry-profile-ui-1'), 'index uses geometry profile entry cache key');
+check(entrySource.includes('core/app.js?v=20260622-geometry-profile-ui-1'), 'entrypoint uses geometry profile app cache key');
 check(entrySource.includes('await init(startupMount())'), 'entrypoint passes resolved mount root into init');
 check(appSource.includes('app-tab-click-state-bridge.js?v=20260622-tab-click-state-1'), 'app side-loads tab click state bridge');
 check(appSource.includes('installAppTabClickStateBridge()'), 'app installs tab click state bridge before runtime delegate');
 check(tabClickBridgeSource.includes('RuntimeEvents.TAB_CHANGED'), 'tab click state bridge listens for tab changes');
 check(tabClickBridgeSource.includes('state.activeTabId = tabId'), 'tab click state bridge synchronizes active tab id');
 check(appSource.includes('GeometryExportWorkspaceBridge.js?v=20260622-geometry-mapping-1'), 'app side-loads geometry mapping workspace bridge');
+check(appSource.includes('GeometryMappingProfileBridge.js?v=20260622-geometry-profile-ui-1'), 'app side-loads geometry mapping profile bridge');
+check(appSource.includes('installGeometryMappingProfileBridge()'), 'app installs geometry mapping profile bridge');
 check(appSource.includes('BrowserRvmNativeFacetGhostPanelPatch.js?v=20260622-rvm-facet-ghost-panels-1'), 'app side-loads native facet ghost patch');
-check(appSource.includes('app-label-perf-runtime.js?v=20260622-geometry-mapping-1'), 'app delegates through geometry mapping runtime cache key');
-check(runtimeSource.includes('viewer3d-rvm-tab-renderer.js?v=20260622-geometry-workspace-1') || runtimeSource.includes('viewer3d-rvm-tab-renderer.js?v=20260622-geometry-mapping-1'), 'runtime keeps RVM renderer cache chain');
+check(appSource.includes('app-label-perf-runtime.js?v=20260622-geometry-profile-ui-1'), 'app delegates through geometry profile runtime cache key');
+check(runtimeSource.includes('viewer3d-rvm-tab-renderer.js?v=20260622-geometry-workspace-1') || runtimeSource.includes('viewer3d-rvm-tab-renderer.js?v=20260622-geometry-mapping-1') || runtimeSource.includes('viewer3d-rvm-tab-renderer.js?v=20260622-geometry-profile-ui-1'), 'runtime keeps RVM renderer cache chain');
 
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed > 0) process.exit(1);
