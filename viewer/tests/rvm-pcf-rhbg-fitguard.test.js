@@ -36,6 +36,9 @@ const measureSource = await read('../tabs/RvmMeasureBridge.js');
 const searchSource = await read('../tabs/RvmObjectSearchBridge.js');
 const labelsSource = await read('../tabs/RvmLabelPerformanceBridge.js');
 const zoneSource = await read('../tabs/RvmZoneLodLabelBridge.js');
+const deepPathSource = await read('../tabs/RvmDeepSourcePathRecoveryBridge.js');
+const zoneDensityV4Source = await read('../tabs/RvmZoneDensitySelectorBridgeV4.js');
+const geometricFallbackSource = await read('../rvm/BrowserRvmGeometricFallbackPolicyBridge.js');
 const coverageBridgeSource = await read('../rvm/RvmDtxrGeometryCoverageBridge.js');
 const coverageEngineSource = await read('../rvm/RvmDtxrGeometryCoverageEngine.js');
 const renderedInventorySource = await read('../rvm/RvmRenderedObjectInventory.js');
@@ -49,9 +52,19 @@ check(rendererSource.includes('installBrowserRvmNativeFacetGhostPanelPatch()'), 
 check(rendererSource.includes('RvmReportExportBridge.js?v=20260621-rvm-report-export-1'), 'renderer keeps report export bridge');
 check(rendererSource.includes('RvmJsonPcfTriggerBridge.js?v=20260621-rvm-pcf-visible-scope-1'), 'renderer keeps visible-scope PCF bridge');
 check(rendererSource.includes('RvmZoneLodLabelBridge.js?v=20260621-rvm-preload-hierarchy-selector-1'), 'renderer keeps preload zone selector');
+check(rendererSource.includes('RvmDeepSourcePathRecoveryBridge.js?v=20260622-rvm-deep-source-path-recovery-1'), 'renderer loads deep source path recovery bridge');
+check(rendererSource.includes('RvmZoneDensitySelectorBridgeV4.js?v=20260622-rvm-zone-density-selector-4'), 'renderer loads deep-source zone density selector v4');
 check(rendererSource.includes('RvmDtxrGeometryCoverageBridge.js?v=20260622-rvm-dtxr-coverage-1'), 'renderer loads DTXR geometry coverage bridge');
 check(rendererSource.includes('installRvmDtxrGeometryCoverageBridge()'), 'renderer installs DTXR geometry coverage bridge');
-check(rendererSource.includes('BrowserRvmCivilFallbackPolicyBridge.js?v=20260622-rvm-smart-civil-code11-default-off-1'), 'renderer loads smart civil fallback policy bridge');
+check(rendererSource.includes('BrowserRvmCivilFallbackPolicyBridge.js?v=20260622-rvm-smart-civil-policy-tooltip-1'), 'renderer loads smart civil fallback policy bridge');
+check(rendererSource.includes('BrowserRvmGeometricFallbackPolicyBridge.js?v=20260622-rvm-geometric-fallback-policy-1'), 'renderer loads geometric fallback policy bridge');
+check(rendererSource.includes('installBrowserRvmGeometricFallbackPolicyBridge()'), 'renderer installs geometric fallback policy bridge');
+
+check(deepPathSource.includes('recoverRvmDeepSourcePathFromInstruction') && deepPathSource.includes('isWeakRvmSourcePath'), 'deep path bridge recovers shallow /EQUIPMENT and /STRUCTURE paths');
+check(zoneDensityV4Source.includes('browser-rvm-zone-selection/v5-deep-source-density-tree'), 'zone density selector v4 exposes deep-source schema');
+check(zoneDensityV4Source.includes('removeGenericBucketRowsWhenDeepRowsExist'), 'zone density selector v4 removes stale generic bucket rows when real top zones exist');
+check(geometricFallbackSource.includes('__PCF_GLB_RVM_GEOMETRIC_FALLBACK_POLICY__'), 'geometric fallback bridge publishes diagnostics API');
+check(geometricFallbackSource.includes('huge-anonymous-box-diagnostic-hidden'), 'geometric fallback hides huge anonymous box diagnostics');
 
 check(facetGhostSource.includes("browser-rvm-native-facet-ghost-panels/v1"), 'native facet ghost patch exposes schema marker');
 check(facetGhostSource.includes('THIN_PANEL_RATIO') && facetGhostSource.includes('LARGE_PANEL_LONG_EDGE'), 'native facet ghost patch classifies large thin panels');
