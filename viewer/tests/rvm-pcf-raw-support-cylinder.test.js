@@ -19,6 +19,7 @@ const deferredLoaderSource = await read('../tabs/RvmDeferredBridgeLoader.js');
 const bottomDiagnosticsSource = await read('../tabs/RvmBottomDiagnosticsDrawerBridge.js');
 const purgeBridgeSource = await read('../tabs/RvmRetiredSupportToolsPurgeBridge.js');
 const leafCanvasPickSource = await read('../tabs/RvmLeafCanvasPickBridge.js');
+const cssOverlayOffSource = await read('../tabs/RvmCssOverlayOffBridge.js');
 
 check(
   adapterSource.includes('rvm-browser-render-instructions/v5-raw-first-support-primitives'),
@@ -87,6 +88,26 @@ check(
   'leaf canvas pick bridge lets orbit/pan/marquee/measure pointerup propagate'
 );
 
+check(
+  rendererSource.includes('RvmCssOverlayOffBridge.js?v=20260622-rvm-css-overlays-off-1')
+    && rendererSource.includes('installRvmCssOverlayOffBridge()'),
+  'RVM tab renderer installs CSS overlay off bridge'
+);
+
+check(
+  cssOverlayOffSource.includes('labelRenderer?.domElement')
+    && cssOverlayOffSource.includes('.rvm-support-symbol-label')
+    && cssOverlayOffSource.includes('.rvm-tag-label'),
+  'CSS overlay off bridge hides CSS2D label layer and label elements'
+);
+
+check(
+  cssOverlayOffSource.includes('.rvm-bottom-diagnostics-drawer')
+    && cssOverlayOffSource.includes('rvm_bottom_diagnostics_drawer_collapsed')
+    && cssOverlayOffSource.includes('display:none!important'),
+  'CSS overlay off bridge suppresses bottom diagnostics and CSS overlay panels'
+);
+
 for (const retiredSelector of [
   'data-rvm-support-att-panel',
   'data-rvm-support-engine-panel',
@@ -115,4 +136,4 @@ if (failed) {
   console.error(`FAILURES: ${failed}`);
   process.exit(1);
 }
-console.log(`All raw support cylinder, retired support-tool, and canvas navigation checks passed (${passed}).`);
+console.log(`All raw support cylinder, retired support-tool, canvas navigation, and CSS overlay checks passed (${passed}).`);
