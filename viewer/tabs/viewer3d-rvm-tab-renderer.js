@@ -11,7 +11,9 @@
 // Active diagnostic collapse cache key: RvmDiagnosticPanelCollapseBridge.js?v=20260621-rvm-diagnostic-collapse-1
 // Active zone/LOD label cache key: RvmZoneLodLabelBridge.js?v=20260621-rvm-zone-lod-labels-1
 // Active preload hierarchy selector cache key: RvmZoneLodLabelBridge.js?v=20260621-rvm-preload-hierarchy-selector-1
-// Active zone density selector cache key: RvmZoneDensitySelectorBridge.js?v=20260622-rvm-zone-density-selector-2
+// Previous zone density selector cache key: RvmZoneDensitySelectorBridge.js?v=20260622-rvm-zone-density-selector-2
+// Active zone density selector cache key: RvmZoneDensitySelectorBridgeV4.js?v=20260622-rvm-zone-density-selector-4
+// Active deep source path recovery cache key: RvmDeepSourcePathRecoveryBridge.js?v=20260622-rvm-deep-source-path-recovery-1
 // Active left panel resize/collapse cache key: RvmLeftPanelResizeCollapseBridge.js?v=20260622-rvm-left-panel-resize-collapse-1
 // Active leaf selection identity cache key: RvmLeafSelectionIdentityBridge.js?v=20260622-rvm-leaf-selection-identity-1
 // Active leaf canvas pick cache key: RvmLeafCanvasPickBridge.js?v=20260622-rvm-leaf-canvas-pick-orbit-guard-1
@@ -31,6 +33,7 @@
 // Active render policy cache key: BrowserRvmRenderPolicyBridge.js?v=20260622-rvm-render-policy-1
 // Previous civil fallback policy cache key: BrowserRvmCivilFallbackPolicyBridge.js?v=20260622-rvm-smart-civil-code11-default-off-1
 // Active civil fallback policy cache key: BrowserRvmCivilFallbackPolicyBridge.js?v=20260622-rvm-smart-civil-policy-tooltip-1
+// Active geometric fallback policy cache key: BrowserRvmGeometricFallbackPolicyBridge.js?v=20260622-rvm-geometric-fallback-policy-1
 // Active debug pick cache key: BrowserRvmPickDiagnosticsBridge.js?v=20260622-rvm-debug-pick-1
 // Active native torus/elbow cache key: BrowserRvmTorusParityRuntimePatch.js?v=20260622-rvm-native-torus-line-elbows-1
 // Active DTXR coverage cache key: RvmDtxrGeometryCoverageBridge.js?v=20260622-rvm-dtxr-coverage-1
@@ -44,7 +47,8 @@ import { installRvmUiInteractionPanelPatch, installRvmUiPanelBridge } from './Rv
 import { installRvmPropertyPanelCollapseAuditBridge } from './RvmPropertyPanelCollapseAuditBridge.js?v=20260621-rvm-property-collapse-1';
 import { installRvmLabelPerformanceBridge, installRvmLabelButtonBridge } from './RvmLabelPerformanceBridge.js?v=20260621-rvm-zone-lod-labels-1';
 import { installRvmZoneLodLabelBridge } from './RvmZoneLodLabelBridge.js?v=20260621-rvm-preload-hierarchy-selector-1';
-import { installRvmZoneDensitySelectorBridge } from './RvmZoneDensitySelectorBridge.js?v=20260622-rvm-zone-density-selector-2';
+import { installRvmDeepSourcePathRecoveryBridge } from './RvmDeepSourcePathRecoveryBridge.js?v=20260622-rvm-deep-source-path-recovery-1';
+import { installRvmZoneDensitySelectorBridge } from './RvmZoneDensitySelectorBridgeV4.js?v=20260622-rvm-zone-density-selector-4';
 import { installRvmNavisHierarchyBridge } from './RvmNavisHierarchyBridge.js?v=20260621-rvm-navis-hierarchy-1';
 import { installRvmZoneLodContextBridge } from './RvmZoneLodContextBridge.js?v=20260621-rvm-zone-lod-context-1';
 import { installRvmSelectionDetailsInspectorBridge } from './RvmSelectionDetailsInspectorBridge.js?v=20260621-rvm-selection-details-inspector-1';
@@ -72,6 +76,7 @@ import { installBrowserRvmNativeTessellationRuntimePatch } from '../rvm/BrowserR
 import { installBrowserRvmNativeFacetGhostPanelPatch } from '../rvm/BrowserRvmNativeFacetGhostPanelPatch.js?v=20260622-rvm-facet-ghost-panels-1';
 import { installBrowserRvmRenderPolicyBridge } from '../rvm/BrowserRvmRenderPolicyBridge.js?v=20260622-rvm-render-policy-1';
 import { installBrowserRvmCivilFallbackPolicyBridge } from '../rvm/BrowserRvmCivilFallbackPolicyBridge.js?v=20260622-rvm-smart-civil-policy-tooltip-1';
+import { installBrowserRvmGeometricFallbackPolicyBridge } from '../rvm/BrowserRvmGeometricFallbackPolicyBridge.js?v=20260622-rvm-geometric-fallback-policy-1';
 import { installBrowserRvmPickDiagnosticsBridge } from '../rvm/BrowserRvmPickDiagnosticsBridge.js?v=20260622-rvm-debug-pick-1';
 import { installBrowserRvmDishTessellationRuntimePatch } from '../rvm/BrowserRvmDishTessellationRuntimePatch.js?v=20260620-rvm-support-assembly-dish-1';
 import { installBrowserRvmRemainingPrimitiveRuntimePatch } from '../rvm/BrowserRvmRemainingPrimitiveRuntimePatch.js?v=20260620-rvm-facetgroup-1';
@@ -84,6 +89,7 @@ installBrowserRvmNativeTessellationRuntimePatch();
 installBrowserRvmNativeFacetGhostPanelPatch();
 installBrowserRvmRenderPolicyBridge();
 installBrowserRvmCivilFallbackPolicyBridge();
+installBrowserRvmGeometricFallbackPolicyBridge();
 installBrowserRvmPickDiagnosticsBridge();
 installBrowserRvmDishTessellationRuntimePatch();
 installBrowserRvmRemainingPrimitiveRuntimePatch();
@@ -94,6 +100,7 @@ installRvmViewerInteractionPatch(RvmViewer3D);
 installRvmUiInteractionPanelPatch(RvmViewer3D);
 installRvmLabelPerformanceBridge(RvmViewer3D);
 installRvmZoneLodLabelBridge();
+installRvmDeepSourcePathRecoveryBridge();
 installRvmZoneDensitySelectorBridge();
 installRvmNavisHierarchyBridge();
 installRvmZoneLodContextBridge();
@@ -118,10 +125,8 @@ installRvmLeftPanelResizeCollapseBridge();
 installRvmLeafSelectionIdentityBridge();
 installRvmDeferredBridgeLoader();
 installRvmUiPanelBridge();
-installRvmPropertyPanelCollapseAuditBridge();
-installRvmLabelButtonBridge();
-installRvmJsonPcfTriggerBridge();
-installRvmPolicyInfoBridge();
-installRvmDiagnosticPanelCollapseBridge();
 
-export { mountViewer3DRvmTab as renderViewer3DRvm } from './viewer3d-rvm-tab.js?v=20260622-rvm-smart-civil-code11-defer-1';
+export async function renderViewer3DRvm(container) {
+  const { mountViewer3DRvmTab } = await import('./viewer3d-rvm-tab.js?v=20260621-rvm-native-facet-primary-1');
+  return mountViewer3DRvmTab(container);
+}
