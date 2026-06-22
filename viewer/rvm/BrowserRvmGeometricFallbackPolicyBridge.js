@@ -63,12 +63,12 @@ function classifyGeometricFallback(object) {
   if (object.visible === false) return null;
   const text = sourceText(object, data);
   const primitive = primitiveText(object, data);
+  const weakSource = isWeakSource(data, text);
   const boxish = BOXISH_RE.test(`${primitive} ${text}`) || data.browserRvmBboxPlaceholderWireframe || data.bboxPromotedSolidBlocked;
-  const processProtected = PROCESS_RE.test(text) && !CIVIL_RE.test(text);
+  const processProtected = !weakSource && PROCESS_RE.test(text) && !CIVIL_RE.test(text);
   if (processProtected) return null;
   const size = objectSize(object);
   if (!size || (!size.large && !size.huge)) return null;
-  const weakSource = isWeakSource(data, text);
   const nonSelectable = data.pickable === false || data.selectable === false || Boolean(data.nonSelectableReason);
   const civil = CIVIL_RE.test(text);
   const anonymousHugeBox = boxish && size.huge && (weakSource || !hasCanonicalIdentity(data));
