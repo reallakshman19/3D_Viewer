@@ -14,6 +14,7 @@ const scripts = [
   'scripts/test-xml-cii-sideload-preview-chain.mjs',
   'scripts/test-xml-cii-conversion-workflow-popup.mjs',
   'scripts/test-model-converters-tab-responsive.mjs',
+  'scripts/test-xml-cii-inputxml-rvm-lazy-load.mjs',
 ];
 
 const missing = scripts.filter((script) => !fs.existsSync(path.join(repoRoot, script)));
