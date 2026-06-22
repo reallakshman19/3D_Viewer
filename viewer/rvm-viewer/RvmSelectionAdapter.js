@@ -48,7 +48,22 @@ export class RvmSelectionAdapter {
     return String(data.renderObjectId || data.leafRenderObjectId || object?.uuid || data.canonicalId || data.name || object?.name || '').trim();
   }
   _intersectionSummary(hit) { const object = hit?.object || {}; const data = object.userData || {}; return { distance: Number(hit?.distance || 0), name: object.name || '', uuid: object.uuid || '', renderId: this._renderIdFor(object), renderKind: data.renderKind || data.effectivePrimitive || data.effectiveRenderPrimitive || data.renderPrimitive || '', sourcePath: data.sourcePath || data.browserRvmProperties?.sourcePath || data.browserRvmProperties?.SourcePath || '', canonicalId: data.canonicalId || data.name || object.name || object.uuid || '', pickable: data.pickable !== false, selectable: data.selectable !== false, nonSelectableReason: data.nonSelectableReason || '' }; }
-  _handlePick(renderId, additive = false) { const canonicalId = this.identityMap?.canonicalFromRender?.(renderId) || renderId; if (additive) this.toggleCanonicalId(canonicalId); else this.selectByCanonicalId(canonicalId); }
+  _handlePick(renderId, additive = false) { const canonicalId = this.identityMap?.canonicalFromRender?.(renderId) || renderId; this.selectByRenderObjectId(renderId, canonicalId, { additive }); }
+  selectByRenderObjectId(renderId, canonicalId = renderId, options = {}) {
+    if (!renderId) return;
+    if (!options.additive) this.clearSelection();
+    if (options.additive && this._selectedRenderIds.includes(renderId)) {
+      this._selectedRenderIds = this._selectedRenderIds.filter((id) => id !== renderId);
+      this._selectedCanonicalIds = this._selectedCanonicalIds.filter((id) => id !== canonicalId);
+    } else {
+      this._selectedRenderIds = options.additive ? [...this._selectedRenderIds, renderId] : [renderId];
+      this._selectedCanonicalIds = options.additive ? [...new Set([...this._selectedCanonicalIds, canonicalId])] : [canonicalId];
+    }
+    this._selectedCanonicalId = this._selectedCanonicalIds[0] || null;
+    this._restoreMaterials();
+    this._highlight(this._selectedRenderIds, COLORS.SELECTED);
+    this._emitSelection();
+  }
   selectByCanonicalId(canonicalId) { this.clearSelection(); this._selectedCanonicalId = canonicalId; this._selectedCanonicalIds = [canonicalId]; this._selectedRenderIds = this.identityMap?.renderIdsFromCanonical?.(canonicalId) || [canonicalId]; this._highlight(this._selectedRenderIds, COLORS.SELECTED); this._emitSelection(); }
   selectCanonicalIds(ids, options = {}) { if (!options.additive) this.clearSelection(); for (const id of ids) if (!this._selectedCanonicalIds.includes(id)) this._selectedCanonicalIds.push(id); this._selectedCanonicalId = this._selectedCanonicalIds[0] || null; this._rebuildRenderIds(); this._highlight(this._selectedRenderIds, COLORS.SELECTED); this._emitSelection(); }
   toggleCanonicalId(id) { const index = this._selectedCanonicalIds.indexOf(id); if (index >= 0) this._selectedCanonicalIds.splice(index, 1); else this._selectedCanonicalIds.push(id); this._selectedCanonicalId = this._selectedCanonicalIds[0] || null; this._restoreMaterials(); this._rebuildRenderIds(); this._highlight(this._selectedRenderIds, COLORS.SELECTED); this._emitSelection(); }
