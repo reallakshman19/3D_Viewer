@@ -1,11 +1,11 @@
 import assert from 'node:assert/strict';
 
 import {
-  parseRvmForBrowserHierarchy
-} from '../../../src/utils/rvm/BrowserRvmHierarchyAdapter.js';
+  groupRvmOwnerHierarchy
+} from '../../../rvm/BrowserRvmHierarchyParser.js';
 import {
   collectBrowserRvmRenderInstructions
-} from '../../../src/utils/rvm/BrowserRvmRenderContractAdapter.js';
+} from '../../../rvm/BrowserRvmRenderContractAdapter.js';
 
 const syntheticPayload = {
   schemaVersion: 'rvm-parser-hierarchy/v1',
@@ -175,6 +175,99 @@ assert.equal(rtorusLeaf.attributes.RVM_PRIMITIVE_KIND, 'TORUS');
 assert.equal(rtorusLeaf.attributes.RVM_BROWSER_PRIMITIVE_CLASS, 'TORUS');
 assert.equal(rtorusLeaf.attributes.RVM_BROWSER_PRIMITIVE_SEMANTIC_SOURCE, 'owner-name');
 assert.equal(rtorusLeaf.attributes.RVM_BROWSER_PRIMITIVE_SEMANTIC_VERSION, 'rhbg-prim-code-map/v2');
+
+function parseRvmForBrowserHierarchy(payload = {}) {
+  const nodesById = new Map((payload.nodes || []).map((node) => [node.id, node]));
+  const referenced = new Set();
+  for (const node of payload.nodes || []) {
+    for (const childId of node.children || []) referenced.add(childId);
+  }
+  const roots = (payload.nodes || [])
+    .filter((node) => !referenced.has(node.id))
+    .map((rootNode) => syntheticRootWithPrimitiveLeaves(rootNode, nodesById));
+  const hierarchy = groupRvmOwnerHierarchy(roots);
+  const renderSummary = collectBrowserRvmRenderInstructions(hierarchy);
+  return {
+    schemaVersion: 'browser-rvm-hierarchy/v2',
+    hierarchy,
+    diagnostics: {
+      ...(payload.diagnostics || {}),
+      geometryApproximateCount: countApproximateGeometry(hierarchy),
+      geometryContractLeafCount: renderSummary.count,
+      geometryContractSourceCounts: renderSummary.diagnostics.sourceCounts,
+      geometryContractCounts: renderSummary.diagnostics.contractCounts
+    }
+  };
+}
+
+function syntheticRootWithPrimitiveLeaves(rootNode, nodesById) {
+  const primitiveLeaves = [];
+  const ownerBranches = [];
+  const walk = (node, ownerPath = []) => {
+    const nextOwnerPath = node.primitive ? ownerPath : [...ownerPath, node.name];
+    if (node.primitive) {
+      primitiveLeaves.push(syntheticPrimitiveLeaf(node, ownerPath));
+      return;
+    }
+    if (node !== rootNode) ownerBranches.push(syntheticOwnerBranch(node));
+    for (const childId of node.children || []) {
+      const child = nodesById.get(childId);
+      if (child) walk(child, nextOwnerPath);
+    }
+  };
+  walk(rootNode, []);
+  return {
+    name: rootNode.name || 'ROOT',
+    type: rootNode.type || 'SITE',
+    attributes: {
+      TYPE: rootNode.type || 'SITE',
+      NAME: rootNode.name || 'ROOT'
+    },
+    children: [...ownerBranches, ...primitiveLeaves]
+  };
+}
+
+function syntheticOwnerBranch(node) {
+  return {
+    name: node.name,
+    type: node.type,
+    attributes: {
+      TYPE: node.type,
+      NAME: node.name
+    },
+    children: []
+  };
+}
+
+function syntheticPrimitiveLeaf(node, ownerPath) {
+  const ownerName = ownerPath.slice().reverse().join(' of ');
+  return {
+    name: node.name,
+    type: node.type,
+    bbox: node.primitive.bbox,
+    attributes: {
+      TYPE: node.type,
+      NAME: node.name,
+      RVM_RECORD_TAG: 'PRIM',
+      RVM_OWNER_NAME: ownerName,
+      RVM_PRIMITIVE_CODE: String(node.primitive.code),
+      RVM_PRIMITIVE_BODY_LENGTH: String(node.primitive.bodyLength),
+      RVM_BYTE_OFFSET: `synthetic:${node.id}`,
+      BROWSER_PARSE_METHOD: 'binary-prim-record'
+    },
+    children: []
+  };
+}
+
+function countApproximateGeometry(roots) {
+  let count = 0;
+  const walk = (node) => {
+    if (node?.attributes?.RVM_BROWSER_GEOMETRY_APPROXIMATE === 'true') count += 1;
+    for (const child of node.children || []) walk(child);
+  };
+  for (const rootNode of roots) walk(rootNode);
+  return count;
+}
 
 function findByName(node, name) {
   if (!node) return null;
