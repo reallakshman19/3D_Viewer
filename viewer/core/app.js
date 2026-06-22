@@ -20,6 +20,7 @@
 // viewer3d-rvm-tab-renderer.js?v=20260621-rvm-health-issues-1
 // viewer3d-rvm-tab-renderer.js?v=20260621-rvm-navis-hierarchy-1
 // viewer3d-rvm-tab-renderer.js?v=20260621-rvm-native-facet-primary-1
+// viewer3d-rvm-tab-renderer.js?v=20260622-rvm-facet-ghost-panels-1
 // viewer3d-rvm-tab-renderer.js?v=20260621-rvm-zone-lod-context-1
 // viewer3d-rvm-tab-renderer.js?v=20260621-rvm-pcf-visible-scope-1
 // RvmJsonPcfTriggerBridge.js?v=20260621-rvm-json-pcf-trigger-1
@@ -35,6 +36,7 @@
 // RvmModelHealthBridge.js?v=20260621-rvm-model-health-1
 // RvmModelHealthBridge.js?v=20260621-rvm-health-issues-1
 // RvmModelHealthIssuesBridge.js?v=20260621-rvm-health-issues-1
+// BrowserRvmNativeFacetGhostPanelPatch.js?v=20260622-rvm-facet-ghost-panels-1
 // RvmPolicyInfoBridge.js?v=20260621-rvm-policy-info-1
 // RvmDiagnosticPanelCollapseBridge.js?v=20260621-rvm-diagnostic-collapse-1
 // RvmZoneLodLabelBridge.js?v=20260621-rvm-zone-lod-labels-1
@@ -60,8 +62,10 @@
 // tabRendererCache
 import { installRvmModelHealthBridge } from '../tabs/RvmModelHealthBridge.js?v=20260621-rvm-health-issues-1';
 import { installRvmModelHealthIssuesBridge } from '../tabs/RvmModelHealthIssuesBridge.js?v=20260621-rvm-health-issues-1';
+import { installBrowserRvmNativeFacetGhostPanelPatch } from '../rvm/BrowserRvmNativeFacetGhostPanelPatch.js?v=20260622-rvm-facet-ghost-panels-1';
 
 installRvmModelHealthBridge();
 installRvmModelHealthIssuesBridge();
+installBrowserRvmNativeFacetGhostPanelPatch();
 
-export { init } from './app-label-perf-runtime.js?v=20260621-rvm-health-issues-1';
+export { init } from './app-label-perf-runtime.js?v=20260622-rvm-facet-ghost-panels-1';
