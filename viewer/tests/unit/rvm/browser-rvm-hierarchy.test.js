@@ -165,9 +165,14 @@ assert.equal(renderInstructions.diagnostics.sourceCounts['bbox-derived-browser-c
 assert.equal(renderInstructions.diagnostics.attCounts.plain, 5);
 assert.equal(renderInstructions.diagnostics.supportHintCount, 0);
 
-const gasket = findByName(root, 'GASKET 1');
-assert.ok(gasket.children.some((child) => child.type === 'GASK'), 'gasket group should retain GASK primitive leaf');
-const rtorus = findByName(root, 'RTORUS 1');
+const gasket = findByNameWithChild(root, 'GASKET 1', (child) => child.type === 'GASK');
+assert.ok(gasket, 'gasket group should retain GASK primitive leaf');
+const rtorus = findByNameWithChild(
+  root,
+  'RTORUS 1',
+  (child) => child.attributes?.RVM_PRIMITIVE_CODE === '3'
+);
+assert.ok(rtorus, 'RTORUS owner group should retain code-3 primitive leaf');
 const rtorusLeaf = rtorus.children.find((child) => child.attributes?.RVM_PRIMITIVE_CODE === '3');
 assert.ok(rtorusLeaf, 'RTORUS code-3 PRIM should remain under the RTORUS owner group');
 assert.equal(rtorusLeaf.type, 'GASK');
@@ -267,6 +272,22 @@ function countApproximateGeometry(roots) {
   };
   for (const rootNode of roots) walk(rootNode);
   return count;
+}
+
+function findByNameWithChild(node, name, predicate) {
+  if (!node) return null;
+  if (
+    node.name === name
+    && Array.isArray(node.children)
+    && node.children.some((child) => predicate(child))
+  ) {
+    return node;
+  }
+  for (const child of node.children || []) {
+    const found = findByNameWithChild(child, name, predicate);
+    if (found) return found;
+  }
+  return null;
 }
 
 function findByName(node, name) {
