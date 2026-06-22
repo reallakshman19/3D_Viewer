@@ -1,8 +1,8 @@
 import * as THREE from 'three';
 
-export const BROWSER_RVM_TORUS_PARITY_SCHEMA = 'browser-rvm-torus-parity/v1-cpp-capped-torus';
+export const BROWSER_RVM_TORUS_PARITY_SCHEMA = 'browser-rvm-torus-parity/v2-line-placeholder-carriers';
 
-const PATCH_FLAG = Symbol.for('pcf-glb-rvm-torus-parity-runtime-patch-v1');
+const PATCH_FLAG = Symbol.for('pcf-glb-rvm-torus-parity-runtime-patch-v2-line-placeholder-carriers');
 const UPGRADE_FLAG = Symbol.for('pcf-glb-rvm-torus-parity-upgraded-v1');
 const GLOBAL_STATE_KEY = '__PCF_GLB_RVM_TORUS_PARITY__';
 const GLOBAL_DIAGNOSTICS_KEY = '__PCF_GLB_RVM_TORUS_PARITY_DIAGNOSTICS__';
@@ -42,7 +42,7 @@ export function installBrowserRvmTorusParityRuntimePatch() {
   try { globalThis.addEventListener?.('rvm-browser-parse-diagnostics', schedule); } catch (_) {}
   try { globalThis.addEventListener?.('rvm-native-tessellation-diagnostics', schedule); } catch (_) {}
   try { globalThis.addEventListener?.('rvm-remaining-primitives-diagnostics', schedule); } catch (_) {}
-  for (const delay of [900, 2200, 4200, 7000]) setTimeout(schedule, delay);
+  for (const delay of [500, 900, 1800, 3200, 5200, 8000]) setTimeout(schedule, delay);
   return state;
 }
 
@@ -60,19 +60,22 @@ export function upgradeRvmTorusParity(root) {
   const replacements = [];
   root.traverse((object) => {
     if (!object || replacements.length >= MAX_OBJECTS) return;
-    if (object === root || !object.parent || !object.isMesh) return;
+    if (object === root || !object.parent || !isTorusCarrierObject(object)) return;
     diagnostics.scannedCount += 1;
     if (object[UPGRADE_FLAG] || object.userData?.browserRvmTorusParityUpgraded) {
       diagnostics.alreadyUpgradedCount += 1;
       return;
     }
-    const attrs = object.userData?.browserRvmAttributes || object.userData?.attributes || object.userData?.browserRvmProperties?.attributes || null;
+    const attrs = attrsForObject(object);
     const params = parseNativeParams(attrs?.RVM_NATIVE_PRIMITIVE_PARAMS);
     const matrix = parseNumericArray(attrs?.RVM_TRANSFORM_3X4, 12);
     const code = Number(params?.kind || attrs?.RVM_PRIMITIVE_CODE);
     if (!params?.decoded || !matrix || (code !== 3 && code !== 4)) return;
     diagnostics.candidateCount += 1;
     bump(diagnostics.kindCounts, params.kindName || `Kind-${code}`);
+    bump(diagnostics.carrierTypeCounts, carrierTypeFor(object));
+    if (object.isLine || object.isLineSegments) diagnostics.linePlaceholderCandidateCount += 1;
+
     const material = materialForSource(object);
     const native = code === 4
       ? buildCircularTorusObject(params, matrix, material, diagnostics)
@@ -97,6 +100,33 @@ export function upgradeRvmTorusParity(root) {
     bump(diagnostics.skippedReasons, 'torus-upgrade-object-limit');
   }
   return diagnostics;
+}
+
+function isTorusCarrierObject(object) {
+  if (!object || object.isGroup) return false;
+  if (!(object.isMesh || object.isLine || object.isLineSegments || object.geometry)) return false;
+  const attrs = attrsForObject(object);
+  if (!attrs) return false;
+  const code = Number(readNativeKind(attrs));
+  return code === 3 || code === 4;
+}
+
+function attrsForObject(object) {
+  const data = object?.userData || {};
+  return data.browserRvmAttributes || data.attributes || data.browserRvmProperties?.attributes || data.rawAttributes || null;
+}
+
+function readNativeKind(attrs = {}) {
+  const params = parseNativeParams(attrs.RVM_NATIVE_PRIMITIVE_PARAMS);
+  return params?.kind || attrs.RVM_PRIMITIVE_CODE;
+}
+
+function carrierTypeFor(object) {
+  if (object?.isMesh) return 'mesh';
+  if (object?.isLineSegments) return 'line-segments';
+  if (object?.isLine) return 'line';
+  if (object?.geometry) return 'geometry-object';
+  return 'unknown';
 }
 
 function buildCircularTorusObject(params, matrix3x4, material, diagnostics) {
@@ -243,6 +273,7 @@ function meshFromGeometry(name, geometry, matrix3x4, material, quality) {
     browserRvmTorusParitySchema: BROWSER_RVM_TORUS_PARITY_SCHEMA,
     effectiveRenderPrimitive: name,
     renderQuality: quality,
+    pickable: true,
   };
   mesh[UPGRADE_FLAG] = true;
   return mesh;
@@ -258,11 +289,14 @@ function replaceObject(source, native, params, code) {
     browserRvmTorusParityUpgraded: true,
     browserRvmTorusParityKind: params.kindName || `Kind-${code}`,
     browserRvmTorusParityCode: String(code),
+    browserRvmTorusCarrierType: carrierTypeFor(source),
     previousEffectiveRenderPrimitive: source.userData?.effectiveRenderPrimitive || '',
     previousRenderQuality: source.userData?.renderQuality || '',
     effectiveRenderPrimitive: native.userData.effectiveRenderPrimitive,
     renderQuality: native.userData.renderQuality,
     pickable: true,
+    selectable: true,
+    nonSelectableReason: '',
   };
   const index = parent.children.indexOf(source);
   if (index >= 0) parent.children[index] = native;
@@ -278,6 +312,7 @@ function makeDiagnostics(extra = {}) {
     reason: extra.reason || '',
     scannedCount: 0,
     candidateCount: 0,
+    linePlaceholderCandidateCount: 0,
     upgradedCount: 0,
     alreadyUpgradedCount: 0,
     skippedCount: 0,
@@ -289,6 +324,7 @@ function makeDiagnostics(extra = {}) {
     circularTorusSegmentSamples: 0,
     rectangularTorusSegmentSamples: 0,
     kindCounts: {},
+    carrierTypeCounts: {},
     upgradedKindCounts: {},
     skippedReasons: {},
   };
@@ -335,10 +371,18 @@ function matrix4FromCppMat3x4(m) {
 function materialForSource(object) {
   let material = null;
   object?.traverse?.((child) => {
-    if (!material && child?.isMesh && child.material) material = Array.isArray(child.material) ? child.material[0] : child.material;
+    if (!material && (child?.isMesh || child?.isLine || child?.isLineSegments) && child.material) {
+      material = Array.isArray(child.material) ? child.material[0] : child.material;
+    }
   });
   if (!material && object?.material) material = Array.isArray(object.material) ? object.material[0] : object.material;
-  return material || new THREE.MeshStandardMaterial({ color: 0x6b7280, roughness: 0.72, metalness: 0.08 });
+  const color = material?.color?.clone?.() || new THREE.Color(0x6b7280);
+  const roughness = Number.isFinite(material?.roughness) ? material.roughness : 0.72;
+  const metalness = Number.isFinite(material?.metalness) ? material.metalness : 0.08;
+  const opacity = Number.isFinite(material?.opacity) && material.opacity > 0 ? Math.max(material.opacity, 0.82) : 1;
+  const meshMaterial = new THREE.MeshStandardMaterial({ color, roughness, metalness, transparent: opacity < 1, opacity });
+  meshMaterial.side = THREE.DoubleSide;
+  return meshMaterial;
 }
 
 function parseNativeParams(value) {
