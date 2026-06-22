@@ -20,6 +20,7 @@
 // Active leaf canvas pick cache key: RvmLeafCanvasPickBridge.js?v=20260622-rvm-leaf-canvas-pick-orbit-guard-1
 // Active canvas single-pick guard cache key: RvmCanvasSelectionSinglePickGuardBridge.js?v=20260622-rvm-canvas-single-pick-guard-1
 // Active support assembly marker mode cache key: RvmSupportAssemblyMarkerModeBridge.js?v=20260622-rvm-support-assembly-markers-off-1
+// Active raw support cylinder guard cache key: RvmRawSupportCylinderGuardBridge.js?v=20260622-rvm-raw-support-cylinder-guard-1
 // Active selection details inspector cache key: RvmSelectionDetailsInspectorBridge.js?v=20260621-rvm-selection-details-inspector-1
 // Active isolate/visibility toolbar cache key: RvmVisibilityToolbarBridge.js?v=20260621-rvm-isolate-visibility-toolbar-1
 // Active visibility snapshots cache key: RvmVisibilitySnapshotsBridge.js?v=20260621-rvm-visibility-snapshots-1
@@ -54,6 +55,7 @@ import { installRvmHierarchySelectionBridge } from './RvmHierarchySelectionBridg
 import { installRvmViewerInteractionPatch, installRvmCanvasSelectionBridge } from './RvmViewerInteractionPatch.js?v=20260621-rvm-button-hardening-1';
 import { installRvmCanvasSelectionSinglePickGuardBridge } from './RvmCanvasSelectionSinglePickGuardBridge.js?v=20260622-rvm-canvas-single-pick-guard-1';
 import { installRvmSupportAssemblyMarkerModeBridge } from './RvmSupportAssemblyMarkerModeBridge.js?v=20260622-rvm-support-assembly-markers-off-1';
+import { installRvmRawSupportCylinderGuardBridge } from './RvmRawSupportCylinderGuardBridge.js?v=20260622-rvm-raw-support-cylinder-guard-1';
 import { installRvmUiInteractionPanelPatch, installRvmUiPanelBridge } from './RvmUiInteractionPanelPatch.js?v=20260621-rvm-ui-interaction-panels-1';
 import { installRvmPropertyPanelCollapseAuditBridge } from './RvmPropertyPanelCollapseAuditBridge.js?v=20260621-rvm-property-collapse-1';
 import { installRvmLabelPerformanceBridge, installRvmLabelButtonBridge } from './RvmLabelPerformanceBridge.js?v=20260621-rvm-zone-lod-labels-1';
@@ -123,6 +125,7 @@ installRvmLeafCanvasPickBridge();
 installRvmCanvasSelectionBridge();
 installRvmCanvasSelectionSinglePickGuardBridge();
 installRvmSupportAssemblyMarkerModeBridge();
+installRvmRawSupportCylinderGuardBridge();
 installRvmVisibilityToolbarBridge();
 installRvmVisibilitySnapshotsBridge();
 installRvmObjectSearchBridge();
