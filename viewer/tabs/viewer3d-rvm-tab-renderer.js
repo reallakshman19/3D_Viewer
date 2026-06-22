@@ -30,8 +30,10 @@
 // Active report export cache key: RvmReportExportBridge.js?v=20260621-rvm-report-export-1
 // Previous geometry export workspace cache key: GeometryExportWorkspaceBridge.js?v=20260622-geometry-workspace-1
 // Previous geometry import tree cache key: GeometryExportWorkspaceBridge.js?v=20260622-geometry-import-tree-1
-// Active geometry mapping cache key: GeometryExportWorkspaceBridge.js?v=20260622-geometry-mapping-1
+// Previous geometry mapping cache key: GeometryExportWorkspaceBridge.js?v=20260622-geometry-mapping-1
+// Active geometry mapping profile cache key: GeometryMappingProfileBridge.js?v=20260622-geometry-profile-ui-1
 // Active geometry mapping engine cache key: GeometryMappingEngine.js?v=20260622-geometry-mapping-1
+// Active geometry mapping profile helper cache key: GeometryMappingProfiles.js?v=20260622-geometry-profile-ui-1
 // Previous model health cache key: RvmModelHealthBridge.js?v=20260621-rvm-model-health-1
 // Active health issues cache key: RvmModelHealthIssuesBridge.js?v=20260621-rvm-health-issues-1
 // Active Navis hierarchy cache key: RvmNavisHierarchyBridge.js?v=20260621-rvm-navis-hierarchy-1
@@ -72,6 +74,7 @@ import { installRvmSectionBoxBridge } from './RvmSectionBoxBridge.js?v=20260621-
 import { installRvmSelectionSetsBridge } from './RvmSelectionSetsBridge.js?v=20260621-rvm-selection-sets-1';
 import { installRvmReportExportBridge } from './RvmReportExportBridge.js?v=20260621-rvm-report-export-1';
 import { installGeometryExportWorkspaceBridge } from '../geometry-workspace/GeometryExportWorkspaceBridge.js?v=20260622-geometry-mapping-1';
+import { installGeometryMappingProfileBridge } from '../geometry-workspace/GeometryMappingProfileBridge.js?v=20260622-geometry-profile-ui-1';
 import { installRvmModelHealthBridge } from './RvmModelHealthBridge.js?v=20260621-rvm-health-issues-1';
 import { installRvmModelHealthIssuesBridge } from './RvmModelHealthIssuesBridge.js?v=20260621-rvm-health-issues-1';
 import { installRvmSelectionTreeSyncBridge } from './RvmSelectionTreeSyncBridge.js?v=20260620-rvm-large-box-support-sync-1';
@@ -128,6 +131,7 @@ installRvmSectionBoxBridge();
 installRvmSelectionSetsBridge();
 installRvmReportExportBridge();
 installGeometryExportWorkspaceBridge();
+installGeometryMappingProfileBridge();
 installRvmModelHealthBridge();
 installRvmModelHealthIssuesBridge();
 installRvmDtxrGeometryCoverageBridge();
@@ -139,7 +143,4 @@ installRvmLeafSelectionIdentityBridge();
 installRvmDeferredBridgeLoader();
 installRvmUiPanelBridge();
 
-export async function renderViewer3DRvm(container) {
-  const { mountViewer3DRvmTab } = await import('./viewer3d-rvm-tab.js?v=20260621-rvm-native-facet-primary-1');
-  return mountViewer3DRvmTab(container);
-}
+export { mountViewer3DRvmTab as renderViewer3DRvm } from './viewer3d-rvm-tab.js?v=20260622-rvm-smart-civil-code11-defer-1';
