@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 
-const CACHE_KEY = '20260622-rvm-raw-support-cylinder-guard-2-hide-inputxml-prims';
+const CACHE_KEY = '20260622-rvm-raw-support-cylinder-guard-3-hide-inputxml-labels';
 const GLOBAL_KEY = '__PCF_GLB_RVM_RAW_SUPPORT_CYLINDER_GUARD__';
 const RAW_INPUTXML_SUPPORT_PRIMITIVES_KEY = 'rvm.rawInputXmlSupportPrimitives';
 const SUPPORT_SYMBOL_ROOTS = new Set([
@@ -11,6 +11,7 @@ const SUPPORT_SYMBOL_ROOTS = new Set([
 const PIPE_LIKE_RE = /\b(PE_\d+_(PIPE|BEND|ELBOW|VALVE|FLANGE|TEE|GASKET|REDUCER)|PIPE|BEND|ELBOW|VALVE|FLANGE|TEE)\b/i;
 const SUPPORT_LIKE_RE = /\b(INPUTXML-\d+-(REST|GUIDE|LINESTOP|STOP|ANCHOR|SUPPORT)|SUPPORT|REST|GUIDE|LINE\s*STOP|LINESTOP|ANCHOR|SHOE)\b/i;
 const INPUTXML_SUPPORT_PRIM_RE = /\bINPUTXML[-_ ]?\d+[-_ ]?(REST|GUIDE|LINESTOP|LINE\s*STOP|STOP|ANCHOR|LIMIT|LIM|SUPPORT|SHOE)\b/i;
+const RVM_INPUTXML_SUPPORT_LABEL_RE = /\bRVM\s+(CYLINDER|PYRAMID|BOX|SPHERE|TORUS|SNOUT|FACET)\b[\s\S]*\bINPUTXML[-_ ]?\d+[-_ ]?(REST|GUIDE|LINESTOP|LINE\s*STOP|STOP|ANCHOR|LIMIT|LIM|SUPPORT|SHOE)\b/i;
 
 export function installRvmRawSupportCylinderGuardBridge() {
   let attempts = 0;
@@ -29,20 +30,22 @@ function bind(root, viewer) {
   if (!root || root.dataset.rvmRawSupportCylinderGuard === CACHE_KEY) return;
   root.dataset.rvmRawSupportCylinderGuard = CACHE_KEY;
   const run = () => applyGuard(root, viewer);
-  for (const delay of [250, 900, 1800, 3600, 7000]) setTimeout(run, delay);
-  const timer = setInterval(run, 2200);
+  for (const delay of [120, 250, 900, 1800, 3600, 7000]) setTimeout(run, delay);
+  const timer = setInterval(run, 1800);
   root._rvmRawSupportCylinderGuardCleanup = () => clearInterval(timer);
   globalThis[GLOBAL_KEY] = { cacheKey: CACHE_KEY, apply: run, last: null };
 }
 
 function applyGuard(root, viewer) {
   const diag = {
-    schema: 'rvm-raw-support-cylinder-guard/v2-hide-inputxml-raw-support-primitives',
+    schema: 'rvm-raw-support-cylinder-guard/v3-hide-inputxml-raw-support-labels',
     cacheKey: CACHE_KEY,
     convertedSupportStandCount: 0,
     protectedRawCylinderCount: 0,
     hiddenInputXmlRawSupportPrimitiveCount: 0,
     restoredInputXmlRawSupportPrimitiveCount: 0,
+    hiddenInputXmlRawSupportLabelCount: 0,
+    restoredInputXmlRawSupportLabelCount: 0,
     clearedPipeLikeSupportCandidateCount: 0,
     removedRawModeSymbolRootCount: 0,
     hiddenPipeLikeGeneratedSymbolCount: 0,
@@ -64,9 +67,9 @@ function applyGuard(root, viewer) {
     }
     if (isInputXmlGeneratedRawSupportPrimitive(obj, text)) {
       if (showRawInputXmlSupportPrimitives) {
-        if (restoreInputXmlRawSupportPrimitive(obj)) diag.restoredInputXmlRawSupportPrimitiveCount += 1;
+        if (restoreInputXmlRawSupportPrimitive(obj, diag)) diag.restoredInputXmlRawSupportPrimitiveCount += 1;
       } else {
-        hideInputXmlRawSupportPrimitive(obj);
+        hideInputXmlRawSupportPrimitive(obj, diag);
         diag.hiddenInputXmlRawSupportPrimitiveCount += 1;
         return;
       }
@@ -82,9 +85,14 @@ function applyGuard(root, viewer) {
 
   viewer?.scene?.traverse?.((obj) => {
     if (!obj || obj.isScene) return;
+    const text = objectText(obj);
+    if (isInputXmlSupportLabelObject(obj, text)) {
+      if (showRawInputXmlSupportPrimitives) restoreInputXmlSupportLabelObject(obj, diag);
+      else hideInputXmlSupportLabelObject(obj, diag);
+      return;
+    }
     const data = obj.userData || {};
     if (!(data.supportSymbol || data.rvmSupportSymbolGenerated || data.rvmSupportAssembly)) return;
-    const text = objectText(obj);
     if (PIPE_LIKE_RE.test(text) && !SUPPORT_LIKE_RE.test(text)) {
       obj.visible = false;
       data.rvmHiddenByRawSupportCylinderGuard = true;
@@ -92,6 +100,8 @@ function applyGuard(root, viewer) {
       diag.hiddenPipeLikeGeneratedSymbolCount += 1;
     }
   });
+
+  sweepInputXmlSupportDomLabels(root, showRawInputXmlSupportPrimitives, diag);
 
   globalThis[GLOBAL_KEY] = { cacheKey: CACHE_KEY, apply: () => applyGuard(root, viewer), last: diag };
   return diag;
@@ -168,24 +178,153 @@ function isInputXmlGeneratedRawSupportPrimitive(obj, text = objectText(obj)) {
   return nativeLike && INPUTXML_SUPPORT_PRIM_RE.test(String(text || ''));
 }
 
-function hideInputXmlRawSupportPrimitive(obj) {
+function hideInputXmlRawSupportPrimitive(obj, diag) {
   const data = obj.userData || {};
   obj.visible = false;
   data.rvmHiddenInputXmlRawSupportPrimitive = true;
+  data.rvmDoNotLabel = true;
+  data.rvmDoNotIndex = true;
   data.pickable = false;
   data.selectable = false;
   data.nonSelectableReason = 'InputXML-generated raw support primitive hidden by default; enable rvm.rawInputXmlSupportPrimitives to inspect file support markers';
+  hideChildInputXmlSupportLabels(obj, diag);
 }
 
-function restoreInputXmlRawSupportPrimitive(obj) {
+function restoreInputXmlRawSupportPrimitive(obj, diag) {
   const data = obj.userData || {};
   if (!data.rvmHiddenInputXmlRawSupportPrimitive) return false;
   obj.visible = true;
   data.rvmHiddenInputXmlRawSupportPrimitive = false;
+  data.rvmDoNotLabel = false;
+  data.rvmDoNotIndex = false;
   data.pickable = true;
   data.selectable = true;
   delete data.nonSelectableReason;
+  restoreChildInputXmlSupportLabels(obj, diag);
   return true;
+}
+
+function isInputXmlSupportLabelObject(obj, text = objectText(obj)) {
+  if (!obj?.element && !obj?.isCSS2DObject && !obj?.userData?.rvmLabel && !obj?.userData?.supportSymbolLabel) return false;
+  const labelText = labelObjectText(obj) || text;
+  return isInputXmlSupportLabelText(labelText);
+}
+
+function isInputXmlSupportLabelText(value) {
+  const text = String(value || '');
+  return INPUTXML_SUPPORT_PRIM_RE.test(text) && (RVM_INPUTXML_SUPPORT_LABEL_RE.test(text) || /\bRVM\s+(CYLINDER|PYRAMID|BOX|SPHERE|TORUS|SNOUT|FACET)\b/i.test(text));
+}
+
+function labelObjectText(obj) {
+  return [
+    obj?.element?.textContent,
+    obj?.name,
+    obj?.userData?.displayName,
+    obj?.userData?.name,
+    obj?.userData?.sourcePath,
+  ].map((value) => String(value || '')).join(' ');
+}
+
+function hideChildInputXmlSupportLabels(root, diag) {
+  root?.traverse?.((child) => {
+    if (child === root) return;
+    if (isInputXmlSupportLabelObject(child)) hideInputXmlSupportLabelObject(child, diag);
+  });
+}
+
+function restoreChildInputXmlSupportLabels(root, diag) {
+  root?.traverse?.((child) => {
+    if (child === root) return;
+    if (child?.userData?.rvmHiddenInputXmlSupportLabel) restoreInputXmlSupportLabelObject(child, diag);
+  });
+}
+
+function hideInputXmlSupportLabelObject(obj, diag) {
+  const data = obj.userData || {};
+  if (!data.rvmHiddenInputXmlSupportLabel) {
+    diag.hiddenInputXmlRawSupportLabelCount += 1;
+  }
+  obj.visible = false;
+  data.rvmHiddenInputXmlSupportLabel = true;
+  data.rvmInteractionIgnore = true;
+  data.pickable = false;
+  data.selectable = false;
+  if (obj.element?.style) {
+    if (!Object.prototype.hasOwnProperty.call(data, 'rvmInputXmlSupportLabelPreviousDisplay')) {
+      data.rvmInputXmlSupportLabelPreviousDisplay = obj.element.style.display || '';
+    }
+    obj.element.style.display = 'none';
+    obj.element.setAttribute('aria-hidden', 'true');
+    obj.element.dataset.rvmHiddenInputXmlSupportLabel = 'true';
+  }
+}
+
+function restoreInputXmlSupportLabelObject(obj, diag) {
+  const data = obj.userData || {};
+  if (!data.rvmHiddenInputXmlSupportLabel) return;
+  obj.visible = true;
+  data.rvmHiddenInputXmlSupportLabel = false;
+  data.rvmInteractionIgnore = false;
+  if (obj.element?.style) {
+    obj.element.style.display = data.rvmInputXmlSupportLabelPreviousDisplay || '';
+    obj.element.removeAttribute('aria-hidden');
+    delete obj.element.dataset.rvmHiddenInputXmlSupportLabel;
+  }
+  diag.restoredInputXmlRawSupportLabelCount += 1;
+}
+
+function sweepInputXmlSupportDomLabels(root, show, diag) {
+  const seen = new WeakSet();
+  const selectors = [
+    '.rvm-support-symbol-label',
+    '.rvm-object-label',
+    '.rvm-label',
+    '.css2d-label',
+    '[data-rvm-label]',
+    '[data-rvm-object-label]',
+    '[data-rvm-support-label]',
+    '.rvm-canvas-label',
+    '.rvm-object-badge'
+  ].join(',');
+  const candidates = [
+    ...Array.from(root?.querySelectorAll?.(selectors) || []),
+    ...Array.from(root?.querySelectorAll?.('div,span') || []).filter((el) => isLikelyViewportBadge(el)),
+  ];
+  for (const el of candidates) {
+    if (!el || seen.has(el)) continue;
+    seen.add(el);
+    const text = el.textContent || '';
+    if (!isInputXmlSupportLabelText(text)) continue;
+    if (show) restoreDomLabel(el, diag);
+    else hideDomLabel(el, diag);
+  }
+}
+
+function isLikelyViewportBadge(el) {
+  const text = String(el?.textContent || '');
+  if (!isInputXmlSupportLabelText(text)) return false;
+  const cls = String(el.className || '');
+  const style = el.getAttribute?.('style') || '';
+  return /label|badge|tag|css2d|tooltip|annotation/i.test(cls) || /position\s*:\s*absolute|transform\s*:/i.test(style);
+}
+
+function hideDomLabel(el, diag) {
+  if (!el.dataset.rvmHiddenInputXmlSupportLabel) {
+    el.dataset.rvmPreviousDisplay = el.style.display || '';
+    diag.hiddenInputXmlRawSupportLabelCount += 1;
+  }
+  el.dataset.rvmHiddenInputXmlSupportLabel = 'true';
+  el.style.display = 'none';
+  el.setAttribute('aria-hidden', 'true');
+}
+
+function restoreDomLabel(el, diag) {
+  if (!el.dataset.rvmHiddenInputXmlSupportLabel) return;
+  el.style.display = el.dataset.rvmPreviousDisplay || '';
+  delete el.dataset.rvmHiddenInputXmlSupportLabel;
+  delete el.dataset.rvmPreviousDisplay;
+  el.removeAttribute('aria-hidden');
+  diag.restoredInputXmlRawSupportLabelCount += 1;
 }
 
 function isPipeLikeFalseSupport(obj, text) {
@@ -228,6 +367,7 @@ function objectText(obj) {
     obj?.userData?.type,
     obj?.userData?.kind,
     obj?.userData?.effectiveRenderPrimitive,
+    obj?.element?.textContent,
     attrs.NAME,
     attrs.TYPE,
     attrs.RVM_RECORD_TAG,
@@ -276,7 +416,7 @@ function firstMaterial(obj) {
 
 function currentSupportMode() {
   try {
-    const saved = localStorage.getItem('rvm_support_render_mode_v1') || '';
+    const saved = localStorage.getItem('rvm_support_render_mode_v2') || localStorage.getItem('rvm_support_render_mode_v1') || '';
     return ['raw', 'symbol', 'both'].includes(saved) ? saved : 'raw';
   } catch (_) {
     return 'raw';
@@ -298,6 +438,10 @@ function finiteNumber(value) {
 
 function disposeObject(root) {
   root?.traverse?.((obj) => {
+    if (isInputXmlSupportLabelObject(obj)) hideInputXmlSupportLabelObject(obj, {
+      hiddenInputXmlRawSupportLabelCount: 0,
+      restoredInputXmlRawSupportLabelCount: 0,
+    });
     obj.geometry?.dispose?.();
     if (Array.isArray(obj.material)) obj.material.forEach((mat) => mat?.dispose?.());
     else obj.material?.dispose?.();
