@@ -132,7 +132,7 @@ assert.ok(findByName(root, 'REDUCER 1'));
 assert.ok(findByName(root, 'STRUCTURE 1'));
 
 const renderInstructions = collectBrowserRvmRenderInstructions(parsed.hierarchy);
-assert.equal(renderInstructions.schemaVersion, 'rvm-browser-render-instructions/v3-support-hints');
+assert.equal(renderInstructions.schemaVersion, 'rvm-browser-render-instructions/v4-preserve-raw-support-cylinders');
 assert.equal(renderInstructions.count, 5);
 assert.equal(renderInstructions.diagnostics.instructionCount, 5);
 assert.equal(renderInstructions.diagnostics.contractCounts.TORUS_BBOX_PLACEHOLDER, 2);
@@ -172,7 +172,7 @@ assert.equal(rtorusLeaf.attributes.RVM_BROWSER_DIAMETER, '20.000');
 
 const rtorusInstruction = renderInstructions.instructions.find((item) => item.sourcePath.includes('RTORUS 1'));
 assert.ok(rtorusInstruction, 'RTORUS render instruction should be collected');
-assert.equal(rtorusInstruction.schemaVersion, 'rvm-browser-render-instructions/v3-support-hints');
+assert.equal(rtorusInstruction.schemaVersion, 'rvm-browser-render-instructions/v4-preserve-raw-support-cylinders');
 assert.equal(rtorusInstruction.renderPrimitive, 'TORUS_BBOX_PLACEHOLDER');
 assert.equal(rtorusInstruction.kind, 'TORUS');
 assert.deepEqual(rtorusInstruction.center, { x: 400, y: 20, z: 0 });
