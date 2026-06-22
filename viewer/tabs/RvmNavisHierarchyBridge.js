@@ -1,4 +1,7 @@
-const INSTALL_FLAG = Symbol.for('pcf-glb-rvm-navis-hierarchy-bridge-v1');
+import { RuntimeEvents } from '../contracts/runtime-events.js';
+import { on } from '../core/event-bus.js';
+
+const INSTALL_FLAG = Symbol.for('pcf-glb-rvm-navis-hierarchy-bridge-v2');
 const TREE_ROOT_ATTR = 'data-rvm-navis-tree-root';
 const TREE_ROW_ATTR = 'data-rvm-navis-node-row';
 const MAX_CHILDREN_PER_BRANCH = 350;
@@ -30,13 +33,20 @@ function cleanPathParts(path = '', displayName = '') {
 }
 
 function objectRenderId(obj) {
-  return String(obj?.userData?.name || obj?.name || obj?.uuid || '').trim();
+  const data = obj?.userData || {};
+  return String(data.renderObjectId || data.leafRenderObjectId || obj?.uuid || data.name || obj?.name || '').trim();
+}
+
+function objectCanonicalId(obj) {
+  const data = obj?.userData || {};
+  return String(data.canonicalId || data.sourcePath || data.browserRvmProperties?.sourcePath || objectRenderId(obj)).trim();
 }
 
 function objectPath(obj) {
   const data = obj?.userData || {};
   const props = data.browserRvmProperties || {};
-  return data.sourcePath || props.sourcePath || props.SourcePath || data.sourceName || data.displayName || obj?.name || '';
+  const attrs = data.browserRvmAttributes || data.attributes || {};
+  return data.sourcePath || props.sourcePath || props.SourcePath || attrs.RVM_OWNER_PATH || attrs.RVM_OWNER_NAME || data.sourceName || data.displayName || obj?.name || '';
 }
 
 function objectLabel(obj) {
@@ -67,18 +77,23 @@ function makeNode(id, label, depth, kind = '') {
     kind: classifyLabel(label, kind),
     count: 0,
     objectIds: new Set(),
+    canonicalIds: new Set(),
     children: new Map(),
     parent: null,
   };
 }
 
-function addObjectToTree(rootNode, nodeById, obj) {
+function addObjectToTree(rootNode, nodeById, objectById, obj) {
   const renderId = objectRenderId(obj);
   if (!renderId) return;
+  objectById.set(renderId, obj);
+  const canonicalId = objectCanonicalId(obj);
+  if (canonicalId) objectById.set(canonicalId, obj);
   const parts = cleanPathParts(objectPath(obj), objectLabel(obj));
   let current = rootNode;
   current.count += 1;
   current.objectIds.add(renderId);
+  if (canonicalId) current.canonicalIds.add(canonicalId);
   let key = rootNode.id;
 
   for (let i = 0; i < parts.length; i += 1) {
@@ -93,6 +108,7 @@ function addObjectToTree(rootNode, nodeById, obj) {
     }
     child.count += 1;
     child.objectIds.add(renderId);
+    if (canonicalId) child.canonicalIds.add(canonicalId);
     current = child;
   }
 }
@@ -100,14 +116,15 @@ function addObjectToTree(rootNode, nodeById, obj) {
 function buildHierarchyModel(viewer) {
   const rootNode = makeNode('rvm-root', 'Loaded RVM model', -1, 'FILE');
   const nodeById = new Map([[rootNode.id, rootNode]]);
+  const objectById = new Map();
   let objectCount = 0;
   viewer?.modelGroup?.traverse?.((obj) => {
-    if (!(obj?.isMesh || obj?.isLine || obj?.isPoints)) return;
-    if (obj.userData?.pickable === false) return;
+    if (!(obj?.isMesh || obj?.isLine || obj?.isLineSegments || obj?.isPoints)) return;
+    if (obj.userData?.pickable === false || obj.userData?.rvmBranchDisabledByUser === true) return;
     objectCount += 1;
-    addObjectToTree(rootNode, nodeById, obj);
+    addObjectToTree(rootNode, nodeById, objectById, obj);
   });
-  return { rootNode, nodeById, objectCount, builtAt: new Date().toISOString() };
+  return { rootNode, nodeById, objectById, objectCount, builtAt: new Date().toISOString() };
 }
 
 function sortedChildren(node) {
@@ -138,11 +155,13 @@ function nodeRowHtml(node, expanded = false) {
           <span class="rvm-navis-label">${esc(node.label)}</span>
           <span class="rvm-tree-count">${node.count}</span>
         </button>
+        <button type="button" class="rvm-navis-branch-off" data-rvm-navis-off="${esc(node.id)}" title="Turn off this branch: remove from render, picking and selection">Off</button>
+        <button type="button" class="rvm-navis-branch-on" data-rvm-navis-on="${esc(node.id)}" title="Turn branch back on">On</button>
       </div>
     </li>`;
 }
 
-function renderChildrenList(node, depth = 0) {
+function renderChildrenList(node) {
   const children = sortedChildren(node).slice(0, MAX_CHILDREN_PER_BRANCH);
   const more = node.children.size > MAX_CHILDREN_PER_BRANCH
     ? `<li class="rvm-empty-state">Showing ${MAX_CHILDREN_PER_BRANCH} of ${node.children.size} child nodes. Use search to narrow.</li>`
@@ -192,20 +211,60 @@ function setStatus(root, text, warning = false) {
 
 function selectNode(root, node) {
   const viewer = globalThis.__3D_RVM_VIEWER__;
-  if (!viewer || !node) return;
+  const model = root?.__rvmNavisHierarchyModel;
+  if (!viewer || !node || !model) return;
   const ids = [...node.objectIds].slice(0, MAX_BRANCH_SELECTION_IDS);
-  if (!ids.length) {
+  const objects = ids.map((id) => model.objectById.get(id)).filter(Boolean);
+  if (!ids.length || !objects.length) {
     setStatus(root, `No rendered objects under ${node.label}.`, true);
     return;
   }
   try {
+    viewer._rvmCanvasSelectedMeshes = objects;
     viewer.selection?.selectCanonicalIds?.(ids, { additive: false });
     viewer.fitSelection?.();
     setStatus(root, `Selected ${ids.length}${node.objectIds.size > ids.length ? '+' : ''} object(s) under ${node.label}.`);
+    syncTreeSelection(root, { renderObjectIds: ids, canonicalIds: [...node.canonicalIds] });
   } catch (error) {
     setStatus(root, `Hierarchy selection failed: ${error?.message || error}`, true);
     console.warn('[RVM hierarchy] selection failed', error);
   }
+}
+
+function setNodeRenderEnabled(root, node, enabled) {
+  const viewer = globalThis.__3D_RVM_VIEWER__;
+  const model = root?.__rvmNavisHierarchyModel;
+  if (!viewer || !model || !node) return;
+  let count = 0;
+  for (const id of node.objectIds) {
+    const obj = model.objectById.get(id);
+    if (!obj) continue;
+    obj.userData = obj.userData || {};
+    if (!enabled) {
+      if (!Object.prototype.hasOwnProperty.call(obj.userData, 'rvmBranchBaseVisible')) obj.userData.rvmBranchBaseVisible = obj.visible !== false;
+      if (!Object.prototype.hasOwnProperty.call(obj.userData, 'rvmBranchBasePickable')) obj.userData.rvmBranchBasePickable = obj.userData.pickable !== false;
+      if (!Object.prototype.hasOwnProperty.call(obj.userData, 'rvmBranchBaseSelectable')) obj.userData.rvmBranchBaseSelectable = obj.userData.selectable !== false;
+      obj.visible = false;
+      obj.userData.pickable = false;
+      obj.userData.selectable = false;
+      obj.userData.rvmBranchDisabledByUser = true;
+      obj.userData.rvmInteractionIgnore = true;
+      obj.userData.nonSelectableReason = obj.userData.nonSelectableReason || 'hierarchy-branch-turned-off';
+    } else {
+      obj.visible = obj.userData.rvmBranchBaseVisible !== false;
+      obj.userData.pickable = obj.userData.rvmBranchBasePickable !== false;
+      obj.userData.selectable = obj.userData.rvmBranchBaseSelectable !== false;
+      delete obj.userData.rvmBranchDisabledByUser;
+      delete obj.userData.rvmInteractionIgnore;
+      if (obj.userData.nonSelectableReason === 'hierarchy-branch-turned-off') delete obj.userData.nonSelectableReason;
+    }
+    count += 1;
+  }
+  viewer.requestRender?.();
+  try { globalThis.__PCF_GLB_RVM_OBJECT_SEARCH__?.rebuildIndex?.(); } catch (_) {}
+  try { globalThis.__PCF_GLB_RVM_VISIBILITY__?.updateToolbarState?.(); } catch (_) {}
+  setStatus(root, `${enabled ? 'Turned on' : 'Turned off'} ${count} object(s) under ${node.label}.`);
+  refreshHierarchy();
 }
 
 function toggleNode(tree, model, nodeId) {
@@ -242,6 +301,20 @@ function bindTree(root, tree, model) {
         toggleNode(tree, modelNow, toggle.dataset.rvmNavisToggle);
         return;
       }
+      const off = event.target?.closest?.('[data-rvm-navis-off]');
+      if (off) {
+        event.preventDefault();
+        event.stopPropagation();
+        setNodeRenderEnabled(root, modelNow.nodeById.get(off.dataset.rvmNavisOff), false);
+        return;
+      }
+      const onBtn = event.target?.closest?.('[data-rvm-navis-on]');
+      if (onBtn) {
+        event.preventDefault();
+        event.stopPropagation();
+        setNodeRenderEnabled(root, modelNow.nodeById.get(onBtn.dataset.rvmNavisOn), true);
+        return;
+      }
       const select = event.target?.closest?.('[data-rvm-navis-select]');
       if (select) {
         event.preventDefault();
@@ -257,6 +330,59 @@ function bindTree(root, tree, model) {
       if (q) renderSearchResults(tree, modelNow, q);
       else renderInitialTree(tree, modelNow);
     }, true);
+    root.__rvmNavisSelectionOff = on(RuntimeEvents.RVM_NODE_SELECTED, (payload) => syncTreeSelection(root, payload));
+  }
+}
+
+function idsFromPayload(payload = {}) {
+  return new Set([
+    ...(Array.isArray(payload.renderObjectIds) ? payload.renderObjectIds : []),
+    ...(Array.isArray(payload.canonicalIds) ? payload.canonicalIds : []),
+    payload.renderObjectId,
+    payload.canonicalId,
+  ].filter(Boolean).map(String));
+}
+
+function findBestNodeForSelection(model, ids) {
+  if (!model || !ids?.size) return null;
+  let best = null;
+  for (const node of model.nodeById.values()) {
+    if (node === model.rootNode) continue;
+    const has = [...ids].some((id) => node.objectIds.has(id) || node.canonicalIds.has(id));
+    if (!has) continue;
+    if (!best || node.depth > best.depth) best = node;
+  }
+  return best;
+}
+
+function syncTreeSelection(root, payload = {}) {
+  const model = root?.__rvmNavisHierarchyModel;
+  const tree = root?.querySelector?.('#rvm-tree');
+  if (!model || !tree) return;
+  const ids = idsFromPayload(payload);
+  const node = findBestNodeForSelection(model, ids);
+  if (!node) return;
+  expandAncestors(tree, model, node);
+  tree.querySelectorAll('.rvm-navis-row.is-selected').forEach((row) => row.classList.remove('is-selected'));
+  const row = tree.querySelector(`[data-node-id="${CSS.escape(node.id)}"] .rvm-navis-row`);
+  if (row) {
+    row.classList.add('is-selected');
+    row.scrollIntoView?.({ block: 'nearest' });
+  }
+}
+
+function expandAncestors(tree, model, node) {
+  const chain = [];
+  let cur = node?.parent;
+  while (cur && cur.parent) {
+    chain.unshift(cur);
+    cur = cur.parent;
+  }
+  for (const ancestor of chain) {
+    const row = tree.querySelector(`[data-node-id="${CSS.escape(ancestor.id)}"]`);
+    if (!row) continue;
+    const expanded = row.querySelector('.rvm-navis-row')?.classList.contains('is-expanded');
+    if (!expanded) toggleNode(tree, model, ancestor.id);
   }
 }
 
@@ -266,9 +392,10 @@ function installStyles() {
   style.id = 'rvm-navis-hierarchy-style';
   style.textContent = `
     .rvm-tree .rvm-navis-summary{display:flex;align-items:center;gap:6px;padding:6px 8px;margin:2px 4px 6px;border:1px solid rgba(126,190,255,.18);border-radius:6px;background:rgba(59,130,246,.08);font-size:10px;color:#bcd8ff}.rvm-tree .rvm-navis-summary b{color:#fff}.rvm-tree .rvm-navis-summary small{color:#7f94b7}
-    .rvm-tree .rvm-navis-children{list-style:none;margin:0;padding:0}.rvm-tree [data-rvm-navis-node-row]{list-style:none;margin:1px 0;padding:0}.rvm-navis-row{display:flex;align-items:center;gap:2px;min-width:0;padding-left:calc(var(--rvm-navis-depth,0) * 12px)}
-    .rvm-navis-expander{width:16px;height:18px;line-height:14px;display:inline-grid;place-items:center;border:1px solid rgba(126,190,255,.30);border-radius:3px;background:#101a2b;color:#bcd8ff;font-size:11px;padding:0}.rvm-navis-expander:disabled{opacity:.35;border-color:transparent;background:transparent}
-    .rvm-navis-select{min-width:0;flex:1;display:grid;grid-template-columns:auto auto minmax(0,1fr) auto;align-items:center;gap:4px;height:20px;border:1px solid rgba(126,190,255,.13);border-radius:4px;background:rgba(255,255,255,.035);color:#d9e9ff;text-align:left;font-size:9px;padding:2px 5px}.rvm-navis-select:hover{border-color:#60a5fa;background:rgba(59,130,246,.18)}
+    .rvm-tree .rvm-navis-children{list-style:none;margin:0;padding:0}.rvm-tree [data-rvm-navis-node-row]{list-style:none;margin:1px 0;padding:0}.rvm-navis-row{display:grid;grid-template-columns:16px minmax(0,1fr) auto auto;align-items:center;gap:2px;min-width:0;padding-left:calc(var(--rvm-navis-depth,0) * 12px)}
+    .rvm-navis-row.is-selected{background:rgba(96,165,250,.18);outline:1px solid rgba(96,165,250,.55);border-radius:4px}.rvm-navis-expander{width:16px;height:18px;line-height:14px;display:inline-grid;place-items:center;border:1px solid rgba(126,190,255,.30);border-radius:3px;background:#101a2b;color:#bcd8ff;font-size:11px;padding:0}.rvm-navis-expander:disabled{opacity:.35;border-color:transparent;background:transparent}
+    .rvm-navis-select{min-width:0;display:grid;grid-template-columns:auto auto minmax(0,1fr) auto;align-items:center;gap:4px;height:20px;border:1px solid rgba(126,190,255,.13);border-radius:4px;background:rgba(255,255,255,.035);color:#d9e9ff;text-align:left;font-size:9px;padding:2px 5px}.rvm-navis-select:hover{border-color:#60a5fa;background:rgba(59,130,246,.18)}
+    .rvm-navis-branch-off,.rvm-navis-branch-on{height:18px;border:1px solid rgba(148,163,184,.22);border-radius:4px;background:#111827;color:#dbeafe;font-size:8px;padding:1px 4px}.rvm-navis-branch-off{color:#fecaca}.rvm-navis-branch-on{color:#bbf7d0}
     .rvm-navis-icon{color:#83b7ff;font-size:10px}.rvm-navis-label{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.rvm-tree .rvm-kind{font-size:8px;line-height:1;padding:2px 4px;border-radius:999px;background:#20324c;color:#bcd8ff}.rvm-tree .rvm-tree-count{font-size:8px;color:#94a3b8;margin-left:auto}
   `;
   document.head.appendChild(style);
@@ -293,7 +420,7 @@ export function installRvmNavisHierarchyBridge() {
   if (globalThis[INSTALL_FLAG]) return;
   globalThis[INSTALL_FLAG] = true;
   globalThis.__PCF_GLB_RVM_NAVIS_HIERARCHY__ = {
-    version: '20260621-rvm-navis-hierarchy-1',
+    version: '20260622-rvm-navis-hierarchy-selection-sync-2',
     refresh: refreshHierarchy,
   };
   globalThis.addEventListener?.('rvm-model-loaded', () => {
