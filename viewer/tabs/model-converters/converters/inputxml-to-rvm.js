@@ -7,6 +7,11 @@
 //   - .rvm  -> Navisworks / AVEVA Review (desktop)
 //   - .glb  -> the repo's in-browser viewer on GitHub Pages (static hosting)
 //
+// Keep the heavy/vendored RVM runner out of the Model Converters startup graph.
+// GitHub Pages can transiently return 503 for one static module; if the runner is
+// imported at top level, that single optional converter prevents the whole tab
+// from rendering.  Load it only when the user runs InputXML -> RVM.
+//
 // The GLB is the only part that reaches for shared code (the three.js-based
 // exporter under viewer/js/pcf2glb/glb/). It is loaded with a dynamic import
 // inside try/catch so:
@@ -15,7 +20,32 @@
 //     still get a valid RVM.
 // The exporter performs no network fetches, so it is safe on static pages.
 
-import { run as runInputXmlToRvm } from '../../../converters/inputxml-rvm/inputxml-to-rvm-runner.js';
+let inputXmlToRvmRunnerPromise = null;
+
+async function runInputXmlToRvm(ctx) {
+  try {
+    if (!inputXmlToRvmRunnerPromise) {
+      inputXmlToRvmRunnerPromise = import('../../../converters/inputxml-rvm/inputxml-to-rvm-runner.js?v=20260622-inputxml-rvm-lazy-1');
+    }
+    const module = await inputXmlToRvmRunnerPromise;
+    if (typeof module?.run !== 'function') throw new Error('InputXML -> RVM runner did not export run().');
+    return module.run(ctx);
+  } catch (error) {
+    // Allow a later click to retry after a transient GitHub Pages/module fetch
+    // failure instead of pinning the rejected import promise for the session.
+    inputXmlToRvmRunnerPromise = null;
+    const message = error instanceof Error ? error.message : String(error);
+    ctx?.setStatus?.(`Failed: ${message}`, 'error');
+    return {
+      ok: false,
+      outputs: [],
+      logs: {
+        stdout: [],
+        stderr: [`InputXML -> RVM runner could not be loaded: ${message}`],
+      },
+    };
+  }
+}
 
 function arrayBufferToBase64(buffer) {
   const bytes = new Uint8Array(buffer);
