@@ -37,6 +37,8 @@ const geometryProfilesSource = await read('../geometry-workspace/GeometryMapping
 const geometryProfileBridgeSource = await read('../geometry-workspace/GeometryMappingProfileBridge.js');
 const geometryCalcRegistrySource = await read('../geometry-workspace/GeometryCalculationModuleRegistry.js');
 const geometryCalcBridgeSource = await read('../geometry-workspace/GeometryCalculationCanvasBridge.js');
+const geometryInputResolverSource = await read('../geometry-workspace/GeometryCalculationInputResolver.js');
+const geometryInputBridgeSource = await read('../geometry-workspace/GeometryCalculationInputBridge.js');
 const pcfSource = await read('../tabs/RvmJsonPcfTriggerBridge.js');
 const visibilitySource = await read('../tabs/RvmVisibilityToolbarBridge.js');
 const setsSource = await read('../tabs/RvmSelectionSetsBridge.js');
@@ -103,8 +105,18 @@ check(geometryCalcRegistrySource.includes('pipe.odMm') && geometryCalcRegistrySo
 check(geometryCalcRegistrySource.includes('evaluateGeometryCalculationModules') && geometryCalcRegistrySource.includes('evaluateSupportLoadReadiness'), 'geometry calculation registry evaluates modules');
 check(geometryCalcBridgeSource.includes('__PCF_GLB_GEOMETRY_CALCULATION_CANVAS__'), 'geometry calculation canvas bridge publishes global API');
 check(geometryCalcBridgeSource.includes('data-geometry-calculation-canvas-open') && geometryCalcBridgeSource.includes('CALC</span><span>Modules'), 'geometry calculation canvas bridge adds modules toolbar button');
+check(geometryCalcBridgeSource.includes('Open Inputs') && geometryCalcBridgeSource.includes('calculationResolvedObjects'), 'geometry calculation canvas consumes resolved input objects');
 check(geometryCalcBridgeSource.includes('Run Validation') && geometryCalcBridgeSource.includes('Export Validation JSON'), 'geometry calculation canvas bridge validates and exports readiness JSON');
 check(geometryCalcBridgeSource.includes('does not fabricate process, schedule, material, weight, or load values'), 'calculation canvas states no fabricated loads');
+
+check(geometryInputResolverSource.includes("GEOMETRY_CALCULATION_INPUT_SCHEMA = 'geometry-calculation-input-resolver/v1'"), 'geometry input resolver exposes schema marker');
+check(geometryInputResolverSource.includes('resolveCalculationInputs') && geometryInputResolverSource.includes('normalizeCalculationInputPackage'), 'geometry input resolver normalizes and resolves input packages');
+check(geometryInputResolverSource.includes('pipeRows') && geometryInputResolverSource.includes('processRows') && geometryInputResolverSource.includes('materialRows') && geometryInputResolverSource.includes('weightRows'), 'geometry input resolver supports pipe/process/material/weight rows');
+check(geometryInputResolverSource.includes('CALCULATION_INPUT_RESOLVER') && geometryInputResolverSource.includes('mappingAudit'), 'geometry input resolver records audit trail');
+check(geometryInputBridgeSource.includes('__PCF_GLB_GEOMETRY_CALCULATION_INPUTS__'), 'geometry input bridge publishes global API');
+check(geometryInputBridgeSource.includes('data-geometry-calculation-input-open') && geometryInputBridgeSource.includes('INPUT</span><span>Data'), 'geometry input bridge adds input data toolbar button');
+check(geometryInputBridgeSource.includes('Apply Inputs') && geometryInputBridgeSource.includes('Export Resolved JSON'), 'geometry input bridge applies and exports resolved inputs');
+check(geometryInputBridgeSource.includes('does not fabricate missing calculation data'), 'geometry input bridge states no fabrication policy');
 
 check(geometryWorkspaceSource.includes("BRIDGE_VERSION = '20260622-geometry-mapping-1'"), 'geometry workspace bridge keeps mapping cache key');
 check(geometryWorkspaceSource.includes("schemaVersion: 'geometry-export-workspace/v1'"), 'geometry workspace state uses independent schema');
@@ -133,8 +145,8 @@ check(renderBuilderSource.includes('RVM_NATIVE_FACET_GROUP'), 'render builder ke
 check(renderBuilderSource.includes('wireframe-diagnostic-not-solid-geometry'), 'bbox placeholders remain diagnostic wireframes');
 check(!renderBuilderSource.includes("primitive === 'STRUCTURE_BBOX' || type === 'STRUCTURE'"), 'unconditional structure slab promotion remains blocked');
 
-check(indexSource.includes('main-rhbg-fitguard.js?v=20260622-geometry-calc-canvas-1'), 'index uses geometry calculation canvas entry cache key');
-check(entrySource.includes('core/app.js?v=20260622-geometry-calc-canvas-1'), 'entrypoint uses geometry calculation canvas app cache key');
+check(indexSource.includes('main-rhbg-fitguard.js?v=20260622-geometry-input-resolver-1'), 'index uses geometry input resolver entry cache key');
+check(entrySource.includes('core/app.js?v=20260622-geometry-input-resolver-1'), 'entrypoint uses geometry input resolver app cache key');
 check(entrySource.includes('await init(startupMount())'), 'entrypoint passes resolved mount root into init');
 check(appSource.includes('app-tab-click-state-bridge.js?v=20260622-tab-click-state-1'), 'app side-loads tab click state bridge');
 check(appSource.includes('installAppTabClickStateBridge()'), 'app installs tab click state bridge before runtime delegate');
@@ -143,9 +155,10 @@ check(tabClickBridgeSource.includes('state.activeTabId = tabId'), 'tab click sta
 check(appSource.includes('GeometryExportWorkspaceBridge.js?v=20260622-geometry-mapping-1'), 'app side-loads geometry mapping workspace bridge');
 check(appSource.includes('GeometryMappingProfileBridge.js?v=20260622-geometry-profile-ui-1'), 'app side-loads geometry mapping profile bridge');
 check(appSource.includes('GeometryCalculationCanvasBridge.js?v=20260622-geometry-calc-canvas-1'), 'app side-loads geometry calculation canvas bridge');
-check(appSource.includes('installGeometryMappingProfileBridge()') && appSource.includes('installGeometryCalculationCanvasBridge()'), 'app installs geometry profile and calculation bridges');
+check(appSource.includes('GeometryCalculationInputBridge.js?v=20260622-geometry-input-resolver-1'), 'app side-loads geometry calculation input bridge');
+check(appSource.includes('installGeometryMappingProfileBridge()') && appSource.includes('installGeometryCalculationCanvasBridge()') && appSource.includes('installGeometryCalculationInputBridge()'), 'app installs geometry profile, calculation, and input bridges');
 check(appSource.includes('BrowserRvmNativeFacetGhostPanelPatch.js?v=20260622-rvm-facet-ghost-panels-1'), 'app side-loads native facet ghost patch');
-check(appSource.includes('app-label-perf-runtime.js?v=20260622-geometry-calc-canvas-1'), 'app delegates through geometry calculation runtime cache key');
+check(appSource.includes('app-label-perf-runtime.js?v=20260622-geometry-input-resolver-1'), 'app delegates through geometry input resolver runtime cache key');
 check(runtimeSource.includes('viewer3d-rvm-tab-renderer.js?v=20260622-geometry-workspace-1') || runtimeSource.includes('viewer3d-rvm-tab-renderer.js?v=20260622-geometry-mapping-1') || runtimeSource.includes('viewer3d-rvm-tab-renderer.js?v=20260622-geometry-profile-ui-1'), 'runtime keeps RVM renderer cache chain');
 
 console.log(`\n${passed} passed, ${failed} failed`);
