@@ -13,6 +13,7 @@ on:
       - 'viewer/tabs/RvmSupportSummaryBridge.js'
       - 'viewer/tabs/RvmSupportGeometryBridge.js'
       - 'viewer/tabs/RvmSupportAttMappingBridge.js'
+      - 'viewer/tabs/RvmSupportAttMappingBridge.js'
       - 'viewer/tabs/RvmIntelligentSupportEngineBridge.js'
       - 'viewer/tabs/model-converters/workflow/**'
       - 'viewer/tabs/rvm-json-pcf-*.js'
@@ -61,7 +62,9 @@ jobs:
         run: node viewer/tests/rvm-pcf-raw-support-cylinder.test.js
 
       - name: Verify RHBG RVM fit guard
-        run: node viewer/tests/rvm-pcf-rhbg-fitguard.test.js
+        run: |
+          set -o pipefail
+          node viewer/tests/rvm-pcf-rhbg-fitguard.test.js 2>&1 | tail -120
 
       - name: Verify geometry workspace import tree
         run: node viewer/tests/rvm-geometry-workspace-import-tree.test.js
