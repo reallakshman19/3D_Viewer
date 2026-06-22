@@ -112,6 +112,25 @@ check(pipeObject.calculatedFields.supportLoads.writebackAudit.target === 'calcul
 check(!pipeObject.calculatedFields.supportLoads.attributes, 'pipe result does not copy input attributes into calculated fields');
 check(pipeObject.attributes.supportLoadInput.readiness.readyForCalculation === true, 'input package remains preserved after writeback');
 
+const accessTotalKgPerM = 13000 * 1000 / (10750 * 10 * 1.1);
+const accessBenchmark = calculateSupportLoadsForPipeInput(Object.freeze({
+  schema: 'support-load-input/v1',
+  version: 'access-nps8-benchmark',
+  sourceObjectId: 'PIPE-8-P25168-BENCH',
+  identity: Object.freeze({ lineNo: '8"-P25168-61502-01', branchKey: 'P25168-61502-01', branchName: '', nps: 8, pipeOdMm: 219.075 }),
+  pipePhysical: Object.freeze({ wallThicknessMm: 12.7, insideDiameterMm: 193.675, unitPipeWtKgPerM: accessTotalKgPerM * 0.6 }),
+  process: Object.freeze({ tempExpC1: 100, tempExpC2: 59, fluidWtOpeKgPerM: accessTotalKgPerM * 0.4, fluidWtHydKgPerM: accessTotalKgPerM * 0.4 }),
+  spans: Object.freeze({ autoSpanMm: 10750, depSpanMm: 10750, autoSpanBySupport: Object.freeze({}) }),
+  formulaProfile: Object.freeze({ profileId: 'ACCESS_TEMP_WALL_WEIGHTED_V1', gravityFactor: 10, verticalLoadFactor: 1.1, roundMajor: 100, roundStep: 50, roundMode: 'up' }),
+  supportRefs: Object.freeze([]),
+  readiness: Object.freeze({ readyForVertical: true, readyForOpeVertical: true, readyForHydVertical: true, readyForGuide: true, readyForLineStop: true, readyForCalculation: true, lockedForCalculation: true, calculationGateStatus: 'INPUT_LOCKED', missing: Object.freeze([]), status: 'INPUT_READY' })
+}));
+near(accessBenchmark.calculatedFields.vertical.opeVDep, 13000, 0.15, 'Access NPS 8 benchmark OPE_V_DEP is 13000 N');
+check(accessBenchmark.calculatedFields.guide.roundedGuideHDep === 650, 'Access NPS 8 benchmark rounded Guide H is 650 N');
+near(accessBenchmark.calculatedFields.guide.guideHDep, 3900, 0.0001, 'Access NPS 8 benchmark final Guide H uses max with 0.3 × OPE_V_DEP');
+check(accessBenchmark.calculatedFields.lineStop.lineStopH === 8800, 'Access NPS 8 benchmark LineStop_H is 8800 N');
+check(accessBenchmark.calculatedFields.lineStop.lineStop.formula.includes('D^4-(D-WT)^4'), 'Access NPS 8 benchmark preserves Dia - WALL_THICK expression');
+
 if (failed) {
   console.error(`FAILED ${failed} checks, passed ${passed}`);
   process.exit(1);
