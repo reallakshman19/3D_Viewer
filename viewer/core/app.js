@@ -70,6 +70,7 @@
 // app-label-perf-runtime.js?v=20260622-geometry-input-resolver-1
 // app-label-perf-runtime.js?v=20260622-geometry-enrichment-1
 // app-label-perf-runtime.js?v=20260622-geometry-enriched-stagedjson-1
+// app-label-perf-runtime.js?v=20260622-model-converters-lazy-rvm-1
 // app-tab-click-state-bridge.js?v=20260622-tab-click-state-1
 // RvmPolicyInfoBridge.js?v=20260621-rvm-policy-info-1
 // RvmDiagnosticPanelCollapseBridge.js?v=20260621-rvm-diagnostic-collapse-1
@@ -116,4 +117,4 @@ installRvmModelHealthBridge();
 installRvmModelHealthIssuesBridge();
 installBrowserRvmNativeFacetGhostPanelPatch();
 
-export { init } from './app-label-perf-runtime.js?v=20260622-geometry-enriched-stagedjson-1';
+export { init } from './app-label-perf-runtime.js?v=20260622-model-converters-lazy-rvm-1';

@@ -1,21 +1,24 @@
 // Registry entry for the "InputXML -> RVM (+ GLB)" converter.
 //
-// The RVM/parsing core lives under viewer/converters/inputxml-rvm/ as vendored,
-// Rvmx-prefixed copies that import NO shared module (see that folder's README).
-// This wrapper adds an OPTIONAL GLB companion so the same conversion is usable
-// in two places:
-//   - .rvm  -> Navisworks / AVEVA Review (desktop)
-//   - .glb  -> the repo's in-browser viewer on GitHub Pages (static hosting)
-//
-// The GLB is the only part that reaches for shared code (the three.js-based
-// exporter under viewer/js/pcf2glb/glb/). It is loaded with a dynamic import
-// inside try/catch so:
-//   * the self-contained RVM path is never affected by it, and
-//   * environments without three.js (e.g. Node tests) simply skip the GLB and
-//     still get a valid RVM.
-// The exporter performs no network fetches, so it is safe on static pages.
+// The converter registry is loaded when the Model Converters tab opens. Keep the
+// heavyweight InputXML runner behind a dynamic import so a transient failure in a
+// runner leaf module cannot reject the whole tab import before this converter is
+// actually run.
 
-import { run as runInputXmlToRvm } from '../../../converters/inputxml-rvm/inputxml-to-rvm-runner.js';
+let inputXmlToRvmRunPromise = null;
+
+async function loadInputXmlToRvmRun() {
+  if (!inputXmlToRvmRunPromise) {
+    inputXmlToRvmRunPromise = import('../../../converters/inputxml-rvm/inputxml-to-rvm-runner.js')
+      .then((module) => {
+        if (typeof module.run !== 'function') {
+          throw new Error('InputXML runner module did not export run().');
+        }
+        return module.run;
+      });
+  }
+  return inputXmlToRvmRunPromise;
+}
 
 function arrayBufferToBase64(buffer) {
   const bytes = new Uint8Array(buffer);
@@ -45,6 +48,7 @@ function createSceneLog(stdout, stderr) {
 }
 
 export async function run(ctx = {}) {
+  const runInputXmlToRvm = await loadInputXmlToRvmRun();
   const result = await runInputXmlToRvm(ctx);
   const options = ctx.options || {};
 
