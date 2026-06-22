@@ -16,6 +16,7 @@
 // viewer3d-rvm-tab-renderer.js?v=20260621-rvm-section-box-1
 // viewer3d-rvm-tab-renderer.js?v=20260621-rvm-selection-sets-1
 // viewer3d-rvm-tab-renderer.js?v=20260621-rvm-report-export-1
+// viewer3d-rvm-tab-renderer.js?v=20260622-geometry-workspace-1
 // viewer3d-rvm-tab-renderer.js?v=20260621-rvm-model-health-1
 // viewer3d-rvm-tab-renderer.js?v=20260621-rvm-health-issues-1
 // viewer3d-rvm-tab-renderer.js?v=20260621-rvm-navis-hierarchy-1
@@ -33,6 +34,9 @@
 // RvmSectionBoxBridge.js?v=20260621-rvm-section-box-1
 // RvmSelectionSetsBridge.js?v=20260621-rvm-selection-sets-1
 // RvmReportExportBridge.js?v=20260621-rvm-report-export-1
+// GeometryExportWorkspaceBridge.js?v=20260622-geometry-workspace-1
+// RenderedGeometrySnapshotBuilder.js?v=20260622-geometry-workspace-1
+// RenderedGeometryFieldDiscovery.js?v=20260622-geometry-workspace-1
 // RvmModelHealthBridge.js?v=20260621-rvm-model-health-1
 // RvmModelHealthBridge.js?v=20260621-rvm-health-issues-1
 // RvmModelHealthIssuesBridge.js?v=20260621-rvm-health-issues-1
@@ -71,4 +75,4 @@ installRvmModelHealthBridge();
 installRvmModelHealthIssuesBridge();
 installBrowserRvmNativeFacetGhostPanelPatch();
 
-export { init } from './app-label-perf-runtime.js?v=20260622-tab-click-state-1';
+export { init } from './app-label-perf-runtime.js?v=20260622-geometry-workspace-1';
