@@ -26,10 +26,10 @@
 // Previous model health cache key: RvmModelHealthBridge.js?v=20260621-rvm-model-health-1
 // Active health issues cache key: RvmModelHealthIssuesBridge.js?v=20260621-rvm-health-issues-1
 // Active Navis hierarchy cache key: RvmNavisHierarchyBridge.js?v=20260621-rvm-navis-hierarchy-1
-// Active native facet primary cache key: viewer3d-rvm-tab.js?v=20260621-rvm-native-facet-primary-1
+// Active native facet primary cache key: viewer3d-rvm-tab.js?v=20260622-rvm-smart-civil-code11-defer-1
 // Active native facet ghost panel cache key: BrowserRvmNativeFacetGhostPanelPatch.js?v=20260622-rvm-facet-ghost-panels-1
 // Active render policy cache key: BrowserRvmRenderPolicyBridge.js?v=20260622-rvm-render-policy-1
-// Active civil fallback policy cache key: BrowserRvmCivilFallbackPolicyBridge.js?v=20260622-rvm-civil-grid-fdns-panel-fallback-2
+// Active civil fallback policy cache key: BrowserRvmCivilFallbackPolicyBridge.js?v=20260622-rvm-smart-civil-code11-default-off-1
 // Active debug pick cache key: BrowserRvmPickDiagnosticsBridge.js?v=20260622-rvm-debug-pick-1
 // Active native torus/elbow cache key: BrowserRvmTorusParityRuntimePatch.js?v=20260622-rvm-native-torus-line-elbows-1
 // Active zone/LOD context cache key: RvmZoneLodContextBridge.js?v=20260621-rvm-zone-lod-context-1
@@ -69,7 +69,7 @@ import { installBrowserRvmCppMat3x4WorkerPatch } from '../rvm/BrowserRvmCppMat3x
 import { installBrowserRvmNativeTessellationRuntimePatch } from '../rvm/BrowserRvmNativeTessellationRuntimePatch.js?v=20260620-rvm-native-diagnostics-1';
 import { installBrowserRvmNativeFacetGhostPanelPatch } from '../rvm/BrowserRvmNativeFacetGhostPanelPatch.js?v=20260622-rvm-facet-ghost-panels-1';
 import { installBrowserRvmRenderPolicyBridge } from '../rvm/BrowserRvmRenderPolicyBridge.js?v=20260622-rvm-render-policy-1';
-import { installBrowserRvmCivilFallbackPolicyBridge } from '../rvm/BrowserRvmCivilFallbackPolicyBridge.js?v=20260622-rvm-civil-grid-fdns-panel-fallback-2';
+import { installBrowserRvmCivilFallbackPolicyBridge } from '../rvm/BrowserRvmCivilFallbackPolicyBridge.js?v=20260622-rvm-smart-civil-code11-default-off-1';
 import { installBrowserRvmPickDiagnosticsBridge } from '../rvm/BrowserRvmPickDiagnosticsBridge.js?v=20260622-rvm-debug-pick-1';
 import { installBrowserRvmDishTessellationRuntimePatch } from '../rvm/BrowserRvmDishTessellationRuntimePatch.js?v=20260620-rvm-support-assembly-dish-1';
 import { installBrowserRvmRemainingPrimitiveRuntimePatch } from '../rvm/BrowserRvmRemainingPrimitiveRuntimePatch.js?v=20260620-rvm-facetgroup-1';
@@ -120,4 +120,4 @@ installRvmJsonPcfTriggerBridge();
 installRvmPolicyInfoBridge();
 installRvmDiagnosticPanelCollapseBridge();
 
-export { mountViewer3DRvmTab as renderViewer3DRvm } from './viewer3d-rvm-tab.js?v=20260622-rvm-zone-tree-code11-leaf-orbit-1';
+export { mountViewer3DRvmTab as renderViewer3DRvm } from './viewer3d-rvm-tab.js?v=20260622-rvm-smart-civil-code11-defer-1';
