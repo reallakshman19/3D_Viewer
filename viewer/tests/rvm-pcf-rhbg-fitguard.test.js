@@ -41,6 +41,8 @@ const geometryInputResolverSource = await read('../geometry-workspace/GeometryCa
 const geometryInputBridgeSource = await read('../geometry-workspace/GeometryCalculationInputBridge.js');
 const geometryEnrichmentResolverSource = await read('../geometry-workspace/GeometryEnrichmentResolver.js');
 const geometryEnrichmentBridgeSource = await read('../geometry-workspace/GeometryEnrichmentBridge.js');
+const geometryStagedJsonExporterSource = await read('../geometry-workspace/GeometryEnrichedStagedJsonExporter.js');
+const geometryStagedJsonBridgeSource = await read('../geometry-workspace/GeometryEnrichedStagedJsonBridge.js');
 const pcfSource = await read('../tabs/RvmJsonPcfTriggerBridge.js');
 const visibilitySource = await read('../tabs/RvmVisibilityToolbarBridge.js');
 const setsSource = await read('../tabs/RvmSelectionSetsBridge.js');
@@ -130,6 +132,12 @@ check(geometryEnrichmentBridgeSource.includes('__PCF_GLB_GEOMETRY_ENRICHMENT__')
 check(geometryEnrichmentBridgeSource.includes('ENRICH</span><span>Resolve') && geometryEnrichmentBridgeSource.includes('Write Back to Canvas'), 'geometry enrichment bridge adds resolve and write-back UI');
 check(geometryEnrichmentBridgeSource.includes('geometryEnrichment') && geometryEnrichmentBridgeSource.includes('enrichedFields'), 'geometry enrichment bridge writes enriched fields onto canvas objects');
 
+check(geometryStagedJsonExporterSource.includes("GEOMETRY_ENRICHED_STAGEDJSON_SCHEMA = 'geometry-enriched-stagedjson/v1'"), 'enriched stagedJSON exporter exposes schema marker');
+check(geometryStagedJsonExporterSource.includes('buildGeometryEnrichedStagedJson') && geometryStagedJsonExporterSource.includes('enrichedFields'), 'enriched stagedJSON exporter serializes enriched fields');
+check(geometryStagedJsonExporterSource.includes('enrichmentAudit') && geometryStagedJsonExporterSource.includes('noFabricatedEngineeringData'), 'enriched stagedJSON exporter preserves audit and no-fabrication policy');
+check(geometryStagedJsonBridgeSource.includes('__PCF_GLB_GEOMETRY_ENRICHED_STAGEDJSON__'), 'enriched stagedJSON bridge publishes global API');
+check(geometryStagedJsonBridgeSource.includes('EXPORT</span><span>StagedJSON') && geometryStagedJsonBridgeSource.includes('geometry-enriched-stagedjson.json'), 'enriched stagedJSON bridge adds export UI and download');
+
 check(geometryWorkspaceSource.includes("BRIDGE_VERSION = '20260622-geometry-mapping-1'"), 'geometry workspace bridge keeps mapping cache key');
 check(geometryWorkspaceSource.includes("schemaVersion: 'geometry-export-workspace/v1'"), 'geometry workspace state uses independent schema');
 check(geometryWorkspaceSource.includes('Top 5 hierarchy import tree') && geometryWorkspaceSource.includes('Mapped Objects') && geometryWorkspaceSource.includes('Calculation Canvas'), 'geometry workspace includes import, mapped objects, and calculation shells');
@@ -157,8 +165,8 @@ check(renderBuilderSource.includes('RVM_NATIVE_FACET_GROUP'), 'render builder ke
 check(renderBuilderSource.includes('wireframe-diagnostic-not-solid-geometry'), 'bbox placeholders remain diagnostic wireframes');
 check(!renderBuilderSource.includes("primitive === 'STRUCTURE_BBOX' || type === 'STRUCTURE'"), 'unconditional structure slab promotion remains blocked');
 
-check(indexSource.includes('main-rhbg-fitguard.js?v=20260622-geometry-enrichment-1'), 'index uses geometry enrichment entry cache key');
-check(entrySource.includes('core/app.js?v=20260622-geometry-enrichment-1'), 'entrypoint uses geometry enrichment app cache key');
+check(indexSource.includes('main-rhbg-fitguard.js?v=20260622-geometry-enriched-stagedjson-1'), 'index uses enriched stagedJSON entry cache key');
+check(entrySource.includes('core/app.js?v=20260622-geometry-enriched-stagedjson-1'), 'entrypoint uses enriched stagedJSON app cache key');
 check(entrySource.includes('await init(startupMount())'), 'entrypoint passes resolved mount root into init');
 check(appSource.includes('app-tab-click-state-bridge.js?v=20260622-tab-click-state-1'), 'app side-loads tab click state bridge');
 check(appSource.includes('installAppTabClickStateBridge()'), 'app installs tab click state bridge before runtime delegate');
@@ -169,9 +177,10 @@ check(appSource.includes('GeometryMappingProfileBridge.js?v=20260622-geometry-pr
 check(appSource.includes('GeometryCalculationCanvasBridge.js?v=20260622-geometry-calc-canvas-1'), 'app side-loads geometry calculation canvas bridge');
 check(appSource.includes('GeometryCalculationInputBridge.js?v=20260622-geometry-input-resolver-1'), 'app side-loads geometry calculation input bridge');
 check(appSource.includes('GeometryEnrichmentBridge.js?v=20260622-geometry-enrichment-1'), 'app side-loads geometry enrichment bridge');
-check(appSource.includes('installGeometryMappingProfileBridge()') && appSource.includes('installGeometryCalculationCanvasBridge()') && appSource.includes('installGeometryCalculationInputBridge()') && appSource.includes('installGeometryEnrichmentBridge()'), 'app installs geometry profile, calculation, input, and enrichment bridges');
+check(appSource.includes('GeometryEnrichedStagedJsonBridge.js?v=20260622-geometry-enriched-stagedjson-1'), 'app side-loads enriched stagedJSON export bridge');
+check(appSource.includes('installGeometryMappingProfileBridge()') && appSource.includes('installGeometryCalculationCanvasBridge()') && appSource.includes('installGeometryCalculationInputBridge()') && appSource.includes('installGeometryEnrichmentBridge()') && appSource.includes('installGeometryEnrichedStagedJsonBridge()'), 'app installs geometry profile, calculation, input, enrichment, and stagedJSON bridges');
 check(appSource.includes('BrowserRvmNativeFacetGhostPanelPatch.js?v=20260622-rvm-facet-ghost-panels-1'), 'app side-loads native facet ghost patch');
-check(appSource.includes('app-label-perf-runtime.js?v=20260622-geometry-enrichment-1'), 'app delegates through geometry enrichment runtime cache key');
+check(appSource.includes('app-label-perf-runtime.js?v=20260622-geometry-enriched-stagedjson-1'), 'app delegates through enriched stagedJSON runtime cache key');
 check(runtimeSource.includes('viewer3d-rvm-tab-renderer.js?v=20260622-geometry-workspace-1') || runtimeSource.includes('viewer3d-rvm-tab-renderer.js?v=20260622-geometry-mapping-1') || runtimeSource.includes('viewer3d-rvm-tab-renderer.js?v=20260622-geometry-profile-ui-1'), 'runtime keeps RVM renderer cache chain');
 
 console.log(`\n${passed} passed, ${failed} failed`);
