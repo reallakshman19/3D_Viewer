@@ -1,4 +1,4 @@
-const CACHE_KEY = '20260621-rvm-perf-lazy-bridges-1';
+const CACHE_KEY = '20260622-rvm-support-tools-retired-1';
 const API_KEY = '__PCF_GLB_RVM_BOTTOM_DIAGNOSTICS_DRAWER__';
 
 const PANEL_SPECS = [
@@ -7,10 +7,7 @@ const PANEL_SPECS = [
   { key: 'acceptance', title: 'RVM GLB Acceptance Pack', selector: '[data-rvm-glb-acceptance-panel]', priority: 20 },
   { key: 'stagedjson', title: 'StagedJSON', selector: '[data-rvm-stagedjson-panel]', priority: 30 },
   { key: 'stagedcheck', title: 'StagedCheck', selector: '[data-rvm-stagedjson-validation-panel]', priority: 40 },
-  { key: 'support-att', title: 'Support ATT Mapping', selector: '[data-rvm-support-att-panel]', priority: 50 },
-  { key: 'support-engine', title: 'Intelligent Support Engine', selector: '[data-rvm-support-engine-panel]', priority: 60 },
   { key: 'primitive-fallback', title: 'Primitive Fallback Review', selector: '[data-rvm-primitive-fallback-panel]', priority: 70 },
-  { key: 'support-geometry', title: 'Support Geometry', selector: '[data-rvm-support-geometry-panel]', priority: 80 },
 ];
 
 const EVENTS = [
@@ -19,9 +16,6 @@ const EVENTS = [
   'rvm-glb-acceptance-pack-diagnostics',
   'rvm-stagedjson-export',
   'rvm-stagedjson-validation',
-  'rvm-support-geometry-diagnostics',
-  'rvm-support-att-mapping-diagnostics',
-  'rvm-intelligent-support-engine-diagnostics',
   'rvm-primitive-fallback-diagnostics',
 ];
 
@@ -145,7 +139,6 @@ function updateHeader(drawer, root) {
       `<span>errors ${counts.errors}</span>`,
       `<span>warnings ${counts.warnings}</span>`,
       counts.acceptance ? `<span>${escapeHtml(counts.acceptance)}</span>` : '',
-      counts.supports ? `<span>${escapeHtml(counts.supports)}</span>` : '',
     ].filter(Boolean).join(' · ');
   }
 }
@@ -154,14 +147,11 @@ function summarizeDiagnostics(root) {
   const cardCount = root?.querySelectorAll?.('[data-rvm-bottom-diagnostics-item]')?.length || 0;
   const acceptance = globalThis.__PCF_GLB_RVM_GLB_ACCEPTANCE_PACK_DIAGNOSTICS__;
   const staged = globalThis.__PCF_GLB_RVM_STAGEDJSON_VALIDATION_DIAGNOSTICS__;
-  const support = globalThis.__PCF_GLB_RVM_INTELLIGENT_SUPPORT_ENGINE_DIAGNOSTICS__;
-  const supportAtt = globalThis.__PCF_GLB_RVM_SUPPORT_ATT_MAPPING_DIAGNOSTICS__;
   const actions = globalThis.__PCF_GLB_RVM_ACTION_DIAGNOSTICS__;
   const errors = Number(acceptance?.errors?.length || 0) + Number(staged?.errors?.length || 0) + Number(actions?.failureCount || 0);
   const warnings = Number(acceptance?.warnings?.length || 0) + Number(staged?.warnings?.length || 0);
   const acceptanceText = acceptance ? `accept ${acceptance.accepted ? 'OK' : acceptance.mode || 'idle'}` : '';
-  const supportCount = Number(support?.candidateCount || 0) || Number(supportAtt?.supportMetadataMappedCount || 0) || 0;
-  return { cardCount, errors, warnings, acceptance: acceptanceText, supports: supportCount ? `supports ${supportCount}` : '' };
+  return { cardCount, errors, warnings, acceptance: acceptanceText };
 }
 
 function isCollapsed() {

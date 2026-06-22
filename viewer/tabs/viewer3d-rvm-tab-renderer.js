@@ -19,9 +19,7 @@
 // Active leaf selection identity cache key: RvmLeafSelectionIdentityBridge.js?v=20260622-rvm-leaf-selection-identity-1
 // Active leaf canvas pick cache key: RvmLeafCanvasPickBridge.js?v=20260622-rvm-leaf-canvas-pick-orbit-guard-1
 // Active canvas single-pick guard cache key: RvmCanvasSelectionSinglePickGuardBridge.js?v=20260622-rvm-canvas-single-pick-guard-1
-// Active support assembly marker mode cache key: RvmSupportAssemblyMarkerModeBridge.js?v=20260622-rvm-support-assembly-markers-off-1
-// Active raw support cylinder guard cache key: RvmRawSupportCylinderGuardBridge.js?v=20260622-rvm-raw-support-cylinder-guard-1
-// Active UI event safety cache key: RvmUiEventSafetyBridge.js?v=20260622-rvm-ui-event-safety-1
+// Active retired support tools purge cache key: RvmRetiredSupportToolsPurgeBridge.js?v=20260622-rvm-retired-support-tools-purge-1
 // Active selection details inspector cache key: RvmSelectionDetailsInspectorBridge.js?v=20260621-rvm-selection-details-inspector-1
 // Active isolate/visibility toolbar cache key: RvmVisibilityToolbarBridge.js?v=20260621-rvm-isolate-visibility-toolbar-1
 // Active visibility snapshots cache key: RvmVisibilitySnapshotsBridge.js?v=20260621-rvm-visibility-snapshots-1
@@ -55,9 +53,7 @@ import { installRvmProgressiveModelRootPatch } from '../rvm-viewer/RvmProgressiv
 import { installRvmHierarchySelectionBridge } from './RvmHierarchySelectionBridge.js?v=20260620-rvm-large-box-support-sync-1';
 import { installRvmViewerInteractionPatch, installRvmCanvasSelectionBridge } from './RvmViewerInteractionPatch.js?v=20260621-rvm-button-hardening-1';
 import { installRvmCanvasSelectionSinglePickGuardBridge } from './RvmCanvasSelectionSinglePickGuardBridge.js?v=20260622-rvm-canvas-single-pick-guard-1';
-import { installRvmSupportAssemblyMarkerModeBridge } from './RvmSupportAssemblyMarkerModeBridge.js?v=20260622-rvm-support-assembly-markers-off-1';
-import { installRvmRawSupportCylinderGuardBridge } from './RvmRawSupportCylinderGuardBridge.js?v=20260622-rvm-raw-support-cylinder-guard-1';
-import { installRvmUiEventSafetyBridge } from './RvmUiEventSafetyBridge.js?v=20260622-rvm-ui-event-safety-1';
+import { installRvmRetiredSupportToolsPurgeBridge } from './RvmRetiredSupportToolsPurgeBridge.js?v=20260622-rvm-retired-support-tools-purge-1';
 import { installRvmUiInteractionPanelPatch, installRvmUiPanelBridge } from './RvmUiInteractionPanelPatch.js?v=20260621-rvm-ui-interaction-panels-1';
 import { installRvmPropertyPanelCollapseAuditBridge } from './RvmPropertyPanelCollapseAuditBridge.js?v=20260621-rvm-property-collapse-1';
 import { installRvmLabelPerformanceBridge, installRvmLabelButtonBridge } from './RvmLabelPerformanceBridge.js?v=20260621-rvm-zone-lod-labels-1';
@@ -83,8 +79,8 @@ import { installRvmModelHealthBridge } from './RvmModelHealthBridge.js?v=2026062
 import { installRvmModelHealthIssuesBridge } from './RvmModelHealthIssuesBridge.js?v=20260621-rvm-health-issues-1';
 import { installRvmSelectionTreeSyncBridge } from './RvmSelectionTreeSyncBridge.js?v=20260620-rvm-large-box-support-sync-1';
 import { installRvmMaterialModeBridge } from './RvmMaterialModeBridge.js?v=20260620-rvm-remaining-material-modes-1';
-import { installRvmBottomDiagnosticsDrawerBridge } from './RvmBottomDiagnosticsDrawerBridge.js?v=20260621-rvm-perf-lazy-bridges-1';
-import { installRvmDeferredBridgeLoader } from './RvmDeferredBridgeLoader.js?v=20260621-rvm-button-hardening-1';
+import { installRvmBottomDiagnosticsDrawerBridge } from './RvmBottomDiagnosticsDrawerBridge.js?v=20260622-rvm-support-tools-retired-1';
+import { installRvmDeferredBridgeLoader } from './RvmDeferredBridgeLoader.js?v=20260622-rvm-support-tools-retired-1';
 import { installRvmLeftPanelResizeCollapseBridge } from './RvmLeftPanelResizeCollapseBridge.js?v=20260622-rvm-left-panel-resize-collapse-1';
 import { installRvmLeafSelectionIdentityBridge } from './RvmLeafSelectionIdentityBridge.js?v=20260622-rvm-leaf-selection-identity-1';
 import { installRvmLeafCanvasPickBridge } from './RvmLeafCanvasPickBridge.js?v=20260622-rvm-leaf-canvas-pick-orbit-guard-1';
@@ -126,8 +122,7 @@ installRvmHierarchySelectionBridge();
 installRvmLeafCanvasPickBridge();
 installRvmCanvasSelectionBridge();
 installRvmCanvasSelectionSinglePickGuardBridge();
-installRvmSupportAssemblyMarkerModeBridge();
-installRvmRawSupportCylinderGuardBridge();
+installRvmRetiredSupportToolsPurgeBridge();
 installRvmVisibilityToolbarBridge();
 installRvmVisibilitySnapshotsBridge();
 installRvmObjectSearchBridge();

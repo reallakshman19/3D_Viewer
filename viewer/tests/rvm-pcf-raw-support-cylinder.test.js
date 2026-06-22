@@ -14,15 +14,14 @@ async function read(path) {
 const adapterSource = await read('../rvm/BrowserRvmRenderContractAdapter.js');
 const workerSource = await read('../rvm/browser-rvm-worker.js');
 const sceneBuilderSource = await read('../rvm/BrowserRvmRenderSceneBuilder.js');
-const remainingPatchSource = await read('../rvm/BrowserRvmRemainingPrimitiveRuntimePatch.js');
-const supportSummarySource = await read('../tabs/RvmSupportSummaryBridge.js');
-const supportGeomSource = await read('../tabs/RvmSupportGeometryBridge.js');
 const rendererSource = await read('../tabs/viewer3d-rvm-tab-renderer.js');
-const uiSafetySource = await read('../tabs/RvmUiEventSafetyBridge.js');
+const deferredLoaderSource = await read('../tabs/RvmDeferredBridgeLoader.js');
+const bottomDiagnosticsSource = await read('../tabs/RvmBottomDiagnosticsDrawerBridge.js');
+const purgeBridgeSource = await read('../tabs/RvmRetiredSupportToolsPurgeBridge.js');
 
 check(
-  adapterSource.includes('rvm-browser-render-instructions/v5-raw-first-support-primitives'),
-  'render adapter schema records raw-first support primitive preservation'
+  adapterSource.includes('rvm-browser-render-instructions/v4-preserve-raw-support-cylinders'),
+  'render adapter schema records raw support cylinder preservation'
 );
 
 check(
@@ -31,13 +30,13 @@ check(
 );
 
 check(
-  adapterSource.includes('RVM_BROWSER_SUPPORT_RAW_PRIMITIVE_PRESERVED') && adapterSource.includes('support-preserved-rvm-primitive-raw'),
-  'raw support primitive preservation is carried in instruction metadata'
+  adapterSource.includes('code === 8') && adapterSource.includes('RVM_BROWSER_SUPPORT_RAW_CYLINDER_PRESERVED'),
+  'RVM code-8 support cylinders are preserved as raw cylinders'
 );
 
 check(
-  workerSource.includes('RVM_BROWSER_SUPPORT_RAW_PRIMITIVE_PRESERVED') && workerSource.includes('RVM_BROWSER_SUPPORT_RAW_PRIMITIVE_POLICY'),
-  'worker compact transfer keeps raw support preservation metadata'
+  adapterSource.includes('support-preserved-rvm-cylinder-raw') && adapterSource.includes('support-hint-promoted-contract'),
+  'adapter distinguishes preserved raw cylinders from promoted support placeholders'
 );
 
 check(
@@ -50,43 +49,52 @@ check(
   'scene builder resolves cylinder primitives before support stand placeholders'
 );
 
+for (const retired of [
+  'RvmSupportSummaryBridge',
+  'RvmSupportAssemblyBridge',
+  'RvmIntelligentSupportEngineBridge',
+  'RvmSupportGeometryBridge',
+  'RvmSupportAttMappingBridge',
+]) {
+  check(!deferredLoaderSource.includes(retired), `deferred loader does not import retired ${retired}`);
+}
+
 check(
-  remainingPatchSource.includes('support-code1-pyramid-solid-upgrade-disabled') && remainingPatchSource.includes('isGeneratedSupportOrChild'),
-  'remaining primitive patch cannot create solid code-1 support pyramids or upgrade generated support children'
+  !rendererSource.includes('RvmSupportAssemblyMarkerModeBridge') && !rendererSource.includes('RvmRawSupportCylinderGuardBridge'),
+  'RVM tab renderer no longer installs support marker/raw-support guard bridges'
 );
 
 check(
-  supportSummarySource.includes("const SUPPORT_MODE_STORAGE_KEY = 'rvm_support_render_mode_v2'") && supportSummarySource.includes("let saved = 'raw'") && supportSummarySource.includes('rawDefaultNoGeneratedRoot'),
-  'support summary defaults to raw-only and does not create hidden generated symbol roots in raw mode'
+  rendererSource.includes('RvmRetiredSupportToolsPurgeBridge') && rendererSource.includes('installRvmRetiredSupportToolsPurgeBridge()'),
+  'RVM tab renderer installs retired support tools purge bridge'
 );
 
-check(
-  supportGeomSource.includes("const STORAGE_KEY = 'rvm_support_geometry_mode_v2'") && supportGeomSource.includes("let v = 'off'") && supportGeomSource.includes('optInOnly: true'),
-  'support geometry overlay ignores old persisted overlay mode and remains opt-in only'
-);
+for (const retiredSelector of [
+  'data-rvm-support-att-panel',
+  'data-rvm-support-engine-panel',
+  'data-rvm-support-geometry-panel',
+  'rvm-support-att-mapping-diagnostics',
+  'rvm-intelligent-support-engine-diagnostics',
+  'rvm-support-geometry-diagnostics',
+]) {
+  check(!bottomDiagnosticsSource.includes(retiredSelector), `bottom diagnostics drawer excludes ${retiredSelector}`);
+}
+
+for (const retiredRoot of [
+  '__RVM_GEOMETRY_SUPPORT_SYMBOLS__',
+  '__RVM_SUPPORT_ASSEMBLY_MARKERS__',
+  '__RVM_EXPORTABLE_SUPPORT_GEOMETRY__',
+]) {
+  check(purgeBridgeSource.includes(retiredRoot), `purge bridge removes retired scene root ${retiredRoot}`);
+}
 
 check(
-  !adapterSource.includes("renderPrimitive: supportHint.isSupport ? 'SUPPORT_BBOX_PLACEHOLDER' : primitive"),
-  'adapter no longer blindly converts all support hints into support stand placeholders'
-);
-
-check(
-  rendererSource.includes('RvmUiEventSafetyBridge.js?v=20260622-rvm-ui-event-safety-1') && rendererSource.includes('installRvmUiEventSafetyBridge()'),
-  'RVM renderer installs the UI event safety bridge after other RVM bridges'
-);
-
-check(
-  uiSafetySource.includes('data-rvm-navis-visible-checkbox') && uiSafetySource.includes('contextmenu') && uiSafetySource.includes('setBranchVisible'),
-  'UI safety bridge restores hierarchy checkbox, right-click, and hide/show actions'
-);
-
-check(
-  uiSafetySource.includes("viewer.controls.enabled = isOrbit || isPan") && uiSafetySource.includes("canvas.style.pointerEvents = 'auto'") && uiSafetySource.includes('purgeStaleInteractionOverlays'),
-  'UI safety bridge repairs orbit/pan controls and purges stale event-blocking overlays after model load'
+  purgeBridgeSource.includes('#rvm-support-summary') && purgeBridgeSource.includes('#rvm-support-scale') && purgeBridgeSource.includes('#rvm-support-labels'),
+  'purge bridge removes legacy support summary and support-scale UI nodes'
 );
 
 if (failed) {
   console.error(`FAILURES: ${failed}`);
   process.exit(1);
 }
-console.log(`All raw-first support and UI safety viewer checks passed (${passed}).`);
+console.log(`All raw support cylinder and retired support-tool checks passed (${passed}).`);

@@ -1,14 +1,9 @@
-const VERSION = '20260621-rvm-button-hardening-1';
+const VERSION = '20260622-rvm-support-tools-retired-1';
 const API_KEY = '__PCF_GLB_RVM_BRIDGE_LOADER__';
 const ACTION_DIAGNOSTICS_KEY = '__PCF_GLB_RVM_ACTION_DIAGNOSTICS__';
 
 const BRIDGE_GROUPS = Object.freeze({
   postModel: [
-    { id: 'support-summary', specifier: './RvmSupportSummaryBridge.js?v=20260620-rvm-support-symbol-mode-1', install: 'installRvmSupportSummaryBridge' },
-    { id: 'support-assembly', specifier: './RvmSupportAssemblyBridge.js?v=20260620-rvm-support-assembly-dish-1', install: 'installRvmSupportAssemblyBridge' },
-    { id: 'support-engine', specifier: './RvmIntelligentSupportEngineBridge.js?v=20260620-rvm-intelligent-support-engine-1', install: 'installRvmIntelligentSupportEngineBridge' },
-    { id: 'support-geometry', specifier: './RvmSupportGeometryBridge.js?v=20260621-rvm-button-hardening-1', install: 'installRvmSupportGeometryBridge', beforeInstall: clearSupportGeometryStickyMode },
-    { id: 'support-att', specifier: './RvmSupportAttMappingBridge.js?v=20260621-rvm-button-hardening-1', install: 'installRvmSupportAttMappingBridge' },
     { id: 'stagedjson-export', specifier: './RvmStagedJsonExportBridge.js?v=20260621-rvm-button-hardening-1', install: 'installRvmStagedJsonExportBridge' },
     { id: 'stagedjson-validation', specifier: './RvmStagedJsonValidationBridge.js?v=20260620-rvm-stagedjson-validation-1', install: 'installRvmStagedJsonValidationBridge' },
     { id: 'primitive-fallback', specifier: './RvmPrimitiveFallbackBridge.js?v=20260620-rvm-primitive-fallback-clickable-1', install: 'installRvmPrimitiveFallbackBridge' },
@@ -116,12 +111,6 @@ function startModelReadyPolling(api) {
     if (attempts < 240) setTimeout(tick, 500);
   };
   afterFirstPaint(tick);
-}
-
-function clearSupportGeometryStickyMode() {
-  const root = document.querySelector('[data-rvm-viewer]');
-  if (root && root.dataset.rvmSupportGeometryUserSet !== 'true') root.dataset.rvmSupportGeometryMode = 'off';
-  try { if (root?.dataset?.rvmSupportGeometryUserSet !== 'true') localStorage.removeItem('rvm_support_geometry_mode_v1'); } catch (_) {}
 }
 
 function installRvmBridgeActionDiagnostics() {
