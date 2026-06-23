@@ -370,7 +370,7 @@ function _primaryStem(primaryName) {
 
 async function _runXmlCiiEnrichedInputXmlExport(pyodide, converterId, primaryPath, primaryName, secondaryPath, options, jobDir, stdout, stderr) {
   if (converterId !== 'xml_to_cii') return null;
-  const outputName = `${_primaryStem(primaryName)}_xml_to_cii2019_enriched.input.xml`;
+  const outputName = `${_primaryStem(primaryName)}_xml_to_cii2019_enriched.xml`;
   const outputPath = `${jobDir}/${outputName}`;
   const argv = [
     '/scripts/xml_to_inputxml_debug.py',
@@ -522,21 +522,4 @@ self.addEventListener('message', async (event) => {
   } finally {
     _activeJobId = null;
   }
-});
-
-self.addEventListener('error', (event) => {
-  const message = [
-    event?.message || 'Unhandled worker error.',
-    event?.filename ? `file=${event.filename}` : '',
-    event?.lineno ? `line=${event.lineno}` : '',
-    event?.colno ? `col=${event.colno}` : '',
-    event?.error ? _errorToString(event.error) : '',
-  ].filter(Boolean).join(' | ');
-
-  if (_activeJobId !== null && _activeJobId !== undefined) _postFailure(_activeJobId, message);
-});
-
-self.addEventListener('unhandledrejection', (event) => {
-  const message = `Unhandled worker promise rejection: ${_errorToString(event?.reason)}`;
-  if (_activeJobId !== null && _activeJobId !== undefined) _postFailure(_activeJobId, message);
 });
