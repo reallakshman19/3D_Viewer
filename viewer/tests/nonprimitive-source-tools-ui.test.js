@@ -9,7 +9,7 @@ const supportSettingsSource = await fs.readFile(new URL('../overlays/support/Sup
 assert.match(uiBridgeSource, /rvm-non-primitive-source-tools-ui\/v6/, 'source-tools UI exposes v6 schema marker');
 assert.match(uiBridgeSource, /rvm-nonprimitive-source-tools-panel/, 'source-tools UI owns a compact panel id');
 assert.match(uiBridgeSource, /installSourceToolsStyles/, 'source-tools UI installs compact layout styles');
-assert.match(uiBridgeSource, /data\.rvmNonPrimitiveSourceToolsStyle = 'v6'/, 'source-tools UI style injection is versioned');
+assert.match(uiBridgeSource, /dataset\.rvmNonPrimitiveSourceToolsStyle = 'v6'/, 'source-tools UI style injection is versioned');
 assert.match(uiBridgeSource, /data-source-tools-layout="compact-v1"/, 'source-tools UI renders compact layout marker');
 assert.match(uiBridgeSource, /data-source-tools-group="auto-bend"/, 'source-tools UI groups auto-bend controls');
 assert.match(uiBridgeSource, /data-source-tools-group="support-overlay"/, 'source-tools UI groups support overlay controls');
