@@ -163,5 +163,8 @@ jobs:
       - name: Verify support-load bulk package export
         run: node viewer/tests/rvm-geometry-workspace-support-load-bulk-package.test.js
 
+      - name: Verify support-load canvas overlay plan
+        run: node viewer/tests/rvm-geometry-workspace-support-load-canvas-overlay.test.js
+
       - name: Verify enriched stagedJSON support-load export
         run: node viewer/tests/rvm-geometry-workspace-enriched-stagedjson-support-loads.test.js
