@@ -1,4 +1,4 @@
-export const SUPPORT_OVERLAY_DETAILS_PANEL_SCHEMA = 'support-overlay-details-panel/v1';
+export const SUPPORT_OVERLAY_DETAILS_PANEL_SCHEMA = 'support-overlay-details-panel/v2';
 
 const MAX_WARNING_ROWS = 6;
 const MAX_ATTRIBUTE_ROWS = 12;
@@ -88,6 +88,8 @@ export function renderSupportOverlayDetailsPanelHtml(state = emptySupportOverlay
       <div class="rvm-source-tools-diag" data-support-details-field="warnings"><span>Warnings</span>${warnings}</div>
       <div class="rvm-source-tools-diag" data-support-details-field="attributes"><span>Attributes</span>${attrs}</div>
       <div class="rvm-source-tools-actions rvm-source-tools-actions--inline" data-support-details-actions="true">
+        <button type="button" data-support-details-action="copy-json">Copy details JSON</button>
+        <button type="button" data-support-details-action="download-json">Download JSON</button>
         <button type="button" data-support-details-action="clear">Clear support details</button>
       </div>
     </div>`;

@@ -6,16 +6,21 @@ import {
   renderSupportOverlayDetailsPanelHtml,
   SUPPORT_OVERLAY_DETAILS_PANEL_SCHEMA,
 } from '../overlays/support/SupportOverlayDetailsPanel.js';
+import {
+  copySupportOverlayDetailsJson,
+  downloadSupportOverlayDetailsJson,
+  SUPPORT_OVERLAY_DETAILS_EXPORT_SCHEMA,
+} from '../overlays/support/SupportOverlayDetailsExport.js';
 
-export const RVM_NON_PRIMITIVE_SUPPORT_DETAILS_PANEL_SCHEMA = 'rvm-non-primitive-support-overlay-details-panel/v1';
+export const RVM_NON_PRIMITIVE_SUPPORT_DETAILS_PANEL_SCHEMA = 'rvm-non-primitive-support-overlay-details-panel/v2';
 
 const ROOT_SELECTOR = '[data-rvm-viewer]';
 const PANEL_ID = 'rvm-nonprimitive-support-details-panel';
 const SUPPORT_OVERLAY_ROOT_NAME = '__RVM_NON_PRIMITIVE_SUPPORT_OVERLAY__';
 const GLOBAL_KEY = '__PCF_GLB_RVM_NON_PRIMITIVE_SUPPORT_DETAILS_PANEL__';
-const PATCH_FLAG = Symbol.for('pcf-glb-rvm-non-primitive-support-details-panel-v1');
-const VIEWER_PATCH_FLAG = Symbol.for('pcf-glb-rvm-non-primitive-support-details-panel-viewer-v1');
-const PICKING_FLAG = Symbol.for('pcf-glb-rvm-non-primitive-support-details-picking-v1');
+const PATCH_FLAG = Symbol.for('pcf-glb-rvm-non-primitive-support-details-panel-v2');
+const VIEWER_PATCH_FLAG = Symbol.for('pcf-glb-rvm-non-primitive-support-details-panel-viewer-v2');
+const PICKING_FLAG = Symbol.for('pcf-glb-rvm-non-primitive-support-details-picking-v2');
 const STYLE_FLAG = Symbol.for('pcf-glb-rvm-non-primitive-support-details-panel-style-v1');
 const SOURCE_KIND_RE = /^(json|jscon|inputxml|txt|source-preview)$/i;
 const PRIMITIVE_KIND_RE = /^(rvm|glb|gltf|rev)$/i;
@@ -26,10 +31,13 @@ export function installRvmNonPrimitiveSupportOverlayDetailsPanelBridge() {
   globalThis[GLOBAL_KEY] = {
     schema: RVM_NON_PRIMITIVE_SUPPORT_DETAILS_PANEL_SCHEMA,
     panelSchema: SUPPORT_OVERLAY_DETAILS_PANEL_SCHEMA,
+    exportSchema: SUPPORT_OVERLAY_DETAILS_EXPORT_SCHEMA,
     render: renderSupportOverlayDetailsPanel,
     sync: syncAllSupportOverlayDetailsPanels,
     clear: clearSupportOverlayDetailsPanel,
     selectFromPointer: selectSupportOverlayDetailsFromPointer,
+    copyJson: copySupportOverlayDetailsJson,
+    downloadJson: downloadSupportOverlayDetailsJson,
   };
   installSupportDetailsStyles();
   patchRvmViewerSetModelForSupportDetailsPanel();
@@ -180,11 +188,37 @@ function bindDetailsPanel(panel, viewer) {
   panel.addEventListener('click', (event) => {
     const control = event.target?.closest?.('[data-support-details-action]');
     if (!control) return;
-    if (control.dataset.supportDetailsAction === 'clear') {
+    const action = control.dataset.supportDetailsAction;
+    if (action === 'clear') {
       clearViewerDetailsSelection(viewer || globalThis.__3D_RVM_VIEWER__, 'user-clear');
       renderSupportOverlayDetailsPanel(panel.closest?.(ROOT_SELECTOR), viewer || globalThis.__3D_RVM_VIEWER__);
+      return;
+    }
+    if (action === 'copy-json' || action === 'download-json') {
+      void handleDetailsExportAction(panel, viewer || globalThis.__3D_RVM_VIEWER__, action);
     }
   });
+}
+
+async function handleDetailsExportAction(panel, viewer, action) {
+  const state = viewer?.nonPrimitiveSupportOverlaySelectedDetails;
+  const diagnostics = viewer?.nonPrimitiveSupportOverlayDiagnostics || {};
+  const context = {
+    sourceKind: diagnostics.sourceKind || viewer?.sourceKind || '',
+    sourceFile: diagnostics.sourceFile || '',
+  };
+  try {
+    const result = action === 'copy-json'
+      ? await copySupportOverlayDetailsJson(state, context)
+      : downloadSupportOverlayDetailsJson(state, context);
+    panel.dataset.supportDetailsExportStatus = result?.status || 'done';
+    if (result?.fileName) panel.dataset.supportDetailsExportFile = result.fileName;
+    return result;
+  } catch (error) {
+    panel.dataset.supportDetailsExportStatus = 'failed';
+    panel.dataset.supportDetailsExportError = String(error?.message || error || 'export-failed');
+    return { status: 'failed', reason: panel.dataset.supportDetailsExportError };
+  }
 }
 
 function clearViewerDetailsSelection(viewer, reason = 'clear') {
