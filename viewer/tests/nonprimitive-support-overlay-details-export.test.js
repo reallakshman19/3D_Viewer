@@ -106,6 +106,6 @@ assert.match(bridge, /downloadSupportOverlayDetailsJson/, 'details panel bridge 
 assert.match(bridge, /supportDetailsExportStatus/, 'details panel publishes panel-local export status');
 assert.match(bridge, /mode === 'source-preview' && isNonPrimitiveKind\(kind\)/, 'details export stays source-preview gated through details panel');
 assert.doesNotMatch(bridge, /selection\.select|selection\.pick|RvmSelectionAdapter|RvmSupportSymbols|Support Summary|SupportATT|SupportEngine/, 'details export does not revive RVM support runtime or primitive selection');
-assert.match(renderer, /RvmNonPrimitiveSupportOverlayDetailsPanelBridge\.js\?v=20260623-nonprimitive-support-details-panel-3/, 'renderer imports details panel bridge with export cache key');
+assert.match(renderer, /RvmNonPrimitiveSupportOverlayDetailsPanelBridge\.js\?v=20260623-nonprimitive-support-details-panel-4/, 'renderer imports details panel bridge with export cache key');
 
 console.log('non-primitive support overlay details export tests passed');
