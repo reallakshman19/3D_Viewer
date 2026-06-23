@@ -27,6 +27,8 @@ assert.ok(shim.includes('model-converters/index.js?v=20260623-xml-cii-rich-worke
 assert.ok(runtime.includes('model-converters-tab.js?v=20260623-xml-cii-rich-worker-1'), 'App runtime must cache-bust Model Converters tab import.');
 assert.ok(app.includes('app-label-perf-runtime.js?v=20260623-xml-cii-rich-worker-1'), 'App delegate must cache-bust app-label-perf-runtime.');
 assert.ok(worker.includes('enrichedInputXmlResult'), 'Worker must include enriched InputXML debug artifact in successful outputs.');
-assert.ok(worker.includes('pyodide.FS.readFile(enrichedInputXmlResult.outputPath'), 'Worker must read the enriched InputXML debug artifact as downloadable output text.');
+assert.ok(worker.includes('_xml_to_cii2019_enriched.xml'), 'Rich Workflow downloadable artifact must be named *_xml_to_cii2019_enriched.xml.');
+assert.ok(!worker.includes('_xml_to_cii2019_enriched.input.xml'), 'Rich Workflow should not expose the debug/internal .input.xml suffix as the downloadable artifact name.');
+assert.ok(worker.includes('pyodide.FS.readFile(enrichedInputXmlResult.outputPath'), 'Worker must read the enriched XML artifact as downloadable output text.');
 
-console.log('✓ XML->CII Rich Workflow uses fresh worker and returns enriched InputXML artifact.');
+console.log('✓ XML->CII Rich Workflow uses fresh worker and returns *_xml_to_cii2019_enriched.xml.');
