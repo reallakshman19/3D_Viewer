@@ -93,6 +93,19 @@ check(diagnostics.rows[1].nps === 4, 'Access fixture diagnostics records NPS4 ro
 check(diagnostics.rows[1].roundedGuideHDep === 200, 'Access fixture diagnostics records rounded guide value');
 check((diagnostics.audit || []).some(item => item.value === 'regression-fixture-only'), 'Access fixture diagnostics remains regression-only');
 
+const mismatchedAccessRows = `JOBNAME	LinenoinCII	ProperlineNo	INSUL_THICK	NS	PipeOD	DEP_SPAN	Vertical_N_SS	WALL_THICK	TEMP_EXP_C1	TEMP_EXP_C2	MinVerLoad	MinHoriLoad	MinHoriLSLoad	TobeCleaned	Remarks	Insulated	Mat_Category
+AML-25-SYS-001 REV2 _PS UPDATE	"8""-P25168-61502-01"	0-1-	0	8	219.075	10750	13000	12.7	100	59	-2700	999	9999	To be Cleaned	Deliberate mismatch row	No	LT`;
+
+const mismatchDiagnostics = buildAccessSupportLoadFixtureDiagnosticsFromText(mismatchedAccessRows);
+check(mismatchDiagnostics.status === 'FAIL', 'Access fixture diagnostics fails deliberate mismatched reference row');
+check(mismatchDiagnostics.total === 1, 'Access fixture diagnostics still reports mismatched row count');
+check(mismatchDiagnostics.mismatchCount >= 2, 'Access fixture diagnostics captures multiple mismatched fields');
+check(mismatchDiagnostics.rows[0].status === 'FAIL', 'Access fixture diagnostics marks mismatched row as failed');
+check(mismatchDiagnostics.rows[0].failedChecks >= 2, 'Access fixture diagnostics records failed check count on row');
+check(mismatchDiagnostics.mismatches.some(item => item.field === 'guide.roundedGuideHDep'), 'Access fixture diagnostics includes rounded guide mismatch field');
+check(mismatchDiagnostics.mismatches.some(item => item.field === 'lineStop.lineStopH'), 'Access fixture diagnostics includes line-stop mismatch field');
+check((mismatchDiagnostics.audit || []).some(item => item.value === 'regression-fixture-only'), 'Access fixture mismatch diagnostics remains regression-only');
+
 if (failed) {
   console.error(`FAILED ${failed} checks, passed ${passed}`);
   process.exit(1);
