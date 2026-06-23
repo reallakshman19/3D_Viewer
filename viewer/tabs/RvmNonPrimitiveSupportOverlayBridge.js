@@ -1,21 +1,30 @@
 import * as THREE from 'three';
 import { AvevaJsonLoader } from '../rvm/AvevaJsonLoader.js';
 import { RvmViewer3D } from '../rvm-viewer/RvmViewer3D.js?v=20260622-rvm-leaf-picking-2';
+import { readNonPrimitiveSupportOverlaySettings } from '../overlays/support/SupportOverlaySettings.js';
+import {
+  classifySupportFamily,
+  extractExplicitSign,
+  readRecordGapMm,
+  resolveSupportSymbol,
+  SUPPORT_FAMILIES,
+} from '../overlays/support/NonPrimitiveSupportOverlayResolver.js';
 
-export const RVM_NON_PRIMITIVE_SUPPORT_OVERLAY_SCHEMA = 'rvm-non-primitive-support-overlay/v1';
+export const RVM_NON_PRIMITIVE_SUPPORT_OVERLAY_SCHEMA = 'rvm-non-primitive-support-overlay/v2';
 
 const ROOT_NAME = '__RVM_NON_PRIMITIVE_SUPPORT_OVERLAY__';
 const GLOBAL_KEY = '__PCF_GLB_RVM_NON_PRIMITIVE_SUPPORT_OVERLAY__';
-const PATCH_FLAG = Symbol.for('pcf-glb-rvm-non-primitive-support-overlay-v1');
-const LOADER_PATCH_FLAG = Symbol.for('pcf-glb-rvm-non-primitive-support-overlay-loader-v1');
-const VIEWER_PATCH_FLAG = Symbol.for('pcf-glb-rvm-non-primitive-support-overlay-viewer-v1');
+const PATCH_FLAG = Symbol.for('pcf-glb-rvm-non-primitive-support-overlay-v2');
+const LOADER_PATCH_FLAG = Symbol.for('pcf-glb-rvm-non-primitive-support-overlay-loader-v2');
+const VIEWER_PATCH_FLAG = Symbol.for('pcf-glb-rvm-non-primitive-support-overlay-viewer-v2');
 const MAX_SUPPORT_OVERLAYS = 500;
 const NON_PRIMITIVE_SOURCE_RE = /\.(json|jscon|uxml|inputxml|txt)$/i;
 const RVM_SOURCE_RE = /\.(rvm|rev)$/i;
-const SUPPORT_KIND_RE = /\b(GUIDE|LINE\s*STOP|LINESTOP|LIMIT\s*STOP|LIMIT|RESTING|REST|SHOE|ANCHOR|FIXED|STOPPER|STOP|SUPPORT|ATTA|ANCI|HANGER|SPRING)\b/i;
+const SUPPORT_KIND_RE = /\b(GUIDE|LINE\s*STOP|LINESTOP|LIMIT\s*STOP|LIMIT|LIM|RESTING|REST|HOLDDOWN|HOLD\s*DOWN|DOWNSTOP|SHOE|ANCHOR|FIXED|STOPPER|STOP|SUPPORT|ATTA|ANCI|HANGER|SPRING|CAN\s*SPRING|SPRING\s*CAN)\b/i;
 const SUPPORT_TAG_RE = /\bPS[-_\s]?[A-Z0-9][A-Z0-9._/\-]*\b/i;
 const CHILD_KEYS = Object.freeze(['children', 'items', 'branches', 'nodes', 'hierarchy']);
 const COORD_KEYS = Object.freeze(['SUPPORTCOORD', 'SUPPORT_COORD', 'SCOORD', 'POS', 'POSITION', 'COORDS', 'CO_ORDS', 'CO_ORD', 'BPOS', 'BP', 'APOS', 'LPOS']);
+const OD_KEYS = Object.freeze(['PIPE_OD_MM', 'PIPEODMM', 'PIPE_OD', 'OD_MM', 'OD', 'BORE_MM', 'BORE', 'NOMINAL_BORE']);
 
 export function installRvmNonPrimitiveSupportOverlayBridge() {
   if (globalThis[PATCH_FLAG]) return;
@@ -72,10 +81,16 @@ export function applyFromSource({ viewer, root, source, sourceKind = '', fileNam
     return { schema: RVM_NON_PRIMITIVE_SUPPORT_OVERLAY_SCHEMA, status: 'skipped', reason: 'rvm-or-unsupported-source', sourceKind: kind, created: 0 };
   }
 
+  const settings = readNonPrimitiveSupportOverlaySettings();
+  if (!settings.enabled) {
+    clear(viewer, 'non-primitive-support-overlay-disabled');
+    return { schema: RVM_NON_PRIMITIVE_SUPPORT_OVERLAY_SCHEMA, status: 'disabled', sourceKind: kind, sourceFile: fileName, created: 0 };
+  }
+
   const records = collectNonPrimitiveSupportRecords(source).slice(0, MAX_SUPPORT_OVERLAYS);
   clear(viewer, 'before-non-primitive-overlay');
   if (!records.length) {
-    const diagnostics = { schema: RVM_NON_PRIMITIVE_SUPPORT_OVERLAY_SCHEMA, status: 'empty', sourceKind: kind, sourceFile: fileName, created: 0, sourceSupports: 0 };
+    const diagnostics = { schema: RVM_NON_PRIMITIVE_SUPPORT_OVERLAY_SCHEMA, status: 'empty', sourceKind: kind, sourceFile: fileName, created: 0, sourceSupports: 0, warnings: [] };
     viewer.nonPrimitiveSupportOverlayDiagnostics = diagnostics;
     return diagnostics;
   }
@@ -83,24 +98,24 @@ export function applyFromSource({ viewer, root, source, sourceKind = '', fileNam
   viewer.modelGroup.updateMatrixWorld?.(true);
   const box = new THREE.Box3().setFromObject(viewer.modelGroup);
   const size = box.isEmpty() ? 1000 : Math.max(box.getSize(new THREE.Vector3()).length(), 1);
-  const glyphSize = Math.max(6, Math.min(80, size * 0.004));
+  const glyphSize = Math.max(6, Math.min(80, size * 0.004)) * (Number(settings.scale) || 1);
   const overlayRoot = new THREE.Group();
   overlayRoot.name = ROOT_NAME;
-  overlayRoot.userData = {
-    schema: RVM_NON_PRIMITIVE_SUPPORT_OVERLAY_SCHEMA,
-    nonPrimitiveSupportOverlay: true,
-    sourceKind: kind,
-    sourceFile: fileName,
-    pickable: false,
-  };
+  overlayRoot.userData = { schema: RVM_NON_PRIMITIVE_SUPPORT_OVERLAY_SCHEMA, nonPrimitiveSupportOverlay: true, sourceKind: kind, sourceFile: fileName, pickable: false };
 
   const seen = new Set();
+  const warnings = [];
+  const byFamily = {};
   for (const record of records) {
+    if (settings.filters?.[record.kind] === false) continue;
     const key = `${record.tag}:${record.kind}:${record.local.x.toFixed(1)}:${record.local.y.toFixed(1)}:${record.local.z.toFixed(1)}`.toUpperCase();
     if (seen.has(key)) continue;
     seen.add(key);
-    const object = makeSupportGlyph(record, viewer, glyphSize, kind, fileName);
-    if (object) overlayRoot.add(object);
+    const object = makeSupportGlyph(record, viewer, glyphSize, kind, fileName, settings);
+    if (!object) continue;
+    overlayRoot.add(object);
+    byFamily[record.kind] = (byFamily[record.kind] || 0) + 1;
+    for (const warning of object.userData?.warnings || []) warnings.push({ supportId: record.tag, family: record.kind, code: warning });
   }
 
   if (overlayRoot.children.length) viewer.scene.add(overlayRoot);
@@ -111,6 +126,9 @@ export function applyFromSource({ viewer, root, source, sourceKind = '', fileNam
     sourceFile: fileName,
     created: overlayRoot.children.length,
     sourceSupports: records.length,
+    byFamily,
+    warningCount: warnings.length,
+    warnings,
     maxSupportOverlays: MAX_SUPPORT_OVERLAYS,
     rvmExcluded: true,
   };
@@ -138,7 +156,7 @@ export function clear(viewer, reason = 'clear') {
 export function isNonPrimitiveSource({ sourceKind = '', fileName = '' } = {}) {
   const kind = String(sourceKind || '').toLowerCase();
   const name = String(fileName || '');
-  if (kind === 'rvm' || RVM_SOURCE_RE.test(name)) return false;
+  if (kind === 'rvm' || kind === 'glb' || kind === 'gltf' || RVM_SOURCE_RE.test(name) || /\.(glb|gltf)$/i.test(name)) return false;
   if (kind === 'json' || kind === 'jscon' || kind === 'uxml' || kind === 'inputxml' || kind === 'txt' || kind === 'source-preview') return true;
   return NON_PRIMITIVE_SOURCE_RE.test(name);
 }
@@ -159,7 +177,22 @@ function collectNode(node, out) {
   if (matched) {
     const supportKind = supportKindFromText(text);
     const local = coordinateFromAttributes(a);
-    if (supportKind && local) out.push({ source: node, attrs: a, kind: supportKind, local, tag: supportTag(node, a), axis: pipeAxisFromAttributes(a) });
+    if (supportKind && local) {
+      out.push({
+        source: node,
+        attrs: a,
+        rawText: text,
+        rawType: String(a.TYPE || a.STYP || a.SUPPORT_TYPE || node.type || node.kind || ''),
+        kind: supportKind,
+        local,
+        tag: supportTag(node, a),
+        axis: pipeAxisFromAttributes(a),
+        gapMm: readRecordGapMm(a),
+        explicitSign: extractExplicitSign(text),
+        pipeOdMm: pipeOdFromAttributes(a),
+        singleAxis: singleAxisFromAttributes(a, text),
+      });
+    }
   }
   for (const key of CHILD_KEYS) {
     const children = node[key];
@@ -167,31 +200,52 @@ function collectNode(node, out) {
   }
 }
 
-function makeSupportGlyph(record, viewer, glyphSize, sourceKind, sourceFile) {
+function makeSupportGlyph(record, viewer, glyphSize, sourceKind, sourceFile, settings) {
   const local = record.local.clone();
   const world = viewer.modelGroup.localToWorld(local);
   const axis = record.axis?.clone?.() || new THREE.Vector3(1, 0, 0);
   axis.transformDirection?.(viewer.modelGroup.matrixWorld);
   if (axis.lengthSq() <= 1e-9) axis.set(1, 0, 0);
   axis.normalize();
-  const up = new THREE.Vector3(0, 1, 0);
-  let side = new THREE.Vector3().crossVectors(axis, up);
-  if (side.lengthSq() <= 1e-9) side.set(0, 0, 1);
-  side.normalize();
+
+  const symbol = resolveSupportSymbol({
+    family: record.kind,
+    rawType: record.rawType,
+    rawText: record.rawText,
+    pipeAxis: { x: axis.x, y: axis.y, z: axis.z },
+    gapMm: record.gapMm,
+    explicitSign: record.explicitSign,
+    pipeOdMm: record.pipeOdMm,
+    singleAxis: record.singleAxis,
+  }, { baseSizeMm: glyphSize });
+
+  if (settings.warningsOnly && !symbol.popupRequired && !symbol.warnings.length) return null;
 
   const points = [];
   const addLine = (a, b) => { points.push(a.x, a.y, a.z, b.x, b.y, b.z); };
-  const addCentered = (direction, half) => addLine(world.clone().add(direction.clone().multiplyScalar(-half)), world.clone().add(direction.clone().multiplyScalar(half)));
-  addCentered(up, glyphSize * 0.35);
-  if (record.kind === 'GUIDE') addCentered(side, glyphSize * 0.9);
-  else if (record.kind === 'LINESTOP' || record.kind === 'LIMIT') addCentered(axis, glyphSize * 0.9);
-  else if (record.kind === 'ANCHOR') { addCentered(axis, glyphSize * 0.75); addCentered(side, glyphSize * 0.75); }
-  else if (record.kind === 'SPRING' || record.kind === 'HANGER') addLine(world, world.clone().add(up.clone().multiplyScalar(glyphSize * 1.1)));
-  else addCentered(side, glyphSize * 0.35);
+
+  for (const arrow of symbol.arrows) {
+    const direction = vec3(arrow.direction);
+    if (direction.lengthSq() <= 1e-9) continue;
+    direction.normalize();
+    const gap = arrow.axial ? symbol.gapVisualSeparationMm : Math.max(0, Number(symbol.gapMm) || 0);
+    const length = resolveRenderedArrowLength(glyphSize, symbol, arrow);
+    const tip = world.clone().add(direction.clone().multiplyScalar(gap));
+    const tail = tip.clone().add(direction.clone().multiplyScalar(-length));
+    addLine(tail, tip);
+    const head = Math.min(length * 0.25, glyphSize * 0.35);
+    const side = stablePerpendicular(direction);
+    addLine(tip, tip.clone().add(direction.clone().multiplyScalar(-head)).add(side.clone().multiplyScalar(head * 0.45)));
+    addLine(tip, tip.clone().add(direction.clone().multiplyScalar(-head)).add(side.clone().multiplyScalar(-head * 0.45)));
+  }
+
+  if (symbol.coil) addSpringCanCoil(points, world, glyphSize);
+  if (symbol.marker) addWarningMarker(points, world, glyphSize);
+  if (!points.length) return null;
 
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute('position', new THREE.Float32BufferAttribute(points, 3));
-  const material = new THREE.LineBasicMaterial({ color: 0x60c864, depthTest: true, transparent: true, opacity: 0.95 });
+  const material = new THREE.LineBasicMaterial({ color: symbol.marker ? 0xffcc33 : 0x60c864, depthTest: true, transparent: true, opacity: 0.95 });
   const line = new THREE.LineSegments(geometry, material);
   line.name = `NON_PRIMITIVE_SUPPORT_OVERLAY_${record.tag}_${record.kind}`;
   line.userData = {
@@ -204,11 +258,53 @@ function makeSupportGlyph(record, viewer, glyphSize, sourceKind, sourceFile) {
     sourceFile,
     pickable: false,
     selectable: false,
+    resolvedSymbol: symbol,
+    warnings: symbol.warnings,
+    gapMm: symbol.gapMm,
+    gapVisualSeparationMm: symbol.gapVisualSeparationMm,
     attributes: { ...record.attrs },
   };
   return line;
 }
 
+function resolveRenderedArrowLength(glyphSize, symbol, arrow) {
+  if (!arrow.axial || !symbol.size?.axialOdTwoThirdsApplied) return glyphSize;
+  return Math.max(glyphSize * 0.7, Math.min(glyphSize * 2.5, symbol.size.arrowLengthMm));
+}
+
+function addSpringCanCoil(points, origin, glyphSize) {
+  const turns = 6;
+  const height = glyphSize * 1.2;
+  const radius = glyphSize * 0.22;
+  let previous = origin.clone().add(new THREE.Vector3(radius, -glyphSize * 0.2, 0));
+  for (let i = 1; i <= turns * 4; i += 1) {
+    const t = i / (turns * 4);
+    const angle = t * Math.PI * 2 * turns;
+    const next = origin.clone().add(new THREE.Vector3(Math.cos(angle) * radius, -glyphSize * 0.2 - height * t, Math.sin(angle) * radius));
+    points.push(previous.x, previous.y, previous.z, next.x, next.y, next.z);
+    previous = next;
+  }
+}
+
+function addWarningMarker(points, origin, glyphSize) {
+  const half = glyphSize * 0.35;
+  const a = origin.clone().add(new THREE.Vector3(-half, 0, 0));
+  const b = origin.clone().add(new THREE.Vector3(half, 0, 0));
+  const c = origin.clone().add(new THREE.Vector3(0, -half, 0));
+  const d = origin.clone().add(new THREE.Vector3(0, half, 0));
+  const e = origin.clone().add(new THREE.Vector3(0, 0, -half));
+  const f = origin.clone().add(new THREE.Vector3(0, 0, half));
+  points.push(a.x, a.y, a.z, b.x, b.y, b.z, c.x, c.y, c.z, d.x, d.y, d.z, e.x, e.y, e.z, f.x, f.y, f.z);
+}
+
+function stablePerpendicular(direction) {
+  const up = Math.abs(direction.dot(new THREE.Vector3(0, 1, 0))) > 0.9 ? new THREE.Vector3(1, 0, 0) : new THREE.Vector3(0, 1, 0);
+  const side = new THREE.Vector3().crossVectors(direction, up);
+  if (side.lengthSq() <= 1e-9) return new THREE.Vector3(0, 0, 1);
+  return side.normalize();
+}
+
+function vec3(value) { return new THREE.Vector3(Number(value?.x) || 0, Number(value?.y) || 0, Number(value?.z) || 0); }
 function attrs(node) { return { ...(node.attributes || {}), ...(node.attrs || {}), ...(node.rawAttributes || {}) }; }
 function textValue(value) { return value === undefined || value === null ? '' : String(value); }
 function supportText(node, a) {
@@ -256,6 +352,8 @@ function coordinateFromAttributes(a) {
   return null;
 }
 function pipeAxisFromAttributes(a) {
+  const explicit = parseVec3(a.PIPE_AXIS || a.PIPEAXIS || a.AXIS || a.DIRECTION || a.DIR);
+  if (explicit && explicit.lengthSq() > 1e-9) return explicit.normalize();
   const ap = parseVec3(a.APOS);
   const lp = parseVec3(a.LPOS);
   if (ap && lp) {
@@ -264,15 +362,22 @@ function pipeAxisFromAttributes(a) {
   }
   return new THREE.Vector3(1, 0, 0);
 }
-function supportKindFromText(text = '') {
+function pipeOdFromAttributes(a) {
+  for (const key of OD_KEYS) {
+    const n = numberValue(a[key]);
+    if (n && n > 0) return n;
+  }
+  return null;
+}
+function singleAxisFromAttributes(a, text) {
   const upper = String(text || '').toUpperCase();
-  if (/LINE\s*STOP|LINESTOP|STOPPER|\bSTOP\b/.test(upper)) return 'LINESTOP';
-  if (/LIMIT\s*STOP|\bLIMIT\b|\bLIM\b/.test(upper)) return 'LIMIT';
-  if (/\bGUIDE\b|\bGDE\b|\bGUI\b|\bPG[-_]|\bGT\d/.test(upper)) return 'GUIDE';
-  if (/\bANCHOR\b|\bFIXED\b|\bAN\d|\bANC\b/.test(upper)) return 'ANCHOR';
-  if (/\bSPRING\b|\bHANGER\b/.test(upper)) return 'SPRING';
-  if (/\bREST\b|\bRESTING\b|\bSHOE\b|\bBASE\s*PLATE\b|\bBP[-_]|\bBT\d/.test(upper)) return 'REST';
-  return SUPPORT_KIND_RE.test(upper) ? 'SUPPORT' : '';
+  if (/\bSINGLE\s*AXIS\b|\bONE\s*WAY\b|\bUNI[-\s]?DIRECTION/.test(upper)) return true;
+  return Boolean(a.SINGLE_AXIS || a.SINGLEAXIS || a.ONE_WAY || a.UNIDIRECTIONAL);
+}
+function supportKindFromText(text = '') {
+  const family = classifySupportFamily(text);
+  if (family !== SUPPORT_FAMILIES.UNKNOWN) return family;
+  return SUPPORT_KIND_RE.test(String(text || '')) ? SUPPORT_FAMILIES.UNKNOWN : '';
 }
 function supportTag(node, a) {
   for (const value of [a.SUPPORT_TAG, a.CMPSUPREFN, a.NAME, a.TAG, a.TAGNO, a.REF, a.REFNO, a.DBREF, a.SKEY, a.SPRE, a.DESCRIPTION, a.DESC, node?.name, node?.id]) {
@@ -290,6 +395,7 @@ function normalizeSourceKind(sourceKind, fileName, root) {
   if (/\.txt$/i.test(name)) return 'txt';
   if (/\.json$/i.test(name)) return 'json';
   if (RVM_SOURCE_RE.test(name)) return 'rvm';
+  if (/\.(glb|gltf)$/i.test(name)) return 'glb';
   return '';
 }
 function disposeObjectTree(root) {
