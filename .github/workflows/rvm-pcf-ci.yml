@@ -19,6 +19,7 @@ on:
       - 'viewer/tabs/viewer3d-rvm-tab.js'
       - 'viewer/tabs/viewer3d-rvm-tab-renderer.js'
       - 'viewer/geometry-workspace/**'
+      - 'viewer/overlays/autobend/**'
       - 'viewer/core/app.js'
       - 'viewer/index.html'
       - 'viewer/main-rhbg-fitguard.js'
@@ -27,6 +28,7 @@ on:
       - 'viewer/core/state.js'
       - 'viewer/tests/rvm-pcf-*.test.js'
       - 'viewer/tests/rvm-geometry-workspace-*.test.js'
+      - 'viewer/tests/nonprimitive-auto-bend-*.test.js'
       - '.github/workflows/rvm-pcf-ci.yml'
   workflow_dispatch:
 
@@ -59,6 +61,12 @@ jobs:
 
       - name: Verify raw support cylinders stay raw
         run: node viewer/tests/rvm-pcf-raw-support-cylinder.test.js
+
+      - name: Verify non-primitive auto-bend gate
+        run: node viewer/tests/nonprimitive-auto-bend-gate.test.js
+
+      - name: Verify non-primitive auto-bend resolver
+        run: node viewer/tests/nonprimitive-auto-bend-resolver.test.js
 
       - name: Verify RHBG RVM fit guard
         run: |
