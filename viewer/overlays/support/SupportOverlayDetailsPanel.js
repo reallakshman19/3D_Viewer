@@ -1,4 +1,4 @@
-export const SUPPORT_OVERLAY_DETAILS_PANEL_SCHEMA = 'support-overlay-details-panel/v2';
+export const SUPPORT_OVERLAY_DETAILS_PANEL_SCHEMA = 'support-overlay-details-panel/v3';
 
 const MAX_WARNING_ROWS = 6;
 const MAX_ATTRIBUTE_ROWS = 12;
@@ -8,6 +8,7 @@ export function emptySupportOverlayDetailsPanelState(reason = 'not-selected') {
     schema: SUPPORT_OVERLAY_DETAILS_PANEL_SCHEMA,
     status: 'empty',
     reason: text(reason),
+    highlighted: false,
     primitiveExcluded: true,
     rvmSearchIndexed: false,
     pickable: false,
@@ -44,6 +45,7 @@ export function buildSupportOverlayDetailsPanelState(details = null, context = {
     gapMm: nullableNumber(details.gapMm),
     gapVisualSeparationMm: nullableNumber(details.gapVisualSeparationMm),
     pipeOdMm: nullableNumber(details.pipeOdMm),
+    highlighted: Boolean(details.highlighted || context.highlighted),
     popupRequired: Boolean(details.popupRequired),
     warningCount: Number(details.warningCount || allWarnings.length) || 0,
     warnings: allWarnings,
@@ -71,11 +73,15 @@ export function renderSupportOverlayDetailsPanelHtml(state = emptySupportOverlay
   const attrs = state.attributes.length
     ? `<ul>${state.attributes.map((row) => `<li><strong>${escapeHtml(row.key)}</strong>: ${escapeHtml(row.value)}</li>`).join('')}</ul>`
     : '<span>No compact source attributes.</span>';
+  const highlightBadge = state.highlighted
+    ? '<strong class="rvm-source-tools-badge is-selected" data-support-details-highlight="true">Highlighted</strong>'
+    : '<strong class="rvm-source-tools-badge" data-support-details-highlight="false">Selected</strong>';
 
   return `
-    <div class="rvm-source-tools-detail" data-support-details-panel="selected" data-support-details-schema="${escapeHtml(SUPPORT_OVERLAY_DETAILS_PANEL_SCHEMA)}" data-support-details-id="${escapeHtml(state.supportId)}">
-      <div class="rvm-source-tools-group-title"><span>Support Details</span><strong class="rvm-source-tools-badge ${state.warningCount ? 'is-warn' : ''}">${escapeHtml(state.family)}</strong></div>
+    <div class="rvm-source-tools-detail" data-support-details-panel="selected" data-support-details-schema="${escapeHtml(SUPPORT_OVERLAY_DETAILS_PANEL_SCHEMA)}" data-support-details-id="${escapeHtml(state.supportId)}" data-support-details-highlighted="${state.highlighted ? 'true' : 'false'}">
+      <div class="rvm-source-tools-group-title"><span>Support Details</span><span>${highlightBadge}<strong class="rvm-source-tools-badge ${state.warningCount ? 'is-warn' : ''}">${escapeHtml(state.family)}</strong></span></div>
       ${detailRow('Support', `${state.supportNo || state.supportId} ${state.family}`, escapeHtml, 'support')}
+      ${detailRow('Highlight', state.highlighted ? 'Highlighted glyph' : 'Selected details only', escapeHtml, 'highlight')}
       ${detailRow('Raw type', state.rawType || 'n/a', escapeHtml, 'raw-type')}
       ${detailRow('Node', state.nodeId || 'n/a', escapeHtml, 'node')}
       ${detailRow('Source', `${state.sourceKind || 'source'} ${state.sourceFile || ''}`.trim(), escapeHtml, 'source')}

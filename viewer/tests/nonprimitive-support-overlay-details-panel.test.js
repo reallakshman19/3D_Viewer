@@ -40,11 +40,13 @@ const details = {
   selectable: false,
 };
 
-const selected = buildSupportOverlayDetailsPanelState(details);
+const selected = buildSupportOverlayDetailsPanelState(details, { highlighted: true });
 assert.equal(selected.schema, SUPPORT_OVERLAY_DETAILS_PANEL_SCHEMA);
+assert.equal(SUPPORT_OVERLAY_DETAILS_PANEL_SCHEMA, 'support-overlay-details-panel/v3');
 assert.equal(selected.status, 'selected');
 assert.equal(selected.supportId, 'PS-101');
 assert.equal(selected.family, 'GUIDE');
+assert.equal(selected.highlighted, true);
 assert.deepEqual(selected.sourceCoordinate, { x: 1000, y: 0, z: 50 });
 assert.deepEqual(selected.mappedCoordinate, { x: 1, y: 0, z: 0.05 });
 assert.deepEqual(selected.pipeAxis, { x: 1, y: 0, z: 0 });
@@ -64,8 +66,11 @@ assert.ok(selected.attributes.some((row) => row.key === 'SUPPORT_NO' && row.valu
 
 const selectedHtml = renderSupportOverlayDetailsPanelHtml(selected);
 assert.match(selectedHtml, /data-support-details-panel="selected"/);
+assert.match(selectedHtml, /data-support-details-highlighted="true"/);
+assert.match(selectedHtml, /data-support-details-highlight="true"/);
+assert.match(selectedHtml, /Highlighted glyph/);
 assert.match(selectedHtml, /PS-101 GUIDE/);
-assert.match(selectedHtml, /GUIDE \+\/-Z/);
+assert.match(selectedHtml, /GUIDE \+\/\-Z/);
 assert.match(selectedHtml, /1, 0, 0/);
 assert.match(selectedHtml, /10 mm · visual 100 mm/);
 assert.match(selectedHtml, /data-support-details-action="copy-json"/);
@@ -74,6 +79,7 @@ assert.match(selectedHtml, /data-support-details-action="clear"/);
 
 const empty = emptySupportOverlayDetailsPanelState('not-selected');
 assert.equal(empty.status, 'empty');
+assert.equal(empty.highlighted, false);
 assert.equal(empty.primitiveExcluded, true);
 const emptyHtml = renderSupportOverlayDetailsPanelHtml(empty);
 assert.match(emptyHtml, /data-support-details-panel="empty"/);
@@ -83,7 +89,7 @@ const bridge = await fs.readFile(new URL('../tabs/RvmNonPrimitiveSupportOverlayD
 const renderer = await fs.readFile(new URL('../tabs/viewer3d-rvm-tab-renderer.js', import.meta.url), 'utf8');
 const sourceTools = await fs.readFile(new URL('../tabs/RvmNonPrimitiveSourceToolsUiBridge.js', import.meta.url), 'utf8');
 
-assert.match(bridge, /rvm-non-primitive-support-overlay-details-panel\/v3/, 'details panel bridge exposes a versioned schema');
+assert.match(bridge, /rvm-non-primitive-support-overlay-details-panel\/v4/, 'details panel bridge exposes a versioned schema');
 assert.match(bridge, /__RVM_NON_PRIMITIVE_SUPPORT_OVERLAY__/, 'details panel raycasts only the scoped non-primitive support overlay root');
 assert.match(bridge, /raycaster\.intersectObjects/, 'details panel uses isolated raycasting instead of RVM primitive selection');
 assert.match(bridge, /nonPrimitiveSupportOverlaySelectedDetails/, 'details panel stores selected details outside RVM primitive selection state');
@@ -91,12 +97,18 @@ assert.match(bridge, /supportOverlayDetails/, 'details panel reads source-backed
 assert.match(bridge, /highlightSupportOverlayGlyph/, 'details panel highlights the selected source support glyph');
 assert.match(bridge, /nonPrimitiveSupportOverlayHighlightState/, 'details panel stores highlight state outside primitive selection state');
 assert.match(bridge, /rvm-nonprimitive-support-details-selected/, 'details panel emits scoped selection event for UI refresh');
+assert.match(bridge, /globalThis\.addEventListener\?\.\('keydown', handleSupportDetailsKeyboardShortcut, true\)/, 'details panel installs scoped Escape-key clear handler');
+assert.match(bridge, /event\.key[\s\S]*Escape/, 'details panel clears only on Escape key');
+assert.match(bridge, /clearViewerDetailsSelection\(viewer, 'escape-key'\)/, 'Escape key clears selected details and highlight state');
+assert.match(bridge, /pointer-miss/, 'pointer miss clears selected non-primitive support details');
+assert.match(bridge, /status: 'missed', cleared: true/, 'pointer miss reports cleared selection state');
+assert.match(bridge, /highlighted: isSupportDetailsHighlighted/, 'panel renders selected highlighted state');
 assert.match(bridge, /mode === 'source-preview' && isNonPrimitiveKind\(kind\)/, 'details panel is source-preview gated');
 assert.match(bridge, /PRIMITIVE_KIND_RE[\s\S]*rvm\|glb\|gltf\|rev/, 'details panel excludes primitive formats');
 assert.doesNotMatch(bridge, /RvmSupportSymbols|RvmSupportGeometryBridge|RvmRawSupportCylinderGuardBridge|Support Summary|SupportATT|SupportEngine/, 'details panel does not revive retired RVM support runtime or UI');
 assert.doesNotMatch(bridge, /selection\.select|selection\.pick|RvmSelectionAdapter/, 'details panel does not call the RVM primitive selection adapter');
 
-assert.match(renderer, /RvmNonPrimitiveSupportOverlayDetailsPanelBridge\.js\?v=20260623-nonprimitive-support-details-panel-3/, 'renderer imports details panel bridge with cache key');
+assert.match(renderer, /RvmNonPrimitiveSupportOverlayDetailsPanelBridge\.js\?v=20260623-nonprimitive-support-details-panel-4/, 'renderer imports details panel bridge with cache key');
 assert.match(renderer, /installRvmNonPrimitiveSupportOverlayBridge\(\)[\s\S]*installRvmNonPrimitiveSupportOverlayDetailsPanelBridge\(\)[\s\S]*installRvmNonPrimitiveAutoBendBridge\(\)/, 'renderer installs details panel after support overlay and before auto-bend/source-tools');
 assert.match(sourceTools, /rvm-nonprimitive-source-tools-panel/, 'source tools panel remains separate from support detail panel');
 
