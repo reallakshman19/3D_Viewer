@@ -4,15 +4,18 @@ export const SUPPORT_OVERLAY_STORAGE_KEYS = Object.freeze({
   enabled: `${PREFIX}enabled`,
   scale: `${PREFIX}scale`,
   labels: `${PREFIX}labels`,
+  labelsUserSet: `${PREFIX}labels.userSet`,
   warningsOnly: `${PREFIX}warningsOnly`,
   filters: `${PREFIX}filters`,
 });
 
 export function readNonPrimitiveSupportOverlaySettings(storage = globalThis?.localStorage) {
+  const labelsUserSet = readBool(storage, SUPPORT_OVERLAY_STORAGE_KEYS.labelsUserSet, false);
   return {
     enabled: readBool(storage, SUPPORT_OVERLAY_STORAGE_KEYS.enabled, true),
     scale: clamp(readNumber(storage, SUPPORT_OVERLAY_STORAGE_KEYS.scale, 1), 0.2, 10),
-    labels: readBool(storage, SUPPORT_OVERLAY_STORAGE_KEYS.labels, false),
+    labels: labelsUserSet ? readBool(storage, SUPPORT_OVERLAY_STORAGE_KEYS.labels, false) : false,
+    labelsUserSet,
     warningsOnly: readBool(storage, SUPPORT_OVERLAY_STORAGE_KEYS.warningsOnly, false),
     filters: readFilters(storage),
   };
@@ -22,9 +25,19 @@ export function writeNonPrimitiveSupportOverlaySettings(settings = {}, storage =
   if (!storage?.setItem) return;
   if ('enabled' in settings) storage.setItem(SUPPORT_OVERLAY_STORAGE_KEYS.enabled, settings.enabled ? 'true' : 'false');
   if ('scale' in settings) storage.setItem(SUPPORT_OVERLAY_STORAGE_KEYS.scale, String(clamp(Number(settings.scale) || 1, 0.2, 10)));
-  if ('labels' in settings) storage.setItem(SUPPORT_OVERLAY_STORAGE_KEYS.labels, settings.labels ? 'true' : 'false');
+  if ('labels' in settings) {
+    storage.setItem(SUPPORT_OVERLAY_STORAGE_KEYS.labels, settings.labels ? 'true' : 'false');
+    storage.setItem(SUPPORT_OVERLAY_STORAGE_KEYS.labelsUserSet, 'true');
+  }
+  if ('labelsUserSet' in settings) storage.setItem(SUPPORT_OVERLAY_STORAGE_KEYS.labelsUserSet, settings.labelsUserSet ? 'true' : 'false');
   if ('warningsOnly' in settings) storage.setItem(SUPPORT_OVERLAY_STORAGE_KEYS.warningsOnly, settings.warningsOnly ? 'true' : 'false');
   if ('filters' in settings) storage.setItem(SUPPORT_OVERLAY_STORAGE_KEYS.filters, JSON.stringify(normalizeFilters(settings.filters)));
+}
+
+export function resetNonPrimitiveSupportOverlayLabels(storage = globalThis?.localStorage) {
+  if (!storage?.setItem) return;
+  storage.setItem(SUPPORT_OVERLAY_STORAGE_KEYS.labels, 'false');
+  storage.setItem(SUPPORT_OVERLAY_STORAGE_KEYS.labelsUserSet, 'true');
 }
 
 function readFilters(storage) {
