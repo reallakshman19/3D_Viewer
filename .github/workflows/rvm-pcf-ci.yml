@@ -141,6 +141,9 @@ jobs:
       - name: Verify support-load AutoSpan resolver
         run: node viewer/tests/rvm-geometry-workspace-support-load-autospan.test.js
 
+      - name: Verify support-load enrichment conflict resolver
+        run: node viewer/tests/rvm-geometry-workspace-support-load-conflicts.test.js
+
       - name: Verify support-load formula engine
         run: node viewer/tests/rvm-geometry-workspace-support-load-formulas.test.js
 
