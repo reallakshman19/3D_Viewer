@@ -160,6 +160,9 @@ jobs:
       - name: Verify support-load advanced profiles
         run: node viewer/tests/rvm-geometry-workspace-support-load-advanced-profiles.test.js
 
+      - name: Verify support-load track certification
+        run: node viewer/tests/rvm-geometry-workspace-support-load-track-certification.test.js
+
       - name: Verify support-load Access benchmark
         run: node viewer/tests/rvm-geometry-workspace-support-load-access-benchmark.test.js
 
