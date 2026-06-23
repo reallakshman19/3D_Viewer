@@ -22,6 +22,8 @@ on:
       - 'viewer/tabs/rvm-json-pcf-*.js'
       - 'viewer/tabs/viewer3d-rvm-tab.js'
       - 'viewer/tabs/viewer3d-rvm-tab-renderer.js'
+      - 'viewer/tabs/RvmViewerInteractionPatch.js'
+      - 'viewer/tabs/RvmNavigationModeArbiterBridge.js'
       - 'viewer/tabs/RvmNonPrimitiveSupportOverlayBridge.js'
       - 'viewer/tabs/RvmNonPrimitiveSupportOverlayDetailsPanelBridge.js'
       - 'viewer/tabs/RvmNonPrimitiveSupportOverlayHoverBridge.js'
@@ -51,6 +53,7 @@ on:
       - 'viewer/tests/nonprimitive-source-tools-ui.test.js'
       - 'viewer/tests/nonprimitive-source-tools-diagnostics-export.test.js'
       - 'viewer/tests/nonprimitive-source-tools-diagnostics-module.test.js'
+      - 'viewer/tests/rvm-navigation-mode-arbiter.test.js'
       - '.github/workflows/rvm-pcf-ci.yml'
   workflow_dispatch:
 
@@ -128,6 +131,9 @@ jobs:
 
       - name: Verify non-primitive support overlay hard disable
         run: node viewer/tests/nonprimitive-support-overlay-hard-disable.test.js
+
+      - name: Verify RVM navigation mode arbiter
+        run: node viewer/tests/rvm-navigation-mode-arbiter.test.js
 
       - name: Verify non-primitive support coordinate mapper
         run: node viewer/tests/nonprimitive-support-coordinate-mapper.test.js
