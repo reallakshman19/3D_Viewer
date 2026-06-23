@@ -37,6 +37,8 @@
 // GeometrySupportLoadMasterDataBridge.js?v=20260623-support-load-master-data-1
 // GeometrySupportLoadConflictResolver.js?v=20260623-support-load-conflict-resolver-1
 // GeometrySupportLoadConflictBridge.js?v=20260623-support-load-conflict-resolver-1
+// GeometrySupportLoadQaDashboard.js?v=20260623-support-load-qa-dashboard-1
+// GeometrySupportLoadQaDashboardBridge.js?v=20260623-support-load-qa-dashboard-1
 // app-label-perf-runtime.js?v=20260622-pipe-support-load-input-hydrator-1
 // app-label-perf-runtime.js?v=20260622-input-review-lock-1
 // app-label-perf-runtime.js?v=20260622-input-review-override-lock-1
@@ -56,6 +58,7 @@ import { installGeometrySupportLoadInputBridge } from '../geometry-workspace/Geo
 import { installGeometrySupportLoadFormulaBridge } from '../geometry-workspace/GeometrySupportLoadFormulaBridge.js?v=20260622-support-load-result-writeback-audit-1';
 import { installGeometrySupportLoadReportBridge } from '../geometry-workspace/GeometrySupportLoadReportBridge.js?v=20260622-support-load-result-report-1';
 import { installGeometrySupportLoadConflictBridge } from '../geometry-workspace/GeometrySupportLoadConflictBridge.js?v=20260623-support-load-conflict-resolver-1';
+import { installGeometrySupportLoadQaDashboardBridge } from '../geometry-workspace/GeometrySupportLoadQaDashboardBridge.js?v=20260623-support-load-qa-dashboard-1';
 import { installRvmModelHealthBridge } from '../tabs/RvmModelHealthBridge.js?v=20260621-rvm-health-issues-1';
 import { installRvmModelHealthIssuesBridge } from '../tabs/RvmModelHealthIssuesBridge.js?v=20260621-rvm-health-issues-1';
 import { installBrowserRvmNativeFacetGhostPanelPatch } from '../rvm/BrowserRvmNativeFacetGhostPanelPatch.js?v=20260622-rvm-facet-ghost-panels-1';
@@ -72,6 +75,7 @@ installGeometrySupportLoadInputBridge();
 installGeometrySupportLoadFormulaBridge();
 installGeometrySupportLoadReportBridge();
 installGeometrySupportLoadConflictBridge();
+installGeometrySupportLoadQaDashboardBridge();
 installRvmModelHealthBridge();
 installRvmModelHealthIssuesBridge();
 installBrowserRvmNativeFacetGhostPanelPatch();
