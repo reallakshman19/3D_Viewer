@@ -142,13 +142,21 @@ assert.match(helper, /support-overlay-hover\/v1/, 'hover helper exposes schema')
 assert.match(helper, /__supportOverlayHoverOriginalMaterial/, 'hover helper stores original material for restore');
 assert.match(helper, /material\.clone/, 'hover helper clones materials before applying hover color');
 assert.match(helper, /selected-glyph-already-highlighted/, 'hover helper does not override selected glyph highlight');
-assert.match(bridge, /rvm-non-primitive-support-overlay-hover\/v1/, 'hover bridge exposes schema');
+assert.match(bridge, /rvm-non-primitive-support-overlay-hover\/v2/, 'hover bridge exposes navigation-safe schema');
+assert.match(bridge, /HOVER_THROTTLE_MS/, 'hover bridge has a pointermove throttle budget');
+assert.match(bridge, /event\.buttons/, 'hover bridge detects drag navigation by pointer buttons');
+assert.match(bridge, /navigation-drag/, 'hover bridge clears/skips while orbit or pan dragging');
+assert.match(bridge, /pointermove-throttled/, 'hover bridge throttles repeated pointer move raycasts');
+assert.match(bridge, /duplicateOwnerSkipped/, 'hover bridge skips duplicate owner material updates');
+assert.match(bridge, /pointerEvents = 'none'|pointer-events: none/, 'hover preview DOM cannot block canvas navigation');
+assert.match(bridge, /nonPrimitiveSupportOverlayHoverDiagnostics/, 'hover diagnostics record navigation-safe state');
 assert.match(bridge, /pointermove/, 'hover bridge listens for pointer move');
 assert.match(bridge, /pointerleave/, 'hover bridge clears hover on pointer leave');
+assert.match(bridge, /pointerdown/, 'hover bridge clears hover when navigation starts');
 assert.match(bridge, /__RVM_NON_PRIMITIVE_SUPPORT_OVERLAY__/, 'hover bridge scopes raycast to support overlay root');
 assert.match(bridge, /nonPrimitiveSupportOverlayHoverState/, 'hover state is stored outside RVM primitive selection state');
 assert.match(bridge, /rvm-support-hover-preview/, 'hover bridge renders a lightweight preview tooltip');
 assert.doesNotMatch(bridge, /selection\.select|selection\.pick|RvmSelectionAdapter|objectSearch/, 'hover bridge does not call RVM primitive selection or search code');
-assert.match(renderer, /RvmNonPrimitiveSupportOverlayHoverBridge\.js\?v=20260623-nonprimitive-support-hover-1/, 'renderer installs hover bridge cache key');
+assert.match(renderer, /RvmNonPrimitiveSupportOverlayHoverBridge\.js\?v=20260623-nonprimitive-support-hover-2/, 'renderer installs navigation-safe hover bridge cache key');
 
 console.log('non-primitive support overlay hover tests passed');
