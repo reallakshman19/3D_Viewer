@@ -163,7 +163,7 @@ assert.equal(renderInstructions.diagnostics.contractCounts.CONE_BBOX_PLACEHOLDER
 assert.equal(renderInstructions.diagnostics.contractCounts.BOX_BBOX, 1);
 assert.equal(renderInstructions.diagnostics.sourceCounts['bbox-derived-browser-contract'], 5);
 assert.equal(renderInstructions.diagnostics.attCounts.plain, 5);
-assert.equal(renderInstructions.diagnostics.supportHintCount, 0);
+assert.equal(Object.hasOwn(renderInstructions.diagnostics, 'supportHintCount'), false);
 
 const gasket = findByNameWithChild(root, 'GASKET 1', (child) => child.type === 'GASK');
 assert.ok(gasket, 'gasket group should retain GASK primitive leaf');
