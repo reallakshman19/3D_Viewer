@@ -49,7 +49,7 @@ assert.ok(unknown.operations[0].components.every((component) => component.geomet
 
 const bridge = fs.readFileSync(new URL('../tabs/RvmNonPrimitiveSupportOverlayBridge.js', import.meta.url), 'utf8');
 assert.ok(bridge.includes("SupportOverlayGlyphGeometry.js"));
-assert.ok(/rvm-non-primitive-support-overlay\/v[456]/.test(bridge));
+assert.ok(/rvm-non-primitive-support-overlay\/v[4567]/.test(bridge));
 assert.ok(!bridge.includes('new THREE.LineSegments'));
 assert.ok(!bridge.includes('LineBasicMaterial'));
 
