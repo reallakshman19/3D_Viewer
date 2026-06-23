@@ -100,7 +100,7 @@ assert.match(html, /data-support-details-action="clear"/);
 
 const bridge = await fs.readFile(new URL('../tabs/RvmNonPrimitiveSupportOverlayDetailsPanelBridge.js', import.meta.url), 'utf8');
 const renderer = await fs.readFile(new URL('../tabs/viewer3d-rvm-tab-renderer.js', import.meta.url), 'utf8');
-assert.match(bridge, /support-overlay-details-export\/v1/, 'details panel bridge exposes the export schema');
+assert.match(bridge, /SUPPORT_OVERLAY_DETAILS_EXPORT_SCHEMA/, 'details panel bridge exposes the export schema constant');
 assert.match(bridge, /copySupportOverlayDetailsJson/, 'details panel bridge wires copy JSON action');
 assert.match(bridge, /downloadSupportOverlayDetailsJson/, 'details panel bridge wires download JSON action');
 assert.match(bridge, /supportDetailsExportStatus/, 'details panel publishes panel-local export status');
