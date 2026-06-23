@@ -92,14 +92,19 @@ function mergeDeep(base, override) {
 
 function configWithRuntimeOptions(baseConfig, options = {}) {
   const parsed = parseXmlCiiEnrichmentConfig(options.supportConfigJson || '{}');
-  // The base core parses supportConfigJson, but the popup/rich workflow can mutate
-  // config immediately before Run.  Re-merge here so preview parity uses the same
-  // live masters, field maps, process overrides, rating overrides, and defaults as
-  // the visible Preview table.
   const merged = mergeDeep(baseConfig || {}, parsed || {});
   if (isObject(options?.overrides)) merged.overrides = mergeDeep(merged.overrides || {}, options.overrides);
+  if (Object.prototype.hasOwnProperty.call(options || {}, 'condenseRigidXsd')) merged.condenseRigidXsd = truthy(options.condenseRigidXsd);
   if (Object.prototype.hasOwnProperty.call(options || {}, 'splitCondensedValveFlange')) {
     merged.splitCondensedValveFlange = truthy(options.splitCondensedValveFlange);
+    merged.split_condensed_valve_flange = merged.splitCondensedValveFlange;
+  }
+  if (Object.prototype.hasOwnProperty.call(options || {}, 'split_condensed_valve_flange')) {
+    merged.splitCondensedValveFlange = truthy(options.split_condensed_valve_flange);
+    merged.split_condensed_valve_flange = merged.splitCondensedValveFlange;
+  }
+  if (Object.prototype.hasOwnProperty.call(merged || {}, 'split_condensed_valve_flange') && !Object.prototype.hasOwnProperty.call(merged || {}, 'splitCondensedValveFlange')) {
+    merged.splitCondensedValveFlange = truthy(merged.split_condensed_valve_flange);
   }
   return merged;
 }
@@ -213,18 +218,22 @@ function renumberLengthBearingNegativeNodes(document) {
 }
 
 function applyCondenseRigidOption(enriched, document, options = {}) {
-  const enabled = truthy(enriched?.config?.splitCondensedValveFlange) || truthy(options?.splitCondensedValveFlange);
+  const config = enriched?.config || {};
+  const enabled = truthy(config.splitCondensedValveFlange) || truthy(config.split_condensed_valve_flange) || truthy(options?.splitCondensedValveFlange) || truthy(options?.split_condensed_valve_flange);
   enriched.stats = enriched.stats && typeof enriched.stats === 'object' ? enriched.stats : {};
+  enriched.stats.condenseRigidXsd = truthy(config.condenseRigidXsd) || truthy(options?.condenseRigidXsd);
   enriched.stats.splitCondensedValveFlange = enabled;
+  enriched.stats.split_condensed_valve_flange = enabled;
   if (!enabled) return 0;
   const changed = renumberLengthBearingNegativeNodes(document);
   enriched.stats.splitCondensedRigidNodes = changed;
   enriched.diagnostics = Array.isArray(enriched.diagnostics) ? enriched.diagnostics : [];
   enriched.diagnostics.push({
-    type: 'split-condensed-valve-flange',
+    type: 'split-condensed-valve-flange-resolved',
     enabled: true,
+    split_condensed_valve_flange: true,
     renumberedNodes: changed,
-    message: 'Condense Rigid option applied: length-bearing negative RIGID/FLAN nodes are assigned positive node numbers before CII conversion.',
+    message: 'Resolved Condense Rigid option applied: length-bearing negative RIGID/FLAN nodes are assigned positive node numbers before CII conversion.',
   });
   return changed;
 }
