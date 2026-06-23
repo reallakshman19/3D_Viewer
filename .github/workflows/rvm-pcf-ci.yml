@@ -18,6 +18,7 @@ on:
       - 'viewer/tabs/rvm-json-pcf-*.js'
       - 'viewer/tabs/viewer3d-rvm-tab.js'
       - 'viewer/tabs/viewer3d-rvm-tab-renderer.js'
+      - 'viewer/tabs/RvmNonPrimitiveAutoBendBridge.js'
       - 'viewer/geometry-workspace/**'
       - 'viewer/overlays/autobend/**'
       - 'viewer/core/app.js'
@@ -67,6 +68,9 @@ jobs:
 
       - name: Verify non-primitive auto-bend resolver
         run: node viewer/tests/nonprimitive-auto-bend-resolver.test.js
+
+      - name: Verify non-primitive auto-bend preview integration
+        run: node viewer/tests/nonprimitive-auto-bend-preview-integration.test.js
 
       - name: Verify RHBG RVM fit guard
         run: |
