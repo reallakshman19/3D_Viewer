@@ -95,10 +95,12 @@ contains(qa, 'support-load-qa-dashboard/v1', 'QA dashboard schema exists');
 contains(qa, 'blocked', 'QA dashboard tracks blocked rows');
 contains(qa, 'calculated', 'QA dashboard tracks calculated rows');
 
-const overlay = read('geometry-workspace/GeometrySupportLoadCanvasOverlayBridge.js');
-contains(overlay, 'support-load-canvas-overlay/v1', 'support-load canvas overlay schema exists');
-contains(overlay, 'calculatedFields.supportLoadReference', 'support-load overlay consumes calculated support references');
-notContains(overlay, 'RvmSupportSymbols', 'support-load overlay does not use retired RVM support symbols');
+const overlayModel = read('geometry-workspace/GeometrySupportLoadCanvasOverlayModel.js');
+contains(overlayModel, 'support-load-canvas-overlay/v1', 'support-load canvas overlay schema exists');
+contains(overlayModel, 'calculatedFields.supportLoadReference', 'support-load overlay model consumes calculated support references');
+const overlayBridge = read('geometry-workspace/GeometrySupportLoadCanvasOverlayBridge.js');
+contains(overlayBridge, 'supportLoadCanvasOverlay', 'support-load overlay bridge writes only overlay metadata');
+notContains(overlayBridge, 'RvmSupportSymbols', 'support-load overlay does not use retired RVM support symbols');
 
 const workflow = read('../.github/workflows/rvm-pcf-ci.yml');
 contains(workflow, 'Verify support-load formula engine', 'CI runs formula-engine regression');
