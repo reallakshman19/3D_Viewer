@@ -6,8 +6,15 @@ const rendererSource = await fs.readFile(new URL('../tabs/viewer3d-rvm-tab-rende
 const autoBridgeSource = await fs.readFile(new URL('../tabs/RvmNonPrimitiveAutoBendBridge.js', import.meta.url), 'utf8');
 const supportSettingsSource = await fs.readFile(new URL('../overlays/support/SupportOverlaySettings.js', import.meta.url), 'utf8');
 
-assert.match(uiBridgeSource, /rvm-non-primitive-source-tools-ui\/v5/, 'source-tools UI exposes v5 schema marker');
+assert.match(uiBridgeSource, /rvm-non-primitive-source-tools-ui\/v6/, 'source-tools UI exposes v6 schema marker');
 assert.match(uiBridgeSource, /rvm-nonprimitive-source-tools-panel/, 'source-tools UI owns a compact panel id');
+assert.match(uiBridgeSource, /installSourceToolsStyles/, 'source-tools UI installs compact layout styles');
+assert.match(uiBridgeSource, /data\.rvmNonPrimitiveSourceToolsStyle = 'v6'/, 'source-tools UI style injection is versioned');
+assert.match(uiBridgeSource, /data-source-tools-layout="compact-v1"/, 'source-tools UI renders compact layout marker');
+assert.match(uiBridgeSource, /data-source-tools-group="auto-bend"/, 'source-tools UI groups auto-bend controls');
+assert.match(uiBridgeSource, /data-source-tools-group="support-overlay"/, 'source-tools UI groups support overlay controls');
+assert.match(uiBridgeSource, /rvm-source-tools-badge/, 'source-tools UI renders compact status/warning badges');
+assert.match(uiBridgeSource, /@media \(max-width: 1150px\)/, 'source-tools UI includes narrow-panel responsive styling');
 assert.match(uiBridgeSource, /rvmModelPrimitiveMode[\s\S]*source-preview/, 'source-tools UI is gated by source-preview mode');
 assert.match(uiBridgeSource, /PRIMITIVE_KIND_RE[\s\S]*rvm\|glb\|gltf\|rev/, 'source-tools UI excludes primitive source kinds');
 assert.match(uiBridgeSource, /clearSourceToolsUi/, 'source-tools UI exposes explicit primitive-mode cleanup');
@@ -25,7 +32,7 @@ assert.match(uiBridgeSource, /Filtered:[\s\S]*supportDiag\.filteredOut/, 'source
 assert.match(uiBridgeSource, /renderSupportFilterSummary/, 'source-tools UI renders compact support filter summary');
 assert.match(uiBridgeSource, /disabledFamilies/, 'source-tools UI surfaces disabled support families');
 assert.match(uiBridgeSource, /skippedDuplicates|skippedGlyphs/, 'source-tools UI surfaces support skip counts');
-assert.match(uiBridgeSource, /Warnings:[\s\S]*supportWarningCount/, 'source-tools UI shows support warning count');
+assert.match(uiBridgeSource, /supportWarningCount/, 'source-tools UI computes support warning count');
 assert.match(uiBridgeSource, /Top warnings|No support overlay warnings/, 'source-tools UI shows compact support warning details');
 assert.match(uiBridgeSource, /Copy diagnostics JSON/, 'source-tools UI exposes diagnostics copy action');
 assert.match(uiBridgeSource, /Download diagnostics JSON/, 'source-tools UI exposes diagnostics download action');
@@ -38,7 +45,7 @@ assert.match(uiBridgeSource, /writeNonPrimitiveSupportOverlaySettings\(\{ filter
 assert.match(uiBridgeSource, /writeNonPrimitiveSupportOverlaySettings/, 'source-tools UI persists support overlay settings');
 assert.doesNotMatch(uiBridgeSource, /Support Summary|SupportATT|SupportEngine|Raw\/Symbol\/Both|rvm_support_render_mode_v1|rvm_support_geometry_mode_v1/, 'source-tools UI does not revive retired RVM support UI or keys');
 
-assert.match(rendererSource, /RvmNonPrimitiveSourceToolsUiBridge\.js\?v=20260623-nonprimitive-source-tools-ui-5/, 'renderer imports source-tools UI bridge with v5 cache key');
+assert.match(rendererSource, /RvmNonPrimitiveSourceToolsUiBridge\.js\?v=20260623-nonprimitive-source-tools-ui-6/, 'renderer imports source-tools UI bridge with v6 cache key');
 assert.match(rendererSource, /installRvmNonPrimitiveSourceToolsUiBridge\(\)/, 'renderer installs source-tools UI bridge');
 
 assert.match(autoBridgeSource, /restoreVisualTrimmedSegments/, 'auto-bend bridge can restore visual trims for live UI toggles');
