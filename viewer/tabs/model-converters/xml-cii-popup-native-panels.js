@@ -394,7 +394,7 @@ function logicInfoPanel() {
     <details class="xml-cii-native-details" data-native-config-info>
       <summary><span aria-hidden="true">ⓘ</span> XML→CII enrichment logic</summary>
       <div class="xml-cii-native-hint">
-        <strong>ElementLengthMm:</strong> generated in browser-side rich enrichment. Existing positive-node lengths use the normal forward CII coordinate distance. INST nodes now also receive ElementLengthMm from the previous positive node to the INST position when no valid length already exists.
+        <strong>ElementLengthMm:</strong> generated in browser-side rich enrichment. ElementLengthMm calculated for INST nodes uses the previous positive node to the INST position in CII coordinate space when no valid length already exists.
       </div>
       <div class="xml-cii-native-hint">
         <strong>Condense Rigid / split condensed valve-flange nodes (XSD):</strong> stores source/XSD intent only as condenseRigidXsd / condense_rigid_xsd. It does not force resolved conversion.
