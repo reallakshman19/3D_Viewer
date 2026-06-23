@@ -1,5 +1,3 @@
-import * as THREE from 'three';
-
 import {
   classifySupportFamily,
   extractExplicitSign,
@@ -226,14 +224,14 @@ export function coordinateFromAttributes(a = {}) {
 
 export function pipeAxisFromAttributes(a = {}) {
   for (const key of SUPPORT_AXIS_KEYS) {
-    const explicit = parseVec3(a[key]);
-    if (explicit && explicit.lengthSq() > 1e-9) return explicit.normalize();
+    const explicit = normalizeVec(parseVec3(a[key]));
+    if (explicit) return explicit;
   }
   const ap = parseVec3(a.APOS ?? a.A_POS ?? a.FROM_POS ?? a.START_POS);
   const lp = parseVec3(a.LPOS ?? a.L_POS ?? a.TO_POS ?? a.END_POS);
   if (ap && lp) {
-    const delta = new THREE.Vector3().subVectors(lp, ap);
-    if (delta.lengthSq() > 1e-9) return delta.normalize();
+    const axis = normalizeVec(sub(lp, ap));
+    if (axis) return axis;
   }
   return null;
 }
@@ -337,18 +335,18 @@ function parseVec3(value) {
   if (!value && value !== 0) return null;
   if (Array.isArray(value) && value.length >= 3) {
     const x = numberValue(value[0]), y = numberValue(value[1]), z = numberValue(value[2]);
-    return x === null || y === null || z === null ? null : new THREE.Vector3(x, y, z);
+    return x === null || y === null || z === null ? null : { x, y, z };
   }
   if (typeof value === 'object') {
     const x = numberValue(value.x ?? value.X ?? value.e ?? value.E);
     const y = numberValue(value.y ?? value.Y ?? value.n ?? value.N);
     const z = numberValue(value.z ?? value.Z ?? value.u ?? value.U ?? value.el ?? value.EL);
-    return x === null || y === null || z === null ? null : new THREE.Vector3(x, y, z);
+    return x === null || y === null || z === null ? null : { x, y, z };
   }
   const text = textValue(value).trim();
   const directional = text.match(/\b([EWNSUD])\s*(-?\d+(?:\.\d+)?)/gi);
   if (directional?.length >= 3) {
-    const out = new THREE.Vector3();
+    const out = { x: 0, y: 0, z: 0 };
     for (const entry of directional) {
       const [, dir, raw] = /([EWNSUD])\s*(-?\d+(?:\.\d+)?)/i.exec(entry) || [];
       const n = Number(raw);
@@ -363,7 +361,7 @@ function parseVec3(value) {
     return out;
   }
   const values = text.match(/-?\d+(?:\.\d+)?/g)?.map(Number).filter(Number.isFinite) || [];
-  return values.length >= 3 ? new THREE.Vector3(values[0], values[1], values[2]) : null;
+  return values.length >= 3 ? { x: values[0], y: values[1], z: values[2] } : null;
 }
 
 function normalizeExplicitSign(value) {
@@ -387,6 +385,20 @@ function cleanSupportTag(value) {
   if (!text) return '';
   if (/^\[object Object\]$/i.test(text)) return '';
   return text.replace(/\s+/g, '-').slice(0, 64);
+}
+
+function sub(a, b) {
+  return { x: Number(a.x) - Number(b.x), y: Number(a.y) - Number(b.y), z: Number(a.z) - Number(b.z) };
+}
+
+function normalizeVec(value) {
+  if (!value) return null;
+  const x = Number(value.x);
+  const y = Number(value.y);
+  const z = Number(value.z);
+  const len = Math.sqrt(x * x + y * y + z * z);
+  if (!Number.isFinite(len) || len < 1e-9) return null;
+  return { x: x / len, y: y / len, z: z / len };
 }
 
 function firstTextFromKeys(a, keys) {
