@@ -74,6 +74,9 @@ jobs:
       - name: Verify non-primitive support overlay geometry
         run: node viewer/tests/nonprimitive-support-overlay-geometry.test.js
 
+      - name: Verify non-primitive support overlay labels
+        run: node viewer/tests/nonprimitive-support-overlay-labels.test.js
+
       - name: Verify non-primitive support coordinate mapper
         run: node viewer/tests/nonprimitive-support-coordinate-mapper.test.js
 
