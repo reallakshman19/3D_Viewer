@@ -60,7 +60,7 @@ assert(/import \{ renderXmlCiiPopupNativePhase \} from '\.\/xml-cii-popup-native
 assert(popup.includes('xml-cii-popup-native-panels.js?v=20260623-inst-length-info-simple-run-1'), 'popup must cache-bust native panel import containing INST length info');
 assert(popup.includes("import { XML_CII_WORKFLOW_PHASES, normalizeWorkflowPhaseId } from './WorkflowShell.js'"), 'popup must use canonical XML CII phase registry');
 assert(canonicalTab.includes('installXmlCiiConversionWorkflowPopup'), 'ModelConvertersTab must install the rich workflow popup path');
-assert(tab.includes('installXmlCiiConversionWorkflowPopup'), 'legacy tab shim must continue exposing XML CII popup installer');
+assert(tab.includes('model-converters/index.js?v=20260623-inst-length-info-simple-run-1'), 'legacy tab shim must point to cache-busted model-converters index');
 assert(popup.includes('Only the XML->CII Rich Workflow button opens this phase-tab popup'), 'popup must document rich-only opening');
 assert(!popup.includes("document.addEventListener('click', interceptRun, true)"), 'popup must not intercept the simple Run Conversion button');
 assert(!popup.includes('function interceptRun'), 'popup must not define simple-run interception');
