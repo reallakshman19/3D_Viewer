@@ -32,3 +32,5 @@ export function installXmlCiiRichWorkerCacheBust() {
     freshToken: FRESH_WORKER_TOKEN,
   };
 }
+
+installXmlCiiRichWorkerCacheBust();
