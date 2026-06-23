@@ -21,6 +21,9 @@
 // GeometrySupportLoadInputBridge.js?v=20260622-input-review-override-lock-1
 // GeometrySupportLoadInputModel.js?v=20260623-master-data-hydrator-priority-1
 // GeometrySupportLoadInputBridge.js?v=20260623-master-data-hydrator-priority-1
+// GeometrySupportLoadAutoSpanResolver.js?v=20260623-support-load-autospan-resolver-1
+// GeometrySupportLoadInputModel.js?v=20260623-autospan-resolver-1
+// GeometrySupportLoadInputBridge.js?v=20260623-autospan-resolver-1
 // GeometrySupportLoadFormulaEngine.js?v=20260622-access-support-load-formula-1
 // GeometrySupportLoadFormulaBridge.js?v=20260622-access-support-load-formula-1
 // GeometrySupportLoadReportExporter.js?v=20260622-support-load-result-report-1
@@ -47,7 +50,7 @@ import { installGeometryCalculationInputBridge } from '../geometry-workspace/Geo
 import { installGeometryEnrichmentBridge } from '../geometry-workspace/GeometryEnrichmentBridge.js?v=20260622-geometry-enrichment-1';
 import { installGeometryEnrichedStagedJsonBridge } from '../geometry-workspace/GeometryEnrichedStagedJsonBridge.js?v=20260622-geometry-enriched-stagedjson-support-loads-1';
 import { installGeometrySupportLoadMasterDataBridge } from '../geometry-workspace/GeometrySupportLoadMasterDataBridge.js?v=20260623-support-load-master-data-1';
-import { installGeometrySupportLoadInputBridge } from '../geometry-workspace/GeometrySupportLoadInputBridge.js?v=20260623-master-data-hydrator-priority-1';
+import { installGeometrySupportLoadInputBridge } from '../geometry-workspace/GeometrySupportLoadInputBridge.js?v=20260623-autospan-resolver-1';
 import { installGeometrySupportLoadFormulaBridge } from '../geometry-workspace/GeometrySupportLoadFormulaBridge.js?v=20260622-support-load-result-writeback-audit-1';
 import { installGeometrySupportLoadReportBridge } from '../geometry-workspace/GeometrySupportLoadReportBridge.js?v=20260622-support-load-result-report-1';
 import { installRvmModelHealthBridge } from '../tabs/RvmModelHealthBridge.js?v=20260621-rvm-health-issues-1';
