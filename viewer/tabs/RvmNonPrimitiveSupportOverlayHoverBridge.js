@@ -9,17 +9,18 @@ import {
   SUPPORT_OVERLAY_HOVER_SCHEMA,
 } from '../overlays/support/SupportOverlayHover.js';
 
-export const RVM_NON_PRIMITIVE_SUPPORT_HOVER_SCHEMA = 'rvm-non-primitive-support-overlay-hover/v1';
+export const RVM_NON_PRIMITIVE_SUPPORT_HOVER_SCHEMA = 'rvm-non-primitive-support-overlay-hover/v2';
 
 const ROOT_SELECTOR = '[data-rvm-viewer]';
 const SUPPORT_OVERLAY_ROOT_NAME = '__RVM_NON_PRIMITIVE_SUPPORT_OVERLAY__';
 const GLOBAL_KEY = '__PCF_GLB_RVM_NON_PRIMITIVE_SUPPORT_HOVER__';
-const PATCH_FLAG = Symbol.for('pcf-glb-rvm-non-primitive-support-hover-v1');
-const VIEWER_PATCH_FLAG = Symbol.for('pcf-glb-rvm-non-primitive-support-hover-viewer-v1');
-const POINTER_FLAG = Symbol.for('pcf-glb-rvm-non-primitive-support-hover-pointer-v1');
-const STYLE_FLAG = Symbol.for('pcf-glb-rvm-non-primitive-support-hover-style-v1');
+const PATCH_FLAG = Symbol.for('pcf-glb-rvm-non-primitive-support-hover-v2');
+const VIEWER_PATCH_FLAG = Symbol.for('pcf-glb-rvm-non-primitive-support-hover-viewer-v2');
+const POINTER_FLAG = Symbol.for('pcf-glb-rvm-non-primitive-support-hover-pointer-v2');
+const STYLE_FLAG = Symbol.for('pcf-glb-rvm-non-primitive-support-hover-style-v2');
 const SOURCE_KIND_RE = /^(json|jscon|inputxml|txt|source-preview)$/i;
 const PRIMITIVE_KIND_RE = /^(rvm|glb|gltf|rev)$/i;
+const HOVER_THROTTLE_MS = 80;
 
 export function installRvmNonPrimitiveSupportOverlayHoverBridge() {
   if (globalThis[PATCH_FLAG]) return;
@@ -41,7 +42,7 @@ function installSupportHoverStyles() {
   const doc = globalThis.document;
   if (!doc?.createElement) return;
   const style = doc.createElement('style');
-  style.dataset.rvmNonPrimitiveSupportHoverStyle = 'v1';
+  style.dataset.rvmNonPrimitiveSupportHoverStyle = 'v2';
   style.textContent = `
     .rvm-support-hover-preview {
       position: fixed;
@@ -55,6 +56,7 @@ function installSupportHoverStyles() {
       color: #eef6ff;
       box-shadow: 0 8px 22px rgba(0, 0, 0, 0.32);
       pointer-events: none;
+      user-select: none;
       font-size: 11px;
       line-height: 1.35;
     }
@@ -102,20 +104,39 @@ function ensureSupportHoverPointerEvents(viewer) {
   if (!dom?.addEventListener) return;
   const onMove = (event) => previewSupportOverlayHoverFromPointer(viewer, event);
   const onLeave = () => clearSupportOverlayHoverPreview(viewer, 'pointer-leave');
+  const onDown = () => clearSupportOverlayHoverPreview(viewer, 'navigation-pointer-down');
   dom.addEventListener('pointermove', onMove, false);
   dom.addEventListener('pointerleave', onLeave, false);
-  viewer[POINTER_FLAG] = { dom, onMove, onLeave };
+  dom.addEventListener('pointerdown', onDown, false);
+  viewer[POINTER_FLAG] = { dom, onMove, onLeave, onDown };
 }
 
 export function previewSupportOverlayHoverFromPointer(viewer = globalThis.__3D_RVM_VIEWER__, event = {}) {
-  if (!viewer?.camera || !viewer?.scene) return { status: 'skipped', reason: 'viewer-missing' };
+  if (!viewer?.camera || !viewer?.scene) return writeHoverDiagnostics(viewer, { status: 'skipped', reason: 'viewer-missing' });
+
+  if (isNavigationDragEvent(event)) {
+    clearSupportOverlayHoverPreview(viewer, 'navigation-drag');
+    return writeHoverDiagnostics(viewer, {
+      schema: RVM_NON_PRIMITIVE_SUPPORT_HOVER_SCHEMA,
+      status: 'skipped',
+      reason: 'navigation-drag',
+      primitiveExcluded: true,
+      rvmSearchIndexed: false,
+      pickable: false,
+      selectable: false,
+    });
+  }
+
+  const throttle = shouldThrottleHover(viewer, event);
+  if (throttle.throttled) return writeHoverDiagnostics(viewer, throttle);
+
   const roots = collectSupportOverlayRoots(viewer);
   if (!roots.length) return clearSupportOverlayHoverPreview(viewer, 'support-overlay-root-missing');
 
   const dom = viewer.renderer?.domElement || event.currentTarget || viewer.container;
   const rect = dom?.getBoundingClientRect?.();
   if (!rect || !Number.isFinite(rect.width) || !Number.isFinite(rect.height) || rect.width <= 0 || rect.height <= 0) {
-    return { status: 'skipped', reason: 'invalid-dom-rect' };
+    return writeHoverDiagnostics(viewer, { status: 'skipped', reason: 'invalid-dom-rect' });
   }
 
   const owner = findHoverOwnerFromPointer(viewer, roots, rect, event);
@@ -128,26 +149,33 @@ export function previewSupportOverlayHoverFromPointer(viewer = globalThis.__3D_R
     sourceKind: owner.userData.sourceKind || diagnostics.sourceKind || viewer.sourceKind || '',
     sourceFile: owner.userData.sourceFile || diagnostics.sourceFile || '',
   });
-  const hoverState = hoverSupportOverlayGlyph(owner, roots, {
-    supportId: preview.supportId,
-    family: preview.family,
-  });
+  const ownerKey = hoverOwnerKey(preview);
+  const previousKey = viewer.__nonPrimitiveSupportOverlayHoverOwnerKey || '';
+  let hoverState = viewer.nonPrimitiveSupportOverlayHoverState;
+  if (ownerKey !== previousKey) {
+    hoverState = hoverSupportOverlayGlyph(owner, roots, {
+      supportId: preview.supportId,
+      family: preview.family,
+    });
+    viewer.__nonPrimitiveSupportOverlayHoverOwnerKey = ownerKey;
+  }
 
   viewer.nonPrimitiveSupportOverlayHoverState = hoverState;
   viewer.nonPrimitiveSupportOverlayHoverPreview = preview;
   renderHoverTooltip(preview, event);
 
-  return {
+  return writeHoverDiagnostics(viewer, {
     schema: RVM_NON_PRIMITIVE_SUPPORT_HOVER_SCHEMA,
     status: 'preview',
     supportId: preview.supportId,
     family: preview.family,
-    hoverStatus: hoverState.status,
+    hoverStatus: hoverState?.status || 'unchanged',
+    duplicateOwnerSkipped: ownerKey === previousKey,
     primitiveExcluded: true,
     rvmSearchIndexed: false,
     pickable: false,
     selectable: false,
-  };
+  });
 }
 
 export function clearSupportOverlayHoverPreview(viewer = globalThis.__3D_RVM_VIEWER__, reason = 'clear') {
@@ -158,9 +186,57 @@ export function clearSupportOverlayHoverPreview(viewer = globalThis.__3D_RVM_VIE
   if (viewer) {
     viewer.nonPrimitiveSupportOverlayHoverState = hoverState;
     viewer.nonPrimitiveSupportOverlayHoverPreview = createEmptySupportOverlayHoverState(reason);
+    viewer.__nonPrimitiveSupportOverlayHoverOwnerKey = '';
+    writeHoverDiagnostics(viewer, {
+      schema: RVM_NON_PRIMITIVE_SUPPORT_HOVER_SCHEMA,
+      status: 'cleared',
+      reason,
+      primitiveExcluded: true,
+      rvmSearchIndexed: false,
+      pickable: false,
+      selectable: false,
+    });
   }
   hideHoverTooltip(reason);
   return hoverState;
+}
+
+function shouldThrottleHover(viewer, event = {}) {
+  const now = performanceNow();
+  const last = Number(viewer.__nonPrimitiveSupportOverlayHoverLastTs || 0);
+  if (last > 0 && now - last < HOVER_THROTTLE_MS) {
+    return {
+      schema: RVM_NON_PRIMITIVE_SUPPORT_HOVER_SCHEMA,
+      status: 'throttled',
+      throttled: true,
+      reason: 'pointermove-throttled',
+      elapsedMs: Math.max(0, now - last),
+      primitiveExcluded: true,
+      rvmSearchIndexed: false,
+      pickable: false,
+      selectable: false,
+    };
+  }
+  viewer.__nonPrimitiveSupportOverlayHoverLastTs = now;
+  return { throttled: false };
+}
+
+function isNavigationDragEvent(event = {}) {
+  const buttons = Number(event.buttons || 0);
+  return buttons !== 0;
+}
+
+function writeHoverDiagnostics(viewer, state = {}) {
+  if (viewer) viewer.nonPrimitiveSupportOverlayHoverDiagnostics = {
+    schema: RVM_NON_PRIMITIVE_SUPPORT_HOVER_SCHEMA,
+    throttleMs: HOVER_THROTTLE_MS,
+    ...state,
+  };
+  return state;
+}
+
+function hoverOwnerKey(preview = {}) {
+  return [preview.supportId || preview.supportNo || '', preview.family || '', preview.nodeId || ''].join('|');
 }
 
 function findHoverOwnerFromPointer(viewer, roots, rect, event) {
@@ -196,6 +272,8 @@ function renderHoverTooltip(preview, event) {
   const y = Number(event.clientY || 0) + 14;
   tooltip.style.left = `${Math.max(0, x)}px`;
   tooltip.style.top = `${Math.max(0, y)}px`;
+  tooltip.style.pointerEvents = 'none';
+  tooltip.style.userSelect = 'none';
   return tooltip;
 }
 
@@ -206,6 +284,7 @@ function hideHoverTooltip(reason = 'clear') {
     tooltip.dataset.supportHoverActive = 'false';
     tooltip.dataset.supportHoverCleared = reason;
     tooltip.innerHTML = '';
+    tooltip.style.pointerEvents = 'none';
   }
 }
 
@@ -219,6 +298,8 @@ function ensureHoverTooltip(root) {
   tooltip.className = 'rvm-support-hover-preview';
   tooltip.dataset.rvmNonprimitiveSupportHoverPreview = 'true';
   tooltip.hidden = true;
+  tooltip.style.pointerEvents = 'none';
+  tooltip.style.userSelect = 'none';
   (root || doc.body || doc.documentElement)?.appendChild?.(tooltip);
   return tooltip;
 }
@@ -260,6 +341,10 @@ function normalizeSourceKind(value) {
   if (!kind || kind === 'aveva-json' || kind === 'source-preview') return 'json';
   if (kind === 'xml' || kind === 'uxml') return 'inputxml';
   return kind;
+}
+
+function performanceNow() {
+  return (typeof performance !== 'undefined' && typeof performance.now === 'function') ? performance.now() : Date.now();
 }
 
 function escapeHtml(value) {
