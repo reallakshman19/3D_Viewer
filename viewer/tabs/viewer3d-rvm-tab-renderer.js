@@ -3,12 +3,14 @@
 // The tab implementation currently exposes mountViewer3DRvmTab.
 // Active retired support tools purge cache key: RvmRetiredSupportToolsPurgeBridge.js?v=20260622-rvm-retired-support-tools-purge-2
 // Active generic label performance cache key: RvmLabelPerformanceBridge.js?v=20260622-rvm-label-perf-no-support-runtime-1
+// Active non-primitive support overlay cache key: RvmNonPrimitiveSupportOverlayBridge.js?v=20260623-nonprimitive-support-overlay-1
 import { RvmViewer3D } from '../rvm-viewer/RvmViewer3D.js?v=20260622-rvm-leaf-picking-2';
 import { installRvmProgressiveModelRootPatch } from '../rvm-viewer/RvmProgressiveModelRootPatchV5.js?v=20260620-rvm-tree-select-nohide-1';
 import { installRvmHierarchySelectionBridge } from './RvmHierarchySelectionBridge.js?v=20260620-rvm-large-box-support-sync-1';
 import { installRvmViewerInteractionPatch, installRvmCanvasSelectionBridge } from './RvmViewerInteractionPatch.js?v=20260621-rvm-button-hardening-1';
 import { installRvmCanvasSelectionSinglePickGuardBridge } from './RvmCanvasSelectionSinglePickGuardBridge.js?v=20260622-rvm-canvas-single-pick-guard-1';
 import { installRvmRetiredSupportToolsPurgeBridge } from './RvmRetiredSupportToolsPurgeBridge.js?v=20260622-rvm-retired-support-tools-purge-2';
+import { installRvmNonPrimitiveSupportOverlayBridge } from './RvmNonPrimitiveSupportOverlayBridge.js?v=20260623-nonprimitive-support-overlay-1';
 import { installRvmUiEventSafetyBridge } from './RvmUiEventSafetyBridge.js?v=20260622-rvm-ui-event-safety-2';
 import { installRvmUiInteractionPanelPatch, installRvmUiPanelBridge } from './RvmUiInteractionPanelPatch.js?v=20260621-rvm-ui-interaction-panels-1';
 import { installRvmPropertyPanelCollapseAuditBridge } from './RvmPropertyPanelCollapseAuditBridge.js?v=20260621-rvm-property-collapse-1';
@@ -68,6 +70,7 @@ installRvmProgressiveModelRootPatch(RvmViewer3D);
 installRvmViewerInteractionPatch(RvmViewer3D);
 installRvmUiInteractionPanelPatch(RvmViewer3D);
 installRvmLabelPerformanceBridge(RvmViewer3D);
+installRvmNonPrimitiveSupportOverlayBridge();
 installRvmZoneLodLabelBridge();
 installRvmDeepSourcePathRecoveryBridge();
 installRvmZoneDensitySelectorBridge();
