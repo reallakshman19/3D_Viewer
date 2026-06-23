@@ -110,6 +110,9 @@ jobs:
       - name: Verify non-primitive support overlay details export
         run: node viewer/tests/nonprimitive-support-overlay-details-export.test.js
 
+      - name: Verify non-primitive support overlay highlight
+        run: node viewer/tests/nonprimitive-support-overlay-highlight.test.js
+
       - name: Verify non-primitive support coordinate mapper
         run: node viewer/tests/nonprimitive-support-coordinate-mapper.test.js
 
