@@ -25,7 +25,8 @@ assert.equal(
 const bridge = fs.readFileSync(new URL('../tabs/RvmNonPrimitiveSupportOverlayBridge.js', import.meta.url), 'utf8');
 assert.ok(bridge.includes('CSS2DObject'));
 assert.ok(bridge.includes('SupportOverlayLabels.js'));
-assert.ok(bridge.includes('rvm-non-primitive-support-overlay/v5'));
+assert.ok(bridge.includes('rvm-non-primitive-support-overlay/v6'));
+assert.ok(bridge.includes('SupportOverlaySourceExtraction.js'));
 assert.ok(bridge.includes('shouldShowSupportOverlayLabel(settings)'));
 assert.ok(!bridge.includes('Support Labels button'));
 assert.ok(!bridge.includes('RvmSupportSymbols'));
