@@ -29,15 +29,35 @@ function attrsFrom(raw = '') {
 }
 function collectBlocks(xml, tag) {
   const name = cleanTagName(tag);
+  const source = String(xml || '');
   const out = [];
-  const paired = new RegExp(`<${name}\\b([^>]*)>([\\s\\S]*?)<\\/${name}>`, 'gi');
+  const start = new RegExp(`<${name}\\b([^>]*)>`, 'gi');
   let match;
-  while ((match = paired.exec(xml))) out.push({ attrs: attrsFrom(match[1]), body: match[2] || '', paired: true });
-  const consumed = new Set(out.map((item) => item.attrs));
-  const self = new RegExp(`<${name}\\b([^>]*)\\/>`, 'gi');
-  while ((match = self.exec(xml))) {
-    const attrs = attrsFrom(match[1]);
-    if (!consumed.has(attrs)) out.push({ attrs, body: '', paired: false });
+  while ((match = start.exec(source))) {
+    const full = match[0] || '';
+    const attrs = attrsFrom(match[1] || '');
+    if (/\/\s*>$/.test(full)) {
+      out.push({ attrs, body: '', paired: false });
+      continue;
+    }
+    const bodyStart = start.lastIndex;
+    const close = new RegExp(`</${name}>`, 'gi');
+    close.lastIndex = bodyStart;
+    const closeMatch = close.exec(source);
+    if (!closeMatch) {
+      out.push({ attrs, body: '', paired: false });
+      continue;
+    }
+    const nextStart = new RegExp(`<${name}\\b`, 'gi');
+    nextStart.lastIndex = bodyStart;
+    const nextMatch = nextStart.exec(source);
+    if (nextMatch && nextMatch.index < closeMatch.index) {
+      out.push({ attrs, body: '', paired: false, inferredSelfClose: true });
+      start.lastIndex = bodyStart;
+      continue;
+    }
+    out.push({ attrs, body: source.slice(bodyStart, closeMatch.index), paired: true });
+    start.lastIndex = closeMatch.index + closeMatch[0].length;
   }
   return out;
 }
