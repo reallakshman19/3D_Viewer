@@ -50,17 +50,22 @@ const publicIndex = read(publicIndexPath);
 const tab = read(tabPath);
 const tabCss = `${read(tabCssPath)}\n${readIfExists(supplementalTabCssPath)}`;
 
-assert(fs.existsSync(path.join(root, popupPath)), 'workflow popup module must exist for backwards compatibility');
+assert(fs.existsSync(path.join(root, popupPath)), 'workflow popup module must exist for rich workflow');
 assert(fs.existsSync(path.join(root, nativePanelsPath)), 'popup-native panel module must exist');
-assert(fs.existsSync(path.join(root, condenseRigidBridgePath)), 'condense rigid UI bridge module must exist');
+assert(fs.existsSync(path.join(root, condenseRigidBridgePath)), 'condense rigid bridge module must exist');
 assert(fs.existsSync(path.join(root, workflowShellPath)), 'canonical WorkflowShell module must exist');
 assert(fs.existsSync(path.join(root, branchSyncPath)), 'branch sample sync module must exist');
 assert(popup.includes("import { WorkflowModal } from './shared/WorkflowModal.js'"), 'popup must reuse existing WorkflowModal');
 assert(/import \{ renderXmlCiiPopupNativePhase \} from '\.\/xml-cii-popup-native-panels\.js(?:\?v=[^']+)?'/.test(popup), 'popup must render popup-native phase bodies when explicitly used');
-assert(popup.includes('xml-cii-popup-native-panels.js?v=20260623-xml-cii-condense-rigid-ui-2'), 'popup must cache-bust native panel import containing Condense Rigid checkbox');
+assert(popup.includes('xml-cii-popup-native-panels.js?v=20260623-inst-length-info-simple-run-1'), 'popup must cache-bust native panel import containing INST length info');
 assert(popup.includes("import { XML_CII_WORKFLOW_PHASES, normalizeWorkflowPhaseId } from './WorkflowShell.js'"), 'popup must use canonical XML CII phase registry');
-assert(!canonicalTab.includes('installXmlCiiConversionWorkflowPopup'), 'ModelConvertersTab must not install second XML CII popup path');
-assert(!tab.includes('installXmlCiiConversionWorkflowPopup'), 'legacy tab shim must not expose duplicate XML CII popup installer');
+assert(canonicalTab.includes('installXmlCiiConversionWorkflowPopup'), 'ModelConvertersTab must install the rich workflow popup path');
+assert(tab.includes('installXmlCiiConversionWorkflowPopup'), 'legacy tab shim must continue exposing XML CII popup installer');
+assert(popup.includes('Only the XML->CII Rich Workflow button opens this phase-tab popup'), 'popup must document rich-only opening');
+assert(!popup.includes("document.addEventListener('click', interceptRun, true)"), 'popup must not intercept the simple Run Conversion button');
+assert(!popup.includes('function interceptRun'), 'popup must not define simple-run interception');
+assert(popup.includes('window[DIRECT_RUN_FLAG] = true'), 'popup must permanently bypass stale run interceptors');
+assert(popup.includes('#model-converters-run') && popup.includes('Run Conversion'), 'popup must restore simple Run Conversion button visibility');
 
 for (const phase of [
   "'1 Regex'",
@@ -91,19 +96,23 @@ assert(nativePanels.includes('data-native-run-option="condenseRigidXsd"'), 'nati
 assert(nativePanels.includes('data-native-run-option="splitCondensedValveFlange"'), 'native Run phase must expose Resolved Condense Rigid key');
 assert(nativePanels.includes('data-native-config-bool="condenseRigidXsd"'), 'native Config phase must expose XSD Condense Rigid config key');
 assert(nativePanels.includes('data-native-config-bool="splitCondensedValveFlange"'), 'native Config phase must expose Resolved Condense Rigid config key');
+assert(nativePanels.includes('data-native-config-info'), 'Config tab must expose the logic info icon/details block');
+assert(nativePanels.includes('ElementLengthMm calculated for INST'), 'Config info must explain INST ElementLengthMm logic');
+assert(nativePanels.includes('previous positive node to the INST position'), 'Config info must state the INST length basis');
 
 assert(condenseRigidBridge.includes('XSD_KEY = \'condenseRigidXsd\''), 'condense rigid bridge must define XSD option key');
 assert(condenseRigidBridge.includes('RESOLVED_SNAKE_KEY = \'split_condensed_valve_flange\''), 'condense rigid bridge must write snake_case resolved key');
-assert(condenseRigidBridge.includes('Condense Rigid / split condensed valve-flange nodes (XSD)'), 'condense rigid bridge must inject XSD label into active rich workflow');
-assert(condenseRigidBridge.includes('Condense Rigid / split condensed valve-flange nodes (Resolved)'), 'condense rigid bridge must inject Resolved label into active rich workflow');
-assert(condenseRigidBridge.includes('[data-xml-cii-run-option="kgToNewton"]'), 'condense rigid bridge must target the actual legacy rich Run phase');
-assert(condenseRigidBridge.includes('[data-xml-cii-config-bool="disableCiiSupportTagPopulation"]'), 'condense rigid bridge must target the actual legacy rich Config phase');
-assert(condenseRigidBridge.includes('DIRECT_RUN_FLAG') && condenseRigidBridge.includes('ensureSimpleRunVisible'), 'condense rigid bridge must restore/bypass simple Run Conversion visibility');
-assert(condenseRigidBridge.includes('setPopupRunOption') && condenseRigidBridge.includes('importPopupConfigText'), 'condense rigid bridge must sync run and config values');
+assert(condenseRigidBridge.includes('normaliseConfig'), 'condense rigid bridge must normalize camelCase and snake_case keys');
+assert(condenseRigidBridge.includes('setPopupRunOption') && condenseRigidBridge.includes('savePopupConfigText'), 'condense rigid bridge must sync run and config values');
+assert(condenseRigidBridge.includes('window[DIRECT_RUN_FLAG] = true'), 'condense rigid bridge must bypass stale simple-run interceptors');
 assert(!condenseRigidBridge.includes('new MutationObserver'), 'condense rigid bridge must not use broad DOM observer side effects');
-assert(canonicalTab.includes('installXmlCiiCondenseRigidUiBridge'), 'ModelConvertersTab must install condense rigid UI bridge');
-assert(canonicalTab.includes('xml-cii-condense-rigid-ui-bridge.js?v=20260623-xml-cii-condense-rigid-ui-4'), 'ModelConvertersTab must cache-bust condense rigid bridge');
-assert(publicIndex.includes('20260623-xml-cii-condense-rigid-ui-4'), 'public model-converters entry must cache-bust rich condense rigid fixes');
+assert(!condenseRigidBridge.includes("document.addEventListener('click'"), 'condense rigid bridge must not install global click injection');
+assert(!condenseRigidBridge.includes('setInterval'), 'condense rigid bridge must not poll the DOM');
+assert(canonicalTab.includes('installXmlCiiCondenseRigidUiBridge'), 'ModelConvertersTab must install condense rigid bridge');
+assert(canonicalTab.includes('installXmlCiiConversionWorkflowPopup'), 'ModelConvertersTab must install rich workflow popup');
+assert(canonicalTab.includes('xml-cii-condense-rigid-ui-bridge.js?v=20260623-inst-length-info-simple-run-1'), 'ModelConvertersTab must cache-bust condense rigid bridge');
+assert(canonicalTab.includes('xml-cii-conversion-workflow-popup.js?v=20260623-inst-length-info-simple-run-1'), 'ModelConvertersTab must cache-bust rich workflow popup');
+assert(publicIndex.includes('20260623-inst-length-info-simple-run-1'), 'public model-converters entry must cache-bust INST/simple-run fix');
 
 assert(branchSync.includes("const BRANCH_SAMPLE_KEY = 'xmlCii2019.regex.branchNameSampleFromXml.v1'"), 'Branchname sync must persist last extracted XML Branchname');
 assert(branchSync.includes('/<\\s*[^>]*Branchname'), 'Branchname sync must extract <Branchname> tag values');
@@ -115,7 +124,11 @@ assert(previewRenderer.includes('computeLineNoKey'), 'Preview must match line-li
 assert(previewRenderer.includes('_looksLikeNpsToken(shifted.fourth)'), 'Preview must recognize shifted Branchname size token at position 4');
 assert(previewRenderer.includes('_isLikelyMaterialToken(value)'), 'Preview must not treat material token CS as piping class fallback');
 assert(previewRenderer.includes('^S\\d+'), 'Preview shifted-branch guard must recognize S-prefixed line keys');
-assert(enrichmentRunParity.includes('RENUMBERABLE_NEGATIVE_TYPES') && enrichmentRunParity.includes('renumberLengthBearingNegativeNodes'), 'enriched XML parity must implement Condense Rigid negative-node renumbering');
+assert(enrichmentRunParity.includes("RENUMBERABLE_NEGATIVE_TYPES = new Set(['FLAN', 'RIGID', 'INST'])"), 'Condense resolved must include INST as length-bearing negative node');
+assert(enrichmentRunParity.includes("INLINE_LENGTH_COMPONENT_TYPES = new Set(['INST'])"), 'enriched XML parity must define INST inline length annotation');
+assert(enrichmentRunParity.includes('annotateInlineElementLengths'), 'enriched XML parity must calculate inline ElementLengthMm values');
+assert(enrichmentRunParity.includes('element-length-inst'), 'enriched XML diagnostics must record INST ElementLengthMm annotations');
+assert(enrichmentRunParity.includes('previous positive-node CII coordinate distance'), 'INST ElementLengthMm basis must be documented in diagnostics');
 assert(enrichmentRunParity.includes('split-condensed-valve-flange-resolved'), 'enriched XML diagnostics must record Resolved Condense Rigid application');
 assert(enrichmentRunParity.includes('split_condensed_valve_flange'), 'enriched XML parity must understand snake_case split_condensed_valve_flange');
 assert(invocationBuilder.includes('--split-condensed-valve-flange') && invocationBuilder.includes('--no-split-condensed-valve-flange'), 'worker invocation must forward Condense Rigid CLI option');
@@ -141,15 +154,16 @@ assert(canonicalTab.includes('model-converters-css-fix.css'), 'ModelConvertersTa
 const tabBridgeImport = canonicalTab.match(/legacy-adapter\.js\?v=([^'"]+)/)?.[1] || '';
 const publicTabImport = publicIndex.match(/ModelConvertersTab\.js\?v=([^'"]+)/)?.[1] || '';
 assert(tabBridgeImport, 'ModelConvertersTab must import legacy adapter with a cache key');
-assert(publicTabImport && publicTabImport.includes('20260623-xml-cii-condense-rigid-ui-4'), 'public index must use latest ModelConvertersTab cache key');
+assert(publicTabImport && publicTabImport.includes('20260623-inst-length-info-simple-run-1'), 'public index must use latest ModelConvertersTab cache key');
 
 console.log('✅ XML CII phase-tab workflow popup static test passed', {
   topLevelTabs: 8,
-  workflowMode: 'legacy-rich-single-popup-plus-simple-run',
+  workflowMode: 'rich-popup-button-plus-simple-run-direct',
   branchNameSync: 'linelist.sampleBranchName',
   shiftedBranchPreview: 'lineKey/size/class guarded',
   weightMatchRating: 'manual override propagated',
   condenseRigid: 'XSD + Resolved split_condensed_valve_flange wired',
+  instElementLength: 'ElementLengthMm for INST annotated',
   simpleRun: 'visible and direct',
   supplementalCss: 'model-converters-css-fix.css',
 });
