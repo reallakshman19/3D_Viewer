@@ -11,16 +11,22 @@ import {
   downloadSupportOverlayDetailsJson,
   SUPPORT_OVERLAY_DETAILS_EXPORT_SCHEMA,
 } from '../overlays/support/SupportOverlayDetailsExport.js';
+import {
+  clearSupportOverlayHighlights,
+  createEmptySupportOverlayHighlightState,
+  highlightSupportOverlayGlyph,
+  SUPPORT_OVERLAY_HIGHLIGHT_SCHEMA,
+} from '../overlays/support/SupportOverlayHighlight.js';
 
-export const RVM_NON_PRIMITIVE_SUPPORT_DETAILS_PANEL_SCHEMA = 'rvm-non-primitive-support-overlay-details-panel/v2';
+export const RVM_NON_PRIMITIVE_SUPPORT_DETAILS_PANEL_SCHEMA = 'rvm-non-primitive-support-overlay-details-panel/v3';
 
 const ROOT_SELECTOR = '[data-rvm-viewer]';
 const PANEL_ID = 'rvm-nonprimitive-support-details-panel';
 const SUPPORT_OVERLAY_ROOT_NAME = '__RVM_NON_PRIMITIVE_SUPPORT_OVERLAY__';
 const GLOBAL_KEY = '__PCF_GLB_RVM_NON_PRIMITIVE_SUPPORT_DETAILS_PANEL__';
-const PATCH_FLAG = Symbol.for('pcf-glb-rvm-non-primitive-support-details-panel-v2');
-const VIEWER_PATCH_FLAG = Symbol.for('pcf-glb-rvm-non-primitive-support-details-panel-viewer-v2');
-const PICKING_FLAG = Symbol.for('pcf-glb-rvm-non-primitive-support-details-picking-v2');
+const PATCH_FLAG = Symbol.for('pcf-glb-rvm-non-primitive-support-details-panel-v3');
+const VIEWER_PATCH_FLAG = Symbol.for('pcf-glb-rvm-non-primitive-support-details-panel-viewer-v3');
+const PICKING_FLAG = Symbol.for('pcf-glb-rvm-non-primitive-support-details-picking-v3');
 const STYLE_FLAG = Symbol.for('pcf-glb-rvm-non-primitive-support-details-panel-style-v1');
 const SOURCE_KIND_RE = /^(json|jscon|inputxml|txt|source-preview)$/i;
 const PRIMITIVE_KIND_RE = /^(rvm|glb|gltf|rev)$/i;
@@ -32,12 +38,14 @@ export function installRvmNonPrimitiveSupportOverlayDetailsPanelBridge() {
     schema: RVM_NON_PRIMITIVE_SUPPORT_DETAILS_PANEL_SCHEMA,
     panelSchema: SUPPORT_OVERLAY_DETAILS_PANEL_SCHEMA,
     exportSchema: SUPPORT_OVERLAY_DETAILS_EXPORT_SCHEMA,
+    highlightSchema: SUPPORT_OVERLAY_HIGHLIGHT_SCHEMA,
     render: renderSupportOverlayDetailsPanel,
     sync: syncAllSupportOverlayDetailsPanels,
     clear: clearSupportOverlayDetailsPanel,
     selectFromPointer: selectSupportOverlayDetailsFromPointer,
     copyJson: copySupportOverlayDetailsJson,
     downloadJson: downloadSupportOverlayDetailsJson,
+    clearHighlight: clearSupportOverlayHighlights,
   };
   installSupportDetailsStyles();
   patchRvmViewerSetModelForSupportDetailsPanel();
@@ -224,7 +232,14 @@ async function handleDetailsExportAction(panel, viewer, action) {
 function clearViewerDetailsSelection(viewer, reason = 'clear') {
   if (!viewer) return;
   viewer.nonPrimitiveSupportOverlaySelectedDetails = emptySupportOverlayDetailsPanelState(reason);
+  viewer.nonPrimitiveSupportOverlayHighlightState = clearViewerSupportHighlights(viewer, reason);
   emitDetailsSelection(viewer, viewer.nonPrimitiveSupportOverlaySelectedDetails);
+}
+
+function clearViewerSupportHighlights(viewer, reason = 'clear') {
+  const roots = collectSupportOverlayRoots(viewer);
+  if (!roots.length) return createEmptySupportOverlayHighlightState(reason);
+  return clearSupportOverlayHighlights(roots, reason);
 }
 
 function ensureSupportDetailsPicking(viewer) {
@@ -268,10 +283,14 @@ export function selectSupportOverlayDetailsFromPointer(viewer = globalThis.__3D_
       sourceKind: owner.userData.sourceKind,
       sourceFile: owner.userData.sourceFile,
     });
+    viewer.nonPrimitiveSupportOverlayHighlightState = highlightSupportOverlayGlyph(owner, roots, {
+      supportId: state.supportId,
+      family: state.family,
+    });
     viewer.nonPrimitiveSupportOverlaySelectedDetails = state;
     emitDetailsSelection(viewer, state);
     syncAllSupportOverlayDetailsPanels();
-    return { status: 'selected', supportId: state.supportId, family: state.family };
+    return { status: 'selected', supportId: state.supportId, family: state.family, highlighted: true };
   }
   return { status: 'missed' };
 }

@@ -65,7 +65,7 @@ assert.ok(selected.attributes.some((row) => row.key === 'SUPPORT_NO' && row.valu
 const selectedHtml = renderSupportOverlayDetailsPanelHtml(selected);
 assert.match(selectedHtml, /data-support-details-panel="selected"/);
 assert.match(selectedHtml, /PS-101 GUIDE/);
-assert.match(selectedHtml, /GUIDE \+\/\-Z/);
+assert.match(selectedHtml, /GUIDE \+\/-Z/);
 assert.match(selectedHtml, /1, 0, 0/);
 assert.match(selectedHtml, /10 mm · visual 100 mm/);
 assert.match(selectedHtml, /data-support-details-action="copy-json"/);
@@ -83,18 +83,20 @@ const bridge = await fs.readFile(new URL('../tabs/RvmNonPrimitiveSupportOverlayD
 const renderer = await fs.readFile(new URL('../tabs/viewer3d-rvm-tab-renderer.js', import.meta.url), 'utf8');
 const sourceTools = await fs.readFile(new URL('../tabs/RvmNonPrimitiveSourceToolsUiBridge.js', import.meta.url), 'utf8');
 
-assert.match(bridge, /rvm-non-primitive-support-overlay-details-panel\/v2/, 'details panel bridge exposes a versioned schema');
+assert.match(bridge, /rvm-non-primitive-support-overlay-details-panel\/v3/, 'details panel bridge exposes a versioned schema');
 assert.match(bridge, /__RVM_NON_PRIMITIVE_SUPPORT_OVERLAY__/, 'details panel raycasts only the scoped non-primitive support overlay root');
 assert.match(bridge, /raycaster\.intersectObjects/, 'details panel uses isolated raycasting instead of RVM primitive selection');
 assert.match(bridge, /nonPrimitiveSupportOverlaySelectedDetails/, 'details panel stores selected details outside RVM primitive selection state');
 assert.match(bridge, /supportOverlayDetails/, 'details panel reads source-backed glyph metadata');
+assert.match(bridge, /highlightSupportOverlayGlyph/, 'details panel highlights the selected source support glyph');
+assert.match(bridge, /nonPrimitiveSupportOverlayHighlightState/, 'details panel stores highlight state outside primitive selection state');
 assert.match(bridge, /rvm-nonprimitive-support-details-selected/, 'details panel emits scoped selection event for UI refresh');
 assert.match(bridge, /mode === 'source-preview' && isNonPrimitiveKind\(kind\)/, 'details panel is source-preview gated');
 assert.match(bridge, /PRIMITIVE_KIND_RE[\s\S]*rvm\|glb\|gltf\|rev/, 'details panel excludes primitive formats');
 assert.doesNotMatch(bridge, /RvmSupportSymbols|RvmSupportGeometryBridge|RvmRawSupportCylinderGuardBridge|Support Summary|SupportATT|SupportEngine/, 'details panel does not revive retired RVM support runtime or UI');
 assert.doesNotMatch(bridge, /selection\.select|selection\.pick|RvmSelectionAdapter/, 'details panel does not call the RVM primitive selection adapter');
 
-assert.match(renderer, /RvmNonPrimitiveSupportOverlayDetailsPanelBridge\.js\?v=20260623-nonprimitive-support-details-panel-2/, 'renderer imports details panel bridge with cache key');
+assert.match(renderer, /RvmNonPrimitiveSupportOverlayDetailsPanelBridge\.js\?v=20260623-nonprimitive-support-details-panel-3/, 'renderer imports details panel bridge with cache key');
 assert.match(renderer, /installRvmNonPrimitiveSupportOverlayBridge\(\)[\s\S]*installRvmNonPrimitiveSupportOverlayDetailsPanelBridge\(\)[\s\S]*installRvmNonPrimitiveAutoBendBridge\(\)/, 'renderer installs details panel after support overlay and before auto-bend/source-tools');
 assert.match(sourceTools, /rvm-nonprimitive-source-tools-panel/, 'source tools panel remains separate from support detail panel');
 
