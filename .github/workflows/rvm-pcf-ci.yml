@@ -21,6 +21,7 @@ on:
       - 'viewer/tabs/RvmNonPrimitiveSupportOverlayBridge.js'
       - 'viewer/tabs/RvmNonPrimitiveSupportOverlayDetailsPanelBridge.js'
       - 'viewer/tabs/RvmNonPrimitiveSupportOverlayHoverBridge.js'
+      - 'viewer/tabs/RvmNonPrimitiveSupportOverlayHardDisableBridge.js'
       - 'viewer/tabs/RvmNonPrimitiveAutoBendBridge.js'
       - 'viewer/tabs/RvmNonPrimitiveSourceToolsUiBridge.js'
       - 'viewer/geometry-workspace/**'
@@ -116,6 +117,9 @@ jobs:
 
       - name: Verify non-primitive support overlay hover
         run: node viewer/tests/nonprimitive-support-overlay-hover.test.js
+
+      - name: Verify non-primitive support overlay hard disable
+        run: node viewer/tests/nonprimitive-support-overlay-hard-disable.test.js
 
       - name: Verify non-primitive support coordinate mapper
         run: node viewer/tests/nonprimitive-support-coordinate-mapper.test.js
