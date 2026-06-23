@@ -18,16 +18,16 @@ import {
   SUPPORT_OVERLAY_HIGHLIGHT_SCHEMA,
 } from '../overlays/support/SupportOverlayHighlight.js';
 
-export const RVM_NON_PRIMITIVE_SUPPORT_DETAILS_PANEL_SCHEMA = 'rvm-non-primitive-support-overlay-details-panel/v3';
+export const RVM_NON_PRIMITIVE_SUPPORT_DETAILS_PANEL_SCHEMA = 'rvm-non-primitive-support-overlay-details-panel/v4';
 
 const ROOT_SELECTOR = '[data-rvm-viewer]';
 const PANEL_ID = 'rvm-nonprimitive-support-details-panel';
 const SUPPORT_OVERLAY_ROOT_NAME = '__RVM_NON_PRIMITIVE_SUPPORT_OVERLAY__';
 const GLOBAL_KEY = '__PCF_GLB_RVM_NON_PRIMITIVE_SUPPORT_DETAILS_PANEL__';
-const PATCH_FLAG = Symbol.for('pcf-glb-rvm-non-primitive-support-details-panel-v3');
-const VIEWER_PATCH_FLAG = Symbol.for('pcf-glb-rvm-non-primitive-support-details-panel-viewer-v3');
-const PICKING_FLAG = Symbol.for('pcf-glb-rvm-non-primitive-support-details-picking-v3');
-const STYLE_FLAG = Symbol.for('pcf-glb-rvm-non-primitive-support-details-panel-style-v1');
+const PATCH_FLAG = Symbol.for('pcf-glb-rvm-non-primitive-support-details-panel-v4');
+const VIEWER_PATCH_FLAG = Symbol.for('pcf-glb-rvm-non-primitive-support-details-panel-viewer-v4');
+const PICKING_FLAG = Symbol.for('pcf-glb-rvm-non-primitive-support-details-picking-v4');
+const STYLE_FLAG = Symbol.for('pcf-glb-rvm-non-primitive-support-details-panel-style-v2');
 const SOURCE_KIND_RE = /^(json|jscon|inputxml|txt|source-preview)$/i;
 const PRIMITIVE_KIND_RE = /^(rvm|glb|gltf|rev)$/i;
 
@@ -46,11 +46,13 @@ export function installRvmNonPrimitiveSupportOverlayDetailsPanelBridge() {
     copyJson: copySupportOverlayDetailsJson,
     downloadJson: downloadSupportOverlayDetailsJson,
     clearHighlight: clearSupportOverlayHighlights,
+    clearOnEscape: handleSupportDetailsKeyboardShortcut,
   };
   installSupportDetailsStyles();
   patchRvmViewerSetModelForSupportDetailsPanel();
   try { globalThis.addEventListener?.('rvm-nonprimitive-support-details-selected', () => syncAllSupportOverlayDetailsPanels()); } catch (_) {}
   try { globalThis.addEventListener?.('rvm-model-loaded', () => syncAllSupportOverlayDetailsPanels()); } catch (_) {}
+  try { globalThis.addEventListener?.('keydown', handleSupportDetailsKeyboardShortcut, true); } catch (_) {}
   queueMicrotask(syncAllSupportOverlayDetailsPanels);
 }
 
@@ -60,7 +62,7 @@ function installSupportDetailsStyles() {
   const doc = globalThis.document;
   if (!doc?.createElement) return;
   const style = doc.createElement('style');
-  style.dataset.rvmNonPrimitiveSupportDetailsStyle = 'v1';
+  style.dataset.rvmNonPrimitiveSupportDetailsStyle = 'v2';
   style.textContent = `
     .rvm-support-details-panel {
       flex: 0 0 auto;
@@ -77,6 +79,11 @@ function installSupportDetailsStyles() {
       border: 1px solid rgba(116, 139, 171, 0.26);
       border-radius: 8px;
       background: rgba(20, 26, 36, 0.82);
+    }
+
+    .rvm-source-tools-detail[data-support-details-highlighted="true"] {
+      border-color: rgba(78, 195, 255, 0.58);
+      box-shadow: inset 0 0 0 1px rgba(78, 195, 255, 0.18);
     }
 
     .rvm-source-tools-detail .rvm-source-tools-row strong {
@@ -137,9 +144,11 @@ export function renderSupportOverlayDetailsPanel(root, viewer = globalThis.__3D_
   panel.dataset.supportDetailsActive = 'true';
   delete panel.dataset.supportDetailsCleared;
   const diagnostics = viewer?.nonPrimitiveSupportOverlayDiagnostics || {};
-  const state = buildSupportOverlayDetailsPanelState(viewer?.nonPrimitiveSupportOverlaySelectedDetails, {
+  const rawDetails = viewer?.nonPrimitiveSupportOverlaySelectedDetails;
+  const state = buildSupportOverlayDetailsPanelState(rawDetails, {
     sourceKind: diagnostics.sourceKind || kind,
     sourceFile: diagnostics.sourceFile || '',
+    highlighted: isSupportDetailsHighlighted(viewer, rawDetails),
   });
   panel.innerHTML = renderSupportOverlayDetailsPanelHtml(state, { escapeHtml });
   bindDetailsPanel(panel, viewer);
@@ -229,6 +238,16 @@ async function handleDetailsExportAction(panel, viewer, action) {
   }
 }
 
+function handleSupportDetailsKeyboardShortcut(event = {}) {
+  if (String(event.key || '') !== 'Escape') return { status: 'ignored', reason: 'not-escape' };
+  const viewer = globalThis.__3D_RVM_VIEWER__;
+  if (!hasSelectedSupportDetails(viewer)) return { status: 'ignored', reason: 'no-selected-support-details' };
+  clearViewerDetailsSelection(viewer, 'escape-key');
+  syncAllSupportOverlayDetailsPanels();
+  try { event.stopPropagation?.(); } catch (_) {}
+  return { status: 'cleared', reason: 'escape-key' };
+}
+
 function clearViewerDetailsSelection(viewer, reason = 'clear') {
   if (!viewer) return;
   viewer.nonPrimitiveSupportOverlaySelectedDetails = emptySupportOverlayDetailsPanelState(reason);
@@ -282,6 +301,7 @@ export function selectSupportOverlayDetailsFromPointer(viewer = globalThis.__3D_
     const state = buildSupportOverlayDetailsPanelState(owner.userData.supportOverlayDetails, {
       sourceKind: owner.userData.sourceKind,
       sourceFile: owner.userData.sourceFile,
+      highlighted: true,
     });
     viewer.nonPrimitiveSupportOverlayHighlightState = highlightSupportOverlayGlyph(owner, roots, {
       supportId: state.supportId,
@@ -292,7 +312,12 @@ export function selectSupportOverlayDetailsFromPointer(viewer = globalThis.__3D_
     syncAllSupportOverlayDetailsPanels();
     return { status: 'selected', supportId: state.supportId, family: state.family, highlighted: true };
   }
-  return { status: 'missed' };
+  if (hasSelectedSupportDetails(viewer)) {
+    clearViewerDetailsSelection(viewer, 'pointer-miss');
+    syncAllSupportOverlayDetailsPanels();
+    return { status: 'missed', cleared: true };
+  }
+  return { status: 'missed', cleared: false };
 }
 
 function collectSupportOverlayRoots(viewer) {
@@ -313,6 +338,18 @@ function findDetailsOwner(object, roots) {
     current = current.parent;
   }
   return null;
+}
+
+function hasSelectedSupportDetails(viewer) {
+  return viewer?.nonPrimitiveSupportOverlaySelectedDetails?.status === 'selected';
+}
+
+function isSupportDetailsHighlighted(viewer, details) {
+  if (!details || details.status !== 'selected') return false;
+  const state = viewer?.nonPrimitiveSupportOverlayHighlightState;
+  if (!state || state.status !== 'highlighted') return false;
+  const supportId = details.supportId || details.supportNo;
+  return !supportId || !state.supportId || String(state.supportId) === String(supportId);
 }
 
 function emitDetailsSelection(viewer, state) {
