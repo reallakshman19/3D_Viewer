@@ -15,15 +15,18 @@ const DEFAULT_UNIT_SCALE = Object.freeze({
   unknown: 1,
 });
 
-const CHILD_KEYS = Object.freeze(['children', 'items', 'branches', 'nodes', 'hierarchy']);
-const PIPE_COORD_FROM_KEYS = Object.freeze(['APOS', 'FROM', 'FROM_POS', 'FROMPOS', 'START', 'START_POS']);
-const PIPE_COORD_TO_KEYS = Object.freeze(['LPOS', 'TO', 'TO_POS', 'TOPOS', 'END', 'END_POS']);
-const PIPE_AXIS_KEYS = Object.freeze(['PIPE_AXIS', 'PIPEAXIS', 'AXIS', 'DIRECTION', 'DIR']);
-const PIPE_NODE_FROM_KEYS = Object.freeze(['FROM_NODE', 'FROMNODE', 'START_NODE', 'STARTNODE', 'NODE1', 'A_NODE']);
-const PIPE_NODE_TO_KEYS = Object.freeze(['TO_NODE', 'TONODE', 'END_NODE', 'ENDNODE', 'NODE2', 'B_NODE']);
-const SUPPORT_NODE_KEYS = Object.freeze(['NODE', 'NODEID', 'NODE_ID', 'ATTACHED_NODE', 'ATTACHEDNODE', 'SUPPORT_NODE', 'SUPPORTNODE', 'FROM_NODE', 'TO_NODE']);
-const BRANCH_KEYS = Object.freeze(['BRANCH', 'BRANCH_ID', 'BRANCHID', 'OWNER_BRANCH', 'OWNERBRANCH']);
-const LINE_KEYS = Object.freeze(['LINE', 'LINE_NO', 'LINENO', 'LINE_NUMBER', 'LINENUMBER', 'LINEREF', 'PIPELINE']);
+const CHILD_KEYS = Object.freeze('children items branches nodes hierarchy components elements members rows records recordset pipes pipeSegments pipe_segments rawElements raw_elements model data payload'.split(/\s+/));
+const ATTRIBUTE_CONTAINER_KEYS = Object.freeze('attributes attrs rawAttributes raw_attributes properties props metadata meta data fields values record pipe pipeData pipe_data segment segmentData segment_data element elementData element_data sourceAttributes source_attributes'.split(/\s+/));
+const PIPE_COORD_FROM_KEYS = Object.freeze('APOS A_POS FROM FROM_POS FROMPOS START START_POS STARTPOS START_POINT STARTPOINT START_COORD STARTCOORD START_COORDINATE STARTCOORDINATE FROM_POINT FROMPOINT FROM_COORD FROMCOORD FROM_COORDINATE FROMCOORDINATE'.split(/\s+/));
+const PIPE_COORD_TO_KEYS = Object.freeze('LPOS L_POS TO TO_POS TOPOS END END_POS ENDPOS END_POINT ENDPOINT END_COORD ENDCOORD END_COORDINATE ENDCOORDINATE TO_POINT TOPOINT TO_COORD TOCOORD TO_COORDINATE TOCOORDINATE'.split(/\s+/));
+const PIPE_AXIS_KEYS = Object.freeze('PIPE_AXIS PIPEAXIS AXIS DIRECTION DIR ORIENTATION ORIENT LINE_AXIS LINEAXIS RUN_AXIS RUNAXIS VECTOR VEC DIRECTION_VECTOR DIRECTIONVECTOR'.split(/\s+/));
+const PIPE_NODE_FROM_KEYS = Object.freeze('FROM_NODE FROMNODE START_NODE STARTNODE NODE1 A_NODE ANODE FROM_NODE_ID FROMNODEID START_NODE_ID STARTNODEID'.split(/\s+/));
+const PIPE_NODE_TO_KEYS = Object.freeze('TO_NODE TONODE END_NODE ENDNODE NODE2 B_NODE BNODE TO_NODE_ID TONODEID END_NODE_ID ENDNODEID'.split(/\s+/));
+const SUPPORT_NODE_KEYS = Object.freeze('NODE NODEID NODE_ID ATTACHED_NODE ATTACHEDNODE SUPPORT_NODE SUPPORTNODE FROM_NODE TO_NODE'.split(/\s+/));
+const BRANCH_KEYS = Object.freeze('BRANCH BRANCH_ID BRANCHID OWNER_BRANCH OWNERBRANCH BRANCHNAME BRANCH_NAME OWNER OWNER_ID OWNERID ZONE ZONE_NAME'.split(/\s+/));
+const LINE_KEYS = Object.freeze('LINE LINE_NO LINENO LINE_NUMBER LINENUMBER LINEREF LINE_REF PIPELINE PIPE_LINE PIPELINE_ID PIPELINEID LINENAME LINE_NAME LINEID LINE_ID'.split(/\s+/));
+const ATTRIBUTE_CONTAINER_KEY_SET = new Set(ATTRIBUTE_CONTAINER_KEYS.map(compactKey));
+const CHILD_KEY_SET = new Set(CHILD_KEYS.map(compactKey));
 
 export function createSupportCoordinateMapper(options = {}) {
   const sourceUnits = normalizeUnit(options.sourceUnits || 'mm');
@@ -127,7 +130,8 @@ export function mapSupportCoordinate(point, options = {}) {
 
 export function collectSourcePipeSegments(source, out = []) {
   const roots = Array.isArray(source) ? source : [source];
-  for (const node of roots) collectPipeNode(node, out);
+  const seen = new Set(out.map(pipeSegmentKey));
+  for (const node of roots) collectPipeNode(node, out, {}, seen);
   return out;
 }
 
@@ -238,21 +242,22 @@ export function resolveSupportPipeAxis(record = {}, pipeSegments = [], options =
   };
 }
 
-function collectPipeNode(node, out) {
+function collectPipeNode(node, out, inherited = {}, seen = new Set()) {
   if (!node || typeof node !== 'object') return;
 
-  const a = attrs(node);
-  const typeText = [node.type, node.kind, a.TYPE, a.COMPONENT_TYPE, a.CATEGORY].map(textValue).join(' ').toUpperCase();
-  const isPipeLike = /\bPIPE\b|\bBRAN\b|\bBRANCH\b|\bPIPING\b/.test(typeText);
-  const isSupportLike = /\bSUPPORT\b|\bATTA\b|\bANCI\b|\bGUIDE\b|\bREST\b|\bLINE\s*STOP\b|\bLINESTOP\b/.test(typeText);
+  const a = mergeInheritedAttrs(attrs(node), inherited);
+  const nextInherited = inheritOwnerContext(a, inherited);
+  const typeText = [node.type, node.kind, a.TYPE, a.COMPONENT_TYPE, a.COMPONENTTYPE, a.CATEGORY, a.SKEY].map(textValue).join(' ').toUpperCase();
+  const isPipeLike = /\bPIPE\b|\bBRAN\b|\bBRANCH\b|\bPIPING\b|\bTUBE\b|\bSEGMENT\b/.test(typeText);
+  const isSupportLike = /\bSUPPORT\b|\bATTA\b|\bANCI\b|\bGUIDE\b|\bREST\b|\bLINE\s*STOP\b|\bLINESTOP\b|\bSPRING\b/.test(typeText);
 
   if (isPipeLike && !isSupportLike) {
     const from = firstVec(a, PIPE_COORD_FROM_KEYS);
     const to = firstVec(a, PIPE_COORD_TO_KEYS);
     const axis = axisFromAttrsOrPoints(a, from, to);
     if (from && to && axis) {
-      out.push({
-        id: textValue(a.ID || a.NAME || node.id || node.name || `pipe-${out.length + 1}`),
+      const segment = {
+        id: firstTextFromKeys(a, ['ID', 'NAME', 'TAG', 'REF', 'PIPE_ID', 'PIPEID']) || textValue(node.id || node.name || `pipe-${out.length + 1}`),
         from,
         to,
         axis,
@@ -261,19 +266,97 @@ function collectPipeNode(node, out) {
         branchId: firstTextFromKeys(a, BRANCH_KEYS),
         lineNo: firstTextFromKeys(a, LINE_KEYS),
         attrs: a,
-      });
+      };
+      const key = pipeSegmentKey(segment);
+      if (!seen.has(key)) {
+        seen.add(key);
+        out.push(segment);
+      }
     }
   }
 
-  for (const key of CHILD_KEYS) {
-    const children = node[key];
-    if (Array.isArray(children)) for (const child of children) collectPipeNode(child, out);
+  for (const child of childNodes(node)) collectPipeNode(child, out, nextInherited, seen);
+}
+
+function childNodes(node) {
+  const out = [];
+  for (const [key, value] of Object.entries(node || {})) {
+    const compact = compactKey(key);
+    const childKey = CHILD_KEY_SET.has(compact) || /CHILDREN|ITEMS|BRANCHES?|NODES?|HIERARCHY|COMPONENTS?|ELEMENTS?|MEMBERS?|ROWS?|RECORDS?|RECORDSET|PIPES?|PIPESEGMENTS?|RAWELEMENTS?|MODEL|DATA|PAYLOAD/.test(compact);
+    if (!childKey) continue;
+    if (Array.isArray(value)) out.push(...value.filter((item) => item && typeof item === 'object'));
+    else if (value && typeof value === 'object') out.push(value);
   }
+  return out;
+}
+
+function attrs(node) {
+  const out = {};
+  mergeNodeTopLevel(out, node);
+  for (const [key, value] of Object.entries(node || {})) {
+    if (!ATTRIBUTE_CONTAINER_KEY_SET.has(compactKey(key))) continue;
+    if (value && typeof value === 'object' && !Array.isArray(value)) mergeAttributeObject(out, value, 1);
+  }
+  return out;
+}
+
+function mergeNodeTopLevel(out, node) {
+  if (!node || typeof node !== 'object') return;
+  for (const [key, value] of Object.entries(node)) {
+    const compact = compactKey(key);
+    if (CHILD_KEY_SET.has(compact) || ATTRIBUTE_CONTAINER_KEY_SET.has(compact)) continue;
+    if (Array.isArray(value)) continue;
+    if (value && typeof value === 'object' && !looksLikeVec3(value)) continue;
+    setAttr(out, key, value);
+  }
+}
+
+function mergeAttributeObject(out, value, depth) {
+  if (!value || typeof value !== 'object' || Array.isArray(value) || depth > 2) return;
+  for (const [key, nested] of Object.entries(value)) {
+    if (Array.isArray(nested)) {
+      setAttr(out, key, nested);
+    } else if (nested && typeof nested === 'object' && !looksLikeVec3(nested)) {
+      if (ATTRIBUTE_CONTAINER_KEY_SET.has(compactKey(key)) || /ATTR|PROP|DATA|PIPE|SEGMENT|SOURCE|FIELD|VALUE|ELEMENT/.test(compactKey(key))) mergeAttributeObject(out, nested, depth + 1);
+      else setAttr(out, key, nested);
+    } else {
+      setAttr(out, key, nested);
+    }
+  }
+}
+
+function setAttr(out, key, value) {
+  const variants = unique([
+    key,
+    String(key).toUpperCase(),
+    compactKey(key),
+    underscoreKey(key),
+  ]);
+  for (const variant of variants) {
+    if (variant && out[variant] === undefined) out[variant] = value;
+  }
+}
+
+function mergeInheritedAttrs(local, inherited) {
+  const out = { ...local };
+  for (const [key, value] of Object.entries(inherited || {})) {
+    if (out[key] === undefined && value !== undefined && value !== null && value !== '') out[key] = value;
+  }
+  return out;
+}
+
+function inheritOwnerContext(attrs, inherited) {
+  const out = { ...inherited };
+  const branch = firstTextFromKeys(attrs, BRANCH_KEYS);
+  const line = firstTextFromKeys(attrs, LINE_KEYS);
+  if (branch) for (const key of BRANCH_KEYS) if (out[key] === undefined) out[key] = branch;
+  if (line) for (const key of LINE_KEYS) if (out[key] === undefined) out[key] = line;
+  return out;
 }
 
 function axisFromAttrsOrPoints(attrs, from, to) {
   for (const key of PIPE_AXIS_KEYS) {
-    const axis = normalizeVec(parseVec3(attrs[key]));
+    const axis = normalizeVec(parseVec3(valueFromKeys(attrs, [key])));
     if (axis) return axis;
   }
   if (from && to) return normalizeVec(sub(to, from));
@@ -282,15 +365,16 @@ function axisFromAttrsOrPoints(attrs, from, to) {
 
 function firstVec(attrs, keys) {
   for (const key of keys) {
-    const value = parseVec3(attrs[key]);
+    const value = parseVec3(valueFromKeys(attrs, [key]));
     if (value) return value;
   }
   return null;
 }
 
 function firstTextFromKeys(attrs, keys) {
+  const a = attrs && attrs.__supportCoordinateCanonicalAttrs ? attrs : canonicalAttrs(attrs || {});
   for (const key of keys) {
-    const value = textValue(attrs[key]).trim();
+    const value = textValue(valueFromKeys(a, [key])).trim();
     if (value) return value;
   }
   return '';
@@ -331,6 +415,18 @@ function nearestPointOnSegment(point, a, b) {
   if (!Number.isFinite(len2) || len2 < EPS) return null;
   const t = Math.max(0, Math.min(1, dot(sub(point, a), ab) / len2));
   return { point: add(a, scale(ab, t)), t };
+}
+
+function pipeSegmentKey(segment) {
+  return [
+    segment.id,
+    Number(segment.from?.x).toFixed(3),
+    Number(segment.from?.y).toFixed(3),
+    Number(segment.from?.z).toFixed(3),
+    Number(segment.to?.x).toFixed(3),
+    Number(segment.to?.y).toFixed(3),
+    Number(segment.to?.z).toFixed(3),
+  ].join('|');
 }
 
 function normalizeUnit(value) {
@@ -374,8 +470,24 @@ function applyMatrix4(point, m) {
   };
 }
 
-function attrs(node) {
-  return { ...(node.attributes || {}), ...(node.attrs || {}), ...(node.rawAttributes || {}) };
+function canonicalAttrs(a = {}) {
+  if (!a || typeof a !== 'object') return {};
+  if (a.__supportCoordinateCanonicalAttrs) return a;
+  const out = {};
+  mergeAttributeObject(out, a, 1);
+  Object.defineProperty(out, '__supportCoordinateCanonicalAttrs', { value: true, enumerable: false });
+  return out;
+}
+
+function valueFromKeys(a, keys) {
+  const attrs = a && a.__supportCoordinateCanonicalAttrs ? a : canonicalAttrs(a || {});
+  for (const key of keys) {
+    const variants = [key, String(key).toUpperCase(), compactKey(key), underscoreKey(key)];
+    for (const variant of variants) {
+      if (attrs[variant] !== undefined && attrs[variant] !== null && attrs[variant] !== '') return attrs[variant];
+    }
+  }
+  return undefined;
 }
 
 function parseVec3(value) {
@@ -385,17 +497,40 @@ function parseVec3(value) {
     return x === null || y === null || z === null ? null : { x, y, z };
   }
   if (typeof value === 'object') {
-    const x = numberValue(value.x ?? value.X), y = numberValue(value.y ?? value.Y), z = numberValue(value.z ?? value.Z);
+    const x = numberValue(firstDefined(value.x, value.X, value.e, value.E, value.easting, value.Easting, value.EASTING));
+    const y = numberValue(firstDefined(value.y, value.Y, value.n, value.N, value.northing, value.Northing, value.NORTHING));
+    const z = numberValue(firstDefined(value.z, value.Z, value.u, value.U, value.up, value.UP, value.el, value.EL, value.elevation, value.Elevation, value.ELEVATION));
     return x === null || y === null || z === null ? null : { x, y, z };
   }
   const text = textValue(value).trim();
+  const directional = text.match(/\b([EWNSUD])\s*(-?\d+(?:\.\d+)?)/gi);
+  if (directional?.length >= 3) {
+    const out = { x: 0, y: 0, z: 0 };
+    for (const entry of directional) {
+      const [, dir, raw] = /([EWNSUD])\s*(-?\d+(?:\.\d+)?)/i.exec(entry) || [];
+      const n = Number(raw);
+      if (!Number.isFinite(n)) continue;
+      if (/E/i.test(dir)) out.x = n;
+      else if (/W/i.test(dir)) out.x = -n;
+      else if (/N/i.test(dir)) out.y = n;
+      else if (/S/i.test(dir)) out.y = -n;
+      else if (/U/i.test(dir)) out.z = n;
+      else if (/D/i.test(dir)) out.z = -n;
+    }
+    return out;
+  }
   const values = text.match(/-?\d+(?:\.\d+)?/g)?.map(Number).filter(Number.isFinite) || [];
   return values.length >= 3 ? { x: values[0], y: values[1], z: values[2] } : null;
 }
 
 function numberValue(value) {
-  const n = Number.parseFloat(textValue(value).replace(/mm|m|inch|in/gi, '').trim());
+  const text = textValue(value).replace(/,/g, '').replace(/\b(?:mm|millimetres?|millimeters?|m|metres?|meters?|inch|in)\b/gi, '').trim();
+  const n = Number.parseFloat(text);
   return Number.isFinite(n) ? n : null;
+}
+
+function firstDefined(...values) {
+  return values.find((value) => value !== undefined && value !== null && value !== '');
 }
 
 function firstText(...values) {
@@ -449,6 +584,13 @@ function isFiniteVec(value) {
   return Number.isFinite(value?.x) && Number.isFinite(value?.y) && Number.isFinite(value?.z);
 }
 
+function looksLikeVec3(value) {
+  if (!value || typeof value !== 'object') return false;
+  return ['x', 'X', 'e', 'E', 'easting', 'Easting', 'EASTING'].some((key) => key in value)
+    && ['y', 'Y', 'n', 'N', 'northing', 'Northing', 'NORTHING'].some((key) => key in value)
+    && ['z', 'Z', 'u', 'U', 'up', 'UP', 'el', 'EL', 'elevation', 'Elevation', 'ELEVATION'].some((key) => key in value);
+}
+
 function add(a, b) {
   return { x: a.x + b.x, y: a.y + b.y, z: a.z + b.z };
 }
@@ -468,4 +610,20 @@ function dot(a, b) {
 function distance(a, b) {
   const d = sub(a, b);
   return Math.sqrt(dot(d, d));
+}
+
+function compactKey(value) {
+  return String(value || '').replace(/[^a-z0-9]/gi, '').toUpperCase();
+}
+
+function underscoreKey(value) {
+  return String(value || '')
+    .replace(/([a-z0-9])([A-Z])/g, '$1_$2')
+    .replace(/[^a-z0-9]+/gi, '_')
+    .replace(/^_+|_+$/g, '')
+    .toUpperCase();
+}
+
+function unique(values) {
+  return [...new Set(values.filter(Boolean))];
 }
