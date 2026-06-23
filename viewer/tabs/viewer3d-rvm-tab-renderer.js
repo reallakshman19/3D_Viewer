@@ -3,7 +3,7 @@
 // The tab implementation currently exposes mountViewer3DRvmTab.
 // Active retired support tools purge cache key: RvmRetiredSupportToolsPurgeBridge.js?v=20260622-rvm-retired-support-tools-purge-2
 // Active generic label performance cache key: RvmLabelPerformanceBridge.js?v=20260622-rvm-label-perf-no-support-runtime-1
-// Active non-primitive support overlay cache key: RvmNonPrimitiveSupportOverlayBridge.js?v=20260623-nonprimitive-support-overlay-8
+// Active non-primitive support overlay cache key: RvmNonPrimitiveSupportOverlayBridge.js?v=20260623-nonprimitive-support-overlay-9
 // Active non-primitive support hard-disable cache key: RvmNonPrimitiveSupportOverlayHardDisableBridge.js?v=20260623-nonprimitive-support-hard-disable-1
 // Active non-primitive support details panel cache key: RvmNonPrimitiveSupportOverlayDetailsPanelBridge.js?v=20260623-nonprimitive-support-details-panel-4
 // Active non-primitive support hover cache key: RvmNonPrimitiveSupportOverlayHoverBridge.js?v=20260623-nonprimitive-support-hover-2
@@ -16,7 +16,7 @@ import { installRvmHierarchySelectionBridge } from './RvmHierarchySelectionBridg
 import { installRvmViewerInteractionPatch, installRvmCanvasSelectionBridge } from './RvmViewerInteractionPatch.js?v=20260621-rvm-button-hardening-1';
 import { installRvmCanvasSelectionSinglePickGuardBridge } from './RvmCanvasSelectionSinglePickGuardBridge.js?v=20260622-rvm-canvas-single-pick-guard-1';
 import { installRvmRetiredSupportToolsPurgeBridge } from './RvmRetiredSupportToolsPurgeBridge.js?v=20260622-rvm-retired-support-tools-purge-2';
-import { installRvmNonPrimitiveSupportOverlayBridge } from './RvmNonPrimitiveSupportOverlayBridge.js?v=20260623-nonprimitive-support-overlay-8';
+import { installRvmNonPrimitiveSupportOverlayBridge } from './RvmNonPrimitiveSupportOverlayBridge.js?v=20260623-nonprimitive-support-overlay-9';
 import { installRvmNonPrimitiveSupportOverlayHardDisableBridge } from './RvmNonPrimitiveSupportOverlayHardDisableBridge.js?v=20260623-nonprimitive-support-hard-disable-1';
 import { installRvmNonPrimitiveSupportOverlayDetailsPanelBridge } from './RvmNonPrimitiveSupportOverlayDetailsPanelBridge.js?v=20260623-nonprimitive-support-details-panel-4';
 import { installRvmNonPrimitiveSupportOverlayHoverBridge } from './RvmNonPrimitiveSupportOverlayHoverBridge.js?v=20260623-nonprimitive-support-hover-2';
@@ -51,7 +51,7 @@ import { installRvmSelectionTreeSyncBridge } from './RvmSelectionTreeSyncBridge.
 import { installRvmMaterialModeBridge } from './RvmMaterialModeBridge.js?v=20260620-rvm-remaining-material-modes-1';
 import { installRvmBottomDiagnosticsDrawerBridge } from './RvmBottomDiagnosticsDrawerBridge.js?v=20260622-rvm-support-tools-retired-1';
 import { installRvmDeferredBridgeLoader } from './RvmDeferredBridgeLoader.js?v=20260622-rvm-support-tools-retired-1';
-import { installRvmLeftPanelResizeCollapseBridge } from './RvmLeftPanelResizeCollapseBridge.js?v=20260622-rvm-left-panel-resize-collapse-1';
+import { installRvmLeftPanelResizeCollapseBridge } from './RvmLeftPanelResizeCollapseBridge.js?v=20260623-rvm-left-panel-resize-collapse-2';
 import { installRvmLeafSelectionIdentityBridge } from './RvmLeafSelectionIdentityBridge.js?v=20260622-rvm-leaf-selection-identity-1';
 import { installRvmLeafCanvasPickBridge } from './RvmLeafCanvasPickBridge.js?v=20260622-rvm-leaf-canvas-pick-orbit-guard-2';
 import { installBrowserRvmCppMat3x4WorkerPatch } from '../rvm/BrowserRvmCppMat3x4WorkerPatch.js?v=20260620-rvm-facetgroup-1';

@@ -79,8 +79,8 @@ assert.ok(bridge.includes('supportOverlayDetails'), 'bridge stores support overl
 assert.ok(bridge.includes('rvmSearchIndexed = false'), 'bridge keeps support overlay details out of RVM search indexing');
 assert.ok(bridge.includes('pickable: false'), 'bridge keeps support overlay details non-pickable');
 assert.ok(glyphGeometry.includes('selectable: false'), 'glyph groups remain non-selectable');
-assert.ok(bridge.includes('rvm-non-primitive-support-overlay/v8'), 'bridge schema is bumped for details metadata');
-assert.match(renderer, /RvmNonPrimitiveSupportOverlayBridge\.js\?v=20260623-nonprimitive-support-overlay-8/, 'renderer cache key is bumped for support overlay details');
+assert.ok(bridge.includes('rvm-non-primitive-support-overlay/v9'), 'bridge schema is bumped for axis-transform-aware details metadata');
+assert.match(renderer, /RvmNonPrimitiveSupportOverlayBridge\.js\?v=20260623-nonprimitive-support-overlay-9/, 'renderer cache key is bumped for support overlay v9');
 assert.doesNotMatch(bridge, /RvmSupportSymbols|RvmSupportGeometryBridge|RvmRawSupportCylinderGuardBridge/, 'details metadata does not revive retired RVM support runtime');
 
 console.log('non-primitive support overlay details tests passed');

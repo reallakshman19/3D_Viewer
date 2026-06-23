@@ -1,5 +1,6 @@
 import { applyInputXmlSupportGraphicsOverlay } from './RvmInputXmlSupportGraphics.js?v=20260619-source-bend-collapse-1';
 import { refreshInputXmlGraphics } from './RvmInputXmlAutoBendGraphics.js?v=20260619-source-bend-collapse-1';
+import { readSourceAxisTransformSettings, writeSourceAxisTransformSettings } from '../overlays/source-tools/SourceAxisTransform.js';
 
 const PANEL_KEY_LEFT = 'rvm.panel.left.width.v2';
 const PANEL_KEY_RIGHT = 'rvm.panel.right.width.v2';
@@ -7,7 +8,7 @@ const INPUTXML_SCALE_DEFAULT = 0.75;
 const INPUTXML_SUPPORT_SYMBOLS_KEY = 'rvm.inputxml.supportSymbols';
 
 function findViewer() {
-  return window.__rvmInputXmlSupportGraphicsViewer || null;
+  return window.__rvmInputXmlSupportGraphicsViewer || window.__3D_RVM_VIEWER__ || null;
 }
 
 function root() {
@@ -44,6 +45,7 @@ function optionsFromUi() {
     labelsVisible,
     autoBendEnabled,
     supportSymbolsEnabled,
+    axisTransform: readSourceAxisTransformSettings(),
   };
 }
 
@@ -54,7 +56,20 @@ function refresh() {
     const options = optionsFromUi();
     refreshInputXmlGraphics(viewer, options);
     applyInputXmlSupportGraphicsOverlay(viewer, options);
+    reapplyNonPrimitiveSourceTools(viewer);
+    updateStatusChip('Applied');
   }, 0);
+}
+
+function reapplyNonPrimitiveSourceTools(viewer) {
+  const r = root();
+  if (!r || !viewer) return;
+  try { window.__PCF_GLB_RVM_NON_PRIMITIVE_SOURCE_TOOLS_UI__?.reapply?.(r, viewer); } catch {}
+  try { window.__PCF_GLB_RVM_NON_PRIMITIVE_SUPPORT_OVERLAY__?.applyFromSource?.({
+    viewer,
+    source: viewer?.modelGroup?.userData?.__rvmNonPrimitiveSourceHierarchy || viewer?.scene?.userData?.__rvmNonPrimitiveSourceHierarchy,
+    sourceKind: r.dataset?.rvmLoadedSourceKind || 'json',
+  }); } catch {}
 }
 
 function selectHtml(id, value, label, options) {
@@ -89,6 +104,11 @@ function removeStaleModeChip(r) {
   if (chip) chip.remove();
 }
 
+function updateStatusChip(text) {
+  const chip = root()?.querySelector?.('[data-rvm-inputxml-transform-status]');
+  if (chip) chip.textContent = text || 'Ready';
+}
+
 function injectControls() {
   const r = root();
   if (!r) return;
@@ -103,14 +123,17 @@ function injectControls() {
   const autoBend = readBool('rvm.inputxml.autoBend', true);
   const axisOn = readBool('rvm.canvasAxis.visible', true);
   const supportSymbols = readBool(INPUTXML_SUPPORT_SYMBOLS_KEY, false);
-  const vAxis = currentAxis('rvm.inputxml.verticalAxis', 'Y');
-  const nAxis = currentAxis('rvm.inputxml.northAxis', 'X');
+  const axisTransform = readSourceAxisTransformSettings();
+  const vAxis = currentAxis('rvm.inputxml.verticalAxis', axisTransform.verticalAxis || 'Y');
+  const nAxis = currentAxis('rvm.inputxml.northAxis', axisTransform.northAxis || 'X');
   host.innerHTML = `
-    <label class="rvm-inputxml-check"><input id="rvm-inputxml-auto-bend" type="checkbox" ${autoBend ? 'checked' : ''}> Auto Bend</label>
-    <label class="rvm-inputxml-check"><input id="rvm-inputxml-support-symbols" type="checkbox" ${supportSymbols ? 'checked' : ''}> Support symbols</label>
-    <label class="rvm-inputxml-check"><input id="rvm-canvas-axis-toggle" type="checkbox" ${axisOn ? 'checked' : ''}> Axis</label>
+    <label class="rvm-inputxml-check" title="Rebuild generated bends where stagedJSON/InputXML has no bend primitive"><input id="rvm-inputxml-auto-bend" type="checkbox" ${autoBend ? 'checked' : ''}> Auto Bend</label>
+    <label class="rvm-inputxml-check" title="Show source support symbols"><input id="rvm-inputxml-support-symbols" type="checkbox" ${supportSymbols ? 'checked' : ''}> Support symbols</label>
+    <label class="rvm-inputxml-check" title="Show or hide axis triad"><input id="rvm-canvas-axis-toggle" type="checkbox" ${axisOn ? 'checked' : ''}> Axis</label>
     ${selectHtml('rvm-inputxml-vertical-axis', vAxis, 'Vertical', ['X','Y','Z'])}
     ${selectHtml('rvm-inputxml-north-axis', nAxis, 'North', ['X','Y','Z'])}
+    <button type="button" id="rvm-inputxml-apply-transform" title="Apply axis transform to generated bends, support overlay and support resolvers">Apply</button>
+    <span class="rvm-inputxml-status" data-rvm-inputxml-transform-status>Ready</span>
   `;
   const supportSection = r.querySelector('#rvm-support-scale')?.closest?.('.rvm-ribbon-section');
   ribbon.insertBefore(host, supportSection || ribbon.firstChild);
@@ -174,16 +197,23 @@ setInterval(tickUi, 650);
 setTimeout(tickUi, 0);
 setTimeout(tickUi, 150);
 
-document.addEventListener('input', (event) => {
+function handleControlEvent(event) {
   const id = event.target?.id || '';
   if (id === 'rvm-support-scale') refresh();
   if (id === 'rvm-inputxml-auto-bend') { writeBool('rvm.inputxml.autoBend', event.target.checked); refresh(); }
   if (id === 'rvm-inputxml-support-symbols') { writeBool(INPUTXML_SUPPORT_SYMBOLS_KEY, event.target.checked); refresh(); }
   if (id === 'rvm-canvas-axis-toggle') { writeBool('rvm.canvasAxis.visible', event.target.checked); refresh(); }
-  if (id === 'rvm-inputxml-vertical-axis') { try { localStorage.setItem('rvm.inputxml.verticalAxis', event.target.value); } catch {}; refresh(); }
-  if (id === 'rvm-inputxml-north-axis') { try { localStorage.setItem('rvm.inputxml.northAxis', event.target.value); } catch {}; refresh(); }
-}, true);
+  if (id === 'rvm-inputxml-vertical-axis') { writeSourceAxisTransformSettings({ verticalAxis: event.target.value }); refresh(); }
+  if (id === 'rvm-inputxml-north-axis') { writeSourceAxisTransformSettings({ northAxis: event.target.value }); refresh(); }
+}
+
+document.addEventListener('input', handleControlEvent, true);
+document.addEventListener('change', handleControlEvent, true);
 
 document.addEventListener('click', (event) => {
   if (event.target?.closest?.('#rvm-support-labels')) refresh();
+  if (event.target?.closest?.('#rvm-inputxml-apply-transform')) {
+    event.preventDefault();
+    refresh();
+  }
 }, true);

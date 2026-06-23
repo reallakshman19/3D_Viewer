@@ -20,14 +20,21 @@ import {
 import { buildSupportOverlayGlyphGroup } from '../overlays/support/SupportOverlayGlyphGeometry.js';
 import { createSupportOverlayLabelObject, shouldShowSupportOverlayLabel } from '../overlays/support/SupportOverlayLabels.js';
 import { buildSupportOverlayDetails, SUPPORT_OVERLAY_DETAILS_SCHEMA } from '../overlays/support/SupportOverlayDetails.js';
+import {
+  readSourceAxisTransformSettings,
+  sourceAxisBasis3,
+  transformSourcePipeSegments,
+  transformSourceVector,
+  SOURCE_AXIS_TRANSFORM_SCHEMA,
+} from '../overlays/source-tools/SourceAxisTransform.js';
 
-export const RVM_NON_PRIMITIVE_SUPPORT_OVERLAY_SCHEMA = 'rvm-non-primitive-support-overlay/v8';
+export const RVM_NON_PRIMITIVE_SUPPORT_OVERLAY_SCHEMA = 'rvm-non-primitive-support-overlay/v9';
 
 const ROOT_NAME = '__RVM_NON_PRIMITIVE_SUPPORT_OVERLAY__';
 const GLOBAL_KEY = '__PCF_GLB_RVM_NON_PRIMITIVE_SUPPORT_OVERLAY__';
-const PATCH_FLAG = Symbol.for('pcf-glb-rvm-non-primitive-support-overlay-v8');
-const LOADER_PATCH_FLAG = Symbol.for('pcf-glb-rvm-non-primitive-support-overlay-loader-v8');
-const VIEWER_PATCH_FLAG = Symbol.for('pcf-glb-rvm-non-primitive-support-overlay-viewer-v8');
+const PATCH_FLAG = Symbol.for('pcf-glb-rvm-non-primitive-support-overlay-v9');
+const LOADER_PATCH_FLAG = Symbol.for('pcf-glb-rvm-non-primitive-support-overlay-loader-v9');
+const VIEWER_PATCH_FLAG = Symbol.for('pcf-glb-rvm-non-primitive-support-overlay-viewer-v9');
 const MAX_SUPPORT_OVERLAYS = 500;
 const NON_PRIMITIVE_SOURCE_RE = /\.(json|jscon|uxml|inputxml|txt)$/i;
 const RVM_SOURCE_RE = /\.(rvm|rev)$/i;
@@ -40,6 +47,7 @@ export function installRvmNonPrimitiveSupportOverlayBridge() {
     sourceExtractionSchema: SUPPORT_OVERLAY_SOURCE_EXTRACTION_SCHEMA,
     filterDiagnosticsSchema: SUPPORT_OVERLAY_FILTER_DIAGNOSTICS_SCHEMA,
     detailsSchema: SUPPORT_OVERLAY_DETAILS_SCHEMA,
+    axisTransformSchema: SOURCE_AXIS_TRANSFORM_SCHEMA,
     rootName: ROOT_NAME,
     applyFromSource,
     clear,
@@ -64,6 +72,7 @@ function patchAvevaJsonLoaderForNonPrimitiveSource() {
       scene.userData.__rvmNonPrimitiveSupportSourceExtractionSchema = SUPPORT_OVERLAY_SOURCE_EXTRACTION_SCHEMA;
       scene.userData.__rvmNonPrimitiveSupportFilterDiagnosticsSchema = SUPPORT_OVERLAY_FILTER_DIAGNOSTICS_SCHEMA;
       scene.userData.__rvmNonPrimitiveSupportDetailsSchema = SUPPORT_OVERLAY_DETAILS_SCHEMA;
+      scene.userData.__rvmSourceAxisTransformSchema = SOURCE_AXIS_TRANSFORM_SCHEMA;
     }
     return payload;
   };
@@ -99,9 +108,11 @@ export function applyFromSource({ viewer, root, source, sourceKind = '', fileNam
     return { schema: RVM_NON_PRIMITIVE_SUPPORT_OVERLAY_SCHEMA, status: 'disabled', sourceKind: kind, sourceFile: fileName, created: 0 };
   }
 
+  const axisTransform = readSourceAxisTransformSettings();
   const records = collectNonPrimitiveSupportRecords(source).slice(0, MAX_SUPPORT_OVERLAYS);
   const filterPlan = buildSupportOverlayFilterPlan(records, settings);
-  const pipeSegments = collectSourcePipeSegments(source);
+  const sourcePipeSegments = collectSourcePipeSegments(source);
+  const pipeSegments = transformSourcePipeSegments(sourcePipeSegments, axisTransform);
   clear(viewer, 'before-non-primitive-overlay');
   if (!records.length) {
     const diagnostics = {
@@ -109,6 +120,7 @@ export function applyFromSource({ viewer, root, source, sourceKind = '', fileNam
       sourceExtractionSchema: SUPPORT_OVERLAY_SOURCE_EXTRACTION_SCHEMA,
       filterDiagnosticsSchema: SUPPORT_OVERLAY_FILTER_DIAGNOSTICS_SCHEMA,
       detailsSchema: SUPPORT_OVERLAY_DETAILS_SCHEMA,
+      axisTransformSchema: SOURCE_AXIS_TRANSFORM_SCHEMA,
       status: 'empty',
       sourceKind: kind,
       sourceFile: fileName,
@@ -121,6 +133,7 @@ export function applyFromSource({ viewer, root, source, sourceKind = '', fileNam
       disabledFamilies: filterPlan.disabledFamilies,
       filtersApplied: filterPlan.filtersApplied,
       sourcePipeSegments: pipeSegments.length,
+      axisTransform,
       warnings: [],
     };
     viewer.nonPrimitiveSupportOverlayDiagnostics = diagnostics;
@@ -134,6 +147,7 @@ export function applyFromSource({ viewer, root, source, sourceKind = '', fileNam
   const coordinateMapper = createSupportCoordinateMapper({
     sourceUnits: 'mm',
     viewerUnits: 'scene',
+    axisBasis: sourceAxisBasis3(axisTransform),
     modelRootMatrix: null,
     sceneScale: 1,
   });
@@ -145,9 +159,11 @@ export function applyFromSource({ viewer, root, source, sourceKind = '', fileNam
     sourceExtractionSchema: SUPPORT_OVERLAY_SOURCE_EXTRACTION_SCHEMA,
     filterDiagnosticsSchema: SUPPORT_OVERLAY_FILTER_DIAGNOSTICS_SCHEMA,
     detailsSchema: SUPPORT_OVERLAY_DETAILS_SCHEMA,
+    axisTransformSchema: SOURCE_AXIS_TRANSFORM_SCHEMA,
     nonPrimitiveSupportOverlay: true,
     sourceKind: kind,
     sourceFile: fileName,
+    axisTransform,
     pickable: false,
   };
 
@@ -167,7 +183,7 @@ export function applyFromSource({ viewer, root, source, sourceKind = '', fileNam
       continue;
     }
     seen.add(key);
-    const object = makeSupportGlyph(record, viewer, glyphSize, kind, fileName, settings, pipeSegments, coordinateMapper);
+    const object = makeSupportGlyph(record, viewer, glyphSize, kind, fileName, settings, pipeSegments, coordinateMapper, axisTransform);
     if (!object) {
       skippedGlyphs += 1;
       continue;
@@ -186,6 +202,7 @@ export function applyFromSource({ viewer, root, source, sourceKind = '', fileNam
     sourceExtractionSchema: SUPPORT_OVERLAY_SOURCE_EXTRACTION_SCHEMA,
     filterDiagnosticsSchema: SUPPORT_OVERLAY_FILTER_DIAGNOSTICS_SCHEMA,
     detailsSchema: SUPPORT_OVERLAY_DETAILS_SCHEMA,
+    axisTransformSchema: SOURCE_AXIS_TRANSFORM_SCHEMA,
     status: overlayRoot.children.length ? 'applied' : 'empty',
     sourceKind: kind,
     sourceFile: fileName,
@@ -207,6 +224,8 @@ export function applyFromSource({ viewer, root, source, sourceKind = '', fileNam
     pipeAxisResolutions,
     supportDetails,
     maxSupportOverlays: MAX_SUPPORT_OVERLAYS,
+    axisTransform,
+    labelsVisible: Boolean(settings.labels),
     rvmExcluded: true,
   };
   viewer.nonPrimitiveSupportOverlayDiagnostics = diagnostics;
@@ -242,7 +261,7 @@ export function collectNonPrimitiveSupportRecords(source, out = []) {
   return collectSupportRecordsFromSource(source, out, { max: MAX_SUPPORT_OVERLAYS });
 }
 
-function makeSupportGlyph(record, viewer, glyphSize, sourceKind, sourceFile, settings, pipeSegments, coordinateMapper) {
+function makeSupportGlyph(record, viewer, glyphSize, sourceKind, sourceFile, settings, pipeSegments, coordinateMapper, axisTransform) {
   const mapping = coordinateMapper.mapPoint({ x: record.local.x, y: record.local.y, z: record.local.z }, { supportId: record.tag });
   if (!mapping.mappedPoint) return null;
 
@@ -250,7 +269,10 @@ function makeSupportGlyph(record, viewer, glyphSize, sourceKind, sourceFile, set
   const world = viewer.modelGroup.localToWorld(local.clone());
 
   const axisResolution = resolveSupportPipeAxis(record, pipeSegments, { toleranceMm: Math.max(100, glyphSize * 10) });
-  const axis = vec3(axisResolution.axis || record.axis || { x: 1, y: 0, z: 0 });
+  const resolvedAxis = axisResolution.source === 'explicit-axis'
+    ? transformSourceVector(axisResolution.axis || record.axis || { x: 1, y: 0, z: 0 }, axisTransform)
+    : (axisResolution.axis || record.axis || { x: 1, y: 0, z: 0 });
+  const axis = vec3(resolvedAxis);
   axis.transformDirection?.(viewer.modelGroup.matrixWorld);
   if (axis.lengthSq() <= 1e-9) axis.set(1, 0, 0);
   axis.normalize();
@@ -279,7 +301,7 @@ function makeSupportGlyph(record, viewer, glyphSize, sourceKind, sourceFile, set
     sourceKind,
     sourceFile,
     coordinateMapping: mapping,
-    pipeAxisResolution: axisResolution,
+    pipeAxisResolution: { ...axisResolution, axis: { x: axis.x, y: axis.y, z: axis.z }, axisTransform },
   });
   if (!group) return null;
 
@@ -287,7 +309,7 @@ function makeSupportGlyph(record, viewer, glyphSize, sourceKind, sourceFile, set
     record,
     symbol,
     coordinateMapping: mapping,
-    pipeAxisResolution: axisResolution,
+    pipeAxisResolution: { ...axisResolution, axis: { x: axis.x, y: axis.y, z: axis.z }, axisTransform },
     sourceKind,
     sourceFile,
   });
