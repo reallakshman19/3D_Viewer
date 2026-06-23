@@ -1,24 +1,19 @@
 /**
  * Installs the XML->CII(2019) workflow popup shown from Model Converters.
  *
- * Inputs: a rendered Model Converters container with the converter select and
- * run button. Output: the required phase-tab modal (`1 Regex` through
- * `7 Config`) with popup-native phase bodies backed by XML->CII bridge data
- * and action methods. Fallback: if the bridge is unavailable, an explicit
- * backend-unavailable panel is shown; legacy inline workflow HTML is never
- * rendered inside this popup.
+ * The main Run Conversion button is intentionally left as the simple/direct
+ * workflow. Only the XML->CII Rich Workflow button opens this phase-tab popup.
  */
 import { WorkflowModal } from './shared/WorkflowModal.js';
 import { getXmlCiiPhaseBridge } from './legacy-adapter.js?v=20260620-master-session-1';
-import { renderXmlCiiPopupNativePhase } from './xml-cii-popup-native-panels.js?v=20260623-xml-cii-condense-rigid-ui-2';
+import { renderXmlCiiPopupNativePhase } from './xml-cii-popup-native-panels.js?v=20260623-inst-length-info-simple-run-1';
 import { XML_CII_WORKFLOW_PHASES, normalizeWorkflowPhaseId } from './WorkflowShell.js';
 
-const FLAG = '__xmlCiiConversionWorkflowPopup_phaseTabs_v1';
+const FLAG = '__xmlCiiConversionWorkflowPopup_phaseTabs_v2';
 const ROOT_ATTR = 'data-xml-cii-workflow-root';
 const ACTIVE_PHASE_KEY = 'xmlCii2019.conversionWorkflow.activePhase.v4';
 const LEGACY_ACTIVE_PHASE_KEY = 'xmlCii2019.conversionWorkflow.activePhase.v3';
 const DIRECT_RUN_FLAG = '__xmlCiiConversionWorkflowAllowDirectRun';
-const XML_CII_CONVERTER_IDS = new Set(['xml_to_cii', 'xml_to_cii2019', 'xml-cii-2019']);
 
 function browserReady() {
   return typeof window !== 'undefined' && typeof document !== 'undefined';
@@ -35,7 +30,6 @@ function writeStored(key, value) {
 function runtime() {
   if (!window[FLAG]) {
     window[FLAG] = {
-      documentClickInstalled: false,
       stateByRoot: new WeakMap(),
     };
   }
@@ -97,12 +91,6 @@ function selectPhase(root, state, phaseId) {
   const modal = state.modal;
   if (modal?.setActiveTab) modal.setActiveTab(state.phaseId);
   renderPhase(root, state);
-}
-
-function setStatus(target, text, ok = true) {
-  if (!target) return;
-  target.textContent = text;
-  target.classList.toggle('is-error', !ok);
 }
 
 async function preloadDefaultMasters(root, state) {
@@ -230,7 +218,6 @@ function bindRun(body, root, state) {
   body.querySelector('[data-native-review-weights]')?.addEventListener('click', () => selectPhase(root, state, 'weight-match'));
   body.querySelector('[data-native-finalise-run]')?.addEventListener('click', () => {
     bridge()?.closePopup?.();
-    armDirectRunGuard();
     root.dispatchEvent(new CustomEvent('xml-cii-popup-finalise-run', { bubbles: true }));
     document.querySelector('#model-converters-run')?.click();
   });
@@ -301,6 +288,8 @@ function bindPhase(body, root, state) {
 }
 
 function openPopup(container) {
+  const activeBridge = bridge();
+  if (!activeBridge) return;
   const state = getState(container);
   const modal = new WorkflowModal({
     title: 'XML->CII(2019) Workflow',
@@ -310,43 +299,36 @@ function openPopup(container) {
     onTabChange: (phaseId) => selectPhase(container, state, phaseId),
     onClose: () => {
       state.modal = null;
-      bridge().closePopup = null;
+      activeBridge.closePopup = null;
     },
   });
   const body = modal.open();
   state.modal = modal;
   body.setAttribute(ROOT_ATTR, 'true');
   body.innerHTML = '<div data-xml-cii-workflow-body></div>';
-  bridge().closePopup = () => {
-    armDirectRunGuard();
+  activeBridge.closePopup = () => {
     state.modal?.close();
   };
   renderPhase(body, state);
   preloadDefaultMasters(body, state);
 }
 
-function armDirectRunGuard() {
+function restoreSimpleRunButton(container = document) {
+  if (!browserReady()) return;
+  // Permanent guard for stale cached popup modules that used to intercept the
+  // main Run Conversion button. Rich Workflow remains bound to its own button.
   window[DIRECT_RUN_FLAG] = true;
-  setTimeout(() => { window[DIRECT_RUN_FLAG] = false; }, 0);
-}
-
-function interceptRun(event) {
-  const runButton = event.target?.closest?.('#model-converters-run');
-  if (!runButton || window[DIRECT_RUN_FLAG]) return;
-  const select = document.querySelector('#model-converters-select');
-  if (!XML_CII_CONVERTER_IDS.has(select?.value)) return;
-  event.preventDefault();
-  event.stopPropagation();
-  openPopup(document.querySelector('.model-converters-root') || document.body);
+  const runButton = container.querySelector?.('#model-converters-run') || document.querySelector('#model-converters-run');
+  if (!runButton) return;
+  runButton.hidden = false;
+  runButton.style.display = '';
+  if (!String(runButton.textContent || '').trim()) runButton.textContent = 'Run Conversion';
 }
 
 export function installXmlCiiConversionWorkflowPopup(container = document) {
   if (!browserReady()) return;
-  const rt = runtime();
-  if (!rt.documentClickInstalled) {
-    document.addEventListener('click', interceptRun, true);
-    rt.documentClickInstalled = true;
-  }
+  runtime();
+  restoreSimpleRunButton(container);
   const richButton = container.querySelector?.('#model-converters-xml-cii-rich-btn');
   if (richButton && richButton.dataset.popupBound !== 'true') {
     richButton.addEventListener('click', () => openPopup(container.querySelector('.model-converters-root') || container));

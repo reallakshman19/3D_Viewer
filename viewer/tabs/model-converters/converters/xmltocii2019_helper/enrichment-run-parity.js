@@ -2,7 +2,8 @@ import { parseXmlCiiEnrichmentConfig } from '../../../../converters/xml-cii2019-
 import { enrichXmlForCii2019 as enrichXmlForCii2019Base } from './enrichment-core.js?v=20260620-rating-override-1';
 import { xmlCiiDryRunPreview } from './preview-renderer.js?v=20260623-preview-run-parity-1';
 
-const RENUMBERABLE_NEGATIVE_TYPES = new Set(['FLAN', 'RIGID']);
+const RENUMBERABLE_NEGATIVE_TYPES = new Set(['FLAN', 'RIGID', 'INST']);
+const INLINE_LENGTH_COMPONENT_TYPES = new Set(['INST']);
 
 function text(value) {
   return value === undefined || value === null ? '' : String(value).trim();
@@ -164,6 +165,65 @@ function branchNodes(branch) {
   return childrenByName(branch, 'Node');
 }
 
+function pointFromPosition(positionText) {
+  const values = text(positionText).match(/-?\d+(?:\.\d+)?/g)?.map(Number).filter(Number.isFinite) || [];
+  if (values.length >= 3) return [values[0], values[2], -values[1]];
+  return null;
+}
+
+function distanceBetweenPositions(fromText, toText) {
+  const from = pointFromPosition(fromText);
+  const to = pointFromPosition(toText);
+  if (!from || !to) return null;
+  const dx = to[0] - from[0];
+  const dy = to[1] - from[1];
+  const dz = to[2] - from[2];
+  const length = Math.sqrt(dx * dx + dy * dy + dz * dz);
+  return Number.isFinite(length) ? length : null;
+}
+
+function previousPositiveNode(nodes, startIndex) {
+  for (let index = startIndex; index >= 0; index -= 1) {
+    const number = numericValue(childText(nodes[index], 'NodeNumber'));
+    if (number !== null && number > 0) return nodes[index];
+  }
+  return null;
+}
+
+function shouldAnnotateInlineLength(node) {
+  return INLINE_LENGTH_COMPONENT_TYPES.has(childText(node, 'ComponentType').toUpperCase());
+}
+
+function annotateInlineElementLengths(document, enriched) {
+  let count = 0;
+  for (const branch of [...document.getElementsByTagName('Branch')]) {
+    const nodes = branchNodes(branch);
+    for (let index = 0; index < nodes.length; index += 1) {
+      const node = nodes[index];
+      if (!shouldAnnotateInlineLength(node)) continue;
+      const existing = numericValue(childText(node, 'ElementLengthMm'));
+      if (existing !== null && existing > 0) continue;
+      const previous = previousPositiveNode(nodes, index - 1);
+      if (!previous) continue;
+      const length = distanceBetweenPositions(childText(previous, 'Position'), childText(node, 'Position'));
+      if (length === null || length <= 0) continue;
+      if (setText(document, node, 'ElementLengthMm', length.toFixed(3))) count += 1;
+    }
+  }
+  enriched.stats = enriched.stats && typeof enriched.stats === 'object' ? enriched.stats : {};
+  enriched.stats.instElementLengthAnnotations = count;
+  if (count > 0) {
+    enriched.diagnostics = Array.isArray(enriched.diagnostics) ? enriched.diagnostics : [];
+    enriched.diagnostics.push({
+      type: 'element-length-inst',
+      componentType: 'INST',
+      annotatedNodes: count,
+      message: 'ElementLengthMm calculated for INST nodes from previous positive-node CII coordinate distance.',
+    });
+  }
+  return count;
+}
+
 function positiveNodeNumberFromOriginal(originalNumbers, nodes, startIndex, step) {
   for (let index = startIndex; index >= 0 && index < nodes.length; index += step) {
     const original = originalNumbers.get(nodes[index]);
@@ -233,7 +293,7 @@ function applyCondenseRigidOption(enriched, document, options = {}) {
     enabled: true,
     split_condensed_valve_flange: true,
     renumberedNodes: changed,
-    message: 'Resolved Condense Rigid option applied: length-bearing negative RIGID/FLAN nodes are assigned positive node numbers before CII conversion.',
+    message: 'Resolved Condense Rigid option applied: length-bearing negative RIGID/FLAN/INST nodes are assigned positive node numbers before CII conversion.',
   });
   return changed;
 }
@@ -246,6 +306,7 @@ function applyPreviewRunParity(enriched, sourceXmlText, stagedJsonText, options 
 
   const rows = xmlCiiDryRunPreview(sourceXmlText, enriched.config, stagedJsonText).branchRows || [];
   if (!rows.length) {
+    annotateInlineElementLengths(document, enriched);
     applyCondenseRigidOption(enriched, document, options);
     enriched.xmlText = new XMLSerializer().serializeToString(document);
     enriched.diagnostics = Array.isArray(enriched.diagnostics) ? enriched.diagnostics : [];
@@ -271,6 +332,7 @@ function applyPreviewRunParity(enriched, sourceXmlText, stagedJsonText, options 
     nodeFactCount += setBranchNodeFacts(document, branch, row);
   }
 
+  annotateInlineElementLengths(document, enriched);
   applyCondenseRigidOption(enriched, document, options);
   enriched.xmlText = new XMLSerializer().serializeToString(document);
   enriched.stats = enriched.stats && typeof enriched.stats === 'object' ? enriched.stats : {};
