@@ -6,16 +6,17 @@ import {
   sourceToolsDiagnosticsFileName,
 } from '../overlays/source-tools/NonPrimitiveSourceToolsDiagnostics.js';
 
-export const RVM_NON_PRIMITIVE_SOURCE_TOOLS_UI_SCHEMA = 'rvm-non-primitive-source-tools-ui/v3';
+export const RVM_NON_PRIMITIVE_SOURCE_TOOLS_UI_SCHEMA = 'rvm-non-primitive-source-tools-ui/v4';
 
-const PATCH_FLAG = Symbol.for('pcf-glb-rvm-non-primitive-source-tools-ui-v3');
-const VIEWER_PATCH_FLAG = Symbol.for('pcf-glb-rvm-non-primitive-source-tools-ui-viewer-v3');
+const PATCH_FLAG = Symbol.for('pcf-glb-rvm-non-primitive-source-tools-ui-v4');
+const VIEWER_PATCH_FLAG = Symbol.for('pcf-glb-rvm-non-primitive-source-tools-ui-viewer-v4');
 const ROOT_SELECTOR = '[data-rvm-viewer]';
 const PANEL_ID = 'rvm-nonprimitive-source-tools-panel';
 const SOURCE_KIND_RE = /^(json|jscon|inputxml|txt|source-preview)$/i;
 const PRIMITIVE_KIND_RE = /^(rvm|glb|gltf|rev)$/i;
 const SUPPORT_FILTER_FAMILIES = Object.freeze(['REST', 'GUIDE', 'LINESTOP', 'LIMIT', 'LIM', 'HOLDDOWN', 'SPRING_CAN', 'UNKNOWN']);
 const MAX_INLINE_WARNINGS = 3;
+const MAX_DISABLED_FAMILIES = 4;
 const viewerContexts = new WeakMap();
 
 export function installRvmNonPrimitiveSourceToolsUiBridge() {
@@ -113,6 +114,7 @@ function renderPanelHtml({ auto, support, viewer }) {
   const autoDiag = viewer?.nonPrimitiveAutoBendDiagnostics || {};
   const supportDiag = viewer?.nonPrimitiveSupportOverlayDiagnostics || {};
   const supportWarningCount = Number(supportDiag.warningCount ?? supportDiag.warnings?.length ?? 0) || 0;
+  const acceptedSupports = Number(supportDiag.acceptedSupports ?? supportDiag.sourceSupports ?? 0) || 0;
   const snapshot = buildSourceToolsDiagnosticsSnapshot(viewer);
   return `
     <div class="rvm-source-tools-grid" data-source-tools-schema="${escapeHtml(RVM_NON_PRIMITIVE_SOURCE_TOOLS_UI_SCHEMA)}">
@@ -125,7 +127,8 @@ function renderPanelHtml({ auto, support, viewer }) {
       <label class="rvm-source-tools-row"><span>Support labels</span><input type="checkbox" data-source-tool="support-labels" ${support.labels ? 'checked' : ''}></label>
       <label class="rvm-source-tools-row"><span>Warnings only</span><input type="checkbox" data-source-tool="support-warnings" ${support.warningsOnly ? 'checked' : ''}></label>
       <div class="rvm-source-tools-filters" data-source-tool-filters="support"><span>Family filters</span>${renderSupportFamilyFilters(support.filters)}</div>
-      <div class="rvm-source-tools-diag" data-source-tool-diag="support">Supports: ${escapeHtml(supportDiag.created ?? 0)} · Warnings: ${escapeHtml(supportWarningCount)} · ${escapeHtml(supportDiag.status || 'idle')}</div>
+      <div class="rvm-source-tools-diag" data-source-tool-diag="support">Supports: ${escapeHtml(supportDiag.created ?? 0)}/${escapeHtml(acceptedSupports)} · Filtered: ${escapeHtml(supportDiag.filteredOut ?? 0)} · Warnings: ${escapeHtml(supportWarningCount)} · ${escapeHtml(supportDiag.status || 'idle')}</div>
+      ${renderSupportFilterSummary(supportDiag)}
       ${renderSupportWarnings(supportDiag.warnings)}
       <div class="rvm-source-tools-actions" data-source-tool-actions="diagnostics">
         <button type="button" data-source-tool-action="copy-diagnostics">Copy diagnostics JSON</button>
@@ -141,6 +144,20 @@ function renderSupportFamilyFilters(filters = {}) {
     const label = family === 'SPRING_CAN' ? 'SPRING' : family;
     return `<label class="rvm-source-tools-chip" data-source-tool-family-chip="${escapeHtml(family)}"><input type="checkbox" data-source-tool="support-filter" data-source-tool-family="${escapeHtml(family)}" ${checked ? 'checked' : ''}>${escapeHtml(label)}</label>`;
   }).join('');
+}
+
+function renderSupportFilterSummary(supportDiag = {}) {
+  const filtered = Number(supportDiag.filteredOut || 0) || 0;
+  const duplicates = Number(supportDiag.skippedDuplicates || 0) || 0;
+  const glyphs = Number(supportDiag.skippedGlyphs || 0) || 0;
+  const disabled = Array.isArray(supportDiag.disabledFamilies) ? supportDiag.disabledFamilies : [];
+  if (!filtered && !duplicates && !glyphs && !disabled.length) {
+    return '<div class="rvm-source-tools-diag" data-source-tool-diag="support-filter-summary">Filters: all families visible.</div>';
+  }
+  const shownDisabled = disabled.slice(0, MAX_DISABLED_FAMILIES).join(', ');
+  const extra = disabled.length > MAX_DISABLED_FAMILIES ? ` +${disabled.length - MAX_DISABLED_FAMILIES}` : '';
+  const disabledText = disabled.length ? `Disabled: ${shownDisabled}${extra}` : 'Disabled: none';
+  return `<div class="rvm-source-tools-diag" data-source-tool-diag="support-filter-summary">Filtered: ${escapeHtml(filtered)} · ${escapeHtml(disabledText)} · Skipped: ${escapeHtml(duplicates + glyphs)}</div>`;
 }
 
 function renderSupportWarnings(warnings = []) {

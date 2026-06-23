@@ -6,7 +6,7 @@ const rendererSource = await fs.readFile(new URL('../tabs/viewer3d-rvm-tab-rende
 const autoBridgeSource = await fs.readFile(new URL('../tabs/RvmNonPrimitiveAutoBendBridge.js', import.meta.url), 'utf8');
 const supportSettingsSource = await fs.readFile(new URL('../overlays/support/SupportOverlaySettings.js', import.meta.url), 'utf8');
 
-assert.match(uiBridgeSource, /rvm-non-primitive-source-tools-ui\/v3/, 'source-tools UI exposes v3 schema marker');
+assert.match(uiBridgeSource, /rvm-non-primitive-source-tools-ui\/v4/, 'source-tools UI exposes v4 schema marker');
 assert.match(uiBridgeSource, /rvm-nonprimitive-source-tools-panel/, 'source-tools UI owns a compact panel id');
 assert.match(uiBridgeSource, /rvmModelPrimitiveMode[\s\S]*source-preview/, 'source-tools UI is gated by source-preview mode');
 assert.match(uiBridgeSource, /PRIMITIVE_KIND_RE[\s\S]*rvm\|glb\|gltf\|rev/, 'source-tools UI excludes primitive source kinds');
@@ -15,6 +15,10 @@ assert.match(uiBridgeSource, /Support Overlay/, 'source-tools UI renders Support
 assert.match(uiBridgeSource, /data-source-tool="support-scale"/, 'source-tools UI renders support overlay scale control');
 assert.match(uiBridgeSource, /data-source-tool="support-filter"/, 'source-tools UI renders support family filter chips');
 assert.match(uiBridgeSource, /SUPPORT_FILTER_FAMILIES/, 'source-tools UI has explicit support family filter list');
+assert.match(uiBridgeSource, /Filtered:[\s\S]*supportDiag\.filteredOut/, 'source-tools UI shows filtered support count');
+assert.match(uiBridgeSource, /renderSupportFilterSummary/, 'source-tools UI renders compact support filter summary');
+assert.match(uiBridgeSource, /disabledFamilies/, 'source-tools UI surfaces disabled support families');
+assert.match(uiBridgeSource, /skippedDuplicates|skippedGlyphs/, 'source-tools UI surfaces support skip counts');
 assert.match(uiBridgeSource, /Warnings:[\s\S]*supportWarningCount/, 'source-tools UI shows support warning count');
 assert.match(uiBridgeSource, /Top warnings|No support overlay warnings/, 'source-tools UI shows compact support warning details');
 assert.match(uiBridgeSource, /Copy diagnostics JSON/, 'source-tools UI exposes diagnostics copy action');
@@ -28,7 +32,7 @@ assert.match(uiBridgeSource, /writeNonPrimitiveSupportOverlaySettings\(\{ filter
 assert.match(uiBridgeSource, /writeNonPrimitiveSupportOverlaySettings/, 'source-tools UI persists support overlay settings');
 assert.doesNotMatch(uiBridgeSource, /Support Summary|SupportATT|SupportEngine|Raw\/Symbol\/Both|rvm_support_render_mode_v1|rvm_support_geometry_mode_v1/, 'source-tools UI does not revive retired RVM support UI or keys');
 
-assert.match(rendererSource, /RvmNonPrimitiveSourceToolsUiBridge\.js\?v=20260623-nonprimitive-source-tools-ui-3/, 'renderer imports source-tools UI bridge with v3 cache key');
+assert.match(rendererSource, /RvmNonPrimitiveSourceToolsUiBridge\.js\?v=20260623-nonprimitive-source-tools-ui-4/, 'renderer imports source-tools UI bridge with v4 cache key');
 assert.match(rendererSource, /installRvmNonPrimitiveSourceToolsUiBridge\(\)/, 'renderer installs source-tools UI bridge');
 
 assert.match(autoBridgeSource, /restoreVisualTrimmedSegments/, 'auto-bend bridge can restore visual trims for live UI toggles');
