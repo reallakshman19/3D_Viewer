@@ -354,7 +354,9 @@ function runPanel(snapshot) {
         </label>
         <label class="xml-cii-native-check"><input type="checkbox" data-native-run-option="createEnrichedXml" ${run.options?.createEnrichedXml ? 'checked' : ''}> Create enriched XML before CII</label>
         <label class="xml-cii-native-check"><input type="checkbox" data-native-run-option="kgToNewton" ${run.options?.kgToNewton !== false ? 'checked' : ''}> kg -> N weight conversion</label>
+        <label class="xml-cii-native-check"><input type="checkbox" data-native-run-option="splitCondensedValveFlange" ${run.options?.splitCondensedValveFlange ? 'checked' : ''}> Condense Rigid / split condensed valve-flange nodes</label>
       </div>
+      <div class="xml-cii-native-hint">Condense Rigid ON: length-bearing negative RIGID/FLAN nodes are assigned positive node numbers before CII generation.</div>
       <div class="xml-cii-native-toolbar">
         <button type="button" class="model-converters-run-btn" data-native-review-weights>Review Weight Matches</button>
         <button type="button" class="model-converters-download-btn" data-native-finalise-run>Finalise and Run</button>
@@ -396,7 +398,9 @@ function configPanel(snapshot, uiState) {
         <label class="xml-cii-native-check"><input type="checkbox" data-native-config-bool="useFrictionSentinelForNonYSupports" ${config.useFrictionSentinel ? 'checked' : ''}> Use friction sentinel for non +Y supports</label>
         <label class="xml-cii-native-check"><input type="checkbox" data-native-config-bool="convertDensityKgM3ToKgCm3" ${config.convertDensity ? 'checked' : ''}> Convert density kg/m3 -> kg/cm3</label>
         <label class="xml-cii-native-check"><input type="checkbox" data-native-config-bool="disableCiiSupportTagPopulation" ${config.disableCiiSupportTag ? 'checked' : ''}> Disable CII Support Tag population</label>
+        <label class="xml-cii-native-check"><input type="checkbox" data-native-config-bool="splitCondensedValveFlange" ${config.splitCondensedValveFlange ? 'checked' : ''}> Condense Rigid / split condensed valve-flange nodes</label>
       </div>
+      <div class="xml-cii-native-hint">Condense Rigid is saved into supportConfigJson.splitCondensedValveFlange and is also mirrored into the conversion run option.</div>
       <div class="xml-cii-native-toolbar">
         <button type="button" class="model-converters-run-btn" data-native-save-config>Save Config</button>
         <button type="button" class="model-converters-download-btn" data-native-export-config>Export JSON</button>

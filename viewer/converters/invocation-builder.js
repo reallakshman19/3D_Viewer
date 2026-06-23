@@ -165,6 +165,8 @@ export function buildInvocation(converterId, primaryPath, primaryName, secondary
     // kg -> N weight conversion (default ON): scale component weights by 10.
     if (options?.kgToNewton !== false) argv.push('--weight-scale', '10');
     pushOptionalStringArg(argv, '--support-config-json', options?.supportConfigJson);
+    if (options?.splitCondensedValveFlange === true) argv.push('--split-condensed-valve-flange');
+    else if (options?.splitCondensedValveFlange === false) argv.push('--no-split-condensed-valve-flange');
     if (secondaryPath) argv.push('--staged-json', secondaryPath);
     if (options?.useRestraintTypeBasedOnJson === false) {
       argv.push('--no-use-restraint-type-based-on-json');

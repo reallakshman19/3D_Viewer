@@ -2,6 +2,8 @@ import { parseXmlCiiEnrichmentConfig } from '../../../../converters/xml-cii2019-
 import { enrichXmlForCii2019 as enrichXmlForCii2019Base } from './enrichment-core.js?v=20260620-rating-override-1';
 import { xmlCiiDryRunPreview } from './preview-renderer.js?v=20260623-preview-run-parity-1';
 
+const RENUMBERABLE_NEGATIVE_TYPES = new Set(['FLAN', 'RIGID']);
+
 function text(value) {
   return value === undefined || value === null ? '' : String(value).trim();
 }
@@ -50,6 +52,22 @@ function numberText(value) {
   return Number.isFinite(numeric) ? String(numeric) : clean;
 }
 
+function numericValue(value) {
+  const clean = text(value);
+  if (!clean) return null;
+  const match = clean.replace(/,/g, '').match(/-?\d+(?:\.\d+)?/);
+  if (!match) return null;
+  const numeric = Number(match[0]);
+  return Number.isFinite(numeric) ? numeric : null;
+}
+
+function truthy(value) {
+  if (value === true) return true;
+  if (value === false || value === null || value === undefined) return false;
+  if (typeof value === 'number') return value !== 0;
+  return /^(1|true|yes|on)$/i.test(text(value));
+}
+
 function rowValue(row, ...keys) {
   for (const key of keys) {
     const value = row?.[key] ?? row?._raw?.[key];
@@ -80,6 +98,9 @@ function configWithRuntimeOptions(baseConfig, options = {}) {
   // the visible Preview table.
   const merged = mergeDeep(baseConfig || {}, parsed || {});
   if (isObject(options?.overrides)) merged.overrides = mergeDeep(merged.overrides || {}, options.overrides);
+  if (Object.prototype.hasOwnProperty.call(options || {}, 'splitCondensedValveFlange')) {
+    merged.splitCondensedValveFlange = truthy(options.splitCondensedValveFlange);
+  }
   return merged;
 }
 
@@ -134,20 +155,96 @@ function rowForBranch(map, branchName) {
   return map.get(text(branchName)) || map.get(normalizeBranchKey(branchName)) || null;
 }
 
+function branchNodes(branch) {
+  return childrenByName(branch, 'Node');
+}
+
+function positiveNodeNumberFromOriginal(originalNumbers, nodes, startIndex, step) {
+  for (let index = startIndex; index >= 0 && index < nodes.length; index += step) {
+    const original = originalNumbers.get(nodes[index]);
+    if (original !== null && original !== undefined && original > 0) return Math.round(original);
+  }
+  return null;
+}
+
+function renumberLengthBearingNegativeNodes(document) {
+  const branches = [...document.getElementsByTagName('Branch')];
+  const nodesByBranch = branches.map(branchNodes);
+  const originalNumbers = new Map();
+  const used = new Set();
+  for (const nodes of nodesByBranch) {
+    for (const node of nodes) {
+      const number = numericValue(childText(node, 'NodeNumber'));
+      originalNumbers.set(node, number);
+      if (number !== null && number > 0) used.add(Math.round(number));
+    }
+  }
+
+  let fallback = 10000;
+  let changed = 0;
+  for (const nodes of nodesByBranch) {
+    for (let index = 0; index < nodes.length; index += 1) {
+      const node = nodes[index];
+      const nodeNumber = originalNumbers.get(node);
+      const componentType = childText(node, 'ComponentType').toUpperCase();
+      const elementLength = numericValue(childText(node, 'ElementLengthMm'));
+      if (nodeNumber === null || nodeNumber === undefined || Math.round(nodeNumber) >= 0) continue;
+      if (!RENUMBERABLE_NEGATIVE_TYPES.has(componentType) || elementLength === null || elementLength <= 0) continue;
+
+      const previous = positiveNodeNumberFromOriginal(originalNumbers, nodes, index - 1, -1);
+      const next = positiveNodeNumberFromOriginal(originalNumbers, nodes, index + 1, 1);
+      const candidates = [
+        next !== null ? next - 1 : null,
+        previous !== null ? previous + 1 : null,
+      ].filter((candidate) => candidate !== null && candidate > 0 && !used.has(candidate));
+
+      let assigned = candidates[0];
+      if (!assigned) {
+        while (used.has(fallback)) fallback += 10;
+        assigned = fallback;
+        fallback += 10;
+      }
+      setText(document, node, 'NodeNumber', assigned);
+      used.add(assigned);
+      changed += 1;
+    }
+  }
+  return changed;
+}
+
+function applyCondenseRigidOption(enriched, document, options = {}) {
+  const enabled = truthy(enriched?.config?.splitCondensedValveFlange) || truthy(options?.splitCondensedValveFlange);
+  enriched.stats = enriched.stats && typeof enriched.stats === 'object' ? enriched.stats : {};
+  enriched.stats.splitCondensedValveFlange = enabled;
+  if (!enabled) return 0;
+  const changed = renumberLengthBearingNegativeNodes(document);
+  enriched.stats.splitCondensedRigidNodes = changed;
+  enriched.diagnostics = Array.isArray(enriched.diagnostics) ? enriched.diagnostics : [];
+  enriched.diagnostics.push({
+    type: 'split-condensed-valve-flange',
+    enabled: true,
+    renumberedNodes: changed,
+    message: 'Condense Rigid option applied: length-bearing negative RIGID/FLAN nodes are assigned positive node numbers before CII conversion.',
+  });
+  return changed;
+}
+
 function applyPreviewRunParity(enriched, sourceXmlText, stagedJsonText, options = {}) {
   if (typeof DOMParser === 'undefined' || typeof XMLSerializer === 'undefined') return enriched;
   enriched.config = configWithRuntimeOptions(enriched.config, options);
+  const document = new DOMParser().parseFromString(enriched.xmlText, 'application/xml');
+  if (document.getElementsByTagName('parsererror').length) return enriched;
+
   const rows = xmlCiiDryRunPreview(sourceXmlText, enriched.config, stagedJsonText).branchRows || [];
   if (!rows.length) {
+    applyCondenseRigidOption(enriched, document, options);
+    enriched.xmlText = new XMLSerializer().serializeToString(document);
     enriched.diagnostics = Array.isArray(enriched.diagnostics) ? enriched.diagnostics : [];
     enriched.diagnostics.push({ type: 'preview-run-parity-skipped', reason: 'no-preview-branch-rows' });
     return enriched;
   }
 
   const byBranch = rowsByBranchName(rows);
-  const document = new DOMParser().parseFromString(enriched.xmlText, 'application/xml');
-  if (document.getElementsByTagName('parsererror').length) return enriched;
-
   let branchCount = 0;
   let processCount = 0;
   let nodeFactCount = 0;
@@ -165,13 +262,15 @@ function applyPreviewRunParity(enriched, sourceXmlText, stagedJsonText, options 
     nodeFactCount += setBranchNodeFacts(document, branch, row);
   }
 
+  applyCondenseRigidOption(enriched, document, options);
+  enriched.xmlText = new XMLSerializer().serializeToString(document);
+  enriched.stats = enriched.stats && typeof enriched.stats === 'object' ? enriched.stats : {};
+
   if (!branchCount) {
     enriched.diagnostics = Array.isArray(enriched.diagnostics) ? enriched.diagnostics : [];
     enriched.diagnostics.push({ type: 'preview-run-parity-skipped', reason: 'no-branch-name-match', previewRows: rows.length, missedBranches: missedBranches.slice(0, 20) });
     return enriched;
   }
-  enriched.xmlText = new XMLSerializer().serializeToString(document);
-  enriched.stats = enriched.stats && typeof enriched.stats === 'object' ? enriched.stats : {};
   enriched.stats.previewRunParityBranches = branchCount;
   enriched.stats.previewRunParityProcessFields = processCount;
   enriched.stats.previewRunParityNodeFacts = nodeFactCount;
