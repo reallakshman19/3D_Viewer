@@ -1,7 +1,9 @@
+import { buildDefaultSupportLoadMasterData, normalizeSupportLoadMasterDataPackage, findDepSpanMasterRow, summarizeSupportLoadMasterData } from './GeometrySupportLoadMasterData.js?v=20260623-support-load-master-data-1';
+
 export const GEOMETRY_SUPPORT_LOAD_INPUT_SCHEMA = 'geometry-support-load-input-model/v1';
 export const PIPE_SUPPORT_LOAD_INPUT_SCHEMA = 'support-load-input/v1';
 export const SUPPORT_LOAD_INPUT_REF_SCHEMA = 'support-load-input-ref/v1';
-export const GEOMETRY_SUPPORT_LOAD_INPUT_VERSION = '20260622-pipe-support-load-input-hydrator-2';
+export const GEOMETRY_SUPPORT_LOAD_INPUT_VERSION = '20260623-master-data-hydrator-priority-1';
 export const SUPPORT_LOAD_INPUT_MODULE_ID = 'support-load-input-model/v1';
 export const SUPPORT_LOAD_INPUT_REQUIRED_FIELDS = Object.freeze([
   'pipe.attributes.supportLoadInput.identity.nps',
@@ -15,13 +17,6 @@ export const SUPPORT_LOAD_INPUT_REQUIRED_FIELDS = Object.freeze([
 ]);
 
 const MAX_OBJECTS = 20000;
-const DEP_SPANS = Object.freeze([
-  [0.5, 21.34, 900], [0.75, 26.67, 1400], [1, 33.4, 2200], [1.5, 48.26, 2800],
-  [2, 60.325, 2800], [3, 88.9, 6400], [4, 114.3, 6400], [6, 168.275, 9400],
-  [8, 219.075, 10750], [10, 273.05, 10750], [12, 323.85, 10750], [14, 355.6, 10750],
-  [16, 406.4, 11000], [18, 457.2, 11000], [20, 508, 11500], [24, 609.6, 12000],
-  [30, 762, 14000], [36, 914.4, 16000], [42, 1066.8, 18000], [48, 1219.2, 20000]
-].map(([nps, pipeOdMm, depSpanMm]) => Object.freeze({ nps, pipeOdMm, depSpanMm })));
 
 function text(value) { return String(value ?? '').trim(); }
 function norm(value) { return text(value).toUpperCase().replace(/[^A-Z0-9.]+/g, ''); }
@@ -64,32 +59,77 @@ function isSupport(object) {
 function lineKey(object) { return text(object?.geometryEnrichment?.branch?.lineKey || object?.enrichedFields?.lineKey || object?.lineNo || rawFields(object).LINE_NO); }
 function branchName(object) { return text(object?.geometryEnrichment?.branch?.branchName || object?.enrichedFields?.branchName || object?.rawRecord?.sourcePath || object?.sourcePath); }
 function npsFromLine(value) { const match = text(value).match(/(^|[^0-9.])(\d+(?:\.\d+)?)\s*["]/); return match ? num(match[2]) : null; }
-function npsFromOd(od) {
+function audit(source, field, value, extra = {}) { return Object.freeze({ source, field, value, ...extra }); }
+function materialKey(...values) { return values.map(norm).filter(Boolean); }
+
+function masterDataFrom(options = {}) {
+  return normalizeSupportLoadMasterDataPackage(options.supportLoadMasterData || buildDefaultSupportLoadMasterData());
+}
+function npsFromOd(od, masterData) {
   if (od === null) return null;
   let best = null;
-  for (const row of DEP_SPANS) {
-    const delta = Math.abs(row.pipeOdMm - od);
+  for (const row of masterData.depSpanRows || []) {
+    const rowOd = num(row.pipeOdMm);
+    if (rowOd === null) continue;
+    const delta = Math.abs(rowOd - od);
     if (delta <= 1.5 && (!best || delta < best.delta)) best = { ...row, delta };
   }
   return best?.nps ?? null;
 }
-function depFor(nps, od) {
-  let row = nps !== null ? DEP_SPANS.find(item => Math.abs(item.nps - nps) < 0.0001) : null;
-  if (!row && od !== null) row = DEP_SPANS.find(item => Math.abs(item.pipeOdMm - od) <= 1.5) || null;
-  return row;
+function depFor(nps, od, masterData) {
+  return findDepSpanMasterRow(masterData, { nps, pipeOdMm: od });
 }
-function audit(source, field, value, extra = {}) { return Object.freeze({ source, field, value, ...extra }); }
+function matchMaterialDensity(masterData, { materialCategory, materialCode, material }) {
+  const keys = materialKey(materialCategory, materialCode, material);
+  if (!keys.length) return null;
+  return (masterData.materialDensityRows || []).find(row => materialKey(row.materialCategory, row.materialCode, row.materialName).some(key => keys.includes(key))) || null;
+}
+function matchPipeWeight(masterData, { nps, od, wall, schedule }) {
+  const rows = masterData.pipeWeightRows || [];
+  let best = null;
+  for (const row of rows) {
+    let score = 0;
+    if (nps !== null && num(row.nps) !== null && Math.abs(num(row.nps) - nps) < 0.0001) score += 5;
+    if (od !== null && num(row.pipeOdMm) !== null && Math.abs(num(row.pipeOdMm) - od) <= 1.5) score += 4;
+    if (wall !== null && num(row.wallThicknessMm) !== null && Math.abs(num(row.wallThicknessMm) - wall) <= 0.25) score += 3;
+    if (text(schedule) && norm(row.schedule) === norm(schedule)) score += 2;
+    if (score && (!best || score > best.score)) best = { row, score };
+  }
+  return best?.row || null;
+}
+function firstHydroProfile(masterData) {
+  return (masterData.hydroDensityProfiles || []).find(row => num(row.fluidDensityHydKgM3) !== null) || null;
+}
+function firstRoundingProfile(masterData) {
+  return (masterData.roundingProfiles || []).find(row => num(row.roundStep) !== null) || null;
+}
+function firstTempProfile(masterData) {
+  return (masterData.tempFunctionProfiles || []).find(row => text(row.profileId)) || null;
+}
 
-function resolvePipeSource(object) {
+function resolvePipeSource(object, options = {}) {
+  const masterData = masterDataFrom(options);
   const raw = rawFields(object);
   const enrichment = object?.geometryEnrichment || {};
   const od = firstNumber(object?.pipe?.odMm, enrichment.branch?.boreMm, rawValue(raw, ['PipeOD', 'PIPE_OD', 'OD_MM', 'OD', 'DIA', 'DIAMETER', 'BORE']));
-  const nps = firstNumber(object?.pipe?.nps, object?.nps, rawValue(raw, ['NS', 'NPS', 'NOMINAL_SIZE', 'PIPE_SIZE']), npsFromLine(lineKey(object) || branchName(object)), npsFromOd(od));
+  const nps = firstNumber(object?.pipe?.nps, object?.nps, rawValue(raw, ['NS', 'NPS', 'NOMINAL_SIZE', 'PIPE_SIZE']), npsFromLine(lineKey(object) || branchName(object)), npsFromOd(od, masterData));
   const wall = firstNumber(enrichment.piping?.wallThicknessMm, object?.pipe?.wallThicknessMm, rawValue(raw, ['WALL_THICK', 'WALL_THICKNESS_MM', 'WT_MM', 'THK_MM']));
   const insideDiameter = od !== null && wall !== null ? round3(od - 2 * wall) : null;
-  const materialDensity = firstNumber(object?.pipe?.materialDensityKgM3, rawValue(raw, ['MATERIAL_DENSITY_KG_M3']));
+  const schedule = text(enrichment.piping?.schedule || object?.pipe?.schedule || rawValue(raw, ['SCHEDULE', 'SCH']));
+  const material = text(enrichment.piping?.materialName || object?.pipe?.material || rawValue(raw, ['MATERIAL', 'MAT']));
+  const materialCode = text(enrichment.piping?.materialCode || object?.pipe?.materialCode || rawValue(raw, ['MATERIAL_CODE', 'MATID']));
+  const materialCategory = text(object?.pipe?.materialCategory || rawValue(raw, ['Mat_Category', 'MAT_CATEGORY']));
   const auditRows = [];
-  let pipeWeight = firstNumber(object?.pipe?.unitPipeWtKgPerM, object?.pipe?.weightKgM, rawValue(raw, ['UnitPipewtKg/m', 'UNIT_PIPE_WT_KG_M', 'PIPE_WT_KG_M', 'WEIGHT_KG_M']));
+  const materialRow = matchMaterialDensity(masterData, { materialCategory, materialCode, material });
+  const materialDensity = firstNumber(object?.pipe?.materialDensityKgM3, rawValue(raw, ['MATERIAL_DENSITY_KG_M3']), materialRow?.materialDensityKgM3);
+  if (materialRow && firstNumber(object?.pipe?.materialDensityKgM3, rawValue(raw, ['MATERIAL_DENSITY_KG_M3'])) === null) {
+    auditRows.push(audit('PROJECT_MASTER_TABLE', 'pipePhysical.materialDensityKgM3', materialDensity, { table: 'materialDensityRows', materialCategory: materialRow.materialCategory || materialCategory }));
+  }
+  const pipeWeightRow = matchPipeWeight(masterData, { nps, od, wall, schedule });
+  let pipeWeight = firstNumber(object?.pipe?.unitPipeWtKgPerM, object?.pipe?.weightKgM, rawValue(raw, ['UnitPipewtKg/m', 'UNIT_PIPE_WT_KG_M', 'PIPE_WT_KG_M', 'WEIGHT_KG_M']), pipeWeightRow?.unitPipeWtKgPerM);
+  if (pipeWeightRow && firstNumber(object?.pipe?.unitPipeWtKgPerM, object?.pipe?.weightKgM, rawValue(raw, ['UnitPipewtKg/m', 'UNIT_PIPE_WT_KG_M', 'PIPE_WT_KG_M', 'WEIGHT_KG_M'])) === null) {
+    auditRows.push(audit('PROJECT_MASTER_TABLE', 'pipePhysical.unitPipeWtKgPerM', pipeWeight, { table: 'pipeWeightRows', match: { nps: pipeWeightRow.nps, pipeOdMm: pipeWeightRow.pipeOdMm, schedule: pipeWeightRow.schedule } }));
+  }
   if (pipeWeight === null && od !== null && insideDiameter !== null && materialDensity !== null) {
     pipeWeight = round3(Math.PI / 4 * (od ** 2 - insideDiameter ** 2) * 1e-6 * materialDensity);
     auditRows.push(audit('DERIVED_PIPE_WEIGHT', 'pipePhysical.unitPipeWtKgPerM', pipeWeight, { expression: 'PI/4*(OD^2-ID^2)*1e-6*materialDensityKgM3' }));
@@ -97,7 +137,10 @@ function resolvePipeSource(object) {
   const temp1 = firstNumber(enrichment.process?.temperature1C, object?.process?.temperature1C, object?.process?.temperatureC, rawValue(raw, ['TEMP_EXP_C1', 'TEMP_C1', 'DESIGN_TEMP_C']));
   const temp2 = firstNumber(enrichment.process?.temperature2C, object?.process?.temperature2C, rawValue(raw, ['TEMP_EXP_C2', 'TEMP_C2']));
   const densityOpe = firstNumber(enrichment.process?.fluidDensityKgM3, object?.process?.fluidDensityOpeKgM3, object?.process?.fluidDensityKgM3, rawValue(raw, ['FLUID_DENSITY_OPE_KG_M3', 'DENSITY_MIXED', 'DENSITY']));
-  const densityHyd = firstNumber(object?.process?.fluidDensityHydKgM3, object?.process?.hydroFluidDensityKgM3, rawValue(raw, ['FLUID_DENSITY_HYD_KG_M3', 'HYD_DENSITY_KG_M3', 'HYDRO_DENSITY']));
+  const hydroRow = firstHydroProfile(masterData);
+  const densityHydNative = firstNumber(object?.process?.fluidDensityHydKgM3, object?.process?.hydroFluidDensityKgM3, rawValue(raw, ['FLUID_DENSITY_HYD_KG_M3', 'HYD_DENSITY_KG_M3', 'HYDRO_DENSITY']));
+  const densityHyd = firstNumber(densityHydNative, hydroRow?.fluidDensityHydKgM3);
+  if (densityHydNative === null && hydroRow) auditRows.push(audit('PROJECT_MASTER_TABLE', 'process.fluidDensityHydKgM3', densityHyd, { table: 'hydroDensityProfiles', profileId: hydroRow.profileId }));
   let fluidOpe = firstNumber(object?.process?.fluidWtOpeKgPerM, rawValue(raw, ['FluidwtKg/m', 'FLUID_WT_OPE_KG_M', 'FLUIDWT_KG_M']));
   let fluidHyd = firstNumber(object?.process?.fluidWtHydKgPerM, rawValue(raw, ['FLUID_WT_HYD_KG_M', 'HYD_FLUIDWT_KG_M']));
   if (fluidOpe === null && insideDiameter !== null && densityOpe !== null) {
@@ -109,26 +152,15 @@ function resolvePipeSource(object) {
     auditRows.push(audit('DERIVED_FLUID_WEIGHT', 'process.fluidWtHydKgPerM', fluidHyd, { expression: 'PI/4*ID^2*1e-6*fluidDensityHydKgM3' }));
   }
   const depRaw = firstNumber(object?.spans?.depSpanMm, rawValue(raw, ['DEP SPAN', 'DEP_SPAN', 'DEPSPAN', 'DEPSPAN_MM']));
-  const depLookup = depRaw === null ? depFor(nps, od) : null;
+  const depLookup = depRaw === null ? depFor(nps, od, masterData) : null;
+  const roundingProfile = firstRoundingProfile(masterData);
+  const tempProfile = firstTempProfile(masterData);
   return {
-    raw,
-    enrichment,
-    nps,
-    od,
-    wall,
-    insideDiameter,
-    materialDensity,
-    pipeWeight,
-    temp1,
-    temp2,
-    densityOpe,
-    densityHyd,
-    fluidOpe,
-    fluidHyd,
+    raw, enrichment, masterData, masterDataSummary: summarizeSupportLoadMasterData(masterData), nps, od, wall, insideDiameter,
+    schedule, material, materialCode, materialCategory, materialDensity, pipeWeight, temp1, temp2, densityOpe, densityHyd, fluidOpe, fluidHyd,
     autoSpan: firstNumber(object?.spans?.autoSpanMm, rawValue(raw, ['AutoSpan', 'AUTOSPAN_MM', 'AUTO_SPAN_MM'])),
     depSpan: depRaw ?? depLookup?.depSpanMm ?? null,
-    depLookup,
-    auditRows
+    depLookup, roundingProfile, tempProfile, auditRows
   };
 }
 
@@ -164,8 +196,8 @@ function readiness(input) {
   });
 }
 
-export function buildPipeSupportLoadInput(object) {
-  const source = resolvePipeSource(object);
+export function buildPipeSupportLoadInput(object, options = {}) {
+  const source = resolvePipeSource(object, options);
   const line = lineKey(object) || text(object?.lineNo);
   const input = {
     schema: PIPE_SUPPORT_LOAD_INPUT_SCHEMA,
@@ -175,10 +207,10 @@ export function buildPipeSupportLoadInput(object) {
     pipePhysical: Object.freeze({
       wallThicknessMm: source.wall,
       insideDiameterMm: source.insideDiameter,
-      schedule: text(source.enrichment.piping?.schedule || object?.pipe?.schedule || rawValue(source.raw, ['SCHEDULE', 'SCH'])),
-      material: text(source.enrichment.piping?.materialName || object?.pipe?.material || rawValue(source.raw, ['MATERIAL', 'MAT'])),
-      materialCode: text(source.enrichment.piping?.materialCode || object?.pipe?.materialCode || rawValue(source.raw, ['MATERIAL_CODE', 'MATID'])),
-      materialCategory: text(object?.pipe?.materialCategory || rawValue(source.raw, ['Mat_Category', 'MAT_CATEGORY'])),
+      schedule: source.schedule,
+      material: source.material,
+      materialCode: source.materialCode,
+      materialCategory: source.materialCategory,
       materialDensityKgM3: source.materialDensity,
       insulationThicknessMm: firstNumber(source.enrichment.process?.insulationThicknessMm, object?.pipe?.insulationThicknessMm, rawValue(source.raw, ['INSUL_THICK', 'INSULATION_THICKNESS_MM'])),
       unitPipeWtKgPerM: source.pipeWeight
@@ -192,11 +224,23 @@ export function buildPipeSupportLoadInput(object) {
       fluidWtHydKgPerM: source.fluidHyd
     }),
     spans: Object.freeze({ autoSpanMm: source.autoSpan, depSpanMm: source.depSpan, autoSpanBySupport: Object.freeze({}) }),
-    formulaProfile: Object.freeze({ profileId: 'ACCESS_TEMP_WALL_WEIGHTED_V1', gravityFactor: 10, verticalLoadFactor: 1.1, roundMajor: 100, roundStep: 50, roundMode: 'up', noLoadFormula: true }),
+    formulaProfile: Object.freeze({
+      profileId: 'ACCESS_TEMP_WALL_WEIGHTED_V1',
+      tempFunctionProfileId: source.tempProfile?.profileId || 'TEMP_FNC_IDENTITY',
+      gravityFactor: 10,
+      verticalLoadFactor: 1.1,
+      roundMajor: num(source.roundingProfile?.roundMajor) ?? 100,
+      roundStep: num(source.roundingProfile?.roundStep) ?? 50,
+      roundMode: text(source.roundingProfile?.roundMode) || 'up',
+      noLoadFormula: true
+    }),
+    sourcePriority: Object.freeze(source.masterData.policy?.sourcePriority || []),
+    masterDataSummary: source.masterDataSummary,
     supportRefs: Object.freeze([]),
     audit: Object.freeze([
       audit('PIPE_SUPPORT_LOAD_INPUT_HYDRATOR', 'pipe.attributes.supportLoadInput', objectId(object)),
-      ...(source.depLookup ? [audit('DEP_SPAN_TABLE', 'spans.depSpanMm', source.depLookup.depSpanMm, { nps: source.depLookup.nps, pipeOdMm: source.depLookup.pipeOdMm })] : []),
+      audit('SUPPORT_LOAD_MASTER_DATA', 'sourcePriority', source.masterData.policy?.sourcePriority || [], { noSilentTopUp: source.masterData.policy?.noSilentTopUp === true }),
+      ...(source.depLookup ? [audit('PROJECT_MASTER_TABLE', 'spans.depSpanMm', source.depLookup.depSpanMm, { table: 'depSpanRows', nps: source.depLookup.nps, pipeOdMm: source.depLookup.pipeOdMm })] : []),
       ...source.auditRows
     ])
   };
@@ -218,11 +262,11 @@ function supportDetails(support) {
     autoSpanMm: firstNumber(support?.spans?.autoSpanMm, rawValue(raw, ['AutoSpan', 'AUTOSPAN_MM', 'AUTO_SPAN_MM']))
   };
 }
-function bestPipeForSupport(support, pipes) {
+function bestPipeForSupport(support, pipes, options = {}) {
   let best = null;
   for (const pipe of pipes) {
     const details = supportDetails(support);
-    const input = pipe.attributes?.supportLoadInput || buildPipeSupportLoadInput(pipe);
+    const input = pipe.attributes?.supportLoadInput || buildPipeSupportLoadInput(pipe, options);
     let score = 0;
     const reasons = [];
     if (norm(lineKey(support)) && norm(lineKey(support)) === norm(input.identity.branchKey || input.identity.lineNo)) { score += 8; reasons.push('line-key'); }
@@ -251,13 +295,13 @@ function supportRef(support, match) {
   });
 }
 
-export function hydratePipeSupportLoadInputs(mappedObjects = []) {
+export function hydratePipeSupportLoadInputs(mappedObjects = [], options = {}) {
   const objects = (Array.isArray(mappedObjects) ? mappedObjects : []).slice(0, MAX_OBJECTS).filter(object => object && !isRejected(object));
-  const pipes = objects.filter(isPipe).map(pipe => withPipeInput(pipe, buildPipeSupportLoadInput(pipe)));
+  const pipes = objects.filter(isPipe).map(pipe => withPipeInput(pipe, buildPipeSupportLoadInput(pipe, options)));
   const refs = new Map();
   const matches = new Map();
   for (const support of objects.filter(isSupport)) {
-    const match = bestPipeForSupport(support, pipes);
+    const match = bestPipeForSupport(support, pipes, options);
     matches.set(objectId(support), match);
     if (match?.pipe) {
       const pipeId = objectId(match.pipe);
@@ -293,7 +337,8 @@ function rowForSupport(support, pipe) {
   });
 }
 export function buildGeometrySupportLoadInputModel(mappedObjects = [], options = {}) {
-  const hydrated = hydratePipeSupportLoadInputs(mappedObjects);
+  const masterData = masterDataFrom(options);
+  const hydrated = hydratePipeSupportLoadInputs(mappedObjects, { ...options, supportLoadMasterData: masterData });
   const rows = hydrated.supports.map(support => {
     const pipeId = support.attributes?.supportLoadInputRef?.associatedPipeId;
     return rowForSupport(support, hydrated.pipes.find(pipe => objectId(pipe) === pipeId));
@@ -320,6 +365,8 @@ export function buildGeometrySupportLoadInputModel(mappedObjects = [], options =
     blockedCount: blocked,
     status: blocked || pipeBlocked ? 'BLOCKED' : rows.length || hydrated.pipes.length ? 'INPUT_READY' : 'EMPTY',
     requiredFields: SUPPORT_LOAD_INPUT_REQUIRED_FIELDS,
+    masterDataSummary: summarizeSupportLoadMasterData(masterData),
+    sourcePriority: Object.freeze(masterData.policy?.sourcePriority || []),
     hydratedObjects: hydrated.objects,
     pipeInputs: Object.freeze(hydrated.pipes.map(pipe => pipe.attributes.supportLoadInput)),
     rows: Object.freeze(rows),
@@ -327,13 +374,14 @@ export function buildGeometrySupportLoadInputModel(mappedObjects = [], options =
     assumptions: Object.freeze([
       'This model writes resolved support-load inputs onto pipe.attributes.supportLoadInput before any formula engine can run.',
       'Support rows are references only; support-load formulas must later read pipe.attributes.supportLoadInput.',
+      'Controlled support-load master data may hydrate missing input fields with audit, but does not run formulas or mutate calculated fields.',
       'This phase does not calculate support loads and writes no OPE/HYD/Guide/LineStop result fields.'
     ])
   });
 }
 export function exampleSupportLoadInputObjects() {
   return [
-    { id: 'PIPE-8-P25168', family: 'PIPE', lineNo: '8"-P25168-61502-01', displayName: 'PIPE 8"-P25168-61502-01', rawFields: { NS: 8, PipeOD: 219.075, WALL_THICK: 12.7, TEMP_EXP_C1: 100, TEMP_EXP_C2: 59, DEPSPAN: 10750 }, geometry: { center: { x: 0, y: 0, z: 0 } }, pipe: { odMm: 219.075, wallThicknessMm: 12.7, material: 'LT', weightKgM: 67 }, process: { fluidDensityKgM3: 800, fluidDensityHydKgM3: 1000, temperature1C: 100 } },
+    { id: 'PIPE-8-P25168', family: 'PIPE', lineNo: '8"-P25168-61502-01', displayName: 'PIPE 8"-P25168-61502-01', rawFields: { NS: 8, PipeOD: 219.075, WALL_THICK: 12.7, TEMP_EXP_C1: 100, TEMP_EXP_C2: 59 }, geometry: { center: { x: 0, y: 0, z: 0 } }, pipe: { odMm: 219.075, wallThicknessMm: 12.7, material: 'LT', weightKgM: 67 }, process: { fluidDensityKgM3: 800, fluidDensityHydKgM3: 1000, temperature1C: 100 } },
     { id: 'SUP-PS-001', family: 'SUPPORT', lineNo: '8"-P25168-61502-01', displayName: 'GUIDE PS-001', geometry: { center: { x: 10, y: -80, z: 0 } }, support: { supportType: 'GUIDE', supportTag: 'PS-001' }, pipe: { odMm: 219.075 } }
   ];
 }
