@@ -24,6 +24,7 @@ on:
       - 'viewer/geometry-workspace/**'
       - 'viewer/overlays/autobend/**'
       - 'viewer/overlays/support/**'
+      - 'viewer/overlays/source-tools/**'
       - 'viewer/core/app.js'
       - 'viewer/index.html'
       - 'viewer/main-rhbg-fitguard.js'
@@ -40,6 +41,7 @@ on:
       - 'viewer/tests/nonprimitive-support-pipe-segment-extraction.test.js'
       - 'viewer/tests/nonprimitive-source-tools-ui.test.js'
       - 'viewer/tests/nonprimitive-source-tools-diagnostics-export.test.js'
+      - 'viewer/tests/nonprimitive-source-tools-diagnostics-module.test.js'
       - '.github/workflows/rvm-pcf-ci.yml'
   workflow_dispatch:
 
@@ -111,6 +113,9 @@ jobs:
 
       - name: Verify non-primitive source tools diagnostics export
         run: node viewer/tests/nonprimitive-source-tools-diagnostics-export.test.js
+
+      - name: Verify non-primitive source tools diagnostics module
+        run: node viewer/tests/nonprimitive-source-tools-diagnostics-module.test.js
 
       - name: Verify RHBG RVM fit guard
         run: |
