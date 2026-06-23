@@ -48,10 +48,10 @@ const hierarchy = [
 ];
 
 const instructionSet = collectBrowserRvmRenderInstructions(hierarchy);
-assert.equal(instructionSet.schemaVersion, 'rvm-browser-render-instructions/v5-raw-first-support-primitives');
+assert.equal(instructionSet.schemaVersion, 'rvm-browser-render-instructions/v6-rvm-support-runtime-retired');
 assert.equal(instructionSet.count, 1);
 assert.equal(instructionSet.diagnostics.attCounts.enriched, 1);
-assert.equal(instructionSet.diagnostics.supportHintCount, 0);
+assert.equal(Object.hasOwn(instructionSet.diagnostics, 'supportHintCount'), false);
 const instruction = instructionSet.instructions[0];
 assert.equal(instruction.displayName, 'P-1001-A');
 assert.equal(instruction.att.enriched, true);
