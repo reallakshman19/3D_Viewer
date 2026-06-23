@@ -1,7 +1,7 @@
 import { calculateSupportLoadsForPipeInput } from './GeometrySupportLoadFormulaEngine.js?v=20260623-support-load-advanced-profiles-1';
 
 export const SUPPORT_LOAD_ACCESS_FIXTURE_SCHEMA = 'support-load-access-fixture-pack/v1';
-export const SUPPORT_LOAD_ACCESS_FIXTURE_VERSION = '20260623-access-fixture-pack-1';
+export const SUPPORT_LOAD_ACCESS_FIXTURE_VERSION = '20260623-access-fixture-import-1';
 
 const ACCESS_PROFILE = Object.freeze({
   profileId: 'ACCESS_TEMP_WALL_WEIGHTED_V1',
@@ -11,6 +11,29 @@ const ACCESS_PROFILE = Object.freeze({
   roundStep: 50,
   roundMode: 'up'
 });
+
+const NPS_OD_LOOKUP = Object.freeze([
+  Object.freeze({ nps: 0.5, pipeOdMm: 21.34 }),
+  Object.freeze({ nps: 0.75, pipeOdMm: 26.67 }),
+  Object.freeze({ nps: 1, pipeOdMm: 33.4 }),
+  Object.freeze({ nps: 1.5, pipeOdMm: 48.26 }),
+  Object.freeze({ nps: 2, pipeOdMm: 60.325 }),
+  Object.freeze({ nps: 3, pipeOdMm: 88.9 }),
+  Object.freeze({ nps: 4, pipeOdMm: 114.3 }),
+  Object.freeze({ nps: 6, pipeOdMm: 168.275 }),
+  Object.freeze({ nps: 8, pipeOdMm: 219.075 }),
+  Object.freeze({ nps: 10, pipeOdMm: 273.05 }),
+  Object.freeze({ nps: 12, pipeOdMm: 323.85 }),
+  Object.freeze({ nps: 14, pipeOdMm: 355.6 }),
+  Object.freeze({ nps: 16, pipeOdMm: 406.4 }),
+  Object.freeze({ nps: 18, pipeOdMm: 457.2 }),
+  Object.freeze({ nps: 20, pipeOdMm: 508 }),
+  Object.freeze({ nps: 24, pipeOdMm: 609.6 }),
+  Object.freeze({ nps: 30, pipeOdMm: 762 }),
+  Object.freeze({ nps: 36, pipeOdMm: 914.4 }),
+  Object.freeze({ nps: 42, pipeOdMm: 1066.8 }),
+  Object.freeze({ nps: 48, pipeOdMm: 1219.2 })
+]);
 
 export const DEFAULT_SUPPORT_LOAD_ACCESS_FIXTURES = Object.freeze([
   Object.freeze({
@@ -60,6 +83,8 @@ function number(value) {
 
 function text(value) { return String(value ?? '').trim(); }
 
+function normalizeKey(value) { return text(value).toLowerCase().replace(/[^a-z0-9]+/g, ''); }
+
 function round3(value) { return Number.isFinite(value) ? Math.round(value * 1000) / 1000 : null; }
 
 function freezeDeep(value) {
@@ -77,10 +102,142 @@ function totalKgPerMForVertical({ verticalNSS, spanMm, gravityFactor = 10, verti
   return v * 1000 / (span * gravity * factor);
 }
 
+function npsOd(nps) {
+  const value = number(nps);
+  if (value === null) return null;
+  const row = NPS_OD_LOOKUP.find(item => Math.abs(item.nps - value) < 0.0001);
+  return row?.pipeOdMm ?? null;
+}
+
+function splitDelimitedLine(line, delimiter) {
+  const output = [];
+  let current = '';
+  let quoted = false;
+  const source = String(line ?? '');
+  for (let index = 0; index < source.length; index += 1) {
+    const char = source[index];
+    if (char === '"') {
+      if (quoted && source[index + 1] === '"') {
+        current += '"';
+        index += 1;
+      } else {
+        quoted = !quoted;
+      }
+    } else if (char === delimiter && !quoted) {
+      output.push(current.trim());
+      current = '';
+    } else {
+      current += char;
+    }
+  }
+  output.push(current.trim());
+  return output;
+}
+
+function detectDelimiter(lines) {
+  const sample = lines.find(line => text(line));
+  if (!sample) return '\t';
+  const tabCount = (sample.match(/\t/g) || []).length;
+  const commaCount = (sample.match(/,/g) || []).length;
+  return tabCount >= commaCount ? '\t' : ',';
+}
+
+function getField(row, names) {
+  for (const name of names) {
+    const normalized = normalizeKey(name);
+    if (Object.prototype.hasOwnProperty.call(row, normalized)) return row[normalized];
+  }
+  return null;
+}
+
+function fixtureIdFromRow(row, index) {
+  const line = text(getField(row, ['LinenoinCII', 'LineNoInCII', 'Line No in CII', 'lineNo']));
+  const nps = text(getField(row, ['NS', 'NPS']));
+  return `access-import-${index + 1}-${normalizeKey(line || `nps-${nps || 'unknown'}`)}`;
+}
+
+export function parseAccessSupportLoadFixtureText(sourceText, options = {}) {
+  const lines = String(sourceText ?? '').split(/\r?\n/).filter(line => text(line));
+  if (lines.length < 2) return freezeDeep({ schema: SUPPORT_LOAD_ACCESS_FIXTURE_SCHEMA, version: SUPPORT_LOAD_ACCESS_FIXTURE_VERSION, status: 'EMPTY', fixtures: [], warnings: ['no-tabular-access-fixture-rows'] });
+  const delimiter = options.delimiter || detectDelimiter(lines);
+  const headers = splitDelimitedLine(lines[0], delimiter).map(normalizeKey);
+  const fixtures = [];
+  const warnings = [];
+  for (let index = 1; index < lines.length; index += 1) {
+    const cells = splitDelimitedLine(lines[index], delimiter);
+    if (!cells.some(cell => text(cell))) continue;
+    const row = {};
+    for (let column = 0; column < headers.length; column += 1) row[headers[column] || `col${column}`] = cells[column] ?? '';
+    const nps = number(getField(row, ['NPS', 'NS']));
+    const pipeOdMm = number(getField(row, ['PipeOD', 'PipeODMm', 'Dia', 'Diameter'])) ?? npsOd(nps);
+    const depSpanMm = number(getField(row, ['DEP SPAN', 'DEPSPAN', 'SUPPORTSPAN', 'DEPSpanMm']));
+    const verticalNSS = number(getField(row, ['Vertical_N_SS', 'VerticalNSS', 'OPE_V_DEP']));
+    const accessMinHoriLoadN = number(getField(row, ['MinHoriLoad', 'RoundedGuideH', 'Rounded_Guide_H']));
+    const accessMinHoriLSLoadN = number(getField(row, ['MinHoriLSLoad', 'LineStop_H', 'LineStopH']));
+    const missing = [];
+    if (nps === null) missing.push('NPS/NS');
+    if (pipeOdMm === null) missing.push('PipeOD/Dia');
+    if (number(getField(row, ['WALL_THICK', 'WallThickness', 'Wallthickness'])) === null) missing.push('WALL_THICK');
+    if (number(getField(row, ['TEMP_EXP_C1', 'TempExpC1'])) === null) missing.push('TEMP_EXP_C1');
+    if (depSpanMm === null) missing.push('DEPSpan/SUPPORTSPAN');
+    if (verticalNSS === null) missing.push('Vertical_N_SS');
+    if (accessMinHoriLoadN === null) missing.push('MinHoriLoad');
+    if (accessMinHoriLSLoadN === null) missing.push('MinHoriLSLoad');
+    if (missing.length) warnings.push(`row ${index + 1}: missing ${missing.join(', ')}`);
+    const fixture = {
+      fixtureId: fixtureIdFromRow(row, index),
+      source: 'ACCESS_IMPORTED_TABULAR_REFERENCE_ROW',
+      jobName: text(getField(row, ['JOBNAME', 'JobName'])),
+      lineNoInCii: text(getField(row, ['LinenoinCII', 'LineNoInCII', 'Line No in CII', 'lineNo'])),
+      properLineNo: text(getField(row, ['ProperlineNo', 'ProperLineNo', 'Proper line No'])),
+      input: {
+        nps,
+        pipeOdMm,
+        wallThicknessMm: number(getField(row, ['WALL_THICK', 'WallThickness', 'Wallthickness'])),
+        tempExpC1: number(getField(row, ['TEMP_EXP_C1', 'TempExpC1'])),
+        tempExpC2: number(getField(row, ['TEMP_EXP_C2', 'TempExpC2'])),
+        insulationThicknessMm: number(getField(row, ['INSUL_THICK', 'InsulThick', 'InsulationThickness'])),
+        depSpanMm,
+        autoSpanMm: number(getField(row, ['AutoSpan', 'AutoSpanMm'])) ?? depSpanMm,
+        verticalNSS,
+        minVerticalLoadN: number(getField(row, ['MinVerLoad', 'MinVerticalLoad'])),
+        accessMinHoriLoadN,
+        accessMinHoriLSLoadN,
+        materialCategory: text(getField(row, ['Mat_Category', 'MaterialCategory'])),
+        insulated: text(getField(row, ['Insulated'])),
+        toBeCleaned: text(getField(row, ['TobeCleaned', 'ToBeCleaned'])),
+        remarks: text(getField(row, ['Remarks']))
+      },
+      expected: {
+        opeVDep: verticalNSS,
+        opeVA: verticalNSS,
+        roundedGuideHDep: accessMinHoriLoadN,
+        roundedGuideHA: accessMinHoriLoadN,
+        finalGuideHDep: verticalNSS === null ? null : round3(0.3 * verticalNSS),
+        finalGuideHA: verticalNSS === null ? null : round3(0.3 * verticalNSS),
+        lineStopH: accessMinHoriLSLoadN,
+        lineStopIdExpression: 'D_MINUS_WT',
+        guideControlling: 'THIRTY_PERCENT_OPE_VERTICAL'
+      },
+      importAudit: [{ source: 'ACCESS_FIXTURE_IMPORT', field: 'delimiter', value: delimiter === '\t' ? 'tab' : delimiter }]
+    };
+    fixtures.push(freezeDeep(fixture));
+  }
+  return freezeDeep({
+    schema: SUPPORT_LOAD_ACCESS_FIXTURE_SCHEMA,
+    version: SUPPORT_LOAD_ACCESS_FIXTURE_VERSION,
+    status: warnings.length ? 'IMPORTED_WITH_WARNINGS' : 'IMPORTED',
+    delimiter: delimiter === '\t' ? 'tab' : delimiter,
+    fixtureCount: fixtures.length,
+    fixtures,
+    warnings
+  });
+}
+
 export function buildLockedPipeInputFromAccessFixture(fixture) {
   const input = fixture?.input || {};
   const nps = number(input.nps ?? input.NS);
-  const pipeOdMm = number(input.pipeOdMm ?? input.PipeOD ?? input.Dia);
+  const pipeOdMm = number(input.pipeOdMm ?? input.PipeOD ?? input.Dia) ?? npsOd(nps);
   const wallThicknessMm = number(input.wallThicknessMm ?? input.WALL_THICK);
   const depSpanMm = number(input.depSpanMm ?? input.DEP_SPAN ?? input.SUPPORTSPAN);
   const autoSpanMm = number(input.autoSpanMm ?? depSpanMm);
