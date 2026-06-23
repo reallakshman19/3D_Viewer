@@ -5,7 +5,7 @@ import { buildXmlCiiNodeResolverIndex } from '../../../converters/xml-cii2019-co
 import { resolveManualRestraintRows } from '../../../converters/xml-cii2019-core/sideload-restraints.js';
 import { mergeXmlCiiMatchedFacts, matchedFactsFromEnrichmentDiagnostics } from '../../../converters/xml-cii2019-core/sideload-ledger.js';
 import { applyManualMatchedFactsToEnrichedXml } from '../../../converters/xml-cii2019-core/sideload-apply.js';
-import { enrichXmlForCii2019 } from './xmltocii2019_helper/enrichment-run-parity.js?v=20260623-preview-run-parity-1';
+import { enrichXmlForCii2019 } from './xmltocii2019_helper/enrichment-run-parity.js?v=20260623-preview-run-parity-2';
 
 const XML_CII_STAGE_TIMEOUT_MS = 120000;
 const MATCHED_PREVIEW_STORAGE_KEY = 'xmlCii2019.matchedPreview.lastDiagnostics.v1';
@@ -198,6 +198,96 @@ function applyOptionalManualSideload(enriched, runValues) {
   };
 }
 
+function xmlLocalName(node) {
+  return text(node?.localName || node?.nodeName).replace(/^.*:/, '');
+}
+
+function xmlChildrenByName(parent, name) {
+  return [...(parent?.childNodes || [])].filter((node) => node.nodeType === 1 && xmlLocalName(node) === name);
+}
+
+function xmlFirstChild(parent, name) {
+  return xmlChildrenByName(parent, name)[0] || null;
+}
+
+function xmlChildText(parent, name) {
+  return text(xmlFirstChild(parent, name)?.textContent);
+}
+
+function xmlElementTextMap(parent) {
+  const out = {};
+  for (const child of [...(parent?.childNodes || [])]) {
+    if (child.nodeType === 1) out[xmlLocalName(child)] = text(child.textContent);
+  }
+  return out;
+}
+
+function xmlNodeRecord(node) {
+  return {
+    nodeNumber: xmlChildText(node, 'NodeNumber'),
+    nodeName: xmlChildText(node, 'NodeName'),
+    endpoint: xmlChildText(node, 'Endpoint'),
+    rigid: xmlChildText(node, 'Rigid'),
+    componentType: xmlChildText(node, 'ComponentType'),
+    connectionType: xmlChildText(node, 'ConnectionType'),
+    weight: xmlChildText(node, 'Weight'),
+    componentRefNo: xmlChildText(node, 'ComponentRefNo'),
+    outsideDiameter: xmlChildText(node, 'OutsideDiameter'),
+    wallThickness: xmlChildText(node, 'WallThickness'),
+    corrosionAllowance: xmlChildText(node, 'CorrosionAllowance'),
+    insulationThickness: xmlChildText(node, 'InsulationThickness'),
+    position: xmlChildText(node, 'Position'),
+    bendRadius: xmlChildText(node, 'BendRadius'),
+    sif: xmlChildText(node, 'SIF'),
+    pipingClass: xmlChildText(node, 'PipingClass'),
+    rating: xmlChildText(node, 'Rating'),
+    boreMm: xmlChildText(node, 'BoreMm'),
+    materialName: xmlChildText(node, 'MaterialName'),
+    materialCode: xmlChildText(node, 'MaterialCode'),
+    elementLengthMm: xmlChildText(node, 'ElementLengthMm'),
+    dtxrPs: xmlChildText(node, 'DTXR_PS'),
+    dtxrPos: xmlChildText(node, 'DTXR_POS'),
+  };
+}
+
+function buildEnrichedStageJson(xmlText, meta = {}) {
+  const payload = {
+    schema: 'xml-cii2019-enriched-stage/v1',
+    profile: 'XML_CII_2019_RICH_WORKFLOW',
+    converter: 'XML->CII(2019)',
+    generatedAt: new Date().toISOString(),
+    source: meta.inputName || '',
+    enrichedXml: meta.enrichedName || '',
+    units: { length: 'mm', pressure: 'pascal', temperature: 'degC', density: 'kg/m3' },
+    stats: meta.stats || {},
+    diagnosticsName: meta.diagnosticsName || '',
+    branches: [],
+  };
+  if (typeof DOMParser === 'undefined') return payload;
+  let document = null;
+  try {
+    document = new DOMParser().parseFromString(text(xmlText), 'application/xml');
+    if (document.getElementsByTagName('parsererror').length) return payload;
+  } catch {
+    return payload;
+  }
+  for (const branch of [...document.getElementsByTagName('Branch')]) {
+    payload.branches.push({
+      branchName: xmlChildText(branch, 'Branchname'),
+      pipelineReference: xmlChildText(branch, 'PipelineReference'),
+      lineNo: xmlChildText(branch, 'LineNo'),
+      pressure: xmlElementTextMap(xmlFirstChild(branch, 'Pressure')),
+      temperature: xmlElementTextMap(xmlFirstChild(branch, 'Temperature')),
+      materialNumber: xmlChildText(branch, 'MaterialNumber'),
+      insulationDensity: xmlChildText(branch, 'InsulationDensity'),
+      fluidDensity: xmlChildText(branch, 'FluidDensity'),
+      nodes: xmlChildrenByName(branch, 'Node').map(xmlNodeRecord),
+    });
+  }
+  payload.stats = { ...payload.stats, enrichedStageBranches: payload.branches.length, enrichedStageNodes: payload.branches.reduce((sum, branch) => sum + branch.nodes.length, 0) };
+  return payload;
+}
+
 export async function run(context) {
   const primary = context.inputFiles.find(f => f.role === 'primary');
   if (!primary || !primary.bytes) throw new Error('Primary XML input is required for XML->CII(2019).');
@@ -269,6 +359,7 @@ export async function run(context) {
   const sideloadLogLines = applyOptionalManualSideload(enriched, runValues).stdout;
 
   const enrichedName = `${stem}_enriched.xml`;
+  const enrichedStageName = `${stem}_enriched_staged.json`;
   if (!context.workerRunner) throw new Error('Python worker runtime is not available.');
   const serializableOptions = Object.fromEntries(Object.entries({ ...runValues, createEnrichedXml: false }).filter(([, v]) => typeof v !== 'function'));
   context.setStatus?.('Running CII conversion in Python worker...', 'running');
@@ -289,12 +380,14 @@ export async function run(context) {
     source: 'latest-run',
     inputName: primary.name,
     enrichedName,
+    enrichedStageName,
     diagnosticsName: `${stem}_enrichment_diagnostics.json`,
     stats,
     diagnostics,
     matchedFacts: enriched.matchedFacts || [],
     rejectedFacts: enriched.rejectedFacts || [],
   };
+  const enrichedStageText = JSON.stringify(buildEnrichedStageJson(enriched.xmlText, diagnosticPayload), null, 2);
   const diagnosticText = JSON.stringify(diagnosticPayload, null, 2);
   publishMatchedPreviewDiagnostics(diagnosticPayload);
   const diagnosticRows = (Array.isArray(diagnostics) ? diagnostics : []).map((item) => ({
@@ -314,12 +407,14 @@ export async function run(context) {
   return {
     outputs: [
       { name: enrichedName, text: enriched.xmlText, mime: 'text/xml;charset=utf-8' },
+      { name: enrichedStageName, text: enrichedStageText, mime: 'application/json;charset=utf-8' },
       { name: `${stem}_enrichment_diagnostics.json`, text: diagnosticText, mime: 'application/json;charset=utf-8' },
       ...ciiOutputs,
     ],
     logs: {
       stdout: [
         'Created enriched XML before XML->CII(2019).',
+        `Created enriched staged JSON: ${enrichedStageName}.`,
         `DATUM duplicate support nodes removed: ${stats.removedDuplicateSupports}.`,
         `XML restraints normalized: ${stats.normalizedRestraints}.`,
         `Staged JSON support matches applied: ${stats.stagedSupportsMapped}.`,
