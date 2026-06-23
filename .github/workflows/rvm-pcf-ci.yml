@@ -138,6 +138,9 @@ jobs:
       - name: Verify support-load master hydration
         run: node viewer/tests/rvm-geometry-workspace-support-load-master-hydration.test.js
 
+      - name: Verify support-load AutoSpan resolver
+        run: node viewer/tests/rvm-geometry-workspace-support-load-autospan.test.js
+
       - name: Verify support-load formula engine
         run: node viewer/tests/rvm-geometry-workspace-support-load-formulas.test.js
 
