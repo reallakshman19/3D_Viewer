@@ -9,7 +9,7 @@ import {
   pipeAxisFromAttributes,
 } from '../overlays/support/SupportOverlaySourceExtraction.js';
 
-assert.equal(SUPPORT_OVERLAY_SOURCE_EXTRACTION_SCHEMA, 'support-overlay-source-extraction/v1');
+assert.equal(SUPPORT_OVERLAY_SOURCE_EXTRACTION_SCHEMA, 'support-overlay-source-extraction/v2');
 
 const point = coordinateFromAttributes({ SUPPORT_POSITION: '100, 200, 300' });
 assert.equal(point.x, 100);
