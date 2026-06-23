@@ -1,6 +1,10 @@
 import { RvmViewer3D } from '../rvm-viewer/RvmViewer3D.js?v=20260622-rvm-leaf-picking-2';
 import { readNonPrimitiveAutoBendSettings, writeNonPrimitiveAutoBendSettings } from '../overlays/autobend/NonPrimitiveAutoBendSettings.js';
 import { readNonPrimitiveSupportOverlaySettings, writeNonPrimitiveSupportOverlaySettings } from '../overlays/support/SupportOverlaySettings.js';
+import {
+  buildNonPrimitiveSourceToolsDiagnosticsSnapshot,
+  sourceToolsDiagnosticsFileName,
+} from '../overlays/source-tools/NonPrimitiveSourceToolsDiagnostics.js';
 
 export const RVM_NON_PRIMITIVE_SOURCE_TOOLS_UI_SCHEMA = 'rvm-non-primitive-source-tools-ui/v3';
 
@@ -12,8 +16,6 @@ const SOURCE_KIND_RE = /^(json|jscon|inputxml|txt|source-preview)$/i;
 const PRIMITIVE_KIND_RE = /^(rvm|glb|gltf|rev)$/i;
 const SUPPORT_FILTER_FAMILIES = Object.freeze(['REST', 'GUIDE', 'LINESTOP', 'LIMIT', 'LIM', 'HOLDDOWN', 'SPRING_CAN', 'UNKNOWN']);
 const MAX_INLINE_WARNINGS = 3;
-const MAX_SNAPSHOT_ARRAY_LENGTH = 1000;
-const MAX_SNAPSHOT_DEPTH = 9;
 const viewerContexts = new WeakMap();
 
 export function installRvmNonPrimitiveSourceToolsUiBridge() {
@@ -207,35 +209,12 @@ export function reapplyFromControls(root, viewer = globalThis.__3D_RVM_VIEWER__)
 }
 
 export function buildSourceToolsDiagnosticsSnapshot(viewer = globalThis.__3D_RVM_VIEWER__, context = {}) {
-  const autoDiagnostics = sanitizeJson(viewer?.nonPrimitiveAutoBendDiagnostics || {});
-  const supportDiagnostics = sanitizeJson(viewer?.nonPrimitiveSupportOverlayDiagnostics || {});
-  const sourceKind = normalizeSourceKind(
-    context.sourceKind
-      || autoDiagnostics.sourceKind
-      || supportDiagnostics.sourceKind
-      || viewer?.sourceKind
-      || ''
-  );
-  const sourceFile = context.sourceFile || context.fileName || autoDiagnostics.sourceFile || supportDiagnostics.sourceFile || '';
-  return {
-    schema: RVM_NON_PRIMITIVE_SOURCE_TOOLS_UI_SCHEMA,
-    snapshotKind: 'non-primitive-source-tools-diagnostics',
-    generatedAt: new Date().toISOString(),
-    sourceKind,
-    sourceFile,
-    primitiveExcluded: true,
-    counts: {
-      autoBendSegments: Number(autoDiagnostics.segmentCount || 0),
-      autoBendBends: Number(autoDiagnostics.bendCount || 0),
-      autoBendTrims: Number(autoDiagnostics.trimCount || 0),
-      supportSourceRecords: Number(supportDiagnostics.sourceSupports || 0),
-      supportCreated: Number(supportDiagnostics.created || 0),
-      supportWarnings: Number(supportDiagnostics.warningCount ?? supportDiagnostics.warnings?.length ?? 0) || 0,
-      supportPipeSegments: Number(supportDiagnostics.sourcePipeSegments || 0),
-    },
-    autoBend: autoDiagnostics,
-    supportOverlay: supportDiagnostics,
-  };
+  return buildNonPrimitiveSourceToolsDiagnosticsSnapshot({
+    viewer,
+    context,
+    uiSchema: RVM_NON_PRIMITIVE_SOURCE_TOOLS_UI_SCHEMA,
+    normalizeSourceKind,
+  });
 }
 
 export async function copySourceToolsDiagnostics(viewer = globalThis.__3D_RVM_VIEWER__, context = {}) {
@@ -269,39 +248,13 @@ export function downloadSourceToolsDiagnostics(viewer = globalThis.__3D_RVM_VIEW
   const url = URLApi.createObjectURL(blob);
   const link = doc.createElement('a');
   link.href = url;
-  link.download = diagnosticsFileName(snapshot);
+  link.download = sourceToolsDiagnosticsFileName(snapshot);
   link.style.display = 'none';
   doc.body?.appendChild?.(link);
   link.click?.();
   link.remove?.();
   setTimeout(() => URLApi.revokeObjectURL?.(url), 0);
   return { status: 'downloaded', fileName: link.download, bytes: text.length };
-}
-
-function diagnosticsFileName(snapshot) {
-  const kind = String(snapshot.sourceKind || 'source').replace(/[^a-z0-9_-]+/gi, '-').replace(/^-+|-+$/g, '') || 'source';
-  const stamp = String(snapshot.generatedAt || new Date().toISOString()).replace(/[:.]/g, '-');
-  return `nonprimitive-source-tools-diagnostics-${kind}-${stamp}.json`;
-}
-
-function sanitizeJson(value, depth = 0, seen = new WeakSet()) {
-  if (value == null || typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') return value;
-  if (typeof value === 'bigint') return Number(value);
-  if (typeof value === 'function' || typeof value === 'symbol') return undefined;
-  if (depth >= MAX_SNAPSHOT_DEPTH) return '[max-depth]';
-  if (typeof value === 'object') {
-    if (seen.has(value)) return '[circular]';
-    seen.add(value);
-  }
-  if (Array.isArray(value)) {
-    return value.slice(0, MAX_SNAPSHOT_ARRAY_LENGTH).map((item) => sanitizeJson(item, depth + 1, seen));
-  }
-  const out = {};
-  for (const [key, item] of Object.entries(value)) {
-    const clean = sanitizeJson(item, depth + 1, seen);
-    if (clean !== undefined) out[key] = clean;
-  }
-  return out;
 }
 
 function isNonPrimitiveKind(kind) {
