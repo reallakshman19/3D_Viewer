@@ -1,10 +1,14 @@
 import * as THREE from 'three';
+import { AvevaJsonLoader } from '../rvm/AvevaJsonLoader.js';
+import { RvmViewer3D } from '../rvm-viewer/RvmViewer3D.js?v=20260622-rvm-leaf-picking-2';
 
 export const RVM_NON_PRIMITIVE_SUPPORT_OVERLAY_SCHEMA = 'rvm-non-primitive-support-overlay/v1';
 
 const ROOT_NAME = '__RVM_NON_PRIMITIVE_SUPPORT_OVERLAY__';
 const GLOBAL_KEY = '__PCF_GLB_RVM_NON_PRIMITIVE_SUPPORT_OVERLAY__';
 const PATCH_FLAG = Symbol.for('pcf-glb-rvm-non-primitive-support-overlay-v1');
+const LOADER_PATCH_FLAG = Symbol.for('pcf-glb-rvm-non-primitive-support-overlay-loader-v1');
+const VIEWER_PATCH_FLAG = Symbol.for('pcf-glb-rvm-non-primitive-support-overlay-viewer-v1');
 const MAX_SUPPORT_OVERLAYS = 500;
 const NON_PRIMITIVE_SOURCE_RE = /\.(json|jscon|uxml|inputxml|txt)$/i;
 const RVM_SOURCE_RE = /\.(rvm|rev)$/i;
@@ -24,6 +28,40 @@ export function installRvmNonPrimitiveSupportOverlayBridge() {
     collect: collectNonPrimitiveSupportRecords,
     isNonPrimitiveSource,
   };
+  patchAvevaJsonLoaderForNonPrimitiveSource();
+  patchRvmViewerSetModelForNonPrimitiveOverlay();
+}
+
+function patchAvevaJsonLoaderForNonPrimitiveSource() {
+  const proto = AvevaJsonLoader?.prototype;
+  if (!proto || proto[LOADER_PATCH_FLAG] || typeof proto.load !== 'function') return;
+  const originalLoad = proto.load;
+  proto.load = async function loadWithNonPrimitiveOverlaySource(source, ...args) {
+    const payload = await originalLoad.call(this, source, ...args);
+    const scene = payload?.gltf?.scene;
+    if (scene?.userData && source) {
+      scene.userData.__rvmNonPrimitiveSourceHierarchy = source;
+      scene.userData.__rvmNonPrimitiveSourceKind = 'source-preview';
+      scene.userData.__rvmNonPrimitiveSupportOverlaySchema = RVM_NON_PRIMITIVE_SUPPORT_OVERLAY_SCHEMA;
+    }
+    return payload;
+  };
+  proto[LOADER_PATCH_FLAG] = true;
+}
+
+function patchRvmViewerSetModelForNonPrimitiveOverlay() {
+  const proto = RvmViewer3D?.prototype;
+  if (!proto || proto[VIEWER_PATCH_FLAG] || typeof proto.setModel !== 'function') return;
+  const originalSetModel = proto.setModel;
+  proto.setModel = function setModelWithNonPrimitiveSupportOverlay(model, upAxis = 'Y') {
+    const result = originalSetModel.call(this, model, upAxis);
+    const source = model?.userData?.__rvmNonPrimitiveSourceHierarchy;
+    const sourceKind = model?.userData?.__rvmNonPrimitiveSourceKind;
+    if (source) applyFromSource({ viewer: this, source, sourceKind });
+    else clear(this, 'primitive-rvm-or-no-source-hierarchy');
+    return result;
+  };
+  proto[VIEWER_PATCH_FLAG] = true;
 }
 
 export function applyFromSource({ viewer, root, source, sourceKind = '', fileName = '' } = {}) {
