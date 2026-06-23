@@ -147,7 +147,7 @@ check(setsSource.includes('__PCF_GLB_RVM_SELECTION_SETS__') && setsSource.includ
 check(sectionSource.includes('__PCF_GLB_RVM_SECTION_BOX__') && sectionSource.includes('MAX_SECTION_SCAN_OBJECTS'), 'section box remains bounded');
 check(measureSource.includes('__PCF_GLB_RVM_MEASURE__') && measureSource.includes('measureCenterDistance'), 'measure bridge remains present');
 check(searchSource.includes('__PCF_GLB_RVM_OBJECT_SEARCH__') && searchSource.includes('MAX_INDEX_OBJECTS'), 'object search remains bounded');
-check(labelsSource.includes('applyScopedSupportLabelVisibility'), 'labels remain scoped to selection');
+check(labelsSource.includes('setRvmLabelLayerVisible') && labelsSource.includes('pcf-glb-rvm-label-performance-bridge-v2-no-support-runtime') && !labelsSource.includes('applyScopedSupportLabelVisibility'), 'labels remain generic and retired support label scoping stays removed');
 check(zoneSource.includes('buildPreloadHierarchyZones'), 'zone selector remains manifest-backed');
 
 check(tabSource.includes('beforeRenderInstructions'), 'RVM tab keeps pre-render hook');
