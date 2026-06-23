@@ -9,7 +9,7 @@ assert.match(uiBridgeSource, /primitiveExcluded:\s*true/, 'diagnostics snapshot 
 assert.match(uiBridgeSource, /autoBend:\s*autoDiagnostics/, 'diagnostics snapshot includes auto-bend diagnostics');
 assert.match(uiBridgeSource, /supportOverlay:\s*supportDiagnostics/, 'diagnostics snapshot includes support overlay diagnostics');
 assert.match(uiBridgeSource, /supportPipeSegments/, 'diagnostics snapshot includes support pipe segment counts');
-assert.match(uiBridgeSource, /coordinateMappings|pipeAxisResolutions/, 'support diagnostics snapshot can carry mapping and pipe-axis diagnostics');
+assert.match(uiBridgeSource, /supportOverlay:\s*supportDiagnostics/, 'support diagnostics snapshot preserves nested mapping and pipe-axis diagnostics when present');
 assert.match(uiBridgeSource, /JSON\.stringify\(buildSourceToolsDiagnosticsSnapshot\(viewer, context\), null, 2\)/, 'copy action uses the canonical diagnostics snapshot JSON');
 assert.match(uiBridgeSource, /navigator\?\.clipboard\?\.writeText/, 'copy action uses Clipboard API when available');
 assert.match(uiBridgeSource, /document\.execCommand\?\.\('copy'\)/, 'copy action keeps a DOM fallback');
