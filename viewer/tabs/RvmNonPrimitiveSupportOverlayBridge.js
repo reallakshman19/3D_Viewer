@@ -4,44 +4,38 @@ import { AvevaJsonLoader } from '../rvm/AvevaJsonLoader.js';
 import { RvmViewer3D } from '../rvm-viewer/RvmViewer3D.js?v=20260622-rvm-leaf-picking-2';
 import { readNonPrimitiveSupportOverlaySettings } from '../overlays/support/SupportOverlaySettings.js';
 import {
-  classifySupportFamily,
-  extractExplicitSign,
-  readRecordGapMm,
   resolveSupportSymbol,
   SUPPORT_FAMILIES,
 } from '../overlays/support/NonPrimitiveSupportOverlayResolver.js';
 import {
   collectSourcePipeSegments,
   createSupportCoordinateMapper,
-  nodeIdFromAttrs,
   resolveSupportPipeAxis,
 } from '../overlays/support/SupportOverlayCoordinateMapper.js';
+import {
+  collectNonPrimitiveSupportRecords as collectSupportRecordsFromSource,
+  SUPPORT_OVERLAY_SOURCE_EXTRACTION_SCHEMA,
+} from '../overlays/support/SupportOverlaySourceExtraction.js';
 import { buildSupportOverlayGlyphGroup } from '../overlays/support/SupportOverlayGlyphGeometry.js';
 import { createSupportOverlayLabelObject, shouldShowSupportOverlayLabel } from '../overlays/support/SupportOverlayLabels.js';
 
-export const RVM_NON_PRIMITIVE_SUPPORT_OVERLAY_SCHEMA = 'rvm-non-primitive-support-overlay/v5';
+export const RVM_NON_PRIMITIVE_SUPPORT_OVERLAY_SCHEMA = 'rvm-non-primitive-support-overlay/v6';
 
 const ROOT_NAME = '__RVM_NON_PRIMITIVE_SUPPORT_OVERLAY__';
 const GLOBAL_KEY = '__PCF_GLB_RVM_NON_PRIMITIVE_SUPPORT_OVERLAY__';
-const PATCH_FLAG = Symbol.for('pcf-glb-rvm-non-primitive-support-overlay-v5');
-const LOADER_PATCH_FLAG = Symbol.for('pcf-glb-rvm-non-primitive-support-overlay-loader-v5');
-const VIEWER_PATCH_FLAG = Symbol.for('pcf-glb-rvm-non-primitive-support-overlay-viewer-v5');
+const PATCH_FLAG = Symbol.for('pcf-glb-rvm-non-primitive-support-overlay-v6');
+const LOADER_PATCH_FLAG = Symbol.for('pcf-glb-rvm-non-primitive-support-overlay-loader-v6');
+const VIEWER_PATCH_FLAG = Symbol.for('pcf-glb-rvm-non-primitive-support-overlay-viewer-v6');
 const MAX_SUPPORT_OVERLAYS = 500;
 const NON_PRIMITIVE_SOURCE_RE = /\.(json|jscon|uxml|inputxml|txt)$/i;
 const RVM_SOURCE_RE = /\.(rvm|rev)$/i;
-const SUPPORT_KIND_RE = /\b(GUIDE|LINE\s*STOP|LINESTOP|LIMIT\s*STOP|LIMIT|LIM|RESTING|REST|HOLDDOWN|HOLD\s*DOWN|DOWNSTOP|SHOE|ANCHOR|FIXED|STOPPER|STOP|SUPPORT|ATTA|ANCI|HANGER|SPRING|CAN\s*SPRING|SPRING\s*CAN)\b/i;
-const SUPPORT_TAG_RE = /\bPS[-_\s]?[A-Z0-9][A-Z0-9._/\-]*\b/i;
-const CHILD_KEYS = Object.freeze(['children', 'items', 'branches', 'nodes', 'hierarchy']);
-const COORD_KEYS = Object.freeze(['SUPPORTCOORD', 'SUPPORT_COORD', 'SCOORD', 'POS', 'POSITION', 'COORDS', 'CO_ORDS', 'CO_ORD', 'BPOS', 'BP', 'APOS', 'LPOS']);
-const OD_KEYS = Object.freeze(['PIPE_OD_MM', 'PIPEODMM', 'PIPE_OD', 'OD_MM', 'OD', 'BORE_MM', 'BORE', 'NOMINAL_BORE']);
-const BRANCH_KEYS = Object.freeze(['BRANCH', 'BRANCH_ID', 'BRANCHID', 'OWNER_BRANCH', 'OWNERBRANCH']);
-const LINE_KEYS = Object.freeze(['LINE', 'LINE_NO', 'LINENO', 'LINE_NUMBER', 'LINENUMBER', 'LINEREF', 'PIPELINE']);
 
 export function installRvmNonPrimitiveSupportOverlayBridge() {
   if (globalThis[PATCH_FLAG]) return;
   globalThis[PATCH_FLAG] = true;
   globalThis[GLOBAL_KEY] = {
     schema: RVM_NON_PRIMITIVE_SUPPORT_OVERLAY_SCHEMA,
+    sourceExtractionSchema: SUPPORT_OVERLAY_SOURCE_EXTRACTION_SCHEMA,
     rootName: ROOT_NAME,
     applyFromSource,
     clear,
@@ -63,6 +57,7 @@ function patchAvevaJsonLoaderForNonPrimitiveSource() {
       scene.userData.__rvmNonPrimitiveSourceHierarchy = source;
       scene.userData.__rvmNonPrimitiveSourceKind = 'source-preview';
       scene.userData.__rvmNonPrimitiveSupportOverlaySchema = RVM_NON_PRIMITIVE_SUPPORT_OVERLAY_SCHEMA;
+      scene.userData.__rvmNonPrimitiveSupportSourceExtractionSchema = SUPPORT_OVERLAY_SOURCE_EXTRACTION_SCHEMA;
     }
     return payload;
   };
@@ -102,7 +97,17 @@ export function applyFromSource({ viewer, root, source, sourceKind = '', fileNam
   const pipeSegments = collectSourcePipeSegments(source);
   clear(viewer, 'before-non-primitive-overlay');
   if (!records.length) {
-    const diagnostics = { schema: RVM_NON_PRIMITIVE_SUPPORT_OVERLAY_SCHEMA, status: 'empty', sourceKind: kind, sourceFile: fileName, created: 0, sourceSupports: 0, sourcePipeSegments: pipeSegments.length, warnings: [] };
+    const diagnostics = {
+      schema: RVM_NON_PRIMITIVE_SUPPORT_OVERLAY_SCHEMA,
+      sourceExtractionSchema: SUPPORT_OVERLAY_SOURCE_EXTRACTION_SCHEMA,
+      status: 'empty',
+      sourceKind: kind,
+      sourceFile: fileName,
+      created: 0,
+      sourceSupports: 0,
+      sourcePipeSegments: pipeSegments.length,
+      warnings: [],
+    };
     viewer.nonPrimitiveSupportOverlayDiagnostics = diagnostics;
     return diagnostics;
   }
@@ -120,7 +125,14 @@ export function applyFromSource({ viewer, root, source, sourceKind = '', fileNam
 
   const overlayRoot = new THREE.Group();
   overlayRoot.name = ROOT_NAME;
-  overlayRoot.userData = { schema: RVM_NON_PRIMITIVE_SUPPORT_OVERLAY_SCHEMA, nonPrimitiveSupportOverlay: true, sourceKind: kind, sourceFile: fileName, pickable: false };
+  overlayRoot.userData = {
+    schema: RVM_NON_PRIMITIVE_SUPPORT_OVERLAY_SCHEMA,
+    sourceExtractionSchema: SUPPORT_OVERLAY_SOURCE_EXTRACTION_SCHEMA,
+    nonPrimitiveSupportOverlay: true,
+    sourceKind: kind,
+    sourceFile: fileName,
+    pickable: false,
+  };
 
   const seen = new Set();
   const warnings = [];
@@ -144,6 +156,7 @@ export function applyFromSource({ viewer, root, source, sourceKind = '', fileNam
   if (overlayRoot.children.length) viewer.scene.add(overlayRoot);
   const diagnostics = {
     schema: RVM_NON_PRIMITIVE_SUPPORT_OVERLAY_SCHEMA,
+    sourceExtractionSchema: SUPPORT_OVERLAY_SOURCE_EXTRACTION_SCHEMA,
     status: overlayRoot.children.length ? 'applied' : 'empty',
     sourceKind: kind,
     sourceFile: fileName,
@@ -188,45 +201,7 @@ export function isNonPrimitiveSource({ sourceKind = '', fileName = '' } = {}) {
 }
 
 export function collectNonPrimitiveSupportRecords(source, out = []) {
-  const roots = Array.isArray(source) ? source : [source];
-  for (const node of roots) collectNode(node, out);
-  return out;
-}
-
-function collectNode(node, out) {
-  if (!node || typeof node !== 'object' || out.length >= MAX_SUPPORT_OVERLAYS) return;
-  const a = attrs(node);
-  const text = supportText(node, a);
-  const sourceType = String(node.type || node.kind || a.TYPE || a.RAW_TYPE || '').toUpperCase();
-  const isPipeLike = /^(PIPE|BRAN|BRANCH|PIPING)$/i.test(sourceType);
-  const matched = !isPipeLike && (/\b(SUPPORT|ATTA|ANCI|PIPE_SUPPORT|PIPESUPPORT)\b/i.test(text) || SUPPORT_KIND_RE.test(text));
-  if (matched) {
-    const supportKind = supportKindFromText(text);
-    const local = coordinateFromAttributes(a);
-    if (supportKind && local) {
-      out.push({
-        source: node,
-        attrs: a,
-        rawText: text,
-        rawType: String(a.TYPE || a.STYP || a.SUPPORT_TYPE || node.type || node.kind || ''),
-        kind: supportKind,
-        local,
-        tag: supportTag(node, a),
-        nodeId: nodeIdFromAttrs(a),
-        branchId: firstTextFromKeys(a, BRANCH_KEYS),
-        lineNo: firstTextFromKeys(a, LINE_KEYS),
-        axis: pipeAxisFromAttributes(a),
-        gapMm: readRecordGapMm(a),
-        explicitSign: extractExplicitSign(text),
-        pipeOdMm: pipeOdFromAttributes(a),
-        singleAxis: singleAxisFromAttributes(a, text),
-      });
-    }
-  }
-  for (const key of CHILD_KEYS) {
-    const children = node[key];
-    if (Array.isArray(children)) for (const child of children) collectNode(child, out);
-  }
+  return collectSupportRecordsFromSource(source, out, { max: MAX_SUPPORT_OVERLAYS });
 }
 
 function makeSupportGlyph(record, viewer, glyphSize, sourceKind, sourceFile, settings, pipeSegments, coordinateMapper) {
@@ -295,94 +270,7 @@ function familyFilteredOut(settings, family) {
 }
 
 function vec3(value) { return new THREE.Vector3(Number(value?.x) || 0, Number(value?.y) || 0, Number(value?.z) || 0); }
-function attrs(node) { return { ...(node.attributes || {}), ...(node.attrs || {}), ...(node.rawAttributes || {}) }; }
-function textValue(value) { return value === undefined || value === null ? '' : String(value); }
-function supportText(node, a) {
-  return [node.type, node.kind, node.name, node.path, node.id, a.TYPE, a.STYP, a.DTXR, a.SUPPORT_TYPE, a.CMPSUPTYPE, a.MDSSUPPTYPE, a.CMPSUPREFN, a.SUPPORT_TAG, a.NAME, a.TAG, a.TAGNO, a.SKEY, a.SPRE, a.DESCRIPTION, a.DESC].map(textValue).join(' ');
-}
-function numberValue(value) {
-  const n = Number.parseFloat(textValue(value).replace(/mm/gi, '').trim());
-  return Number.isFinite(n) ? n : null;
-}
-function parseVec3(value) {
-  if (!value && value !== 0) return null;
-  if (Array.isArray(value) && value.length >= 3) {
-    const x = numberValue(value[0]), y = numberValue(value[1]), z = numberValue(value[2]);
-    return x === null || y === null || z === null ? null : new THREE.Vector3(x, y, z);
-  }
-  if (typeof value === 'object') {
-    const x = numberValue(value.x ?? value.X), y = numberValue(value.y ?? value.Y), z = numberValue(value.z ?? value.Z);
-    return x === null || y === null || z === null ? null : new THREE.Vector3(x, y, z);
-  }
-  const text = textValue(value).trim();
-  const directional = text.match(/\b([EWNSUD])\s*(-?\d+(?:\.\d+)?)/gi);
-  if (directional?.length >= 3) {
-    const out = new THREE.Vector3();
-    for (const entry of directional) {
-      const [, dir, raw] = /([EWNSUD])\s*(-?\d+(?:\.\d+)?)/i.exec(entry) || [];
-      const n = Number(raw);
-      if (!Number.isFinite(n)) continue;
-      if (/E/i.test(dir)) out.x = n;
-      else if (/W/i.test(dir)) out.x = -n;
-      else if (/N/i.test(dir)) out.y = n;
-      else if (/S/i.test(dir)) out.y = -n;
-      else if (/U/i.test(dir)) out.z = n;
-      else if (/D/i.test(dir)) out.z = -n;
-    }
-    return out;
-  }
-  const values = text.match(/-?\d+(?:\.\d+)?/g)?.map(Number).filter(Number.isFinite) || [];
-  return values.length >= 3 ? new THREE.Vector3(values[0], values[1], values[2]) : null;
-}
-function coordinateFromAttributes(a) {
-  for (const key of COORD_KEYS) {
-    const pt = parseVec3(a[key]);
-    if (pt) return pt;
-  }
-  return null;
-}
-function pipeAxisFromAttributes(a) {
-  const explicit = parseVec3(a.PIPE_AXIS || a.PIPEAXIS || a.AXIS || a.DIRECTION || a.DIR);
-  if (explicit && explicit.lengthSq() > 1e-9) return explicit.normalize();
-  const ap = parseVec3(a.APOS);
-  const lp = parseVec3(a.LPOS);
-  if (ap && lp) {
-    const delta = new THREE.Vector3().subVectors(lp, ap);
-    if (delta.lengthSq() > 1e-9) return delta.normalize();
-  }
-  return null;
-}
-function pipeOdFromAttributes(a) {
-  for (const key of OD_KEYS) {
-    const n = numberValue(a[key]);
-    if (n && n > 0) return n;
-  }
-  return null;
-}
-function singleAxisFromAttributes(a, text) {
-  const upper = String(text || '').toUpperCase();
-  if (/\bSINGLE\s*AXIS\b|\bONE\s*WAY\b|\bUNI[-\s]?DIRECTION/.test(upper)) return true;
-  return Boolean(a.SINGLE_AXIS || a.SINGLEAXIS || a.ONE_WAY || a.UNIDIRECTIONAL);
-}
-function supportKindFromText(text = '') {
-  const family = classifySupportFamily(text);
-  if (family !== SUPPORT_FAMILIES.UNKNOWN) return family;
-  return SUPPORT_KIND_RE.test(String(text || '')) ? SUPPORT_FAMILIES.UNKNOWN : '';
-}
-function supportTag(node, a) {
-  for (const value of [a.SUPPORT_TAG, a.CMPSUPREFN, a.NAME, a.TAG, a.TAGNO, a.REF, a.REFNO, a.DBREF, a.SKEY, a.SPRE, a.DESCRIPTION, a.DESC, node?.name, node?.id]) {
-    const match = SUPPORT_TAG_RE.exec(textValue(value));
-    if (match) return match[0].replace(/\s+/g, '-');
-  }
-  return textValue(a.CMPSUPREFN || a.SUPPORT_TAG || a.NAME || node?.name || node?.id || 'SUPPORT').slice(0, 64);
-}
-function firstTextFromKeys(a, keys) {
-  for (const key of keys) {
-    const text = textValue(a[key]).trim();
-    if (text) return text;
-  }
-  return '';
-}
+
 function normalizeSourceKind(sourceKind, fileName, root) {
   const kind = String(sourceKind || root?.dataset?.rvmLoadedSourceKind || '').toLowerCase();
   if (kind) return kind;
@@ -395,6 +283,7 @@ function normalizeSourceKind(sourceKind, fileName, root) {
   if (/\.(glb|gltf)$/i.test(name)) return 'glb';
   return '';
 }
+
 function disposeObjectTree(root) {
   root?.traverse?.((obj) => {
     obj.element?.remove?.();
