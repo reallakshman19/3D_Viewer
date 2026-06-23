@@ -4,6 +4,9 @@ import {
   evaluateDefaultAccessSupportLoadFixtures,
   parseAccessSupportLoadFixtureText
 } from '../geometry-workspace/GeometrySupportLoadAccessFixturePack.js';
+import {
+  evaluateAccessSupportLoadFixtureText
+} from '../geometry-workspace/GeometrySupportLoadAccessFixtureBatchValidator.js';
 
 let passed = 0;
 let failed = 0;
@@ -63,6 +66,20 @@ near(importedResult.formulaResult.calculatedFields.vertical.opeVDep, 13000, 0.15
 check(importedResult.formulaResult.calculatedFields.guide.roundedGuideHDep === 650, 'imported Access row reproduces rounded guide component');
 check(importedResult.formulaResult.calculatedFields.lineStop.lineStopH === 8800, 'imported Access row reproduces line-stop result');
 check(imported.fixtures[0].importAudit.some(item => item.source === 'ACCESS_FIXTURE_IMPORT'), 'imported Access row stores import audit');
+
+const batchAccessRows = `JOBNAME\tLinenoinCII\tProperlineNo\tINSUL_THICK\tNS\tPipeOD\tDEP_SPAN\tVertical_N_SS\tWALL_THICK\tTEMP_EXP_C1\tTEMP_EXP_C2\tMinVerLoad\tMinHoriLoad\tMinHoriLSLoad\tTobeCleaned\tRemarks\tInsulated\tMat_Category
+AML-25-SYS-001 REV2 _PS UPDATE\t"8""-P25168-61502-01"\t0-1-\t0\t8\t219.075\t10750\t13000\t12.7\t100\t59\t-2700\t650\t8800\tTo be Cleaned\tSpec Not available\tNo\tLT
+UNIT-TEST-NPS4\t"4""-UNIT-TEST-0001"\t0-2-\t0\t4\t114.3\t6400\t7700\t6.02\t100\t59\t-1165\t200\t3150\tTo be Cleaned\tRegression row\tNo\tLT`;
+
+const batch = evaluateAccessSupportLoadFixtureText(batchAccessRows);
+check(batch.status === 'PASS', 'batch Access fixture validator passes complete pasted rows');
+check(batch.total === 2, 'batch Access fixture validator evaluates two rows');
+check(batch.failed === 0, 'batch Access fixture validator has no failed rows');
+check(batch.results.every(row => row.status === 'PASS'), 'batch Access fixture validator returns row-level pass status');
+check(batch.results[1].formulaResult.calculatedFields.guide.roundedGuideHDep === 200, 'batch Access validator preserves NPS4 rounded guide component');
+near(batch.results[1].formulaResult.calculatedFields.guide.guideHDep, 2310, 0.001, 'batch Access validator applies NPS4 guide Max rule');
+check(batch.results[1].formulaResult.calculatedFields.lineStop.lineStopH === 3150, 'batch Access validator preserves NPS4 line-stop reference');
+check((batch.audit || []).some(item => item.value === 'regression-fixture-only'), 'batch Access validator is marked regression-only, not runtime top-up');
 
 if (failed) {
   console.error(`FAILED ${failed} checks, passed ${passed}`);
