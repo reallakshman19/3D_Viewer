@@ -22,30 +22,37 @@ function assert(condition, message) {
 
 const popupPath = 'viewer/tabs/model-converters/xml-cii-conversion-workflow-popup.js';
 const nativePanelsPath = 'viewer/tabs/model-converters/xml-cii-popup-native-panels.js';
+const condenseRigidBridgePath = 'viewer/tabs/model-converters/xml-cii-condense-rigid-ui-bridge.js';
 const workflowShellPath = 'viewer/tabs/model-converters/WorkflowShell.js';
 const legacyAdapterPath = 'viewer/tabs/model-converters/legacy-adapter.js';
 const canonicalTabPath = 'viewer/tabs/model-converters/ModelConvertersTab.js';
 const branchSyncPath = 'viewer/tabs/model-converters/xml-cii-branch-sample-sync.js';
 const previewRendererPath = 'viewer/tabs/model-converters/converters/xmltocii2019_helper/preview-renderer.js';
+const enrichmentRunParityPath = 'viewer/tabs/model-converters/converters/xmltocii2019_helper/enrichment-run-parity.js';
 const weightMatchModelPath = 'viewer/converters/xml-cii2019-core/weight-match-model.js';
+const invocationBuilderPath = 'viewer/converters/invocation-builder.js';
 const publicIndexPath = 'viewer/tabs/model-converters/index.js';
 const tabPath = 'viewer/tabs/model-converters-tab.js';
 const tabCssPath = 'viewer/tabs/model-converters-tab.css';
 const supplementalTabCssPath = 'viewer/tabs/model-converters-css-fix.css';
 const popup = read(popupPath);
 const nativePanels = read(nativePanelsPath);
+const condenseRigidBridge = read(condenseRigidBridgePath);
 const workflowShell = read(workflowShellPath);
 const legacyAdapter = read(legacyAdapterPath);
 const canonicalTab = read(canonicalTabPath);
 const branchSync = read(branchSyncPath);
 const previewRenderer = read(previewRendererPath);
+const enrichmentRunParity = read(enrichmentRunParityPath);
 const weightMatchModel = read(weightMatchModelPath);
+const invocationBuilder = read(invocationBuilderPath);
 const publicIndex = read(publicIndexPath);
 const tab = read(tabPath);
 const tabCss = `${read(tabCssPath)}\n${readIfExists(supplementalTabCssPath)}`;
 
 assert(fs.existsSync(path.join(root, popupPath)), 'workflow popup module must exist');
 assert(fs.existsSync(path.join(root, nativePanelsPath)), 'popup-native panel module must exist');
+assert(fs.existsSync(path.join(root, condenseRigidBridgePath)), 'condense rigid UI bridge module must exist');
 assert(fs.existsSync(path.join(root, workflowShellPath)), 'canonical WorkflowShell module must exist');
 assert(fs.existsSync(path.join(root, branchSyncPath)), 'branch sample sync module must exist');
 assert(popup.includes("import { WorkflowModal } from './shared/WorkflowModal.js'"), 'popup must reuse existing WorkflowModal');
@@ -86,6 +93,13 @@ assert(nativePanels.includes('data-native-finalise-run'), 'native Run phase must
 assert(nativePanels.includes('data-native-build-preview'), 'native Preview phase must own Build Preview action');
 assert(nativePanels.includes('data-native-dry-run'), 'native Diagnostics phase must own Dry Run action');
 assert(nativePanels.includes('data-native-regex-path="linelist.sampleBranchName"'), 'native Regex tab must edit canonical linelist.sampleBranchName');
+assert(nativePanels.includes('data-native-run-option="splitCondensedValveFlange"'), 'native Run phase must expose Condense Rigid run option');
+assert(nativePanels.includes('data-native-config-bool="splitCondensedValveFlange"'), 'native Config phase must expose Condense Rigid config option');
+assert(condenseRigidBridge.includes('OPTION_KEY = \'splitCondensedValveFlange\''), 'condense rigid bridge must use canonical splitCondensedValveFlange key');
+assert(condenseRigidBridge.includes('wrapBridge') && condenseRigidBridge.includes('getPopupSnapshot'), 'condense rigid bridge must hydrate popup snapshots');
+assert(condenseRigidBridge.includes('setPopupRunOption') && condenseRigidBridge.includes('savePopupConfigText'), 'condense rigid bridge must sync run and config saves');
+assert(canonicalTab.includes('installXmlCiiCondenseRigidUiBridge'), 'ModelConvertersTab must install condense rigid UI bridge');
+assert(publicIndex.includes('20260623-xml-cii-condense-rigid-ui-1'), 'public model-converters entry must cache-bust condense rigid UI');
 
 assert(branchSync.includes("const BRANCH_SAMPLE_KEY = 'xmlCii2019.regex.branchNameSampleFromXml.v1'"), 'Branchname sync must persist last extracted XML Branchname');
 assert(branchSync.includes('/<\\s*[^>]*Branchname'), 'Branchname sync must extract <Branchname> tag values');
@@ -99,6 +113,9 @@ assert(previewRenderer.includes('computeLineNoKey'), 'Preview must match line-li
 assert(previewRenderer.includes('_looksLikeNpsToken(shifted.fourth)'), 'Preview must recognize shifted Branchname size token at position 4');
 assert(previewRenderer.includes('_isLikelyMaterialToken(value)'), 'Preview must not treat material token CS as piping class fallback');
 assert(previewRenderer.includes('^S\\d+'), 'Preview shifted-branch guard must recognize S-prefixed line keys');
+assert(enrichmentRunParity.includes('RENUMBERABLE_NEGATIVE_TYPES') && enrichmentRunParity.includes('renumberLengthBearingNegativeNodes'), 'enriched XML parity must implement Condense Rigid negative-node renumbering');
+assert(enrichmentRunParity.includes('split-condensed-valve-flange'), 'enriched XML diagnostics must record Condense Rigid application');
+assert(invocationBuilder.includes('--split-condensed-valve-flange') && invocationBuilder.includes('--no-split-condensed-valve-flange'), 'worker invocation must forward Condense Rigid CLI option');
 
 assert(weightMatchModel.includes('computeLineNoKey'), 'Weight Match must match line-list rows using configured field maps');
 assert(weightMatchModel.includes('ratingOverrideForBranch'), 'Weight Match must explicitly read manual rating overrides');
@@ -138,5 +155,6 @@ console.log('✅ XML CII phase-tab workflow popup static test passed', {
   branchNameSync: 'linelist.sampleBranchName',
   shiftedBranchPreview: 'lineKey/size/class guarded',
   weightMatchRating: 'manual override propagated',
+  condenseRigid: 'splitCondensedValveFlange exposed and forwarded',
   supplementalCss: 'model-converters-css-fix.css',
 });
