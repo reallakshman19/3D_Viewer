@@ -7,6 +7,9 @@ import {
 import {
   evaluateAccessSupportLoadFixtureText
 } from '../geometry-workspace/GeometrySupportLoadAccessFixtureBatchValidator.js';
+import {
+  buildAccessSupportLoadFixtureDiagnosticsFromText
+} from '../geometry-workspace/GeometrySupportLoadAccessFixtureDiagnostics.js';
 
 let passed = 0;
 let failed = 0;
@@ -53,8 +56,8 @@ check(calc.lineStop?.lineStop?.idExpression === 'D_MINUS_WT', 'Access fixture pr
 check((result.audit || []).some(item => item.field === 'runtimeMutation' && item.value === 'none'), 'Access fixture validation does not mutate runtime workspace data');
 check((input.audit || []).some(item => item.field === 'weightSplit' && String(item.value).includes('benchmark-vertical-backsolve')), 'Access fixture marks Vertical_N_SS weight split as regression-only');
 
-const pastedAccessRows = `JOBNAME\tLinenoinCII\tProperlineNo\tINSUL_THICK\tNS\tPipeOD\tDEP_SPAN\tVertical_N_SS\tWALL_THICK\tTEMP_EXP_C1\tTEMP_EXP_C2\tMinVerLoad\tMinHoriLoad\tMinHoriLSLoad\tTobeCleaned\tRemarks\tInsulated\tMat_Category
-AML-25-SYS-001 REV2 _PS UPDATE\t"8""-P25168-61502-01"\t0-1-\t0\t8\t219.075\t10750\t13000\t12.7\t100\t59\t-2700\t650\t8800\tTo be Cleaned\tSpec Not available\tNo\tLT`;
+const pastedAccessRows = `JOBNAME	LinenoinCII	ProperlineNo	INSUL_THICK	NS	PipeOD	DEP_SPAN	Vertical_N_SS	WALL_THICK	TEMP_EXP_C1	TEMP_EXP_C2	MinVerLoad	MinHoriLoad	MinHoriLSLoad	TobeCleaned	Remarks	Insulated	Mat_Category
+AML-25-SYS-001 REV2 _PS UPDATE	"8""-P25168-61502-01"	0-1-	0	8	219.075	10750	13000	12.7	100	59	-2700	650	8800	To be Cleaned	Spec Not available	No	LT`;
 
 const imported = parseAccessSupportLoadFixtureText(pastedAccessRows);
 check(imported.status === 'IMPORTED', 'Access fixture text importer accepts tab-delimited Access rows');
@@ -67,9 +70,9 @@ check(importedResult.formulaResult.calculatedFields.guide.roundedGuideHDep === 6
 check(importedResult.formulaResult.calculatedFields.lineStop.lineStopH === 8800, 'imported Access row reproduces line-stop result');
 check(imported.fixtures[0].importAudit.some(item => item.source === 'ACCESS_FIXTURE_IMPORT'), 'imported Access row stores import audit');
 
-const batchAccessRows = `JOBNAME\tLinenoinCII\tProperlineNo\tINSUL_THICK\tNS\tPipeOD\tDEP_SPAN\tVertical_N_SS\tWALL_THICK\tTEMP_EXP_C1\tTEMP_EXP_C2\tMinVerLoad\tMinHoriLoad\tMinHoriLSLoad\tTobeCleaned\tRemarks\tInsulated\tMat_Category
-AML-25-SYS-001 REV2 _PS UPDATE\t"8""-P25168-61502-01"\t0-1-\t0\t8\t219.075\t10750\t13000\t12.7\t100\t59\t-2700\t650\t8800\tTo be Cleaned\tSpec Not available\tNo\tLT
-UNIT-TEST-NPS4\t"4""-UNIT-TEST-0001"\t0-2-\t0\t4\t114.3\t6400\t7700\t6.02\t100\t59\t-1165\t200\t3150\tTo be Cleaned\tRegression row\tNo\tLT`;
+const batchAccessRows = `JOBNAME	LinenoinCII	ProperlineNo	INSUL_THICK	NS	PipeOD	DEP_SPAN	Vertical_N_SS	WALL_THICK	TEMP_EXP_C1	TEMP_EXP_C2	MinVerLoad	MinHoriLoad	MinHoriLSLoad	TobeCleaned	Remarks	Insulated	Mat_Category
+AML-25-SYS-001 REV2 _PS UPDATE	"8""-P25168-61502-01"	0-1-	0	8	219.075	10750	13000	12.7	100	59	-2700	650	8800	To be Cleaned	Spec Not available	No	LT
+UNIT-TEST-NPS4	"4""-UNIT-TEST-0001"	0-2-	0	4	114.3	6400	7700	6.02	100	59	-1165	200	3150	To be Cleaned	Regression row	No	LT`;
 
 const batch = evaluateAccessSupportLoadFixtureText(batchAccessRows);
 check(batch.status === 'PASS', 'batch Access fixture validator passes complete pasted rows');
@@ -80,6 +83,15 @@ check(batch.results[1].formulaResult.calculatedFields.guide.roundedGuideHDep ===
 near(batch.results[1].formulaResult.calculatedFields.guide.guideHDep, 2310, 0.001, 'batch Access validator applies NPS4 guide Max rule');
 check(batch.results[1].formulaResult.calculatedFields.lineStop.lineStopH === 3150, 'batch Access validator preserves NPS4 line-stop reference');
 check((batch.audit || []).some(item => item.value === 'regression-fixture-only'), 'batch Access validator is marked regression-only, not runtime top-up');
+
+const diagnostics = buildAccessSupportLoadFixtureDiagnosticsFromText(batchAccessRows);
+check(diagnostics.status === 'PASS', 'Access fixture diagnostics pass for complete batch');
+check(diagnostics.total === 2, 'Access fixture diagnostics includes both rows');
+check(diagnostics.mismatchCount === 0, 'Access fixture diagnostics has no mismatches for valid rows');
+check(diagnostics.rows[0].lineNo === '8"-P25168-61502-01', 'Access fixture diagnostics records row line number');
+check(diagnostics.rows[1].nps === 4, 'Access fixture diagnostics records NPS4 row');
+check(diagnostics.rows[1].roundedGuideHDep === 200, 'Access fixture diagnostics records rounded guide value');
+check((diagnostics.audit || []).some(item => item.value === 'regression-fixture-only'), 'Access fixture diagnostics remains regression-only');
 
 if (failed) {
   console.error(`FAILED ${failed} checks, passed ${passed}`);
