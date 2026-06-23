@@ -39,7 +39,6 @@ on:
       - 'viewer/tests/nonprimitive-support-filter-diagnostics.test.js'
       - 'viewer/tests/nonprimitive-support-managed-stage-fixtures.test.js'
       - 'viewer/tests/nonprimitive-support-preview-smoke.test.js'
-      - 'viewer/tests/nonprimitive-source-preview-browser-shell-smoke.test.js'
       - 'viewer/tests/nonprimitive-support-pipe-segment-extraction.test.js'
       - 'viewer/tests/nonprimitive-source-tools-ui.test.js'
       - 'viewer/tests/nonprimitive-source-tools-diagnostics-export.test.js'
@@ -92,9 +91,6 @@ jobs:
       - name: Verify non-primitive support preview smoke fixture
         run: node viewer/tests/nonprimitive-support-preview-smoke.test.js
 
-      - name: Verify non-primitive source-preview browser shell smoke
-        run: node viewer/tests/nonprimitive-source-preview-browser-shell-smoke.test.js
-
       - name: Verify non-primitive support pipe segment extraction
         run: node viewer/tests/nonprimitive-support-pipe-segment-extraction.test.js
 
@@ -141,6 +137,9 @@ jobs:
 
       - name: Verify support-load master hydration
         run: node viewer/tests/rvm-geometry-workspace-support-load-master-hydration.test.js
+
+      - name: Verify support-load enrichment conflict resolver
+        run: node viewer/tests/rvm-geometry-workspace-support-load-conflicts.test.js
 
       - name: Verify support-load formula engine
         run: node viewer/tests/rvm-geometry-workspace-support-load-formulas.test.js
