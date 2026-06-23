@@ -98,10 +98,12 @@ assert(condenseRigidBridge.includes('Condense Rigid / split condensed valve-flan
 assert(condenseRigidBridge.includes('Condense Rigid / split condensed valve-flange nodes (Resolved)'), 'condense rigid bridge must inject Resolved label into active rich workflow');
 assert(condenseRigidBridge.includes('[data-xml-cii-run-option="kgToNewton"]'), 'condense rigid bridge must target the actual legacy rich Run phase');
 assert(condenseRigidBridge.includes('[data-xml-cii-config-bool="disableCiiSupportTagPopulation"]'), 'condense rigid bridge must target the actual legacy rich Config phase');
-assert(condenseRigidBridge.includes('setPopupRunOption') && condenseRigidBridge.includes('savePopupConfigText'), 'condense rigid bridge must sync run and config saves');
+assert(condenseRigidBridge.includes('DIRECT_RUN_FLAG') && condenseRigidBridge.includes('ensureSimpleRunVisible'), 'condense rigid bridge must restore/bypass simple Run Conversion visibility');
+assert(condenseRigidBridge.includes('setPopupRunOption') && condenseRigidBridge.includes('importPopupConfigText'), 'condense rigid bridge must sync run and config values');
+assert(!condenseRigidBridge.includes('new MutationObserver'), 'condense rigid bridge must not use broad DOM observer side effects');
 assert(canonicalTab.includes('installXmlCiiCondenseRigidUiBridge'), 'ModelConvertersTab must install condense rigid UI bridge');
-assert(canonicalTab.includes('xml-cii-condense-rigid-ui-bridge.js?v=20260623-xml-cii-condense-rigid-ui-3'), 'ModelConvertersTab must cache-bust condense rigid bridge');
-assert(publicIndex.includes('20260623-xml-cii-condense-rigid-ui-3'), 'public model-converters entry must cache-bust rich condense rigid fixes');
+assert(canonicalTab.includes('xml-cii-condense-rigid-ui-bridge.js?v=20260623-xml-cii-condense-rigid-ui-4'), 'ModelConvertersTab must cache-bust condense rigid bridge');
+assert(publicIndex.includes('20260623-xml-cii-condense-rigid-ui-4'), 'public model-converters entry must cache-bust rich condense rigid fixes');
 
 assert(branchSync.includes("const BRANCH_SAMPLE_KEY = 'xmlCii2019.regex.branchNameSampleFromXml.v1'"), 'Branchname sync must persist last extracted XML Branchname');
 assert(branchSync.includes('/<\\s*[^>]*Branchname'), 'Branchname sync must extract <Branchname> tag values');
@@ -139,7 +141,7 @@ assert(canonicalTab.includes('model-converters-css-fix.css'), 'ModelConvertersTa
 const tabBridgeImport = canonicalTab.match(/legacy-adapter\.js\?v=([^'"]+)/)?.[1] || '';
 const publicTabImport = publicIndex.match(/ModelConvertersTab\.js\?v=([^'"]+)/)?.[1] || '';
 assert(tabBridgeImport, 'ModelConvertersTab must import legacy adapter with a cache key');
-assert(publicTabImport && publicTabImport.includes('20260623-xml-cii-condense-rigid-ui-3'), 'public index must use latest ModelConvertersTab cache key');
+assert(publicTabImport && publicTabImport.includes('20260623-xml-cii-condense-rigid-ui-4'), 'public index must use latest ModelConvertersTab cache key');
 
 console.log('✅ XML CII phase-tab workflow popup static test passed', {
   topLevelTabs: 8,
@@ -148,5 +150,6 @@ console.log('✅ XML CII phase-tab workflow popup static test passed', {
   shiftedBranchPreview: 'lineKey/size/class guarded',
   weightMatchRating: 'manual override propagated',
   condenseRigid: 'XSD + Resolved split_condensed_valve_flange wired',
+  simpleRun: 'visible and direct',
   supplementalCss: 'model-converters-css-fix.css',
 });
