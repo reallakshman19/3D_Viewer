@@ -15,14 +15,15 @@ import {
   nodeIdFromAttrs,
   resolveSupportPipeAxis,
 } from '../overlays/support/SupportOverlayCoordinateMapper.js';
+import { buildSupportOverlayGlyphGroup } from '../overlays/support/SupportOverlayGlyphGeometry.js';
 
-export const RVM_NON_PRIMITIVE_SUPPORT_OVERLAY_SCHEMA = 'rvm-non-primitive-support-overlay/v3';
+export const RVM_NON_PRIMITIVE_SUPPORT_OVERLAY_SCHEMA = 'rvm-non-primitive-support-overlay/v4';
 
 const ROOT_NAME = '__RVM_NON_PRIMITIVE_SUPPORT_OVERLAY__';
 const GLOBAL_KEY = '__PCF_GLB_RVM_NON_PRIMITIVE_SUPPORT_OVERLAY__';
-const PATCH_FLAG = Symbol.for('pcf-glb-rvm-non-primitive-support-overlay-v3');
-const LOADER_PATCH_FLAG = Symbol.for('pcf-glb-rvm-non-primitive-support-overlay-loader-v3');
-const VIEWER_PATCH_FLAG = Symbol.for('pcf-glb-rvm-non-primitive-support-overlay-viewer-v3');
+const PATCH_FLAG = Symbol.for('pcf-glb-rvm-non-primitive-support-overlay-v4');
+const LOADER_PATCH_FLAG = Symbol.for('pcf-glb-rvm-non-primitive-support-overlay-loader-v4');
+const VIEWER_PATCH_FLAG = Symbol.for('pcf-glb-rvm-non-primitive-support-overlay-viewer-v4');
 const MAX_SUPPORT_OVERLAYS = 500;
 const NON_PRIMITIVE_SOURCE_RE = /\.(json|jscon|uxml|inputxml|txt)$/i;
 const RVM_SOURCE_RE = /\.(rvm|rev)$/i;
@@ -253,95 +254,24 @@ function makeSupportGlyph(record, viewer, glyphSize, sourceKind, sourceFile, set
 
   if (settings.warningsOnly && !symbol.popupRequired && !symbol.warnings.length) return null;
 
-  const points = [];
-  const addLine = (a, b) => { points.push(a.x, a.y, a.z, b.x, b.y, b.z); };
-
-  for (const arrow of symbol.arrows) {
-    const direction = vec3(arrow.direction);
-    if (direction.lengthSq() <= 1e-9) continue;
-    direction.normalize();
-    const gap = arrow.axial ? symbol.gapVisualSeparationMm : Math.max(0, Number(symbol.gapMm) || 0);
-    const length = resolveRenderedArrowLength(glyphSize, symbol, arrow);
-    const tip = world.clone().add(direction.clone().multiplyScalar(gap));
-    const tail = tip.clone().add(direction.clone().multiplyScalar(-length));
-    addLine(tail, tip);
-    const head = Math.min(length * 0.25, glyphSize * 0.35);
-    const side = stablePerpendicular(direction);
-    addLine(tip, tip.clone().add(direction.clone().multiplyScalar(-head)).add(side.clone().multiplyScalar(head * 0.45)));
-    addLine(tip, tip.clone().add(direction.clone().multiplyScalar(-head)).add(side.clone().multiplyScalar(-head * 0.45)));
-  }
-
-  if (symbol.coil) addSpringCanCoil(points, world, glyphSize);
-  if (symbol.marker) addWarningMarker(points, world, glyphSize);
-  if (!points.length) return null;
-
-  const geometry = new THREE.BufferGeometry();
-  geometry.setAttribute('position', new THREE.Float32BufferAttribute(points, 3));
-  const material = new THREE.LineBasicMaterial({ color: symbol.marker ? 0xffcc33 : 0x60c864, depthTest: true, transparent: true, opacity: 0.95 });
-  const line = new THREE.LineSegments(geometry, material);
-  line.name = `NON_PRIMITIVE_SUPPORT_OVERLAY_${record.tag}_${record.kind}`;
-  line.userData = {
+  return buildSupportOverlayGlyphGroup({
+    THREE,
+    symbol,
+    origin: world,
+    glyphSize,
+    record,
     schema: RVM_NON_PRIMITIVE_SUPPORT_OVERLAY_SCHEMA,
-    nonPrimitiveSupportOverlay: true,
-    supportOverlayOnly: true,
-    supportKind: record.kind,
-    supportTag: record.tag,
     sourceKind,
     sourceFile,
-    pickable: false,
-    selectable: false,
-    resolvedSymbol: symbol,
-    warnings: symbol.warnings,
-    gapMm: symbol.gapMm,
-    gapVisualSeparationMm: symbol.gapVisualSeparationMm,
     coordinateMapping: mapping,
     pipeAxisResolution: axisResolution,
-    attributes: { ...record.attrs },
-  };
-  return line;
+  });
 }
 
 function familyFilteredOut(settings, family) {
   const filters = settings?.filters || {};
   const key = family === SUPPORT_FAMILIES.SPRING_CAN ? 'SPRING' : family;
   return filters[family] === false || filters[key] === false;
-}
-
-function resolveRenderedArrowLength(glyphSize, symbol, arrow) {
-  if (!arrow.axial || !symbol.size?.axialOdTwoThirdsApplied) return glyphSize;
-  return Math.max(glyphSize * 0.7, Math.min(glyphSize * 2.5, symbol.size.arrowLengthMm));
-}
-
-function addSpringCanCoil(points, origin, glyphSize) {
-  const turns = 6;
-  const height = glyphSize * 1.2;
-  const radius = glyphSize * 0.22;
-  let previous = origin.clone().add(new THREE.Vector3(radius, -glyphSize * 0.2, 0));
-  for (let i = 1; i <= turns * 4; i += 1) {
-    const t = i / (turns * 4);
-    const angle = t * Math.PI * 2 * turns;
-    const next = origin.clone().add(new THREE.Vector3(Math.cos(angle) * radius, -glyphSize * 0.2 - height * t, Math.sin(angle) * radius));
-    points.push(previous.x, previous.y, previous.z, next.x, next.y, next.z);
-    previous = next;
-  }
-}
-
-function addWarningMarker(points, origin, glyphSize) {
-  const half = glyphSize * 0.35;
-  const a = origin.clone().add(new THREE.Vector3(-half, 0, 0));
-  const b = origin.clone().add(new THREE.Vector3(half, 0, 0));
-  const c = origin.clone().add(new THREE.Vector3(0, -half, 0));
-  const d = origin.clone().add(new THREE.Vector3(0, half, 0));
-  const e = origin.clone().add(new THREE.Vector3(0, 0, -half));
-  const f = origin.clone().add(new THREE.Vector3(0, 0, half));
-  points.push(a.x, a.y, a.z, b.x, b.y, b.z, c.x, c.y, c.z, d.x, d.y, d.z, e.x, e.y, e.z, f.x, f.y, f.z);
-}
-
-function stablePerpendicular(direction) {
-  const up = Math.abs(direction.dot(new THREE.Vector3(0, 1, 0))) > 0.9 ? new THREE.Vector3(1, 0, 0) : new THREE.Vector3(0, 1, 0);
-  const side = new THREE.Vector3().crossVectors(direction, up);
-  if (side.lengthSq() <= 1e-9) return new THREE.Vector3(0, 0, 1);
-  return side.normalize();
 }
 
 function vec3(value) { return new THREE.Vector3(Number(value?.x) || 0, Number(value?.y) || 0, Number(value?.z) || 0); }
