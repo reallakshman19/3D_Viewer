@@ -1,24 +1,28 @@
 import { getXmlCiiPhaseBridge } from './legacy-adapter.js?v=20260620-master-session-1';
 
-const INSTALL_FLAG = Symbol.for('pcf-glb-xml-cii-condense-rigid-ui-bridge-v3');
-const VERSION = '20260623-xml-cii-condense-rigid-ui-3';
+const INSTALL_FLAG = Symbol.for('pcf-glb-xml-cii-condense-rigid-ui-bridge-v4');
+const VERSION = '20260623-xml-cii-condense-rigid-ui-4';
+const DIRECT_RUN_FLAG = '__xmlCiiConversionWorkflowAllowDirectRun';
 
 const XSD_KEY = 'condenseRigidXsd';
+const XSD_SNAKE_KEY = 'condense_rigid_xsd';
 const RESOLVED_KEY = 'splitCondensedValveFlange';
 const RESOLVED_SNAKE_KEY = 'split_condensed_valve_flange';
 
 const OPTIONS = Object.freeze([
   {
     key: XSD_KEY,
+    runKeys: [XSD_KEY],
+    configKeys: [XSD_KEY, XSD_SNAKE_KEY],
     label: 'Condense Rigid / split condensed valve-flange nodes (XSD)',
-    hint: 'Records the source/XSD condense-rigid intent in supportConfigJson. It does not force the resolver.',
-    aliases: [XSD_KEY, 'condense_rigid_xsd'],
+    hint: 'Source/XSD intent flag only. It is stored in supportConfigJson and does not force resolved conversion.',
   },
   {
     key: RESOLVED_KEY,
+    runKeys: [RESOLVED_KEY, RESOLVED_SNAKE_KEY],
+    configKeys: [RESOLVED_KEY, RESOLVED_SNAKE_KEY],
     label: 'Condense Rigid / split condensed valve-flange nodes (Resolved)',
-    hint: 'Forces the resolved conversion path: supportConfigJson.split_condensed_valve_flange=True and Python --split-condensed-valve-flange.',
-    aliases: [RESOLVED_KEY, RESOLVED_SNAKE_KEY],
+    hint: 'Resolved conversion flag. ON writes split_condensed_valve_flange=True and forwards --split-condensed-valve-flange.',
   },
 ]);
 
@@ -42,18 +46,22 @@ function parseConfigText(text) {
   }
 }
 
-function bridgeConfig(bridge) {
-  return parseConfigText(bridge?.exportPopupConfigText?.() || '{}');
+function bridge() {
+  return getXmlCiiPhaseBridge?.() || null;
 }
 
-function optionEnabled(option, bridge) {
-  const cfg = bridgeConfig(bridge);
-  return option.aliases.some((key) => bool(cfg[key]));
+function bridgeConfig(activeBridge = bridge()) {
+  return parseConfigText(activeBridge?.exportPopupConfigText?.() || '{}');
 }
 
-function importConfig(bridge, config) {
+function optionEnabled(option, activeBridge = bridge()) {
+  const cfg = bridgeConfig(activeBridge);
+  return option.configKeys.some((key) => bool(cfg[key]));
+}
+
+function importConfig(activeBridge, config) {
   try {
-    bridge?.importPopupConfigText?.(JSON.stringify(config || {}, null, 2));
+    activeBridge?.importPopupConfigText?.(JSON.stringify(config || {}, null, 2));
     return true;
   } catch (error) {
     console.warn('[XML CII Condense Rigid] config sync failed', error);
@@ -61,181 +69,134 @@ function importConfig(bridge, config) {
   }
 }
 
-function setConfigValue(config, key, enabled) {
-  if (key === RESOLVED_KEY || key === RESOLVED_SNAKE_KEY) {
-    config[RESOLVED_KEY] = !!enabled;
-    config[RESOLVED_SNAKE_KEY] = !!enabled;
-    return;
-  }
-  if (key === XSD_KEY || key === 'condense_rigid_xsd') {
-    config[XSD_KEY] = !!enabled;
-    return;
-  }
-  config[key] = !!enabled;
+function setConfigValue(config, option, enabled) {
+  for (const key of option.configKeys) config[key] = !!enabled;
 }
 
-function syncConfig(bridge, key, enabled) {
-  if (!bridge) return false;
-  const cfg = bridgeConfig(bridge);
-  setConfigValue(cfg, key, enabled);
-  return importConfig(bridge, cfg);
+function syncOption(option, enabled) {
+  const activeBridge = bridge();
+  if (!activeBridge) return;
+  const cfg = bridgeConfig(activeBridge);
+  setConfigValue(cfg, option, enabled);
+  importConfig(activeBridge, cfg);
+  for (const key of option.runKeys) {
+    try { activeBridge.setPopupRunOption?.(key, !!enabled, 'checkbox'); } catch {}
+  }
 }
 
-function mergeBoolsIntoConfigText(text, bools = {}) {
-  const cfg = parseConfigText(text);
-  for (const option of OPTIONS) {
-    if (Object.prototype.hasOwnProperty.call(bools, option.key)) setConfigValue(cfg, option.key, bools[option.key]);
-    if (option.key === RESOLVED_KEY && Object.prototype.hasOwnProperty.call(bools, RESOLVED_SNAKE_KEY)) {
-      setConfigValue(cfg, RESOLVED_KEY, bools[RESOLVED_SNAKE_KEY]);
-    }
-  }
-  return JSON.stringify(cfg, null, 2);
+function ensureSimpleRunVisible() {
+  if (!browserReady()) return;
+  // Keep normal/simple Run Conversion as a direct button. Older cached popup
+  // installers used a capture listener on #model-converters-run; this flag keeps
+  // that listener bypassed without touching the Rich Workflow button.
+  window[DIRECT_RUN_FLAG] = true;
+  const runButton = document.querySelector('#model-converters-run');
+  if (!runButton) return;
+  runButton.hidden = false;
+  runButton.style.display = '';
+  runButton.disabled = false;
+  if (!String(runButton.textContent || '').trim()) runButton.textContent = 'Run Conversion';
 }
 
-function hydrateSnapshot(snapshot, bridge) {
-  if (!snapshot || typeof snapshot !== 'object') return snapshot;
-  snapshot.run = snapshot.run && typeof snapshot.run === 'object' ? snapshot.run : {};
-  snapshot.run.options = snapshot.run.options && typeof snapshot.run.options === 'object' ? snapshot.run.options : {};
-  snapshot.config = snapshot.config && typeof snapshot.config === 'object' ? snapshot.config : {};
-
-  for (const option of OPTIONS) {
-    const enabled = optionEnabled(option, bridge) || bool(snapshot.run.options[option.key]);
-    snapshot.run.options[option.key] = enabled;
-    snapshot.config[option.key] = enabled;
-    if (option.key === RESOLVED_KEY) {
-      snapshot.run.options[RESOLVED_SNAKE_KEY] = enabled;
-      snapshot.config[RESOLVED_SNAKE_KEY] = enabled;
-    }
+function inputSelectors(option) {
+  const selectors = [];
+  for (const key of option.runKeys) {
+    selectors.push(`[data-native-run-option="${key}"]`);
+    selectors.push(`[data-xml-cii-run-option="${key}"]`);
   }
-  return snapshot;
+  for (const key of option.configKeys) {
+    selectors.push(`[data-native-config-bool="${key}"]`);
+    selectors.push(`[data-xml-cii-config-bool="${key}"]`);
+  }
+  return selectors.join(', ');
 }
 
-function wrapBridge(bridge = getXmlCiiPhaseBridge()) {
-  if (!bridge || bridge.__xmlCiiCondenseRigidUiWrapped === VERSION) return bridge || null;
-  const originalGetPopupSnapshot = typeof bridge.getPopupSnapshot === 'function' ? bridge.getPopupSnapshot.bind(bridge) : null;
-  const originalSetPopupRunOption = typeof bridge.setPopupRunOption === 'function' ? bridge.setPopupRunOption.bind(bridge) : null;
-  const originalSavePopupConfigText = typeof bridge.savePopupConfigText === 'function' ? bridge.savePopupConfigText.bind(bridge) : null;
-
-  if (originalGetPopupSnapshot) {
-    bridge.getPopupSnapshot = (target) => hydrateSnapshot(originalGetPopupSnapshot(target), bridge);
-  }
-
-  if (originalSetPopupRunOption) {
-    bridge.setPopupRunOption = (key, value, type) => {
-      if ([XSD_KEY, RESOLVED_KEY, RESOLVED_SNAKE_KEY].includes(key)) syncConfig(bridge, key, !!value);
-      return originalSetPopupRunOption(key, value, type);
-    };
-  }
-
-  if (originalSavePopupConfigText) {
-    bridge.savePopupConfigText = (editedText, bools) => {
-      const nextText = mergeBoolsIntoConfigText(editedText, bools || {});
-      const savedText = originalSavePopupConfigText(nextText, bools);
-      for (const option of OPTIONS) {
-        if (Object.prototype.hasOwnProperty.call(bools || {}, option.key)) syncConfig(bridge, option.key, !!bools[option.key]);
-      }
-      return savedText;
-    };
-  }
-
-  bridge.__xmlCiiCondenseRigidUiWrapped = VERSION;
-  return bridge;
+function findOptionFromInput(input) {
+  const key = input?.dataset?.nativeRunOption
+    || input?.dataset?.xmlCiiRunOption
+    || input?.dataset?.nativeConfigBool
+    || input?.dataset?.xmlCiiConfigBool
+    || '';
+  return OPTIONS.find((option) => option.runKeys.includes(key) || option.configKeys.includes(key)) || null;
 }
 
-function optionInputSelector(option) {
-  return [
-    `[data-native-run-option="${option.key}"]`,
-    `[data-native-config-bool="${option.key}"]`,
-    `[data-xml-cii-run-option="${option.key}"]`,
-    `[data-xml-cii-config-bool="${option.key}"]`,
-  ].join(', ');
-}
-
-function optionLabel(option, enabled, source) {
-  const label = document.createElement('label');
+function labelFor(option, source, enabled) {
   const legacy = source.startsWith('legacy');
+  const label = document.createElement('label');
   label.className = legacy ? 'model-converters-workflow-map-field' : 'xml-cii-native-check';
   label.dataset.xmlCiiCondenseRigidInjected = `${source}:${option.key}`;
   if (legacy) label.style.cssText = 'flex-direction:row;align-items:center;gap:8px;';
   label.innerHTML = `<input type="checkbox" ${enabled ? 'checked' : ''}> <span>${option.label}</span>`;
   const input = label.querySelector('input');
-  if (source.includes('run')) input.dataset[legacy ? 'xmlCiiRunOption' : 'nativeRunOption'] = option.key;
-  else input.dataset[legacy ? 'xmlCiiConfigBool' : 'nativeConfigBool'] = option.key;
+  if (source.includes('run')) {
+    if (legacy) input.dataset.xmlCiiRunOption = option.key;
+    else input.dataset.nativeRunOption = option.key;
+  } else {
+    if (legacy) input.dataset.xmlCiiConfigBool = option.key;
+    else input.dataset.nativeConfigBool = option.key;
+  }
   input.title = option.hint;
-  input.addEventListener('change', () => setCondenseRigid(option.key, input.checked));
   return label;
 }
 
-function setCondenseRigid(key, enabled) {
-  const bridge = wrapBridge();
-  syncConfig(bridge, key, !!enabled);
-  try { bridge?.setPopupRunOption?.(key, !!enabled, 'checkbox'); } catch (error) { console.warn('[XML CII Condense Rigid] run option sync failed', error); }
-  syncInputs(document);
-}
-
-function syncInputs(root = document) {
-  const bridge = wrapBridge();
-  for (const option of OPTIONS) {
-    const enabled = optionEnabled(option, bridge);
-    root?.querySelectorAll?.(optionInputSelector(option)).forEach((input) => {
-      if (input.type === 'checkbox') input.checked = !!enabled;
-    });
-  }
-}
-
-function bindExisting(root = document) {
-  for (const option of OPTIONS) {
-    root?.querySelectorAll?.(optionInputSelector(option)).forEach((input) => {
-      if (input.dataset.xmlCiiCondenseRigidBound === VERSION) return;
-      input.dataset.xmlCiiCondenseRigidBound = VERSION;
-      input.addEventListener('change', () => setCondenseRigid(option.key, input.checked));
-    });
-  }
-}
-
-function injectOne(root, option, enabled, source, anchorSelector) {
-  if (root.querySelector?.(optionInputSelector(option))) return;
-  const anchor = root.querySelector?.(anchorSelector)?.closest?.('label');
+function injectOne(root, option, source, anchorSelector) {
+  if (!root?.querySelector) return;
+  if (root.querySelector(inputSelectors(option))) return;
+  const anchor = root.querySelector(anchorSelector)?.closest?.('label');
   const parent = anchor?.parentElement;
-  if (!anchor || !parent || parent.querySelector?.(`[data-xml-cii-condense-rigid-injected$=":${option.key}"]`)) return;
-  anchor.insertAdjacentElement('afterend', optionLabel(option, enabled, source));
+  if (!anchor || !parent) return;
+  if (parent.querySelector(`[data-xml-cii-condense-rigid-injected$=":${option.key}"]`)) return;
+  anchor.insertAdjacentElement('afterend', labelFor(option, source, optionEnabled(option)));
 }
 
-function injectRunOptions(root, bridge) {
+function injectAll(root = document) {
+  ensureSimpleRunVisible();
   for (const option of OPTIONS) {
-    const enabled = optionEnabled(option, bridge);
-    injectOne(root, option, enabled, 'native-run', '[data-native-run-option="kgToNewton"]');
-    injectOne(root, option, enabled, 'legacy-run', '[data-xml-cii-run-option="kgToNewton"]');
+    injectOne(root, option, 'legacy-run', '[data-xml-cii-run-option="kgToNewton"]');
+    injectOne(root, option, 'native-run', '[data-native-run-option="kgToNewton"]');
+    injectOne(root, option, 'legacy-config', '[data-xml-cii-config-bool="disableCiiSupportTagPopulation"]');
+    injectOne(root, option, 'native-config', '[data-native-config-bool="disableCiiSupportTagPopulation"]');
+  }
+  syncInputStates(root);
+}
+
+function syncInputStates(root = document) {
+  for (const option of OPTIONS) {
+    const enabled = optionEnabled(option);
+    root?.querySelectorAll?.(inputSelectors(option)).forEach((input) => {
+      if (input.type === 'checkbox') input.checked = enabled;
+      if (!input.dataset.xmlCiiCondenseRigidBound) {
+        input.dataset.xmlCiiCondenseRigidBound = VERSION;
+        input.addEventListener('change', () => {
+          const changedOption = findOptionFromInput(input);
+          if (!changedOption) return;
+          syncOption(changedOption, input.checked);
+          syncInputStates(document);
+        });
+      }
+    });
   }
 }
 
-function injectConfigOptions(root, bridge) {
-  for (const option of OPTIONS) {
-    const enabled = optionEnabled(option, bridge);
-    injectOne(root, option, enabled, 'native-config', '[data-native-config-bool="disableCiiSupportTagPopulation"]');
-    injectOne(root, option, enabled, 'legacy-config', '[data-xml-cii-config-bool="disableCiiSupportTagPopulation"]');
-  }
-}
-
-function apply(root = document) {
-  const bridge = wrapBridge();
-  injectRunOptions(root, bridge);
-  injectConfigOptions(root, bridge);
-  bindExisting(root);
-  syncInputs(root);
+function onDomAction() {
+  ensureSimpleRunVisible();
+  setTimeout(() => injectAll(document), 0);
+  setTimeout(() => injectAll(document), 60);
+  setTimeout(() => injectAll(document), 200);
 }
 
 export function installXmlCiiCondenseRigidUiBridge(root = document) {
   if (!browserReady()) return null;
   if (window[INSTALL_FLAG]) return window[INSTALL_FLAG];
-  const state = { version: VERSION, apply };
+  const state = { version: VERSION, injectAll };
   window[INSTALL_FLAG] = state;
 
-  const tick = () => apply(root || document);
-  for (const delay of [0, 80, 250, 750, 1500]) setTimeout(tick, delay);
-
-  const observer = new MutationObserver(() => tick());
-  observer.observe(document.body, { childList: true, subtree: true });
-  state.disconnect = () => observer.disconnect();
+  ensureSimpleRunVisible();
+  document.addEventListener('click', onDomAction, true);
+  document.addEventListener('change', onDomAction, true);
+  for (const delay of [0, 80, 250, 750, 1500, 3000]) setTimeout(() => injectAll(root || document), delay);
+  const interval = setInterval(() => injectAll(root || document), 500);
+  setTimeout(() => clearInterval(interval), 8000);
+  state.disconnect = () => clearInterval(interval);
   return state;
 }
