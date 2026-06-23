@@ -36,6 +36,7 @@ on:
       - 'viewer/tests/nonprimitive-auto-bend-*.test.js'
       - 'viewer/tests/nonprimitive-support-overlay-*.test.js'
       - 'viewer/tests/nonprimitive-support-source-extraction.test.js'
+      - 'viewer/tests/nonprimitive-support-filter-diagnostics.test.js'
       - 'viewer/tests/nonprimitive-support-managed-stage-fixtures.test.js'
       - 'viewer/tests/nonprimitive-support-preview-smoke.test.js'
       - 'viewer/tests/nonprimitive-support-pipe-segment-extraction.test.js'
@@ -80,6 +81,9 @@ jobs:
 
       - name: Verify non-primitive support source extraction
         run: node viewer/tests/nonprimitive-support-source-extraction.test.js
+
+      - name: Verify non-primitive support filter diagnostics
+        run: node viewer/tests/nonprimitive-support-filter-diagnostics.test.js
 
       - name: Verify non-primitive managed-stage support fixtures
         run: node viewer/tests/nonprimitive-support-managed-stage-fixtures.test.js
