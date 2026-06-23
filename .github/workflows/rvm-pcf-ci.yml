@@ -169,6 +169,9 @@ jobs:
       - name: Verify support-load Access benchmark
         run: node viewer/tests/rvm-geometry-workspace-support-load-access-benchmark.test.js
 
+      - name: Verify support-load real model validation
+        run: node viewer/tests/rvm-geometry-workspace-support-load-real-model-validation.test.js
+
       - name: Verify support-load report export
         run: node viewer/tests/rvm-geometry-workspace-support-load-report.test.js
 
