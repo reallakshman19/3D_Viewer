@@ -1,7 +1,7 @@
 import { calculateSupportLoadsForPipeInput } from './GeometrySupportLoadFormulaEngine.js?v=20260623-support-load-advanced-profiles-1';
 
 export const SUPPORT_LOAD_ACCESS_FIXTURE_SCHEMA = 'support-load-access-fixture-pack/v1';
-export const SUPPORT_LOAD_ACCESS_FIXTURE_VERSION = '20260623-access-fixture-import-1';
+export const SUPPORT_LOAD_ACCESS_FIXTURE_VERSION = '20260623-access-fixture-batch-1';
 
 const ACCESS_PROFILE = Object.freeze({
   profileId: 'ACCESS_TEMP_WALL_WEIGHTED_V1',
@@ -344,14 +344,55 @@ export function evaluateAccessSupportLoadFixture(fixture) {
   });
 }
 
-export function evaluateDefaultAccessSupportLoadFixtures() {
-  const results = DEFAULT_SUPPORT_LOAD_ACCESS_FIXTURES.map(evaluateAccessSupportLoadFixture);
+export function evaluateAccessSupportLoadFixtures(fixtures) {
+  const rows = Array.isArray(fixtures) ? fixtures : [];
+  const results = rows.map(evaluateAccessSupportLoadFixture);
+  const failed = results.filter(result => result.status !== 'PASS');
   return freezeDeep({
     schema: SUPPORT_LOAD_ACCESS_FIXTURE_SCHEMA,
     version: SUPPORT_LOAD_ACCESS_FIXTURE_VERSION,
+    status: failed.length ? 'FAIL' : 'PASS',
     total: results.length,
-    passed: results.filter(result => result.status === 'PASS').length,
-    failed: results.filter(result => result.status !== 'PASS').length,
-    results
+    passed: results.length - failed.length,
+    failed: failed.length,
+    failedFixtureIds: failed.map(result => result.fixtureId),
+    results,
+    audit: [{
+      source: 'ACCESS_FIXTURE_BATCH_VALIDATOR',
+      field: 'runtimeMutation',
+      value: 'none',
+      note: 'Batch validation consumes parsed regression fixtures only; it does not hydrate runtime objects or write calculated fields.'
+    }]
   });
+}
+
+export function evaluateAccessSupportLoadFixtureText(sourceText, options = {}) {
+  const imported = parseAccessSupportLoadFixtureText(sourceText, options);
+  const validation = evaluateAccessSupportLoadFixtures(imported.fixtures || []);
+  const blocked = imported.status === 'EMPTY';
+  const status = blocked ? 'EMPTY' : validation.failed ? 'FAIL' : imported.warnings?.length ? 'PASS_WITH_IMPORT_WARNINGS' : 'PASS';
+  return freezeDeep({
+    schema: SUPPORT_LOAD_ACCESS_FIXTURE_SCHEMA,
+    version: SUPPORT_LOAD_ACCESS_FIXTURE_VERSION,
+    status,
+    importStatus: imported.status,
+    delimiter: imported.delimiter,
+    fixtureCount: imported.fixtureCount || 0,
+    importWarnings: imported.warnings || [],
+    total: validation.total,
+    passed: validation.passed,
+    failed: validation.failed,
+    failedFixtureIds: validation.failedFixtureIds,
+    results: validation.results,
+    audit: [{
+      source: 'ACCESS_FIXTURE_TEXT_BATCH_VALIDATOR',
+      field: 'scope',
+      value: 'regression-fixture-only',
+      note: 'Text batch validation is not a runtime top-up/import path for support-load inputs.'
+    }]
+  });
+}
+
+export function evaluateDefaultAccessSupportLoadFixtures() {
+  return evaluateAccessSupportLoadFixtures(DEFAULT_SUPPORT_LOAD_ACCESS_FIXTURES);
 }
