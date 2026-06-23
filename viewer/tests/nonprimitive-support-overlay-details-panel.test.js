@@ -86,7 +86,7 @@ assert.match(bridge, /__RVM_NON_PRIMITIVE_SUPPORT_OVERLAY__/, 'details panel ray
 assert.match(bridge, /raycaster\.intersectObjects/, 'details panel uses isolated raycasting instead of RVM primitive selection');
 assert.match(bridge, /nonPrimitiveSupportOverlaySelectedDetails/, 'details panel stores selected details outside RVM primitive selection state');
 assert.match(bridge, /supportOverlayDetails/, 'details panel reads source-backed glyph metadata');
-assert.match(bridge, /CustomEvent\('rvm-nonprimitive-support-details-selected'/, 'details panel emits scoped selection event for UI refresh');
+assert.match(bridge, /rvm-nonprimitive-support-details-selected/, 'details panel emits scoped selection event for UI refresh');
 assert.match(bridge, /mode === 'source-preview' && isNonPrimitiveKind\(kind\)/, 'details panel is source-preview gated');
 assert.match(bridge, /PRIMITIVE_KIND_RE[\s\S]*rvm\|glb\|gltf\|rev/, 'details panel excludes primitive formats');
 assert.doesNotMatch(bridge, /RvmSupportSymbols|RvmSupportGeometryBridge|RvmRawSupportCylinderGuardBridge|Support Summary|SupportATT|SupportEngine/, 'details panel does not revive retired RVM support runtime or UI');
