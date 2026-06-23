@@ -10,6 +10,7 @@ export const RVM_NON_PRIMITIVE_SOURCE_TOOLS_UI_SCHEMA = 'rvm-non-primitive-sourc
 
 const PATCH_FLAG = Symbol.for('pcf-glb-rvm-non-primitive-source-tools-ui-v6');
 const VIEWER_PATCH_FLAG = Symbol.for('pcf-glb-rvm-non-primitive-source-tools-ui-viewer-v6');
+const STYLE_FLAG = Symbol.for('pcf-glb-rvm-non-primitive-source-tools-ui-style-v6');
 const ROOT_SELECTOR = '[data-rvm-viewer]';
 const PANEL_ID = 'rvm-nonprimitive-source-tools-panel';
 const SOURCE_KIND_RE = /^(json|jscon|inputxml|txt|source-preview)$/i;
@@ -32,9 +33,166 @@ export function installRvmNonPrimitiveSourceToolsUiBridge() {
     copyDiagnostics: copySourceToolsDiagnostics,
     downloadDiagnostics: downloadSourceToolsDiagnostics,
   };
+  installSourceToolsStyles();
   patchRvmViewerSetModelForSourceToolsUi();
   try { globalThis.addEventListener?.('rvm-model-loaded', () => syncAllSourceToolsUi()); } catch (_) {}
   queueMicrotask(syncAllSourceToolsUi);
+}
+
+function installSourceToolsStyles() {
+  if (globalThis[STYLE_FLAG]) return;
+  globalThis[STYLE_FLAG] = true;
+  const doc = globalThis.document;
+  if (!doc?.createElement) return;
+  const style = doc.createElement('style');
+  style.dataset.rvmNonPrimitiveSourceToolsStyle = 'v6';
+  style.textContent = `
+    .rvm-source-tools-panel {
+      flex: 0 0 auto;
+      max-height: min(46vh, 520px);
+      padding: 7px;
+      border-bottom: 1px solid var(--geo-border, #333);
+      background: rgba(16, 22, 31, 0.86);
+      overflow-y: auto;
+    }
+
+    .rvm-source-tools-grid--compact {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 7px;
+    }
+
+    .rvm-source-tools-group {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr);
+      gap: 5px;
+      padding: 7px;
+      border: 1px solid rgba(116, 139, 171, 0.26);
+      border-radius: 8px;
+      background: rgba(27, 34, 45, 0.72);
+    }
+
+    .rvm-source-tools-group-title,
+    .rvm-source-tools-row,
+    .rvm-source-tools-actions,
+    .rvm-source-tools-filters {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .rvm-source-tools-group-title {
+      justify-content: space-between;
+      color: #d9e7ff;
+      font-size: 11px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.055em;
+    }
+
+    .rvm-source-tools-row {
+      justify-content: space-between;
+      min-height: 22px;
+      color: #a9b9d4;
+      font-size: 11px;
+    }
+
+    .rvm-source-tools-row select,
+    .rvm-source-tools-row input[type="range"] {
+      min-width: 92px;
+      max-width: 130px;
+    }
+
+    .rvm-source-tools-badge {
+      min-width: 44px;
+      padding: 2px 6px;
+      border-radius: 999px;
+      border: 1px solid rgba(126, 182, 246, 0.38);
+      color: #d9e7ff;
+      background: rgba(74, 158, 255, 0.14);
+      font-size: 10px;
+      text-align: center;
+      text-transform: none;
+      letter-spacing: 0;
+    }
+
+    .rvm-source-tools-badge.is-warn {
+      border-color: rgba(226, 153, 74, 0.66);
+      color: #ffd59a;
+      background: rgba(226, 153, 74, 0.16);
+    }
+
+    .rvm-source-tools-diag {
+      color: #91a1ba;
+      font-size: 10.5px;
+      line-height: 1.35;
+    }
+
+    .rvm-source-tools-filters {
+      align-items: flex-start;
+      flex-wrap: wrap;
+      padding-top: 2px;
+    }
+
+    .rvm-source-tools-filters > span {
+      flex: 0 0 100%;
+      color: #8fa5c7;
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .rvm-source-tools-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 3px;
+      padding: 2px 5px;
+      border: 1px solid rgba(116, 139, 171, 0.28);
+      border-radius: 999px;
+      background: rgba(22, 29, 39, 0.86);
+      color: #b8c8e4;
+      font-size: 10px;
+      white-space: nowrap;
+    }
+
+    .rvm-source-tools-actions {
+      align-items: flex-start;
+      flex-wrap: wrap;
+      padding: 7px;
+      border: 1px solid rgba(116, 139, 171, 0.2);
+      border-radius: 8px;
+      background: rgba(12, 17, 24, 0.7);
+    }
+
+    .rvm-source-tools-actions button {
+      min-height: 23px;
+      padding: 3px 7px;
+      border: 1px solid rgba(116, 139, 171, 0.34);
+      border-radius: 5px;
+      background: rgba(35, 44, 58, 0.9);
+      color: #d9e7ff;
+      font-size: 10.5px;
+      cursor: pointer;
+    }
+
+    .rvm-source-tools-actions [data-source-tool-diag="diagnostics-snapshot"] {
+      flex: 1 1 100%;
+    }
+
+    @media (max-width: 1150px) {
+      .rvm-source-tools-panel {
+        max-height: 40vh;
+      }
+
+      .rvm-source-tools-row,
+      .rvm-source-tools-actions {
+        align-items: flex-start;
+        flex-direction: column;
+      }
+    }
+  `;
+  doc.head?.appendChild?.(style);
 }
 
 function patchRvmViewerSetModelForSourceToolsUi() {
