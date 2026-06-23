@@ -1,11 +1,13 @@
-const CACHE_KEY = '20260622-rvm-retired-support-tools-purge-1';
+const CACHE_KEY = '20260622-rvm-retired-support-tools-purge-2';
 const API_KEY = '__PCF_GLB_RVM_RETIRED_SUPPORT_TOOLS__';
+const DEBUG_EMBEDDED_INPUTXML_MARKERS_KEY = 'rvm.debug.showEmbeddedInputXmlSupportMarkers';
 
 const RETIRED_SCENE_ROOTS = Object.freeze([
   '__RVM_GEOMETRY_SUPPORT_SYMBOLS__',
   '__RVM_SUPPORT_ASSEMBLY_MARKERS__',
   '__RVM_EXPORTABLE_SUPPORT_GEOMETRY__',
   '__RVM_SUPPORT_SYMBOLS__',
+  '__NON_PRIMITIVE_SUPPORT_OVERLAY__'
 ]);
 
 const RETIRED_GLOBALS = Object.freeze([
@@ -20,9 +22,13 @@ const RETIRED_GLOBALS = Object.freeze([
 
 const RETIRED_STORAGE_KEYS = Object.freeze([
   'rvm_support_render_mode_v1',
+  'rvm_support_render_mode_v2',
   'rvm_support_geometry_mode_v1',
   'rvm_support_assembly_markers_v1',
+  'rvm.rawInputXmlSupportPrimitives',
 ]);
+
+const EMBEDDED_INPUTXML_MARKER_RE = /\b(RVM\s+(CYLINDER|PYRAMID|BOX|SPHERE|TORUS|SNOUT|FACET)\b[\s\S]*)?INPUTXML[-_ ]?\d+[-_ ]?(REST|GUIDE|LINE\s*STOP|LINESTOP|STOP|LIMIT|LIM|SUPPORT|SHOE)\b/i;
 
 export function installRvmRetiredSupportToolsPurgeBridge() {
   const api = globalThis[API_KEY] || {
@@ -59,10 +65,11 @@ function purgeRetiredSupportTools(reason = 'manual') {
   const root = document.querySelector('[data-rvm-viewer]');
   const viewer = globalThis.__3D_RVM_VIEWER__;
   const removedSceneRoots = purgeSceneRoots(viewer);
+  const hiddenEmbeddedMarkers = hideEmbeddedInputXmlMarkers(viewer, root);
   const removedDomNodes = purgeDom(root);
   const clearedGlobals = purgeGlobals();
   purgeStorage();
-  const payload = { schema: 'rvm-retired-support-tools/v1', version: CACHE_KEY, reason, removedSceneRoots, removedDomNodes, clearedGlobals, retired: true };
+  const payload = { schema: 'rvm-retired-support-tools/v2', version: CACHE_KEY, reason, removedSceneRoots, hiddenEmbeddedMarkers, removedDomNodes, clearedGlobals, retired: true };
   globalThis[API_KEY] = { ...(globalThis[API_KEY] || {}), ...payload, purge: () => purgeRetiredSupportTools('api') };
   if (root) root.dataset.rvmSupportToolsRetired = CACHE_KEY;
   return payload;
@@ -70,17 +77,48 @@ function purgeRetiredSupportTools(reason = 'manual') {
 
 function purgeSceneRoots(viewer) {
   let count = 0;
-  const scene = viewer?.scene;
-  for (const name of RETIRED_SCENE_ROOTS) {
-    let obj = scene?.getObjectByName?.(name);
-    while (obj) {
-      scene.remove(obj);
-      disposeObject(obj);
-      count += 1;
-      obj = scene?.getObjectByName?.(name);
+  for (const parent of [viewer?.scene, viewer?.modelGroup]) {
+    for (const name of RETIRED_SCENE_ROOTS) {
+      let obj = parent?.getObjectByName?.(name);
+      while (obj) {
+        obj.parent?.remove?.(obj);
+        disposeObject(obj);
+        count += 1;
+        obj = parent?.getObjectByName?.(name);
+      }
     }
   }
   return count;
+}
+
+function hideEmbeddedInputXmlMarkers(viewer, root) {
+  if (showEmbeddedInputXmlMarkers()) return 0;
+  let count = 0;
+  for (const parent of [viewer?.scene, viewer?.modelGroup]) {
+    parent?.traverse?.((obj) => {
+      if (!obj || obj.isScene) return;
+      const text = objectText(obj);
+      if (!EMBEDDED_INPUTXML_MARKER_RE.test(text)) return;
+      if (obj.visible !== false) count += 1;
+      obj.visible = false;
+      obj.userData = {
+        ...(obj.userData || {}),
+        rvmHiddenEmbeddedInputXmlSupportMarker: true,
+        rvmDoNotLabel: true,
+        rvmDoNotIndex: true,
+        pickable: false,
+        selectable: false,
+        nonSelectableReason: `Embedded InputXML marker hidden by default; set ${DEBUG_EMBEDDED_INPUTXML_MARKERS_KEY}=true for debug inspection`,
+      };
+      if (obj.element?.style) hideDomNode(obj.element);
+    });
+  }
+  count += hideEmbeddedInputXmlDomLabels(root);
+  return count;
+}
+
+function showEmbeddedInputXmlMarkers() {
+  try { return localStorage.getItem(DEBUG_EMBEDDED_INPUTXML_MARKERS_KEY) === 'true'; } catch (_) { return false; }
 }
 
 function purgeDom(root) {
@@ -94,6 +132,8 @@ function purgeDom(root) {
     '[data-rvm-support-att-panel]',
     '[data-rvm-support-engine-panel]',
     '[data-rvm-support-geometry-panel]',
+    '[data-rvm-support-label]',
+    '.rvm-support-symbol-label',
     '.rvm-support-engine-section',
     '.rvm-support-att-section',
     '.rvm-support-mode-row',
@@ -113,23 +153,56 @@ function purgeDom(root) {
     count += 1;
   }
 
-  const scale = root.querySelector('#rvm-support-scale');
-  const label = root.querySelector('#rvm-support-labels');
-  const section = scale?.closest?.('.rvm-ribbon-section') || label?.closest?.('.rvm-ribbon-section');
-  if (section) {
-    section.remove();
-    count += 1;
-  }
-
-  const supportChip = root.querySelector('[data-rvm-status-chip="supports"]');
-  if (supportChip) {
-    supportChip.remove();
-    count += 1;
+  for (const selector of ['#rvm-support-scale', '#rvm-support-labels', '[data-rvm-status-chip="supports"]']) {
+    const node = root.querySelector(selector);
+    const section = node?.closest?.('.rvm-ribbon-section');
+    if (section) {
+      section.remove();
+      count += 1;
+    } else if (node) {
+      node.remove();
+      count += 1;
+    }
   }
 
   const search = root.querySelector('#rvm-search-input');
   if (search && /support tag/i.test(search.getAttribute('placeholder') || '')) search.setAttribute('placeholder', 'Search hierarchy / object…');
+  count += hideEmbeddedInputXmlDomLabels(root);
   return count;
+}
+
+function hideEmbeddedInputXmlDomLabels(root) {
+  if (!root || showEmbeddedInputXmlMarkers()) return 0;
+  let count = 0;
+  const selectors = [
+    '.rvm-object-label',
+    '.rvm-label',
+    '.css2d-label',
+    '[data-rvm-label]',
+    '[data-rvm-object-label]',
+    '[data-rvm-support-label]',
+    '.rvm-canvas-label',
+    '.rvm-object-badge',
+    'div',
+    'span'
+  ].join(',');
+  const seen = new WeakSet();
+  root.querySelectorAll?.(selectors)?.forEach((node) => {
+    if (!node || seen.has(node)) return;
+    seen.add(node);
+    if (!EMBEDDED_INPUTXML_MARKER_RE.test(node.textContent || '')) return;
+    hideDomNode(node);
+    count += 1;
+  });
+  return count;
+}
+
+function hideDomNode(node) {
+  if (!node?.style) return;
+  if (!node.dataset.rvmPreviousDisplay) node.dataset.rvmPreviousDisplay = node.style.display || '';
+  node.dataset.rvmHiddenEmbeddedInputXmlSupportMarker = 'true';
+  node.style.display = 'none';
+  node.setAttribute('aria-hidden', 'true');
 }
 
 function previousElement(node) {
@@ -157,6 +230,26 @@ function purgeGlobals() {
 
 function purgeStorage() {
   try { for (const key of RETIRED_STORAGE_KEYS) localStorage.removeItem(key); } catch (_) {}
+}
+
+function objectText(obj) {
+  const data = obj?.userData || {};
+  const attrs = { ...(data.browserRvmAttributes || {}), ...(data.attributes || {}), ...(data.rawAttributes || {}) };
+  return [
+    obj?.name,
+    obj?.element?.textContent,
+    data.displayName,
+    data.sourcePath,
+    data.sourceName,
+    data.type,
+    data.kind,
+    data.renderPrimitive,
+    data.effectiveRenderPrimitive,
+    attrs.NAME,
+    attrs.TYPE,
+    attrs.RVM_OWNER_NAME,
+    attrs.RVM_OWNER_PATH,
+  ].map((value) => String(value || '')).join(' ');
 }
 
 function disposeObject(root) {
