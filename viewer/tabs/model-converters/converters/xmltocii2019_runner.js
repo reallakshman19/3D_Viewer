@@ -5,7 +5,7 @@ import { buildXmlCiiNodeResolverIndex } from '../../../converters/xml-cii2019-co
 import { resolveManualRestraintRows } from '../../../converters/xml-cii2019-core/sideload-restraints.js';
 import { mergeXmlCiiMatchedFacts, matchedFactsFromEnrichmentDiagnostics } from '../../../converters/xml-cii2019-core/sideload-ledger.js';
 import { applyManualMatchedFactsToEnrichedXml } from '../../../converters/xml-cii2019-core/sideload-apply.js';
-import { enrichXmlForCii2019 } from './xmltocii2019_helper/enrichment-core.js?v=20260620-rating-override-1';
+import { enrichXmlForCii2019 } from './xmltocii2019_helper/enrichment-run-parity.js?v=20260623-preview-run-parity-1';
 
 const XML_CII_STAGE_TIMEOUT_MS = 120000;
 const MATCHED_PREVIEW_STORAGE_KEY = 'xmlCii2019.matchedPreview.lastDiagnostics.v1';
@@ -326,6 +326,7 @@ export async function run(context) {
         `DTXR_PS annotations: ${stats.dtxrPsAnnotations || 0}.`,
         `DTXR_POS annotations: ${stats.dtxrPosAnnotations || 0}.`,
         `Branch line keys annotated from Branchname: ${stats.branchLineKeys}.`,
+        `Preview/run parity branches: ${stats.previewRunParityBranches || 0}; process fields: ${stats.previewRunParityProcessFields || 0}; node facts: ${stats.previewRunParityNodeFacts || 0}.`,
         `Rating annotations: ${stats.ratingAnnotations}; weight annotations: ${stats.weightAnnotations}.`,
         `Matched enrichment preview facts: ${stats.previewMatchedFacts || 0}.`,
         `Rejected enrichment preview facts: ${stats.previewRejectedFacts || 0}.`,
