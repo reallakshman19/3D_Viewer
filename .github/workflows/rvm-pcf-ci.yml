@@ -68,6 +68,9 @@ jobs:
       - name: Verify geometry workspace import tree
         run: node viewer/tests/rvm-geometry-workspace-import-tree.test.js
 
+      - name: Verify support-load master data manager
+        run: node viewer/tests/rvm-geometry-workspace-support-load-master-data.test.js
+
       - name: Verify support-load input overrides
         run: node viewer/tests/rvm-geometry-workspace-support-load-input-overrides.test.js
 
