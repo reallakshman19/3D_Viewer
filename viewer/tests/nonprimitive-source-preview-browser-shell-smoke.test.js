@@ -180,10 +180,13 @@ assert.equal(snapshot.supportOverlay.pipeAxisResolutions.length, 3, 'snapshot pr
 assert.match(rendererSource, /installRvmNonPrimitiveSupportOverlayBridge\(\)[\s\S]*installRvmNonPrimitiveAutoBendBridge\(\)[\s\S]*installRvmNonPrimitiveSourceToolsUiBridge\(\)/, 'renderer installs non-primitive overlay bridges before source tools UI sync');
 assert.match(rendererSource, /RvmNonPrimitiveSupportOverlayBridge\.js\?v=20260623-nonprimitive-support-overlay-7/, 'renderer imports support overlay bridge with current cache key');
 assert.match(rendererSource, /RvmNonPrimitiveAutoBendBridge\.js\?v=20260623-nonprimitive-auto-bend-preview-2/, 'renderer imports auto-bend bridge with current cache key');
-assert.match(rendererSource, /RvmNonPrimitiveSourceToolsUiBridge\.js\?v=20260623-nonprimitive-source-tools-ui-5/, 'renderer imports source tools UI bridge with current cache key');
+assert.match(rendererSource, /RvmNonPrimitiveSourceToolsUiBridge\.js\?v=20260623-nonprimitive-source-tools-ui-6/, 'renderer imports source tools UI bridge with current cache key');
 
 assert.match(sourceToolsSource, /mode === 'source-preview' && isNonPrimitiveKind\(kind\)/, 'source tools UI is source-preview gated');
 assert.match(sourceToolsSource, /PRIMITIVE_KIND_RE[\s\S]*rvm\|glb\|gltf\|rev/, 'source tools UI explicitly excludes primitive formats');
+assert.match(sourceToolsSource, /data-source-tools-layout="compact-v1"/, 'source tools UI uses compact layout schema');
+assert.match(sourceToolsSource, /data-source-tools-group="auto-bend"[\s\S]*data-source-tools-group="support-overlay"/, 'source tools UI groups auto-bend and support controls');
+assert.match(sourceToolsSource, /rvm-source-tools-badge/, 'source tools UI surfaces compact status badges');
 assert.match(sourceToolsSource, /panel\.innerHTML = ''/, 'primitive reload clears stale Source Tools panel content');
 assert.match(sourceToolsSource, /clearNonPrimitiveRuntime[\s\S]*NON_PRIMITIVE_AUTO_BEND[\s\S]*NON_PRIMITIVE_SUPPORT_OVERLAY/, 'primitive reload clears both non-primitive overlay runtimes');
 assert.match(sourceToolsSource, /support-labels[\s\S]*writeNonPrimitiveSupportOverlaySettings\(\{ labels:/, 'support labels are controlled by Source Tools and persisted as non-primitive settings');
