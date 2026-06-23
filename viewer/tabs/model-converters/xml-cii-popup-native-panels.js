@@ -389,6 +389,25 @@ function supportTypesPanel(snapshot) {
     </section>`;
 }
 
+function logicInfoPanel() {
+  return `
+    <details class="xml-cii-native-details" data-native-config-info>
+      <summary><span aria-hidden="true">ⓘ</span> XML→CII enrichment logic</summary>
+      <div class="xml-cii-native-hint">
+        <strong>ElementLengthMm:</strong> generated in browser-side rich enrichment. Existing positive-node lengths use the normal forward CII coordinate distance. INST nodes now also receive ElementLengthMm from the previous positive node to the INST position when no valid length already exists.
+      </div>
+      <div class="xml-cii-native-hint">
+        <strong>Condense Rigid / split condensed valve-flange nodes (XSD):</strong> stores source/XSD intent only as condenseRigidXsd / condense_rigid_xsd. It does not force resolved conversion.
+      </div>
+      <div class="xml-cii-native-hint">
+        <strong>Condense Rigid / split condensed valve-flange nodes (Resolved):</strong> writes splitCondensedValveFlange=true and split_condensed_valve_flange=true, forwards --split-condensed-valve-flange, and renumbers length-bearing negative FLAN/RIGID/INST nodes before final CII generation.
+      </div>
+      <div class="xml-cii-native-hint">
+        <strong>Simple workflow:</strong> the main Run Conversion button runs directly. The XML-&gt;CII Rich Workflow button is the only entry point for this popup.
+      </div>
+    </details>`;
+}
+
 function configPanel(snapshot, uiState) {
   const config = snapshot.config || {};
   const textValue = uiState.configText ?? config.compactText ?? '{}';
@@ -403,6 +422,7 @@ function configPanel(snapshot, uiState) {
         <label class="xml-cii-native-check"><input type="checkbox" data-native-config-bool="splitCondensedValveFlange" ${config.splitCondensedValveFlange ? 'checked' : ''}> Condense Rigid / split condensed valve-flange nodes (Resolved)</label>
       </div>
       <div class="xml-cii-native-hint">Resolved is saved as both splitCondensedValveFlange and split_condensed_valve_flange for worker compatibility.</div>
+      ${logicInfoPanel()}
       <div class="xml-cii-native-toolbar">
         <button type="button" class="model-converters-run-btn" data-native-save-config>Save Config</button>
         <button type="button" class="model-converters-download-btn" data-native-export-config>Export JSON</button>
