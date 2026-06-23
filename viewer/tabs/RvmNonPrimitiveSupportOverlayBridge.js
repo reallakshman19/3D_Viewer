@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
 import { AvevaJsonLoader } from '../rvm/AvevaJsonLoader.js';
 import { RvmViewer3D } from '../rvm-viewer/RvmViewer3D.js?v=20260622-rvm-leaf-picking-2';
 import { readNonPrimitiveSupportOverlaySettings } from '../overlays/support/SupportOverlaySettings.js';
@@ -16,14 +17,15 @@ import {
   resolveSupportPipeAxis,
 } from '../overlays/support/SupportOverlayCoordinateMapper.js';
 import { buildSupportOverlayGlyphGroup } from '../overlays/support/SupportOverlayGlyphGeometry.js';
+import { createSupportOverlayLabelObject, shouldShowSupportOverlayLabel } from '../overlays/support/SupportOverlayLabels.js';
 
-export const RVM_NON_PRIMITIVE_SUPPORT_OVERLAY_SCHEMA = 'rvm-non-primitive-support-overlay/v4';
+export const RVM_NON_PRIMITIVE_SUPPORT_OVERLAY_SCHEMA = 'rvm-non-primitive-support-overlay/v5';
 
 const ROOT_NAME = '__RVM_NON_PRIMITIVE_SUPPORT_OVERLAY__';
 const GLOBAL_KEY = '__PCF_GLB_RVM_NON_PRIMITIVE_SUPPORT_OVERLAY__';
-const PATCH_FLAG = Symbol.for('pcf-glb-rvm-non-primitive-support-overlay-v4');
-const LOADER_PATCH_FLAG = Symbol.for('pcf-glb-rvm-non-primitive-support-overlay-loader-v4');
-const VIEWER_PATCH_FLAG = Symbol.for('pcf-glb-rvm-non-primitive-support-overlay-viewer-v4');
+const PATCH_FLAG = Symbol.for('pcf-glb-rvm-non-primitive-support-overlay-v5');
+const LOADER_PATCH_FLAG = Symbol.for('pcf-glb-rvm-non-primitive-support-overlay-loader-v5');
+const VIEWER_PATCH_FLAG = Symbol.for('pcf-glb-rvm-non-primitive-support-overlay-viewer-v5');
 const MAX_SUPPORT_OVERLAYS = 500;
 const NON_PRIMITIVE_SOURCE_RE = /\.(json|jscon|uxml|inputxml|txt)$/i;
 const RVM_SOURCE_RE = /\.(rvm|rev)$/i;
@@ -254,7 +256,7 @@ function makeSupportGlyph(record, viewer, glyphSize, sourceKind, sourceFile, set
 
   if (settings.warningsOnly && !symbol.popupRequired && !symbol.warnings.length) return null;
 
-  return buildSupportOverlayGlyphGroup({
+  const group = buildSupportOverlayGlyphGroup({
     THREE,
     symbol,
     origin: world,
@@ -266,6 +268,24 @@ function makeSupportGlyph(record, viewer, glyphSize, sourceKind, sourceFile, set
     coordinateMapping: mapping,
     pipeAxisResolution: axisResolution,
   });
+  if (!group) return null;
+
+  if (shouldShowSupportOverlayLabel(settings)) {
+    const label = createSupportOverlayLabelObject({
+      CSS2DObject,
+      THREE,
+      record,
+      symbol,
+      origin: world,
+      glyphSize,
+      schema: RVM_NON_PRIMITIVE_SUPPORT_OVERLAY_SCHEMA,
+      sourceKind,
+      sourceFile,
+    });
+    if (label) group.add(label);
+  }
+
+  return group;
 }
 
 function familyFilteredOut(settings, family) {
@@ -377,6 +397,7 @@ function normalizeSourceKind(sourceKind, fileName, root) {
 }
 function disposeObjectTree(root) {
   root?.traverse?.((obj) => {
+    obj.element?.remove?.();
     obj.geometry?.dispose?.();
     const materials = Array.isArray(obj.material) ? obj.material : [obj.material].filter(Boolean);
     for (const material of materials) material?.dispose?.();
