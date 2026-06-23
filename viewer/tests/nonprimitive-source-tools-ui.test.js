@@ -6,10 +6,16 @@ const rendererSource = await fs.readFile(new URL('../tabs/viewer3d-rvm-tab-rende
 const autoBridgeSource = await fs.readFile(new URL('../tabs/RvmNonPrimitiveAutoBendBridge.js', import.meta.url), 'utf8');
 const supportSettingsSource = await fs.readFile(new URL('../overlays/support/SupportOverlaySettings.js', import.meta.url), 'utf8');
 
-assert.match(uiBridgeSource, /rvm-non-primitive-source-tools-ui\/v4/, 'source-tools UI exposes v4 schema marker');
+assert.match(uiBridgeSource, /rvm-non-primitive-source-tools-ui\/v5/, 'source-tools UI exposes v5 schema marker');
 assert.match(uiBridgeSource, /rvm-nonprimitive-source-tools-panel/, 'source-tools UI owns a compact panel id');
 assert.match(uiBridgeSource, /rvmModelPrimitiveMode[\s\S]*source-preview/, 'source-tools UI is gated by source-preview mode');
 assert.match(uiBridgeSource, /PRIMITIVE_KIND_RE[\s\S]*rvm\|glb\|gltf\|rev/, 'source-tools UI excludes primitive source kinds');
+assert.match(uiBridgeSource, /clearSourceToolsUi/, 'source-tools UI exposes explicit primitive-mode cleanup');
+assert.match(uiBridgeSource, /clearNonPrimitiveRuntime/, 'source-tools UI clears non-primitive overlay runtimes when leaving source-preview mode');
+assert.match(uiBridgeSource, /panel\.innerHTML = ''/, 'source-tools UI clears stale panel content for primitive or unsupported modes');
+assert.match(uiBridgeSource, /sourceToolsCleared/, 'source-tools UI marks cleared panel state for diagnostics/debugging');
+assert.match(uiBridgeSource, /nonPrimitiveSourceToolsDiagnostics[\s\S]*status: 'cleared'/, 'source-tools UI publishes cleared diagnostics on primitive mode');
+assert.match(uiBridgeSource, /primitiveExcluded: true/, 'source-tools UI cleared diagnostics preserves primitive exclusion marker');
 assert.match(uiBridgeSource, /Auto Bend/, 'source-tools UI renders Auto Bend control');
 assert.match(uiBridgeSource, /Support Overlay/, 'source-tools UI renders Support Overlay control');
 assert.match(uiBridgeSource, /data-source-tool="support-scale"/, 'source-tools UI renders support overlay scale control');
@@ -32,7 +38,7 @@ assert.match(uiBridgeSource, /writeNonPrimitiveSupportOverlaySettings\(\{ filter
 assert.match(uiBridgeSource, /writeNonPrimitiveSupportOverlaySettings/, 'source-tools UI persists support overlay settings');
 assert.doesNotMatch(uiBridgeSource, /Support Summary|SupportATT|SupportEngine|Raw\/Symbol\/Both|rvm_support_render_mode_v1|rvm_support_geometry_mode_v1/, 'source-tools UI does not revive retired RVM support UI or keys');
 
-assert.match(rendererSource, /RvmNonPrimitiveSourceToolsUiBridge\.js\?v=20260623-nonprimitive-source-tools-ui-4/, 'renderer imports source-tools UI bridge with v4 cache key');
+assert.match(rendererSource, /RvmNonPrimitiveSourceToolsUiBridge\.js\?v=20260623-nonprimitive-source-tools-ui-5/, 'renderer imports source-tools UI bridge with v5 cache key');
 assert.match(rendererSource, /installRvmNonPrimitiveSourceToolsUiBridge\(\)/, 'renderer installs source-tools UI bridge');
 
 assert.match(autoBridgeSource, /restoreVisualTrimmedSegments/, 'auto-bend bridge can restore visual trims for live UI toggles');

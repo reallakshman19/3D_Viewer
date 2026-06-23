@@ -6,10 +6,10 @@ import {
   sourceToolsDiagnosticsFileName,
 } from '../overlays/source-tools/NonPrimitiveSourceToolsDiagnostics.js';
 
-export const RVM_NON_PRIMITIVE_SOURCE_TOOLS_UI_SCHEMA = 'rvm-non-primitive-source-tools-ui/v4';
+export const RVM_NON_PRIMITIVE_SOURCE_TOOLS_UI_SCHEMA = 'rvm-non-primitive-source-tools-ui/v5';
 
-const PATCH_FLAG = Symbol.for('pcf-glb-rvm-non-primitive-source-tools-ui-v4');
-const VIEWER_PATCH_FLAG = Symbol.for('pcf-glb-rvm-non-primitive-source-tools-ui-viewer-v4');
+const PATCH_FLAG = Symbol.for('pcf-glb-rvm-non-primitive-source-tools-ui-v5');
+const VIEWER_PATCH_FLAG = Symbol.for('pcf-glb-rvm-non-primitive-source-tools-ui-viewer-v5');
 const ROOT_SELECTOR = '[data-rvm-viewer]';
 const PANEL_ID = 'rvm-nonprimitive-source-tools-panel';
 const SOURCE_KIND_RE = /^(json|jscon|inputxml|txt|source-preview)$/i;
@@ -27,6 +27,7 @@ export function installRvmNonPrimitiveSourceToolsUiBridge() {
     sync: syncAllSourceToolsUi,
     render: renderSourceToolsUi,
     reapply: reapplyFromControls,
+    clear: clearSourceToolsUi,
     snapshot: buildSourceToolsDiagnosticsSnapshot,
     copyDiagnostics: copySourceToolsDiagnostics,
     downloadDiagnostics: downloadSourceToolsDiagnostics,
@@ -43,8 +44,12 @@ function patchRvmViewerSetModelForSourceToolsUi() {
   proto.setModel = function setModelWithNonPrimitiveSourceToolsUi(model, upAxis = 'Y') {
     const result = originalSetModel.call(this, model, upAxis);
     const context = contextFromModel(model, this);
-    if (context.source) viewerContexts.set(this, context);
-    else viewerContexts.delete(this);
+    if (context.source && isNonPrimitiveKind(context.sourceKind)) {
+      viewerContexts.set(this, context);
+    } else {
+      viewerContexts.delete(this);
+      clearNonPrimitiveRuntime(this, 'primitive-or-no-source-hierarchy');
+    }
     syncAllSourceToolsUi();
     return result;
   };
@@ -78,9 +83,10 @@ export function renderSourceToolsUi(root, viewer = globalThis.__3D_RVM_VIEWER__)
   const shouldShow = mode === 'source-preview' && isNonPrimitiveKind(kind);
   const panel = ensurePanel(root);
   if (!panel) return null;
-  panel.hidden = !shouldShow;
-  panel.dataset.sourceToolsActive = shouldShow ? 'true' : 'false';
-  if (!shouldShow) return panel;
+  if (!shouldShow) return clearSourceToolsUi(panel, viewer, 'primitive-or-unsupported-source');
+  panel.hidden = false;
+  panel.dataset.sourceToolsActive = 'true';
+  delete panel.dataset.sourceToolsCleared;
   panel.innerHTML = renderPanelHtml({ auto: readNonPrimitiveAutoBendSettings(), support: readNonPrimitiveSupportOverlaySettings(), viewer });
   bindPanel(root, panel, viewer);
   return panel;
@@ -108,6 +114,32 @@ function ensurePanel(root) {
     rightPanel.append(header, panel);
   }
   return panel;
+}
+
+export function clearSourceToolsUi(panel, viewer = globalThis.__3D_RVM_VIEWER__, reason = 'clear') {
+  if (panel) {
+    panel.hidden = true;
+    panel.dataset.sourceToolsActive = 'false';
+    panel.dataset.sourceToolsCleared = reason;
+    panel.innerHTML = '';
+  }
+  clearNonPrimitiveRuntime(viewer, reason);
+  if (viewer) {
+    viewer.nonPrimitiveSourceToolsDiagnostics = {
+      schema: RVM_NON_PRIMITIVE_SOURCE_TOOLS_UI_SCHEMA,
+      status: 'cleared',
+      reason,
+      primitiveExcluded: true,
+    };
+  }
+  return panel;
+}
+
+function clearNonPrimitiveRuntime(viewer, reason = 'clear') {
+  if (!viewer) return { status: 'skipped', reason: 'viewer-missing' };
+  const auto = globalThis.__PCF_GLB_RVM_NON_PRIMITIVE_AUTO_BEND__?.clear?.(viewer, reason) || null;
+  const support = globalThis.__PCF_GLB_RVM_NON_PRIMITIVE_SUPPORT_OVERLAY__?.clear?.(viewer, reason) || null;
+  return { status: 'cleared', reason, auto, support };
 }
 
 function renderPanelHtml({ auto, support, viewer }) {
@@ -210,7 +242,10 @@ function nextSupportFilters(control) {
 export function reapplyFromControls(root, viewer = globalThis.__3D_RVM_VIEWER__) {
   const context = viewer ? viewerContexts.get(viewer) : null;
   const kind = normalizeSourceKind(root?.dataset?.rvmLoadedSourceKind || context?.sourceKind || '');
-  if (!viewer || !context?.source || !isNonPrimitiveKind(kind)) return { status: 'skipped', reason: 'missing-nonprimitive-context' };
+  if (!viewer || !context?.source || !isNonPrimitiveKind(kind)) {
+    clearNonPrimitiveRuntime(viewer, 'missing-nonprimitive-context');
+    return { status: 'skipped', reason: 'missing-nonprimitive-context' };
+  }
 
   const auto = readNonPrimitiveAutoBendSettings();
   const support = readNonPrimitiveSupportOverlaySettings();
