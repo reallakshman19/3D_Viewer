@@ -111,6 +111,7 @@ export function applyFromSource({ viewer, source, sourceKind = '', fileName = ''
 
 export function clear(viewer, reason = 'clear') {
   let removed = 0;
+  restoreVisualTrimmedSegments(viewer);
   const removeFrom = (parent) => {
     const nodes = [];
     parent?.traverse?.((obj) => {
@@ -181,11 +182,17 @@ function applyVisualTrimmedSegments(viewer, result, segments) {
     const startTrim = trimLookup.get(`${segment.id}:${segment.fromNode}`) || 0;
     const endTrim = trimLookup.get(`${segment.id}:${segment.toNode}`) || 0;
     if (!(startTrim > 0 || endTrim > 0)) return;
+    restoreTrimmedSegmentGroup(obj);
     const replacement = createTrimmedSegmentCylinder(segment, startTrim, endTrim);
     if (!replacement) return;
-    for (const child of [...obj.children]) {
-      obj.remove(child);
-      disposeObjectTree(child);
+    for (const child of obj.children) {
+      if (child?.userData?.nonPrimitiveAutoBendTrimmedSegment) continue;
+      child.userData = {
+        ...(child.userData || {}),
+        nonPrimitiveAutoBendOriginalSegmentChild: true,
+        __nonPrimitiveAutoBendOriginalVisible: child.visible !== false,
+      };
+      child.visible = false;
     }
     obj.add(replacement);
     obj.userData = {
@@ -197,6 +204,38 @@ function applyVisualTrimmedSegments(viewer, result, segments) {
     trimmed += 1;
   });
   return trimmed;
+}
+
+function restoreVisualTrimmedSegments(viewer) {
+  let restored = 0;
+  viewer?.modelGroup?.traverse?.((obj) => {
+    if (obj?.userData?.nonPrimitiveAutoBendTrimmed) restored += restoreTrimmedSegmentGroup(obj);
+  });
+  return restored;
+}
+
+function restoreTrimmedSegmentGroup(group) {
+  if (!group?.children) return 0;
+  let restored = 0;
+  for (const child of [...group.children]) {
+    if (child?.userData?.nonPrimitiveAutoBendTrimmedSegment) {
+      group.remove(child);
+      disposeObjectTree(child);
+      continue;
+    }
+    if (child?.userData?.nonPrimitiveAutoBendOriginalSegmentChild) {
+      child.visible = child.userData.__nonPrimitiveAutoBendOriginalVisible !== false;
+      delete child.userData.nonPrimitiveAutoBendOriginalSegmentChild;
+      delete child.userData.__nonPrimitiveAutoBendOriginalVisible;
+      restored += 1;
+    }
+  }
+  if (group.userData) {
+    delete group.userData.nonPrimitiveAutoBendTrimmed;
+    delete group.userData.autoBendVisualTrimStartMm;
+    delete group.userData.autoBendVisualTrimEndMm;
+  }
+  return restored;
 }
 
 function createTrimmedSegmentCylinder(segment, startTrim, endTrim) {
