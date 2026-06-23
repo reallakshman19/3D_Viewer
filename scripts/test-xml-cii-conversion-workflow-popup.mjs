@@ -64,8 +64,11 @@ assert(tabShim.includes('20260623-inst-length-info-simple-run-1'), 'tab shim mus
 
 assert(enrichmentRunParity.includes("RENUMBERABLE_NEGATIVE_TYPES = new Set(['FLAN', 'RIGID', 'INST'])"), 'Resolved condense must include INST nodes');
 assert(enrichmentRunParity.includes("INLINE_LENGTH_COMPONENT_TYPES = new Set(['INST'])"), 'INST inline length type set must exist');
+assert(enrichmentRunParity.includes("RESOLVED_RIGID_MARKER_TYPES = new Set(['INST'])"), 'Resolved INST nodes must be explicitly marked as rigid');
 assert(enrichmentRunParity.includes('annotateInlineElementLengths'), 'INST ElementLengthMm annotation must exist');
 assert(enrichmentRunParity.includes('element-length-inst'), 'INST ElementLengthMm diagnostics must exist');
+assert(enrichmentRunParity.includes('ensureChildAfter') && enrichmentRunParity.includes("setTextAfter(document, node, 'Rigid', '2', 'Endpoint')"), 'Resolved INST rigid marker must be inserted after Endpoint');
+assert(enrichmentRunParity.includes('instRigid2Annotations'), 'Resolved INST Rigid=2 annotations must be counted');
 assert(enrichmentRunParity.includes('split-condensed-valve-flange-resolved'), 'Resolved condense diagnostics must exist');
 assert(enrichmentRunParity.includes('split_condensed_valve_flange'), 'snake_case resolved flag must be honored in rich enrichment');
 
@@ -78,4 +81,5 @@ console.log('✅ XML CII rich workflow smoke validation passed', {
   richPopup: 'button-owned, no simple-run interception',
   condenseRigid: 'XSD + Resolved controls rendered',
   instElementLength: 'ElementLengthMm for INST annotated',
+  instRigidMarker: 'Resolved INST nodes emit Rigid=2 after Endpoint',
 });
