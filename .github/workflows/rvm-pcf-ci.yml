@@ -39,6 +39,7 @@ on:
       - 'viewer/tests/nonprimitive-support-preview-smoke.test.js'
       - 'viewer/tests/nonprimitive-support-pipe-segment-extraction.test.js'
       - 'viewer/tests/nonprimitive-source-tools-ui.test.js'
+      - 'viewer/tests/nonprimitive-source-tools-diagnostics-export.test.js'
       - '.github/workflows/rvm-pcf-ci.yml'
   workflow_dispatch:
 
@@ -107,6 +108,9 @@ jobs:
 
       - name: Verify non-primitive source tools UI
         run: node viewer/tests/nonprimitive-source-tools-ui.test.js
+
+      - name: Verify non-primitive source tools diagnostics export
+        run: node viewer/tests/nonprimitive-source-tools-diagnostics-export.test.js
 
       - name: Verify RHBG RVM fit guard
         run: |

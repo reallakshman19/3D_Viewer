@@ -2,16 +2,18 @@ import { RvmViewer3D } from '../rvm-viewer/RvmViewer3D.js?v=20260622-rvm-leaf-pi
 import { readNonPrimitiveAutoBendSettings, writeNonPrimitiveAutoBendSettings } from '../overlays/autobend/NonPrimitiveAutoBendSettings.js';
 import { readNonPrimitiveSupportOverlaySettings, writeNonPrimitiveSupportOverlaySettings } from '../overlays/support/SupportOverlaySettings.js';
 
-export const RVM_NON_PRIMITIVE_SOURCE_TOOLS_UI_SCHEMA = 'rvm-non-primitive-source-tools-ui/v2';
+export const RVM_NON_PRIMITIVE_SOURCE_TOOLS_UI_SCHEMA = 'rvm-non-primitive-source-tools-ui/v3';
 
-const PATCH_FLAG = Symbol.for('pcf-glb-rvm-non-primitive-source-tools-ui-v2');
-const VIEWER_PATCH_FLAG = Symbol.for('pcf-glb-rvm-non-primitive-source-tools-ui-viewer-v2');
+const PATCH_FLAG = Symbol.for('pcf-glb-rvm-non-primitive-source-tools-ui-v3');
+const VIEWER_PATCH_FLAG = Symbol.for('pcf-glb-rvm-non-primitive-source-tools-ui-viewer-v3');
 const ROOT_SELECTOR = '[data-rvm-viewer]';
 const PANEL_ID = 'rvm-nonprimitive-source-tools-panel';
 const SOURCE_KIND_RE = /^(json|jscon|inputxml|txt|source-preview)$/i;
 const PRIMITIVE_KIND_RE = /^(rvm|glb|gltf|rev)$/i;
 const SUPPORT_FILTER_FAMILIES = Object.freeze(['REST', 'GUIDE', 'LINESTOP', 'LIMIT', 'LIM', 'HOLDDOWN', 'SPRING_CAN', 'UNKNOWN']);
 const MAX_INLINE_WARNINGS = 3;
+const MAX_SNAPSHOT_ARRAY_LENGTH = 1000;
+const MAX_SNAPSHOT_DEPTH = 9;
 const viewerContexts = new WeakMap();
 
 export function installRvmNonPrimitiveSourceToolsUiBridge() {
@@ -22,6 +24,9 @@ export function installRvmNonPrimitiveSourceToolsUiBridge() {
     sync: syncAllSourceToolsUi,
     render: renderSourceToolsUi,
     reapply: reapplyFromControls,
+    snapshot: buildSourceToolsDiagnosticsSnapshot,
+    copyDiagnostics: copySourceToolsDiagnostics,
+    downloadDiagnostics: downloadSourceToolsDiagnostics,
   };
   patchRvmViewerSetModelForSourceToolsUi();
   try { globalThis.addEventListener?.('rvm-model-loaded', () => syncAllSourceToolsUi()); } catch (_) {}
@@ -106,6 +111,7 @@ function renderPanelHtml({ auto, support, viewer }) {
   const autoDiag = viewer?.nonPrimitiveAutoBendDiagnostics || {};
   const supportDiag = viewer?.nonPrimitiveSupportOverlayDiagnostics || {};
   const supportWarningCount = Number(supportDiag.warningCount ?? supportDiag.warnings?.length ?? 0) || 0;
+  const snapshot = buildSourceToolsDiagnosticsSnapshot(viewer);
   return `
     <div class="rvm-source-tools-grid" data-source-tools-schema="${escapeHtml(RVM_NON_PRIMITIVE_SOURCE_TOOLS_UI_SCHEMA)}">
       <label class="rvm-source-tools-row"><span>Auto Bend</span><input type="checkbox" data-source-tool="auto-enabled" ${auto.enabled ? 'checked' : ''}></label>
@@ -119,6 +125,11 @@ function renderPanelHtml({ auto, support, viewer }) {
       <div class="rvm-source-tools-filters" data-source-tool-filters="support"><span>Family filters</span>${renderSupportFamilyFilters(support.filters)}</div>
       <div class="rvm-source-tools-diag" data-source-tool-diag="support">Supports: ${escapeHtml(supportDiag.created ?? 0)} · Warnings: ${escapeHtml(supportWarningCount)} · ${escapeHtml(supportDiag.status || 'idle')}</div>
       ${renderSupportWarnings(supportDiag.warnings)}
+      <div class="rvm-source-tools-actions" data-source-tool-actions="diagnostics">
+        <button type="button" data-source-tool-action="copy-diagnostics">Copy diagnostics JSON</button>
+        <button type="button" data-source-tool-action="download-diagnostics">Download diagnostics JSON</button>
+        <span class="rvm-source-tools-diag" data-source-tool-diag="diagnostics-snapshot">Snapshot: auto ${escapeHtml(snapshot.autoBend.status || 'idle')} · support ${escapeHtml(snapshot.supportOverlay.status || 'idle')}</span>
+      </div>
     </div>`;
 }
 
@@ -158,6 +169,16 @@ function bindPanel(root, panel, viewer) {
     else if (tool === 'support-filter') writeNonPrimitiveSupportOverlaySettings({ filters: nextSupportFilters(control) });
     reapplyFromControls(root, viewer || globalThis.__3D_RVM_VIEWER__);
   });
+  panel.addEventListener('click', (event) => {
+    const control = event.target?.closest?.('[data-source-tool-action]');
+    if (!control) return;
+    const action = control.dataset.sourceToolAction;
+    if (action === 'copy-diagnostics') {
+      copySourceToolsDiagnostics(viewer || globalThis.__3D_RVM_VIEWER__).catch?.(() => {});
+    } else if (action === 'download-diagnostics') {
+      downloadSourceToolsDiagnostics(viewer || globalThis.__3D_RVM_VIEWER__);
+    }
+  });
 }
 
 function nextSupportFilters(control) {
@@ -183,6 +204,104 @@ export function reapplyFromControls(root, viewer = globalThis.__3D_RVM_VIEWER__)
 
   renderSourceToolsUi(root, viewer);
   return { status: 'applied', autoEnabled: auto.enabled, supportEnabled: support.enabled };
+}
+
+export function buildSourceToolsDiagnosticsSnapshot(viewer = globalThis.__3D_RVM_VIEWER__, context = {}) {
+  const autoDiagnostics = sanitizeJson(viewer?.nonPrimitiveAutoBendDiagnostics || {});
+  const supportDiagnostics = sanitizeJson(viewer?.nonPrimitiveSupportOverlayDiagnostics || {});
+  const sourceKind = normalizeSourceKind(
+    context.sourceKind
+      || autoDiagnostics.sourceKind
+      || supportDiagnostics.sourceKind
+      || viewer?.sourceKind
+      || ''
+  );
+  const sourceFile = context.sourceFile || context.fileName || autoDiagnostics.sourceFile || supportDiagnostics.sourceFile || '';
+  return {
+    schema: RVM_NON_PRIMITIVE_SOURCE_TOOLS_UI_SCHEMA,
+    snapshotKind: 'non-primitive-source-tools-diagnostics',
+    generatedAt: new Date().toISOString(),
+    sourceKind,
+    sourceFile,
+    primitiveExcluded: true,
+    counts: {
+      autoBendSegments: Number(autoDiagnostics.segmentCount || 0),
+      autoBendBends: Number(autoDiagnostics.bendCount || 0),
+      autoBendTrims: Number(autoDiagnostics.trimCount || 0),
+      supportSourceRecords: Number(supportDiagnostics.sourceSupports || 0),
+      supportCreated: Number(supportDiagnostics.created || 0),
+      supportWarnings: Number(supportDiagnostics.warningCount ?? supportDiagnostics.warnings?.length ?? 0) || 0,
+      supportPipeSegments: Number(supportDiagnostics.sourcePipeSegments || 0),
+    },
+    autoBend: autoDiagnostics,
+    supportOverlay: supportDiagnostics,
+  };
+}
+
+export async function copySourceToolsDiagnostics(viewer = globalThis.__3D_RVM_VIEWER__, context = {}) {
+  const text = JSON.stringify(buildSourceToolsDiagnosticsSnapshot(viewer, context), null, 2);
+  if (globalThis.navigator?.clipboard?.writeText) {
+    await globalThis.navigator.clipboard.writeText(text);
+    return { status: 'copied', bytes: text.length };
+  }
+  const textarea = globalThis.document?.createElement?.('textarea');
+  if (!textarea) return { status: 'unavailable', reason: 'clipboard-api-missing', bytes: text.length };
+  textarea.value = text;
+  textarea.setAttribute('readonly', 'readonly');
+  textarea.style.position = 'fixed';
+  textarea.style.left = '-9999px';
+  globalThis.document.body?.appendChild?.(textarea);
+  textarea.select?.();
+  let copied = false;
+  try { copied = !!globalThis.document.execCommand?.('copy'); } catch (_) { copied = false; }
+  textarea.remove?.();
+  return { status: copied ? 'copied' : 'unavailable', bytes: text.length };
+}
+
+export function downloadSourceToolsDiagnostics(viewer = globalThis.__3D_RVM_VIEWER__, context = {}) {
+  const snapshot = buildSourceToolsDiagnosticsSnapshot(viewer, context);
+  const text = JSON.stringify(snapshot, null, 2);
+  const doc = globalThis.document;
+  const BlobCtor = globalThis.Blob;
+  const URLApi = globalThis.URL;
+  if (!doc?.createElement || !BlobCtor || !URLApi?.createObjectURL) return { status: 'unavailable', reason: 'download-api-missing', bytes: text.length };
+  const blob = new BlobCtor([text], { type: 'application/json' });
+  const url = URLApi.createObjectURL(blob);
+  const link = doc.createElement('a');
+  link.href = url;
+  link.download = diagnosticsFileName(snapshot);
+  link.style.display = 'none';
+  doc.body?.appendChild?.(link);
+  link.click?.();
+  link.remove?.();
+  setTimeout(() => URLApi.revokeObjectURL?.(url), 0);
+  return { status: 'downloaded', fileName: link.download, bytes: text.length };
+}
+
+function diagnosticsFileName(snapshot) {
+  const kind = String(snapshot.sourceKind || 'source').replace(/[^a-z0-9_-]+/gi, '-').replace(/^-+|-+$/g, '') || 'source';
+  const stamp = String(snapshot.generatedAt || new Date().toISOString()).replace(/[:.]/g, '-');
+  return `nonprimitive-source-tools-diagnostics-${kind}-${stamp}.json`;
+}
+
+function sanitizeJson(value, depth = 0, seen = new WeakSet()) {
+  if (value == null || typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') return value;
+  if (typeof value === 'bigint') return Number(value);
+  if (typeof value === 'function' || typeof value === 'symbol') return undefined;
+  if (depth >= MAX_SNAPSHOT_DEPTH) return '[max-depth]';
+  if (typeof value === 'object') {
+    if (seen.has(value)) return '[circular]';
+    seen.add(value);
+  }
+  if (Array.isArray(value)) {
+    return value.slice(0, MAX_SNAPSHOT_ARRAY_LENGTH).map((item) => sanitizeJson(item, depth + 1, seen));
+  }
+  const out = {};
+  for (const [key, item] of Object.entries(value)) {
+    const clean = sanitizeJson(item, depth + 1, seen);
+    if (clean !== undefined) out[key] = clean;
+  }
+  return out;
 }
 
 function isNonPrimitiveKind(kind) {
