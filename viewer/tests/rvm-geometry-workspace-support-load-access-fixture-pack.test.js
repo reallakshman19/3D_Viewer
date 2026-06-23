@@ -7,6 +7,9 @@ import {
 import {
   evaluateAccessSupportLoadFixtureText
 } from '../geometry-workspace/GeometrySupportLoadAccessFixtureBatchValidator.js';
+import {
+  buildAccessSupportLoadFixtureDiagnosticsFromText
+} from '../geometry-workspace/GeometrySupportLoadAccessFixtureDiagnostics.js';
 
 let passed = 0;
 let failed = 0;
@@ -80,6 +83,15 @@ check(batch.results[1].formulaResult.calculatedFields.guide.roundedGuideHDep ===
 near(batch.results[1].formulaResult.calculatedFields.guide.guideHDep, 2310, 0.001, 'batch Access validator applies NPS4 guide Max rule');
 check(batch.results[1].formulaResult.calculatedFields.lineStop.lineStopH === 3150, 'batch Access validator preserves NPS4 line-stop reference');
 check((batch.audit || []).some(item => item.value === 'regression-fixture-only'), 'batch Access validator is marked regression-only, not runtime top-up');
+
+const diagnostics = buildAccessSupportLoadFixtureDiagnosticsFromText(batchAccessRows);
+check(diagnostics.status === 'PASS', 'Access fixture diagnostics pass for complete batch');
+check(diagnostics.total === 2, 'Access fixture diagnostics includes both rows');
+check(diagnostics.mismatchCount === 0, 'Access fixture diagnostics has no mismatches for valid rows');
+check(diagnostics.rows[0].lineNo === '8"-P25168-61502-01', 'Access fixture diagnostics records row line number');
+check(diagnostics.rows[1].nps === 4, 'Access fixture diagnostics records NPS4 row');
+check(diagnostics.rows[1].roundedGuideHDep === 200, 'Access fixture diagnostics records rounded guide value');
+check((diagnostics.audit || []).some(item => item.value === 'regression-fixture-only'), 'Access fixture diagnostics remains regression-only');
 
 if (failed) {
   console.error(`FAILED ${failed} checks, passed ${passed}`);
