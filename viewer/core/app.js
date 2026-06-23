@@ -69,7 +69,4 @@ installRvmModelHealthBridge();
 installRvmModelHealthIssuesBridge();
 installBrowserRvmNativeFacetGhostPanelPatch();
 
-export async function init(mount) {
-  const { init: initApp } = await import('./app-bootstrap.js?v=20260622-tab-click-state-1');
-  return initApp(mount);
-}
+export { init } from './app-label-perf-runtime.js?v=20260622-geometry-enriched-stagedjson-support-loads-1';
