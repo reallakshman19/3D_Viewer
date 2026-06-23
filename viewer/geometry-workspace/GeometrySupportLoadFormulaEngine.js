@@ -1,6 +1,8 @@
+import { normalizeSupportLoadFormulaProfile, resolveSupportLoadTempFnC, supportLoadFormulaProfileAudit, SUPPORT_LOAD_DEFAULT_PROFILE_ID } from './GeometrySupportLoadAdvancedProfiles.js?v=20260623-support-load-advanced-profiles-1';
+
 export const SUPPORT_LOAD_FORMULA_SCHEMA = 'support-load-formula-results/v1';
-export const SUPPORT_LOAD_FORMULA_VERSION = '20260622-access-support-load-formula-writeback-audit-1';
-export const SUPPORT_LOAD_FORMULA_PROFILE_ID = 'ACCESS_TEMP_WALL_WEIGHTED_V1';
+export const SUPPORT_LOAD_FORMULA_VERSION = '20260623-access-support-load-formula-advanced-profile-1';
+export const SUPPORT_LOAD_FORMULA_PROFILE_ID = SUPPORT_LOAD_DEFAULT_PROFILE_ID;
 export const SUPPORT_LOAD_RESULT_WRITEBACK_SCHEMA = 'support-load-result-writeback-audit/v1';
 export const SUPPORT_LOAD_RESULT_WRITEBACK_VERSION = '20260622-support-load-result-writeback-audit-1';
 
@@ -9,40 +11,46 @@ export const SUPPORT_LOAD_FORMULA_INFO_TEXT = `Support Load Formula — Access T
 Vertical Loads
 
 OPE_V_A =
-Round(((FluidWt_OPE kg/m + UnitPipeWt kg/m) × AutoSpan mm × 10 × 1.1 ÷ 1000), 1)
+Round(((FluidWt_OPE kg/m + UnitPipeWt kg/m) × AutoSpan mm × gravityFactor × verticalLoadFactor ÷ 1000), 1)
 
 HYD_V_A =
-Round(((FluidWt_HYD kg/m + UnitPipeWt kg/m) × AutoSpan mm × 10 × 1.1 ÷ 1000), 1)
+Round(((FluidWt_HYD kg/m + UnitPipeWt kg/m) × AutoSpan mm × gravityFactor × verticalLoadFactor ÷ 1000), 1)
 
 OPE_V_DEP =
-Round(((FluidWt_OPE kg/m + UnitPipeWt kg/m) × DEPSpan mm × 10 × 1.1 ÷ 1000), 1)
+Round(((FluidWt_OPE kg/m + UnitPipeWt kg/m) × DEPSpan mm × gravityFactor × verticalLoadFactor ÷ 1000), 1)
 
 HYD_V_DEP =
-Round(((FluidWt_HYD kg/m + UnitPipeWt kg/m) × DEPSpan mm × 10 × 1.1 ÷ 1000), 1)
+Round(((FluidWt_HYD kg/m + UnitPipeWt kg/m) × DEPSpan mm × gravityFactor × verticalLoadFactor ÷ 1000), 1)
 
 Guide Horizontal Loads
 
 Rounded_Guide_H_A =
-GetRoundedNum(0.1 × 0.3 × OPE_V_A × (WallThickness mm ÷ 6.3) × (TempfnC(TEMP_EXP_C1) ÷ 100) ÷ 1.23, 100, 50, "up")
+GetRoundedNum(guideTemperatureMultiplier × guideSpanLoadMultiplier × OPE_V_A × (WallThickness mm ÷ guideWallReferenceMm) × (TempfnC(TEMP_EXP_C1) ÷ guideTempDivisor) ÷ guideDivisor, roundMajor, roundStep, roundMode)
 
-Guide_H_A = Max(Rounded_Guide_H_A, 0.3 × OPE_V_A)
+Guide_H_A = Max(Rounded_Guide_H_A, guideMinimumOpeVerticalFactor × OPE_V_A)
 
 Rounded_Guide_H_DEP =
-GetRoundedNum(0.1 × 0.3 × OPE_V_DEP × (WallThickness mm ÷ 6.3) × (TempfnC(TEMP_EXP_C1) ÷ 100) ÷ 1.23, 100, 50, "up")
+GetRoundedNum(guideTemperatureMultiplier × guideSpanLoadMultiplier × OPE_V_DEP × (WallThickness mm ÷ guideWallReferenceMm) × (TempfnC(TEMP_EXP_C1) ÷ guideTempDivisor) ÷ guideDivisor, roundMajor, roundStep, roundMode)
 
-Guide_H_DEP = Max(Rounded_Guide_H_DEP, 0.3 × OPE_V_DEP)
+Guide_H_DEP = Max(Rounded_Guide_H_DEP, guideMinimumOpeVerticalFactor × OPE_V_DEP)
+
+Default Access values:
+guideTemperatureMultiplier = 0.1, guideSpanLoadMultiplier = 0.3, guideWallReferenceMm = 6.3, guideTempDivisor = 100, guideDivisor = 1.23, guideMinimumOpeVerticalFactor = 0.3
 
 Line Stop Horizontal Load
 
 LineStop_H =
-GetRoundedNum(1000 × 0.0209 × (3.14 ÷ 32 × (Dia_mm^4 - (Dia_mm - WallThickness_mm)^4) ÷ Dia_mm)^0.5079 × (TempfnC(TEMP_EXP_C1) ÷ 100) ÷ 1.23, 100, 50, "up")
+GetRoundedNum(lineStopScale × lineStopCoefficient × (lineStopPi ÷ lineStopSectionDivisor × (Dia_mm^4 - (Dia_mm - WallThickness_mm)^4) ÷ Dia_mm)^lineStopExponent × (TempfnC(TEMP_EXP_C1) ÷ lineStopTempDivisor) ÷ lineStopDivisor, roundMajor, roundStep, roundMode)
+
+Default Access values:
+lineStopScale = 1000, lineStopCoefficient = 0.0209, lineStopPi = 3.14, lineStopSectionDivisor = 32, lineStopExponent = 0.5079, lineStopTempDivisor = 100, lineStopDivisor = 1.23, lineStop ID expression = Dia - WALL_THICK
 
 Notes:
 - Calculation reads only locked pipe.attributes.supportLoadInput packages.
-- No master lookup, enrichment, association, or missing-value fabrication is performed inside this formula engine.
+- The default profile preserves Access benchmark behavior.
+- Advanced profile values must be supplied in the locked input package; no master lookup, enrichment, association, or missing-value top-up is performed inside this formula engine.
 - Result writeback is restricted to calculatedFields.supportLoads and calculatedFields.supportLoadReference.
-- Blocked recalculation clears stale support-load calculated fields rather than leaving old results on objects.
-- TempfnC(T) defaults to identity T for this profile until a project-specific temperature function table is supplied.`;
+- Blocked recalculation clears stale support-load calculated fields rather than leaving old results on objects.`;
 
 function text(value) { return String(value ?? '').trim(); }
 function number(value) {
@@ -63,9 +71,11 @@ function inputKey(input) {
   const identity = input?.identity || {};
   return text(input?.sourceObjectId) || text(identity.lineNo) || text(identity.branchKey) || text(identity.branchName) || 'pipe-input';
 }
-function getRoundStep(input) { return number(input?.formulaProfile?.roundStep) || 50; }
-function getRoundMajor(input) { return number(input?.formulaProfile?.roundMajor) || 100; }
-function getRoundMode(input) { return text(input?.formulaProfile?.roundMode || 'up').toLowerCase(); }
+function normalizedProfile(input) { return normalizeSupportLoadFormulaProfile(input?.formulaProfile || {}); }
+function profileId(input) { return normalizedProfile(input).profileId || SUPPORT_LOAD_FORMULA_PROFILE_ID; }
+function getRoundStep(input) { return normalizedProfile(input).rounding.roundStep; }
+function getRoundMajor(input) { return normalizedProfile(input).rounding.roundMajor; }
+function getRoundMode(input) { return normalizedProfile(input).rounding.roundMode; }
 function stableJson(value) {
   try { return JSON.stringify(value ?? null); } catch { return '__unserializable__'; }
 }
@@ -111,47 +121,77 @@ export function getRoundedNum(value, major = 100, step = 50, mode = 'up') {
   if (String(mode || 'up').toLowerCase() !== 'up') return Math.round(numeric / roundStep) * roundStep;
   return Math.ceil(numeric / roundStep) * roundStep;
 }
-export function tempFnC(value) {
-  return number(value);
+export function tempFnC(value, profileLike = {}) {
+  return number(resolveSupportLoadTempFnC(value, profileLike));
 }
 function verticalLoad(pipeWt, fluidWt, spanMm, profile) {
   const p = number(pipeWt), f = number(fluidWt), span = number(spanMm);
   if (p === null || f === null || span === null) return null;
-  const gravity = number(profile?.gravityFactor) || 10;
-  const factor = number(profile?.verticalLoadFactor) || 1.1;
+  const gravity = number(profile?.vertical?.gravityFactor) || 10;
+  const factor = number(profile?.vertical?.loadFactor) || 1.1;
   return round1((p + f) * span * gravity * factor / 1000);
 }
-function guideLoad(opeVerticalN, input) {
+function guideLoad(opeVerticalN, input, profile) {
+  if (profile?.guide?.enabled === false) return null;
   const v = number(opeVerticalN);
   const wall = number(input?.pipePhysical?.wallThicknessMm);
-  const temp = tempFnC(input?.process?.tempExpC1);
+  const temp = tempFnC(input?.process?.tempExpC1, profile);
   if (v === null || wall === null || temp === null) return null;
-  const raw = 0.1 * 0.3 * v * (wall / 6.3) * (temp / 100) / 1.23;
-  const rounded = getRoundedNum(raw, getRoundMajor(input), getRoundStep(input), getRoundMode(input));
-  const thirtyPercent = round3(0.3 * v);
-  const finalN = round3(Math.max(number(rounded) ?? -Infinity, thirtyPercent));
+  const g = profile.guide;
+  const raw = g.temperatureMultiplier * g.spanLoadMultiplier * v * (wall / g.wallReferenceMm) * (temp / g.tempDivisor) / g.divisor;
+  const rounded = getRoundedNum(raw, profile.rounding.roundMajor, profile.rounding.roundStep, profile.rounding.roundMode);
+  const minimumByOpeVertical = round3(g.minimumOpeVerticalFactor * v);
+  const finalN = round3(Math.max(number(rounded) ?? -Infinity, minimumByOpeVertical));
+  const controlling = finalN === rounded
+    ? 'ROUNDED_TEMPERATURE_WALL_GUIDE'
+    : (g.minimumOpeVerticalFactor === 0.3 ? 'THIRTY_PERCENT_OPE_VERTICAL' : 'MINIMUM_OPE_VERTICAL_FACTOR');
   return freezeDeep({
     rawN: round3(raw),
     roundedN: rounded,
-    thirtyPercentOpeVN: thirtyPercent,
+    thirtyPercentOpeVN: g.minimumOpeVerticalFactor === 0.3 ? minimumByOpeVertical : null,
+    minimumOpeVerticalN: minimumByOpeVertical,
     finalN,
-    controlling: finalN === rounded ? 'ROUNDED_TEMPERATURE_WALL_GUIDE' : 'THIRTY_PERCENT_OPE_VERTICAL',
-    formula: 'Max(GetRoundedNum(0.1*0.3*OPE_V*(WT/6.3)*(TempfnC(T1)/100)/1.23,100,50,"up"),0.3*OPE_V)'
+    controlling,
+    profile: {
+      temperatureMultiplier: g.temperatureMultiplier,
+      spanLoadMultiplier: g.spanLoadMultiplier,
+      wallReferenceMm: g.wallReferenceMm,
+      tempDivisor: g.tempDivisor,
+      divisor: g.divisor,
+      minimumOpeVerticalFactor: g.minimumOpeVerticalFactor
+    },
+    formula: 'Max(GetRoundedNum(guideTemperatureMultiplier*guideSpanLoadMultiplier*OPE_V*(WT/guideWallReferenceMm)*(TempfnC(T1)/guideTempDivisor)/guideDivisor,roundMajor,roundStep,roundMode),guideMinimumOpeVerticalFactor*OPE_V)'
   });
 }
-function lineStopLoad(input) {
+function lineStopLoad(input, profile) {
+  if (profile?.lineStop?.enabled === false) return null;
   const dia = number(input?.identity?.pipeOdMm);
   const wall = number(input?.pipePhysical?.wallThicknessMm);
-  const temp = tempFnC(input?.process?.tempExpC1);
+  const temp = tempFnC(input?.process?.tempExpC1, profile);
   if (dia === null || wall === null || temp === null) return null;
-  const sectionTerm = 3.14 / 32 * (dia ** 4 - (dia - wall) ** 4) / dia;
-  const raw = 1000 * 0.0209 * (sectionTerm ** 0.5079) * (temp / 100) / 1.23;
-  const rounded = getRoundedNum(raw, getRoundMajor(input), getRoundStep(input), getRoundMode(input));
+  const ls = profile.lineStop;
+  const idTerm = ls.idExpression === 'D_MINUS_2WT' ? dia - 2 * wall : dia - wall;
+  const sectionTerm = ls.pi / ls.sectionDivisor * (dia ** 4 - idTerm ** 4) / dia;
+  const raw = ls.scale * ls.coefficient * (sectionTerm ** ls.exponent) * (temp / ls.tempDivisor) / ls.divisor;
+  const rounded = getRoundedNum(raw, profile.rounding.roundMajor, profile.rounding.roundStep, profile.rounding.roundMode);
   return freezeDeep({
     sectionTerm: round3(sectionTerm),
     rawN: round3(raw),
     finalN: rounded,
-    formula: 'GetRoundedNum(1000*0.0209*(3.14/32*(D^4-(D-WT)^4)/D)^0.5079*(TempfnC(T1)/100)/1.23,100,50,"up")'
+    idExpression: ls.idExpression,
+    profile: {
+      scale: ls.scale,
+      coefficient: ls.coefficient,
+      pi: ls.pi,
+      sectionDivisor: ls.sectionDivisor,
+      exponent: ls.exponent,
+      tempDivisor: ls.tempDivisor,
+      divisor: ls.divisor,
+      idExpression: ls.idExpression
+    },
+    formula: ls.idExpression === 'D_MINUS_2WT'
+      ? 'GetRoundedNum(scale*coefficient*(pi/sectionDivisor*(D^4-(D-2*WT)^4)/D)^exponent*(TempfnC(T1)/tempDivisor)/divisor,roundMajor,roundStep,roundMode)'
+      : 'GetRoundedNum(scale*coefficient*(pi/sectionDivisor*(D^4-(D-WT)^4)/D)^exponent*(TempfnC(T1)/tempDivisor)/divisor,roundMajor,roundStep,roundMode)'
   });
 }
 function supportAppliesGuide(ref) {
@@ -167,7 +207,7 @@ function blockedResult(input, reason) {
   return freezeDeep({
     schema: SUPPORT_LOAD_FORMULA_SCHEMA,
     version: SUPPORT_LOAD_FORMULA_VERSION,
-    profileId: SUPPORT_LOAD_FORMULA_PROFILE_ID,
+    profileId: profileId(input),
     sourceObjectId: text(input?.sourceObjectId),
     inputKey: inputKey(input),
     status: 'BLOCKED',
@@ -180,23 +220,24 @@ function blockedResult(input, reason) {
 export function calculateSupportLoadsForPipeInput(input) {
   if (!input || typeof input !== 'object') return blockedResult(input, 'missing-pipe-support-load-input');
   if (input?.readiness?.readyForCalculation !== true) return blockedResult(input, 'pipe-input-not-locked-for-calculation');
+  const profile = normalizedProfile(input);
   const pipe = input.pipePhysical || {};
   const process = input.process || {};
   const spans = input.spans || {};
-  const profile = input.formulaProfile || {};
   const vertical = freezeDeep({
     opeVA: verticalLoad(pipe.unitPipeWtKgPerM, process.fluidWtOpeKgPerM, spans.autoSpanMm, profile),
     hydVA: verticalLoad(pipe.unitPipeWtKgPerM, process.fluidWtHydKgPerM, spans.autoSpanMm, profile),
     opeVDep: verticalLoad(pipe.unitPipeWtKgPerM, process.fluidWtOpeKgPerM, spans.depSpanMm, profile),
     hydVDep: verticalLoad(pipe.unitPipeWtKgPerM, process.fluidWtHydKgPerM, spans.depSpanMm, profile)
   });
-  const guideA = guideLoad(vertical.opeVA, input);
-  const guideDep = guideLoad(vertical.opeVDep, input);
-  const lineStop = lineStopLoad(input);
+  const guideA = guideLoad(vertical.opeVA, input, profile);
+  const guideDep = guideLoad(vertical.opeVDep, input, profile);
+  const lineStop = lineStopLoad(input, profile);
   const calculatedFields = freezeDeep({
     schema: SUPPORT_LOAD_FORMULA_SCHEMA,
     version: SUPPORT_LOAD_FORMULA_VERSION,
-    profileId: SUPPORT_LOAD_FORMULA_PROFILE_ID,
+    profileId: profile.profileId,
+    formulaProfile: profile,
     vertical,
     guide: {
       roundedGuideHA: guideA?.roundedN ?? null,
@@ -215,7 +256,7 @@ export function calculateSupportLoadsForPipeInput(input) {
   return freezeDeep({
     schema: SUPPORT_LOAD_FORMULA_SCHEMA,
     version: SUPPORT_LOAD_FORMULA_VERSION,
-    profileId: SUPPORT_LOAD_FORMULA_PROFILE_ID,
+    profileId: profile.profileId,
     sourceObjectId: text(input.sourceObjectId),
     inputKey: inputKey(input),
     lineNo: text(input.identity?.lineNo),
@@ -224,8 +265,7 @@ export function calculateSupportLoadsForPipeInput(input) {
     audit: [
       { source: 'SUPPORT_LOAD_FORMULA_ENGINE', field: 'inputSource', value: 'pipe.attributes.supportLoadInput' },
       { source: 'SUPPORT_LOAD_FORMULA_ENGINE', field: 'calculationGate', value: input.readiness?.calculationGateStatus || 'INPUT_LOCKED' },
-      { source: 'SUPPORT_LOAD_FORMULA_ENGINE', field: 'TempfnC', value: 'identity' },
-      { source: 'SUPPORT_LOAD_FORMULA_ENGINE', field: 'GetRoundedNum', value: `major=${getRoundMajor(input)}, step=${getRoundStep(input)}, mode=${getRoundMode(input)}` }
+      ...supportLoadFormulaProfileAudit(profile)
     ]
   });
 }
@@ -308,10 +348,11 @@ export function calculateSupportLoadResultsFromInputModel(model, options = {}) {
   const writeback = writeResultsToObjects(model?.hydratedObjects || [], pipeResults, supportRows, { evaluatedAt });
   const calculatedCount = pipeResults.filter(result => result.status === 'CALCULATED').length;
   const blockedCount = pipeResults.length - calculatedCount;
+  const resultProfileId = pipeResults.find(result => result.profileId)?.profileId || SUPPORT_LOAD_FORMULA_PROFILE_ID;
   return freezeDeep({
     schema: SUPPORT_LOAD_FORMULA_SCHEMA,
     version: SUPPORT_LOAD_FORMULA_VERSION,
-    profileId: SUPPORT_LOAD_FORMULA_PROFILE_ID,
+    profileId: resultProfileId,
     evaluatedAt,
     status: pipeResults.length === 0 ? 'EMPTY' : blockedCount ? 'BLOCKED' : 'CALCULATED',
     pipeInputCount: pipeResults.length,
@@ -325,8 +366,8 @@ export function calculateSupportLoadResultsFromInputModel(model, options = {}) {
     formulaInfo: SUPPORT_LOAD_FORMULA_INFO_TEXT,
     assumptions: [
       'Formula engine reads only locked pipe.attributes.supportLoadInput packages.',
-      'TempfnC(TEMP_EXP_C1) defaults to identity until a project-specific function table is supplied.',
-      'Line Stop formula intentionally preserves the legacy Access Dia - WALL_THICK expression.',
+      'Default profile preserves the Access benchmark and Dia - WALL_THICK expression.',
+      'Advanced formula profile values must be present in the locked input package; no master lookup or top-up occurs inside the engine.',
       'Result writeback is restricted to calculatedFields.supportLoads and calculatedFields.supportLoadReference.'
     ]
   });
