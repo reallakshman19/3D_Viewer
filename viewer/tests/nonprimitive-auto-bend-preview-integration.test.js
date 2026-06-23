@@ -68,7 +68,7 @@ assert.match(bridgeSource, /applyVisualTrimmedSegments/, 'bridge applies visual 
 assert.match(bridgeSource, /createTrimmedSegmentCylinder/, 'bridge replaces straight preview segment with trimmed cylinder');
 assert.match(bridgeSource, /canUseAutoBend/, 'bridge uses central primitive-exclusion gate');
 assert.doesNotMatch(bridgeSource, /RvmSupportSymbols|RvmSupportGeometryBridge|RvmRawSupportCylinderGuardBridge/, 'bridge does not reintroduce retired support runtime');
-assert.match(rendererSource, /RvmNonPrimitiveAutoBendBridge\.js\?v=20260623-nonprimitive-auto-bend-preview-1/, 'renderer imports auto-bend bridge with cache key');
+assert.match(rendererSource, /RvmNonPrimitiveAutoBendBridge\.js\?v=20260623-nonprimitive-auto-bend-preview-2/, 'renderer imports auto-bend bridge with updated cache key');
 assert.match(rendererSource, /installRvmNonPrimitiveAutoBendBridge\(\)/, 'renderer installs non-primitive auto-bend bridge');
 
 console.log('nonprimitive-auto-bend-preview-integration passed');
