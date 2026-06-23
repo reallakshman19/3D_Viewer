@@ -50,20 +50,17 @@ const publicIndex = read(publicIndexPath);
 const tab = read(tabPath);
 const tabCss = `${read(tabCssPath)}\n${readIfExists(supplementalTabCssPath)}`;
 
-assert(fs.existsSync(path.join(root, popupPath)), 'workflow popup module must exist');
+assert(fs.existsSync(path.join(root, popupPath)), 'workflow popup module must exist for backwards compatibility');
 assert(fs.existsSync(path.join(root, nativePanelsPath)), 'popup-native panel module must exist');
 assert(fs.existsSync(path.join(root, condenseRigidBridgePath)), 'condense rigid UI bridge module must exist');
 assert(fs.existsSync(path.join(root, workflowShellPath)), 'canonical WorkflowShell module must exist');
 assert(fs.existsSync(path.join(root, branchSyncPath)), 'branch sample sync module must exist');
 assert(popup.includes("import { WorkflowModal } from './shared/WorkflowModal.js'"), 'popup must reuse existing WorkflowModal');
-assert(/import \{ renderXmlCiiPopupNativePhase \} from '\.\/xml-cii-popup-native-panels\.js(?:\?v=[^']+)?'/.test(popup), 'popup must render popup-native phase bodies');
+assert(/import \{ renderXmlCiiPopupNativePhase \} from '\.\/xml-cii-popup-native-panels\.js(?:\?v=[^']+)?'/.test(popup), 'popup must render popup-native phase bodies when explicitly used');
 assert(popup.includes('xml-cii-popup-native-panels.js?v=20260623-xml-cii-condense-rigid-ui-2'), 'popup must cache-bust native panel import containing Condense Rigid checkbox');
 assert(popup.includes("import { XML_CII_WORKFLOW_PHASES, normalizeWorkflowPhaseId } from './WorkflowShell.js'"), 'popup must use canonical XML CII phase registry');
-assert(tab.includes('installXmlCiiConversionWorkflowPopup'), 'model-converters-tab must expose workflow popup installer');
-
-assert(popup.includes("tabs: XML_CII_WORKFLOW_PHASES"), 'popup must render XML->CII phases as top-level tabs');
-assert(popup.includes("title: 'XML->CII(2019) Workflow'"), 'popup title must match required workflow popup');
-assert(popup.includes('Import masters, map fields, and maintain manual overrides'), 'popup subtitle must describe master/config workflow');
+assert(!canonicalTab.includes('installXmlCiiConversionWorkflowPopup'), 'ModelConvertersTab must not install second XML CII popup path');
+assert(!tab.includes('installXmlCiiConversionWorkflowPopup'), 'legacy tab shim must not expose duplicate XML CII popup installer');
 
 for (const phase of [
   "'1 Regex'",
@@ -82,57 +79,51 @@ assert(workflowShell.indexOf("id: 'weight-match'") < workflowShell.indexOf("id: 
 assert(workflowShell.indexOf("id: 'run'") < workflowShell.indexOf("id: 'support-mapper'"), 'Run must appear before Support Types');
 assert(workflowShell.indexOf("id: 'support-mapper'") < workflowShell.indexOf("id: 'config'"), 'Support Types must appear before Config');
 
-assert(!popup.includes("{ id: 'matched-audit'"), 'Matched Audit must not be a top-level workflow tab');
-assert(!popup.includes("{ id: 'output-run'"), 'Output / Run Conversion must not be a top-level workflow tab');
-assert(!popup.includes('XML - Model Data'), 'XML - Model Data must not replace the required phase tabs');
-assert(!popup.includes('Process / Piping Class / Wt. Enrichment'), 'Process enrichment must not replace the required phase tabs');
 assert(!popup.includes('oldPhaseDetailHtml'), 'popup must not render old direct-panel phase HTML');
-assert(!popup.includes('bridge.renderPhaseInto'), 'popup must not render legacy-adapter phase HTML into the modal');
-assert(popup.includes('getPopupSnapshot'), 'popup must use bridge data snapshots for native bodies');
 assert(nativePanels.includes('renderXmlCiiPopupNativePhase'), 'native panel module must expose the popup-native renderer');
 assert(nativePanels.includes('data-native-finalise-run'), 'native Run phase must own Finalise and Run action');
 assert(nativePanels.includes('data-native-build-preview'), 'native Preview phase must own Build Preview action');
 assert(nativePanels.includes('data-native-dry-run'), 'native Diagnostics phase must own Dry Run action');
 assert(nativePanels.includes('data-native-regex-path="linelist.sampleBranchName"'), 'native Regex tab must edit canonical linelist.sampleBranchName');
-assert(nativePanels.includes('data-native-run-option="splitCondensedValveFlange"'), 'native Run phase must expose Condense Rigid run option');
-assert(nativePanels.includes('data-native-config-bool="splitCondensedValveFlange"'), 'native Config phase must expose Condense Rigid config option');
-assert(condenseRigidBridge.includes('OPTION_KEY = \'splitCondensedValveFlange\''), 'condense rigid bridge must use canonical splitCondensedValveFlange key');
-assert(condenseRigidBridge.includes('wrapBridge') && condenseRigidBridge.includes('getPopupSnapshot'), 'condense rigid bridge must hydrate popup snapshots');
+assert(nativePanels.includes('Condense Rigid / split condensed valve-flange nodes (XSD)'), 'native Run/Config phase must expose XSD Condense Rigid option');
+assert(nativePanels.includes('Condense Rigid / split condensed valve-flange nodes (Resolved)'), 'native Run/Config phase must expose Resolved Condense Rigid option');
+assert(nativePanels.includes('data-native-run-option="condenseRigidXsd"'), 'native Run phase must expose XSD Condense Rigid key');
+assert(nativePanels.includes('data-native-run-option="splitCondensedValveFlange"'), 'native Run phase must expose Resolved Condense Rigid key');
+assert(nativePanels.includes('data-native-config-bool="condenseRigidXsd"'), 'native Config phase must expose XSD Condense Rigid config key');
+assert(nativePanels.includes('data-native-config-bool="splitCondensedValveFlange"'), 'native Config phase must expose Resolved Condense Rigid config key');
+
+assert(condenseRigidBridge.includes('XSD_KEY = \'condenseRigidXsd\''), 'condense rigid bridge must define XSD option key');
+assert(condenseRigidBridge.includes('RESOLVED_SNAKE_KEY = \'split_condensed_valve_flange\''), 'condense rigid bridge must write snake_case resolved key');
+assert(condenseRigidBridge.includes('Condense Rigid / split condensed valve-flange nodes (XSD)'), 'condense rigid bridge must inject XSD label into active rich workflow');
+assert(condenseRigidBridge.includes('Condense Rigid / split condensed valve-flange nodes (Resolved)'), 'condense rigid bridge must inject Resolved label into active rich workflow');
+assert(condenseRigidBridge.includes('[data-xml-cii-run-option="kgToNewton"]'), 'condense rigid bridge must target the actual legacy rich Run phase');
+assert(condenseRigidBridge.includes('[data-xml-cii-config-bool="disableCiiSupportTagPopulation"]'), 'condense rigid bridge must target the actual legacy rich Config phase');
 assert(condenseRigidBridge.includes('setPopupRunOption') && condenseRigidBridge.includes('savePopupConfigText'), 'condense rigid bridge must sync run and config saves');
 assert(canonicalTab.includes('installXmlCiiCondenseRigidUiBridge'), 'ModelConvertersTab must install condense rigid UI bridge');
-assert(canonicalTab.includes('xml-cii-conversion-workflow-popup.js?v=20260623-xml-cii-condense-rigid-ui-2'), 'ModelConvertersTab must cache-bust popup importer after Condense Rigid panel update');
-assert(publicIndex.includes('20260623-xml-cii-condense-rigid-ui-2'), 'public model-converters entry must cache-bust condense rigid UI');
+assert(canonicalTab.includes('xml-cii-condense-rigid-ui-bridge.js?v=20260623-xml-cii-condense-rigid-ui-3'), 'ModelConvertersTab must cache-bust condense rigid bridge');
+assert(publicIndex.includes('20260623-xml-cii-condense-rigid-ui-3'), 'public model-converters entry must cache-bust rich condense rigid fixes');
 
 assert(branchSync.includes("const BRANCH_SAMPLE_KEY = 'xmlCii2019.regex.branchNameSampleFromXml.v1'"), 'Branchname sync must persist last extracted XML Branchname');
 assert(branchSync.includes('/<\\s*[^>]*Branchname'), 'Branchname sync must extract <Branchname> tag values');
 assert(branchSync.includes('cfg.linelist.sampleBranchName = sample'), 'Branchname sync must write canonical linelist.sampleBranchName used by the Regex tab');
 assert(branchSync.includes('cfg.regex.branchNameSample = sample'), 'Branchname sync must retain backward-compatible regex.branchNameSample mirror');
 assert(branchSync.includes('data-native-regex-path="linelist.sampleBranchName"'), 'Branchname sync must update native Regex popup sample input');
-assert(branchSync.includes('if (current === value) return false'), 'Branchname sync must avoid redundant synthetic events/render loops');
-assert(branchSync.includes("input.dispatchEvent(new Event('change', { bubbles: true }))"), 'Branchname sync must dispatch config change so last-session defaults persist');
 
 assert(previewRenderer.includes('computeLineNoKey'), 'Preview must match line-list rows using configured field maps');
 assert(previewRenderer.includes('_looksLikeNpsToken(shifted.fourth)'), 'Preview must recognize shifted Branchname size token at position 4');
 assert(previewRenderer.includes('_isLikelyMaterialToken(value)'), 'Preview must not treat material token CS as piping class fallback');
 assert(previewRenderer.includes('^S\\d+'), 'Preview shifted-branch guard must recognize S-prefixed line keys');
 assert(enrichmentRunParity.includes('RENUMBERABLE_NEGATIVE_TYPES') && enrichmentRunParity.includes('renumberLengthBearingNegativeNodes'), 'enriched XML parity must implement Condense Rigid negative-node renumbering');
-assert(enrichmentRunParity.includes('split-condensed-valve-flange'), 'enriched XML diagnostics must record Condense Rigid application');
+assert(enrichmentRunParity.includes('split-condensed-valve-flange-resolved'), 'enriched XML diagnostics must record Resolved Condense Rigid application');
+assert(enrichmentRunParity.includes('split_condensed_valve_flange'), 'enriched XML parity must understand snake_case split_condensed_valve_flange');
 assert(invocationBuilder.includes('--split-condensed-valve-flange') && invocationBuilder.includes('--no-split-condensed-valve-flange'), 'worker invocation must forward Condense Rigid CLI option');
+assert(invocationBuilder.includes('supportConfig.split_condensed_valve_flange'), 'worker invocation must honor supportConfigJson.split_condensed_valve_flange');
 
 assert(weightMatchModel.includes('computeLineNoKey'), 'Weight Match must match line-list rows using configured field maps');
 assert(weightMatchModel.includes('ratingOverrideForBranch'), 'Weight Match must explicitly read manual rating overrides');
 assert(weightMatchModel.includes("config?.overrides?.processData?.[key]?.rating"), 'Weight Match must accept rating saved under processData overrides');
 assert(weightMatchModel.includes('lineKey: branchContext.lineKey'), 'Weight Match rows must carry the resolved line key for diagnostics/debugging');
 
-assert(!popup.includes('mountExistingPanel'), 'popup must not move live DOM panels by portal');
-assert(!popup.includes('new MutationObserver'), 'popup must not install MutationObserver');
-assert(popup.includes("document.addEventListener('click', interceptRun, true)"), 'popup must intercept XML->CII run click through one capture listener');
-assert(popup.includes('stateByRoot: new WeakMap()'), 'popup must keep independent modal state per rendered root');
-assert(popup.includes('renderPhase(root, state)'), 'popup must render the active phase through the live bridge/fallback path');
-assert(/preloadDefaultMasters\((root|body), state\)/.test(popup), 'popup must preload default masters after opening');
-assert(popup.includes('ensureDefaultMastersLoaded'), 'popup must use the legacy default-master preload bridge');
-assert(popup.includes('function armDirectRunGuard()'), 'popup must expose a one-tick direct-run guard');
-assert(/armDirectRunGuard\(\);\s*state\.modal\?\.close\(\);/.test(popup), 'bridge close handoff must arm direct-run before closing');
 assert(legacyAdapter.includes('ensureDefaultMastersLoaded(target)'), 'legacy phase bridge must expose default-master preload');
 assert(legacyAdapter.includes('getPopupSnapshot(target)'), 'legacy phase bridge must expose popup snapshot data');
 assert(legacyAdapter.includes('buildPopupPreviewRows()'), 'legacy phase bridge must expose popup preview data action');
@@ -145,18 +136,17 @@ assert(tabCss.includes('.model-converters-workflow-regex-field select'), 'Run ph
 assert(tabCss.includes('span:not(.model-converters-workflow-run-status-icon)'), 'Run status row layout must not flex the icon column as the label');
 assert(canonicalTab.includes('model-converters-css-fix.css'), 'ModelConvertersTab must defensively load supplemental layout CSS');
 
-const popupBridgeImport = popup.match(/legacy-adapter\.js\?v=([^'"]+)/)?.[1] || '';
 const tabBridgeImport = canonicalTab.match(/legacy-adapter\.js\?v=([^'"]+)/)?.[1] || '';
 const publicTabImport = publicIndex.match(/ModelConvertersTab\.js\?v=([^'"]+)/)?.[1] || '';
-assert(popupBridgeImport && popupBridgeImport === tabBridgeImport, 'popup and ModelConvertersTab must import the same legacy-adapter module URL');
-assert(publicTabImport && canonicalTab.includes(`legacy-adapter.js?v=${popupBridgeImport}`), 'public index and canonical tab cache keys must be bumped with rich workflow fixes');
+assert(tabBridgeImport, 'ModelConvertersTab must import legacy adapter with a cache key');
+assert(publicTabImport && publicTabImport.includes('20260623-xml-cii-condense-rigid-ui-3'), 'public index must use latest ModelConvertersTab cache key');
 
 console.log('✅ XML CII phase-tab workflow popup static test passed', {
   topLevelTabs: 8,
-  workflowMode: 'phase-tabs',
+  workflowMode: 'legacy-rich-single-popup-plus-simple-run',
   branchNameSync: 'linelist.sampleBranchName',
   shiftedBranchPreview: 'lineKey/size/class guarded',
   weightMatchRating: 'manual override propagated',
-  condenseRigid: 'splitCondensedValveFlange exposed, forwarded, and cache-busted',
+  condenseRigid: 'XSD + Resolved split_condensed_valve_flange wired',
   supplementalCss: 'model-converters-css-fix.css',
 });

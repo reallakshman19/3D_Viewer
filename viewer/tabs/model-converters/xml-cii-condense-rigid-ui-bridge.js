@@ -1,8 +1,26 @@
 import { getXmlCiiPhaseBridge } from './legacy-adapter.js?v=20260620-master-session-1';
 
-const INSTALL_FLAG = Symbol.for('pcf-glb-xml-cii-condense-rigid-ui-bridge-v1');
-const VERSION = '20260623-xml-cii-condense-rigid-ui-1';
-const OPTION_KEY = 'splitCondensedValveFlange';
+const INSTALL_FLAG = Symbol.for('pcf-glb-xml-cii-condense-rigid-ui-bridge-v3');
+const VERSION = '20260623-xml-cii-condense-rigid-ui-3';
+
+const XSD_KEY = 'condenseRigidXsd';
+const RESOLVED_KEY = 'splitCondensedValveFlange';
+const RESOLVED_SNAKE_KEY = 'split_condensed_valve_flange';
+
+const OPTIONS = Object.freeze([
+  {
+    key: XSD_KEY,
+    label: 'Condense Rigid / split condensed valve-flange nodes (XSD)',
+    hint: 'Records the source/XSD condense-rigid intent in supportConfigJson. It does not force the resolver.',
+    aliases: [XSD_KEY, 'condense_rigid_xsd'],
+  },
+  {
+    key: RESOLVED_KEY,
+    label: 'Condense Rigid / split condensed valve-flange nodes (Resolved)',
+    hint: 'Forces the resolved conversion path: supportConfigJson.split_condensed_valve_flange=True and Python --split-condensed-valve-flange.',
+    aliases: [RESOLVED_KEY, RESOLVED_SNAKE_KEY],
+  },
+]);
 
 function browserReady() {
   return typeof document !== 'undefined' && typeof window !== 'undefined';
@@ -28,9 +46,9 @@ function bridgeConfig(bridge) {
   return parseConfigText(bridge?.exportPopupConfigText?.() || '{}');
 }
 
-function bridgeEnabled(bridge) {
+function optionEnabled(option, bridge) {
   const cfg = bridgeConfig(bridge);
-  return bool(cfg[OPTION_KEY]);
+  return option.aliases.some((key) => bool(cfg[key]));
 }
 
 function importConfig(bridge, config) {
@@ -43,27 +61,52 @@ function importConfig(bridge, config) {
   }
 }
 
-function syncConfig(bridge, enabled) {
+function setConfigValue(config, key, enabled) {
+  if (key === RESOLVED_KEY || key === RESOLVED_SNAKE_KEY) {
+    config[RESOLVED_KEY] = !!enabled;
+    config[RESOLVED_SNAKE_KEY] = !!enabled;
+    return;
+  }
+  if (key === XSD_KEY || key === 'condense_rigid_xsd') {
+    config[XSD_KEY] = !!enabled;
+    return;
+  }
+  config[key] = !!enabled;
+}
+
+function syncConfig(bridge, key, enabled) {
   if (!bridge) return false;
   const cfg = bridgeConfig(bridge);
-  cfg[OPTION_KEY] = !!enabled;
+  setConfigValue(cfg, key, enabled);
   return importConfig(bridge, cfg);
 }
 
-function mergeBoolIntoConfigText(text, bools = {}) {
+function mergeBoolsIntoConfigText(text, bools = {}) {
   const cfg = parseConfigText(text);
-  if (Object.prototype.hasOwnProperty.call(bools, OPTION_KEY)) cfg[OPTION_KEY] = !!bools[OPTION_KEY];
+  for (const option of OPTIONS) {
+    if (Object.prototype.hasOwnProperty.call(bools, option.key)) setConfigValue(cfg, option.key, bools[option.key]);
+    if (option.key === RESOLVED_KEY && Object.prototype.hasOwnProperty.call(bools, RESOLVED_SNAKE_KEY)) {
+      setConfigValue(cfg, RESOLVED_KEY, bools[RESOLVED_SNAKE_KEY]);
+    }
+  }
   return JSON.stringify(cfg, null, 2);
 }
 
 function hydrateSnapshot(snapshot, bridge) {
   if (!snapshot || typeof snapshot !== 'object') return snapshot;
-  const enabled = bridgeEnabled(bridge) || bool(snapshot?.run?.options?.[OPTION_KEY]);
   snapshot.run = snapshot.run && typeof snapshot.run === 'object' ? snapshot.run : {};
   snapshot.run.options = snapshot.run.options && typeof snapshot.run.options === 'object' ? snapshot.run.options : {};
-  snapshot.run.options[OPTION_KEY] = enabled;
   snapshot.config = snapshot.config && typeof snapshot.config === 'object' ? snapshot.config : {};
-  snapshot.config[OPTION_KEY] = enabled;
+
+  for (const option of OPTIONS) {
+    const enabled = optionEnabled(option, bridge) || bool(snapshot.run.options[option.key]);
+    snapshot.run.options[option.key] = enabled;
+    snapshot.config[option.key] = enabled;
+    if (option.key === RESOLVED_KEY) {
+      snapshot.run.options[RESOLVED_SNAKE_KEY] = enabled;
+      snapshot.config[RESOLVED_SNAKE_KEY] = enabled;
+    }
+  }
   return snapshot;
 }
 
@@ -79,18 +122,18 @@ function wrapBridge(bridge = getXmlCiiPhaseBridge()) {
 
   if (originalSetPopupRunOption) {
     bridge.setPopupRunOption = (key, value, type) => {
-      if (key === OPTION_KEY) syncConfig(bridge, !!value);
+      if ([XSD_KEY, RESOLVED_KEY, RESOLVED_SNAKE_KEY].includes(key)) syncConfig(bridge, key, !!value);
       return originalSetPopupRunOption(key, value, type);
     };
   }
 
   if (originalSavePopupConfigText) {
     bridge.savePopupConfigText = (editedText, bools) => {
-      const nextText = Object.prototype.hasOwnProperty.call(bools || {}, OPTION_KEY)
-        ? mergeBoolIntoConfigText(editedText, bools)
-        : editedText;
+      const nextText = mergeBoolsIntoConfigText(editedText, bools || {});
       const savedText = originalSavePopupConfigText(nextText, bools);
-      if (Object.prototype.hasOwnProperty.call(bools || {}, OPTION_KEY)) syncConfig(bridge, !!bools[OPTION_KEY]);
+      for (const option of OPTIONS) {
+        if (Object.prototype.hasOwnProperty.call(bools || {}, option.key)) syncConfig(bridge, option.key, !!bools[option.key]);
+      }
       return savedText;
     };
   }
@@ -99,67 +142,87 @@ function wrapBridge(bridge = getXmlCiiPhaseBridge()) {
   return bridge;
 }
 
-function optionLabel(enabled, source) {
+function optionInputSelector(option) {
+  return [
+    `[data-native-run-option="${option.key}"]`,
+    `[data-native-config-bool="${option.key}"]`,
+    `[data-xml-cii-run-option="${option.key}"]`,
+    `[data-xml-cii-config-bool="${option.key}"]`,
+  ].join(', ');
+}
+
+function optionLabel(option, enabled, source) {
   const label = document.createElement('label');
-  label.className = 'xml-cii-native-check';
-  label.dataset.xmlCiiCondenseRigidInjected = source;
-  label.innerHTML = `<input type="checkbox" ${enabled ? 'checked' : ''}> Condense Rigid / split condensed valve-flange nodes`;
+  const legacy = source.startsWith('legacy');
+  label.className = legacy ? 'model-converters-workflow-map-field' : 'xml-cii-native-check';
+  label.dataset.xmlCiiCondenseRigidInjected = `${source}:${option.key}`;
+  if (legacy) label.style.cssText = 'flex-direction:row;align-items:center;gap:8px;';
+  label.innerHTML = `<input type="checkbox" ${enabled ? 'checked' : ''}> <span>${option.label}</span>`;
   const input = label.querySelector('input');
-  if (source === 'run') input.dataset.nativeRunOption = OPTION_KEY;
-  else input.dataset.nativeConfigBool = OPTION_KEY;
-  input.addEventListener('change', () => setCondenseRigid(input.checked));
+  if (source.includes('run')) input.dataset[legacy ? 'xmlCiiRunOption' : 'nativeRunOption'] = option.key;
+  else input.dataset[legacy ? 'xmlCiiConfigBool' : 'nativeConfigBool'] = option.key;
+  input.title = option.hint;
+  input.addEventListener('change', () => setCondenseRigid(option.key, input.checked));
   return label;
 }
 
-function setCondenseRigid(enabled) {
+function setCondenseRigid(key, enabled) {
   const bridge = wrapBridge();
-  syncConfig(bridge, !!enabled);
-  try { bridge?.setPopupRunOption?.(OPTION_KEY, !!enabled, 'checkbox'); } catch (error) { console.warn('[XML CII Condense Rigid] run option sync failed', error); }
-  syncInputs(document, !!enabled);
+  syncConfig(bridge, key, !!enabled);
+  try { bridge?.setPopupRunOption?.(key, !!enabled, 'checkbox'); } catch (error) { console.warn('[XML CII Condense Rigid] run option sync failed', error); }
+  syncInputs(document);
 }
 
-function syncInputs(root, enabled) {
-  root?.querySelectorAll?.(`[data-native-run-option="${OPTION_KEY}"], [data-native-config-bool="${OPTION_KEY}"]`).forEach((input) => {
-    if (input.type === 'checkbox') input.checked = !!enabled;
-  });
-}
-
-function injectRunOption(root, enabled) {
-  const existing = root.querySelector?.(`[data-native-run-option="${OPTION_KEY}"]`);
-  if (existing) {
-    existing.checked = !!enabled;
-    if (!existing.dataset.xmlCiiCondenseRigidBound) {
-      existing.dataset.xmlCiiCondenseRigidBound = VERSION;
-      existing.addEventListener('change', () => setCondenseRigid(existing.checked));
-    }
-    return;
+function syncInputs(root = document) {
+  const bridge = wrapBridge();
+  for (const option of OPTIONS) {
+    const enabled = optionEnabled(option, bridge);
+    root?.querySelectorAll?.(optionInputSelector(option)).forEach((input) => {
+      if (input.type === 'checkbox') input.checked = !!enabled;
+    });
   }
-  const anchor = root.querySelector?.('[data-native-run-option="kgToNewton"]')?.closest?.('label');
-  if (!anchor || anchor.parentElement?.querySelector?.('[data-xml-cii-condense-rigid-injected="run"]')) return;
-  anchor.insertAdjacentElement('afterend', optionLabel(enabled, 'run'));
 }
 
-function injectConfigOption(root, enabled) {
-  const existing = root.querySelector?.(`[data-native-config-bool="${OPTION_KEY}"]`);
-  if (existing) {
-    existing.checked = !!enabled;
-    if (!existing.dataset.xmlCiiCondenseRigidBound) {
-      existing.dataset.xmlCiiCondenseRigidBound = VERSION;
-      existing.addEventListener('change', () => setCondenseRigid(existing.checked));
-    }
-    return;
+function bindExisting(root = document) {
+  for (const option of OPTIONS) {
+    root?.querySelectorAll?.(optionInputSelector(option)).forEach((input) => {
+      if (input.dataset.xmlCiiCondenseRigidBound === VERSION) return;
+      input.dataset.xmlCiiCondenseRigidBound = VERSION;
+      input.addEventListener('change', () => setCondenseRigid(option.key, input.checked));
+    });
   }
-  const anchor = root.querySelector?.('[data-native-config-bool="disableCiiSupportTagPopulation"]')?.closest?.('label');
-  if (!anchor || anchor.parentElement?.querySelector?.('[data-xml-cii-condense-rigid-injected="config"]')) return;
-  anchor.insertAdjacentElement('afterend', optionLabel(enabled, 'config'));
+}
+
+function injectOne(root, option, enabled, source, anchorSelector) {
+  if (root.querySelector?.(optionInputSelector(option))) return;
+  const anchor = root.querySelector?.(anchorSelector)?.closest?.('label');
+  const parent = anchor?.parentElement;
+  if (!anchor || !parent || parent.querySelector?.(`[data-xml-cii-condense-rigid-injected$=":${option.key}"]`)) return;
+  anchor.insertAdjacentElement('afterend', optionLabel(option, enabled, source));
+}
+
+function injectRunOptions(root, bridge) {
+  for (const option of OPTIONS) {
+    const enabled = optionEnabled(option, bridge);
+    injectOne(root, option, enabled, 'native-run', '[data-native-run-option="kgToNewton"]');
+    injectOne(root, option, enabled, 'legacy-run', '[data-xml-cii-run-option="kgToNewton"]');
+  }
+}
+
+function injectConfigOptions(root, bridge) {
+  for (const option of OPTIONS) {
+    const enabled = optionEnabled(option, bridge);
+    injectOne(root, option, enabled, 'native-config', '[data-native-config-bool="disableCiiSupportTagPopulation"]');
+    injectOne(root, option, enabled, 'legacy-config', '[data-xml-cii-config-bool="disableCiiSupportTagPopulation"]');
+  }
 }
 
 function apply(root = document) {
   const bridge = wrapBridge();
-  const enabled = bridgeEnabled(bridge);
-  injectRunOption(root, enabled);
-  injectConfigOption(root, enabled);
-  syncInputs(root, enabled);
+  injectRunOptions(root, bridge);
+  injectConfigOptions(root, bridge);
+  bindExisting(root);
+  syncInputs(root);
 }
 
 export function installXmlCiiCondenseRigidUiBridge(root = document) {

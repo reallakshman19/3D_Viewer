@@ -39,6 +39,25 @@ function pushOptionalNumberArg(argv, flag, value) {
   argv.push(flag, String(numeric));
 }
 
+function parseJsonObject(text) {
+  try {
+    const parsed = JSON.parse(toStringValue(text) || '{}');
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+function boolOrNull(value) {
+  if (value === true || value === false) return value;
+  if (value === undefined || value === null || value === '') return null;
+  if (typeof value === 'number') return value !== 0;
+  const clean = toStringValue(value).trim().toLowerCase();
+  if (['1', 'true', 'yes', 'on'].includes(clean)) return true;
+  if (['0', 'false', 'no', 'off'].includes(clean)) return false;
+  return null;
+}
+
 function pushSupportArgs(argv, options) {
   pushOptionalStringArg(argv, '--support-stiffness', options?.supportStiffness);
   pushOptionalStringArg(argv, '--support-gap', options?.supportGap);
@@ -161,12 +180,17 @@ export function buildInvocation(converterId, primaryPath, primaryName, secondary
     if (options?.includeGenericSupportGroups) argv.push('--include-generic-support-groups');
   } else if (converterId === 'xml_to_cii') {
     const mode = toStringValue(options?.coordsMode).trim().toLowerCase();
+    const supportConfig = parseJsonObject(options?.supportConfigJson);
+    const splitCondensed = boolOrNull(options?.splitCondensedValveFlange)
+      ?? boolOrNull(options?.split_condensed_valve_flange)
+      ?? boolOrNull(supportConfig.splitCondensedValveFlange)
+      ?? boolOrNull(supportConfig.split_condensed_valve_flange);
     argv.push('--coords-mode', mode === 'all' || mode === 'none' ? mode : 'first');
     // kg -> N weight conversion (default ON): scale component weights by 10.
     if (options?.kgToNewton !== false) argv.push('--weight-scale', '10');
     pushOptionalStringArg(argv, '--support-config-json', options?.supportConfigJson);
-    if (options?.splitCondensedValveFlange === true) argv.push('--split-condensed-valve-flange');
-    else if (options?.splitCondensedValveFlange === false) argv.push('--no-split-condensed-valve-flange');
+    if (splitCondensed === true) argv.push('--split-condensed-valve-flange');
+    else if (splitCondensed === false) argv.push('--no-split-condensed-valve-flange');
     if (secondaryPath) argv.push('--staged-json', secondaryPath);
     if (options?.useRestraintTypeBasedOnJson === false) {
       argv.push('--no-use-restraint-type-based-on-json');
