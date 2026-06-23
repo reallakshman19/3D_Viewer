@@ -6,10 +6,10 @@ import {
   sourceToolsDiagnosticsFileName,
 } from '../overlays/source-tools/NonPrimitiveSourceToolsDiagnostics.js';
 
-export const RVM_NON_PRIMITIVE_SOURCE_TOOLS_UI_SCHEMA = 'rvm-non-primitive-source-tools-ui/v5';
+export const RVM_NON_PRIMITIVE_SOURCE_TOOLS_UI_SCHEMA = 'rvm-non-primitive-source-tools-ui/v6';
 
-const PATCH_FLAG = Symbol.for('pcf-glb-rvm-non-primitive-source-tools-ui-v5');
-const VIEWER_PATCH_FLAG = Symbol.for('pcf-glb-rvm-non-primitive-source-tools-ui-viewer-v5');
+const PATCH_FLAG = Symbol.for('pcf-glb-rvm-non-primitive-source-tools-ui-v6');
+const VIEWER_PATCH_FLAG = Symbol.for('pcf-glb-rvm-non-primitive-source-tools-ui-viewer-v6');
 const ROOT_SELECTOR = '[data-rvm-viewer]';
 const PANEL_ID = 'rvm-nonprimitive-source-tools-panel';
 const SOURCE_KIND_RE = /^(json|jscon|inputxml|txt|source-preview)$/i;
@@ -149,19 +149,25 @@ function renderPanelHtml({ auto, support, viewer }) {
   const acceptedSupports = Number(supportDiag.acceptedSupports ?? supportDiag.sourceSupports ?? 0) || 0;
   const snapshot = buildSourceToolsDiagnosticsSnapshot(viewer);
   return `
-    <div class="rvm-source-tools-grid" data-source-tools-schema="${escapeHtml(RVM_NON_PRIMITIVE_SOURCE_TOOLS_UI_SCHEMA)}">
-      <label class="rvm-source-tools-row"><span>Auto Bend</span><input type="checkbox" data-source-tool="auto-enabled" ${auto.enabled ? 'checked' : ''}></label>
-      <label class="rvm-source-tools-row"><span>Radius</span><select data-source-tool="auto-radius-mode"><option value="source-or-od" ${auto.radiusMode === 'source-or-od' ? 'selected' : ''}>Source / OD×${escapeHtml(auto.defaultRadiusFactor)}</option><option value="source-only" ${auto.radiusMode === 'source-only' ? 'selected' : ''}>Source only</option></select></label>
-      <label class="rvm-source-tools-row"><span>Bend diagnostics</span><input type="checkbox" data-source-tool="auto-diagnostics" ${auto.showDiagnostics ? 'checked' : ''}></label>
-      <div class="rvm-source-tools-diag" data-source-tool-diag="auto">Bends: ${escapeHtml(autoDiag.bendCount ?? 0)} · Trims: ${escapeHtml(autoDiag.trimCount ?? 0)} · ${escapeHtml(autoDiag.status || 'idle')}</div>
-      <label class="rvm-source-tools-row"><span>Support Overlay</span><input type="checkbox" data-source-tool="support-enabled" ${support.enabled ? 'checked' : ''}></label>
-      <label class="rvm-source-tools-row"><span>Support scale</span><input type="range" min="0.2" max="10" step="0.1" value="${escapeHtml(support.scale)}" data-source-tool="support-scale"><strong data-source-tool-scale-value>${escapeHtml(formatScale(support.scale))}</strong></label>
-      <label class="rvm-source-tools-row"><span>Support labels</span><input type="checkbox" data-source-tool="support-labels" ${support.labels ? 'checked' : ''}></label>
-      <label class="rvm-source-tools-row"><span>Warnings only</span><input type="checkbox" data-source-tool="support-warnings" ${support.warningsOnly ? 'checked' : ''}></label>
-      <div class="rvm-source-tools-filters" data-source-tool-filters="support"><span>Family filters</span>${renderSupportFamilyFilters(support.filters)}</div>
-      <div class="rvm-source-tools-diag" data-source-tool-diag="support">Supports: ${escapeHtml(supportDiag.created ?? 0)}/${escapeHtml(acceptedSupports)} · Filtered: ${escapeHtml(supportDiag.filteredOut ?? 0)} · Warnings: ${escapeHtml(supportWarningCount)} · ${escapeHtml(supportDiag.status || 'idle')}</div>
-      ${renderSupportFilterSummary(supportDiag)}
-      ${renderSupportWarnings(supportDiag.warnings)}
+    <div class="rvm-source-tools-grid rvm-source-tools-grid--compact" data-source-tools-layout="compact-v1" data-source-tools-schema="${escapeHtml(RVM_NON_PRIMITIVE_SOURCE_TOOLS_UI_SCHEMA)}">
+      <section class="rvm-source-tools-group" data-source-tools-group="auto-bend">
+        <div class="rvm-source-tools-group-title"><span>Auto Bend</span><strong class="rvm-source-tools-badge" data-source-tool-badge="auto">${escapeHtml(autoDiag.status || 'idle')}</strong></div>
+        <label class="rvm-source-tools-row"><span>Auto Bend</span><input type="checkbox" data-source-tool="auto-enabled" ${auto.enabled ? 'checked' : ''}></label>
+        <label class="rvm-source-tools-row"><span>Radius</span><select data-source-tool="auto-radius-mode"><option value="source-or-od" ${auto.radiusMode === 'source-or-od' ? 'selected' : ''}>Source / OD×${escapeHtml(auto.defaultRadiusFactor)}</option><option value="source-only" ${auto.radiusMode === 'source-only' ? 'selected' : ''}>Source only</option></select></label>
+        <label class="rvm-source-tools-row"><span>Bend diagnostics</span><input type="checkbox" data-source-tool="auto-diagnostics" ${auto.showDiagnostics ? 'checked' : ''}></label>
+        <div class="rvm-source-tools-diag" data-source-tool-diag="auto">Bends: ${escapeHtml(autoDiag.bendCount ?? 0)} · Trims: ${escapeHtml(autoDiag.trimCount ?? 0)}</div>
+      </section>
+      <section class="rvm-source-tools-group" data-source-tools-group="support-overlay">
+        <div class="rvm-source-tools-group-title"><span>Support Overlay</span><strong class="rvm-source-tools-badge ${supportWarningCount ? 'is-warn' : ''}" data-source-tool-badge="support">${escapeHtml(supportWarningCount)} warn</strong></div>
+        <label class="rvm-source-tools-row"><span>Support Overlay</span><input type="checkbox" data-source-tool="support-enabled" ${support.enabled ? 'checked' : ''}></label>
+        <label class="rvm-source-tools-row"><span>Support scale</span><input type="range" min="0.2" max="10" step="0.1" value="${escapeHtml(support.scale)}" data-source-tool="support-scale"><strong data-source-tool-scale-value>${escapeHtml(formatScale(support.scale))}</strong></label>
+        <label class="rvm-source-tools-row"><span>Support labels</span><input type="checkbox" data-source-tool="support-labels" ${support.labels ? 'checked' : ''}></label>
+        <label class="rvm-source-tools-row"><span>Warnings only</span><input type="checkbox" data-source-tool="support-warnings" ${support.warningsOnly ? 'checked' : ''}></label>
+        <div class="rvm-source-tools-filters" data-source-tool-filters="support"><span>Family filters</span>${renderSupportFamilyFilters(support.filters)}</div>
+        <div class="rvm-source-tools-diag" data-source-tool-diag="support">Supports: ${escapeHtml(supportDiag.created ?? 0)}/${escapeHtml(acceptedSupports)} · Filtered: ${escapeHtml(supportDiag.filteredOut ?? 0)} · ${escapeHtml(supportDiag.status || 'idle')}</div>
+        ${renderSupportFilterSummary(supportDiag)}
+        ${renderSupportWarnings(supportDiag.warnings)}
+      </section>
       <div class="rvm-source-tools-actions" data-source-tool-actions="diagnostics">
         <button type="button" data-source-tool-action="copy-diagnostics">Copy diagnostics JSON</button>
         <button type="button" data-source-tool-action="download-diagnostics">Download diagnostics JSON</button>
