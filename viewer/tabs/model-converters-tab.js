@@ -13,5 +13,5 @@
  * keeps the legacy entrypoint discoverable without duplicating runtime install
  * logic.
  */
-export { renderModelConvertersTab } from './model-converters/index.js?v=20260622-regex-pos-persist-1';
-export { installXmlCiiConversionWorkflowPopup } from './model-converters/xml-cii-conversion-workflow-popup.js?v=20260620-weight-ready-1';
+export { renderModelConvertersTab } from './model-converters/index.js?v=20260623-xml-cii-rich-worker-1';
+export { installXmlCiiConversionWorkflowPopup } from './model-converters/xml-cii-conversion-workflow-popup.js?v=20260623-xml-cii-rich-worker-1';

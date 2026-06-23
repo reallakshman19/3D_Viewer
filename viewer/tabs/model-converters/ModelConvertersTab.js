@@ -11,6 +11,7 @@
  * orchestrator.
  */
 
+import './xml-cii-rich-worker-cache-bust.js?v=20260623-xml-cii-rich-worker-1';
 import { renderLegacyModelConvertersTab } from './legacy-adapter.js?v=20260620-master-session-1';
 import { installBmCiiSupportAnnotationPopup } from './bm-cii-support-annotation-popup.js?v=20260617-bmcii-open-basic-handoff-2';
 import { installInputXmlPropertyTransferUi } from './inputxml-property-transfer-popup-ui-v4.js?v=20260615-inputxml-property-transfer-popup-host-hide-1';

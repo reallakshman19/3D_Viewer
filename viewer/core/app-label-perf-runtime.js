@@ -88,7 +88,7 @@ async function loadBasicGlbPcfRenderer() {
 const TABS = [
   { id: 'viewer3d', label: '3D Viewer', load: () => import('../tabs/viewer3d-tab.js?v=20260518-statusbar-theme-12').then((module) => pickRenderer(module, 'renderViewer3D', 'viewer3d')) },
   { id: 'viewer3d-rvm', label: '3D RVM Viewer', load: loadRvmViewerRenderer },
-  { id: 'model-converters', label: '3D Model Converters', load: () => import('../tabs/model-converters-tab.js?v=20260622-inputxml-rvm-lazy-1').then((module) => pickRenderer(module, 'renderModelConvertersTab', 'model-converters')) },
+  { id: 'model-converters', label: '3D Model Converters', load: () => import('../tabs/model-converters-tab.js?v=20260623-xml-cii-rich-worker-1').then((module) => pickRenderer(module, 'renderModelConvertersTab', 'model-converters')) },
   { id: 'basic-glb-pcf', label: 'Basic GLB-PCF', load: loadBasicGlbPcfRenderer },
   { id: 'pcfx-converter', label: 'PCFX Converter', load: () => import('../tabs/pcfx-converter-tab.js').then((module) => pickRenderer(module, 'renderPcfxConverterTab', 'pcfx-converter')) },
   { id: 'model-exchange', label: 'Model Exchange', load: () => import('../tabs/model-exchange-tab.js').then((module) => pickRenderer(module, 'renderModelExchangeTab', 'model-exchange')) },
