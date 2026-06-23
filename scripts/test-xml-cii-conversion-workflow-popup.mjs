@@ -48,7 +48,7 @@ const weightMatchModel = read(weightMatchModelPath);
 const invocationBuilder = read(invocationBuilderPath);
 const publicIndex = read(publicIndexPath);
 const tab = read(tabPath);
-const tabCss = `${read(tabCssPath)}\n${readIfExists(supplementalTabCssPath)}`;
+const tabCss = `${read(tabPath.replace('model-converters-tab.js', 'model-converters-tab.css'))}\n${readIfExists(supplementalTabCssPath)}`;
 
 assert(fs.existsSync(path.join(root, popupPath)), 'workflow popup module must exist');
 assert(fs.existsSync(path.join(root, nativePanelsPath)), 'popup-native panel module must exist');
@@ -57,6 +57,7 @@ assert(fs.existsSync(path.join(root, workflowShellPath)), 'canonical WorkflowShe
 assert(fs.existsSync(path.join(root, branchSyncPath)), 'branch sample sync module must exist');
 assert(popup.includes("import { WorkflowModal } from './shared/WorkflowModal.js'"), 'popup must reuse existing WorkflowModal');
 assert(/import \{ renderXmlCiiPopupNativePhase \} from '\.\/xml-cii-popup-native-panels\.js(?:\?v=[^']+)?'/.test(popup), 'popup must render popup-native phase bodies');
+assert(popup.includes('xml-cii-popup-native-panels.js?v=20260623-xml-cii-condense-rigid-ui-2'), 'popup must cache-bust native panel import containing Condense Rigid checkbox');
 assert(popup.includes("import { XML_CII_WORKFLOW_PHASES, normalizeWorkflowPhaseId } from './WorkflowShell.js'"), 'popup must use canonical XML CII phase registry');
 assert(tab.includes('installXmlCiiConversionWorkflowPopup'), 'model-converters-tab must expose workflow popup installer');
 
@@ -99,7 +100,8 @@ assert(condenseRigidBridge.includes('OPTION_KEY = \'splitCondensedValveFlange\''
 assert(condenseRigidBridge.includes('wrapBridge') && condenseRigidBridge.includes('getPopupSnapshot'), 'condense rigid bridge must hydrate popup snapshots');
 assert(condenseRigidBridge.includes('setPopupRunOption') && condenseRigidBridge.includes('savePopupConfigText'), 'condense rigid bridge must sync run and config saves');
 assert(canonicalTab.includes('installXmlCiiCondenseRigidUiBridge'), 'ModelConvertersTab must install condense rigid UI bridge');
-assert(publicIndex.includes('20260623-xml-cii-condense-rigid-ui-1'), 'public model-converters entry must cache-bust condense rigid UI');
+assert(canonicalTab.includes('xml-cii-conversion-workflow-popup.js?v=20260623-xml-cii-condense-rigid-ui-2'), 'ModelConvertersTab must cache-bust popup importer after Condense Rigid panel update');
+assert(publicIndex.includes('20260623-xml-cii-condense-rigid-ui-2'), 'public model-converters entry must cache-bust condense rigid UI');
 
 assert(branchSync.includes("const BRANCH_SAMPLE_KEY = 'xmlCii2019.regex.branchNameSampleFromXml.v1'"), 'Branchname sync must persist last extracted XML Branchname');
 assert(branchSync.includes('/<\\s*[^>]*Branchname'), 'Branchname sync must extract <Branchname> tag values');
@@ -155,6 +157,6 @@ console.log('✅ XML CII phase-tab workflow popup static test passed', {
   branchNameSync: 'linelist.sampleBranchName',
   shiftedBranchPreview: 'lineKey/size/class guarded',
   weightMatchRating: 'manual override propagated',
-  condenseRigid: 'splitCondensedValveFlange exposed and forwarded',
+  condenseRigid: 'splitCondensedValveFlange exposed, forwarded, and cache-busted',
   supplementalCss: 'model-converters-css-fix.css',
 });
