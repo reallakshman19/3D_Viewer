@@ -103,13 +103,13 @@ assert.match(helper, /support-overlay-highlight\/v1/, 'highlight helper exposes 
 assert.match(helper, /__supportOverlayOriginalMaterial/, 'highlight helper stores original material for restore');
 assert.match(helper, /material\.clone/, 'highlight helper clones materials before highlighting');
 assert.match(helper, /clearSupportOverlayHighlights/, 'highlight helper exposes clear function');
-assert.match(bridge, /rvm-non-primitive-support-overlay-details-panel\/v3/, 'details panel bridge schema bumped for highlight behavior');
+assert.match(bridge, /rvm-non-primitive-support-overlay-details-panel\/v4/, 'details panel bridge schema bumped for keyboard and miss-clear behavior');
 assert.match(bridge, /highlightSupportOverlayGlyph/, 'details panel highlights selected source support glyph');
 assert.match(bridge, /clearSupportOverlayHighlights/, 'details panel clears scoped source support highlights');
 assert.match(bridge, /nonPrimitiveSupportOverlayHighlightState/, 'highlight state is stored outside RVM primitive selection state');
 assert.match(bridge, /__RVM_NON_PRIMITIVE_SUPPORT_OVERLAY__/, 'highlight is scoped to the non-primitive support overlay root');
 assert.doesNotMatch(bridge, /selection\.select|selection\.pick|RvmSelectionAdapter|objectSearch|searchIndex/, 'highlight bridge does not call RVM primitive selection or search/index code');
 assert.match(geometry, /pickable:\s*false[\s\S]*selectable:\s*false/, 'glyph geometry remains non-pickable and non-selectable');
-assert.match(renderer, /RvmNonPrimitiveSupportOverlayDetailsPanelBridge\.js\?v=20260623-nonprimitive-support-details-panel-3/, 'renderer imports highlighted details panel bridge cache key');
+assert.match(renderer, /RvmNonPrimitiveSupportOverlayDetailsPanelBridge\.js\?v=20260623-nonprimitive-support-details-panel-4/, 'renderer imports highlighted details panel bridge cache key');
 
 console.log('non-primitive support overlay highlight tests passed');
