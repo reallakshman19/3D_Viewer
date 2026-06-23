@@ -142,13 +142,16 @@ function guideLoad(opeVerticalN, input, profile) {
   const rounded = getRoundedNum(raw, profile.rounding.roundMajor, profile.rounding.roundStep, profile.rounding.roundMode);
   const minimumByOpeVertical = round3(g.minimumOpeVerticalFactor * v);
   const finalN = round3(Math.max(number(rounded) ?? -Infinity, minimumByOpeVertical));
+  const controlling = finalN === rounded
+    ? 'ROUNDED_TEMPERATURE_WALL_GUIDE'
+    : (g.minimumOpeVerticalFactor === 0.3 ? 'THIRTY_PERCENT_OPE_VERTICAL' : 'MINIMUM_OPE_VERTICAL_FACTOR');
   return freezeDeep({
     rawN: round3(raw),
     roundedN: rounded,
     thirtyPercentOpeVN: g.minimumOpeVerticalFactor === 0.3 ? minimumByOpeVertical : null,
     minimumOpeVerticalN: minimumByOpeVertical,
     finalN,
-    controlling: finalN === rounded ? 'ROUNDED_TEMPERATURE_WALL_GUIDE' : 'MINIMUM_OPE_VERTICAL_FACTOR',
+    controlling,
     profile: {
       temperatureMultiplier: g.temperatureMultiplier,
       spanLoadMultiplier: g.spanLoadMultiplier,
