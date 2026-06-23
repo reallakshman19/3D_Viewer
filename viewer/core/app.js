@@ -41,6 +41,8 @@
 // GeometrySupportLoadQaDashboardBridge.js?v=20260623-support-load-qa-dashboard-1
 // GeometrySupportLoadBulkPackageExporter.js?v=20260623-support-load-bulk-package-1
 // GeometrySupportLoadBulkPackageBridge.js?v=20260623-support-load-bulk-package-1
+// GeometrySupportLoadCanvasOverlayModel.js?v=20260623-support-load-canvas-overlay-1
+// GeometrySupportLoadCanvasOverlayBridge.js?v=20260623-support-load-canvas-overlay-1
 // app-label-perf-runtime.js?v=20260622-pipe-support-load-input-hydrator-1
 // app-label-perf-runtime.js?v=20260622-input-review-lock-1
 // app-label-perf-runtime.js?v=20260622-input-review-override-lock-1
@@ -49,6 +51,7 @@
 // app-label-perf-runtime.js?v=20260622-support-load-result-writeback-audit-1
 // app-label-perf-runtime.js?v=20260622-geometry-enriched-stagedjson-support-loads-1
 // app-label-perf-runtime.js?v=20260623-support-load-bulk-package-1
+// app-label-perf-runtime.js?v=20260623-support-load-canvas-overlay-1
 import { installAppTabClickStateBridge } from './app-tab-click-state-bridge.js?v=20260622-tab-click-state-1';
 import { installGeometryExportWorkspaceBridge } from '../geometry-workspace/GeometryExportWorkspaceBridge.js?v=20260622-geometry-mapping-1';
 import { installGeometryMappingProfileBridge } from '../geometry-workspace/GeometryMappingProfileBridge.js?v=20260622-geometry-profile-ui-1';
@@ -63,6 +66,7 @@ import { installGeometrySupportLoadReportBridge } from '../geometry-workspace/Ge
 import { installGeometrySupportLoadConflictBridge } from '../geometry-workspace/GeometrySupportLoadConflictBridge.js?v=20260623-support-load-conflict-resolver-1';
 import { installGeometrySupportLoadQaDashboardBridge } from '../geometry-workspace/GeometrySupportLoadQaDashboardBridge.js?v=20260623-support-load-qa-dashboard-1';
 import { installGeometrySupportLoadBulkPackageBridge } from '../geometry-workspace/GeometrySupportLoadBulkPackageBridge.js?v=20260623-support-load-bulk-package-1';
+import { installGeometrySupportLoadCanvasOverlayBridge } from '../geometry-workspace/GeometrySupportLoadCanvasOverlayBridge.js?v=20260623-support-load-canvas-overlay-1';
 import { installRvmModelHealthBridge } from '../tabs/RvmModelHealthBridge.js?v=20260621-rvm-health-issues-1';
 import { installRvmModelHealthIssuesBridge } from '../tabs/RvmModelHealthIssuesBridge.js?v=20260621-rvm-health-issues-1';
 import { installBrowserRvmNativeFacetGhostPanelPatch } from '../rvm/BrowserRvmNativeFacetGhostPanelPatch.js?v=20260622-rvm-facet-ghost-panels-1';
@@ -81,8 +85,9 @@ installGeometrySupportLoadReportBridge();
 installGeometrySupportLoadConflictBridge();
 installGeometrySupportLoadQaDashboardBridge();
 installGeometrySupportLoadBulkPackageBridge();
+installGeometrySupportLoadCanvasOverlayBridge();
 installRvmModelHealthBridge();
 installRvmModelHealthIssuesBridge();
 installBrowserRvmNativeFacetGhostPanelPatch();
 
-export { init } from './app-label-perf-runtime.js?v=20260623-support-load-bulk-package-1';
+export { init } from './app-label-perf-runtime.js?v=20260623-support-load-canvas-overlay-1';
