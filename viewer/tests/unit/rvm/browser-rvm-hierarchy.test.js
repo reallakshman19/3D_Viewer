@@ -154,7 +154,7 @@ assert.ok(findByName(root, 'REDUCER 1'));
 assert.ok(findByName(root, 'STRUCTURE 1'));
 
 const renderInstructions = collectBrowserRvmRenderInstructions(parsed.hierarchy);
-assert.equal(renderInstructions.schemaVersion, 'rvm-browser-render-instructions/v5-raw-first-support-primitives');
+assert.equal(renderInstructions.schemaVersion, 'rvm-browser-render-instructions/v6-rvm-support-runtime-retired');
 assert.equal(renderInstructions.count, 5);
 assert.equal(renderInstructions.diagnostics.instructionCount, 5);
 assert.equal(renderInstructions.diagnostics.contractCounts.TORUS_BBOX_PLACEHOLDER, 2);
