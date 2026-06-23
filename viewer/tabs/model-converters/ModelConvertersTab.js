@@ -55,7 +55,7 @@ function markStylesReady(container) {
   container.classList.add('model-converters-style-ready');
   container.dataset.modelConvertersCss = '20260621-model-converters-css-1';
   const root = container.querySelector?.('.model-converters-root');
-  if (root) root.datasetModelConvertersCss = '20260621-model-converters-css-1';
+  if (root) root.dataset.modelConvertersCss = '20260621-model-converters-css-1';
 }
 
 function installSafely(name, installer, container) {
