@@ -86,8 +86,10 @@ export function buildLockedPipeInputFromAccessFixture(fixture) {
   const autoSpanMm = number(input.autoSpanMm ?? depSpanMm);
   const verticalNSS = number(input.verticalNSS ?? input.Vertical_N_SS);
   const totalKgPerM = totalKgPerMForVertical({ verticalNSS, spanMm: depSpanMm });
-  const unitPipeWtKgPerM = number(input.unitPipeWtKgPerM ?? input.UnitPipewtKgM ?? input['UnitPipewtKg/m']) ?? (totalKgPerM === null ? null : round3(totalKgPerM * 0.6));
-  const fluidWtOpeKgPerM = number(input.fluidWtOpeKgPerM ?? input.FluidwtKgM ?? input['FluidwtKg/m']) ?? (totalKgPerM === null ? null : round3(totalKgPerM - unitPipeWtKgPerM));
+  const fallbackPipeWtKgPerM = totalKgPerM === null ? null : totalKgPerM * 0.6;
+  const unitPipeWtKgPerM = number(input.unitPipeWtKgPerM ?? input.UnitPipewtKgM ?? input['UnitPipewtKg/m']) ?? fallbackPipeWtKgPerM;
+  const fallbackFluidWtOpeKgPerM = totalKgPerM === null || unitPipeWtKgPerM === null ? null : totalKgPerM - unitPipeWtKgPerM;
+  const fluidWtOpeKgPerM = number(input.fluidWtOpeKgPerM ?? input.FluidwtKgM ?? input['FluidwtKg/m']) ?? fallbackFluidWtOpeKgPerM;
   const fluidWtHydKgPerM = number(input.fluidWtHydKgPerM ?? input.FluidwtHydKgM ?? input['FluidwtHydKg/m']) ?? fluidWtOpeKgPerM;
   const insideDiameterMm = number(input.insideDiameterMm) ?? (pipeOdMm === null || wallThicknessMm === null ? null : round3(pipeOdMm - 2 * wallThicknessMm));
   return freezeDeep({
