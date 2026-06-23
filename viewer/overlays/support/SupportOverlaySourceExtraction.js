@@ -73,6 +73,7 @@ export function parseSupportRecordFromSourceNode(node) {
 }
 
 export function coordinateFromAttributes(a = {}) {
+  a = canonicalAttrs(a);
   for (const key of SUPPORT_COORDINATE_KEYS) {
     const pt = parseVec3(valueFromKeys(a, [key]));
     if (pt) return pt;
@@ -91,6 +92,7 @@ export function coordinateFromAttributes(a = {}) {
 }
 
 export function pipeAxisFromAttributes(a = {}) {
+  a = canonicalAttrs(a);
   for (const key of SUPPORT_AXIS_KEYS) {
     const explicit = normalizeVec(parseVec3(valueFromKeys(a, [key])));
     if (explicit) return explicit;
@@ -109,6 +111,7 @@ export function pipeAxisFromAttributes(a = {}) {
 }
 
 export function explicitSignFromAttributes(a = {}, text = '') {
+  a = canonicalAttrs(a);
   for (const key of SUPPORT_SIGN_KEYS) {
     const sign = normalizeExplicitSign(valueFromKeys(a, [key]));
     if (sign) return sign;
@@ -117,6 +120,7 @@ export function explicitSignFromAttributes(a = {}, text = '') {
 }
 
 export function supportTag(node, a = {}) {
+  a = canonicalAttrs(a);
   for (const key of EXPLICIT_SUPPORT_REF_KEYS) {
     const value = valueFromKeys(a, [key]);
     const direct = cleanSupportTag(value);
@@ -139,6 +143,7 @@ export function supportTag(node, a = {}) {
 }
 
 export function pipeOdFromAttributes(a = {}) {
+  a = canonicalAttrs(a);
   for (const key of SUPPORT_OD_KEYS) {
     const n = numberValue(valueFromKeys(a, [key]));
     if (n && n > 0) return n;
@@ -147,6 +152,7 @@ export function pipeOdFromAttributes(a = {}) {
 }
 
 export function singleAxisFromAttributes(a = {}, text = '') {
+  a = canonicalAttrs(a);
   const upper = String(text || '').toUpperCase();
   if (/\bSINGLE\s*AXIS\b|\bONE\s*WAY\b|\bONEWAY\b|\bUNI[-\s]?DIRECTION/.test(upper)) return true;
   return boolValue(firstDefined(
@@ -185,6 +191,15 @@ function childNodes(node) {
     if (Array.isArray(value)) out.push(...value.filter((item) => item && typeof item === 'object'));
     else if (value && typeof value === 'object') out.push(value);
   }
+  return out;
+}
+
+function canonicalAttrs(a = {}) {
+  if (!a || typeof a !== 'object') return {};
+  if (a.__supportOverlayCanonicalAttrs) return a;
+  const out = {};
+  mergeAttributeObject(out, a, 1);
+  Object.defineProperty(out, '__supportOverlayCanonicalAttrs', { value: true, enumerable: false });
   return out;
 }
 
