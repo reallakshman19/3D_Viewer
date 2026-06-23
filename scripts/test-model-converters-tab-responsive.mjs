@@ -31,9 +31,16 @@ assert(/setTimeout\(run, 0\)/.test(tabSource), 'deferred installer scheduler mus
 
 assert(!/new MutationObserver/.test(popupSource), 'lean popup launcher must not install MutationObserver');
 assert(!/mountExistingPanel/.test(popupSource), 'lean popup launcher must not move live panels by DOM portal');
-assert(/document\.addEventListener\('click', interceptRun, true\)/.test(popupSource), 'lean popup must intercept XML→CII run click through a single capture listener');
+assert(!/function interceptRun/.test(popupSource), 'lean popup must not define old simple-run interception');
+assert(!/document\.addEventListener\('click', interceptRun, true\)/.test(popupSource), 'lean popup must not capture the simple Run Conversion click');
+assert(/Only the XML->CII Rich Workflow button opens this phase-tab popup/.test(popupSource), 'rich popup must be opened only by XML->CII Rich Workflow button');
+assert(/restoreSimpleRunButton/.test(popupSource), 'lean popup must restore simple Run Conversion visibility');
+assert(/window\[DIRECT_RUN_FLAG\] = true/.test(popupSource), 'lean popup must bypass stale cached simple-run interceptors');
 assert(/data-xml-cii-workflow-root/.test(popupSource), 'lean popup must scope installer state to the current model-converters root');
 assert(/stateByRoot: new WeakMap\(\)/.test(popupSource), 'lean popup must keep independent modal state per rendered root');
 assert(!/if \(!browserReady\(\) \|\| window\[FLAG\]\) return/.test(popupSource), 'lean popup must not use a stale global singleton guard that blocks re-render install');
 
-console.log('✅ model converters tab lean responsiveness static test passed');
+console.log('✅ model converters tab lean responsiveness static test passed', {
+  simpleRun: 'direct/no popup interception',
+  richWorkflow: 'explicit rich button popup only',
+});
