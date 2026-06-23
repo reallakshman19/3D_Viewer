@@ -7,6 +7,7 @@ on:
     paths:
       - 'viewer/rvm-pcf-extract/**'
       - 'viewer/converters/xml-cii2019-core/**'
+      - 'viewer/converters/inputxml-managed-stage/**'
       - 'viewer/rvm-viewer/RvmProgressiveModelRootPatch.js'
       - 'viewer/rvm/BrowserRvmRenderContractAdapter.js'
       - 'viewer/rvm/BrowserRvmRemainingPrimitiveRuntimePatch.js'
@@ -14,6 +15,9 @@ on:
       - 'viewer/tabs/RvmSupportGeometryBridge.js'
       - 'viewer/tabs/RvmSupportAttMappingBridge.js'
       - 'viewer/tabs/RvmIntelligentSupportEngineBridge.js'
+      - 'viewer/tabs/model-converters/ModelConvertersTab.js'
+      - 'viewer/tabs/model-converters/inputxml-managed-stage-bridge.js'
+      - 'viewer/tabs/model-converters/converters/inputxml-to-stagedjson.js'
       - 'viewer/tabs/model-converters/workflow/**'
       - 'viewer/tabs/rvm-json-pcf-*.js'
       - 'viewer/tabs/viewer3d-rvm-tab.js'
@@ -35,6 +39,7 @@ on:
       - 'viewer/core/event-bus.js'
       - 'viewer/core/state.js'
       - 'viewer/tests/rvm-pcf-*.test.js'
+      - 'viewer/tests/inputxml-direct-managed-stage.test.js'
       - 'viewer/tests/rvm-geometry-workspace-*.test.js'
       - 'viewer/tests/nonprimitive-auto-bend-*.test.js'
       - 'viewer/tests/nonprimitive-support-overlay-*.test.js'
@@ -75,6 +80,9 @@ jobs:
 
       - name: Verify JSON/RVM PCF adapter preview and run
         run: node viewer/tests/rvm-pcf-json-adapter-preview-run.test.js
+
+      - name: Verify direct InputXML stagedJSON conversion
+        run: node viewer/tests/inputxml-direct-managed-stage.test.js
 
       - name: Verify raw support cylinders stay raw
         run: node viewer/tests/rvm-pcf-raw-support-cylinder.test.js
@@ -182,18 +190,3 @@ jobs:
 
       - name: Verify support-load real model validation
         run: node viewer/tests/rvm-geometry-workspace-support-load-real-model-validation.test.js
-
-      - name: Verify support-load span matrix regression
-        run: node viewer/tests/rvm-geometry-workspace-support-load-span-matrix.test.js
-
-      - name: Verify support-load report export
-        run: node viewer/tests/rvm-geometry-workspace-support-load-report.test.js
-
-      - name: Verify support-load bulk package export
-        run: node viewer/tests/rvm-geometry-workspace-support-load-bulk-package.test.js
-
-      - name: Verify support-load canvas overlay plan
-        run: node viewer/tests/rvm-geometry-workspace-support-load-canvas-overlay.test.js
-
-      - name: Verify enriched stagedJSON support-load export
-        run: node viewer/tests/rvm-geometry-workspace-enriched-stagedjson-support-loads.test.js

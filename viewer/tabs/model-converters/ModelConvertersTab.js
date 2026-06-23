@@ -19,6 +19,7 @@ import { installXmlCiiConversionWorkflowPopup } from './xml-cii-conversion-workf
 import { installXmlCiiBranchSampleSync } from './xml-cii-branch-sample-sync.js?v=20260620-rating-runtime-1';
 import { installXmlCiiLineKeySelectPatch } from './xml-cii-linekey-select-patch.js?v=20260622-regex-pos-persist-1';
 import { installInputXmlBasicGlbBridge } from './inputxml-basic-glb-bridge.js';
+import { installInputXmlManagedStageBridge } from './inputxml-managed-stage-bridge.js?v=20260623-inputxml-direct-stage-1';
 import { installXmlCiiDefaultMasterAutoload, installXmlCiiRecoveryPatch } from '../xml-cii-master-autoload-patch.js?v=20260620-master-session-1';
 import { installXmlCiiPreviewLineKeyRemap } from './xml-cii-preview-linekey-remap.js?v=20260620-rating-runtime-1';
 import { installXmlCiiRuntimeOverrideSync } from './xml-cii-runtime-override-sync.js?v=20260620-rating-runtime-1';
@@ -84,6 +85,7 @@ const MODEL_CONVERTER_INSTALLERS = Object.freeze([
   ['bm-cii-support-annotation-popup', installBmCiiSupportAnnotationPopup],
   ['inputxml-property-transfer-popup-ui-v4', installInputXmlPropertyTransferUi],
   ['inputxml-basic-glb-bridge', installInputXmlBasicGlbBridge],
+  ['inputxml-managed-stage-bridge', installInputXmlManagedStageBridge],
   ['xml-cii-default-master-autoload', installXmlCiiDefaultMasterAutoload],
   ['xml-cii-recovery-patch', installXmlCiiRecoveryPatch],
   ['xml-cii-preview-linekey-remap', installXmlCiiPreviewLineKeyRemap],
