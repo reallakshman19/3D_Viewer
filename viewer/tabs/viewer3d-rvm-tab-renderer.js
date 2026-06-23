@@ -6,7 +6,7 @@
 // Active non-primitive support overlay cache key: RvmNonPrimitiveSupportOverlayBridge.js?v=20260623-nonprimitive-support-overlay-8
 // Active non-primitive support hard-disable cache key: RvmNonPrimitiveSupportOverlayHardDisableBridge.js?v=20260623-nonprimitive-support-hard-disable-1
 // Active non-primitive support details panel cache key: RvmNonPrimitiveSupportOverlayDetailsPanelBridge.js?v=20260623-nonprimitive-support-details-panel-4
-// Active non-primitive support hover cache key: RvmNonPrimitiveSupportOverlayHoverBridge.js?v=20260623-nonprimitive-support-hover-1
+// Active non-primitive support hover cache key: RvmNonPrimitiveSupportOverlayHoverBridge.js?v=20260623-nonprimitive-support-hover-2
 // Active non-primitive auto-bend cache key: RvmNonPrimitiveAutoBendBridge.js?v=20260623-nonprimitive-auto-bend-preview-2
 // Active non-primitive source tools UI cache key: RvmNonPrimitiveSourceToolsUiBridge.js?v=20260623-nonprimitive-source-tools-ui-6
 import { RvmViewer3D } from '../rvm-viewer/RvmViewer3D.js?v=20260622-rvm-leaf-picking-2';
@@ -18,7 +18,7 @@ import { installRvmRetiredSupportToolsPurgeBridge } from './RvmRetiredSupportToo
 import { installRvmNonPrimitiveSupportOverlayBridge } from './RvmNonPrimitiveSupportOverlayBridge.js?v=20260623-nonprimitive-support-overlay-8';
 import { installRvmNonPrimitiveSupportOverlayHardDisableBridge } from './RvmNonPrimitiveSupportOverlayHardDisableBridge.js?v=20260623-nonprimitive-support-hard-disable-1';
 import { installRvmNonPrimitiveSupportOverlayDetailsPanelBridge } from './RvmNonPrimitiveSupportOverlayDetailsPanelBridge.js?v=20260623-nonprimitive-support-details-panel-4';
-import { installRvmNonPrimitiveSupportOverlayHoverBridge } from './RvmNonPrimitiveSupportOverlayHoverBridge.js?v=20260623-nonprimitive-support-hover-1';
+import { installRvmNonPrimitiveSupportOverlayHoverBridge } from './RvmNonPrimitiveSupportOverlayHoverBridge.js?v=20260623-nonprimitive-support-hover-2';
 import { installRvmNonPrimitiveAutoBendBridge } from './RvmNonPrimitiveAutoBendBridge.js?v=20260623-nonprimitive-auto-bend-preview-2';
 import { installRvmNonPrimitiveSourceToolsUiBridge } from './RvmNonPrimitiveSourceToolsUiBridge.js?v=20260623-nonprimitive-source-tools-ui-6';
 import { installRvmUiEventSafetyBridge } from './RvmUiEventSafetyBridge.js?v=20260622-rvm-ui-event-safety-2';
