@@ -18,6 +18,7 @@ on:
       - 'viewer/tabs/rvm-json-pcf-*.js'
       - 'viewer/tabs/viewer3d-rvm-tab.js'
       - 'viewer/tabs/viewer3d-rvm-tab-renderer.js'
+      - 'viewer/tabs/RvmNonPrimitiveSupportOverlayBridge.js'
       - 'viewer/tabs/RvmNonPrimitiveAutoBendBridge.js'
       - 'viewer/tabs/RvmNonPrimitiveSourceToolsUiBridge.js'
       - 'viewer/geometry-workspace/**'
@@ -32,6 +33,7 @@ on:
       - 'viewer/tests/rvm-pcf-*.test.js'
       - 'viewer/tests/rvm-geometry-workspace-*.test.js'
       - 'viewer/tests/nonprimitive-auto-bend-*.test.js'
+      - 'viewer/tests/nonprimitive-support-overlay-*.test.js'
       - 'viewer/tests/nonprimitive-source-tools-ui.test.js'
       - '.github/workflows/rvm-pcf-ci.yml'
   workflow_dispatch:
@@ -65,6 +67,9 @@ jobs:
 
       - name: Verify raw support cylinders stay raw
         run: node viewer/tests/rvm-pcf-raw-support-cylinder.test.js
+
+      - name: Verify non-primitive support overlay resolver
+        run: node viewer/tests/nonprimitive-support-overlay-resolver.test.js
 
       - name: Verify non-primitive auto-bend gate
         run: node viewer/tests/nonprimitive-auto-bend-gate.test.js
