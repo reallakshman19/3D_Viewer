@@ -34,7 +34,16 @@ function readFilters(storage) {
 }
 
 function normalizeFilters(value) {
-  const fallback = { REST: true, GUIDE: true, LINESTOP: true, LIMIT: true, HOLDDOWN: true, SPRING: true, HANGER: true, ANCHOR: true, SUPPORT: true };
+  const fallback = {
+    REST: true,
+    GUIDE: true,
+    LINESTOP: true,
+    LIMIT: true,
+    LIM: true,
+    HOLDDOWN: true,
+    SPRING_CAN: true,
+    UNKNOWN: true,
+  };
   if (!value || typeof value !== 'object') return fallback;
   return { ...fallback, ...Object.fromEntries(Object.entries(value).map(([key, enabled]) => [String(key).toUpperCase(), enabled !== false])) };
 }
