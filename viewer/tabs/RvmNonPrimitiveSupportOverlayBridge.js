@@ -3,10 +3,11 @@ import { CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
 import { AvevaJsonLoader } from '../rvm/AvevaJsonLoader.js';
 import { RvmViewer3D } from '../rvm-viewer/RvmViewer3D.js?v=20260622-rvm-leaf-picking-2';
 import { readNonPrimitiveSupportOverlaySettings } from '../overlays/support/SupportOverlaySettings.js';
+import { resolveSupportSymbol } from '../overlays/support/NonPrimitiveSupportOverlayResolver.js';
 import {
-  resolveSupportSymbol,
-  SUPPORT_FAMILIES,
-} from '../overlays/support/NonPrimitiveSupportOverlayResolver.js';
+  buildSupportOverlayFilterPlan,
+  SUPPORT_OVERLAY_FILTER_DIAGNOSTICS_SCHEMA,
+} from '../overlays/support/SupportOverlayFilterDiagnostics.js';
 import {
   collectSourcePipeSegments,
   createSupportCoordinateMapper,
@@ -19,13 +20,13 @@ import {
 import { buildSupportOverlayGlyphGroup } from '../overlays/support/SupportOverlayGlyphGeometry.js';
 import { createSupportOverlayLabelObject, shouldShowSupportOverlayLabel } from '../overlays/support/SupportOverlayLabels.js';
 
-export const RVM_NON_PRIMITIVE_SUPPORT_OVERLAY_SCHEMA = 'rvm-non-primitive-support-overlay/v6';
+export const RVM_NON_PRIMITIVE_SUPPORT_OVERLAY_SCHEMA = 'rvm-non-primitive-support-overlay/v7';
 
 const ROOT_NAME = '__RVM_NON_PRIMITIVE_SUPPORT_OVERLAY__';
 const GLOBAL_KEY = '__PCF_GLB_RVM_NON_PRIMITIVE_SUPPORT_OVERLAY__';
-const PATCH_FLAG = Symbol.for('pcf-glb-rvm-non-primitive-support-overlay-v6');
-const LOADER_PATCH_FLAG = Symbol.for('pcf-glb-rvm-non-primitive-support-overlay-loader-v6');
-const VIEWER_PATCH_FLAG = Symbol.for('pcf-glb-rvm-non-primitive-support-overlay-viewer-v6');
+const PATCH_FLAG = Symbol.for('pcf-glb-rvm-non-primitive-support-overlay-v7');
+const LOADER_PATCH_FLAG = Symbol.for('pcf-glb-rvm-non-primitive-support-overlay-loader-v7');
+const VIEWER_PATCH_FLAG = Symbol.for('pcf-glb-rvm-non-primitive-support-overlay-viewer-v7');
 const MAX_SUPPORT_OVERLAYS = 500;
 const NON_PRIMITIVE_SOURCE_RE = /\.(json|jscon|uxml|inputxml|txt)$/i;
 const RVM_SOURCE_RE = /\.(rvm|rev)$/i;
@@ -36,6 +37,7 @@ export function installRvmNonPrimitiveSupportOverlayBridge() {
   globalThis[GLOBAL_KEY] = {
     schema: RVM_NON_PRIMITIVE_SUPPORT_OVERLAY_SCHEMA,
     sourceExtractionSchema: SUPPORT_OVERLAY_SOURCE_EXTRACTION_SCHEMA,
+    filterDiagnosticsSchema: SUPPORT_OVERLAY_FILTER_DIAGNOSTICS_SCHEMA,
     rootName: ROOT_NAME,
     applyFromSource,
     clear,
@@ -58,6 +60,7 @@ function patchAvevaJsonLoaderForNonPrimitiveSource() {
       scene.userData.__rvmNonPrimitiveSourceKind = 'source-preview';
       scene.userData.__rvmNonPrimitiveSupportOverlaySchema = RVM_NON_PRIMITIVE_SUPPORT_OVERLAY_SCHEMA;
       scene.userData.__rvmNonPrimitiveSupportSourceExtractionSchema = SUPPORT_OVERLAY_SOURCE_EXTRACTION_SCHEMA;
+      scene.userData.__rvmNonPrimitiveSupportFilterDiagnosticsSchema = SUPPORT_OVERLAY_FILTER_DIAGNOSTICS_SCHEMA;
     }
     return payload;
   };
@@ -94,17 +97,25 @@ export function applyFromSource({ viewer, root, source, sourceKind = '', fileNam
   }
 
   const records = collectNonPrimitiveSupportRecords(source).slice(0, MAX_SUPPORT_OVERLAYS);
+  const filterPlan = buildSupportOverlayFilterPlan(records, settings);
   const pipeSegments = collectSourcePipeSegments(source);
   clear(viewer, 'before-non-primitive-overlay');
   if (!records.length) {
     const diagnostics = {
       schema: RVM_NON_PRIMITIVE_SUPPORT_OVERLAY_SCHEMA,
       sourceExtractionSchema: SUPPORT_OVERLAY_SOURCE_EXTRACTION_SCHEMA,
+      filterDiagnosticsSchema: SUPPORT_OVERLAY_FILTER_DIAGNOSTICS_SCHEMA,
       status: 'empty',
       sourceKind: kind,
       sourceFile: fileName,
       created: 0,
       sourceSupports: 0,
+      acceptedSupports: 0,
+      filteredOut: 0,
+      filteredByFamily: {},
+      sourceByFamily: {},
+      disabledFamilies: filterPlan.disabledFamilies,
+      filtersApplied: filterPlan.filtersApplied,
       sourcePipeSegments: pipeSegments.length,
       warnings: [],
     };
@@ -128,6 +139,7 @@ export function applyFromSource({ viewer, root, source, sourceKind = '', fileNam
   overlayRoot.userData = {
     schema: RVM_NON_PRIMITIVE_SUPPORT_OVERLAY_SCHEMA,
     sourceExtractionSchema: SUPPORT_OVERLAY_SOURCE_EXTRACTION_SCHEMA,
+    filterDiagnosticsSchema: SUPPORT_OVERLAY_FILTER_DIAGNOSTICS_SCHEMA,
     nonPrimitiveSupportOverlay: true,
     sourceKind: kind,
     sourceFile: fileName,
@@ -139,13 +151,21 @@ export function applyFromSource({ viewer, root, source, sourceKind = '', fileNam
   const coordinateMappings = [];
   const pipeAxisResolutions = [];
   const byFamily = {};
-  for (const record of records) {
-    if (familyFilteredOut(settings, record.kind)) continue;
+  let skippedDuplicates = 0;
+  let skippedGlyphs = 0;
+
+  for (const record of filterPlan.acceptedRecords) {
     const key = `${record.tag}:${record.kind}:${record.local.x.toFixed(1)}:${record.local.y.toFixed(1)}:${record.local.z.toFixed(1)}`.toUpperCase();
-    if (seen.has(key)) continue;
+    if (seen.has(key)) {
+      skippedDuplicates += 1;
+      continue;
+    }
     seen.add(key);
     const object = makeSupportGlyph(record, viewer, glyphSize, kind, fileName, settings, pipeSegments, coordinateMapper);
-    if (!object) continue;
+    if (!object) {
+      skippedGlyphs += 1;
+      continue;
+    }
     overlayRoot.add(object);
     byFamily[record.kind] = (byFamily[record.kind] || 0) + 1;
     if (object.userData?.coordinateMapping) coordinateMappings.push(object.userData.coordinateMapping);
@@ -157,11 +177,20 @@ export function applyFromSource({ viewer, root, source, sourceKind = '', fileNam
   const diagnostics = {
     schema: RVM_NON_PRIMITIVE_SUPPORT_OVERLAY_SCHEMA,
     sourceExtractionSchema: SUPPORT_OVERLAY_SOURCE_EXTRACTION_SCHEMA,
+    filterDiagnosticsSchema: SUPPORT_OVERLAY_FILTER_DIAGNOSTICS_SCHEMA,
     status: overlayRoot.children.length ? 'applied' : 'empty',
     sourceKind: kind,
     sourceFile: fileName,
     created: overlayRoot.children.length,
     sourceSupports: records.length,
+    acceptedSupports: filterPlan.acceptedCount,
+    filteredOut: filterPlan.filteredOut,
+    filteredByFamily: filterPlan.filteredByFamily,
+    sourceByFamily: filterPlan.sourceByFamily,
+    disabledFamilies: filterPlan.disabledFamilies,
+    filtersApplied: filterPlan.filtersApplied,
+    skippedDuplicates,
+    skippedGlyphs,
     sourcePipeSegments: pipeSegments.length,
     byFamily,
     warningCount: warnings.length,
@@ -261,12 +290,6 @@ function makeSupportGlyph(record, viewer, glyphSize, sourceKind, sourceFile, set
   }
 
   return group;
-}
-
-function familyFilteredOut(settings, family) {
-  const filters = settings?.filters || {};
-  const key = family === SUPPORT_FAMILIES.SPRING_CAN ? 'SPRING' : family;
-  return filters[family] === false || filters[key] === false;
 }
 
 function vec3(value) { return new THREE.Vector3(Number(value?.x) || 0, Number(value?.y) || 0, Number(value?.z) || 0); }
