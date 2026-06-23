@@ -28,6 +28,8 @@
 // GeometryEnrichedStagedJsonBridge.js?v=20260622-geometry-enriched-stagedjson-1
 // GeometryEnrichedStagedJsonExporter.js?v=20260622-geometry-enriched-stagedjson-support-loads-1
 // GeometryEnrichedStagedJsonBridge.js?v=20260622-geometry-enriched-stagedjson-support-loads-1
+// GeometrySupportLoadMasterData.js?v=20260623-support-load-master-data-1
+// GeometrySupportLoadMasterDataBridge.js?v=20260623-support-load-master-data-1
 // app-label-perf-runtime.js?v=20260622-pipe-support-load-input-hydrator-1
 // app-label-perf-runtime.js?v=20260622-input-review-lock-1
 // app-label-perf-runtime.js?v=20260622-input-review-override-lock-1
@@ -42,6 +44,7 @@ import { installGeometryCalculationCanvasBridge } from '../geometry-workspace/Ge
 import { installGeometryCalculationInputBridge } from '../geometry-workspace/GeometryCalculationInputBridge.js?v=20260622-geometry-input-resolver-1';
 import { installGeometryEnrichmentBridge } from '../geometry-workspace/GeometryEnrichmentBridge.js?v=20260622-geometry-enrichment-1';
 import { installGeometryEnrichedStagedJsonBridge } from '../geometry-workspace/GeometryEnrichedStagedJsonBridge.js?v=20260622-geometry-enriched-stagedjson-support-loads-1';
+import { installGeometrySupportLoadMasterDataBridge } from '../geometry-workspace/GeometrySupportLoadMasterDataBridge.js?v=20260623-support-load-master-data-1';
 import { installGeometrySupportLoadInputBridge } from '../geometry-workspace/GeometrySupportLoadInputBridge.js?v=20260622-input-review-override-lock-1';
 import { installGeometrySupportLoadFormulaBridge } from '../geometry-workspace/GeometrySupportLoadFormulaBridge.js?v=20260622-support-load-result-writeback-audit-1';
 import { installGeometrySupportLoadReportBridge } from '../geometry-workspace/GeometrySupportLoadReportBridge.js?v=20260622-support-load-result-report-1';
@@ -56,6 +59,7 @@ installGeometryCalculationCanvasBridge();
 installGeometryCalculationInputBridge();
 installGeometryEnrichmentBridge();
 installGeometryEnrichedStagedJsonBridge();
+installGeometrySupportLoadMasterDataBridge();
 installGeometrySupportLoadInputBridge();
 installGeometrySupportLoadFormulaBridge();
 installGeometrySupportLoadReportBridge();
