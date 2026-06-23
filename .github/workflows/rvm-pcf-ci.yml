@@ -36,6 +36,7 @@ on:
       - 'viewer/tests/nonprimitive-support-overlay-*.test.js'
       - 'viewer/tests/nonprimitive-support-source-extraction.test.js'
       - 'viewer/tests/nonprimitive-support-managed-stage-fixtures.test.js'
+      - 'viewer/tests/nonprimitive-support-preview-smoke.test.js'
       - 'viewer/tests/nonprimitive-source-tools-ui.test.js'
       - '.github/workflows/rvm-pcf-ci.yml'
   workflow_dispatch:
@@ -78,6 +79,9 @@ jobs:
 
       - name: Verify non-primitive managed-stage support fixtures
         run: node viewer/tests/nonprimitive-support-managed-stage-fixtures.test.js
+
+      - name: Verify non-primitive support preview smoke fixture
+        run: node viewer/tests/nonprimitive-support-preview-smoke.test.js
 
       - name: Verify non-primitive support overlay geometry
         run: node viewer/tests/nonprimitive-support-overlay-geometry.test.js
