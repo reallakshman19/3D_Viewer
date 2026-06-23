@@ -4,6 +4,7 @@
 // Active retired support tools purge cache key: RvmRetiredSupportToolsPurgeBridge.js?v=20260622-rvm-retired-support-tools-purge-2
 // Active generic label performance cache key: RvmLabelPerformanceBridge.js?v=20260622-rvm-label-perf-no-support-runtime-1
 // Active non-primitive support overlay cache key: RvmNonPrimitiveSupportOverlayBridge.js?v=20260623-nonprimitive-support-overlay-8
+// Active non-primitive support details panel cache key: RvmNonPrimitiveSupportOverlayDetailsPanelBridge.js?v=20260623-nonprimitive-support-details-panel-1
 // Active non-primitive auto-bend cache key: RvmNonPrimitiveAutoBendBridge.js?v=20260623-nonprimitive-auto-bend-preview-2
 // Active non-primitive source tools UI cache key: RvmNonPrimitiveSourceToolsUiBridge.js?v=20260623-nonprimitive-source-tools-ui-6
 import { RvmViewer3D } from '../rvm-viewer/RvmViewer3D.js?v=20260622-rvm-leaf-picking-2';
@@ -13,6 +14,7 @@ import { installRvmViewerInteractionPatch, installRvmCanvasSelectionBridge } fro
 import { installRvmCanvasSelectionSinglePickGuardBridge } from './RvmCanvasSelectionSinglePickGuardBridge.js?v=20260622-rvm-canvas-single-pick-guard-1';
 import { installRvmRetiredSupportToolsPurgeBridge } from './RvmRetiredSupportToolsPurgeBridge.js?v=20260622-rvm-retired-support-tools-purge-2';
 import { installRvmNonPrimitiveSupportOverlayBridge } from './RvmNonPrimitiveSupportOverlayBridge.js?v=20260623-nonprimitive-support-overlay-8';
+import { installRvmNonPrimitiveSupportOverlayDetailsPanelBridge } from './RvmNonPrimitiveSupportOverlayDetailsPanelBridge.js?v=20260623-nonprimitive-support-details-panel-1';
 import { installRvmNonPrimitiveAutoBendBridge } from './RvmNonPrimitiveAutoBendBridge.js?v=20260623-nonprimitive-auto-bend-preview-2';
 import { installRvmNonPrimitiveSourceToolsUiBridge } from './RvmNonPrimitiveSourceToolsUiBridge.js?v=20260623-nonprimitive-source-tools-ui-6';
 import { installRvmUiEventSafetyBridge } from './RvmUiEventSafetyBridge.js?v=20260622-rvm-ui-event-safety-2';
@@ -75,6 +77,7 @@ installRvmViewerInteractionPatch(RvmViewer3D);
 installRvmUiInteractionPanelPatch(RvmViewer3D);
 installRvmLabelPerformanceBridge(RvmViewer3D);
 installRvmNonPrimitiveSupportOverlayBridge();
+installRvmNonPrimitiveSupportOverlayDetailsPanelBridge();
 installRvmNonPrimitiveAutoBendBridge();
 installRvmNonPrimitiveSourceToolsUiBridge();
 installRvmZoneLodLabelBridge();
