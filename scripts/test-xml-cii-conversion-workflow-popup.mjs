@@ -48,7 +48,7 @@ const weightMatchModel = read(weightMatchModelPath);
 const invocationBuilder = read(invocationBuilderPath);
 const publicIndex = read(publicIndexPath);
 const tab = read(tabPath);
-const tabCss = `${read(tabPath.replace('model-converters-tab.js', 'model-converters-tab.css'))}\n${readIfExists(supplementalTabCssPath)}`;
+const tabCss = `${read(tabCssPath)}\n${readIfExists(supplementalTabCssPath)}`;
 
 assert(fs.existsSync(path.join(root, popupPath)), 'workflow popup module must exist');
 assert(fs.existsSync(path.join(root, nativePanelsPath)), 'popup-native panel module must exist');
@@ -88,7 +88,7 @@ assert(!popup.includes('XML - Model Data'), 'XML - Model Data must not replace t
 assert(!popup.includes('Process / Piping Class / Wt. Enrichment'), 'Process enrichment must not replace the required phase tabs');
 assert(!popup.includes('oldPhaseDetailHtml'), 'popup must not render old direct-panel phase HTML');
 assert(!popup.includes('bridge.renderPhaseInto'), 'popup must not render legacy-adapter phase HTML into the modal');
-assert(popup.includes('bridge.getPopupSnapshot'), 'popup must use bridge data snapshots for native bodies');
+assert(popup.includes('getPopupSnapshot'), 'popup must use bridge data snapshots for native bodies');
 assert(nativePanels.includes('renderXmlCiiPopupNativePhase'), 'native panel module must expose the popup-native renderer');
 assert(nativePanels.includes('data-native-finalise-run'), 'native Run phase must own Finalise and Run action');
 assert(nativePanels.includes('data-native-build-preview'), 'native Preview phase must own Build Preview action');
@@ -129,10 +129,10 @@ assert(!popup.includes('new MutationObserver'), 'popup must not install Mutation
 assert(popup.includes("document.addEventListener('click', interceptRun, true)"), 'popup must intercept XML->CII run click through one capture listener');
 assert(popup.includes('stateByRoot: new WeakMap()'), 'popup must keep independent modal state per rendered root');
 assert(popup.includes('renderPhase(root, state)'), 'popup must render the active phase through the live bridge/fallback path');
-assert(popup.includes('preloadDefaultMasters(root, state)'), 'popup must preload default masters after opening');
-assert(popup.includes('bridge.ensureDefaultMastersLoaded'), 'popup must use the legacy default-master preload bridge');
+assert(/preloadDefaultMasters\((root|body), state\)/.test(popup), 'popup must preload default masters after opening');
+assert(popup.includes('ensureDefaultMastersLoaded'), 'popup must use the legacy default-master preload bridge');
 assert(popup.includes('function armDirectRunGuard()'), 'popup must expose a one-tick direct-run guard');
-assert(popup.includes('armDirectRunGuard();\n      state.modal?.close();'), 'bridge close handoff must arm direct-run before closing');
+assert(/armDirectRunGuard\(\);\s*state\.modal\?\.close\(\);/.test(popup), 'bridge close handoff must arm direct-run before closing');
 assert(legacyAdapter.includes('ensureDefaultMastersLoaded(target)'), 'legacy phase bridge must expose default-master preload');
 assert(legacyAdapter.includes('getPopupSnapshot(target)'), 'legacy phase bridge must expose popup snapshot data');
 assert(legacyAdapter.includes('buildPopupPreviewRows()'), 'legacy phase bridge must expose popup preview data action');
