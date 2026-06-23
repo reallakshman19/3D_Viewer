@@ -191,5 +191,8 @@ jobs:
       - name: Verify support-load Access fixture coverage
         run: node viewer/tests/rvm-geometry-workspace-support-load-access-fixture-coverage.test.js
 
+      - name: Verify support-load Access fixture intake completion
+        run: node viewer/tests/rvm-geometry-workspace-support-load-access-fixture-intake-completion.test.js
+
       - name: Verify support-load real model validation
         run: node viewer/tests/rvm-geometry-workspace-support-load-real-model-validation.test.js
