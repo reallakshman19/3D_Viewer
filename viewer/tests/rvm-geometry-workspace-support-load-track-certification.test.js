@@ -33,6 +33,7 @@ contains(inputModel, 'PROJECT_MASTER_TABLE', 'input model can audit controlled p
 contains(inputModel, 'DERIVED_PIPE_WEIGHT', 'input model audits deterministic pipe-weight derivation');
 contains(inputModel, 'DERIVED_FLUID_WEIGHT', 'input model audits deterministic fluid-weight derivation');
 contains(inputModel, 'supportLoadInputRef', 'input model keeps supports as input references');
+contains(inputModel, 'autoSpanBySupport', 'input model stores support-specific AutoSpan data on pipe input');
 
 const review = read('geometry-workspace/GeometrySupportLoadInputReview.js');
 contains(review, "SUPPORT_LOAD_INPUT_REVIEW_SCHEMA='support-load-input-review/v1'", 'input review schema exists');
@@ -52,7 +53,8 @@ contains(master, 'supportLoadMasterData', 'master-data package is named explicit
 
 const autoSpan = read('geometry-workspace/GeometrySupportLoadAutoSpanResolver.js');
 contains(autoSpan, 'support-load-autospan-resolver/v1', 'AutoSpan resolver schema exists');
-contains(autoSpan, 'autoSpanBySupport', 'AutoSpan resolver stores support-specific span audit');
+contains(autoSpan, 'AUTO_RESOLVED_SUPPORT_GRAPH', 'AutoSpan resolver audits graph-derived spans');
+contains(autoSpan, 'REVIEW_REQUIRED_NO_NEIGHBOR_SUPPORTS', 'AutoSpan resolver blocks incomplete support graphs for review');
 
 const conflicts = read('geometry-workspace/GeometrySupportLoadConflictResolver.js');
 contains(conflicts, 'support-load-enrichment-conflict/v1', 'conflict resolver schema exists');
@@ -69,7 +71,8 @@ notContains(formula, 'RvmNonPrimitiveSupportOverlay', 'formula engine is indepen
 const advancedProfiles = read('geometry-workspace/GeometrySupportLoadAdvancedProfiles.js');
 contains(advancedProfiles, 'support-load-advanced-profile/v1', 'advanced profile registry schema exists');
 contains(advancedProfiles, 'ACCESS_TEMP_WALL_WEIGHTED_V1', 'Access profile remains available');
-contains(advancedProfiles, 'enabled: false', 'future profiles remain disabled unless project/imported data exists');
+contains(advancedProfiles, 'DISABLED_ADVANCED_PROFILES', 'future profiles remain disabled unless project/imported data exists');
+contains(advancedProfiles, 'DISABLED_REQUIRES_PROJECT_RULES', 'thermal/friction/axial profile remains disabled until project rules exist');
 
 const report = read('geometry-workspace/GeometrySupportLoadReportExporter.js');
 contains(report, 'support-load-report/v1', 'report schema exists');
@@ -84,7 +87,8 @@ contains(stagedJson, 'supportLoads', 'stagedJSON exports calculated support load
 const bulkPackage = read('geometry-workspace/GeometrySupportLoadBulkPackageExporter.js');
 contains(bulkPackage, 'support-load-bulk-package/v1', 'bulk package schema exists');
 contains(bulkPackage, 'masterData', 'bulk package includes master-data export');
-contains(bulkPackage, 'conflictAudit', 'bulk package includes conflict audit export');
+contains(bulkPackage, 'conflictModel', 'bulk package includes conflict audit export');
+contains(bulkPackage, 'packageDoesNotTopUpMissingFields: true', 'bulk package cannot top-up missing fields');
 
 const qa = read('geometry-workspace/GeometrySupportLoadQaDashboard.js');
 contains(qa, 'support-load-qa-dashboard/v1', 'QA dashboard schema exists');
@@ -99,6 +103,7 @@ notContains(overlay, 'RvmSupportSymbols', 'support-load overlay does not use ret
 const workflow = read('../.github/workflows/rvm-pcf-ci.yml');
 contains(workflow, 'Verify support-load formula engine', 'CI runs formula-engine regression');
 contains(workflow, 'Verify support-load advanced profiles', 'CI runs advanced-profile regression');
+contains(workflow, 'Verify support-load track certification', 'CI runs track certification regression');
 contains(workflow, 'Verify support-load Access benchmark', 'CI runs Access benchmark regression');
 
 if (failed) {
