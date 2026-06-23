@@ -4,6 +4,7 @@ import { xmlCiiDryRunPreview } from './preview-renderer.js?v=20260623-preview-ru
 
 const RENUMBERABLE_NEGATIVE_TYPES = new Set(['FLAN', 'RIGID', 'INST']);
 const INLINE_LENGTH_COMPONENT_TYPES = new Set(['INST']);
+const RESOLVED_RIGID_MARKER_TYPES = new Set(['INST']);
 
 function text(value) {
   return value === undefined || value === null ? '' : String(value).trim();
@@ -25,11 +26,25 @@ function childText(parent, name) {
   return text(firstChild(parent, name)?.textContent);
 }
 
+function createChild(document, parent, name) {
+  return parent?.namespaceURI ? document.createElementNS(parent.namespaceURI, name) : document.createElement(name);
+}
+
 function ensureChild(document, parent, name) {
   let element = firstChild(parent, name);
   if (element) return element;
-  element = parent?.namespaceURI ? document.createElementNS(parent.namespaceURI, name) : document.createElement(name);
+  element = createChild(document, parent, name);
   parent.appendChild(element);
+  return element;
+}
+
+function ensureChildAfter(document, parent, name, anchorName) {
+  let element = firstChild(parent, name);
+  if (element) return element;
+  element = createChild(document, parent, name);
+  const anchor = firstChild(parent, anchorName);
+  if (anchor && anchor.parentNode === parent) parent.insertBefore(element, anchor.nextSibling);
+  else parent.appendChild(element);
   return element;
 }
 
@@ -37,6 +52,15 @@ function setText(document, parent, name, value) {
   const clean = text(value);
   if (clean === '') return false;
   const element = ensureChild(document, parent, name);
+  const before = text(element.textContent);
+  element.textContent = clean;
+  return before !== clean;
+}
+
+function setTextAfter(document, parent, name, value, anchorName) {
+  const clean = text(value);
+  if (clean === '') return false;
+  const element = ensureChildAfter(document, parent, name, anchorName);
   const before = text(element.textContent);
   element.textContent = clean;
   return before !== clean;
@@ -232,6 +256,11 @@ function positiveNodeNumberFromOriginal(originalNumbers, nodes, startIndex, step
   return null;
 }
 
+function ensureResolvedRigidMarker(document, node, componentType) {
+  if (!RESOLVED_RIGID_MARKER_TYPES.has(componentType)) return false;
+  return setTextAfter(document, node, 'Rigid', '2', 'Endpoint');
+}
+
 function renumberLengthBearingNegativeNodes(document) {
   const branches = [...document.getElementsByTagName('Branch')];
   const nodesByBranch = branches.map(branchNodes);
@@ -247,6 +276,7 @@ function renumberLengthBearingNegativeNodes(document) {
 
   let fallback = 10000;
   let changed = 0;
+  let rigidMarkers = 0;
   for (const nodes of nodesByBranch) {
     for (let index = 0; index < nodes.length; index += 1) {
       const node = nodes[index];
@@ -270,11 +300,12 @@ function renumberLengthBearingNegativeNodes(document) {
         fallback += 10;
       }
       setText(document, node, 'NodeNumber', assigned);
+      if (ensureResolvedRigidMarker(document, node, componentType)) rigidMarkers += 1;
       used.add(assigned);
       changed += 1;
     }
   }
-  return changed;
+  return { renumberedNodes: changed, rigidMarkers };
 }
 
 function applyCondenseRigidOption(enriched, document, options = {}) {
@@ -285,17 +316,19 @@ function applyCondenseRigidOption(enriched, document, options = {}) {
   enriched.stats.splitCondensedValveFlange = enabled;
   enriched.stats.split_condensed_valve_flange = enabled;
   if (!enabled) return 0;
-  const changed = renumberLengthBearingNegativeNodes(document);
-  enriched.stats.splitCondensedRigidNodes = changed;
+  const result = renumberLengthBearingNegativeNodes(document);
+  enriched.stats.splitCondensedRigidNodes = result.renumberedNodes;
+  enriched.stats.instRigid2Annotations = result.rigidMarkers;
   enriched.diagnostics = Array.isArray(enriched.diagnostics) ? enriched.diagnostics : [];
   enriched.diagnostics.push({
     type: 'split-condensed-valve-flange-resolved',
     enabled: true,
     split_condensed_valve_flange: true,
-    renumberedNodes: changed,
-    message: 'Resolved Condense Rigid option applied: length-bearing negative RIGID/FLAN/INST nodes are assigned positive node numbers before CII conversion.',
+    renumberedNodes: result.renumberedNodes,
+    instRigid2Annotations: result.rigidMarkers,
+    message: 'Resolved Condense Rigid option applied: length-bearing negative RIGID/FLAN/INST nodes are assigned positive node numbers; resolved INST nodes are marked with Rigid=2 before CII conversion.',
   });
-  return changed;
+  return result.renumberedNodes;
 }
 
 function applyPreviewRunParity(enriched, sourceXmlText, stagedJsonText, options = {}) {
