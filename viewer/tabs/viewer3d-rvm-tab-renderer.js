@@ -3,7 +3,7 @@
 // The tab implementation currently exposes mountViewer3DRvmTab.
 // Active retired support tools purge cache key: RvmRetiredSupportToolsPurgeBridge.js?v=20260622-rvm-retired-support-tools-purge-2
 // Active generic label performance cache key: RvmLabelPerformanceBridge.js?v=20260622-rvm-label-perf-no-support-runtime-1
-// Active non-primitive support overlay cache key: RvmNonPrimitiveSupportOverlayBridge.js?v=20260623-nonprimitive-support-overlay-2
+// Active non-primitive support overlay cache key: RvmNonPrimitiveSupportOverlayBridge.js?v=20260623-nonprimitive-support-overlay-3
 // Active non-primitive auto-bend cache key: RvmNonPrimitiveAutoBendBridge.js?v=20260623-nonprimitive-auto-bend-preview-2
 // Active non-primitive source tools UI cache key: RvmNonPrimitiveSourceToolsUiBridge.js?v=20260623-nonprimitive-source-tools-ui-2
 import { RvmViewer3D } from '../rvm-viewer/RvmViewer3D.js?v=20260622-rvm-leaf-picking-2';
@@ -12,7 +12,7 @@ import { installRvmHierarchySelectionBridge } from './RvmHierarchySelectionBridg
 import { installRvmViewerInteractionPatch, installRvmCanvasSelectionBridge } from './RvmViewerInteractionPatch.js?v=20260621-rvm-button-hardening-1';
 import { installRvmCanvasSelectionSinglePickGuardBridge } from './RvmCanvasSelectionSinglePickGuardBridge.js?v=20260622-rvm-canvas-single-pick-guard-1';
 import { installRvmRetiredSupportToolsPurgeBridge } from './RvmRetiredSupportToolsPurgeBridge.js?v=20260622-rvm-retired-support-tools-purge-2';
-import { installRvmNonPrimitiveSupportOverlayBridge } from './RvmNonPrimitiveSupportOverlayBridge.js?v=20260623-nonprimitive-support-overlay-2';
+import { installRvmNonPrimitiveSupportOverlayBridge } from './RvmNonPrimitiveSupportOverlayBridge.js?v=20260623-nonprimitive-support-overlay-3';
 import { installRvmNonPrimitiveAutoBendBridge } from './RvmNonPrimitiveAutoBendBridge.js?v=20260623-nonprimitive-auto-bend-preview-2';
 import { installRvmNonPrimitiveSourceToolsUiBridge } from './RvmNonPrimitiveSourceToolsUiBridge.js?v=20260623-nonprimitive-source-tools-ui-2';
 import { installRvmUiEventSafetyBridge } from './RvmUiEventSafetyBridge.js?v=20260622-rvm-ui-event-safety-2';
@@ -78,41 +78,6 @@ installRvmNonPrimitiveSupportOverlayBridge();
 installRvmNonPrimitiveAutoBendBridge();
 installRvmNonPrimitiveSourceToolsUiBridge();
 installRvmZoneLodLabelBridge();
-installRvmDeepSourcePathRecoveryBridge(RvmViewer3D);
-installRvmZoneDensitySelectorBridge();
-installRvmHierarchySelectionBridge(RvmViewer3D);
-installRvmCanvasSelectionSinglePickGuardBridge(RvmViewer3D);
-installRvmCanvasSelectionBridge(RvmViewer3D);
-installRvmNavisHierarchyBridge(RvmViewer3D);
-installRvmZoneLodContextBridge();
-installRvmSelectionDetailsInspectorBridge();
-installRvmJsonPcfTriggerBridge();
-installRvmPolicyInfoBridge();
-installRvmDiagnosticPanelCollapseBridge();
-installRvmVisibilityToolbarBridge(RvmViewer3D);
-installRvmVisibilitySnapshotsBridge();
-installRvmObjectSearchBridge(RvmViewer3D);
-installRvmMeasureBridge(RvmViewer3D);
-installRvmSectionBoxBridge(RvmViewer3D);
-installRvmSelectionSetsBridge();
-installRvmReportExportBridge(RvmViewer3D);
-installGeometryExportWorkspaceBridge();
-installGeometryMappingProfileBridge();
-installRvmModelHealthBridge();
-installRvmModelHealthIssuesBridge();
-installRvmSelectionTreeSyncBridge(RvmViewer3D);
-installRvmMaterialModeBridge(RvmViewer3D);
-installRvmBottomDiagnosticsDrawerBridge();
-installRvmDeferredBridgeLoader();
-installRvmLeftPanelResizeCollapseBridge();
-installRvmLeafSelectionIdentityBridge(RvmViewer3D);
-installRvmLeafCanvasPickBridge(RvmViewer3D);
 
-export { RvmViewer3D };
-
-export async function renderViewer3DRvm(root, options = {}) {
-  const { mountViewer3DRvmTab } = await import('./viewer3d-rvm-tab.js?v=20260622-rvm-support-runtime-retired-2');
-  return mountViewer3DRvmTab(root, options);
-}
-
-export default renderViewer3DRvm;
+export { mountViewer3DRvmTab } from './viewer3d-rvm-tab.js?v=20260622-rvm-support-tools-retired-1';
+export { mountViewer3DRvmTab as renderViewer3DRvm } from './viewer3d-rvm-tab.js?v=20260622-rvm-support-tools-retired-1';
