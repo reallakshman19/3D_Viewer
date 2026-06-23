@@ -178,7 +178,7 @@ assert.equal(snapshot.supportOverlay.coordinateMappings.length, 3, 'snapshot pre
 assert.equal(snapshot.supportOverlay.pipeAxisResolutions.length, 3, 'snapshot preserves pipe-axis diagnostics');
 
 assert.match(rendererSource, /installRvmNonPrimitiveSupportOverlayBridge\(\)[\s\S]*installRvmNonPrimitiveAutoBendBridge\(\)[\s\S]*installRvmNonPrimitiveSourceToolsUiBridge\(\)/, 'renderer installs non-primitive overlay bridges before source tools UI sync');
-assert.match(rendererSource, /RvmNonPrimitiveSupportOverlayBridge\.js\?v=20260623-nonprimitive-support-overlay-7/, 'renderer imports support overlay bridge with current cache key');
+assert.match(rendererSource, /RvmNonPrimitiveSupportOverlayBridge\.js\?v=20260623-nonprimitive-support-overlay-8/, 'renderer imports support overlay bridge with current cache key');
 assert.match(rendererSource, /RvmNonPrimitiveAutoBendBridge\.js\?v=20260623-nonprimitive-auto-bend-preview-2/, 'renderer imports auto-bend bridge with current cache key');
 assert.match(rendererSource, /RvmNonPrimitiveSourceToolsUiBridge\.js\?v=20260623-nonprimitive-source-tools-ui-6/, 'renderer imports source tools UI bridge with current cache key');
 
@@ -195,6 +195,8 @@ assert.doesNotMatch(sourceToolsSource, /Support Summary|SupportATT|SupportEngine
 
 assert.match(supportBridgeSource, /__RVM_NON_PRIMITIVE_SUPPORT_OVERLAY__/, 'support overlay uses scoped non-primitive root');
 assert.match(supportBridgeSource, /createSupportOverlayLabelObject/, 'support overlay labels are scoped and opt-in through label factory');
+assert.match(supportBridgeSource, /supportOverlayDetails/, 'support overlay glyphs carry source-backed details metadata');
+assert.match(supportBridgeSource, /rvmSearchIndexed = false/, 'support overlay details stay out of RVM search indexing');
 assert.match(supportBridgeSource, /obj\.element\?\.remove\?\.\(\)/, 'support overlay clear path removes CSS2D label DOM elements');
 assert.match(supportBridgeSource, /isNonPrimitiveSource[\s\S]*rvm[\s\S]*glb[\s\S]*gltf/, 'support overlay excludes RVM/GLB/GLTF sources');
 assert.doesNotMatch(supportBridgeSource, /RvmSupportSymbols|RvmSupportGeometryBridge|RvmRawSupportCylinderGuardBridge/, 'support overlay does not import retired RVM support runtime');

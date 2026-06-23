@@ -19,14 +19,15 @@ import {
 } from '../overlays/support/SupportOverlaySourceExtraction.js';
 import { buildSupportOverlayGlyphGroup } from '../overlays/support/SupportOverlayGlyphGeometry.js';
 import { createSupportOverlayLabelObject, shouldShowSupportOverlayLabel } from '../overlays/support/SupportOverlayLabels.js';
+import { buildSupportOverlayDetails, SUPPORT_OVERLAY_DETAILS_SCHEMA } from '../overlays/support/SupportOverlayDetails.js';
 
-export const RVM_NON_PRIMITIVE_SUPPORT_OVERLAY_SCHEMA = 'rvm-non-primitive-support-overlay/v7';
+export const RVM_NON_PRIMITIVE_SUPPORT_OVERLAY_SCHEMA = 'rvm-non-primitive-support-overlay/v8';
 
 const ROOT_NAME = '__RVM_NON_PRIMITIVE_SUPPORT_OVERLAY__';
 const GLOBAL_KEY = '__PCF_GLB_RVM_NON_PRIMITIVE_SUPPORT_OVERLAY__';
-const PATCH_FLAG = Symbol.for('pcf-glb-rvm-non-primitive-support-overlay-v7');
-const LOADER_PATCH_FLAG = Symbol.for('pcf-glb-rvm-non-primitive-support-overlay-loader-v7');
-const VIEWER_PATCH_FLAG = Symbol.for('pcf-glb-rvm-non-primitive-support-overlay-viewer-v7');
+const PATCH_FLAG = Symbol.for('pcf-glb-rvm-non-primitive-support-overlay-v8');
+const LOADER_PATCH_FLAG = Symbol.for('pcf-glb-rvm-non-primitive-support-overlay-loader-v8');
+const VIEWER_PATCH_FLAG = Symbol.for('pcf-glb-rvm-non-primitive-support-overlay-viewer-v8');
 const MAX_SUPPORT_OVERLAYS = 500;
 const NON_PRIMITIVE_SOURCE_RE = /\.(json|jscon|uxml|inputxml|txt)$/i;
 const RVM_SOURCE_RE = /\.(rvm|rev)$/i;
@@ -38,6 +39,7 @@ export function installRvmNonPrimitiveSupportOverlayBridge() {
     schema: RVM_NON_PRIMITIVE_SUPPORT_OVERLAY_SCHEMA,
     sourceExtractionSchema: SUPPORT_OVERLAY_SOURCE_EXTRACTION_SCHEMA,
     filterDiagnosticsSchema: SUPPORT_OVERLAY_FILTER_DIAGNOSTICS_SCHEMA,
+    detailsSchema: SUPPORT_OVERLAY_DETAILS_SCHEMA,
     rootName: ROOT_NAME,
     applyFromSource,
     clear,
@@ -61,6 +63,7 @@ function patchAvevaJsonLoaderForNonPrimitiveSource() {
       scene.userData.__rvmNonPrimitiveSupportOverlaySchema = RVM_NON_PRIMITIVE_SUPPORT_OVERLAY_SCHEMA;
       scene.userData.__rvmNonPrimitiveSupportSourceExtractionSchema = SUPPORT_OVERLAY_SOURCE_EXTRACTION_SCHEMA;
       scene.userData.__rvmNonPrimitiveSupportFilterDiagnosticsSchema = SUPPORT_OVERLAY_FILTER_DIAGNOSTICS_SCHEMA;
+      scene.userData.__rvmNonPrimitiveSupportDetailsSchema = SUPPORT_OVERLAY_DETAILS_SCHEMA;
     }
     return payload;
   };
@@ -105,6 +108,7 @@ export function applyFromSource({ viewer, root, source, sourceKind = '', fileNam
       schema: RVM_NON_PRIMITIVE_SUPPORT_OVERLAY_SCHEMA,
       sourceExtractionSchema: SUPPORT_OVERLAY_SOURCE_EXTRACTION_SCHEMA,
       filterDiagnosticsSchema: SUPPORT_OVERLAY_FILTER_DIAGNOSTICS_SCHEMA,
+      detailsSchema: SUPPORT_OVERLAY_DETAILS_SCHEMA,
       status: 'empty',
       sourceKind: kind,
       sourceFile: fileName,
@@ -140,6 +144,7 @@ export function applyFromSource({ viewer, root, source, sourceKind = '', fileNam
     schema: RVM_NON_PRIMITIVE_SUPPORT_OVERLAY_SCHEMA,
     sourceExtractionSchema: SUPPORT_OVERLAY_SOURCE_EXTRACTION_SCHEMA,
     filterDiagnosticsSchema: SUPPORT_OVERLAY_FILTER_DIAGNOSTICS_SCHEMA,
+    detailsSchema: SUPPORT_OVERLAY_DETAILS_SCHEMA,
     nonPrimitiveSupportOverlay: true,
     sourceKind: kind,
     sourceFile: fileName,
@@ -150,6 +155,7 @@ export function applyFromSource({ viewer, root, source, sourceKind = '', fileNam
   const warnings = [];
   const coordinateMappings = [];
   const pipeAxisResolutions = [];
+  const supportDetails = [];
   const byFamily = {};
   let skippedDuplicates = 0;
   let skippedGlyphs = 0;
@@ -170,6 +176,7 @@ export function applyFromSource({ viewer, root, source, sourceKind = '', fileNam
     byFamily[record.kind] = (byFamily[record.kind] || 0) + 1;
     if (object.userData?.coordinateMapping) coordinateMappings.push(object.userData.coordinateMapping);
     if (object.userData?.pipeAxisResolution) pipeAxisResolutions.push(object.userData.pipeAxisResolution);
+    if (object.userData?.supportOverlayDetails) supportDetails.push(object.userData.supportOverlayDetails);
     for (const warning of object.userData?.warnings || []) warnings.push({ supportId: record.tag, family: record.kind, code: warning });
   }
 
@@ -178,6 +185,7 @@ export function applyFromSource({ viewer, root, source, sourceKind = '', fileNam
     schema: RVM_NON_PRIMITIVE_SUPPORT_OVERLAY_SCHEMA,
     sourceExtractionSchema: SUPPORT_OVERLAY_SOURCE_EXTRACTION_SCHEMA,
     filterDiagnosticsSchema: SUPPORT_OVERLAY_FILTER_DIAGNOSTICS_SCHEMA,
+    detailsSchema: SUPPORT_OVERLAY_DETAILS_SCHEMA,
     status: overlayRoot.children.length ? 'applied' : 'empty',
     sourceKind: kind,
     sourceFile: fileName,
@@ -197,6 +205,7 @@ export function applyFromSource({ viewer, root, source, sourceKind = '', fileNam
     warnings,
     coordinateMappings,
     pipeAxisResolutions,
+    supportDetails,
     maxSupportOverlays: MAX_SUPPORT_OVERLAYS,
     rvmExcluded: true,
   };
@@ -273,6 +282,17 @@ function makeSupportGlyph(record, viewer, glyphSize, sourceKind, sourceFile, set
     pipeAxisResolution: axisResolution,
   });
   if (!group) return null;
+
+  group.userData.supportOverlayDetails = buildSupportOverlayDetails({
+    record,
+    symbol,
+    coordinateMapping: mapping,
+    pipeAxisResolution: axisResolution,
+    sourceKind,
+    sourceFile,
+  });
+  group.userData.detailsSchema = SUPPORT_OVERLAY_DETAILS_SCHEMA;
+  group.userData.rvmSearchIndexed = false;
 
   if (shouldShowSupportOverlayLabel(settings)) {
     const label = createSupportOverlayLabelObject({
