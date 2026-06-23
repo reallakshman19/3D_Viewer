@@ -78,6 +78,41 @@ installRvmNonPrimitiveSupportOverlayBridge();
 installRvmNonPrimitiveAutoBendBridge();
 installRvmNonPrimitiveSourceToolsUiBridge();
 installRvmZoneLodLabelBridge();
+installRvmDeepSourcePathRecoveryBridge(RvmViewer3D);
+installRvmZoneDensitySelectorBridge();
+installRvmHierarchySelectionBridge(RvmViewer3D);
+installRvmCanvasSelectionSinglePickGuardBridge(RvmViewer3D);
+installRvmCanvasSelectionBridge(RvmViewer3D);
+installRvmNavisHierarchyBridge(RvmViewer3D);
+installRvmZoneLodContextBridge();
+installRvmSelectionDetailsInspectorBridge();
+installRvmJsonPcfTriggerBridge();
+installRvmPolicyInfoBridge();
+installRvmDiagnosticPanelCollapseBridge();
+installRvmVisibilityToolbarBridge(RvmViewer3D);
+installRvmVisibilitySnapshotsBridge();
+installRvmObjectSearchBridge(RvmViewer3D);
+installRvmMeasureBridge(RvmViewer3D);
+installRvmSectionBoxBridge(RvmViewer3D);
+installRvmSelectionSetsBridge();
+installRvmReportExportBridge(RvmViewer3D);
+installGeometryExportWorkspaceBridge();
+installGeometryMappingProfileBridge();
+installRvmModelHealthBridge();
+installRvmModelHealthIssuesBridge();
+installRvmSelectionTreeSyncBridge(RvmViewer3D);
+installRvmMaterialModeBridge(RvmViewer3D);
+installRvmBottomDiagnosticsDrawerBridge();
+installRvmDeferredBridgeLoader();
+installRvmLeftPanelResizeCollapseBridge();
+installRvmLeafSelectionIdentityBridge(RvmViewer3D);
+installRvmLeafCanvasPickBridge(RvmViewer3D);
 
-export { mountViewer3DRvmTab } from './viewer3d-rvm-tab.js?v=20260622-rvm-support-tools-retired-1';
-export { mountViewer3DRvmTab as renderViewer3DRvm } from './viewer3d-rvm-tab.js?v=20260622-rvm-support-tools-retired-1';
+export { RvmViewer3D };
+
+export async function renderViewer3DRvm(root, options = {}) {
+  const { mountViewer3DRvmTab } = await import('./viewer3d-rvm-tab.js?v=20260622-rvm-support-runtime-retired-2');
+  return mountViewer3DRvmTab(root, options);
+}
+
+export default renderViewer3DRvm;
