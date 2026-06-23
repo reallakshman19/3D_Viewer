@@ -23,11 +23,14 @@ assert.equal(
 );
 
 const bridge = fs.readFileSync(new URL('../tabs/RvmNonPrimitiveSupportOverlayBridge.js', import.meta.url), 'utf8');
+const settings = fs.readFileSync(new URL('../overlays/support/SupportOverlaySettings.js', import.meta.url), 'utf8');
 assert.ok(bridge.includes('CSS2DObject'));
 assert.ok(bridge.includes('SupportOverlayLabels.js'));
-assert.ok(bridge.includes('rvm-non-primitive-support-overlay/v8'));
+assert.ok(bridge.includes('rvm-non-primitive-support-overlay/v9'));
 assert.ok(bridge.includes('SupportOverlaySourceExtraction.js'));
 assert.ok(bridge.includes('shouldShowSupportOverlayLabel(settings)'));
+assert.ok(settings.includes('labelsUserSet'));
+assert.ok(settings.includes('resetNonPrimitiveSupportOverlayLabels'));
 assert.ok(!bridge.includes('Support Labels button'));
 assert.ok(!bridge.includes('RvmSupportSymbols'));
 
