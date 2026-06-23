@@ -71,13 +71,14 @@ assert.match(formatSupportOverlayDetailText(details), /PS-101 GUIDE/);
 assert.match(formatSupportOverlayDetailText(details), /gap 10 mm/);
 
 const bridge = fs.readFileSync(new URL('../tabs/RvmNonPrimitiveSupportOverlayBridge.js', import.meta.url), 'utf8');
+const glyphGeometry = fs.readFileSync(new URL('../overlays/support/SupportOverlayGlyphGeometry.js', import.meta.url), 'utf8');
 const renderer = fs.readFileSync(new URL('../tabs/viewer3d-rvm-tab-renderer.js', import.meta.url), 'utf8');
 assert.ok(bridge.includes('SupportOverlayDetails.js'), 'support overlay bridge imports the details metadata builder');
 assert.ok(bridge.includes('SUPPORT_OVERLAY_DETAILS_SCHEMA'), 'bridge exposes details schema');
 assert.ok(bridge.includes('supportOverlayDetails'), 'bridge stores support overlay details on glyph userData');
 assert.ok(bridge.includes('rvmSearchIndexed = false'), 'bridge keeps support overlay details out of RVM search indexing');
 assert.ok(bridge.includes('pickable: false'), 'bridge keeps support overlay details non-pickable');
-assert.ok(bridge.includes('selectable: false'), 'bridge keeps support overlay details non-selectable');
+assert.ok(glyphGeometry.includes('selectable: false'), 'glyph groups remain non-selectable');
 assert.ok(bridge.includes('rvm-non-primitive-support-overlay/v8'), 'bridge schema is bumped for details metadata');
 assert.match(renderer, /RvmNonPrimitiveSupportOverlayBridge\.js\?v=20260623-nonprimitive-support-overlay-8/, 'renderer cache key is bumped for support overlay details');
 assert.doesNotMatch(bridge, /RvmSupportSymbols|RvmSupportGeometryBridge|RvmRawSupportCylinderGuardBridge/, 'details metadata does not revive retired RVM support runtime');
