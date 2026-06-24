@@ -52,16 +52,7 @@ function saveConfigToInput(config) {
   return true;
 }
 
-function patchWorkflowLabel() {
-  if (typeof document === 'undefined') return;
-  const buttons = document.querySelectorAll('[data-xml-cii-phase="support-mapper"]');
-  for (const button of buttons) {
-    button.setAttribute('title', 'Map support attributes to support kinds and XML/CII restraint output types, including direction cosines.');
-    const spans = button.querySelectorAll('span');
-    if (spans.length) spans[0].textContent = '6 Support Mapping';
-    else if (/6\s+Support\s+Types/i.test(button.textContent || '')) button.textContent = '6 Support Mapping';
-  }
-}
+
 
 export function xmlCiiRenderSupportMapperPhase() {
   return `
@@ -76,7 +67,7 @@ export function bindXmlCiiSupportMapperPhase(detailEl, options = {}) {
   const host = detailEl?.querySelector('#mc-support-mapper-host');
   if (!host) return;
 
-  patchWorkflowLabel();
+
 
   const config = options.config || readConfigFromInput();
 

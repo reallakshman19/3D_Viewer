@@ -1,7 +1,10 @@
-const FLAG = '__xmlCiiBranchSampleSync_v1';
+const FLAG = '__xmlCiiBranchSampleSync_v2';
 const BRANCH_SAMPLE_KEY = 'xmlCii2019.regex.branchNameSampleFromXml.v1';
 const FILE_KEY = 'xmlCii2019.regex.branchNameSampleFileKey.v1';
 const ROOT_ATTR = 'data-xml-cii-workflow-root';
+const LEGACY_ATTR = 'data-xml-cii-regex-path';
+const NATIVE_ATTR = 'data-native-regex-path';
+const SAMPLE_PATH = 'linelist.sampleBranchName';
 
 function browserReady() {
   return typeof window !== 'undefined' && typeof document !== 'undefined';
@@ -114,108 +117,56 @@ function currentFileKey(file) {
   return file ? `${file.name}|${file.size}|${file.lastModified}` : '';
 }
 
+function isSampleTarget(node) {
+  const path = node?.getAttribute?.(NATIVE_ATTR) || node?.getAttribute?.(LEGACY_ATTR) || '';
+  return path === SAMPLE_PATH;
+}
+
+function sampleTargets(root = document) {
+  const scope = root?.querySelectorAll ? root : document;
+  return Array.from(scope.querySelectorAll?.(`[${NATIVE_ATTR}="${SAMPLE_PATH}"], [${LEGACY_ATTR}="${SAMPLE_PATH}"]`) || [])
+    .filter(isSampleTarget);
+}
+
 function setElementValue(element, value) {
   if (!element || !value) return false;
   const current = 'value' in element ? element.value : element.textContent;
   if (current === value) return false;
   if ('value' in element) element.value = value;
   else element.textContent = value;
-  try {
-    element.dispatchEvent(new Event('input', { bubbles: true }));
-    element.dispatchEvent(new Event('change', { bubbles: true }));
-  } catch {}
   return true;
 }
 
-function findLabelBoundControl(label) {
-  const labelText = clean(label?.textContent).toLowerCase();
-  if (!labelText.includes('sample') || !labelText.includes('branch')) return null;
-  const forId = label.getAttribute?.('for');
-  if (forId) {
-    const byFor = document.getElementById(forId);
-    if (byFor) return byFor;
-  }
-  return label.querySelector?.('input,textarea,[contenteditable="true"]') || null;
-}
-
-function isInsideWorkflowPopup(node) {
-  return Boolean(node?.closest?.('.model-converters-workflow-popup-overlay'));
-}
-
-function isNativeBranchSampleTarget(node) {
-  const path = node?.getAttribute?.('data-native-regex-path') || node?.getAttribute?.('data-xml-cii-regex-path') || '';
-  return path === 'linelist.sampleBranchName';
-}
-
-function branchSampleTargets(root) {
-  const scope = root?.querySelectorAll ? root : document;
-  const targets = new Set();
-  scope.querySelectorAll?.('[data-option-key="branchNameSample"], [name="branchNameSample"], #branchNameSample, #xml-cii-branchname-sample, #xml-cii-branch-name-sample, [data-native-regex-path="linelist.sampleBranchName"], [data-xml-cii-regex-path="linelist.sampleBranchName"]')
-    .forEach((node) => {
-      if (!isInsideWorkflowPopup(node) || isNativeBranchSampleTarget(node)) targets.add(node);
-    });
-  scope.querySelectorAll?.('label').forEach((label) => {
-    if (isInsideWorkflowPopup(label)) return;
-    const control = findLabelBoundControl(label);
-    if (control) targets.add(control);
-  });
-  return Array.from(targets);
-}
-
-function writeSupportConfigBranchSample(root, value) {
-  const input = root?.querySelector?.('[data-option-key="supportConfigJson"]') || document.querySelector('[data-option-key="supportConfigJson"]');
-  const sample = normalizeBranchName(value);
-  if (!input || !sample) return false;
-  try {
-    const cfg = JSON.parse(input.value || '{}') || {};
-    cfg.linelist = cfg.linelist && typeof cfg.linelist === 'object' ? cfg.linelist : {};
-    cfg.linelist.sampleBranchName = sample;
-
-    // Backward compatibility for older popup/tests that looked at regex.branchNameSample.
-    // The rich XML->CII(2019) workflow reads linelist.sampleBranchName as canonical.
-    cfg.regex = cfg.regex && typeof cfg.regex === 'object' ? cfg.regex : {};
-    cfg.regex.branchNameSample = sample;
-
-    input.value = JSON.stringify(cfg, null, 2);
-    input.dispatchEvent(new Event('input', { bubbles: true }));
-    input.dispatchEvent(new Event('change', { bubbles: true }));
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-function applyBranchSample(root = document, value = readStored(BRANCH_SAMPLE_KEY, '')) {
+export function applyXmlCiiBranchSample(root = document, value = readStored(BRANCH_SAMPLE_KEY, '')) {
   const sample = normalizeBranchName(value);
   if (!sample) return 0;
   writeStored(BRANCH_SAMPLE_KEY, sample);
   const scope = root?.querySelectorAll ? root : document;
   if (scope !== document) scope.setAttribute?.(ROOT_ATTR, 'true');
   let updated = 0;
-  for (const target of branchSampleTargets(scope)) {
+  for (const target of sampleTargets(scope)) {
     if (setElementValue(target, sample)) updated += 1;
   }
-  writeSupportConfigBranchSample(scope, sample);
   return updated;
 }
 
-async function syncLoadedXmlBranchSample(root = document, force = false) {
+export async function syncLoadedXmlCiiBranchSample(root = document, force = false) {
   const input = primaryXmlInput(root);
   const file = input?.files?.[0];
   if (!file) {
-    applyBranchSample(root);
+    applyXmlCiiBranchSample(root);
     return '';
   }
   const key = currentFileKey(file);
   if (!force && key && readStored(FILE_KEY, '') === key && readStored(BRANCH_SAMPLE_KEY, '')) {
-    applyBranchSample(root);
+    applyXmlCiiBranchSample(root);
     return readStored(BRANCH_SAMPLE_KEY, '');
   }
   const xmlText = await file.text();
   const sample = extractXmlCiiBranchSample(xmlText);
   if (sample) {
     writeStored(FILE_KEY, key);
-    applyBranchSample(root, sample);
+    applyXmlCiiBranchSample(root, sample);
   }
   return sample;
 }
@@ -225,14 +176,14 @@ function bindPrimaryInput(root, state) {
   if (!input || state.primaryInput === input) return;
   state.primaryInput?.removeEventListener?.('change', state.onPrimaryChange);
   state.primaryInput = input;
-  state.onPrimaryChange = () => syncLoadedXmlBranchSample(root, true);
+  state.onPrimaryChange = () => syncLoadedXmlCiiBranchSample(root, true).catch(() => {});
   input.addEventListener('change', state.onPrimaryChange);
 }
 
 export function installXmlCiiBranchSampleSync(container = document) {
   if (!browserReady()) return;
   const root = container && container.nodeType === 1 ? container : document;
-  if (!window[FLAG]) window[FLAG] = { observer: null, stateByRoot: new WeakMap() };
+  if (!window[FLAG]) window[FLAG] = { stateByRoot: new WeakMap() };
   let state = window[FLAG].stateByRoot.get(root);
   if (!state) {
     state = { primaryInput: null, onPrimaryChange: null };
@@ -240,22 +191,6 @@ export function installXmlCiiBranchSampleSync(container = document) {
   }
 
   bindPrimaryInput(root, state);
-  applyBranchSample(root);
-  syncLoadedXmlBranchSample(root).catch(() => {});
-
-  if (!window[FLAG].observer) {
-    let _observerDebounceTimer = null;
-    window[FLAG].observer = new MutationObserver(() => {
-      if (_observerDebounceTimer) return;
-      _observerDebounceTimer = setTimeout(() => {
-        _observerDebounceTimer = null;
-        document.querySelectorAll?.(`[${ROOT_ATTR}]`).forEach((markedRoot) => applyBranchSample(markedRoot));
-        applyBranchSample(document);
-      }, 200);
-    });
-    window[FLAG].observer.observe(document.body, { childList: true, subtree: true });
-  }
-
-  setTimeout(() => { bindPrimaryInput(root, state); applyBranchSample(root); }, 0);
-  setTimeout(() => { bindPrimaryInput(root, state); syncLoadedXmlBranchSample(root).catch(() => {}); }, 150);
+  applyXmlCiiBranchSample(root);
+  syncLoadedXmlCiiBranchSample(root).catch(() => {});
 }

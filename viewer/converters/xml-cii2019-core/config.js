@@ -173,7 +173,7 @@ export function parseXmlCiiEnrichmentConfig(rawJson) {
       masterUrl: '../docs/Masters/wtValveweights.json',
       masterRows: [],
     },
-    pipingClass: { masterUrl: '../docs/Masters/Piping_class_master.json', masterRows: [], startsWithConfidence: 0.8, fuzzyThreshold: 0.6, reviewBelow: 1.0 },
+    pipingClass: { masterUrl: '', masterRows: [], startsWithConfidence: 0.8, fuzzyThreshold: 0.6, reviewBelow: 1.0 },
     pipingClassMatch: DEFAULT_PIPING_CLASS_MATCH,
     material: { masterUrl: '../docs/Masters/PCF_MAT_MAP.TXT', mapRows: [], containsConfidence: 0.9, tokenJaccardThreshold: 0.35 },
     overrides: { pipingClass: {}, material: {}, materialCode: {}, rating: {}, wallThickness: {}, corrosion: {}, rigidWeight: {}, processData: {} },

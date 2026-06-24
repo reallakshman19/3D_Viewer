@@ -30,10 +30,6 @@ function rowCount(value) {
   return `${numeric.toLocaleString()} row(s)`;
 }
 
-function workflowMode(uiState) {
-  return uiState?.mode === 'workflow1' ? 'workflow1' : 'workflow2';
-}
-
 function phaseHeader(phaseId, fallbackSummary) {
   const phase = getWorkflowPhase(phaseId);
   return `
@@ -173,13 +169,12 @@ function importMastersPanel(snapshot, uiState) {
   return `
     ${phaseHeader('import-masters')}
     ${masterTabs(snapshot, uiState)}
-    ${activeKey === 'overrides' ? overridesPanel(snapshot) : masterDetailPanel(active, workflowMode(uiState))}`;
+    ${activeKey === 'overrides' ? overridesPanel(snapshot) : masterDetailPanel(active)}`;
 }
 
-function masterDetailPanel(master, mode = 'workflow2') {
+function masterDetailPanel(master) {
   const fields = Array.isArray(master.fields) ? master.fields : [];
   const previewRows = Array.isArray(master.previewRows) ? master.previewRows : [];
-  const enhanced = mode === 'workflow2';
   const defaultDisabled = !master.hasDefault || master.key === 'pipingClass';
   const defaultTitle = master.key === 'pipingClass'
     ? 'Specwise piping-class rows are loaded by line/spec context; obsolete aggregate Piping_class_master.json is intentionally disabled.'
@@ -222,14 +217,10 @@ function masterDetailPanel(master, mode = 'workflow2') {
           `).join('')}
         </div>` : '<div class="model-converters-workflow-detail-note">Import rows to configure field mapping.</div>'}
     </section>
-    ${enhanced ? `
-      <section class="xml-cii-native-card" data-xml-cii-workflow2-master-preview="true">
-        <div class="model-converters-workflow-section-title">Preview Rows</div>
-        ${compactTable(master.previewColumns || [], previewRows, 'No imported rows to preview.')}
-      </section>` : `
-      <section class="xml-cii-native-card" data-xml-cii-workflow1-master-note="true">
-        <div class="model-converters-workflow-detail-note">Workflow 1 keeps master setup compact. Use Workflow 2 for per-master preview rows and richer customisation.</div>
-      </section>`}`;
+    <section class="xml-cii-native-card" data-xml-cii-unified-master-preview="true" data-xml-cii-workflow2-master-preview="true">
+      <div class="model-converters-workflow-section-title">Preview Rows</div>
+      ${compactTable(master.previewColumns || [], previewRows, 'No imported rows to preview.')}
+    </section>`;
 }
 
 function overridesPanel(snapshot) {
@@ -416,7 +407,7 @@ function logicInfoPanel() {
         <strong>Condense Rigid / split condensed valve-flange nodes (Resolved):</strong> writes splitCondensedValveFlange=true and split_condensed_valve_flange=true, forwards --split-condensed-valve-flange, and renumbers length-bearing negative FLAN/RIGID/INST nodes before final CII generation.
       </div>
       <div class="xml-cii-native-hint">
-        <strong>Workflow 1 / Workflow 2:</strong> both workflows use the same conversion core. Workflow 2 exposes enhanced master-preview and customisation UI for process data and weight data.
+        <strong>Unified Workflow:</strong> import masters, preview enrichment, weight review, support mapping, config, and final run use the same conversion core.
       </div>
     </details>`;
 }

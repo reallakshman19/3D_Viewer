@@ -493,7 +493,7 @@ export async function enrichXmlForCii2019(xmlTextVal, stagedJsonText, options = 
 
   const diagnostics = [];
   await loadXmlCiiWeightMasterRows(config, diagnostics);
-  await loadXmlCiiMasterRows(config.pipingClass, ['../docs/Masters/Piping_class_master.json', 'docs/Masters/Piping_class_master.json'], 'piping-class', diagnostics);
+  await loadXmlCiiMasterRows(config.pipingClass, [], 'piping-class', diagnostics);
   await loadXmlCiiMaterialMap(config, diagnostics);
   const stagedSupportIndex = buildStagedSupportIndex(stagedJsonText, config, diagnostics);
   const stagedComponentIndex = buildStagedComponentIndex(stagedJsonText, config);

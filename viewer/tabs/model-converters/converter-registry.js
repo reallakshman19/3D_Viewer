@@ -54,7 +54,6 @@ function _defaultInputxml2019LayoutConfigJson() {
       row8: ['0.000000', '0.000000', '0.000000', '0.000000', '9999.99', '9999.99'],
       row9: ['0.000000', '0.000000', '0.000000', '0.000000', '0.000000'],
       row10: ['0'],
-      row11: ['-1', '-1'],
       row12: ['{bend}', '{rigid}', '0', '{restraint}', '{sif}', '0'],
       row13: ['0', '0', '0', '{sif}', '0', '0'],
       row14: ['{reducer}', '0', '{sif}'],
@@ -387,6 +386,12 @@ const CONVERTER_DEFS = {
         supportKindToXmlType: { REST: '+Y', GUIDE: 'GUI', LINESTOP: 'LIM', LIMIT: 'LIM', ANCHOR: 'A', SPRING: 'Y' },
         defaultXmlSupportType: 'Y',
         defaultStiffness: '1.751270E+12',
+        masterPaths: {
+          materialMapPath: 'docs/Masters/PCF_MAT_MAP.TXT',
+          weightPath: 'docs/Masters/wtValveweights.json',
+          pipingClassIndexPath: 'docs/Masters/SpecwisePipingClass/index.json',
+          pipingClassShardFolder: 'docs/Masters/SpecwisePipingClass/',
+        },
         linelist: {
           sampleBranchName: '/ASIM-1885-10"-S8810101-91261M7-HC/B1',
           tokenDelimiter: '-',
@@ -419,7 +424,7 @@ const CONVERTER_DEFS = {
           masterRows: [],
         },
         pipingClass: {
-          masterUrl: '../docs/Masters/Piping_class_master.json',
+          masterUrl: '',
           masterRows: [],
           startsWithConfidence: 0.8,
           fuzzyThreshold: 0.6,

@@ -82,7 +82,7 @@ export function renderUnifiedSupportMappingTable(container, config) {
   const rows = supportMappingRowsForTable(config);
 
   container.innerHTML = `
-    <div class="model-converters-workflow-detail-title">7 Support Mapping</div>
+    <div class="model-converters-workflow-detail-title">6 Support Types</div>
     <div class="model-converters-workflow-detail-text">
       One table for support detection and XML/CII restraint output. Detection columns map staged/XML/RVM/ATT attributes to support kinds.
       Output columns map each kind to XML/CII type, direction cosines, stiffness, gap, friction, and support tag behavior.

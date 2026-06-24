@@ -53,7 +53,7 @@ import {
   normalizeLineListRow as _normalizeLineListRow
 } from '../../converters/xml-cii2019-core/linelist-mapping.js';
 import { buildStagedSupportIndex, xmlCiiTypeEntriesFromSupportKind, xmlCiiTypeEntryFromExistingRestraint, applyXmlRestraints, enrichHierarchyWithMapperKinds } from '../../converters/xml-cii2019-core/support-mapping.js';
-import { CONVERTERS, getConverterById } from './converter-registry.js?v=20260617-basic-glb-2';
+import { CONVERTERS, getConverterById } from './converter-registry.js?v=20260617-basic-glb-3';
 import { XML_CII_WORKFLOW_PHASES } from './WorkflowShell.js';
 import { loadStoredState, saveStoredState } from './core/config-store.js';
 import { downloadOutput, arrayBufferToBase64, baseNameWithoutExtension, isRvmFileName, isAttOrTxtFileName, encodeTextUtf8, decodeTextUtf8, toFiniteNumber } from './core/output-utils.js';
@@ -118,6 +118,33 @@ const INPUTXML2019_SAFE_UNITS = Object.freeze({
 // Compute absolute URLs for default master files so fetch() resolves correctly
 // regardless of the current page URL (avoids issues when the page is not at /viewer/).
 const _xmlCiiMasterBaseUrl = new URL('../../../docs/Masters/', import.meta.url).href;
+const XML_CII_SPECWISE_MASTER_PATH_DEFAULTS = Object.freeze({
+  materialMapPath: 'docs/Masters/PCF_MAT_MAP.TXT',
+  weightPath: 'docs/Masters/wtValveweights.json',
+  pipingClassIndexPath: 'docs/Masters/SpecwisePipingClass/index.json',
+  pipingClassShardFolder: 'docs/Masters/SpecwisePipingClass/',
+});
+const XML_CII_SPECWISE_PIPING_FIELD_MAP = Object.freeze({
+  pipingClass: 'pipingClass',
+  convertedBore: 'convertedBore',
+  componentType: 'componentType',
+  rating: 'rating',
+  materialName: 'materialName',
+  schedule: 'schedule',
+  wallThickness: 'wallThickness',
+  corrosion: 'corrosion',
+  endCondition: 'endCondition',
+});
+const XML_CII_SPECWISE_PLACEHOLDER_ROW = Object.freeze({
+  _smartMasterPlaceholder: true,
+  pipingClass: '__ON_DEMAND__',
+  convertedBore: '',
+  wallThickness: '',
+  materialName: '',
+  rating: '',
+  corrosion: '',
+  schedule: '',
+});
 
 const XML_CII_MASTER_DEFS = Object.freeze({
   linelist: Object.freeze({
@@ -176,7 +203,7 @@ const XML_CII_MASTER_DEFS = Object.freeze({
     sectionKey: 'pipingClass',
     rowsKey: 'masterRows',
     fieldMapKey: 'fieldMap',
-    defaultUrl: `${_xmlCiiMasterBaseUrl}Piping_class_master.json`,
+    defaultUrl: '',
     requiredFields: Object.freeze(['pipingClass', 'convertedBore']),
     aliases: Object.freeze({
       pipingClass: Object.freeze(['Piping Class', 'PIPING_CLASS', 'Class', 'SPEC', 'Spec']),
@@ -237,7 +264,6 @@ function _defaultInputxml2019LayoutConfigJson() {
       row8: ['0.000000', '0.000000', '0.000000', '0.000000', '9999.99', '9999.99'],
       row9: ['0.000000', '0.000000', '0.000000', '0.000000', '0.000000'],
       row10: ['0'],
-      row11: ['-1', '-1'],
       row12: ['{bend}', '{rigid}', '0', '{restraint}', '{sif}', '0'],
       row13: ['0', '0', '0', '{sif}', '0', '0'],
       row14: ['{reducer}', '0', '{sif}'],
@@ -559,6 +585,12 @@ const CONVERTER_DEFS = Object.freeze({
         supportKindToXmlType: { REST: '+Y', GUIDE: 'GUI', LINESTOP: 'LIM', LIMIT: 'LIM', ANCHOR: 'A', SPRING: 'Y' },
         defaultXmlSupportType: 'Y',
         defaultStiffness: '1.751270E+12',
+        masterPaths: {
+          materialMapPath: 'docs/Masters/PCF_MAT_MAP.TXT',
+          weightPath: 'docs/Masters/wtValveweights.json',
+          pipingClassIndexPath: 'docs/Masters/SpecwisePipingClass/index.json',
+          pipingClassShardFolder: 'docs/Masters/SpecwisePipingClass/',
+        },
         linelist: {
           sampleBranchName: '/ASIM-1885-10"-S8810101-91261M7-HC/B1',
           tokenDelimiter: '-',
@@ -591,7 +623,7 @@ const CONVERTER_DEFS = Object.freeze({
           masterRows: [],
         },
         pipingClass: {
-          masterUrl: '../docs/Masters/Piping_class_master.json',
+          masterUrl: '',
           masterRows: [],
           startsWithConfidence: 0.8,
           fuzzyThreshold: 0.6,
@@ -3270,7 +3302,7 @@ async function _enrichXmlForCii2019(xmlText, stagedJsonText, options = {}) {
 
   const diagnostics = [];
   await _loadXmlCiiWeightMasterRows(config, diagnostics);
-  await _loadXmlCiiMasterRows(config.pipingClass, ['../docs/Masters/Piping_class_master.json', 'docs/Masters/Piping_class_master.json'], 'piping-class', diagnostics);
+  await _loadXmlCiiMasterRows(config.pipingClass, [], 'piping-class', diagnostics);
   await _loadXmlCiiMaterialMap(config, diagnostics);
   const stagedSupportIndex = _buildStagedSupportIndex(stagedJsonText, config, diagnostics);
   const stagedComponentIndex = _buildStagedComponentIndex(stagedJsonText, config);
@@ -5717,6 +5749,296 @@ export function renderModelConvertersTab(container) {
     _xmlCiiSyncConfigTextarea();
   }
 
+  function xmlCiiSpecwiseMasterPaths(config) {
+    const current = config?.masterPaths && typeof config.masterPaths === 'object' && !Array.isArray(config.masterPaths)
+      ? config.masterPaths
+      : {};
+    const paths = { ...XML_CII_SPECWISE_MASTER_PATH_DEFAULTS, ...current };
+    delete paths.legacyPipingMasterPath;
+    return paths;
+  }
+
+  function xmlCiiNormalizeMasterPath(masterPath) {
+    return _toText(masterPath).trim().replace(/^\/+/, '').replace(/^\.\//, '');
+  }
+
+  function xmlCiiSpecwiseCandidateUrls(masterPath) {
+    const cleanPath = xmlCiiNormalizeMasterPath(masterPath);
+    const urls = [];
+    try { urls.push(new URL(`../../../${cleanPath}`, import.meta.url).href); } catch {}
+    try { urls.push(new URL(`../../${cleanPath}`, document.baseURI).href); } catch {}
+    try { urls.push(new URL(cleanPath, document.baseURI).href); } catch {}
+    return [...new Set(urls.filter(Boolean))];
+  }
+
+  async function xmlCiiFetchMasterPathText(masterPath) {
+    const errors = [];
+    for (const url of xmlCiiSpecwiseCandidateUrls(masterPath)) {
+      try {
+        const response = await fetch(url, { cache: 'no-store' });
+        if (!response.ok) {
+          errors.push(`${url}: HTTP ${response.status}`);
+          continue;
+        }
+        const text = await response.text();
+        if (!_toText(text).trim()) {
+          errors.push(`${url}: empty response`);
+          continue;
+        }
+        return { text, url };
+      } catch (error) {
+        errors.push(`${url}: ${_toText(error?.message || error)}`);
+      }
+    }
+    throw new Error(`Failed to load ${masterPath}. Tried: ${errors.join(' | ')}`);
+  }
+
+  function xmlCiiParseSpecwiseIndex(text) {
+    const parsed = JSON.parse(_toText(text).replace(/^export\s+default\s+/i, '').replace(/;\s*$/g, '') || '{}');
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed) || !parsed.classes || typeof parsed.classes !== 'object') {
+      throw new Error('Invalid specwise piping class index.');
+    }
+    return parsed;
+  }
+
+  function xmlCiiNormalizeSpecwiseToken(value) {
+    return _toText(value).trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
+  }
+
+  function xmlCiiNormalizeSpecwisePipingRow(row, index) {
+    const raw = row && typeof row === 'object' ? row : {};
+    const rawText = (keys) => _rowText(raw, keys);
+    const boreText = rawText(['convertedBore', 'Converted Bore', 'DN', 'NB', 'Bore', 'NPS', 'Size']);
+    const boreNumber = _parseNumericMm(boreText);
+    return {
+      ...raw,
+      _raw: raw,
+      _sourceRowIndex: raw._sourceRowIndex || raw._rowIndex || index + 1,
+      pipingClass: rawText(['pipingClass', 'Piping Class', 'PIPING_CLASS', 'Class', 'SPEC', 'Spec']),
+      convertedBore: boreNumber !== null ? boreNumber : boreText,
+      componentType: rawText(['componentType', 'Component Type', 'COMPONENT_TYPE', 'Type', 'Item Type']),
+      rating: rawText(['rating', 'Rating', 'RATING', 'Class Rating', 'Pressure Class']),
+      materialName: rawText(['materialName', 'Material_Name', 'Material', 'MATERIAL', 'Material Name']),
+      schedule: rawText(['schedule', 'Schedule', 'SCHEDULE', 'SCH']),
+      wallThickness: rawText(['wallThickness', 'Wall Thickness', 'Wall thickness', 'WALL_THICKNESS', 'WT', 'WallThickness']),
+      corrosion: rawText(['corrosion', 'Corrosion', 'Corrosion Allowance', 'CORROSION_ALLOWANCE', 'CA']),
+      endCondition: rawText(['endCondition', 'End Condition', 'END_CONDITION', 'End Type']),
+    };
+  }
+
+  function xmlCiiSpecwiseRowsFromShard(text) {
+    const rows = _xmlCiiParseJsonRows(text);
+    return (Array.isArray(rows) ? rows : [])
+      .map((row, index) => xmlCiiNormalizeSpecwisePipingRow(row, index))
+      .filter((row) => _toText(row.pipingClass).trim());
+  }
+
+  function xmlCiiExtractBranchNamesFromXml(xmlText) {
+    const source = _toText(xmlText);
+    const names = [];
+    if (typeof DOMParser !== 'undefined') {
+      try {
+        const doc = new DOMParser().parseFromString(source, 'application/xml');
+        if (!doc.getElementsByTagName('parsererror').length) {
+          for (const node of Array.from(doc.getElementsByTagName('Branchname'))) {
+            const value = _toText(node.textContent).trim();
+            if (value) names.push(value);
+          }
+        }
+      } catch {}
+    }
+    if (!names.length) {
+      for (const match of source.matchAll(/<Branchname\b[^>]*>([\s\S]*?)<\/Branchname>/gi)) {
+        const value = _toText(match[1]).replace(/<[^>]+>/g, '').trim();
+        if (value) names.push(value);
+      }
+    }
+    return [...new Set(names)];
+  }
+
+  function xmlCiiSpecwiseBranchClassToken(branchName, config) {
+    const delimiter = config?.rating?.tokenDelimiter || config?.linelist?.tokenDelimiter || '-';
+    const token = _tokenAtPosition(branchName, delimiter, Number(config?.rating?.pipingClassTokenIndex || 5));
+    return xmlCiiNormalizeSpecwiseToken(token);
+  }
+
+  function xmlCiiSpecwiseIndexMatches(index, branchNames, config) {
+    const entries = Object.entries(index?.classes || {});
+    const branchKeys = branchNames.map((branchName) => ({
+      branch: xmlCiiNormalizeSpecwiseToken(branchName),
+      classToken: xmlCiiSpecwiseBranchClassToken(branchName, config),
+    }));
+    const matches = [];
+    for (const [classKey, meta] of entries) {
+      const tokens = [classKey, ...(Array.isArray(meta?.matchTokens) ? meta.matchTokens : [])]
+        .map(xmlCiiNormalizeSpecwiseToken)
+        .filter(Boolean);
+      if (!tokens.length) continue;
+      const matched = branchKeys.some(({ branch, classToken }) => tokens.some((token) => (
+        (classToken && (classToken.includes(token) || token.includes(classToken)))
+        || (branch && branch.includes(token))
+      )));
+      if (matched) matches.push({ classKey, meta });
+    }
+    return matches;
+  }
+
+  function xmlCiiJoinMasterPath(folder, file) {
+    return `${xmlCiiNormalizeMasterPath(folder).replace(/\/+$/, '')}/${_toText(file).trim().replace(/^\/+/, '')}`;
+  }
+
+  function xmlCiiSpecwiseStatusText(config) {
+    const piping = config?.pipingClass && typeof config.pipingClass === 'object' ? config.pipingClass : {};
+    const rows = Array.isArray(piping.masterRows) ? piping.masterRows.length : 0;
+    if (piping._smartMode === 'specwise-shard') {
+      return `Piping Class: ${piping._loadedShardCount || 0}/${piping._matchedClassCount || 0} shard(s), ${rows} row(s), ${piping._branchNameCount || 0} branchname(s).`;
+    }
+    if (piping._smartMode === 'specwise-index-no-match') {
+      return `Piping Class: 0/${piping._matchedClassCount || 0} shard(s), 0 row(s), ${piping._branchNameCount || 0} branchname(s).`;
+    }
+    return 'Material Map and Weight Master auto-load from docs/Masters. Select XML and rescan to load specwise piping class rows.';
+  }
+
+  function xmlCiiRenderSpecwiseMasterPathsPanel(config, statusText) {
+    const paths = xmlCiiSpecwiseMasterPaths(config);
+    const pathInput = (label, key) => `
+      <label class="model-converters-workflow-regex-field">
+        <span>${_esc(label)}</span>
+        <input type="text" value="${_escAttr(paths[key] || '')}" data-xml-cii-master-path="${_escAttr(key)}">
+      </label>`;
+    return `
+      <div class="model-converters-workflow-master-card" data-xml-cii-specwise-paths-panel style="margin:10px 0;border-color:#25466b;">
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;">
+          <div>
+            <div class="model-converters-workflow-detail-title">Master Paths / Specwise Piping Class Index</div>
+            <div class="model-converters-workflow-detail-text">Default masters load from docs/Masters. Piping class rows load from specwise shards after XML selection.</div>
+          </div>
+          <button type="button" class="model-converters-run-btn" data-xml-cii-rescan-piping>Rescan XML</button>
+        </div>
+        <div class="model-converters-workflow-regex-grid" style="margin-top:10px;grid-template-columns:repeat(4,minmax(180px,1fr));">
+          ${pathInput('Material Map Path', 'materialMapPath')}
+          ${pathInput('Weights / Valve CA8 Path', 'weightPath')}
+          ${pathInput('Piping Class Index Path', 'pipingClassIndexPath')}
+          ${pathInput('Piping Class Shard Folder', 'pipingClassShardFolder')}
+        </div>
+        <div data-xml-cii-path-status style="margin-top:8px;padding:8px 10px;border:1px solid #2b7656;border-radius:8px;color:#7dffc0;background:#0f1b2c;font-size:12px;">
+          ${_esc(statusText || xmlCiiSpecwiseStatusText(config))}
+        </div>
+      </div>`;
+  }
+
+  async function xmlCiiRescanSpecwisePipingClass(options = {}) {
+    const force = options.force === true;
+    const notifyUser = options.notifyUser === true;
+    const xmlFile = xmlCiiCurrentPrimaryFile();
+    const activeVal = activeValues();
+    const config = _parseXmlCiiEnrichmentConfig(activeVal.supportConfigJson);
+    if (!xmlFile) return { changed: false, message: 'Piping Class: select XML, then Rescan XML to load specwise shard rows.' };
+
+    const xmlText = await xmlFile.text();
+    const branchNames = xmlCiiExtractBranchNamesFromXml(xmlText);
+    if (!branchNames.length) return { changed: false, message: 'Piping Class: no Branchname values found in XML.' };
+
+    const paths = xmlCiiSpecwiseMasterPaths(config);
+    const signature = JSON.stringify({
+      file: `${xmlFile.name}:${xmlFile.size}:${xmlFile.lastModified}`,
+      branches: branchNames.length,
+      index: paths.pipingClassIndexPath,
+      folder: paths.pipingClassShardFolder,
+    });
+    if (!force && config.pipingClass?._rescanSignature === signature && Array.isArray(config.pipingClass?.masterRows) && config.pipingClass.masterRows.length) {
+      return { changed: false, message: xmlCiiSpecwiseStatusText(config) };
+    }
+
+    const indexLoad = await xmlCiiFetchMasterPathText(paths.pipingClassIndexPath);
+    const index = xmlCiiParseSpecwiseIndex(indexLoad.text);
+    const matches = xmlCiiSpecwiseIndexMatches(index, branchNames, config);
+    const rows = [];
+    const loadedFiles = [];
+    const folder = paths.pipingClassShardFolder || index.shardBase || XML_CII_SPECWISE_MASTER_PATH_DEFAULTS.pipingClassShardFolder;
+
+    for (const match of matches) {
+      const shardFile = _toText(match.meta?.file || `${match.classKey}.json`).trim();
+      if (!shardFile) continue;
+      const shard = await xmlCiiFetchMasterPathText(xmlCiiJoinMasterPath(folder, shardFile));
+      const shardRows = xmlCiiSpecwiseRowsFromShard(shard.text);
+      if (!shardRows.length) continue;
+      rows.push(...shardRows);
+      loadedFiles.push(shardFile);
+    }
+
+    if (!config.pipingClass || typeof config.pipingClass !== 'object' || Array.isArray(config.pipingClass)) config.pipingClass = {};
+    config.pipingClass.masterRows = rows.length ? rows : [{ ...XML_CII_SPECWISE_PLACEHOLDER_ROW }];
+    config.pipingClass.fieldMap = { ...XML_CII_SPECWISE_PIPING_FIELD_MAP };
+    config.pipingClass.masterUrl = indexLoad.url;
+    config.pipingClass.defaultUrl = indexLoad.url;
+    config.pipingClass._smartMode = rows.length ? 'specwise-shard' : 'specwise-index-no-match';
+    config.pipingClass._autoloadedRows = rows.length;
+    config.pipingClass._matchedClassCount = matches.length;
+    config.pipingClass._loadedShardCount = loadedFiles.length;
+    config.pipingClass._loadedShardFiles = loadedFiles;
+    config.pipingClass._branchNameCount = branchNames.length;
+    config.pipingClass._rescanSignature = signature;
+    config.pipingClass._rescanAt = new Date().toISOString();
+    config.masterPaths = { ...paths };
+    delete config.masterPaths.legacyPipingMasterPath;
+    xmlCiiSaveConfig(config);
+
+    const message = xmlCiiSpecwiseStatusText(config);
+    if (notifyUser) {
+      notify({ level: rows.length ? 'success' : 'warning', title: 'XML->CII Masters', message });
+    }
+    return { changed: true, message };
+  }
+
+  function xmlCiiBindSpecwiseMasterPathsPanel(rootEl, rerender) {
+    const panel = rootEl?.querySelector?.('[data-xml-cii-specwise-paths-panel]');
+    if (!panel || panel.dataset.bound === 'true') return;
+    panel.dataset.bound = 'true';
+    panel.querySelectorAll('[data-xml-cii-master-path]').forEach((input) => {
+      input.addEventListener('change', () => {
+        const config = _parseXmlCiiEnrichmentConfig(activeValues().supportConfigJson);
+        config.masterPaths = xmlCiiSpecwiseMasterPaths(config);
+        config.masterPaths[input.getAttribute('data-xml-cii-master-path') || ''] = xmlCiiNormalizeMasterPath(input.value);
+        delete config.masterPaths.legacyPipingMasterPath;
+        xmlCiiSaveConfig(config);
+        rerender?.();
+      });
+    });
+    panel.querySelector('[data-xml-cii-rescan-piping]')?.addEventListener('click', async () => {
+      const statusEl = panel.querySelector('[data-xml-cii-path-status]');
+      try {
+        if (statusEl) statusEl.textContent = 'Scanning XML branch names against specwise piping class index...';
+        const result = await xmlCiiRescanSpecwisePipingClass({ force: true, notifyUser: true });
+        if (statusEl) statusEl.textContent = result.message;
+      } catch (error) {
+        const message = _toText(error?.message || error);
+        if (statusEl) statusEl.textContent = message;
+        notify({ level: 'error', title: 'XML->CII Masters', message });
+      } finally {
+        rerender?.();
+      }
+    });
+  }
+
+  function xmlCiiScheduleSpecwiseRescan(rootEl, rerender) {
+    if (!rootEl || rootEl.dataset.xmlCiiSpecwiseRescanScheduled === 'true') return;
+    rootEl.dataset.xmlCiiSpecwiseRescanScheduled = 'true';
+    const run = async () => {
+      try {
+        const result = await xmlCiiRescanSpecwisePipingClass({ force: false, notifyUser: false });
+        if (result.changed && rootEl.isConnected) rerender?.();
+      } catch (error) {
+        console.warn('[XML->CII] Specwise piping class scan failed:', error);
+      } finally {
+        if (rootEl) rootEl.dataset.xmlCiiSpecwiseRescanScheduled = 'false';
+      }
+    };
+    if (typeof requestIdleCallback === 'function') requestIdleCallback(run, { timeout: 1000 });
+    else if (typeof requestAnimationFrame === 'function') requestAnimationFrame(run);
+    else Promise.resolve().then(run);
+  }
+
   function xmlCiiConfigWithLoadedMasterRows(contextLabel) {
     const values = activeValues();
     const config = _parseXmlCiiEnrichmentConfig(values.supportConfigJson);
@@ -6125,6 +6447,7 @@ export function renderModelConvertersTab(container) {
       <div class="model-converters-workflow-detail-text">
         Load masters here. Rows are saved into the XML->CII config JSON so the converter can become standalone.
       </div>
+      ${xmlCiiRenderSpecwiseMasterPathsPanel(config)}
       <div class="model-converters-workflow-master-tabs">
         ${summary.map((entry) => `
           <button type="button" class="model-converters-workflow-master-tab ${entry.masterKey === activeTab ? 'is-active' : ''}" data-xml-cii-master-tab="${_esc(entry.masterKey)}">
@@ -6658,10 +6981,13 @@ export function renderModelConvertersTab(container) {
   function bindXmlCiiImportMastersPhase(rootEl) {
     if (!rootEl) return;
     const detailEl = xmlCiiWorkflowDetailForRoot(rootEl);
+    const rerender = () => xmlCiiRenderWorkflowRoot(rootEl, detailEl);
+    xmlCiiBindSpecwiseMasterPathsPanel(rootEl, rerender);
+    xmlCiiScheduleSpecwiseRescan(rootEl, rerender);
     rootEl.querySelectorAll('[data-xml-cii-master-tab]').forEach((button) => {
       button.addEventListener('click', () => {
         rootEl.dataset.activeMaster = button.getAttribute('data-xml-cii-master-tab') || 'linelist';
-        xmlCiiRenderWorkflowRoot(rootEl, detailEl);
+        rerender();
       });
     });
     rootEl.querySelectorAll('[data-xml-cii-import-master]').forEach((input) => {
@@ -8109,6 +8435,9 @@ export function renderModelConvertersTab(container) {
         // Import Masters: fully popup-aware binding using rerender() for refresh.
         // Does NOT call bindXmlCiiImportMastersPhase which targets the main tab workflow.
         if (phaseId === 'import-masters') {
+          xmlCiiBindSpecwiseMasterPathsPanel(target, rerender);
+          xmlCiiScheduleSpecwiseRescan(target, rerender);
+
           // Master sub-tab navigation
           target.querySelectorAll('[data-xml-cii-master-tab]').forEach((btn) => {
             btn.addEventListener('click', () => {

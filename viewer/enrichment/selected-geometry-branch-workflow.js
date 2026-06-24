@@ -232,7 +232,7 @@ function enrichmentPayload(row, branchInfo, audit) {
   return {
     schema: SELECTED_GEOMETRY_BRANCH_ENRICHMENT_SCHEMA,
     branch: { branchName: row?.branchName || branchInfo.branchName || '', objectCount: row?.objectCount || 0, status: row?.status || 'review' },
-    lineList: { lineNo: row?.lineKey || '', lineKey: row?.lineKey || '', p1: row?.p1 || '', t1: row?.t1 || '', t2: row?.t2 || '', t3: row?.t3 || '', density: row?.density || '', fluidDensityHydKgM3: numberFromText(row?.hydro_density) ?? 1000, insulationThicknessMm: numberFromText(row?.insulationThickness ?? row?.insul_thick) },
+    lineList: { lineNo: row?.lineKey || '', lineKey: row?.lineKey || '', p1: row?.p1 || '', t1: row?.t1 || '', t2: row?.t2 || '', t3: row?.t3 || '', density: row?.density || '' },
     pipingClass: { className: row?.pipingClass || '', requestedClass: row?.pipingClassDerived || '', rating: row?.rating || '', wallThicknessMm: numberFromText(row?.wallThickness), corrosionAllowanceMm: numberFromText(row?.corrosion), materialName: row?.material || '', materialCode: row?.materialCode || '' },
     material: { materialName: row?.material || '', materialCode: row?.materialCode || '', source: row?.materialSource || '' },
     weight: { rating: row?.rating || '', candidateCount: row?.weightRows?.length || 0, bestWeightKg: firstWeight(row?.weightRows) },

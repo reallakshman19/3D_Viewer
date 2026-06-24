@@ -43,7 +43,7 @@ const INSTALL_FLAG = Symbol.for('rvm-selected-geometry-enrichment-floating-workf
 const STYLE_ID = 'rvm-selected-geometry-enrichment-floating-workflow-style';
 const ROOT_SELECTOR = '[data-rvm-viewer]';
 const GLOBAL_KEY = '__RVM_SELECTED_GEOMETRY_ENRICHMENT__';
-const DEFAULT_TARGET_URL = 'http://localhost:5173/Simplified_Analysis/';
+const DEFAULT_TARGET_URL = 'http://localhost:5173/';
 const ACTIVE_PHASE_KEY = 'rvmSelectedGeometry.enrichment.activePhase.v1';
 const POPUP_ID = 'rvm-selected-geometry-workflow-popup';
 const TOOLBAR_SECTION_ATTR = 'data-selected-geometry-workflow-toolbar';
@@ -818,9 +818,7 @@ function resolveTargetUrl(value) {
 }
 
 function readTargetUrl() {
-  const stored = text(globalThis.localStorage?.getItem?.('rvmSelectedGeometryWorkspaceTargetUrl'));
-  if (stored === 'http://localhost:5173/' || stored === 'http://127.0.0.1:5173/') return DEFAULT_TARGET_URL;
-  return stored || DEFAULT_TARGET_URL;
+  return text(globalThis.localStorage?.getItem?.('rvmSelectedGeometryWorkspaceTargetUrl')) || DEFAULT_TARGET_URL;
 }
 
 function writeTargetUrl(value) {

@@ -1,24 +1,39 @@
 /**
- * XML->CII workflow button scope owner.
+ * XML->CII unified workflow button scope owner.
  *
  * Owns only the visible converter action area in the Model Converters tab.
  * It does not open workflow popups, run conversion, or mutate phase content.
  *
  * Contract:
- * - XML->CII left panel shows exactly two workflow launchers: Workflow 1 and Workflow 2.
+ * - XML->CII left panel shows one unified workflow launcher.
  * - The generic converter Advanced options block is hidden for XML->CII.
  * - The legacy direct Run Conversion button is hidden for XML->CII and restored for other converters.
- * - Workflow launchers are visible only when the selected converter is xml_to_cii.
- * - Workflow launchers must not remain inside the legacy dark workflow shell.
+ * - Workflow launcher is visible only when the selected converter is xml_to_cii.
+ * - Launcher must not remain inside the legacy dark workflow shell.
  * - Duplicate launchers from stale renders are removed inside the current root.
  * - Stale/cached launcher click listeners are stripped before popup binding.
  */
 
 const XML_CII_BUTTON_SCOPE_STYLE_ID = 'xml-cii-workflow-button-scope-style';
-const XML_CII_BUTTON_SCOPE_FLAG = '__xmlCiiWorkflowButtonScope_v5';
-const XML_CII_EXCLUSIVE_LAUNCHER_VERSION = '20260624-workflow1-workflow2-1';
+const XML_CII_BUTTON_SCOPE_FLAG = '__xmlCiiWorkflowButtonScope_unified_v1';
+const XML_CII_EXCLUSIVE_LAUNCHER_VERSION = '20260624-unified-wf2-1';
 const XML_CII_CONVERTER_ID = 'xml_to_cii';
 const XML_CII_DIRECT_RUN_HIDDEN_ATTR = 'data-xml-cii-direct-run-hidden';
+const XML_CII_UNIFIED_BUTTON_ID = 'model-converters-xml-cii-workflow-btn';
+
+const XML_CII_LEGACY_LAUNCHER_SELECTORS = Object.freeze([
+  '#model-converters-xml-cii-workflow-btn',
+  '#model-converters-xml-cii-workflow1-btn',
+  '#model-converters-xml-cii-workflow2-btn',
+  '#model-converters-xml-cii-simple-btn',
+  '#model-converters-xml-cii-rich-btn',
+  '[data-xml-cii-workflow-launcher="true"]',
+  '[data-xml-cii-unified-workflow-launcher="true"]',
+  '[data-xml-cii-workflow1-launcher="true"]',
+  '[data-xml-cii-workflow2-launcher="true"]',
+  '[data-xml-cii-simple-workflow-launcher="true"]',
+  '[data-xml-cii-rich-workflow-launcher="true"]',
+]);
 
 function xmlCiiWorkflowButtonScopeBrowserReady() {
   return typeof window !== 'undefined' && typeof document !== 'undefined';
@@ -61,7 +76,7 @@ function xmlCiiWorkflowButtonScopeEnsureStyle() {
       min-width:0!important;
       padding:10px!important;
       border:1px solid rgba(148,163,184,0.28)!important;
-      border-radius:10px!important;
+      border-radius:8px!important;
       background:rgba(15,23,42,0.22)!important;
       box-shadow:none!important;
     }
@@ -125,25 +140,18 @@ function xmlCiiWorkflowButtonScopeEnsureActionRow(root) {
   return row;
 }
 
-function xmlCiiWorkflowButtonScopeEnsureCard(row, workflow) {
+function xmlCiiWorkflowButtonScopeEnsureCard(row) {
   if (!row) return null;
-  const attrName = workflow === 'workflow1' ? 'data-xml-cii-workflow1-card' : 'data-xml-cii-workflow2-card';
-  let card = row.querySelector(`:scope > [${attrName}]`);
+  let card = row.querySelector(':scope > [data-xml-cii-workflow-card]');
   if (card) return card;
   card = document.createElement('section');
-  card.className = `xml-cii-workflow-card xml-cii-${workflow}-card`;
-  card.setAttribute(attrName, 'true');
-  card.innerHTML = workflow === 'workflow1'
-    ? `
-      <div class="xml-cii-workflow-card-title">Workflow 1</div>
-      <div class="xml-cii-workflow-card-note">Opens the Workflow 1 XML-&gt;CII popup. Import masters, map fields, inspect diagnostics, and run enriched CII conversion.</div>
-      <div class="xml-cii-workflow-card-actions" data-xml-cii-workflow1-actions></div>`
-    : `
-      <div class="xml-cii-workflow-card-title">Workflow 2</div>
-      <div class="xml-cii-workflow-card-note">Opens the Workflow 2 XML-&gt;CII popup. Includes the enhanced master/customisation UI for process data and weight data.</div>
-      <div class="xml-cii-workflow-card-actions" data-xml-cii-workflow2-actions></div>`;
-  if (workflow === 'workflow1') row.insertBefore(card, row.firstChild);
-  else row.appendChild(card);
+  card.className = 'xml-cii-workflow-card';
+  card.setAttribute('data-xml-cii-workflow-card', 'true');
+  card.innerHTML = `
+    <div class="xml-cii-workflow-card-title">XML-&gt;CII(2019) Workflow</div>
+    <div class="xml-cii-workflow-card-note">Opens the unified XML-&gt;CII popup with regex setup, saved master rows, preview edits, diagnostics, weight review, support mapping, config, and run.</div>
+    <div class="xml-cii-workflow-card-actions" data-xml-cii-workflow-actions></div>`;
+  row.appendChild(card);
   return card;
 }
 
@@ -175,6 +183,7 @@ function xmlCiiWorkflowButtonScopeFreshLauncher(button) {
   const fresh = button.cloneNode(true);
   fresh.dataset.xmlCiiExclusiveLauncherVersion = XML_CII_EXCLUSIVE_LAUNCHER_VERSION;
   delete fresh.dataset.xmlCiiWorkflowPopupBound;
+  delete fresh.dataset.xmlCiiUnifiedWorkflowPopupBound;
   delete fresh.dataset.xmlCiiWorkflow1PopupBound;
   delete fresh.dataset.xmlCiiWorkflow2PopupBound;
   delete fresh.dataset.xmlCiiSimpleWorkflowPopupBound;
@@ -184,19 +193,18 @@ function xmlCiiWorkflowButtonScopeFreshLauncher(button) {
   return fresh;
 }
 
-function xmlCiiWorkflowButtonScopeCanonicalLauncher(root, workflow) {
-  const id = workflow === 'workflow1' ? 'model-converters-xml-cii-workflow1-btn' : 'model-converters-xml-cii-workflow2-btn';
-  const oldId = workflow === 'workflow1' ? 'model-converters-xml-cii-simple-btn' : 'model-converters-xml-cii-rich-btn';
-  const attr = workflow === 'workflow1' ? 'data-xml-cii-workflow1-launcher' : 'data-xml-cii-workflow2-launcher';
-  const oldAttr = workflow === 'workflow1' ? 'data-xml-cii-simple-workflow-launcher' : 'data-xml-cii-rich-workflow-launcher';
-  const cardAttr = workflow === 'workflow1' ? 'data-xml-cii-workflow1-card' : 'data-xml-cii-workflow2-card';
-  const candidates = Array.from(root?.querySelectorAll?.(`#${id}, #${oldId}, [${attr}="true"], [${oldAttr}="true"]`) || []);
-  let canonical = candidates.find((button) => button.closest(`[${cardAttr}]`)) || candidates[0] || null;
+function xmlCiiWorkflowButtonScopeLauncherCandidates(root) {
+  return Array.from(root?.querySelectorAll?.(XML_CII_LEGACY_LAUNCHER_SELECTORS.join(', ')) || []);
+}
+
+function xmlCiiWorkflowButtonScopeCanonicalLauncher(root) {
+  const candidates = xmlCiiWorkflowButtonScopeLauncherCandidates(root);
+  let canonical = candidates.find((button) => button.closest('[data-xml-cii-workflow-card]')) || candidates[0] || null;
   if (!canonical) {
     canonical = document.createElement('button');
     canonical.type = 'button';
-    canonical.id = id;
-    canonical.setAttribute(attr, 'true');
+    canonical.id = XML_CII_UNIFIED_BUTTON_ID;
+    canonical.setAttribute('data-xml-cii-unified-workflow-launcher', 'true');
     canonical.setAttribute('data-xml-cii-workflow-launcher', 'true');
   }
   canonical = xmlCiiWorkflowButtonScopeFreshLauncher(canonical);
@@ -206,22 +214,24 @@ function xmlCiiWorkflowButtonScopeCanonicalLauncher(root, workflow) {
   return canonical;
 }
 
-function xmlCiiWorkflowButtonScopePrepareLauncher(root, card, workflow) {
-  const button = xmlCiiWorkflowButtonScopeCanonicalLauncher(root, workflow);
-  const target = card?.querySelector?.(workflow === 'workflow1' ? '[data-xml-cii-workflow1-actions]' : '[data-xml-cii-workflow2-actions]');
+function xmlCiiWorkflowButtonScopePrepareLauncher(root, card) {
+  const button = xmlCiiWorkflowButtonScopeCanonicalLauncher(root);
+  const target = card?.querySelector?.('[data-xml-cii-workflow-actions]');
   if (!button || !target) return null;
   if (button.parentElement !== target) target.appendChild(button);
-  button.id = workflow === 'workflow1' ? 'model-converters-xml-cii-workflow1-btn' : 'model-converters-xml-cii-workflow2-btn';
+  button.id = XML_CII_UNIFIED_BUTTON_ID;
   button.dataset.xmlCiiWorkflowLauncher = 'true';
-  if (workflow === 'workflow1') button.dataset.xmlCiiWorkflow1Launcher = 'true';
-  else button.dataset.xmlCiiWorkflow2Launcher = 'true';
+  button.dataset.xmlCiiUnifiedWorkflowLauncher = 'true';
+  button.dataset.xmlCiiExclusiveLauncherVersion = XML_CII_EXCLUSIVE_LAUNCHER_VERSION;
+  delete button.dataset.xmlCiiWorkflow1Launcher;
+  delete button.dataset.xmlCiiWorkflow2Launcher;
   delete button.dataset.xmlCiiSimpleWorkflowLauncher;
   delete button.dataset.xmlCiiRichWorkflowLauncher;
-  button.dataset.xmlCiiExclusiveLauncherVersion = XML_CII_EXCLUSIVE_LAUNCHER_VERSION;
-  button.classList.add(workflow === 'workflow1' ? 'model-converters-download-btn' : 'model-converters-run-btn');
+  button.classList.add('model-converters-run-btn');
+  button.classList.remove('model-converters-download-btn');
   button.removeAttribute('style');
   button.type = 'button';
-  button.textContent = workflow === 'workflow1' ? 'XML->CII Workflow 1' : 'XML->CII Workflow 2';
+  button.textContent = 'XML->CII Workflow';
   return button;
 }
 
@@ -253,6 +263,13 @@ function xmlCiiWorkflowButtonScopeRetireLegacyShell(root) {
   workflowShell.style.display = 'none';
 }
 
+function xmlCiiWorkflowButtonScopeRemoveCard(card) {
+  if (!card) return;
+  card.hidden = true;
+  card.style.display = 'none';
+  if (card.isConnected) card.remove();
+}
+
 export function xmlCiiWorkflowButtonScopeSync(container = document) {
   if (!xmlCiiWorkflowButtonScopeBrowserReady()) return null;
   xmlCiiWorkflowButtonScopeEnsureStyle();
@@ -260,34 +277,30 @@ export function xmlCiiWorkflowButtonScopeSync(container = document) {
   if (!root) return null;
   const row = xmlCiiWorkflowButtonScopeEnsureActionRow(root);
   const isXmlCii = xmlCiiWorkflowButtonScopeIsXmlCiiSelected(root);
-  const workflow1Card = isXmlCii ? xmlCiiWorkflowButtonScopeEnsureCard(row, 'workflow1') : row?.querySelector?.(':scope > [data-xml-cii-workflow1-card]');
-  const workflow2Card = isXmlCii ? xmlCiiWorkflowButtonScopeEnsureCard(row, 'workflow2') : row?.querySelector?.(':scope > [data-xml-cii-workflow2-card]');
-  const workflow1Button = isXmlCii ? xmlCiiWorkflowButtonScopePrepareLauncher(root, workflow1Card, 'workflow1') : row?.querySelector?.('[data-xml-cii-workflow1-launcher="true"]');
-  const workflow2Button = isXmlCii ? xmlCiiWorkflowButtonScopePrepareLauncher(root, workflow2Card, 'workflow2') : row?.querySelector?.('[data-xml-cii-workflow2-launcher="true"]');
+  const card = isXmlCii ? xmlCiiWorkflowButtonScopeEnsureCard(row) : row?.querySelector?.(':scope > [data-xml-cii-workflow-card]');
+  const button = isXmlCii ? xmlCiiWorkflowButtonScopePrepareLauncher(root, card) : row?.querySelector?.('[data-xml-cii-workflow-launcher="true"]');
   const runButton = xmlCiiWorkflowButtonScopeToggleDirectRun(root, isXmlCii);
 
   xmlCiiWorkflowButtonScopeHideAdvancedOptions(root, isXmlCii);
 
-  for (const card of [workflow1Card, workflow2Card]) {
-    if (!card) continue;
+  if (card) {
     card.hidden = !isXmlCii;
     card.style.display = isXmlCii ? '' : 'none';
-    if (!isXmlCii) card.remove();
+    if (!isXmlCii) xmlCiiWorkflowButtonScopeRemoveCard(card);
   }
-  for (const button of [workflow1Button, workflow2Button]) {
-    if (!button) continue;
+  if (button) {
     button.hidden = !isXmlCii;
     button.style.display = isXmlCii ? 'inline-flex' : 'none';
     button.setAttribute('aria-hidden', isXmlCii ? 'false' : 'true');
     if (!isXmlCii && button.isConnected) button.remove();
   }
   xmlCiiWorkflowButtonScopeRetireLegacyShell(root);
-  return { root, row, workflow1Card, workflow2Card, runButton, workflow1Button, workflow2Button, isXmlCii };
+  return { root, row, card, runButton, button, isXmlCii };
 }
 
 export function installXmlCiiWorkflowButtonScope(container = document) {
   if (!xmlCiiWorkflowButtonScopeBrowserReady()) return null;
-  if (!window[XML_CII_BUTTON_SCOPE_FLAG]) window[XML_CII_BUTTON_SCOPE_FLAG] = { version: 'v5' };
+  if (!window[XML_CII_BUTTON_SCOPE_FLAG]) window[XML_CII_BUTTON_SCOPE_FLAG] = { version: 'unified-v1' };
   const root = xmlCiiWorkflowButtonScopeRoot(container);
   const select = xmlCiiWorkflowButtonScopeSelect(root);
   const sync = () => xmlCiiWorkflowButtonScopeSync(container);
@@ -295,6 +308,5 @@ export function installXmlCiiWorkflowButtonScope(container = document) {
     select.addEventListener('change', sync);
     select.dataset.xmlCiiWorkflowButtonScopeBound = 'true';
   }
-  for (const delay of [0, 40, 120, 300, 800]) setTimeout(sync, delay);
   return sync();
 }

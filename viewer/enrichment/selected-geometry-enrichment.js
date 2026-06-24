@@ -174,8 +174,6 @@ export function normalizeLineListEnrichment(row) {
     temp2C: rowNumber(row, ['temp2C', 'TEMP2_C', 'TEMP_EXP_C2', 'T2']),
     temp3C: rowNumber(row, ['temp3C', 'TEMP3_C', 'TEMP_EXP_C3', 'T3']),
     fluidDensityKgM3: rowNumber(row, ['fluidDensityKgM3', 'DENSITY_KG_M3', 'DENSITY']),
-    // Hydro test fluid density — defaults to 1000 kg/m³ (water) if not specified
-    fluidDensityHydKgM3: rowNumber(row, ['fluidDensityHydKgM3', 'HYDRO_DENSITY_KG_M3', 'HYD_DENSITY', 'HYDRO_FLUID_DENSITY']) ?? 1000,
     insulationThicknessMm: rowNumber(row, ['insulationThicknessMm', 'INSULATION_THICKNESS_MM', 'INSUL_THICK']),
   });
 }

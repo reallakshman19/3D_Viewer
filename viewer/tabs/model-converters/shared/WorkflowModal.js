@@ -54,7 +54,7 @@ export class WorkflowModal {
           </div>
         </div>
         ${this.tabs.length ? `
-          <div class="model-converters-workflow-popup-tabs">
+          <div class="model-converters-workflow-popup-tabs" data-modal-tabs>
             ${this.tabs.map(t => `
               <button type="button" class="model-converters-workflow-phase ${t.id === this.activeTabId ? 'is-active' : ''}" data-modal-tab="${t.id}" data-xml-cii-phase="${t.id}">
                 <span>${t.label}</span>
@@ -78,15 +78,22 @@ export class WorkflowModal {
     overlay.querySelector('[data-modal-close]')?.addEventListener('click', () => this.close());
     overlay.querySelector('[data-modal-fullscreen]')?.addEventListener('click', () => this.toggleFullscreen());
 
-    // Bind tab listeners
-    if (this.tabs.length) {
-      overlay.querySelectorAll('[data-modal-tab]').forEach(btn => {
-        btn.addEventListener('click', () => {
-          const tabId = btn.dataset.modalTab;
-          this.setActiveTab(tabId);
-          this.onTabChange(tabId);
-        });
-      });
+    // Bind workflow tab clicks through the stable tab host, not individual buttons.
+    // XML->CII popup bodies are re-rendered often; delegated tab handling keeps
+    // the phase tabs responsive even when buttons are recreated or stale cached
+    // listeners were stripped from workflow launchers.
+    const tabHost = overlay.querySelector('[data-modal-tabs]');
+    if (tabHost) {
+      tabHost.addEventListener('click', (event) => {
+        const btn = event.target?.closest?.('[data-modal-tab]');
+        if (!btn || !tabHost.contains(btn)) return;
+        event.preventDefault();
+        event.stopPropagation();
+        const tabId = btn.dataset.modalTab;
+        if (!tabId) return;
+        this.setActiveTab(tabId);
+        this.onTabChange(tabId);
+      }, { capture: true });
     }
 
     this.installWorkflowHealthDetector();
