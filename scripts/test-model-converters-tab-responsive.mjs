@@ -52,6 +52,9 @@ assert(/xmlCiiWorkflowButtonScopePlaceAdvancedInSimpleCard/.test(buttonScopeSour
 assert(/Simple\/direct workflow options/.test(buttonScopeSource), 'simple XML CII options must be visibly labelled as simple/direct workflow options');
 assert(/xml-cii-rich-workflow-card > details\.model-converters-advanced/.test(buttonScopeSource), 'rich workflow card must guard against containing generic advanced options');
 assert(/Rich workflow[\s\S]*inside the popup/.test(buttonScopeSource), 'rich workflow card copy must explain that rich options are configured inside the popup');
+assert(/xmlCiiWorkflowButtonScopeFreshRichButton/.test(buttonScopeSource), 'button scope must freshen the rich launcher to strip stale cached listeners');
+assert(/cloneNode\(true\)/.test(buttonScopeSource), 'rich launcher freshening must clone the element instead of preserving old anonymous listeners');
+assert(/delete fresh\.dataset\.xmlCiiRichWorkflowPopupBound/.test(buttonScopeSource), 'fresh rich launcher must force the canonical popup to rebind');
 assert(!/new MutationObserver/.test(buttonScopeSource), 'button scope must not use a broad observer to chase UI mutations');
 
 assert(/xmlCiiSimpleWorkflowRestoreRunButton/.test(simpleControllerSource), 'simple controller must restore simple Run Conversion visibility');
@@ -64,6 +67,10 @@ assert(!/mountExistingPanel/.test(richPopupSource), 'lean rich popup launcher mu
 assert(!/function interceptRun/.test(richPopupSource), 'rich popup must not define old simple-run interception');
 assert(!/document\.addEventListener\('click', interceptRun, true\)/.test(richPopupSource), 'rich popup must not capture the simple Run Conversion click');
 assert(/XML->CII\(2019\) Rich Workflow/.test(richPopupSource), 'rich popup title must be explicit');
+assert(/Canonical rich workflow/.test(richPopupSource), 'rich popup subtitle must identify the canonical rich workflow');
+assert(/stopImmediatePropagation/.test(richPopupSource), 'rich popup click handler must block stale cached popup listeners on the same click');
+assert(/addEventListener\('click',[\s\S]*\{ capture: true \}\)/.test(richPopupSource), 'rich popup click handler must bind in capture phase before old bubble listeners');
+assert(/xmlCiiRichWorkflowCloseForeignXmlCiiWorkflowOverlays/.test(richPopupSource), 'rich popup must close duplicate legacy XML CII workflow overlays');
 assert(!/restoreSimpleRunButton/.test(richPopupSource), 'rich popup must not restore simple Run Conversion visibility');
 assert(!/__xmlCiiConversionWorkflowAllowDirectRun/.test(richPopupSource), 'rich popup must not own direct-run flags');
 assert(/data-xml-cii-rich-workflow-root/.test(richPopupSource), 'rich popup must scope installer state to the current model-converters root');
@@ -75,6 +82,6 @@ assert(!/restoreSimpleRunButton/.test(oldPopupShimSource), 'old generic popup sh
 
 console.log('✅ model converters tab lean responsiveness static test passed', {
   simpleRun: 'direct/no popup interception, owned by simple-prefixed controller with simple-only options card',
-  richWorkflow: 'explicit rich-prefixed button popup only, no generic advanced options inside rich card',
+  richWorkflow: 'exclusive canonical rich-prefixed popup, stale cached click listeners stripped/blocked',
   buttonScope: 'single action row, no dark-shell rich launcher, rich visible only for xml_to_cii',
 });

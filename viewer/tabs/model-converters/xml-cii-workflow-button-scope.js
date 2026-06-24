@@ -11,10 +11,12 @@
  * - Rich Workflow launcher card must never contain the simple Advanced options block.
  * - Rich Workflow launcher must not remain inside the legacy dark workflow shell.
  * - Duplicate rich launchers from stale renders are removed inside the current root.
+ * - Stale/cached rich launcher click listeners are stripped before rich popup binding.
  */
 
 const XML_CII_BUTTON_SCOPE_STYLE_ID = 'xml-cii-workflow-button-scope-style';
-const XML_CII_BUTTON_SCOPE_FLAG = '__xmlCiiWorkflowButtonScope_v2';
+const XML_CII_BUTTON_SCOPE_FLAG = '__xmlCiiWorkflowButtonScope_v3';
+const XML_CII_EXCLUSIVE_LAUNCHER_VERSION = '20260624-popup-identity-1';
 const XML_CII_CONVERTER_ID = 'xml_to_cii';
 
 function xmlCiiWorkflowButtonScopeBrowserReady() {
@@ -183,7 +185,19 @@ function xmlCiiWorkflowButtonScopePlaceAdvancedInSimpleCard(root, simpleCard) {
   return details;
 }
 
-function xmlCiiWorkflowButtonScopeCanonicalRichButton(root, row) {
+function xmlCiiWorkflowButtonScopeFreshRichButton(button) {
+  if (!button) return null;
+  if (button.dataset.xmlCiiExclusiveLauncherVersion === XML_CII_EXCLUSIVE_LAUNCHER_VERSION) return button;
+
+  const fresh = button.cloneNode(true);
+  fresh.dataset.xmlCiiExclusiveLauncherVersion = XML_CII_EXCLUSIVE_LAUNCHER_VERSION;
+  delete fresh.dataset.xmlCiiRichWorkflowPopupBound;
+  delete fresh.dataset.xmlCiiHotfixBound;
+  button.replaceWith(fresh);
+  return fresh;
+}
+
+function xmlCiiWorkflowButtonScopeCanonicalRichButton(root) {
   const candidates = Array.from(root?.querySelectorAll?.('#model-converters-xml-cii-rich-btn, [data-xml-cii-rich-workflow-launcher="true"]') || []);
   let canonical = candidates.find((button) => button.closest('[data-xml-cii-rich-workflow-card]')) || candidates[0] || null;
   if (!canonical) {
@@ -192,8 +206,9 @@ function xmlCiiWorkflowButtonScopeCanonicalRichButton(root, row) {
     canonical.id = 'model-converters-xml-cii-rich-btn';
     canonical.setAttribute('data-xml-cii-rich-workflow-launcher', 'true');
   }
+  canonical = xmlCiiWorkflowButtonScopeFreshRichButton(canonical);
   for (const button of candidates) {
-    if (button !== canonical) button.remove();
+    if (button !== canonical && button.isConnected) button.remove();
   }
   return canonical;
 }
@@ -222,6 +237,7 @@ function xmlCiiWorkflowButtonScopePrepareRichButton(root, row, richCard) {
   if (richButton.parentElement !== target) target.appendChild(richButton);
   richButton.id = 'model-converters-xml-cii-rich-btn';
   richButton.dataset.xmlCiiRichWorkflowLauncher = 'true';
+  richButton.dataset.xmlCiiExclusiveLauncherVersion = XML_CII_EXCLUSIVE_LAUNCHER_VERSION;
   richButton.classList.add('model-converters-run-btn');
   richButton.removeAttribute('style');
   richButton.type = 'button';
@@ -272,7 +288,7 @@ export function xmlCiiWorkflowButtonScopeSync(container = document) {
 
 export function installXmlCiiWorkflowButtonScope(container = document) {
   if (!xmlCiiWorkflowButtonScopeBrowserReady()) return null;
-  if (!window[XML_CII_BUTTON_SCOPE_FLAG]) window[XML_CII_BUTTON_SCOPE_FLAG] = { version: 'v2' };
+  if (!window[XML_CII_BUTTON_SCOPE_FLAG]) window[XML_CII_BUTTON_SCOPE_FLAG] = { version: 'v3' };
   const root = xmlCiiWorkflowButtonScopeRoot(container);
   const select = xmlCiiWorkflowButtonScopeSelect(root);
   const sync = () => xmlCiiWorkflowButtonScopeSync(container);
