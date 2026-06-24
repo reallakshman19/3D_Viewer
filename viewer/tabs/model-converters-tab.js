@@ -7,4 +7,4 @@
  * This file is kept only so existing import paths in the viewer shell continue
  * to resolve without changes. Do not add render orchestration logic here.
  */
-export { renderModelConvertersTab } from './model-converters/index.js?v=20260623-inst-length-info-simple-run-1';
+export { renderModelConvertersTab } from './model-converters/index.js?v=20260624-rich-parity-ui-1';
