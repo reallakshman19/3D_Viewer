@@ -59,16 +59,47 @@ assert.ok(detailsText.includes('applySelectedGeometryEnrichmentIndicators'));
 const csv = parseSelectedGeometryMasterText('lineNo,pipingClass,service\n"8-L100,STEAM",66620M0,Steam\n', 'line-list.csv', 'lineList');
 assert.strictEqual(csv.rows.length, 1);
 assert.strictEqual(csv.rows[0].lineNo, '8-L100,STEAM');
+assert.strictEqual(csv.rows[0].lineNoKey, '8-L100,STEAM');
 assert.strictEqual(csv.rows[0].pipingClass, '66620M0');
+assert.strictEqual(csv.rows[0]._bindings.lineNo, 'lineNo');
+assert.strictEqual(csv.rows[0]._raw.service, 'Steam');
+
+const aliasLineList = parseSelectedGeometryMasterText('Pipeline Reference,Pipe Class,Design Pressure,Design Temp,Fluid Density\nP1710011,66620M0,6000,90,100\n', 'line-list.csv', 'lineList');
+assert.strictEqual(aliasLineList.rows[0].lineNo, 'P1710011');
+assert.strictEqual(aliasLineList.rows[0].lineNoKey, 'P1710011');
+assert.strictEqual(aliasLineList.rows[0].pipingClass, '66620M0');
+assert.strictEqual(aliasLineList.rows[0].p1, '6000');
+assert.strictEqual(aliasLineList.rows[0].t1, '90');
+assert.strictEqual(aliasLineList.rows[0].density, '100');
+assert.strictEqual(aliasLineList.rows[0]._bindings.pipingClass, 'Pipe Class');
 
 const txt = parseSelectedGeometryMasterText('106 ASTM A106-B\n316 ASTM A312 TP316\n', 'PCF_MAT_MAP.TXT', 'materialMap');
 assert.strictEqual(txt.rows.length, 2);
 assert.strictEqual(txt.rows[0].code, '106');
 assert.strictEqual(txt.rows[0].material, 'ASTM A106-B');
+assert.strictEqual(txt.rows[0].materialCode, '106');
+assert.strictEqual(txt.rows[0].materialName, 'ASTM A106-B');
 
 const json = parseSelectedGeometryMasterText('{"version":"MAT-v1","rows":[{"materialCode":"106","materialName":"A106-B"}]}', 'materials.json', 'materialMap');
 assert.strictEqual(json.version, 'MAT-v1');
 assert.strictEqual(json.rows[0].materialCode, '106');
+assert.strictEqual(json.rows[0].code, '106');
+
+const classCsv = parseSelectedGeometryMasterText('Pipe Class,Material Code,Wall Thk,Corr,Pressure Class\n66620M0,106,12.7,1.5,600\n', 'pclass.csv', 'pipingClass');
+assert.strictEqual(classCsv.rows[0].pipingClass, '66620M0');
+assert.strictEqual(classCsv.rows[0].materialCode, '106');
+assert.strictEqual(classCsv.rows[0].wallThickness, '12.7');
+assert.strictEqual(classCsv.rows[0].corrosion, '1.5');
+assert.strictEqual(classCsv.rows[0].rating, '600');
+assert.strictEqual(classCsv.rows[0]._bindings.materialCode, 'Material Code');
+
+const weightCsv = parseSelectedGeometryMasterText('BORE,RATING,LENGTH MM,WEIGHT KG,TYPE DESC\n250,600,311.15,742.8,FLANGED VALVE\n', 'weight.csv', 'weightMaster');
+assert.strictEqual(weightCsv.rows[0].boreMm, '250');
+assert.strictEqual(weightCsv.rows[0].rating, '600');
+assert.strictEqual(weightCsv.rows[0].lengthMm, '311.15');
+assert.strictEqual(weightCsv.rows[0].weight, '742.8');
+assert.strictEqual(weightCsv.rows[0].typeDesc, 'FLANGED VALVE');
+assert.strictEqual(weightCsv.rows[0]._bindings.weight, 'WEIGHT KG');
 
 const workbook = parseSelectedGeometryMasterWorkbook(new ArrayBuffer(0), 'line-list.xls', 'lineList', {
   read() {
@@ -83,6 +114,10 @@ const workbook = parseSelectedGeometryMasterWorkbook(new ArrayBuffer(0), 'line-l
 assert.strictEqual(workbook.format, 'workbook');
 assert.strictEqual(workbook.rows.length, 1);
 assert.strictEqual(workbook.rows[0]['Line Number'], 'S8810101');
+assert.strictEqual(workbook.rows[0].lineNo, 'S8810101');
+assert.strictEqual(workbook.rows[0].lineNoKey, 'S8810101');
+assert.strictEqual(workbook.rows[0].pipingClass, '200AA1');
+assert.strictEqual(workbook.rows[0]._bindings.lineNo, 'Line Number');
 
 const scope = {
   schema: 'selected-geometry-scope/v1',
