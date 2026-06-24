@@ -8,7 +8,8 @@
  *
  * XML->CII(2019) workflow consolidation rule:
  *   - No XML->CII patch/hotfix modules are imported from this shell.
- *   - Workflow 1 / Workflow 2 popup UI is owned by xml-cii-workflow-popup.js.
+ *   - Workflow 1 popup UI is owned by xml-cii-workflow-popup.js.
+ *   - Workflow 2 popup UI is owned by xml-cii-workflow2-popup.js.
  *   - Condense Rigid option state is owned by xml-cii-workflow-bridge.js.
  *   - Enriched XML corrections are owned by xmltocii2019_runner.js.
  */
@@ -18,9 +19,10 @@ import { renderLegacyModelConvertersTab } from './legacy-adapter.js?v=20260624-s
 import { installBmCiiSupportAnnotationPopup } from './bm-cii-support-annotation-popup.js?v=20260617-bmcii-open-basic-handoff-2';
 import { installInputXmlPropertyTransferUi } from './inputxml-property-transfer-popup-ui-v4.js?v=20260615-inputxml-property-transfer-popup-host-hide-1';
 import { installRvmAttrUxmlAddon } from './rvmattr-uxml-addon.js?v=20260618-port-bore-contract-1';
-import { installXmlCiiWorkflowButtonScope } from './xml-cii-workflow-button-scope.js?v=20260624-workflow-consolidation-1';
+import { installXmlCiiWorkflowButtonScope } from './xml-cii-workflow-button-scope.js?v=20260624-workflow2-standalone-1';
 import { installXmlCiiSimpleWorkflowController } from './xml-cii-simple-workflow-controller.js?v=20260624-workflow-consolidation-1';
-import { installXmlCiiWorkflowPopup } from './xml-cii-workflow-popup.js?v=20260624-workflow-tabs-fix-1';
+import { installXmlCiiWorkflowPopup } from './xml-cii-workflow-popup.js?v=20260624-workflow2-standalone-1';
+import { installXmlCiiWorkflow2Popup } from './xml-cii-workflow2-popup.js?v=20260624-workflow2-standalone-1';
 import { installXmlCiiBranchSampleSync } from './xml-cii-branch-sample-sync.js?v=20260624-workflow-consolidation-1';
 import { installInputXmlBasicGlbBridge } from './inputxml-basic-glb-bridge.js';
 import { installInputXmlManagedStageBridge } from './inputxml-managed-stage-bridge.js?v=20260623-inputxml-direct-stage-1';
@@ -106,7 +108,8 @@ const MODEL_CONVERTER_INSTALLERS = Object.freeze([
   ['rvmattr-uxml-addon', installRvmAttrUxmlAddon],
   ['xml-cii-workflow-button-scope', installXmlCiiWorkflowButtonScope],
   ['xml-cii-simple-workflow-controller', installXmlCiiSimpleWorkflowController],
-  ['xml-cii-workflow-popup', installXmlCiiWorkflowPopup],
+  ['xml-cii-workflow1-popup', installXmlCiiWorkflowPopup],
+  ['xml-cii-workflow2-popup', installXmlCiiWorkflow2Popup],
   ['xml-cii-branch-sample-sync', installXmlCiiBranchSampleSync],
   ['bm-cii-support-annotation-popup', installBmCiiSupportAnnotationPopup],
   ['inputxml-property-transfer-popup-ui-v4', installInputXmlPropertyTransferUi],
