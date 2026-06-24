@@ -84,7 +84,7 @@ assert(nativePanels.includes('Condense Rigid / split condensed valve-flange node
 assert(nativePanels.includes('Condense Rigid / split condensed valve-flange nodes (Resolved)'), 'Resolved condense option must remain rendered in popup');
 assert(nativePanels.includes('data-xml-cii-workflow2-master-preview'), 'Workflow 2 must show per-master preview rows');
 assert(nativePanels.includes('Workflow 1 keeps master setup compact'), 'Workflow 1 must keep the compact master sequence');
-assert(!nativePanels.includes('Piping_class_master.json'), 'native panels must not expose obsolete aggregate piping-class master');
+assert(nativePanels.includes("master.key === 'pipingClass'"), 'native panels must disable default loading for piping-class master');
 assert(enrichmentRunParity.includes('process-provenance') && enrichmentRunParity.includes('Pressure2 / Hydro/Test Pressure'), 'process provenance diagnostics must still include Hydro/Test Pressure');
 assert(enrichmentRunParity.includes('split-condensed-valve-flange-resolved'), 'resolved condense diagnostics must still exist');
 assert(invocationBuilder.includes('--split-condensed-valve-flange'), 'worker invocation must still forward split-condensed flag');
