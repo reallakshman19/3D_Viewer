@@ -1,5 +1,5 @@
 import { getConverterById } from './converter-registry.js?v=20260617-basic-glb-2';
-import { getXmlCiiPhaseBridge } from './legacy-adapter.js?v=20260620-master-session-1';
+import { xmlCiiRichWorkflowGetBridge } from './xml-cii-rich-workflow-bridge.js?v=20260624-simple-rich-isolation-1';
 import { run as originalXmlCiiRun } from './converters/xmltocii2019_runner.js?v=20260620-weight-ready-1';
 import { decodeTextUtf8, encodeTextUtf8 } from './core/output-utils.js';
 import { applyXmlCiiEnrichedXmlFix } from './converters/xml-cii-rich-enrichment-fix.js?v=20260624-rich-parity-ui-1';
@@ -66,15 +66,8 @@ function style() {
   if (document.getElementById(STYLE_ID)) return;
   const s = document.createElement('style');
   s.id = STYLE_ID;
-  s.textContent = `.xml-cii-simple-rich-actions{display:flex!important;flex-wrap:wrap!important;align-items:center!important;gap:10px!important}#model-converters-run{display:inline-flex!important;visibility:visible!important;position:relative!important;z-index:2!important;margin-right:10px!important}.xml-cii-hotfix-check{display:flex;flex-direction:row;align-items:center;gap:8px;color:#d8ecff;font-size:12px;line-height:1.35}.xml-cii-hotfix-info{border:1px solid #315070;border-radius:8px;padding:8px 10px;background:#102033;color:#bcd8f7;font-size:12px;margin:8px 0}`;
+  s.textContent = `.xml-cii-hotfix-check{display:flex;flex-direction:row;align-items:center;gap:8px;color:#d8ecff;font-size:12px;line-height:1.35}.xml-cii-hotfix-info{border:1px solid #315070;border-radius:8px;padding:8px 10px;background:#102033;color:#bcd8f7;font-size:12px;margin:8px 0}`;
   document.head.appendChild(s);
-}
-function restoreButtons(container = document) {
-  const run = container.querySelector?.('#model-converters-run') || document.querySelector('#model-converters-run');
-  const rich = container.querySelector?.('#model-converters-xml-cii-rich-btn') || document.querySelector('#model-converters-xml-cii-rich-btn');
-  if (run) { run.hidden = false; run.style.display = 'inline-flex'; run.style.visibility = 'visible'; if (!text(run.textContent)) run.textContent = 'Run Conversion'; }
-  if (run?.parentElement) run.parentElement.classList.add('xml-cii-simple-rich-actions');
-  if (rich?.parentElement && rich.parentElement === run?.parentElement) rich.parentElement.classList.add('xml-cii-simple-rich-actions');
 }
 function checkbox(kind, checked) { const key = kind === 'xsd' ? 'condenseRigidXsd' : 'splitCondensedValveFlange'; const label = kind === 'xsd' ? 'Condense Rigid / split condensed valve-flange nodes (XSD)' : 'Condense Rigid / split condensed valve-flange nodes (Resolved)'; return `<label class="xml-cii-hotfix-check"><input type="checkbox" data-xml-cii-hotfix-condense="${key}" ${checked ? 'checked' : ''}> <span>${label}</span></label>`; }
 function setBool(root, key, checked) { const cfg = normalise(readConfig(root)); cfg[key] = !!checked; if (key === 'splitCondensedValveFlange') { cfg.splitCondensedValveFlange = !!checked; cfg.split_condensed_valve_flange = !!checked; } if (key === 'condenseRigidXsd') { cfg.condenseRigidXsd = !!checked; cfg.condense_rigid_xsd = !!checked; } writeConfig(root, cfg); return cfg; }
@@ -89,7 +82,7 @@ function injectControls(scope, root) {
   scope.querySelectorAll('[data-xml-cii-hotfix-condense]').forEach((input) => {
     if (input.dataset.hotfixBound === 'true') return;
     input.dataset.hotfixBound = 'true';
-    input.addEventListener('change', () => { const key = input.dataset.xmlCiiHotfixCondense; const cfg2 = setBool(root, key, input.checked); try { getXmlCiiPhaseBridge?.()?.savePopupConfigText?.(JSON.stringify(cfg2, null, 2), { [key]: input.checked }); } catch {} });
+    input.addEventListener('change', () => { const key = input.dataset.xmlCiiHotfixCondense; const cfg2 = setBool(root, key, input.checked); try { xmlCiiRichWorkflowGetBridge()?.savePopupConfigText?.(JSON.stringify(cfg2, null, 2), { [key]: input.checked }); } catch {} });
   });
 }
 function suppressBlink(scope) {
@@ -99,14 +92,13 @@ function suppressBlink(scope) {
     const target = event.target;
     if (!target?.matches?.('[data-native-regex-path], [data-native-field-map]')) return;
     event.stopImmediatePropagation();
-    const bridge = getXmlCiiPhaseBridge?.();
+    const bridge = xmlCiiRichWorkflowGetBridge();
     if (target.matches('[data-native-regex-path]')) bridge?.setPopupConfigValue?.(target.dataset.nativeRegexPath, target.value, target.type === 'number' ? 'number' : 'text');
     if (target.matches('[data-native-field-map]')) bridge?.setPopupMasterField?.(target.dataset.nativeMasterKey, target.dataset.nativeFieldMap, target.value);
   }, true);
 }
 function patchUi(container = document) {
-  restoreButtons(container);
-  for (const scope of [container, ...document.querySelectorAll('[data-xml-cii-workflow-root], .model-converters-workflow-detail, [data-old-xml-cii-phase-body]')].filter(Boolean)) { injectControls(scope, container); suppressBlink(scope); }
+  for (const scope of [container, ...document.querySelectorAll('[data-xml-cii-rich-workflow-root], [data-xml-cii-workflow-root], .model-converters-workflow-detail, [data-old-xml-cii-phase-body]')].filter(Boolean)) { injectControls(scope, container); suppressBlink(scope); }
 }
 export function installXmlCiiRichWorkflowHotfix(container = document) {
   if (!ready()) return;
