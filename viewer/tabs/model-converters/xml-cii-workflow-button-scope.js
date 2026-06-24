@@ -15,8 +15,8 @@
  */
 
 const XML_CII_BUTTON_SCOPE_STYLE_ID = 'xml-cii-workflow-button-scope-style';
-const XML_CII_BUTTON_SCOPE_FLAG = '__xmlCiiWorkflowButtonScope_v5';
-const XML_CII_EXCLUSIVE_LAUNCHER_VERSION = '20260624-workflow1-workflow2-1';
+const XML_CII_BUTTON_SCOPE_FLAG = '__xmlCiiWorkflowButtonScope_v6';
+const XML_CII_EXCLUSIVE_LAUNCHER_VERSION = '20260624-workflow-consolidation-1';
 const XML_CII_CONVERTER_ID = 'xml_to_cii';
 const XML_CII_DIRECT_RUN_HIDDEN_ATTR = 'data-xml-cii-direct-run-hidden';
 
@@ -287,7 +287,7 @@ export function xmlCiiWorkflowButtonScopeSync(container = document) {
 
 export function installXmlCiiWorkflowButtonScope(container = document) {
   if (!xmlCiiWorkflowButtonScopeBrowserReady()) return null;
-  if (!window[XML_CII_BUTTON_SCOPE_FLAG]) window[XML_CII_BUTTON_SCOPE_FLAG] = { version: 'v5' };
+  if (!window[XML_CII_BUTTON_SCOPE_FLAG]) window[XML_CII_BUTTON_SCOPE_FLAG] = { version: 'v6' };
   const root = xmlCiiWorkflowButtonScopeRoot(container);
   const select = xmlCiiWorkflowButtonScopeSelect(root);
   const sync = () => xmlCiiWorkflowButtonScopeSync(container);
@@ -295,6 +295,5 @@ export function installXmlCiiWorkflowButtonScope(container = document) {
     select.addEventListener('change', sync);
     select.dataset.xmlCiiWorkflowButtonScopeBound = 'true';
   }
-  for (const delay of [0, 40, 120, 300, 800]) setTimeout(sync, delay);
   return sync();
 }
