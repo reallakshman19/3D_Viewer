@@ -1,39 +1,8 @@
 /**
- * XML->CII(2019) Rich Workflow final-run handoff.
+ * Deprecated compatibility shim.
  *
- * This is the only rich-prefixed module allowed to invoke the current legacy
- * converter button. It gives the remaining handoff a named boundary while the
- * rich workflow run path is extracted from legacy-adapter.js in a later phase.
+ * XML->CII workflow final-run handoff moved to xml-cii-workflow-runner.js under
+ * neutral Workflow 1 / Workflow 2 naming. Keep old export for cached imports.
  */
 
-const XML_CII_RICH_WORKFLOW_HANDOFF_FLAG = '__xmlCiiRichWorkflowRunHandoff_v1';
-const XML_CII_LEGACY_DIRECT_RUN_FLAG = '__xmlCiiConversionWorkflowAllowDirectRun';
-
-function xmlCiiRichWorkflowBrowserReady() {
-  return typeof window !== 'undefined' && typeof document !== 'undefined';
-}
-
-export function xmlCiiRichWorkflowRequestFinalRun(root = document) {
-  if (!xmlCiiRichWorkflowBrowserReady()) return false;
-  const event = new CustomEvent('xml-cii-rich-workflow-finalise-run', {
-    bubbles: true,
-    cancelable: true,
-    detail: { workflow: 'rich', version: 'v1' },
-  });
-  root?.dispatchEvent?.(event);
-  if (event.defaultPrevented) return true;
-
-  const runButton = document.querySelector('#model-converters-run');
-  if (!runButton) return false;
-  window[XML_CII_RICH_WORKFLOW_HANDOFF_FLAG] = true;
-  window[XML_CII_LEGACY_DIRECT_RUN_FLAG] = true;
-  try {
-    runButton.click();
-    return true;
-  } finally {
-    setTimeout(() => {
-      window[XML_CII_RICH_WORKFLOW_HANDOFF_FLAG] = false;
-      window[XML_CII_LEGACY_DIRECT_RUN_FLAG] = false;
-    }, 0);
-  }
-}
+export { xmlCiiWorkflowRequestFinalRun as xmlCiiRichWorkflowRequestFinalRun } from './xml-cii-workflow-runner.js?v=20260624-workflow1-workflow2-1';
