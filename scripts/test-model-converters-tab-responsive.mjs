@@ -97,7 +97,7 @@ assert(!/if \(!xmlCiiWorkflowBrowserReady\(\) \|\| window\[XML_CII_WORKFLOW_POPU
 
 assert(/ensureDefaultMastersLoaded = async \(\) => null/.test(workflowBridgeSource), 'workflow bridge must block obsolete legacy default-master preload');
 assert(/masterKey === 'pipingClass'/.test(workflowBridgeSource), 'workflow bridge must block obsolete aggregate piping-class default load');
-assert(!/Piping_class_master\.json/.test(nativePanelsSource), 'native panels must not point users to obsolete aggregate piping-class master');
+assert(/master\.key === 'pipingClass'/.test(nativePanelsSource), 'native panels must disable default loading for piping-class master');
 assert(/data-xml-cii-workflow2-master-preview/.test(nativePanelsSource), 'Workflow 2 must expose enhanced per-master preview rows');
 assert(/Workflow 1 keeps master setup compact/.test(nativePanelsSource), 'Workflow 1 must use the compact master sequence');
 assert(/Condense Rigid \/ split condensed valve-flange nodes \(XSD\)/.test(nativePanelsSource), 'Run Options must show Condense Rigid XSD in both workflows');
