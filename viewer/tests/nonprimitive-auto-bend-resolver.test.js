@@ -55,15 +55,15 @@ const portAStraightChain = resolveNonPrimitiveAutoBends({
 check(portAStraightChain.bends.length === 0, 'PORT-A straight chain does not emit auto bends');
 check(portAStraightChain.diagnostics.skippedCollinearCount === 2, 'PORT-A straight chain records both collinear degree-2 candidates');
 
-const reverseStraightChain = resolveNonPrimitiveAutoBends({
+const sameSideStraightChain = resolveNonPrimitiveAutoBends({
   sourceKind: 'inputxml',
   segments: [
     pipe('R1', 'A', 'B', [0, 0, 0], [1000, 0, 0]),
-    pipe('R2', 'C', 'B', [2000, 0, 0], [1000, 0, 0]),
+    pipe('R2', 'C', 'B', [0, 0, 0], [1000, 0, 0]),
   ],
 });
-check(reverseStraightChain.bends.length === 0 && reverseStraightChain.diagnostics.skippedStraightContinuationCount === 1, 'opposed straight chain is rejected as straight continuation');
-check(reverseStraightChain.diagnostics.warnings.some((w) => w.code === 'straightContinuation'), 'straight continuation rejection is diagnostic-visible');
+check(sameSideStraightChain.bends.length === 0 && sameSideStraightChain.diagnostics.skippedStraightContinuationCount === 1, 'same-side straight chain is rejected as straight continuation');
+check(sameSideStraightChain.diagnostics.warnings.some((w) => w.code === 'straightContinuation'), 'straight continuation rejection is diagnostic-visible');
 
 const tee = resolveNonPrimitiveAutoBends({
   sourceKind: 'inputxml',
