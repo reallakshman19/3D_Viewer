@@ -74,25 +74,30 @@ function installSafely(name, installer, container) {
   }
 }
 
+function monotonicNow() {
+  return typeof performance !== 'undefined' && typeof performance.now === 'function' ? performance.now() : Date.now();
+}
+
+function scheduleModelConverterTask(callback) {
+  if (typeof requestIdleCallback === 'function') return requestIdleCallback(callback, { timeout: 750 });
+  if (typeof requestAnimationFrame === 'function') return requestAnimationFrame(() => callback(null));
+  return Promise.resolve().then(() => callback(null));
+}
+
 function scheduleInstallerQueue(container) {
   const queue = MODEL_CONVERTER_INSTALLERS.map((entry) => entry);
   const runNext = (deadline) => {
-    const startedAt = performance?.now?.() || Date.now();
+    const startedAt = monotonicNow();
     while (queue.length) {
       const [name, install] = queue.shift();
       installSafely(name, install, container);
-      const elapsed = (performance?.now?.() || Date.now()) - startedAt;
+      const elapsed = monotonicNow() - startedAt;
       if (deadline?.timeRemaining && deadline.timeRemaining() <= 4) break;
       if (!deadline?.timeRemaining && elapsed > 12) break;
     }
-    if (!queue.length) return;
-    if (typeof requestIdleCallback === 'function') requestIdleCallback(runNext, { timeout: 750 });
-    else if (typeof requestAnimationFrame === 'function') requestAnimationFrame(() => runNext(null));
-    else Promise.resolve().then(() => runNext(null));
+    if (queue.length) scheduleModelConverterTask(runNext);
   };
-  if (typeof requestIdleCallback === 'function') requestIdleCallback(runNext, { timeout: 750 });
-  else if (typeof requestAnimationFrame === 'function') requestAnimationFrame(() => runNext(null));
-  else Promise.resolve().then(() => runNext(null));
+  scheduleModelConverterTask(runNext);
 }
 
 /**
