@@ -19,6 +19,8 @@ const requiredFiles = [
   'viewer/tabs/model-converters/xml-cii-conversion-workflow-popup.js',
   'viewer/tabs/model-converters/xml-cii-popup-native-panels.js',
   'viewer/tabs/model-converters/xml-cii-condense-rigid-ui-bridge.js',
+  'viewer/tabs/model-converters/xml-cii-rich-workflow-hotfix.js',
+  'viewer/tabs/model-converters/converters/xml-cii-rich-enrichment-fix.js',
   'viewer/tabs/model-converters/ModelConvertersTab.js',
   'viewer/tabs/model-converters/index.js',
   'viewer/tabs/model-converters-tab.js',
@@ -33,6 +35,8 @@ for (const rel of requiredFiles) {
 const popup = read('viewer/tabs/model-converters/xml-cii-conversion-workflow-popup.js');
 const nativePanels = read('viewer/tabs/model-converters/xml-cii-popup-native-panels.js');
 const condenseBridge = read('viewer/tabs/model-converters/xml-cii-condense-rigid-ui-bridge.js');
+const richHotfix = read('viewer/tabs/model-converters/xml-cii-rich-workflow-hotfix.js');
+const enrichmentFix = read('viewer/tabs/model-converters/converters/xml-cii-rich-enrichment-fix.js');
 const modelTab = read('viewer/tabs/model-converters/ModelConvertersTab.js');
 const publicIndex = read('viewer/tabs/model-converters/index.js');
 const tabShim = read('viewer/tabs/model-converters-tab.js');
@@ -56,13 +60,25 @@ assert(!condenseBridge.includes('new MutationObserver'), 'condense bridge must n
 assert(!condenseBridge.includes("document.addEventListener('click'"), 'condense bridge must not install global click handlers');
 assert(!condenseBridge.includes('setInterval'), 'condense bridge must not poll with setInterval');
 
+assert(richHotfix.includes('runXmlCiiWithRichFix'), 'rich workflow hotfix must patch XML->CII runner');
+assert(richHotfix.includes('getConverterById') && richHotfix.includes("'xml_to_cii'"), 'rich workflow hotfix must target xml_to_cii converter');
+assert(richHotfix.includes('xml-cii-simple-rich-actions'), 'rich workflow hotfix must offset simple/rich buttons');
+assert(richHotfix.includes('data-xml-cii-hotfix-condense'), 'rich workflow hotfix must inject visible condense checkboxes into the active rich path');
+assert(richHotfix.includes('data-native-regex-path') && richHotfix.includes('stopImmediatePropagation'), 'rich workflow hotfix must suppress native regex/dropdown blink rerenders');
+
+assert(enrichmentFix.includes("'Pressure2'") && enrichmentFix.includes('hydroPressure'), 'enrichment fix must write hydro/test pressure to Pressure2');
+assert(enrichmentFix.includes("new Set(['FLAN', 'GASK', 'VALV', 'RIGID', 'INST'])"), 'enrichment fix must include full negative valve/flange block types');
+assert(enrichmentFix.includes('condensedValveFlangeBlocks'), 'enrichment fix must count resolved valve/flange blocks');
+assert(enrichmentFix.includes('Pressure1') && enrichmentFix.includes('Temperature1') && enrichmentFix.includes('Temperature2') && enrichmentFix.includes('Temperature3'), 'enrichment fix must preserve preview process fields into enriched XML');
+
 assert(modelTab.includes('installXmlCiiConversionWorkflowPopup'), 'ModelConvertersTab must install rich workflow popup');
 assert(modelTab.includes('installXmlCiiCondenseRigidUiBridge'), 'ModelConvertersTab must install condense bridge');
-assert(modelTab.includes('20260623-inst-length-info-simple-run-1'), 'ModelConvertersTab must be cache-busted');
-assert(publicIndex.includes('20260623-inst-length-info-simple-run-1'), 'model-converters index must be cache-busted');
-assert(tabShim.includes('20260623-inst-length-info-simple-run-1'), 'tab shim must be cache-busted');
+assert(modelTab.includes('installXmlCiiRichWorkflowHotfix'), 'ModelConvertersTab must install rich workflow hotfix');
+assert(modelTab.includes('20260624-rich-parity-ui-1'), 'ModelConvertersTab must be cache-busted');
+assert(publicIndex.includes('20260624-rich-parity-ui-1'), 'model-converters index must be cache-busted');
+assert(tabShim.includes('20260624-rich-parity-ui-1'), 'tab shim must be cache-busted');
 
-assert(enrichmentRunParity.includes("RENUMBERABLE_NEGATIVE_TYPES = new Set(['FLAN', 'RIGID', 'INST'])"), 'Resolved condense must include INST nodes');
+assert(enrichmentRunParity.includes("RENUMBERABLE_NEGATIVE_TYPES = new Set(['FLAN', 'RIGID', 'INST'])"), 'Resolved condense base path must include INST nodes');
 assert(enrichmentRunParity.includes("INLINE_LENGTH_COMPONENT_TYPES = new Set(['INST'])"), 'INST inline length type set must exist');
 assert(enrichmentRunParity.includes("RESOLVED_RIGID_MARKER_TYPES = new Set(['INST'])"), 'Resolved INST nodes must be explicitly marked as rigid');
 assert(enrichmentRunParity.includes('annotateInlineElementLengths'), 'INST ElementLengthMm annotation must exist');
@@ -77,9 +93,10 @@ assert(invocationBuilder.includes('--no-split-condensed-valve-flange'), 'worker 
 assert(invocationBuilder.includes('supportConfig.split_condensed_valve_flange'), 'worker invocation must read snake_case supportConfig key');
 
 console.log('✅ XML CII rich workflow smoke validation passed', {
-  simpleRun: 'direct button visible/restored',
+  simpleRun: 'direct button visible/restored and offset from Rich Workflow',
   richPopup: 'button-owned, no simple-run interception',
-  condenseRigid: 'XSD + Resolved controls rendered',
-  instElementLength: 'ElementLengthMm for INST annotated',
-  instRigidMarker: 'Resolved INST nodes emit Rigid=2 after Endpoint',
+  condenseRigid: 'XSD + Resolved controls rendered and injected into active rich path',
+  processParity: 'Pressure1/Pressure2/Temperature1..3/density copied from preview to enriched XML',
+  negativeValveFlangeBlocks: 'FLAN/GASK/VALV/RIGID/INST negative blocks resolved when enabled',
+  regexBlink: 'native regex/dropdown change rerender suppressed',
 });
