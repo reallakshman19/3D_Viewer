@@ -21,7 +21,7 @@ import { installRvmAttrUxmlAddon } from './rvmattr-uxml-addon.js?v=20260618-port
 import { installXmlCiiWorkflowButtonScope } from './xml-cii-workflow-button-scope.js?v=20260624-workflow1-workflow2-1';
 import { installXmlCiiSimpleWorkflowController } from './xml-cii-simple-workflow-controller.js?v=20260624-popup-only-1';
 import { installXmlCiiWorkflowHotfix } from './xml-cii-workflow-hotfix.js?v=20260624-workflow1-workflow2-1';
-import { installXmlCiiWorkflowPopup } from './xml-cii-workflow-popup.js?v=20260624-workflow1-workflow2-1';
+import { installXmlCiiWorkflowPopup } from './xml-cii-workflow-popup.js?v=20260624-master-tab-responsive-1';
 import { installXmlCiiCondenseRigidUiBridge } from './xml-cii-condense-rigid-ui-bridge.js?v=20260624-simple-rich-isolation-1';
 import { installXmlCiiBranchSampleSync } from './xml-cii-branch-sample-sync.js?v=20260620-rating-runtime-1';
 import { installXmlCiiLineKeySelectPatch } from './xml-cii-linekey-select-patch.js?v=20260624-simple-rich-isolation-1';
@@ -29,7 +29,7 @@ import { installInputXmlBasicGlbBridge } from './inputxml-basic-glb-bridge.js';
 import { installInputXmlManagedStageBridge } from './inputxml-managed-stage-bridge.js?v=20260623-inputxml-direct-stage-1';
 import { installXmlCiiDefaultMasterAutoload, installXmlCiiRecoveryPatch } from '../xml-cii-master-autoload-patch.js?v=20260624-workflow1-workflow2-1';
 import { installXmlCiiPreviewLineKeyRemap } from './xml-cii-preview-linekey-remap.js?v=20260620-rating-runtime-1';
-import { installXmlCiiRuntimeOverrideSync } from './xml-cii-runtime-override-sync.js?v=20260620-rating-runtime-1';
+import { installXmlCiiRuntimeOverrideSync } from './xml-cii-runtime-override-sync.js?v=20260624-master-tab-responsive-1';
 import { installXmlCiiMasterPreservePatch } from './xml-cii-master-preserve-patch.js?v=20260620-master-session-1';
 
 const TRACE_PREFIX = '[BM_CII_CONVERTER_TRACE]';

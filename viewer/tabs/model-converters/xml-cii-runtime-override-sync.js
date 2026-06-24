@@ -35,9 +35,17 @@ function mergeRuntimeOverrides(baseConfig, runtimeConfig) {
   return out;
 }
 
+function scopedSupportConfigTextarea(root) {
+  const input = root?.querySelector?.('[data-option-key="supportConfigJson"]');
+  if (!input || !('value' in input)) return null;
+  const style = input instanceof HTMLElement ? window.getComputedStyle(input) : null;
+  if (style && style.display === 'none' && root.querySelector?.('[data-xml-cii-workflow-root="true"]')) return null;
+  return input;
+}
+
 function syncSupportConfigTextarea(root) {
-  const input = root?.querySelector?.('[data-option-key="supportConfigJson"]') || document?.querySelector?.('[data-option-key="supportConfigJson"]');
-  if (!input || !('value' in input)) return false;
+  const input = scopedSupportConfigTextarea(root);
+  if (!input) return false;
   const runtimeConfig = getXmlCiiPreviewRuntimeConfig();
   const runtimeOverrides = runtimeConfig?.overrides;
   if (!runtimeOverrides || typeof runtimeOverrides !== 'object' || !Object.keys(runtimeOverrides).length) return false;
@@ -55,17 +63,26 @@ export function installXmlCiiRuntimeOverrideSync(container) {
   const root = container?.querySelector?.('[data-model-converters-root]')
     || container?.querySelector?.('.model-converters-panel')
     || container;
-  if (!root || root.dataset.xmlCiiRuntimeOverrideSync === 'true') return;
-  root.dataset.xmlCiiRuntimeOverrideSync = 'true';
+  if (!root || root.dataset.xmlCiiRuntimeOverrideSync === '20260624-explicit-only') return;
+  root.dataset.xmlCiiRuntimeOverrideSync = '20260624-explicit-only';
 
+  // Do not listen to every popup/master `change` event. The previous broad
+  // capture listener parsed and re-serialized the hidden multi-MB XML->CII config
+  // for ordinary master-tab/select changes, producing 200-400 ms handlers and
+  // making Workflow 1/2 Import Masters feel unresponsive. Runtime preview
+  // overrides only need to be merged before explicit preview/weight/run actions.
   root.addEventListener('click', (event) => {
-    const trigger = event.target?.closest?.('.model-converters-run-btn, #mc-wm-refresh, #mc-wm-fill-best, [data-mc-preview-build]');
+    const trigger = event.target?.closest?.([
+      '[data-mc-preview-build]',
+      '#mc-wm-refresh',
+      '#mc-wm-fill-best',
+      '[data-native-build-preview]',
+      '[data-native-compute-weights]',
+      '[data-native-apply-preferred-weights]',
+      '[data-native-finalise-run]',
+      '.model-converters-run-btn[data-xml-cii-finalize-run]',
+    ].join(','));
     if (!trigger) return;
-    syncSupportConfigTextarea(root);
-  }, true);
-
-  root.addEventListener('change', (event) => {
-    if (event.target?.closest?.('#model-converters-select, [data-option-key="supportConfigJson"]')) return;
     syncSupportConfigTextarea(root);
   }, true);
 }

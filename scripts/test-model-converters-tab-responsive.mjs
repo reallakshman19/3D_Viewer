@@ -10,6 +10,7 @@ const workflowPopupPath = path.join(repoRoot, 'viewer/tabs/model-converters/xml-
 const workflowBridgePath = path.join(repoRoot, 'viewer/tabs/model-converters/xml-cii-workflow-bridge.js');
 const nativePanelsPath = path.join(repoRoot, 'viewer/tabs/model-converters/xml-cii-popup-native-panels.js');
 const simpleControllerPath = path.join(repoRoot, 'viewer/tabs/model-converters/xml-cii-simple-workflow-controller.js');
+const runtimeOverrideSyncPath = path.join(repoRoot, 'viewer/tabs/model-converters/xml-cii-runtime-override-sync.js');
 const oldPopupShimPath = path.join(repoRoot, 'viewer/tabs/model-converters/xml-cii-conversion-workflow-popup.js');
 const oldRichPopupShimPath = path.join(repoRoot, 'viewer/tabs/model-converters/xml-cii-rich-workflow-popup.js');
 
@@ -20,6 +21,7 @@ const workflowPopupSource = fs.readFileSync(workflowPopupPath, 'utf8');
 const workflowBridgeSource = fs.readFileSync(workflowBridgePath, 'utf8');
 const nativePanelsSource = fs.readFileSync(nativePanelsPath, 'utf8');
 const simpleControllerSource = fs.readFileSync(simpleControllerPath, 'utf8');
+const runtimeOverrideSyncSource = fs.readFileSync(runtimeOverrideSyncPath, 'utf8');
 const oldPopupShimSource = fs.readFileSync(oldPopupShimPath, 'utf8');
 const oldRichPopupShimSource = fs.readFileSync(oldRichPopupShimPath, 'utf8');
 
@@ -47,6 +49,8 @@ assert(/installXmlCiiWorkflowHotfix/.test(tabSource), 'canonical tab must instal
 assert(!/installXmlCiiRichWorkflowPopup/.test(tabSource), 'canonical tab must not install the old rich-prefixed popup module');
 assert(!/installXmlCiiRichWorkflowHotfix/.test(tabSource), 'canonical tab must not install the old rich-prefixed hotfix module');
 assert(!/installXmlCiiConversionWorkflowPopup/.test(tabSource), 'canonical tab must not install the old generic popup module');
+assert(/xml-cii-workflow-popup\.js\?v=20260624-master-tab-responsive-1/.test(tabSource), 'canonical tab must bump workflow popup import key for master-tab responsiveness fix');
+assert(/xml-cii-runtime-override-sync\.js\?v=20260624-master-tab-responsive-1/.test(tabSource), 'canonical tab must bump runtime override sync import key for responsiveness fix');
 
 assert(/xmlCiiWorkflowButtonScopeSync/.test(buttonScopeSource), 'button scope must expose a sync function');
 assert(/XML_CII_CONVERTER_ID\s*=\s*'xml_to_cii'/.test(buttonScopeSource), 'button scope must key workflow visibility from xml_to_cii converter id');
@@ -94,14 +98,26 @@ assert(!/__xmlCiiConversionWorkflowAllowDirectRun/.test(workflowPopupSource), 'w
 assert(/data-xml-cii-workflow-root/.test(workflowPopupSource), 'workflow popup must scope installer state to the current model-converters root');
 assert(/stateByRoot: new WeakMap\(\)/.test(workflowPopupSource), 'workflow popup must keep independent modal state per rendered root');
 assert(!/if \(!xmlCiiWorkflowBrowserReady\(\) \|\| window\[XML_CII_WORKFLOW_POPUP_FLAG\]\) return/.test(workflowPopupSource), 'workflow popup must not use a stale global singleton guard that blocks re-render install');
+assert(/xmlCiiWorkflowScheduleRenderPhase/.test(workflowPopupSource), 'workflow popup must schedule heavy phase/master rerenders outside click/change handlers');
+assert(/requestAnimationFrame\(\(\) =>/.test(workflowPopupSource), 'workflow popup scheduled rendering must use requestAnimationFrame');
+assert(/Switching master table/.test(workflowPopupSource), 'master-tab clicks must use the scheduled lightweight switching path');
 
 assert(/ensureDefaultMastersLoaded = async \(\) => null/.test(workflowBridgeSource), 'workflow bridge must block obsolete legacy default-master preload');
 assert(/masterKey === 'pipingClass'/.test(workflowBridgeSource), 'workflow bridge must block obsolete aggregate piping-class default load');
+assert(/XML_CII_WORKFLOW_SNAPSHOT_TTL_MS/.test(workflowBridgeSource), 'workflow bridge must cache popup snapshots to avoid rebuilding all master metadata on every tab click');
+assert(/safe\.getPopupSnapshot = \(root\) => cachedSnapshot/.test(workflowBridgeSource), 'workflow bridge must wrap getPopupSnapshot with cache');
+assert(/clearSnapshotCache/.test(workflowBridgeSource), 'workflow bridge must invalidate cached snapshots after master/config mutations');
 assert(/master\.key === 'pipingClass'/.test(nativePanelsSource), 'native panels must disable default loading for piping-class master');
 assert(/data-xml-cii-workflow2-master-preview/.test(nativePanelsSource), 'Workflow 2 must expose enhanced per-master preview rows');
 assert(/Workflow 1 keeps master setup compact/.test(nativePanelsSource), 'Workflow 1 must use the compact master sequence');
 assert(/Condense Rigid \/ split condensed valve-flange nodes \(XSD\)/.test(nativePanelsSource), 'Run Options must show Condense Rigid XSD in both workflows');
 assert(/Condense Rigid \/ split condensed valve-flange nodes \(Resolved\)/.test(nativePanelsSource), 'Run Options must show Condense Rigid Resolved in both workflows');
+
+assert(!/root\.addEventListener\('change'/.test(runtimeOverrideSyncSource), 'runtime override sync must not install broad capture-phase change handler');
+assert(!/document\?\.querySelector\?\.\('\[data-option-key="supportConfigJson"\]'\)/.test(runtimeOverrideSyncSource), 'runtime override sync must not use global hidden supportConfigJson fallback');
+assert(/explicit preview\/weight\/run actions/.test(runtimeOverrideSyncSource), 'runtime override sync must document explicit-action-only behavior');
+assert(/data-native-build-preview/.test(runtimeOverrideSyncSource), 'runtime override sync must still sync before popup preview actions');
+assert(/data-native-finalise-run/.test(runtimeOverrideSyncSource), 'runtime override sync must still sync before final workflow run');
 
 assert(/Deprecated compatibility shim/.test(oldPopupShimSource), 'old generic popup filename must be a compatibility shim only');
 assert(!/restoreSimpleRunButton/.test(oldPopupShimSource), 'old generic popup shim must not restore simple Run Conversion visibility');
@@ -112,5 +128,5 @@ console.log('model converters tab lean responsiveness static test passed', {
   xmlCiiLeftPanel: 'popup-only: Workflow 1 + Workflow 2, no generic advanced options',
   workflow1: 'baseline enriched conversion workflow popup',
   workflow2: 'enhanced customization workflow popup with per-master preview rows',
-  buttonScope: 'single action row, no dark-shell launcher, visible only for xml_to_cii',
+  masterTabResponsiveness: 'scheduled popup rendering + cached bridge snapshot + explicit runtime override sync',
 });
