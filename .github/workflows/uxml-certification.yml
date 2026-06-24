@@ -119,6 +119,7 @@ jobs:
             scripts/test-selected-geometry-package.mjs
             scripts/test-selected-geometry-enrichment.mjs
             scripts/test-selected-geometry-enrichment-ui.mjs
+            scripts/test-selected-geometry-workflow-cleanup.mjs
           )
           for test_file in "${tests[@]}"; do
             echo "Running ${test_file}"
