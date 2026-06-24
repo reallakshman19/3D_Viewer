@@ -6,6 +6,7 @@ const RENUMBERABLE_NEGATIVE_TYPES = new Set(['FLAN', 'GASK', 'VALV', 'RIGID', 'I
 const INLINE_LENGTH_COMPONENT_TYPES = new Set(['FLAN', 'GASK', 'VALV', 'RIGID', 'INST']);
 const RESOLVED_RIGID_MARKER_TYPES = new Set(['FLAN', 'VALV', 'RIGID', 'INST']);
 const RESOLVED_FLEXIBLE_MARKER_TYPES = new Set(['GASK']);
+const DTXR_POS_SIF_ZERO_TYPES = new Set(['TEE', 'OLET', 'WELDOLET', 'SOCKOLET', 'THREDOLET', 'THREADOLET', 'ELBOLET', 'LATROLET', 'SWEEPOLET', 'NIPOLET']);
 
 function text(value) {
   return value === undefined || value === null ? '' : String(value).trim();
@@ -272,6 +273,51 @@ function annotateInlineElementLengths(document, enriched) {
   return count;
 }
 
+function nodeDescriptor(node) {
+  return [
+    childText(node, 'ComponentType'),
+    childText(node, 'NodeName'),
+    childText(node, 'ComponentRefNo'),
+    childText(node, 'DTXR_POS'),
+    childText(node, 'TEEDESC_POS'),
+  ].map(text).filter(Boolean).join(' ').toUpperCase();
+}
+
+function isDtxrPosTeeOrOletNode(node) {
+  const componentType = childText(node, 'ComponentType').toUpperCase();
+  if (DTXR_POS_SIF_ZERO_TYPES.has(componentType)) return true;
+  const descriptor = nodeDescriptor(node);
+  return /\bTEE\b/.test(descriptor) || /OLET\b/.test(descriptor);
+}
+
+function nodeHasResolvedDtxrPos(node) {
+  return !!(childText(node, 'DTXR_POS') || childText(node, 'TEEDESC_POS'));
+}
+
+function applyDtxrPosSifZero(document, enriched) {
+  let count = 0;
+  const diagnostics = [];
+  for (const node of [...document.getElementsByTagName('Node')]) {
+    if (!nodeHasResolvedDtxrPos(node)) continue;
+    if (!isDtxrPosTeeOrOletNode(node)) continue;
+    if (setText(document, node, 'SIF', '0')) count += 1;
+    diagnostics.push({
+      type: 'dtxr-pos-sif-zero',
+      nodeNumber: childText(node, 'NodeNumber'),
+      componentType: childText(node, 'ComponentType'),
+      dtxrPos: childText(node, 'DTXR_POS') || childText(node, 'TEEDESC_POS'),
+      message: 'DTXR_POS-matched Tee/Olet node assigned SIF=0 before CII worker conversion.',
+    });
+  }
+  enriched.stats = enriched.stats && typeof enriched.stats === 'object' ? enriched.stats : {};
+  enriched.stats.dtxrPosSifZeroAnnotations = count;
+  if (diagnostics.length) {
+    enriched.diagnostics = Array.isArray(enriched.diagnostics) ? enriched.diagnostics : [];
+    enriched.diagnostics.push(...diagnostics);
+  }
+  return count;
+}
+
 function positiveNodeNumberFromOriginal(originalNumbers, nodes, startIndex, step) {
   for (let index = startIndex; index >= 0 && index < nodes.length; index += step) {
     const original = originalNumbers.get(nodes[index]);
@@ -421,6 +467,7 @@ function applyPreviewRunParity(enriched, sourceXmlText, stagedJsonText, options 
   const rows = xmlCiiDryRunPreview(sourceXmlText, enriched.config, stagedJsonText).branchRows || [];
   if (!rows.length) {
     annotateInlineElementLengths(document, enriched);
+    applyDtxrPosSifZero(document, enriched);
     applyCondenseRigidOption(enriched, document, options);
     enriched.xmlText = new XMLSerializer().serializeToString(document);
     enriched.diagnostics = Array.isArray(enriched.diagnostics) ? enriched.diagnostics : [];
@@ -449,6 +496,7 @@ function applyPreviewRunParity(enriched, sourceXmlText, stagedJsonText, options 
   }
 
   annotateInlineElementLengths(document, enriched);
+  applyDtxrPosSifZero(document, enriched);
   applyCondenseRigidOption(enriched, document, options);
   enriched.xmlText = new XMLSerializer().serializeToString(document);
   enriched.stats = enriched.stats && typeof enriched.stats === 'object' ? enriched.stats : {};
