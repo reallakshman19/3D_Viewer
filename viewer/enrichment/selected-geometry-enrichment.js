@@ -192,6 +192,7 @@ export function normalizePipingClassEnrichment(row, requestedClass) {
 
 export function normalizeMaterialEnrichment(row, fallbackName) {
   return freezeDeep({
+    materialCode: text(rowValue(row, ['materialCode', 'MATERIAL_CODE', 'MatID', 'code'])),
     materialCategory: text(rowValue(row, ['materialCategory', 'MATERIAL_CATEGORY', 'category'])),
     materialDensityKgM3: rowNumber(row, ['materialDensityKgM3', 'DENSITY_KG_M3', 'density']),
     materialName: text(rowValue(row, ['materialName', 'MATERIAL_NAME', 'material', 'name']) || fallbackName),

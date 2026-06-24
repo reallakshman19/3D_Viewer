@@ -68,10 +68,10 @@ const masters = {
   pipingClassVersion: 'PC-v1',
   materialMapVersion: 'MAT-v1',
   weightMasterVersion: 'WT-v1',
-  lineList: [{ lineNo: '8-L100-STEAM', pipingClass: '66620M0', fluid: 'Steam' }],
-  pipingClass: [{ pipingClass: '66620M0', componentType: 'PIPE', nps: 8, wallThicknessMm: 12.7, materialCode: '106' }],
-  materialMap: [{ materialCode: '106', materialCategory: 'CS', materialDensityKgM3: 7850 }],
-  weightMaster: [{ nps: 8, componentType: 'PIPE', unitPipeWeightKgPerM: 64.6 }],
+  lineList: [{ lineNo: '8-L100-STEAM', pipingClass: '66620M0', fluid: 'Steam', _bindings: { lineNo: 'Line Number', pipingClass: 'Pipe Class' } }],
+  pipingClass: [{ pipingClass: '66620M0', componentType: 'PIPE', nps: 8, wallThicknessMm: 12.7, materialCode: '106', _bindings: { materialCode: 'Material Code', wallThicknessMm: 'Wall Thk' } }],
+  materialMap: [{ materialCode: '106', materialCategory: 'CS', materialDensityKgM3: 7850, _bindings: { materialCode: 'MAT_CODE' } }],
+  weightMaster: [{ nps: 8, componentType: 'PIPE', unitPipeWeightKgPerM: 64.6, _bindings: { unitPipeWeightKgPerM: 'Unit Pipe Weight' } }],
 };
 const enrichedScope = enrichSelectedGeometryScope(scope, masters, {});
 const packageJson = buildSelectedGeometryWorkspacePackage({
@@ -93,6 +93,8 @@ assert.strictEqual(packageJson.geometry.objects.length, 2);
 assert.strictEqual(packageJson.geometry.supports.length, 1);
 assert.strictEqual(packageJson.geometry.branches.length, 1);
 assert.strictEqual(packageJson.enrichment.masters.lineListVersion, 'LL-v1');
+assert.deepStrictEqual(packageJson.enrichment.masterBindings.lineList.lineNo, ['Line Number']);
+assert.deepStrictEqual(packageJson.enrichment.masterBindings.pipingClass.materialCode, ['Material Code']);
 assert.strictEqual(packageJson.enrichment.stats.objects, 2);
 assert.strictEqual(packageJson.geometry.objects[0].sourceAttributes.WALL_THICK, '12.7');
 assert.strictEqual(pipe.attributes.enrichment, undefined);
@@ -100,6 +102,7 @@ assert.strictEqual(pipe.attributes.enrichment, undefined);
 const packagePipe = packageJson.geometry.objects.find((object) => object.id === 'PIPE-100-A');
 const packageSupport = packageJson.geometry.objects.find((object) => object.id === 'SUP-100-A');
 assert.ok(packagePipe.attributes.enrichment, 'DB enrichment block must be retained in package');
+assert.strictEqual(packagePipe.attributes.enrichment.material.materialCode, '106', 'material code must remain visible in material enrichment');
 assert.strictEqual(packagePipe.sourceAttributes.WALL_THICK, '12.7', 'source geometry fields must be retained');
 assert.strictEqual(packagePipe.calculatedFields, undefined, 'calculated fields must not be exported from 3D_Viewer');
 assert.strictEqual(packagePipe.supportLoadFormulaResults, undefined, 'formula results must not be exported from 3D_Viewer');
@@ -116,7 +119,7 @@ const fileName = selectedGeometryWorkspacePackageFileName({
   sourceFileName: 'BM_CII.rvm',
   scopeMode: 'selected',
 });
-assert.strictEqual(fileName, 'BM_CII_selected_rvm_enriched_workspace_package.json');
+assert.strictEqual(fileName, 'BM_CII_selected_db_enriched_workspace_package.json');
 
 const textPayload = serializeSelectedGeometryWorkspacePackage(packageJson);
 assert.ok(textPayload.includes(RVM_SELECTED_GEOMETRY_WORKSPACE_PACKAGE_SCHEMA));
