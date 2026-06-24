@@ -26,6 +26,9 @@ jobs:
       - name: Verify static viewer entrypoint
         run: node viewer/tests/app-entrypoint-static.test.js
 
+      - name: Verify RVM viewer UI contracts
+        run: node viewer/tests/rvm-viewer-ui-contract.test.js
+
       - name: Verify RVM PCF shared workflow and adapter checks
         run: |
           node viewer/tests/rvm-pcf-master-context.test.js
@@ -42,7 +45,7 @@ jobs:
           path: viewer
 
   deploy:
-    name: Deploy to GitHub Pages
+    name: Deploy Pages artifact
     runs-on: ubuntu-latest
     needs: build
     environment:
