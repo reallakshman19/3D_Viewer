@@ -11,17 +11,17 @@
  */
 
 import { WorkflowModal } from './shared/WorkflowModal.js';
-import { xmlCiiWorkflowGetBridge, xmlCiiWorkflowGetSnapshot } from './xml-cii-workflow-bridge.js?v=20260624-workflow1-workflow2-1';
+import { xmlCiiWorkflowGetBridge, xmlCiiWorkflowGetSnapshot } from './xml-cii-workflow-bridge.js?v=20260624-master-tab-responsive-1';
 import { xmlCiiWorkflowRequestFinalRun } from './xml-cii-workflow-runner.js?v=20260624-workflow1-workflow2-1';
 import { renderXmlCiiPopupNativePhase } from './xml-cii-popup-native-panels.js?v=20260624-workflow1-workflow2-1';
 import { XML_CII_WORKFLOW_PHASES, normalizeWorkflowPhaseId } from './WorkflowShell.js';
 
-const XML_CII_WORKFLOW_POPUP_FLAG = '__xmlCiiWorkflowPopups_phaseTabs_v6';
+const XML_CII_WORKFLOW_POPUP_FLAG = '__xmlCiiWorkflowPopups_phaseTabs_v7';
 const XML_CII_WORKFLOW_ROOT_ATTR = 'data-xml-cii-workflow-root';
 const XML_CII_WORKFLOW_OVERLAY_ATTR = 'data-xml-cii-workflow-overlay';
 const XML_CII_WORKFLOW_ACTIVE_PHASE_KEY = 'xmlCii2019.workflow.activePhase.v1';
 const XML_CII_WORKFLOW_LEGACY_ACTIVE_PHASE_KEY = 'xmlCii2019.richWorkflow.activePhase.v1';
-const XML_CII_WORKFLOW_CLICK_VERSION = '20260624-workflow1-workflow2-1';
+const XML_CII_WORKFLOW_CLICK_VERSION = '20260624-master-tab-responsive-1';
 
 const XML_CII_WORKFLOW_POPUP_META = Object.freeze({
   workflow1: Object.freeze({
@@ -83,6 +83,7 @@ function xmlCiiWorkflowState(root) {
       configStatus: '',
       modal: null,
       mode: 'workflow2',
+      renderRaf: 0,
     };
     runtime.stateByRoot.set(root, state);
   }
@@ -93,7 +94,19 @@ function xmlCiiWorkflowSnapshot(root) {
   return xmlCiiWorkflowGetSnapshot(root);
 }
 
+function xmlCiiWorkflowSetRootDataset(root, state) {
+  if (!root) return;
+  root.dataset.selectedPhase = state.phaseId;
+  root.dataset.xmlCiiWorkflowMode = state.mode || 'workflow2';
+  root.dataset.xmlCiiActiveMaster = state.activeMaster || root.dataset.xmlCiiActiveMaster || 'linelist';
+}
+
 function xmlCiiWorkflowRenderPhase(root, state) {
+  if (state?.renderRaf) {
+    cancelAnimationFrame(state.renderRaf);
+    state.renderRaf = 0;
+  }
+  xmlCiiWorkflowSetRootDataset(root, state);
   const body = root?.querySelector('[data-xml-cii-workflow-body]');
   if (!body) return;
   const data = xmlCiiWorkflowSnapshot(root);
@@ -106,19 +119,32 @@ function xmlCiiWorkflowRenderPhase(root, state) {
   xmlCiiWorkflowBindPhase(body, root, state);
 }
 
+function xmlCiiWorkflowScheduleRenderPhase(root, state, message = 'Loading workflow view...') {
+  xmlCiiWorkflowSetRootDataset(root, state);
+  const body = root?.querySelector('[data-xml-cii-workflow-body]');
+  if (body && message) {
+    body.innerHTML = `<div class="model-converters-workflow-detail-note">${message}</div>`;
+  }
+  if (state.renderRaf) cancelAnimationFrame(state.renderRaf);
+  state.renderRaf = requestAnimationFrame(() => {
+    state.renderRaf = 0;
+    xmlCiiWorkflowRenderPhase(root, state);
+  });
+}
+
 function xmlCiiWorkflowSelectPhase(root, state, phaseId) {
   state.phaseId = xmlCiiWorkflowNormalizePhase(phaseId);
   root.dataset.selectedPhase = state.phaseId;
   xmlCiiWorkflowWriteStored(XML_CII_WORKFLOW_ACTIVE_PHASE_KEY, state.phaseId);
   const modal = state.modal;
   if (modal?.setActiveTab) modal.setActiveTab(state.phaseId);
-  xmlCiiWorkflowRenderPhase(root, state);
+  xmlCiiWorkflowScheduleRenderPhase(root, state, 'Loading workflow phase...');
 }
 
 async function xmlCiiWorkflowPreloadDefaultMasters(root, state) {
   try {
     await xmlCiiWorkflowGetBridge()?.ensureDefaultMastersLoaded?.(root);
-    xmlCiiWorkflowRenderPhase(root, state);
+    xmlCiiWorkflowScheduleRenderPhase(root, state, 'Refreshing workflow masters...');
   } catch (error) {
     console.warn('[XML CII Workflow] default master preload failed', error);
   }
@@ -128,7 +154,7 @@ function xmlCiiWorkflowBindRegex(body, root, state) {
   body.querySelectorAll('[data-native-regex-path]').forEach((input) => {
     input.addEventListener('change', () => {
       xmlCiiWorkflowGetBridge()?.setPopupConfigValue?.(input.dataset.nativeRegexPath, input.value, input.type === 'number' ? 'number' : 'text');
-      xmlCiiWorkflowRenderPhase(root, state);
+      xmlCiiWorkflowScheduleRenderPhase(root, state, 'Updating regex configuration...');
     });
   });
 }
@@ -138,7 +164,7 @@ function xmlCiiWorkflowBindMasters(body, root, state) {
     button.addEventListener('click', () => {
       root.dataset.xmlCiiActiveMaster = button.dataset.nativeMasterTab || 'linelist';
       state.activeMaster = root.dataset.xmlCiiActiveMaster;
-      xmlCiiWorkflowRenderPhase(root, state);
+      xmlCiiWorkflowScheduleRenderPhase(root, state, 'Switching master table...');
     });
   });
   body.querySelectorAll('[data-native-import-master]').forEach((input) => {
@@ -146,37 +172,37 @@ function xmlCiiWorkflowBindMasters(body, root, state) {
       const file = input.files?.[0];
       if (!file) return;
       await xmlCiiWorkflowGetBridge()?.importPopupMasterFile?.(input.dataset.nativeImportMaster, file);
-      xmlCiiWorkflowRenderPhase(root, state);
+      xmlCiiWorkflowScheduleRenderPhase(root, state, 'Imported master. Refreshing...');
     });
   });
   body.querySelectorAll('[data-native-load-default]').forEach((button) => {
     button.addEventListener('click', async () => {
       await xmlCiiWorkflowGetBridge()?.loadPopupDefaultMaster?.(button.dataset.nativeLoadDefault);
-      xmlCiiWorkflowRenderPhase(root, state);
+      xmlCiiWorkflowScheduleRenderPhase(root, state, 'Loaded default master. Refreshing...');
     });
   });
   body.querySelectorAll('[data-native-auto-map]').forEach((button) => {
     button.addEventListener('click', () => {
       xmlCiiWorkflowGetBridge()?.autoMapPopupMaster?.(button.dataset.nativeAutoMap);
-      xmlCiiWorkflowRenderPhase(root, state);
+      xmlCiiWorkflowScheduleRenderPhase(root, state, 'Auto-mapped columns. Refreshing...');
     });
   });
   body.querySelectorAll('[data-native-save-master]').forEach((button) => {
     button.addEventListener('click', () => {
       xmlCiiWorkflowGetBridge()?.savePopupMaster?.(button.dataset.nativeSaveMaster);
-      xmlCiiWorkflowRenderPhase(root, state);
+      xmlCiiWorkflowScheduleRenderPhase(root, state, 'Saved master rows. Refreshing...');
     });
   });
   body.querySelectorAll('[data-native-clear-master]').forEach((button) => {
     button.addEventListener('click', () => {
       xmlCiiWorkflowGetBridge()?.clearPopupMaster?.(button.dataset.nativeClearMaster);
-      xmlCiiWorkflowRenderPhase(root, state);
+      xmlCiiWorkflowScheduleRenderPhase(root, state, 'Cleared master rows. Refreshing...');
     });
   });
   body.querySelectorAll('[data-native-field-map]').forEach((select) => {
     select.addEventListener('change', () => {
       xmlCiiWorkflowGetBridge()?.setPopupMasterField?.(select.dataset.nativeMasterKey, select.dataset.nativeFieldMap, select.value);
-      xmlCiiWorkflowRenderPhase(root, state);
+      xmlCiiWorkflowScheduleRenderPhase(root, state, 'Updated field mapping. Refreshing...');
     });
   });
 }
@@ -234,7 +260,7 @@ function xmlCiiWorkflowBindRun(body, root, state) {
     input.addEventListener('change', () => {
       const value = input.type === 'checkbox' ? input.checked : input.value;
       xmlCiiWorkflowGetBridge()?.setPopupRunOption?.(input.dataset.nativeRunOption, value, input.type === 'checkbox' ? 'checkbox' : 'text');
-      xmlCiiWorkflowRenderPhase(root, state);
+      xmlCiiWorkflowScheduleRenderPhase(root, state, 'Updated run options. Refreshing...');
     });
   });
   body.querySelector('[data-native-review-weights]')?.addEventListener('click', () => xmlCiiWorkflowSelectPhase(root, state, 'weight-match'));
@@ -257,7 +283,7 @@ function xmlCiiWorkflowBindConfig(body, root, state) {
       const bools = { [input.dataset.nativeConfigBool]: input.checked };
       state.configText = xmlCiiWorkflowGetBridge()?.savePopupConfigText?.(textarea?.value || '{}', bools) || state.configText;
       state.configStatus = 'Saved';
-      xmlCiiWorkflowRenderPhase(root, state);
+      xmlCiiWorkflowScheduleRenderPhase(root, state, 'Saved config. Refreshing...');
     });
   });
   textarea?.addEventListener('input', () => {
@@ -273,7 +299,7 @@ function xmlCiiWorkflowBindConfig(body, root, state) {
     } catch (error) {
       state.configStatus = `Error: ${error?.message || error}`;
     }
-    xmlCiiWorkflowRenderPhase(root, state);
+    xmlCiiWorkflowScheduleRenderPhase(root, state, 'Saved config. Refreshing...');
   });
   body.querySelector('[data-native-export-config]')?.addEventListener('click', () => {
     const configText = xmlCiiWorkflowGetBridge()?.exportPopupConfigText?.() || '{}';
@@ -293,7 +319,7 @@ function xmlCiiWorkflowBindConfig(body, root, state) {
     } catch (error) {
       state.configStatus = `Import failed: ${error?.message || error}`;
     }
-    xmlCiiWorkflowRenderPhase(root, state);
+    xmlCiiWorkflowScheduleRenderPhase(root, state, 'Imported config. Refreshing...');
   });
 }
 
