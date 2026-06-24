@@ -30,6 +30,10 @@ function rowCount(value) {
   return `${numeric.toLocaleString()} row(s)`;
 }
 
+function workflowMode(uiState) {
+  return uiState?.mode === 'workflow1' ? 'workflow1' : 'workflow2';
+}
+
 function phaseHeader(phaseId, fallbackSummary) {
   const phase = getWorkflowPhase(phaseId);
   return `
@@ -169,12 +173,17 @@ function importMastersPanel(snapshot, uiState) {
   return `
     ${phaseHeader('import-masters')}
     ${masterTabs(snapshot, uiState)}
-    ${activeKey === 'overrides' ? overridesPanel(snapshot) : masterDetailPanel(active)}`;
+    ${activeKey === 'overrides' ? overridesPanel(snapshot) : masterDetailPanel(active, workflowMode(uiState))}`;
 }
 
-function masterDetailPanel(master) {
+function masterDetailPanel(master, mode = 'workflow2') {
   const fields = Array.isArray(master.fields) ? master.fields : [];
   const previewRows = Array.isArray(master.previewRows) ? master.previewRows : [];
+  const enhanced = mode === 'workflow2';
+  const defaultDisabled = !master.hasDefault || master.key === 'pipingClass';
+  const defaultTitle = master.key === 'pipingClass'
+    ? 'Specwise piping-class rows are loaded by line/spec context; obsolete aggregate Piping_class_master.json is intentionally disabled.'
+    : 'Load default master';
   return `
     <section class="xml-cii-native-card">
       <div class="xml-cii-native-card-head">
@@ -189,7 +198,7 @@ function masterDetailPanel(master) {
           Import file
           <input type="file" data-native-import-master="${attr(master.key || '')}" accept=".json,.csv,.tsv,.txt,.xlsx,.xls" hidden>
         </label>
-        <button type="button" class="model-converters-download-btn" data-native-load-default="${attr(master.key || '')}" ${master.hasDefault ? '' : 'disabled'}>Load default</button>
+        <button type="button" class="model-converters-download-btn" data-native-load-default="${attr(master.key || '')}" ${defaultDisabled ? 'disabled' : ''} title="${attr(defaultTitle)}">Load default</button>
         <button type="button" class="model-converters-download-btn" data-native-auto-map="${attr(master.key || '')}" ${master.rawRows ? '' : 'disabled'}>Auto map</button>
         <button type="button" class="model-converters-run-btn" data-native-save-master="${attr(master.key || '')}" ${master.rawRows ? '' : 'disabled'}>Save rows</button>
         <button type="button" class="model-converters-download-btn" data-native-clear-master="${attr(master.key || '')}">Clear</button>
@@ -213,10 +222,14 @@ function masterDetailPanel(master) {
           `).join('')}
         </div>` : '<div class="model-converters-workflow-detail-note">Import rows to configure field mapping.</div>'}
     </section>
-    <section class="xml-cii-native-card">
-      <div class="model-converters-workflow-section-title">Preview Rows</div>
-      ${compactTable(master.previewColumns || [], previewRows, 'No imported rows to preview.')}
-    </section>`;
+    ${enhanced ? `
+      <section class="xml-cii-native-card" data-xml-cii-workflow2-master-preview="true">
+        <div class="model-converters-workflow-section-title">Preview Rows</div>
+        ${compactTable(master.previewColumns || [], previewRows, 'No imported rows to preview.')}
+      </section>` : `
+      <section class="xml-cii-native-card" data-xml-cii-workflow1-master-note="true">
+        <div class="model-converters-workflow-detail-note">Workflow 1 keeps master setup compact. Use Workflow 2 for per-master preview rows and richer customisation.</div>
+      </section>`}`;
 }
 
 function overridesPanel(snapshot) {
@@ -394,7 +407,7 @@ function logicInfoPanel() {
     <details class="xml-cii-native-details" data-native-config-info>
       <summary><span aria-hidden="true">ⓘ</span> XML→CII enrichment logic</summary>
       <div class="xml-cii-native-hint">
-        <strong>ElementLengthMm:</strong> generated in browser-side rich enrichment. ElementLengthMm calculated for INST nodes uses the previous positive node to the INST position in CII coordinate space when no valid length already exists.
+        <strong>ElementLengthMm:</strong> generated in browser-side enrichment. ElementLengthMm calculated for INST nodes uses the previous positive node to the INST position in CII coordinate space when no valid length already exists.
       </div>
       <div class="xml-cii-native-hint">
         <strong>Condense Rigid / split condensed valve-flange nodes (XSD):</strong> stores source/XSD intent only as condenseRigidXsd / condense_rigid_xsd. It does not force resolved conversion.
@@ -403,7 +416,7 @@ function logicInfoPanel() {
         <strong>Condense Rigid / split condensed valve-flange nodes (Resolved):</strong> writes splitCondensedValveFlange=true and split_condensed_valve_flange=true, forwards --split-condensed-valve-flange, and renumbers length-bearing negative FLAN/RIGID/INST nodes before final CII generation.
       </div>
       <div class="xml-cii-native-hint">
-        <strong>Simple workflow:</strong> the main Run Conversion button runs directly. The XML-&gt;CII Rich Workflow button is the only entry point for this popup.
+        <strong>Workflow 1 / Workflow 2:</strong> both workflows use the same conversion core. Workflow 2 exposes enhanced master-preview and customisation UI for process data and weight data.
       </div>
     </details>`;
 }

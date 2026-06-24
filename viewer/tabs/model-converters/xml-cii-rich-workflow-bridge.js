@@ -1,29 +1,14 @@
 /**
- * XML->CII(2019) Rich Workflow bridge boundary.
+ * Deprecated compatibility shim.
  *
- * Rich UI modules import this boundary instead of importing legacy-adapter.js
- * directly. The legacy bridge remains the current state provider until the rich
- * workflow state owner is fully extracted, but the dependency is contained here.
+ * XML->CII workflow bridge ownership moved to xml-cii-workflow-bridge.js under
+ * neutral Workflow 1 / Workflow 2 naming. Keep old exports for cached imports.
  */
 
-import { getXmlCiiPhaseBridge } from './legacy-adapter.js?v=20260620-master-session-1';
-
-export function xmlCiiRichWorkflowGetBridge() {
-  return getXmlCiiPhaseBridge?.() || null;
-}
-
-export function xmlCiiRichWorkflowGetSnapshot(root) {
-  return xmlCiiRichWorkflowGetBridge()?.getPopupSnapshot?.(root) || null;
-}
-
-export function xmlCiiRichWorkflowSetConfigValue(path, value, valueType = 'text') {
-  return xmlCiiRichWorkflowGetBridge()?.setPopupConfigValue?.(path, value, valueType);
-}
-
-export function xmlCiiRichWorkflowSetMasterField(masterKey, fieldKey, value) {
-  return xmlCiiRichWorkflowGetBridge()?.setPopupMasterField?.(masterKey, fieldKey, value);
-}
-
-export function xmlCiiRichWorkflowClosePopup() {
-  return xmlCiiRichWorkflowGetBridge()?.closePopup?.();
-}
+export {
+  xmlCiiWorkflowGetBridge as xmlCiiRichWorkflowGetBridge,
+  xmlCiiWorkflowGetSnapshot as xmlCiiRichWorkflowGetSnapshot,
+  xmlCiiWorkflowSetConfigValue as xmlCiiRichWorkflowSetConfigValue,
+  xmlCiiWorkflowSetMasterField as xmlCiiRichWorkflowSetMasterField,
+  xmlCiiWorkflowClosePopup as xmlCiiRichWorkflowClosePopup,
+} from './xml-cii-workflow-bridge.js?v=20260624-workflow1-workflow2-1';
