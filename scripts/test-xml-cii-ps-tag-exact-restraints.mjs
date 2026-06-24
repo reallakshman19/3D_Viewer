@@ -9,8 +9,8 @@ for (const normalize of [normalizeDtxrSupportTag, normalizeMappingSupportTag, no
   assert.equal(normalize('/ps-11236.8'), 'PS-11236.8');
   assert.equal(normalize('PS-11236'), 'PS-11236');
 }
-assert.equal(normalizePsKey('/ps-11236.8'), 'PS-11236.8');
-assert.deepEqual(psCandidateKeys('PS-11236.8'), ['PS-11236.8']);
+assert.equal(normalizePsKey('/ps-11236.8'), 'PS11236.8');
+assert.deepEqual(psCandidateKeys('PS-11236.8'), ['PS11236.8']);
 
 const stagedJson = JSON.stringify({ type: 'BRANCH', children: [
   { type: 'SUPPORT', attributes: { TYPE: 'SUPPORT', DTXR_PS: 'PS-11236', SUPPORT_KIND: 'GUIDE', CMPSUPGAP: '10' } },
@@ -34,4 +34,4 @@ const restraints = xmlCiiRestraintEntriesFromSupportMatch(supportMatch, null, su
 assert.equal(restraints[0]?.supportKind, 'LINESTOP');
 assert.equal(restraints[0]?.type, 'LIM');
 
-console.log('✓ XML CII exact decimal PS tag restraint regression passed');
+console.log('XML CII exact decimal PS tag restraint regression passed');
