@@ -14,20 +14,21 @@
  */
 
 import './xml-cii-rich-worker-cache-bust.js?v=20260623-xml-cii-rich-worker-1';
-import { renderLegacyModelConvertersTab } from './legacy-adapter.js?v=20260624-workflow1-workflow2-1';
+import { renderLegacyModelConvertersTab } from './legacy-adapter.js?v=20260624-startup-autoload-noise-1';
 import { installBmCiiSupportAnnotationPopup } from './bm-cii-support-annotation-popup.js?v=20260617-bmcii-open-basic-handoff-2';
 import { installInputXmlPropertyTransferUi } from './inputxml-property-transfer-popup-ui-v4.js?v=20260615-inputxml-property-transfer-popup-host-hide-1';
 import { installRvmAttrUxmlAddon } from './rvmattr-uxml-addon.js?v=20260618-port-bore-contract-1';
-import { installXmlCiiWorkflowButtonScope } from './xml-cii-workflow-button-scope.js?v=20260624-workflow1-workflow2-1';
+import { installXmlCiiWorkflowButtonScope } from './xml-cii-workflow-button-scope.js?v=20260624-startup-autoload-noise-1';
 import { installXmlCiiSimpleWorkflowController } from './xml-cii-simple-workflow-controller.js?v=20260624-popup-only-1';
 import { installXmlCiiWorkflowHotfix } from './xml-cii-workflow-hotfix.js?v=20260624-workflow1-workflow2-1';
-import { installXmlCiiWorkflowPopup } from './xml-cii-workflow-popup.js?v=20260624-master-tab-responsive-1';
+import { installXmlCiiWorkflowPopup } from './xml-cii-workflow-popup.js?v=20260624-startup-autoload-noise-1';
 import { installXmlCiiCondenseRigidUiBridge } from './xml-cii-condense-rigid-ui-bridge.js?v=20260624-simple-rich-isolation-1';
 import { installXmlCiiBranchSampleSync } from './xml-cii-branch-sample-sync.js?v=20260620-rating-runtime-1';
 import { installXmlCiiLineKeySelectPatch } from './xml-cii-linekey-select-patch.js?v=20260624-simple-rich-isolation-1';
 import { installInputXmlBasicGlbBridge } from './inputxml-basic-glb-bridge.js';
 import { installInputXmlManagedStageBridge } from './inputxml-managed-stage-bridge.js?v=20260623-inputxml-direct-stage-1';
-import { installXmlCiiDefaultMasterAutoload, installXmlCiiRecoveryPatch } from '../xml-cii-master-autoload-patch.js?v=20260624-workflow1-workflow2-1';
+import { installXmlCiiDefaultMasterAutoloadLite } from '../xml-cii-master-autoload-lite.js?v=20260624-startup-autoload-noise-1';
+import { installXmlCiiRecoveryPatch } from '../xml-cii-master-autoload-patch.js?v=20260624-workflow1-workflow2-1';
 import { installXmlCiiPreviewLineKeyRemap } from './xml-cii-preview-linekey-remap.js?v=20260620-rating-runtime-1';
 import { installXmlCiiRuntimeOverrideSync } from './xml-cii-runtime-override-sync.js?v=20260624-master-tab-responsive-1';
 import { installXmlCiiMasterPreservePatch } from './xml-cii-master-preserve-patch.js?v=20260620-master-session-1';
@@ -73,9 +74,30 @@ function installSafely(name, installer, container) {
   }
 }
 
-function scheduleInstaller(name, installer, container) {
-  const run = () => installSafely(name, installer, container);
-  setTimeout(run, 0);
+function monotonicNow() {
+  return typeof performance !== 'undefined' && typeof performance.now === 'function' ? performance.now() : Date.now();
+}
+
+function scheduleModelConverterTask(callback) {
+  if (typeof requestIdleCallback === 'function') return requestIdleCallback(callback, { timeout: 750 });
+  if (typeof requestAnimationFrame === 'function') return requestAnimationFrame(() => callback(null));
+  return Promise.resolve().then(() => callback(null));
+}
+
+function scheduleInstallerQueue(container) {
+  const queue = MODEL_CONVERTER_INSTALLERS.map((entry) => entry);
+  const runNext = (deadline) => {
+    const startedAt = monotonicNow();
+    while (queue.length) {
+      const [name, install] = queue.shift();
+      installSafely(name, install, container);
+      const elapsed = monotonicNow() - startedAt;
+      if (deadline?.timeRemaining && deadline.timeRemaining() <= 4) break;
+      if (!deadline?.timeRemaining && elapsed > 12) break;
+    }
+    if (queue.length) scheduleModelConverterTask(runNext);
+  };
+  scheduleModelConverterTask(runNext);
 }
 
 /**
@@ -98,7 +120,7 @@ const MODEL_CONVERTER_INSTALLERS = Object.freeze([
   ['inputxml-property-transfer-popup-ui-v4', installInputXmlPropertyTransferUi],
   ['inputxml-basic-glb-bridge', installInputXmlBasicGlbBridge],
   ['inputxml-managed-stage-bridge', installInputXmlManagedStageBridge],
-  ['xml-cii-default-master-autoload', installXmlCiiDefaultMasterAutoload],
+  ['xml-cii-default-master-autoload-lite', installXmlCiiDefaultMasterAutoloadLite],
   ['xml-cii-recovery-patch', installXmlCiiRecoveryPatch],
   ['xml-cii-preview-linekey-remap', installXmlCiiPreviewLineKeyRemap],
   ['xml-cii-runtime-override-sync', installXmlCiiRuntimeOverrideSync],
@@ -109,7 +131,5 @@ export function renderModelConvertersTab(container, ctx) {
   ensureModelConvertersStyles();
   renderLegacyModelConvertersTab(container, ctx);
   markStylesReady(container);
-  for (const [name, install] of MODEL_CONVERTER_INSTALLERS) {
-    scheduleInstaller(name, install, container);
-  }
+  scheduleInstallerQueue(container);
 }

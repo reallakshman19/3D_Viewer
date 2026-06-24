@@ -7,7 +7,7 @@
  * is contained here under neutral Workflow naming.
  */
 
-import { getXmlCiiPhaseBridge } from './legacy-adapter.js?v=20260624-workflow1-workflow2-1';
+import { getXmlCiiPhaseBridge } from './legacy-adapter.js?v=20260624-startup-autoload-noise-1';
 
 const XML_CII_OBSOLETE_PIPING_CLASS_MASTER = 'Piping_class_master.json';
 const XML_CII_WORKFLOW_SNAPSHOT_TTL_MS = 5000;
@@ -38,6 +38,17 @@ function clearSnapshotCache() {
   snapshotCache = { key: '', value: null, createdAt: 0 };
 }
 
+function sanitizeSnapshot(value) {
+  if (!value || typeof value !== 'object') return value;
+  const masters = Array.isArray(value.masterDefs) ? value.masterDefs : [];
+  for (const master of masters) {
+    if (master?.key === 'pipingClass' && typeof master.defaultUrl === 'string' && master.defaultUrl.includes(XML_CII_OBSOLETE_PIPING_CLASS_MASTER)) {
+      master.defaultUrl = '';
+    }
+  }
+  return value;
+}
+
 function cachedSnapshot(base, root) {
   if (!base?.getPopupSnapshot) return null;
   const key = snapshotKey(root);
@@ -45,7 +56,7 @@ function cachedSnapshot(base, root) {
   if (snapshotCache.key === key && snapshotCache.value && createdAt - snapshotCache.createdAt < XML_CII_WORKFLOW_SNAPSHOT_TTL_MS) {
     return snapshotCache.value;
   }
-  const value = base.getPopupSnapshot(root);
+  const value = sanitizeSnapshot(base.getPopupSnapshot(root));
   if (value) snapshotCache = { key, value, createdAt };
   return value;
 }
@@ -80,7 +91,7 @@ function xmlCiiWorkflowWrapBridge(base) {
 
   // The popup's old legacy preload path probes the removed aggregate
   // docs/Masters/Piping_class_master.json. Default Material/Weight autoload is
-  // owned by xml-cii-master-autoload-patch.js, and specwise piping class rows are
+  // owned by xml-cii-master-autoload-lite.js, and specwise piping class rows are
   // resolved from docs/Masters/SpecwisePipingClass by line/spec context. Do not
   // call the stale aggregate preload from Workflow 1/2 popups.
   safe.ensureDefaultMastersLoaded = async () => null;

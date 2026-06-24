@@ -11,6 +11,7 @@ const workflowBridgePath = path.join(repoRoot, 'viewer/tabs/model-converters/xml
 const nativePanelsPath = path.join(repoRoot, 'viewer/tabs/model-converters/xml-cii-popup-native-panels.js');
 const simpleControllerPath = path.join(repoRoot, 'viewer/tabs/model-converters/xml-cii-simple-workflow-controller.js');
 const runtimeOverrideSyncPath = path.join(repoRoot, 'viewer/tabs/model-converters/xml-cii-runtime-override-sync.js');
+const masterAutoloadLitePath = path.join(repoRoot, 'viewer/tabs/xml-cii-master-autoload-lite.js');
 const oldPopupShimPath = path.join(repoRoot, 'viewer/tabs/model-converters/xml-cii-conversion-workflow-popup.js');
 const oldRichPopupShimPath = path.join(repoRoot, 'viewer/tabs/model-converters/xml-cii-rich-workflow-popup.js');
 
@@ -22,6 +23,7 @@ const workflowBridgeSource = fs.readFileSync(workflowBridgePath, 'utf8');
 const nativePanelsSource = fs.readFileSync(nativePanelsPath, 'utf8');
 const simpleControllerSource = fs.readFileSync(simpleControllerPath, 'utf8');
 const runtimeOverrideSyncSource = fs.readFileSync(runtimeOverrideSyncPath, 'utf8');
+const masterAutoloadLiteSource = fs.readFileSync(masterAutoloadLitePath, 'utf8');
 const oldPopupShimSource = fs.readFileSync(oldPopupShimPath, 'utf8');
 const oldRichPopupShimSource = fs.readFileSync(oldRichPopupShimPath, 'utf8');
 
@@ -34,14 +36,26 @@ function assert(condition, message) {
 
 assert(/export\s*\{\s*renderModelConvertersTab\s*\}\s*from\s*['"]\.\/model-converters\/index\.js(?:\?[^'"]*)?['"]/.test(legacyTabSource), 'legacy shim must delegate renderModelConvertersTab to canonical model-converters entrypoint');
 assert(/renderLegacyModelConvertersTab\(container, ctx\)/.test(tabSource), 'canonical model converter tab must render legacy adapter first');
-assert(/scheduleInstaller\(/.test(tabSource), 'optional installers must be scheduled/deferred');
+assert(/scheduleInstallerQueue\(container\)/.test(tabSource), 'optional installers must be scheduled through a queue');
+assert(/scheduleModelConverterTask/.test(tabSource), 'installer queue must use the non-timeout task scheduler');
+assert(!/setTimeout\(run, 0\)/.test(tabSource), 'installer queue must not create one setTimeout per installer');
+assert(!/setTimeout\(/.test(tabSource), 'ModelConvertersTab must not emit repeated setTimeout startup handlers');
+assert(/requestIdleCallback/.test(tabSource), 'installer queue should prefer requestIdleCallback when available');
 assert(/installSafely\(/.test(tabSource), 'optional installers must be guarded');
 assert(/catch \(error\)/.test(tabSource), 'installer failures must be caught and logged');
 assert(/Optional installer failed/.test(tabSource), 'installer failure log must identify optional installer errors');
 assert(!/installXmlCiiSideloadUi/.test(tabSource), 'heavy XML CII sideload observer installer must not auto-run from Model Converter tab');
 assert(!/installXmlCiiMatchedPreviewUi/.test(tabSource), 'heavy XML CII matched-preview observer installer must not auto-run from Model Converter tab');
 assert(!/installXmlCiiConversionWorkflowPolish/.test(tabSource), 'workflow polish observer must not auto-run from Model Converter tab');
-assert(/setTimeout\(run, 0\)/.test(tabSource), 'deferred installer scheduler must use timeout to keep legacy render responsive');
+
+assert(/installXmlCiiDefaultMasterAutoloadLite/.test(tabSource), 'canonical tab must use the lightweight one-shot XML CII master autoload');
+assert(!/installXmlCiiDefaultMasterAutoload[^L]/.test(tabSource), 'canonical tab must not install the legacy broad-listener master autoload');
+assert(/xml-cii-master-autoload-lite\.js\?v=20260624-startup-autoload-noise-1/.test(tabSource), 'canonical tab must use the startup-noise cache key for lite master autoload');
+assert(!/document\.addEventListener\('click'/.test(masterAutoloadLiteSource), 'lite master autoload must not schedule on every popup click/master tab click');
+assert(!/document\.addEventListener\('input'/.test(masterAutoloadLiteSource), 'lite master autoload must not schedule on hidden config input churn');
+assert(!/document\.addEventListener\('change'/.test(masterAutoloadLiteSource), 'lite master autoload must not schedule on every config/master change');
+assert(!/Piping_class_master\.json/.test(masterAutoloadLiteSource), 'lite master autoload must not probe obsolete aggregate piping class master');
+assert(/DEFAULT_MASTER_PATHS/.test(masterAutoloadLiteSource), 'lite master autoload must still define default material/weight master paths');
 
 assert(/installXmlCiiWorkflowButtonScope/.test(tabSource), 'canonical tab must install the scoped workflow button host');
 assert(/installXmlCiiWorkflowPopup/.test(tabSource), 'canonical tab must install the neutral Workflow 1/2 popup module');
@@ -49,8 +63,9 @@ assert(/installXmlCiiWorkflowHotfix/.test(tabSource), 'canonical tab must instal
 assert(!/installXmlCiiRichWorkflowPopup/.test(tabSource), 'canonical tab must not install the old rich-prefixed popup module');
 assert(!/installXmlCiiRichWorkflowHotfix/.test(tabSource), 'canonical tab must not install the old rich-prefixed hotfix module');
 assert(!/installXmlCiiConversionWorkflowPopup/.test(tabSource), 'canonical tab must not install the old generic popup module');
-assert(/xml-cii-workflow-popup\.js\?v=20260624-master-tab-responsive-1/.test(tabSource), 'canonical tab must bump workflow popup import key for master-tab responsiveness fix');
-assert(/xml-cii-runtime-override-sync\.js\?v=20260624-master-tab-responsive-1/.test(tabSource), 'canonical tab must bump runtime override sync import key for responsiveness fix');
+assert(/xml-cii-workflow-popup\.js\?v=20260624-startup-autoload-noise-1/.test(tabSource), 'canonical tab must bump workflow popup import key for startup/autoload fix');
+assert(/legacy-adapter\.js\?v=20260624-startup-autoload-noise-1/.test(tabSource), 'canonical tab must bump legacy adapter import key to flush stale default-master URL code');
+assert(/xml-cii-runtime-override-sync\.js\?v=20260624-master-tab-responsive-1/.test(tabSource), 'canonical tab must keep runtime override sync responsiveness import key');
 
 assert(/xmlCiiWorkflowButtonScopeSync/.test(buttonScopeSource), 'button scope must expose a sync function');
 assert(/XML_CII_CONVERTER_ID\s*=\s*'xml_to_cii'/.test(buttonScopeSource), 'button scope must key workflow visibility from xml_to_cii converter id');
@@ -104,6 +119,8 @@ assert(/Switching master table/.test(workflowPopupSource), 'master-tab clicks mu
 
 assert(/ensureDefaultMastersLoaded = async \(\) => null/.test(workflowBridgeSource), 'workflow bridge must block obsolete legacy default-master preload');
 assert(/masterKey === 'pipingClass'/.test(workflowBridgeSource), 'workflow bridge must block obsolete aggregate piping-class default load');
+assert(/sanitizeSnapshot/.test(workflowBridgeSource), 'workflow bridge must sanitize stale default URLs from popup snapshots');
+assert(/legacy-adapter\.js\?v=20260624-startup-autoload-noise-1/.test(workflowBridgeSource), 'workflow bridge must bump legacy adapter cache key');
 assert(/XML_CII_WORKFLOW_SNAPSHOT_TTL_MS/.test(workflowBridgeSource), 'workflow bridge must cache popup snapshots to avoid rebuilding all master metadata on every tab click');
 assert(/safe\.getPopupSnapshot = \(root\) => cachedSnapshot/.test(workflowBridgeSource), 'workflow bridge must wrap getPopupSnapshot with cache');
 assert(/clearSnapshotCache/.test(workflowBridgeSource), 'workflow bridge must invalidate cached snapshots after master/config mutations');
@@ -129,4 +146,5 @@ console.log('model converters tab lean responsiveness static test passed', {
   workflow1: 'baseline enriched conversion workflow popup',
   workflow2: 'enhanced customization workflow popup with per-master preview rows',
   masterTabResponsiveness: 'scheduled popup rendering + cached bridge snapshot + explicit runtime override sync',
+  startupNoise: 'no per-installer setTimeout loop + one-shot lite master autoload',
 });
