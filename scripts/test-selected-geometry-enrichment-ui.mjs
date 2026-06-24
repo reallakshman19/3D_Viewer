@@ -138,6 +138,11 @@ assert.strictEqual(preview.branchRows[0].pipingClass, '200AA1');
 assert.strictEqual(preview.branchRows[0].rating, '20000');
 assert.strictEqual(preview.branchRows[0].materialCode, '106');
 assert.strictEqual(preview.branchRows[0].p1, '70');
+assert.strictEqual(preview.branchRows[0].pipingClassNeedsReview, false);
+assert.ok(['resolved', 'resolved-with-audit'].includes(preview.branchRows[0].status));
+assert.strictEqual(preview.diagnostics.length, 0);
+assert.deepStrictEqual(preview.diagnosticSummary, []);
+assert.strictEqual(preview.counts.statuses[preview.branchRows[0].status], 1);
 assert.strictEqual(preview.nodeRows[0].weight, 20);
 
 const enriched = enrichSelectedGeometryScopeWithBranchWorkflow({ scope, masters, config: {} });
