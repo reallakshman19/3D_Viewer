@@ -1,12 +1,14 @@
 import { isXmlCiiRigidNode } from '../converters/xml-cii2019-core/weight-match-model.js';
 import { notify } from '../diagnostics/notification-center.js';
 
-const FLAG = '__xmlCiiDefaultMasterAutoload_raw_first_v2';
-const RECOVERY_FLAG = '__xmlCiiRecovery_raw_first_v2';
+const FLAG = '__xmlCiiDefaultMasterAutoload_single_session_v3';
+const RECOVERY_FLAG = '__xmlCiiRecovery_single_session_v3';
+const SESSION_KEY = '__xmlCiiDefaultMasterAutoloadSession_v3';
 const INPUT_SELECTOR = '[data-option-key="supportConfigJson"]';
 const PRIMARY_FILE_SELECTOR = '#model-converters-primary-input';
 const STATUS_ID = 'xml-cii-master-autoload-status';
 const PATH_PANEL_ID = 'xml-cii-master-paths-panel';
+const REPO_NAME = '3D_Viewer';
 const RAW_BASE = 'https://raw.githubusercontent.com/reallaksh19/3D_Viewer/main/';
 
 const DEFAULT_MASTER_PATHS = Object.freeze({
@@ -14,7 +16,6 @@ const DEFAULT_MASTER_PATHS = Object.freeze({
   weightPath: 'docs/Masters/wtValveweights.json',
   pipingClassIndexPath: 'docs/Masters/SpecwisePipingClass/index.json',
   pipingClassShardFolder: 'docs/Masters/SpecwisePipingClass/',
-  legacyPipingMasterPath: 'docs/Masters/Piping_class_master.json',
 });
 
 const PIPING_PLACEHOLDER_ROW = Object.freeze({
@@ -68,6 +69,21 @@ function browserReady() {
   return typeof window !== 'undefined' && typeof document !== 'undefined' && typeof location !== 'undefined';
 }
 
+function sessionState() {
+  if (!browserReady()) return { scheduled: false, running: false, pending: false };
+  if (!window[SESSION_KEY] || typeof window[SESSION_KEY] !== 'object') {
+    window[SESSION_KEY] = {
+      scheduled: false,
+      running: false,
+      pending: false,
+      lastSuccessNotifyKey: '',
+      lastErrorNotifyKey: '',
+      lastPipingNotifyKey: '',
+    };
+  }
+  return window[SESSION_KEY];
+}
+
 function text(value) { return value == null ? '' : String(value); }
 function clean(value) { return text(value).replace(/\s+/g, ' ').trim(); }
 function esc(value) { return text(value).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;'); }
@@ -77,13 +93,21 @@ function rawValue(row, keys) { for (const key of keys || []) { const value = row
 
 function masterPaths(config) {
   const existing = config?.masterPaths && typeof config.masterPaths === 'object' && !Array.isArray(config.masterPaths) ? config.masterPaths : {};
-  return { ...DEFAULT_MASTER_PATHS, ...existing };
+  const merged = { ...DEFAULT_MASTER_PATHS, ...existing };
+  delete merged.legacyPipingMasterPath;
+  return merged;
 }
 function normalizeMasterPath(masterPath) { return clean(masterPath).replace(/^\/+/, '').replace(/^\.\//, ''); }
 function rawUrl(masterPath) { const p = normalizeMasterPath(masterPath); return `${RAW_BASE}${p.split('/').map(encodeURIComponent).join('/')}`; }
-function pageUrl(masterPath) { const p = normalizeMasterPath(masterPath); const appRoot = location.pathname.split('/').filter(Boolean)[0] || ''; const prefix = appRoot ? `/${appRoot}/` : '/'; return `${location.origin}${prefix}${p}`; }
-function localUrl(masterPath) { return new URL(`../${normalizeMasterPath(masterPath)}`, import.meta.url).href; }
-function candidateUrls(masterPath) { const p = normalizeMasterPath(masterPath); return [...new Set([rawUrl(p), pageUrl(p), localUrl(p)])]; }
+function appRootPrefix() {
+  const parts = location.pathname.split('/').filter(Boolean);
+  if (parts.includes(REPO_NAME)) return `/${REPO_NAME}/`;
+  if (/github\.io$/i.test(location.hostname)) return `/${REPO_NAME}/`;
+  return parts[0] ? `/${parts[0]}/` : '/';
+}
+function pageUrl(masterPath) { const p = normalizeMasterPath(masterPath); return `${location.origin}${appRootPrefix()}${p}`; }
+function moduleRelativeUrl(masterPath) { return new URL(`../../${normalizeMasterPath(masterPath)}`, import.meta.url).href; }
+function candidateUrls(masterPath) { const p = normalizeMasterPath(masterPath); return [...new Set([rawUrl(p), pageUrl(p), moduleRelativeUrl(p)])]; }
 
 async function fetchTextByPath(masterPath) {
   const errors = [];
@@ -135,18 +159,176 @@ function primaryXmlFile() { return document.querySelector(PRIMARY_FILE_SELECTOR)
 function phaseTitle(regex = /Import Masters/i) { return Array.from(document.querySelectorAll('.model-converters-workflow-detail-title, .xml-cii-native-phase-head .model-converters-workflow-detail-title')).find((el) => regex.test(clean(el.textContent))); }
 function renderStatus(message, tone = 'info') { const title = phaseTitle(/Import Masters|Preview|Run|Config|Weight Match/i); if (!title) return; let host = document.getElementById(STATUS_ID); if (!host) { host = document.createElement('div'); host.id = STATUS_ID; title.insertAdjacentElement('afterend', host); } host.textContent = message; host.style.cssText = `margin:8px 0;padding:8px 10px;border:1px solid ${tone === 'error' ? '#7f3040' : '#2b7656'};border-radius:8px;background:#0f1b2c;color:${tone === 'error' ? '#ffc2c2' : '#7dffc0'};font-size:12px;`; }
 function pathInput(label, key, value) { return `<label class="model-converters-workflow-regex-field"><span>${esc(label)}</span><input type="text" value="${esc(value)}" data-xml-cii-master-path="${esc(key)}"></label>`; }
-function pathPanelHtml(config, status) { const paths = masterPaths(config); return `<div id="${PATH_PANEL_ID}" class="model-converters-workflow-master-card" style="margin:10px 0;border-color:#25466b;"><div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;"><div><div class="model-converters-workflow-detail-title">Master Paths / Specwise Piping Class Index</div><div class="model-converters-workflow-detail-text">Default masters load raw-first from GitHub source and remain editable here.</div></div><button type="button" class="model-converters-run-btn" data-xml-cii-rescan-piping>Rescan XML</button></div><div class="model-converters-workflow-regex-grid" style="margin-top:10px;grid-template-columns:repeat(4,minmax(180px,1fr));">${pathInput('Material Map Path', 'materialMapPath', paths.materialMapPath)}${pathInput('Weights / Valve CA8 Path', 'weightPath', paths.weightPath)}${pathInput('Piping Class Index Path', 'pipingClassIndexPath', paths.pipingClassIndexPath)}${pathInput('Piping Class Shard Folder', 'pipingClassShardFolder', paths.pipingClassShardFolder)}</div><div data-xml-cii-path-status style="margin-top:8px;padding:8px 10px;border:1px solid #2b7656;border-radius:8px;color:#7dffc0;background:#0f1b2c;font-size:12px;">${esc(status)}</div></div>`; }
-function renderMasterPathsPanel(input = configInput(), status = 'Material Map and Weight Master auto-load from docs/Masters. Select XML to scan specwise piping class shards.') { const config = parseConfig(input); if (!config) return; const title = phaseTitle(/Import Masters/i); if (!title) return; const html = pathPanelHtml(config, status); const existing = document.getElementById(PATH_PANEL_ID); if (existing) existing.outerHTML = html; else title.insertAdjacentHTML('afterend', html); bindPathPanel(input); }
-function bindPathPanel(input) { const panel = document.getElementById(PATH_PANEL_ID); if (!panel || panel.dataset.bound === 'true') return; panel.dataset.bound = 'true'; panel.querySelectorAll('[data-xml-cii-master-path]').forEach((field) => field.addEventListener('change', () => { const config = parseConfig(input); if (!config) return; config.masterPaths = config.masterPaths && typeof config.masterPaths === 'object' ? config.masterPaths : {}; config.masterPaths[field.getAttribute('data-xml-cii-master-path') || ''] = normalizeMasterPath(field.value); writeConfig(input, config); renderMasterPathsPanel(input, 'Master paths updated. Rescan XML to reload specwise piping class rows.'); })); panel.querySelector('[data-xml-cii-rescan-piping]')?.addEventListener('click', () => rescanPipingClassFromXml({ force: true, notifyUser: true }).catch((error) => notify({ level: 'error', title: 'XML->CII Masters', message: clean(error?.message || error) }))); }
+function pathPanelHtml(config, status) { const paths = masterPaths(config); return `<div id="${PATH_PANEL_ID}" class="model-converters-workflow-master-card" style="margin:10px 0;border-color:#25466b;"><div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;"><div><div class="model-converters-workflow-detail-title">Master Paths / Specwise Piping Class Index</div><div class="model-converters-workflow-detail-text">Default masters load once per browser session. Piping class rows are loaded from specwise shards after XML selection.</div></div><button type="button" class="model-converters-run-btn" data-xml-cii-rescan-piping>Rescan XML</button></div><div class="model-converters-workflow-regex-grid" style="margin-top:10px;grid-template-columns:repeat(4,minmax(180px,1fr));">${pathInput('Material Map Path', 'materialMapPath', paths.materialMapPath)}${pathInput('Weights / Valve CA8 Path', 'weightPath', paths.weightPath)}${pathInput('Piping Class Index Path', 'pipingClassIndexPath', paths.pipingClassIndexPath)}${pathInput('Piping Class Shard Folder', 'pipingClassShardFolder', paths.pipingClassShardFolder)}</div><div data-xml-cii-path-status style="margin-top:8px;padding:8px 10px;border:1px solid #2b7656;border-radius:8px;color:#7dffc0;background:#0f1b2c;font-size:12px;">${esc(status)}</div></div>`; }
+function renderMasterPathsPanel(input = configInput(), status = 'Material Map and Weight Master auto-load once from docs/Masters. Select XML to scan specwise piping class shards.') { const config = parseConfig(input); if (!config) return; const title = phaseTitle(/Import Masters/i); if (!title) return; const html = pathPanelHtml(config, status); const existing = document.getElementById(PATH_PANEL_ID); if (existing) existing.outerHTML = html; else title.insertAdjacentHTML('afterend', html); bindPathPanel(input); }
+function bindPathPanel(input) { const panel = document.getElementById(PATH_PANEL_ID); if (!panel || panel.dataset.bound === 'true') return; panel.dataset.bound = 'true'; panel.querySelectorAll('[data-xml-cii-master-path]').forEach((field) => field.addEventListener('change', () => { const config = parseConfig(input); if (!config) return; config.masterPaths = config.masterPaths && typeof config.masterPaths === 'object' ? config.masterPaths : {}; config.masterPaths[field.getAttribute('data-xml-cii-master-path') || ''] = normalizeMasterPath(field.value); delete config.masterPaths.legacyPipingMasterPath; writeConfig(input, config); renderMasterPathsPanel(input, 'Master paths updated. Rescan XML to reload specwise piping class rows.'); })); panel.querySelector('[data-xml-cii-rescan-piping]')?.addEventListener('click', () => rescanPipingClassFromXml({ force: true, notifyUser: true }).catch((error) => notifyOnce('error', `manual:${clean(error?.message || error)}`, { level: 'error', title: 'XML->CII Masters', message: clean(error?.message || error) }))); }
 
-async function loadMaterialAndWeight(input = configInput()) { const config = parseConfig(input); if (!config || config.disableDefaultMasterAutoload === true || config._disableDefaultMasterAutoload === true) return false; const paths = masterPaths(config); const missing = Object.entries(MASTER_SECTIONS).filter(([key, section]) => key !== 'pipingClass' && rowCount(section, config[section.sectionKey]) <= 0); if (!missing.length) return false; const loaded = []; const errors = []; for (const [key, section] of missing) { try { const { rawText, url } = await fetchTextByPath(paths[section.pathKey] || DEFAULT_MASTER_PATHS[section.pathKey]); const rawRows = key === 'material' ? parseMaterialRows(rawText) : parseJsonRows(rawText); const rows = normalizeRows(key, rawRows); if (!rows.length) throw new Error(`${section.title} loaded 0 usable rows.`); const target = ensureSection(config, section); target[section.rowsKey] = rows; target[section.fieldMapKey] = { ...section.fieldMap }; target.masterUrl = url; target.defaultUrl = url; target._autoloadedRows = rows.length; target._autoloadedFrom = url; loaded.push(`${section.title}: ${rows.length} row(s)`); } catch (error) { errors.push(`${section.title}: ${clean(error?.message || error)}`); } } if (loaded.length) { config.masterPaths = config.masterPaths && typeof config.masterPaths === 'object' ? config.masterPaths : {}; Object.assign(config.masterPaths, paths); config._defaultMastersAutoloaded = { loadedAt: new Date().toISOString(), source: 'raw-first docs/Masters', loaded }; writeConfig(input, config); renderMasterPathsPanel(input, `Autoloaded ${loaded.join(' · ')}.`); notify({ level: 'success', title: 'XML->CII Masters', message: `Autoloaded ${loaded.join(' · ')}.` }); } if (errors.length) { renderStatus(`Default master autoload failed: ${errors.join(' || ')}`, 'error'); notify({ level: 'error', title: 'XML->CII Masters', message: `Default master autoload failed: ${errors.join(' || ')}` }); } return loaded.length > 0; }
+function notifyOnce(kind, key, payload) {
+  const state = sessionState();
+  const prop = kind === 'error' ? 'lastErrorNotifyKey' : (kind === 'piping' ? 'lastPipingNotifyKey' : 'lastSuccessNotifyKey');
+  if (state[prop] === key) return;
+  state[prop] = key;
+  notify(payload);
+}
+
+async function loadMaterialAndWeight(input = configInput()) {
+  const config = parseConfig(input);
+  if (!config || config.disableDefaultMasterAutoload === true || config._disableDefaultMasterAutoload === true) return false;
+  const paths = masterPaths(config);
+  const missing = Object.entries(MASTER_SECTIONS).filter(([key, section]) => key !== 'pipingClass' && rowCount(section, config[section.sectionKey]) <= 0);
+  if (!missing.length) return false;
+  const loaded = [];
+  const errors = [];
+  for (const [key, section] of missing) {
+    try {
+      const { rawText, url } = await fetchTextByPath(paths[section.pathKey] || DEFAULT_MASTER_PATHS[section.pathKey]);
+      const rawRows = key === 'material' ? parseMaterialRows(rawText) : parseJsonRows(rawText);
+      const rows = normalizeRows(key, rawRows);
+      if (!rows.length) throw new Error(`${section.title} loaded 0 usable rows.`);
+      const target = ensureSection(config, section);
+      target[section.rowsKey] = rows;
+      target[section.fieldMapKey] = { ...section.fieldMap };
+      target.masterUrl = url;
+      target.defaultUrl = url;
+      target._autoloadedRows = rows.length;
+      target._autoloadedFrom = url;
+      loaded.push(`${section.title}: ${rows.length} row(s)`);
+    } catch (error) {
+      errors.push(`${section.title}: ${clean(error?.message || error)}`);
+    }
+  }
+  if (loaded.length) {
+    config.masterPaths = config.masterPaths && typeof config.masterPaths === 'object' ? config.masterPaths : {};
+    Object.assign(config.masterPaths, paths);
+    delete config.masterPaths.legacyPipingMasterPath;
+    config._defaultMastersAutoloaded = { loadedAt: new Date().toISOString(), source: 'single-session raw-first docs/Masters', loaded };
+    writeConfig(input, config);
+    const message = `Autoloaded ${loaded.join(' · ')}.`;
+    renderMasterPathsPanel(input, message);
+    notifyOnce('success', loaded.join('|'), { level: 'success', title: 'XML->CII Masters', message });
+  }
+  if (errors.length) {
+    const message = `Default master autoload failed: ${errors.join(' || ')}`;
+    renderStatus(message, 'error');
+    notifyOnce('error', errors.join('|'), { level: 'error', title: 'XML->CII Masters', message });
+  }
+  return loaded.length > 0;
+}
 
 let rescanBusy = false;
-async function rescanPipingClassFromXml({ force = false, notifyUser = false } = {}) { if (rescanBusy) return false; const input = configInput(); const config = parseConfig(input); if (!input || !config || config.disableDefaultMasterAutoload === true) return false; const xmlFile = primaryXmlFile(); if (!xmlFile) { renderMasterPathsPanel(input, 'Piping Class: select XML, then Rescan XML to load specwise shard rows.'); return false; } rescanBusy = true; try { const paths = masterPaths(config); const xmlText = await xmlFile.text(); const branchNames = extractBranchNames(xmlText); if (!branchNames.length) { renderMasterPathsPanel(input, 'Piping Class: no Branchname values found in XML.'); return false; } const signature = JSON.stringify({ file: `${xmlFile.name}:${xmlFile.size}:${xmlFile.lastModified}`, branches: branchNames.length, index: paths.pipingClassIndexPath, folder: paths.pipingClassShardFolder }); if (!force && config.pipingClass?._rescanSignature === signature && rowCount(MASTER_SECTIONS.pipingClass, config.pipingClass) > 0) { renderMasterPathsPanel(input, `Piping Class: cached ${config.pipingClass._autoloadedRows || rowCount(MASTER_SECTIONS.pipingClass, config.pipingClass)} row(s), ${branchNames.length} branchname(s).`); return true; } renderMasterPathsPanel(input, `Scanning ${branchNames.length} XML branchname(s) against specwise piping class index…`); const indexLoad = await fetchTextByPath(paths.pipingClassIndexPath); const index = parseIndex(indexLoad.rawText); const matches = matchedClassesFromIndex(index, branchNames, config); const rows = []; const loadedFiles = []; const folder = paths.pipingClassShardFolder || index.shardBase || DEFAULT_MASTER_PATHS.pipingClassShardFolder; for (const match of matches) { const file = clean(match.meta?.file || `${match.classKey}.json`); if (!file) continue; const shard = await fetchTextByPath(joinPath(folder, file)); const shardRows = normalizeRows('pipingClass', parseJsonRows(shard.rawText)); if (shardRows.length) { rows.push(...shardRows); loadedFiles.push(file); } } const section = ensureSection(config, MASTER_SECTIONS.pipingClass); section.masterRows = rows.length ? rows : [{ ...PIPING_PLACEHOLDER_ROW }]; section.fieldMap = { ...MASTER_SECTIONS.pipingClass.fieldMap }; section.masterUrl = indexLoad.url; section.defaultUrl = indexLoad.url; section._smartMode = rows.length ? 'specwise-shard' : 'specwise-index-no-match'; section._autoloadedRows = rows.length; section._matchedClassCount = matches.length; section._loadedShardCount = loadedFiles.length; section._loadedShardFiles = loadedFiles; section._branchNameCount = branchNames.length; section._rescanSignature = signature; section._rescanAt = new Date().toISOString(); config.masterPaths = config.masterPaths && typeof config.masterPaths === 'object' ? config.masterPaths : {}; Object.assign(config.masterPaths, paths); writeConfig(input, config); const msg = rows.length ? `Piping Class: ${loadedFiles.length}/${matches.length} shard(s), ${rows.length} row(s), ${branchNames.length} branchname(s).` : `Piping Class: 0/${matches.length} shard(s), 0 row(s), ${branchNames.length} branchname(s).`; renderMasterPathsPanel(input, msg); renderStatus(msg, rows.length ? 'ok' : 'error'); if (notifyUser) notify({ level: rows.length ? 'success' : 'warning', title: 'XML->CII Masters', message: msg }); return rows.length > 0; } finally { rescanBusy = false; } }
+async function rescanPipingClassFromXml({ force = false, notifyUser = false } = {}) {
+  if (rescanBusy) return false;
+  const input = configInput();
+  const config = parseConfig(input);
+  if (!input || !config || config.disableDefaultMasterAutoload === true) return false;
+  const xmlFile = primaryXmlFile();
+  if (!xmlFile) {
+    renderMasterPathsPanel(input, 'Piping Class: select XML, then Rescan XML to load specwise shard rows.');
+    return false;
+  }
+  rescanBusy = true;
+  try {
+    const paths = masterPaths(config);
+    const xmlText = await xmlFile.text();
+    const branchNames = extractBranchNames(xmlText);
+    if (!branchNames.length) {
+      renderMasterPathsPanel(input, 'Piping Class: no Branchname values found in XML.');
+      return false;
+    }
+    const signature = JSON.stringify({ file: `${xmlFile.name}:${xmlFile.size}:${xmlFile.lastModified}`, branches: branchNames.length, index: paths.pipingClassIndexPath, folder: paths.pipingClassShardFolder });
+    if (!force && config.pipingClass?._rescanSignature === signature && rowCount(MASTER_SECTIONS.pipingClass, config.pipingClass) > 0) {
+      renderMasterPathsPanel(input, `Piping Class: cached ${config.pipingClass._autoloadedRows || rowCount(MASTER_SECTIONS.pipingClass, config.pipingClass)} row(s), ${branchNames.length} branchname(s).`);
+      return true;
+    }
+    renderMasterPathsPanel(input, `Scanning ${branchNames.length} XML branchname(s) against specwise piping class index…`);
+    const indexLoad = await fetchTextByPath(paths.pipingClassIndexPath);
+    const index = parseIndex(indexLoad.rawText);
+    const matches = matchedClassesFromIndex(index, branchNames, config);
+    const rows = [];
+    const loadedFiles = [];
+    const folder = paths.pipingClassShardFolder || index.shardBase || DEFAULT_MASTER_PATHS.pipingClassShardFolder;
+    for (const match of matches) {
+      const file = clean(match.meta?.file || `${match.classKey}.json`);
+      if (!file) continue;
+      const shard = await fetchTextByPath(joinPath(folder, file));
+      const shardRows = normalizeRows('pipingClass', parseJsonRows(shard.rawText));
+      if (shardRows.length) { rows.push(...shardRows); loadedFiles.push(file); }
+    }
+    const section = ensureSection(config, MASTER_SECTIONS.pipingClass);
+    section.masterRows = rows.length ? rows : [{ ...PIPING_PLACEHOLDER_ROW }];
+    section.fieldMap = { ...MASTER_SECTIONS.pipingClass.fieldMap };
+    section.masterUrl = indexLoad.url;
+    section.defaultUrl = indexLoad.url;
+    section._smartMode = rows.length ? 'specwise-shard' : 'specwise-index-no-match';
+    section._autoloadedRows = rows.length;
+    section._matchedClassCount = matches.length;
+    section._loadedShardCount = loadedFiles.length;
+    section._loadedShardFiles = loadedFiles;
+    section._branchNameCount = branchNames.length;
+    section._rescanSignature = signature;
+    section._rescanAt = new Date().toISOString();
+    config.masterPaths = config.masterPaths && typeof config.masterPaths === 'object' ? config.masterPaths : {};
+    Object.assign(config.masterPaths, paths);
+    delete config.masterPaths.legacyPipingMasterPath;
+    writeConfig(input, config);
+    const msg = rows.length ? `Piping Class: ${loadedFiles.length}/${matches.length} shard(s), ${rows.length} row(s), ${branchNames.length} branchname(s).` : `Piping Class: 0/${matches.length} shard(s), 0 row(s), ${branchNames.length} branchname(s).`;
+    renderMasterPathsPanel(input, msg);
+    renderStatus(msg, rows.length ? 'ok' : 'error');
+    if (notifyUser) notifyOnce('piping', msg, { level: rows.length ? 'success' : 'warning', title: 'XML->CII Masters', message: msg });
+    return rows.length > 0;
+  } finally {
+    rescanBusy = false;
+  }
+}
 
-let scheduled = false;
-function scheduleAutoload(delay = 0) { if (scheduled) return; scheduled = true; setTimeout(async () => { scheduled = false; const input = configInput(); if (!input) return; renderMasterPathsPanel(input); await loadMaterialAndWeight(input); await rescanPipingClassFromXml({ force: false }); renderMasterPathsPanel(input); }, delay); }
+function scheduleAutoload(delay = 0) {
+  const state = sessionState();
+  if (state.scheduled) return;
+  state.scheduled = true;
+  setTimeout(() => runAutoloadSession().catch((error) => {
+    const message = clean(error?.message || error);
+    renderStatus(`Default master autoload failed: ${message}`, 'error');
+    notifyOnce('error', `session:${message}`, { level: 'error', title: 'XML->CII Masters', message: `Default master autoload failed: ${message}` });
+  }), delay);
+}
 
-export function installXmlCiiDefaultMasterAutoload() { if (!browserReady()) return; if (window[FLAG]) return; window[FLAG] = true; document.addEventListener('change', (event) => { if (event.target?.matches?.(`${INPUT_SELECTOR}, ${PRIMARY_FILE_SELECTOR}`)) scheduleAutoload(0); }, true); document.addEventListener('input', (event) => { if (event.target?.matches?.(INPUT_SELECTOR)) scheduleAutoload(80); }, true); document.addEventListener('click', (event) => { if (event.target?.closest?.('[data-xml-cii-phase], [data-native-master-tab], [data-xml-cii-save-master], [data-xml-cii-master-tab]')) scheduleAutoload(0); }, true); const observer = new MutationObserver(() => { if (phaseTitle(/Import Masters/i)) scheduleAutoload(80); }); observer.observe(document.body, { childList: true, subtree: true }); scheduleAutoload(0); }
+async function runAutoloadSession() {
+  const state = sessionState();
+  state.scheduled = false;
+  if (state.running) {
+    state.pending = true;
+    return;
+  }
+  state.running = true;
+  try {
+    const input = configInput();
+    if (!input) return;
+    renderMasterPathsPanel(input);
+    await loadMaterialAndWeight(input);
+    await rescanPipingClassFromXml({ force: false, notifyUser: false });
+    renderMasterPathsPanel(input);
+  } finally {
+    state.running = false;
+    if (state.pending) {
+      state.pending = false;
+      scheduleAutoload(120);
+    }
+  }
+}
 
-export function installXmlCiiRecoveryPatch() { if (!browserReady()) return; if (window[RECOVERY_FLAG]) return; window[RECOVERY_FLAG] = true; if (typeof globalThis !== 'undefined' && !globalThis.isXmlCiiRigidNode) Object.defineProperty(globalThis, 'isXmlCiiRigidNode', { value: isXmlCiiRigidNode, configurable: true }); scheduleAutoload(0); }
+export function installXmlCiiDefaultMasterAutoload() {
+  if (!browserReady()) return;
+  if (window[FLAG]) return;
+  window[FLAG] = true;
+  document.addEventListener('change', (event) => { if (event.target?.matches?.(`${INPUT_SELECTOR}, ${PRIMARY_FILE_SELECTOR}`)) scheduleAutoload(0); }, true);
+  document.addEventListener('input', (event) => { if (event.target?.matches?.(INPUT_SELECTOR)) scheduleAutoload(250); }, true);
+  document.addEventListener('click', (event) => { if (event.target?.closest?.('[data-xml-cii-phase], [data-native-master-tab], [data-xml-cii-save-master], [data-xml-cii-master-tab]')) scheduleAutoload(0); }, true);
+  scheduleAutoload(0);
+}
+
+export function installXmlCiiRecoveryPatch() {
+  if (!browserReady()) return;
+  if (window[RECOVERY_FLAG]) return;
+  window[RECOVERY_FLAG] = true;
+  if (typeof globalThis !== 'undefined' && !globalThis.isXmlCiiRigidNode) Object.defineProperty(globalThis, 'isXmlCiiRigidNode', { value: isXmlCiiRigidNode, configurable: true });
+}
