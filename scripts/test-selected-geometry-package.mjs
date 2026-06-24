@@ -31,7 +31,16 @@ const pipe = {
     WALL_THICK: '12.7',
     APOS: { x: 0, y: 0, z: 0 },
     LPOS: { x: 10750, y: 0, z: 0 },
+    supportLoadInput: {
+      schema: 'support-load-input/v1',
+      readiness: { readyForVertical: true },
+    },
   },
+  calculatedFields: {
+    supportLoads: { vertical: { opeVDep: 13000 } },
+    supportLoadReference: { supportIds: ['SUP-100-A'] },
+  },
+  supportLoadFormulaResults: { stale: true },
 };
 const support = {
   id: 'SUP-100-A',
@@ -40,6 +49,10 @@ const support = {
     TYPE: 'ATTA',
     OWNER: '/AREA/8-L100-STEAM/SUPPORT',
     APOS: { x: 5000, y: -100, z: 0 },
+    supportLoadInputRef: { pipeId: 'PIPE-100-A' },
+  },
+  calculatedFields: {
+    supportLoads: { supportId: 'SUP-100-A' },
   },
 };
 const scope = buildSelectedGeometryScope({
@@ -84,6 +97,21 @@ assert.strictEqual(packageJson.enrichment.stats.objects, 2);
 assert.strictEqual(packageJson.geometry.objects[0].sourceAttributes.WALL_THICK, '12.7');
 assert.strictEqual(pipe.attributes.enrichment, undefined);
 
+const packagePipe = packageJson.geometry.objects.find((object) => object.id === 'PIPE-100-A');
+const packageSupport = packageJson.geometry.objects.find((object) => object.id === 'SUP-100-A');
+assert.ok(packagePipe.attributes.enrichment, 'DB enrichment block must be retained in package');
+assert.strictEqual(packagePipe.sourceAttributes.WALL_THICK, '12.7', 'source geometry fields must be retained');
+assert.strictEqual(packagePipe.calculatedFields, undefined, 'calculated fields must not be exported from 3D_Viewer');
+assert.strictEqual(packagePipe.supportLoadFormulaResults, undefined, 'formula results must not be exported from 3D_Viewer');
+assert.strictEqual(packagePipe.attributes.supportLoadInput, undefined, 'calculation input packages belong in Simplified_Analysis');
+assert.strictEqual(packageSupport.calculatedFields, undefined, 'support calculated fields must not be exported');
+assert.strictEqual(packageSupport.attributes.supportLoadInputRef, undefined, 'support load refs belong in Simplified_Analysis');
+
+const serializedPackage = JSON.stringify(packageJson);
+assert.ok(!serializedPackage.includes('support-load-input/v1'), 'DB package must not include support-load input schemas');
+assert.ok(!serializedPackage.includes('opeVDep'), 'DB package must not include calculated vertical load values');
+assert.ok(!serializedPackage.includes('supportLoadReference'), 'DB package must not include support-load references');
+
 const fileName = selectedGeometryWorkspacePackageFileName({
   sourceFileName: 'BM_CII.rvm',
   scopeMode: 'selected',
@@ -105,5 +133,6 @@ const writeResult = writePendingWorkspacePackageToStorage(packageJson, storage);
 assert.strictEqual(writeResult.status, 'written');
 assert.strictEqual(storage.key, PENDING_WORKSPACE_PACKAGE_STORAGE_KEY);
 assert.ok(storage.value.includes('BM_CII'));
+assert.ok(!storage.value.includes('supportLoadInput'));
 
 console.log('selected geometry package tests passed');
