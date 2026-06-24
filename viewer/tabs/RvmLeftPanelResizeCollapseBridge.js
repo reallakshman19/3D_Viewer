@@ -117,12 +117,12 @@ function applyStoredPanelWidth(root, side) {
 }
 
 function setPanelWidth(root, side, value) {
-  const legacyVariable = side === 'left' ? '--rvm-left-w' : '--rvm-right-w';
+  const variable = side === 'left' ? '--rvm-left-w' : '--rvm-right-w';
   const contractVariable = side === 'left' ? '--rvm-left-panel-width' : '--rvm-right-panel-width';
   const body = root?.querySelector?.('.rvm-body');
-  root?.style?.setProperty(legacyVariable, value);
+  root?.style?.setProperty(variable, value);
   root?.style?.setProperty(contractVariable, value);
-  body?.style?.setProperty(legacyVariable, value);
+  body?.style?.setProperty(variable, value);
   body?.style?.setProperty(contractVariable, value);
   try { localStorage.setItem(PANEL_WIDTH_KEYS[side], value); } catch (_) {}
   try { window.dispatchEvent(new Event('resize')); } catch (_) {}
