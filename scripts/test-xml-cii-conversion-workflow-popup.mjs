@@ -17,6 +17,7 @@ function assert(condition, message) {
 
 const files = {
   workflowPopup: 'viewer/tabs/model-converters/xml-cii-workflow-popup.js',
+  workflowModal: 'viewer/tabs/model-converters/shared/WorkflowModal.js',
   bridge: 'viewer/tabs/model-converters/xml-cii-workflow-bridge.js',
   runner: 'viewer/tabs/model-converters/xml-cii-workflow-runner.js',
   buttonScope: 'viewer/tabs/model-converters/xml-cii-workflow-button-scope.js',
@@ -33,6 +34,7 @@ for (const rel of Object.values(files)) {
 }
 
 const workflowPopup = read(files.workflowPopup);
+const workflowModal = read(files.workflowModal);
 const bridge = read(files.bridge);
 const runner = read(files.runner);
 const buttonScope = read(files.buttonScope);
@@ -59,12 +61,21 @@ assert(workflowPopup.includes('XML->CII(2019) Workflow 1'), 'Workflow 1 popup ti
 assert(workflowPopup.includes('XML->CII(2019) Workflow 2'), 'Workflow 2 popup title must be explicit');
 assert(workflowPopup.includes('Import masters, map fields, inspect diagnostics, and run enriched CII conversion.'), 'Workflow 1 popup subtitle must match requested copy');
 assert(workflowPopup.includes('Import masters, map fields, and maintain manual overrides in a standalone-ready config.'), 'Workflow 2 popup subtitle must match requested copy');
-assert(workflowPopup.includes("xmlCiiWorkflowBindLauncher(container, 'workflow1')"), 'popup module must bind Workflow 1 launcher');
-assert(workflowPopup.includes("xmlCiiWorkflowBindLauncher(container, 'workflow2')"), 'popup module must bind Workflow 2 launcher');
+assert(workflowPopup.includes("xmlCiiWorkflowBindLauncher(container, 'workflow1')"), 'popup module must keep direct Workflow 1 launcher binding');
+assert(workflowPopup.includes("xmlCiiWorkflowBindLauncher(container, 'workflow2')"), 'popup module must keep direct Workflow 2 launcher binding');
+assert(workflowPopup.includes('xmlCiiWorkflowBindDelegatedLauncher'), 'popup module must delegate launcher clicks from the stable root so future-created buttons respond');
+assert(workflowPopup.includes('data-xml-cii-workflow-launcher'), 'delegated popup launcher binding must catch current and future Workflow 1/2 buttons');
+assert(workflowPopup.includes('XML_CII_WORKFLOW_DELEGATED_DATASET_KEY'), 'delegated popup launcher binding must be guarded once per model-converters root');
+assert(workflowPopup.includes('WorkflowModal.js?v=20260624-workflow-tabs-fix-1'), 'popup module must cache-bust the modal delegated-tab binding');
 assert(workflowPopup.includes('stopImmediatePropagation'), 'popup click handler must block stale duplicate popup listeners');
 assert(workflowPopup.includes('{ capture: true }'), 'popup click handler must bind in capture phase');
 assert(!workflowPopup.includes("document.querySelector('#model-converters-run')"), 'popup module must not directly click legacy Run Conversion');
 assert(!workflowPopup.includes('./legacy-adapter.js'), 'popup module must not import legacy adapter directly');
+assert(workflowPopup.includes('xmlCiiWorkflowRenderError'), 'popup phase rendering must fail visibly instead of making tabs look inert');
+
+assert(workflowModal.includes('data-modal-tabs'), 'modal must expose a stable tab host');
+assert(workflowModal.includes("tabHost.addEventListener('click'"), 'modal phase tabs must use delegated host click handling');
+assert(workflowModal.includes('data-modal-tab'), 'modal delegated handler must target phase tab buttons');
 
 assert(bridge.includes('./legacy-adapter.js'), 'legacy adapter dependency must remain isolated to bridge boundary');
 assert(bridge.includes('ensureDefaultMastersLoaded = async () => null'), 'bridge must block obsolete default-master preload');
@@ -76,7 +87,7 @@ assert(runner.includes("document.querySelector('#model-converters-run')"), 'lega
 assert(modelTab.includes('installXmlCiiWorkflowButtonScope'), 'ModelConvertersTab must install button scope');
 assert(modelTab.includes('installXmlCiiWorkflowPopup'), 'ModelConvertersTab must install workflow popup binding');
 assert(!modelTab.includes('installXmlCiiWorkflowHotfix'), 'ModelConvertersTab must not install the retired workflow hotfix module');
-assert(modelTab.includes('20260624-workflow-consolidation-1'), 'ModelConvertersTab must be cache-busted for workflow consolidation');
+assert(modelTab.includes('20260624-workflow-tabs-fix-1'), 'ModelConvertersTab must be cache-busted for delegated workflow tab click fix');
 
 assert(oldGenericShim.includes('Deprecated compatibility shim'), 'old generic popup filename must remain a compatibility shim');
 assert(oldRichShim.includes('Deprecated compatibility shim'), 'old rich popup filename must remain a compatibility shim');
@@ -96,5 +107,6 @@ console.log('XML CII workflow popup identity smoke validation passed', {
   workflow1: 'baseline enriched conversion workflow popup',
   workflow2: 'enhanced customization workflow popup with per-master preview rows',
   duplicateGuard: 'capture-phase stopImmediatePropagation and foreign overlay cleanup',
+  clickReliability: 'delegated root launcher clicks + delegated modal phase tabs',
   consolidation: 'workflow hotfix removed from active importer; bridge owns condense state',
 });

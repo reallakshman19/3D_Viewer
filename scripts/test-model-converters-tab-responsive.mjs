@@ -10,6 +10,7 @@ const files = {
   tab: 'viewer/tabs/model-converters/ModelConvertersTab.js',
   buttonScope: 'viewer/tabs/model-converters/xml-cii-workflow-button-scope.js',
   workflowPopup: 'viewer/tabs/model-converters/xml-cii-workflow-popup.js',
+  workflowModal: 'viewer/tabs/model-converters/shared/WorkflowModal.js',
   workflowBridge: 'viewer/tabs/model-converters/xml-cii-workflow-bridge.js',
   nativePanels: 'viewer/tabs/model-converters/xml-cii-popup-native-panels.js',
   simpleController: 'viewer/tabs/model-converters/xml-cii-simple-workflow-controller.js',
@@ -51,7 +52,7 @@ for (const token of [
 }
 
 assert(/xml-cii-workflow-button-scope\.js\?v=20260624-workflow-consolidation-1/.test(source.tab), 'button scope must use consolidation cache key');
-assert(/xml-cii-workflow-popup\.js\?v=20260624-workflow-consolidation-1/.test(source.tab), 'workflow popup must use consolidation cache key');
+assert(/xml-cii-workflow-popup\.js\?v=20260624-workflow-tabs-fix-1/.test(source.tab), 'workflow popup must use phase-tab fix cache key');
 assert(/xml-cii-branch-sample-sync\.js\?v=20260624-workflow-consolidation-1/.test(source.tab), 'branch sample service must use consolidation cache key');
 assert(/installXmlCiiDefaultMasterAutoloadLite/.test(source.tab), 'canonical tab must keep lightweight one-shot XML CII master autoload');
 assert(!/installXmlCiiDefaultMasterAutoload[^L]/.test(source.tab), 'canonical tab must not install the legacy broad-listener master autoload');
@@ -77,12 +78,21 @@ assert(!/function interceptRun/.test(source.workflowPopup), 'workflow popup must
 assert(!/document\.addEventListener\('click', interceptRun, true\)/.test(source.workflowPopup), 'workflow popup must not capture the legacy Run Conversion click');
 assert(/XML->CII\(2019\) Workflow 1/.test(source.workflowPopup), 'Workflow 1 popup title must be explicit');
 assert(/XML->CII\(2019\) Workflow 2/.test(source.workflowPopup), 'Workflow 2 popup title must be explicit');
-assert(/xmlCiiWorkflowBindLauncher\(container, 'workflow1'\)/.test(source.workflowPopup), 'popup module must bind the Workflow 1 launcher');
-assert(/xmlCiiWorkflowBindLauncher\(container, 'workflow2'\)/.test(source.workflowPopup), 'popup module must bind the Workflow 2 launcher');
+assert(/xmlCiiWorkflowBindDelegatedLauncher/.test(source.workflowPopup), 'popup module must delegate launcher clicks from the stable model-converters root');
+assert(/XML_CII_WORKFLOW_DELEGATED_DATASET_KEY/.test(source.workflowPopup), 'delegated launcher binding must be installed once per root');
+assert(/data-xml-cii-workflow-launcher/.test(source.workflowPopup), 'delegated launcher binding must catch future-created Workflow 1/2 buttons');
+assert(/WorkflowModal\.js\?v=20260624-workflow-tabs-fix-1/.test(source.workflowPopup), 'workflow popup must cache-bust the modal delegated-tab implementation');
+assert(/xmlCiiWorkflowBindLauncher\(container, 'workflow1'\)/.test(source.workflowPopup), 'popup module must keep direct Workflow 1 launcher binding for existing buttons');
+assert(/xmlCiiWorkflowBindLauncher\(container, 'workflow2'\)/.test(source.workflowPopup), 'popup module must keep direct Workflow 2 launcher binding for existing buttons');
 assert(/stopImmediatePropagation/.test(source.workflowPopup), 'workflow popup click handler must block stale cached popup listeners on the same click');
 assert(/xmlCiiWorkflowCloseForeignXmlCiiWorkflowOverlays/.test(source.workflowPopup), 'workflow popup must close duplicate legacy XML CII workflow overlays');
 assert(/xmlCiiWorkflowScheduleRenderPhase/.test(source.workflowPopup), 'workflow popup must schedule heavy phase/master rerenders outside click/change handlers');
-assert(/requestAnimationFrame\(\(\) =>/.test(source.workflowPopup), 'workflow popup scheduled rendering must use requestAnimationFrame');
+assert(/requestAnimationFrame/.test(source.workflowPopup), 'workflow popup scheduled rendering must use requestAnimationFrame when available');
+assert(/xmlCiiWorkflowRenderError/.test(source.workflowPopup), 'workflow popup must surface render errors instead of making tabs look inert');
+
+assert(/data-modal-tabs/.test(source.workflowModal), 'workflow modal must expose a stable tab host');
+assert(/tabHost\.addEventListener\('click'/.test(source.workflowModal), 'workflow modal must delegate phase tab clicks from the tab host');
+assert(/data-modal-tab/.test(source.workflowModal), 'workflow modal delegated handler must target data-modal-tab buttons');
 
 assert(/ensureDefaultMastersLoaded = async \(\) => null/.test(source.workflowBridge), 'workflow bridge must block obsolete legacy default-master preload');
 assert(/masterKey === 'pipingClass'/.test(source.workflowBridge), 'workflow bridge must block obsolete aggregate piping-class default load');
@@ -123,6 +133,7 @@ assert(/installXmlCiiWorkflowPopup as installXmlCiiRichWorkflowPopup/.test(sourc
 console.log('model converters tab XML CII workflow consolidation guard passed', {
   xmlCiiLeftPanel: 'popup-only: Workflow 1 + Workflow 2, no generic advanced options',
   activePatchModules: 'removed from ModelConvertersTab active import path',
+  clickReliability: 'delegated root launcher clicks + delegated modal phase tabs',
   masterTabResponsiveness: 'scheduled popup rendering + cached bridge snapshot + explicit runtime override sync',
   startupNoise: 'no repeated startup repair setTimeout loops in XML CII shell/button/simple/branch services',
 });
