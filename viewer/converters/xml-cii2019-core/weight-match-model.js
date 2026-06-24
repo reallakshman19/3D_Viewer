@@ -64,31 +64,26 @@ function xmlSetText(document, parent, localName, value) {
 
 function normalizePoint(point) {
   if (point === undefined || point === null || point === '') return null;
-
   if (Array.isArray(point) && point.length >= 3) {
     const x = Number(point[0]);
     const y = Number(point[1]);
     const z = Number(point[2]);
     return Number.isFinite(x) && Number.isFinite(y) && Number.isFinite(z) ? { x, y, z } : null;
   }
-
   if (typeof point === 'object') {
     const x = Number(point.x ?? point.X);
     const y = Number(point.y ?? point.Y);
     const z = Number(point.z ?? point.Z);
     return Number.isFinite(x) && Number.isFinite(y) && Number.isFinite(z) ? { x, y, z } : null;
   }
-
   const text = toText(point).trim();
   const tokens = text.split(/\s+/g);
   const directional = { x: 0, y: 0, z: 0 };
   let parsedDirectional = false;
-
   for (let i = 0; i < tokens.length - 1; i += 2) {
     const axis = tokens[i].toUpperCase();
     const value = parseNumericMm(tokens[i + 1]);
     if (!Number.isFinite(value)) continue;
-
     if (axis === 'E') { directional.x = value; parsedDirectional = true; }
     else if (axis === 'W') { directional.x = -value; parsedDirectional = true; }
     else if (axis === 'N') { directional.y = value; parsedDirectional = true; }
@@ -96,7 +91,6 @@ function normalizePoint(point) {
     else if (axis === 'U') { directional.z = value; parsedDirectional = true; }
     else if (axis === 'D') { directional.z = -value; parsedDirectional = true; }
   }
-
   if (parsedDirectional) return directional;
   const values = text.match(/-?\d+(?:\.\d+)?/g)?.map(Number).filter(Number.isFinite) || [];
   return values.length >= 3 ? { x: values[0], y: values[1], z: values[2] } : null;
@@ -109,9 +103,10 @@ function xmlPositionKey(positionText, tolerance) {
   return [point.x, point.y, point.z].map((value) => Math.round(value / tol)).join('|');
 }
 
-function normalizeSupportTag(value) {
-  const match = toText(value).trim().toUpperCase().replace(/^\/+/, '').match(/PS-\d+(?:\.\d+)?/i);
-  return match ? match[0].replace(/\.\d+$/, '') : '';
+export function normalizeSupportTag(value) {
+  const text = toText(value).trim().toUpperCase().replace(/^\/+/, '').replace(/\s+/g, ' ');
+  const match = text.match(/PS-\d+(?:\.\d+)?/i);
+  return match ? match[0].toUpperCase() : '';
 }
 
 function supportTagsFromText(value) {
@@ -144,28 +139,22 @@ function walkStagedComponents(value, branchName = '', out = []) {
     return out;
   }
   if (!value || typeof value !== 'object') return out;
-
   const attrs = value.attributes && typeof value.attributes === 'object' ? value.attributes : {};
   const type = toText(value.type || attrs.TYPE).toUpperCase();
-  const currentBranch = type === 'BRANCH' || Array.isArray(value.children)
-    ? toText(value.name || attrs.NAME || attrs.OWNER || branchName)
-    : branchName;
+  const currentBranch = type === 'BRANCH' || Array.isArray(value.children) ? toText(value.name || attrs.NAME || attrs.OWNER || branchName) : branchName;
   out.push({ component: value, attrs, branchName: currentBranch });
   if (Array.isArray(value.children)) value.children.forEach((child) => walkStagedComponents(child, currentBranch, out));
   return out;
 }
 
-export function buildStagedComponentIndex(stagedJsonText, config) {
+export function buildStagedComponentIndex(stagedJsonText, config = {}) {
   const empty = { byCoord: new Map(), byTag: new Map(), count: 0 };
   if (!toText(stagedJsonText).trim()) return empty;
-
   let parsed = null;
   try { parsed = JSON.parse(stagedJsonText); } catch { return empty; }
-
   const byCoord = new Map();
   const byTag = new Map();
   let count = 0;
-
   for (const entry of walkStagedComponents(parsed)) {
     const attrs = entry.attrs || {};
     let point = null;
@@ -173,7 +162,6 @@ export function buildStagedComponentIndex(stagedJsonText, config) {
       point = normalizePoint(attrs[key]);
       if (point) break;
     }
-
     const indexed = { ...entry, point };
     if (point) {
       const key = xmlPositionKey(`${point.x} ${point.y} ${point.z}`, toFiniteNumber(config.coordinateTolerance, 1));
@@ -188,18 +176,15 @@ export function buildStagedComponentIndex(stagedJsonText, config) {
     }
     count += 1;
   }
-
   return { byCoord, byTag, count };
 }
 
-export function stagedComponentForXmlNode(node, stagedIndex, config) {
+export function stagedComponentForXmlNode(node, stagedIndex, config = {}) {
   if (!stagedIndex || stagedIndex.count <= 0) return { match: null, method: '' };
-
   for (const tag of xmlNodeSupportTags(node)) {
     const matches = stagedIndex.byTag.get(tag) || [];
     if (matches.length) return { match: matches[0], method: `PS tag ${tag}` };
   }
-
   const positionKey = xmlPositionKey(xmlText(node, 'Position'), toFiniteNumber(config.coordinateTolerance, 1));
   const coordMatches = positionKey ? (stagedIndex.byCoord.get(positionKey) || []) : [];
   return coordMatches.length ? { match: coordMatches[0], method: 'coordinate' } : { match: null, method: '' };
@@ -235,9 +220,7 @@ export function xmlCiiWeightCandidateFromRow(row, config, lengthMm) {
   const rowRating = normalizedXmlCiiRating(rowText(row, ['ratingClass', 'rating', 'Rating', 'RATING', 'Class', 'CLASS', 'Pressure Class']));
   const valveType = weightType(row);
   const typeDesc = weightTypeDesc(row);
-  return rowBore === null || rowLength === null || rowWeight === null
-    ? null
-    : { weight: rowWeight, rowBore, rowLength, rowRating, valveType, type: valveType, typeDesc, rowData: row };
+  return rowBore === null || rowLength === null || rowWeight === null ? null : { weight: rowWeight, rowBore, rowLength, rowRating, valveType, type: valveType, typeDesc, rowData: row };
 }
 
 export function findWeightMasterMatch(params, config) {
@@ -301,33 +284,21 @@ export function xmlCiiForwardElementLengths(nodes) {
     const point = normalizePoint(positionText);
     return point ? [point.x, point.z, -point.y] : null;
   };
-
   for (let j = 0; j < nodes.length; j += 1) {
     const toNumber = Number(xmlText(nodes[j], 'NodeNumber'));
     if (!Number.isFinite(toNumber) || toNumber <= 0) continue;
     const toPosition = xmlText(nodes[j], 'Position');
     if (!toPosition) continue;
-
     let fromPosition = null;
     for (let i = j - 1; i >= 0; i -= 1) {
       const fromNumber = Number(xmlText(nodes[i], 'NodeNumber'));
-      if (Number.isFinite(fromNumber) && fromNumber > 0) {
-        fromPosition = xmlText(nodes[i], 'Position');
-        break;
-      }
+      if (Number.isFinite(fromNumber) && fromNumber > 0) { fromPosition = xmlText(nodes[i], 'Position'); break; }
     }
-    if (!fromPosition) continue;
-
     const from = mapPositionToCii(fromPosition);
     const to = mapPositionToCii(toPosition);
     if (!from || !to) continue;
-
-    const dx = to[0] - from[0];
-    const dy = to[1] - from[1];
-    const dz = to[2] - from[2];
-    out[j] = Math.sqrt(dx * dx + dy * dy + dz * dz);
+    out[j] = Math.sqrt(((to[0] - from[0]) ** 2) + ((to[1] - from[1]) ** 2) + ((to[2] - from[2]) ** 2));
   }
-
   return out;
 }
 
@@ -361,10 +332,7 @@ function lineListRowForBranch(branchName, config) {
   const lineKey = deriveLineKeyFromBranchName(branchName, config);
   const wanted = normalizeLineKey(lineKey);
   if (!wanted) return { lineKey: '', row: null };
-  for (const row of rows) {
-    const raw = lineListRowKey(row, config);
-    if (normalizeLineKey(raw) === wanted) return { lineKey, row };
-  }
+  for (const row of rows) if (normalizeLineKey(lineListRowKey(row, config)) === wanted) return { lineKey, row };
   return { lineKey, row: null };
 }
 
@@ -418,13 +386,7 @@ function overrideText(config, bucketName, keys = []) {
 }
 
 function ratingOverrideForBranch(config, { lineKey, branchName, lineRow, requestedPipingClass }) {
-  const candidates = [
-    lineKey,
-    branchName,
-    requestedPipingClass,
-    lineListRowKey(lineRow, config),
-    rowText(lineRow, ['lineNoKey', 'lineNo', 'lineKey', 'LineNo', 'Line No', 'Line Number', 'PipelineReference']),
-  ].filter(Boolean);
+  const candidates = [lineKey, branchName, requestedPipingClass, lineListRowKey(lineRow, config), rowText(lineRow, ['lineNoKey', 'lineNo', 'lineKey', 'LineNo', 'Line No', 'Line Number', 'PipelineReference'])].filter(Boolean);
   const direct = overrideText(config, 'rating', candidates);
   if (direct) return direct;
   for (const key of candidates) {
@@ -444,33 +406,9 @@ function resolveRigidWeightBranchContext(branch, config, pipingClassIndex) {
   const resolverLineRow = { ...(lineRow || {}), pipingClass: requestedPipingClass };
   if (manualRating || lineRating) resolverLineRow.rating = manualRating || lineRating;
   const boreMm = branchBoreFromFirstUsefulNode(branch);
-  const resolved = resolveBranchProcessData({
-    branchName,
-    lineKey,
-    lineRow: resolverLineRow,
-    boreMm,
-    componentType: 'PIPE',
-    rating: manualRating || lineRating,
-    materialMap: config.material?.mapRows || [],
-    pipingClassIndex,
-    overrides: config.overrides || {},
-    xmlNode: null,
-    xmlBranch: branch,
-    config,
-  });
+  const resolved = resolveBranchProcessData({ branchName, lineKey, lineRow: resolverLineRow, boreMm, componentType: 'PIPE', rating: manualRating || lineRating, materialMap: config.material?.mapRows || [], pipingClassIndex, overrides: config.overrides || {}, xmlNode: null, xmlBranch: branch, config });
   const rating = manualRating || resolved.rating || lineRating;
-  return {
-    branchName,
-    lineKey,
-    lineRow: resolverLineRow,
-    boreMm,
-    requestedPipingClass: resolverLineRow.pipingClass,
-    resolvedPipingClass: resolved.pipingClass,
-    rating,
-    pipingClassMatchMethod: resolved.pipingClassMatchMethod,
-    pipingClassNeedsReview: resolved.pipingClassNeedsReview,
-    pipingClassCandidates: resolved.pipingClassCandidates || [],
-  };
+  return { branchName, lineKey, lineRow: resolverLineRow, boreMm, requestedPipingClass: resolverLineRow.pipingClass, resolvedPipingClass: resolved.pipingClass, rating, pipingClassMatchMethod: resolved.pipingClassMatchMethod, pipingClassNeedsReview: resolved.pipingClassNeedsReview, pipingClassCandidates: resolved.pipingClassCandidates || [] };
 }
 
 function ratingForRigidWeightIssue(node, branchContext, config) {
@@ -484,95 +422,41 @@ function collectWeightRows(xmlTextVal, stagedJsonText, config, mode = 'zero-rigi
   if (typeof DOMParser === 'undefined') return [];
   const document = new DOMParser().parseFromString(toText(xmlTextVal), 'application/xml');
   if (document.getElementsByTagName('parsererror').length) return [];
-
   const dtxrContext = buildDtxrContext(stagedJsonText, config);
   const pipingClassIndex = buildPipingClassIndex(config.pipingClass?.masterRows || []);
   const rows = [];
-
   for (const branch of [...document.getElementsByTagName('Branch')]) {
     const branchContext = resolveRigidWeightBranchContext(branch, config, pipingClassIndex);
     const branchName = branchContext.branchName;
     const branchNodeList = xmlChildrenByName(branch, 'Node');
     const forwardLengths = xmlCiiForwardElementLengths(branchNodeList);
-
     branchNodeList.forEach((node, nodeIdx) => {
       const nodeNumber = xmlText(node, 'NodeNumber');
       if (Number(nodeNumber) <= 0) return;
-
       const dtxrResult = resolveWeightDtxr(node, dtxrContext, config);
       const dtxrText = dtxrResult?.suppressed ? '' : toText(dtxrResult?.canonicalText);
       const componentType = xmlText(node, 'ComponentType');
       const reviewNode = isXmlCiiWeightReviewNode(node, dtxrText);
-      const lengthRaw = xmlText(node, 'ElementLengthMm');
-      const explicitLength = lengthRaw ? xmlCiiNumberText(lengthRaw) : null;
+      const explicitLength = xmlText(node, 'ElementLengthMm') ? xmlCiiNumberText(xmlText(node, 'ElementLengthMm')) : null;
       const lengthMm = explicitLength !== null ? explicitLength : forwardLengths[nodeIdx];
       const weight = xmlCiiNumberText(xmlText(node, 'Weight'));
       const overrideWeight = xmlCiiRigidWeightOverrideForNode(branchName, node, config);
       const mappedWeight = overrideWeight ?? weight;
       const isMapped = mappedWeight !== null && mappedWeight > 0;
-
       if (mode === 'all-review-nodes') {
         if (!reviewNode || lengthMm === null || lengthMm <= 6) return;
-      } else if (!isXmlCiiRigidNode(node) || lengthMm === null || (weight !== null && Math.abs(weight) > 1e-12)) {
-        return;
-      }
-
+      } else if (!isXmlCiiRigidNode(node) || lengthMm === null || (weight !== null && Math.abs(weight) > 1e-12)) return;
       let boreMm = xmlCiiNumberText(xmlText(node, 'BoreMm'));
       if (boreMm === null) {
         const od = xmlCiiNumberText(xmlText(node, 'OutsideDiameter'));
         if (od !== null) boreMm = nominalDnFromOd(od);
       }
       if (boreMm === null) boreMm = branchContext.boreMm;
-
       const rating = ratingForRigidWeightIssue(node, branchContext, config);
-      const ranking = rankXmlCiiWeightCandidates({
-        boreMm,
-        rating,
-        lengthMm,
-        nodeName: xmlText(node, 'NodeName'),
-        componentType,
-        componentRefNo: xmlText(node, 'ComponentRefNo'),
-        dtxr: dtxrText,
-      }, config, { includeRejected: true });
-
-      rows.push({
-        key: xmlCiiRigidWeightOverrideKey(branchName, nodeNumber),
-        branchName,
-        lineKey: branchContext.lineKey,
-        nodeNumber,
-        nodeName: xmlText(node, 'NodeName'),
-        componentType,
-        componentRefNo: xmlText(node, 'ComponentRefNo'),
-        boreMm,
-        rating,
-        requestedPipingClass: branchContext.requestedPipingClass,
-        resolvedPipingClass: branchContext.resolvedPipingClass,
-        pipingClassMatchMethod: branchContext.pipingClassMatchMethod,
-        pipingClassNeedsReview: branchContext.pipingClassNeedsReview,
-        pipingClassCandidates: branchContext.pipingClassCandidates,
-        lengthMm,
-        elementLengthSource: explicitLength !== null ? 'ElementLengthMm' : 'computed-forward',
-        weight: mappedWeight,
-        originalWeight: weight,
-        overrideWeight,
-        weightSource: overrideWeight !== null ? 'override' : (weight !== null && weight > 0 ? 'xml-weight' : 'unresolved'),
-        mapped: isMapped,
-        status: isMapped ? 'mapped' : 'unresolved',
-        dtxr: dtxrText,
-        dtxrSource: dtxrResult?.source || '',
-        dtxrMatchedBy: dtxrResult?.matchedBy || '',
-        dtxrMatchedKey: dtxrResult?.matchedKey || '',
-        dtxrStagedType: dtxrResult?.stagedType || '',
-        dtxrSuppressed: Boolean(dtxrResult?.suppressed),
-        dtxrSuppressionReason: dtxrResult?.suppressionReason || '',
-        ranking,
-        nodeHint: ranking.nodeHint,
-        candidates: ranking.candidates.slice(0, 5),
-        rejectedCandidates: ranking.rejectedCandidates.slice(0, 3),
-      });
+      const ranking = rankXmlCiiWeightCandidates({ boreMm, rating, lengthMm, nodeName: xmlText(node, 'NodeName'), componentType, componentRefNo: xmlText(node, 'ComponentRefNo'), dtxr: dtxrText }, config, { includeRejected: true });
+      rows.push({ key: xmlCiiRigidWeightOverrideKey(branchName, nodeNumber), branchName, lineKey: branchContext.lineKey, nodeNumber, nodeName: xmlText(node, 'NodeName'), componentType, componentRefNo: xmlText(node, 'ComponentRefNo'), boreMm, rating, requestedPipingClass: branchContext.requestedPipingClass, resolvedPipingClass: branchContext.resolvedPipingClass, pipingClassMatchMethod: branchContext.pipingClassMatchMethod, pipingClassNeedsReview: branchContext.pipingClassNeedsReview, pipingClassCandidates: branchContext.pipingClassCandidates, lengthMm, elementLengthSource: explicitLength !== null ? 'ElementLengthMm' : 'computed-forward', weight: mappedWeight, originalWeight: weight, overrideWeight, weightSource: overrideWeight !== null ? 'override' : (weight !== null && weight > 0 ? 'xml-weight' : 'unresolved'), mapped: isMapped, status: isMapped ? 'mapped' : 'unresolved', dtxr: dtxrText, dtxrSource: dtxrResult?.source || '', dtxrMatchedBy: dtxrResult?.matchedBy || '', dtxrMatchedKey: dtxrResult?.matchedKey || '', dtxrStagedType: dtxrResult?.stagedType || '', dtxrSuppressed: Boolean(dtxrResult?.suppressed), dtxrSuppressionReason: dtxrResult?.suppressionReason || '', ranking, nodeHint: ranking.nodeHint, candidates: ranking.candidates.slice(0, 5), rejectedCandidates: ranking.rejectedCandidates.slice(0, 3) });
     });
   }
-
   return rows;
 }
 
@@ -585,14 +469,9 @@ export function collectXmlCiiZeroRigidWeightIssues(xmlTextVal, stagedJsonText, c
 }
 
 export function applyXmlCiiRigidWeightOverrides(xmlTextVal, weightsByKey) {
-  if (typeof DOMParser === 'undefined' || typeof XMLSerializer === 'undefined') {
-    return { xmlText: xmlTextVal, appliedCount: 0, appliedRows: [] };
-  }
+  if (typeof DOMParser === 'undefined' || typeof XMLSerializer === 'undefined') return { xmlText: xmlTextVal, appliedCount: 0, appliedRows: [] };
   const document = new DOMParser().parseFromString(toText(xmlTextVal), 'application/xml');
-  if (document.getElementsByTagName('parsererror').length) {
-    return { xmlText: xmlTextVal, appliedCount: 0, appliedRows: [] };
-  }
-
+  if (document.getElementsByTagName('parsererror').length) return { xmlText: xmlTextVal, appliedCount: 0, appliedRows: [] };
   const appliedRows = [];
   for (const branch of [...document.getElementsByTagName('Branch')]) {
     const branchName = xmlText(branch, 'Branchname');
