@@ -78,13 +78,16 @@ assert(modelTab.includes('20260624-rich-parity-ui-1'), 'ModelConvertersTab must 
 assert(publicIndex.includes('20260624-rich-parity-ui-1'), 'model-converters index must be cache-busted');
 assert(tabShim.includes('20260624-rich-parity-ui-1'), 'tab shim must be cache-busted');
 
-assert(enrichmentRunParity.includes("RENUMBERABLE_NEGATIVE_TYPES = new Set(['FLAN', 'RIGID', 'INST'])"), 'Resolved condense base path must include INST nodes');
-assert(enrichmentRunParity.includes("INLINE_LENGTH_COMPONENT_TYPES = new Set(['INST'])"), 'INST inline length type set must exist');
-assert(enrichmentRunParity.includes("RESOLVED_RIGID_MARKER_TYPES = new Set(['INST'])"), 'Resolved INST nodes must be explicitly marked as rigid');
-assert(enrichmentRunParity.includes('annotateInlineElementLengths'), 'INST ElementLengthMm annotation must exist');
-assert(enrichmentRunParity.includes('element-length-inst'), 'INST ElementLengthMm diagnostics must exist');
-assert(enrichmentRunParity.includes('ensureChildAfter') && enrichmentRunParity.includes("setTextAfter(document, node, 'Rigid', '2', 'Endpoint')"), 'Resolved INST rigid marker must be inserted after Endpoint');
-assert(enrichmentRunParity.includes('instRigid2Annotations'), 'Resolved INST Rigid=2 annotations must be counted');
+assert(enrichmentRunParity.includes("RENUMBERABLE_NEGATIVE_TYPES = new Set(['FLAN', 'GASK', 'VALV', 'RIGID', 'INST'])"), 'Resolved condense base path must include full FLAN/GASK/VALV/RIGID/INST chains');
+assert(enrichmentRunParity.includes("INLINE_LENGTH_COMPONENT_TYPES = new Set(['FLAN', 'GASK', 'VALV', 'RIGID', 'INST'])"), 'Negative inline chain length type set must include full valve/flange/gasket chain types');
+assert(enrichmentRunParity.includes("RESOLVED_RIGID_MARKER_TYPES = new Set(['FLAN', 'VALV', 'RIGID', 'INST'])"), 'Resolved INST/FLAN/VALV/RIGID nodes must be explicitly marked as rigid');
+assert(enrichmentRunParity.includes('RESOLVED_FLEXIBLE_MARKER_TYPES = new Set([\'GASK\'])'), 'Resolved GASK nodes must preserve non-rigid marker semantics');
+assert(enrichmentRunParity.includes('annotateInlineElementLengths'), 'inline ElementLengthMm annotation must exist');
+assert(enrichmentRunParity.includes('element-length-inline-negative'), 'negative inline ElementLengthMm diagnostics must exist');
+assert(enrichmentRunParity.includes('sameComponentRefMate') && enrichmentRunParity.includes('allocateContiguousNumbers'), 'contiguous negative inline block construction must be source-level, not bridge-only');
+assert(enrichmentRunParity.includes('process-provenance') && enrichmentRunParity.includes('Pressure2 / Hydro/Test Pressure'), 'visible process provenance diagnostics must include Hydro/Test Pressure');
+assert(enrichmentRunParity.includes('ensureChildAfter') && enrichmentRunParity.includes("setTextAfter(document, node, 'Rigid', '2', 'Endpoint')"), 'Resolved rigid marker must be inserted after Endpoint');
+assert(enrichmentRunParity.includes('instRigid2Annotations') && enrichmentRunParity.includes('resolvedRigidMarkers'), 'Resolved Rigid=2 annotations must be counted');
 assert(enrichmentRunParity.includes('split-condensed-valve-flange-resolved'), 'Resolved condense diagnostics must exist');
 assert(enrichmentRunParity.includes('split_condensed_valve_flange'), 'snake_case resolved flag must be honored in rich enrichment');
 
@@ -96,7 +99,7 @@ console.log('✅ XML CII rich workflow smoke validation passed', {
   simpleRun: 'direct button visible/restored and offset from Rich Workflow',
   richPopup: 'button-owned, no simple-run interception',
   condenseRigid: 'XSD + Resolved controls rendered and injected into active rich path',
-  processParity: 'Pressure1/Pressure2/Temperature1..3/density copied from preview to enriched XML',
-  negativeValveFlangeBlocks: 'FLAN/GASK/VALV/RIGID/INST negative blocks resolved when enabled',
+  processParity: 'Pressure1/Pressure2/Temperature1..3/density copied from preview to enriched XML with diagnostics provenance',
+  negativeValveFlangeBlocks: 'contiguous FLAN/GASK/VALV/RIGID/INST negative blocks resolved when enabled',
   regexBlink: 'native regex/dropdown change rerender suppressed',
 });

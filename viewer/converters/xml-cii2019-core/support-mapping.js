@@ -34,8 +34,6 @@ function parseNumericMm(value) {
   return Number.isFinite(numeric) ? numeric : null;
 }
 
-// Critical: support coordinates are real positions and must NOT be normalized to
-// unit length. Direction cosines are normalized separately below.
 function normalizeCoordinatePoint(point) {
   if (point === undefined || point === null || point === '') return null;
 
@@ -59,12 +57,10 @@ function normalizeCoordinatePoint(point) {
   const tokens = text.split(/\s+/g);
   const directional = { x: 0, y: 0, z: 0 };
   let parsedDirectional = false;
-
   for (let i = 0; i < tokens.length - 1; i += 2) {
     const axis = tokens[i].toUpperCase();
     const value = parseNumericMm(tokens[i + 1]);
     if (!Number.isFinite(value)) continue;
-
     if (axis === 'E') { directional.x = value; parsedDirectional = true; }
     else if (axis === 'W') { directional.x = -value; parsedDirectional = true; }
     else if (axis === 'N') { directional.y = value; parsedDirectional = true; }
@@ -72,7 +68,6 @@ function normalizeCoordinatePoint(point) {
     else if (axis === 'U') { directional.z = value; parsedDirectional = true; }
     else if (axis === 'D') { directional.z = -value; parsedDirectional = true; }
   }
-
   if (parsedDirectional) return directional;
 
   const values = text.match(/-?\d+(?:\.\d+)?/g)?.map(Number).filter(Number.isFinite) || [];
@@ -81,25 +76,17 @@ function normalizeCoordinatePoint(point) {
 
 function normalizeDirectionVector(value) {
   if (!value) return null;
-
   const x = Number(value.x ?? value.X ?? value[0]);
   const y = Number(value.y ?? value.Y ?? value[1]);
   const z = Number(value.z ?? value.Z ?? value[2]);
-
   if (![x, y, z].every(Number.isFinite)) return null;
-
   const length = Math.sqrt((x * x) + (y * y) + (z * z));
   if (length <= 1e-9) return null;
-
   return { x: x / length, y: y / length, z: z / length };
 }
 
 function parseDirectionVectorText(value) {
-  const nums = toText(value)
-    .match(/[-+]?\d*\.?\d+(?:[Ee][-+]?\d+)?/g)
-    ?.map(Number)
-    .filter(Number.isFinite) || [];
-
+  const nums = toText(value).match(/[-+]?\d*\.?\d+(?:[Ee][-+]?\d+)?/g)?.map(Number).filter(Number.isFinite) || [];
   return nums.length >= 3 ? normalizeDirectionVector({ x: nums[0], y: nums[1], z: nums[2] }) : null;
 }
 
@@ -146,38 +133,26 @@ function walkStagedComponents(value, branchName = '', out = []) {
     value.forEach((item) => walkStagedComponents(item, branchName, out));
     return out;
   }
-
   if (!value || typeof value !== 'object') return out;
-
-  const attrs = value.attributes && typeof value.attributes === 'object'
-    ? value.attributes
-    : {};
-
+  const attrs = value.attributes && typeof value.attributes === 'object' ? value.attributes : {};
   const type = toText(value.type || attrs.TYPE).toUpperCase();
   const currentBranch = (type === 'BRANCH' || Array.isArray(value.children))
     ? toText(value.name || attrs.NAME || branchName)
     : branchName;
-
   out.push({ component: value, attrs, branchName: currentBranch });
-
-  if (Array.isArray(value.children)) {
-    value.children.forEach((child) => walkStagedComponents(child, currentBranch, out));
-  }
-
+  if (Array.isArray(value.children)) value.children.forEach((child) => walkStagedComponents(child, currentBranch, out));
   return out;
 }
 
-function normalizeSupportTag(value) {
-  const text = toText(value).trim().toUpperCase().replace(/^\/+/, '');
+export function normalizeSupportTag(value) {
+  const text = toText(value).trim().toUpperCase().replace(/^\/+/, '').replace(/\s+/g, ' ');
   const match = text.match(/PS-\d+(?:\.\d+)?/i);
-  if (!match) return '';
-  return match[0].replace(/\.\d+$/, '');
+  return match ? match[0].toUpperCase() : '';
 }
 
 function supportTagsFromText(value) {
-  const text = toText(value);
   const tags = new Set();
-  for (const match of text.matchAll(/\/?PS-\d+(?:\.\d+)?/ig)) {
+  for (const match of toText(value).matchAll(/\/?PS-\d+(?:\.\d+)?/ig)) {
     const tag = normalizeSupportTag(match[0]);
     if (tag) tags.add(tag);
   }
@@ -194,10 +169,7 @@ function supportTagsFromAttrs(attrs, componentName = '') {
 }
 
 export function xmlNodeSupportTags(node) {
-  const parts = [
-    xmlText(node, 'NodeName'),
-    xmlText(node, 'ComponentRefNo'),
-  ];
+  const parts = [xmlText(node, 'NodeName'), xmlText(node, 'ComponentRefNo')];
   for (const child of xmlChildrenByName(node, 'SupportTag')) parts.push(toText(child.textContent));
   return [...new Set(parts.flatMap(supportTagsFromText))];
 }
@@ -224,19 +196,11 @@ function isKindReference(value) {
 }
 
 export function resolveXmlCiiSupportDescriptor(attrs, config = {}) {
-  const direct = normalizeSupportKind(
-    attrs?.SUPPORT_KIND ||
-    attrs?.SUPPORT_MAPPER_KIND ||
-    attrs?.SUPPORT_TYPE
-  );
-
-  if (direct) {
-    return { primaryKind: direct, kinds: [direct], dofs: {}, source: 'explicit' };
-  }
+  const direct = normalizeSupportKind(attrs?.SUPPORT_KIND || attrs?.SUPPORT_MAPPER_KIND || attrs?.SUPPORT_TYPE);
+  if (direct) return { primaryKind: direct, kinds: [direct], dofs: {}, source: 'explicit' };
 
   const supportMapping = migrateSupportMappingConfig(config);
   const rules = supportRulesFromMapping(supportMapping);
-
   if (rules.length) {
     const descriptor = resolveKindDescriptor(attrs, {
       userRules: rules,
@@ -244,17 +208,11 @@ export function resolveXmlCiiSupportDescriptor(attrs, config = {}) {
       kindMap: {},
       defaultKind: '',
     });
-
-    if (descriptor?.primaryKind) {
-      return { ...descriptor, source: 'supportMapping' };
-    }
+    if (descriptor?.primaryKind) return { ...descriptor, source: 'supportMapping' };
   }
 
   const legacyKind = normalizeSupportKind(resolveKindFromAttrs(attrs));
-  if (legacyKind) {
-    return { primaryKind: legacyKind, kinds: [legacyKind], dofs: {}, source: 'legacyRvmSupportMapper' };
-  }
-
+  if (legacyKind) return { primaryKind: legacyKind, kinds: [legacyKind], dofs: {}, source: 'legacyRvmSupportMapper' };
   return { primaryKind: '', kinds: [], dofs: {}, source: 'none' };
 }
 
@@ -265,21 +223,14 @@ export function resolveXmlCiiSupportKind(attrs, config = {}) {
 export function buildStagedSupportIndex(stagedJsonText, config = {}, diagnostics = []) {
   const empty = { byCoord: new Map(), byTag: new Map(), count: 0 };
   const supportMapping = migrateSupportMappingConfig(config);
-
-  // Phase 3 integration: both enrichment paths already preserve XML restraints
-  // when no staged support match exists. Returning an empty index here makes the
-  // global OFF switch preserve XML restraints without patching both large files.
   if (supportMapping.useJsonForRestraints === false) {
     diagnostics.push({ type: 'staged-support-index', supports: 0, coordinateKeys: 0, psTagKeys: 0, disabled: true });
     return empty;
   }
-
   if (!toText(stagedJsonText).trim()) return empty;
 
   let parsed = null;
-  try {
-    parsed = JSON.parse(stagedJsonText);
-  } catch (error) {
+  try { parsed = JSON.parse(stagedJsonText); } catch (error) {
     diagnostics.push({ type: 'staged-json-parse-error', message: toText(error?.message || error) });
     return empty;
   }
@@ -295,17 +246,7 @@ export function buildStagedSupportIndex(stagedJsonText, config = {}, diagnostics
     if (!descriptor.primaryKind) continue;
 
     let point = null;
-    for (const key of [
-      'SUPPORTCOORD',
-      'SUPPORT_COORD',
-      'POS',
-      'BPOS',
-      'APOS',
-      'LPOS',
-      'CPOS',
-      'HPOS',
-      'TPOS',
-    ]) {
+    for (const key of ['SUPPORTCOORD', 'SUPPORT_COORD', 'POS', 'BPOS', 'APOS', 'LPOS', 'CPOS', 'HPOS', 'TPOS']) {
       point = normalizeCoordinatePoint(attrs[key]);
       if (point) break;
     }
@@ -333,7 +274,6 @@ export function buildStagedSupportIndex(stagedJsonText, config = {}, diagnostics
       if (!byTag.has(tag)) byTag.set(tag, []);
       byTag.get(tag).push(indexed);
     }
-
     count += 1;
   }
 
@@ -354,87 +294,44 @@ const XML_CII_NATIVE_RESTRAINT_TYPE_ALIASES = Object.freeze({
 export function normalizeExistingXmlCiiRestraintType(typeText, config = {}) {
   const raw = toText(typeText).trim();
   if (!raw) return '';
-
   const upper = raw.toUpperCase();
   const nativeType = XML_CII_NATIVE_RESTRAINT_TYPE_ALIASES[upper];
   if (nativeType) return nativeType;
-
   const sign = upper.startsWith('+') || upper.startsWith('-') ? upper[0] : '';
   const unsigned = sign ? upper.slice(1) : upper;
   const mapped = config.xmlAxisToCiiAxis?.[upper] || config.xmlAxisToCiiAxis?.[unsigned];
-  if (mapped) return toText(mapped).trim().toUpperCase();
-
-  return upper;
+  return mapped ? toText(mapped).trim().toUpperCase() : upper;
 }
 
 function vectorFromAttrs(attrs, keys) {
   for (const key of keys || []) {
     const value = attrs?.[key];
-    const parsed = value && typeof value === 'object'
-      ? normalizeDirectionVector(value)
-      : parseDirectionVectorText(value);
+    const parsed = value && typeof value === 'object' ? normalizeDirectionVector(value) : parseDirectionVectorText(value);
     if (parsed) return parsed;
   }
   return null;
 }
 
 function resolvePipeAxis(attrs) {
-  return vectorFromAttrs(attrs, [
-    'PIPE_AXIS_COSINES',
-    'PIPEAXISCOSINES',
-    'PIPE_AXIS',
-    'PIPEAXIS',
-    'PIPE_AXIS_VECTOR',
-    'PIPEAXISVECTOR',
-    'AXIS',
-    'DIRECTION_COSINES',
-    'DIRECTIONCOSINES',
-  ]);
+  return vectorFromAttrs(attrs, ['PIPE_AXIS_COSINES', 'PIPEAXISCOSINES', 'PIPE_AXIS', 'PIPEAXIS', 'PIPE_AXIS_VECTOR', 'PIPEAXISVECTOR', 'AXIS', 'DIRECTION_COSINES', 'DIRECTIONCOSINES']);
 }
 
 function cross(a, b) {
-  return normalizeDirectionVector({
-    x: (a.y * b.z) - (a.z * b.y),
-    y: (a.z * b.x) - (a.x * b.z),
-    z: (a.x * b.y) - (a.y * b.x),
-  });
+  return normalizeDirectionVector({ x: (a.y * b.z) - (a.z * b.y), y: (a.z * b.x) - (a.x * b.z), z: (a.x * b.y) - (a.y * b.x) });
 }
 
 function resolveSupportDirectionCosines({ profile, attrs, nodeElement }) {
   const mode = toText(profile.directionMode || 'none').toLowerCase();
   if (mode === 'none') return null;
-
   if (mode === 'fixed') return normalizeDirectionVector(profile.direction);
-
-  if (mode === 'from-staged') {
-    return vectorFromAttrs(attrs, [
-      'DIRECTION_COSINES',
-      'DIRECTIONCOSINES',
-      'SUPPORT_DIRECTION_COSINES',
-      'SUPPORTDIRECTIONCOSINES',
-      'DIRCOS',
-      'DIRECTION',
-      'SUPPORT_DIRECTION',
-    ]);
-  }
-
-  if (mode === 'from-xml') {
-    return normalizeDirectionVector({
-      x: xmlText(nodeElement, 'DirectionCosineX'),
-      y: xmlText(nodeElement, 'DirectionCosineY'),
-      z: xmlText(nodeElement, 'DirectionCosineZ'),
-    });
-  }
-
+  if (mode === 'from-staged') return vectorFromAttrs(attrs, ['DIRECTION_COSINES', 'DIRECTIONCOSINES', 'SUPPORT_DIRECTION_COSINES', 'SUPPORTDIRECTIONCOSINES', 'DIRCOS', 'DIRECTION', 'SUPPORT_DIRECTION']);
+  if (mode === 'from-xml') return normalizeDirectionVector({ x: xmlText(nodeElement, 'DirectionCosineX'), y: xmlText(nodeElement, 'DirectionCosineY'), z: xmlText(nodeElement, 'DirectionCosineZ') });
   if (mode === 'pipe-axis') return resolvePipeAxis(attrs);
-
   if (mode === 'pipe-normal') {
     const axis = resolvePipeAxis(attrs);
     if (!axis) return null;
-    const reference = Math.abs(axis.y) < 0.9 ? { x: 0, y: 1, z: 0 } : { x: 1, y: 0, z: 0 };
-    return cross(reference, axis);
+    return cross(Math.abs(axis.y) < 0.9 ? { x: 0, y: 1, z: 0 } : { x: 1, y: 0, z: 0 }, axis);
   }
-
   return null;
 }
 
@@ -470,11 +367,7 @@ export function supportDirectionAuditForNode(nodeElement) {
   return xmlChildrenByName(nodeElement, 'Restraint')
     .map((restraint) => {
       const type = normalizeXmlType(xmlText(restraint, 'Type'));
-      const dir = formatDirection({
-        x: xmlText(restraint, 'DirectionCosineX'),
-        y: xmlText(restraint, 'DirectionCosineY'),
-        z: xmlText(restraint, 'DirectionCosineZ'),
-      });
+      const dir = formatDirection({ x: xmlText(restraint, 'DirectionCosineX'), y: xmlText(restraint, 'DirectionCosineY'), z: xmlText(restraint, 'DirectionCosineZ') });
       return dir ? `${type}:from-xml:${dir}` : '';
     })
     .filter(Boolean)
@@ -482,37 +375,27 @@ export function supportDirectionAuditForNode(nodeElement) {
 }
 
 function createRestraintEntry(fields) {
-  return {
-    ...fields,
-    toString() { return this.type || ''; },
-    valueOf() { return this.type || ''; },
-    [Symbol.toPrimitive]() { return this.type || ''; },
-  };
+  return { ...fields, toString() { return this.type || ''; }, valueOf() { return this.type || ''; }, [Symbol.toPrimitive]() { return this.type || ''; } };
 }
 
 export function restraintEntriesFromSupportKind(kind, attrs = {}, nodeElement = null, config = {}) {
   const upperKind = normalizeSupportKind(kind);
   if (!upperKind) return [];
-
   const profile = supportProfileForKind(upperKind, config);
   const values = normalizeXmlTypes(profile.xmlTypes || config.supportKindToXmlType?.[upperKind] || []);
   const direction = resolveSupportDirectionCosines({ profile, attrs, nodeElement });
-
-  return values
-    .map(normalizeXmlType)
-    .filter(Boolean)
-    .map((type) => createRestraintEntry({
-      type,
-      stiffness: profile.stiffness && profile.stiffness !== 'default' ? profile.stiffness : config.defaultStiffness,
-      gap: profile.gap ?? '0',
-      frictionMode: profile.frictionMode || 'default',
-      fixedFriction: profile.fixedFriction || '',
-      supportTagMode: profile.supportTagMode || 'kind',
-      supportTagValue: profile.supportTagValue || '',
-      direction,
-      supportKind: upperKind,
-      directionMode: profile.directionMode || 'none',
-    }));
+  return values.map(normalizeXmlType).filter(Boolean).map((type) => createRestraintEntry({
+    type,
+    stiffness: profile.stiffness && profile.stiffness !== 'default' ? profile.stiffness : config.defaultStiffness,
+    gap: profile.gap ?? '0',
+    frictionMode: profile.frictionMode || 'default',
+    fixedFriction: profile.fixedFriction || '',
+    supportTagMode: profile.supportTagMode || 'kind',
+    supportTagValue: profile.supportTagValue || '',
+    direction,
+    supportKind: upperKind,
+    directionMode: profile.directionMode || 'none',
+  }));
 }
 
 export function xmlCiiRestraintEntriesFromSupportMatch(match, nodeElement, config = {}) {
@@ -520,40 +403,25 @@ export function xmlCiiRestraintEntriesFromSupportMatch(match, nodeElement, confi
   const kinds = Array.isArray(match?.kinds) && match.kinds.length ? match.kinds : [match?.kind].filter(Boolean);
   const seen = new Set();
   const entries = [];
-
   for (const kind of kinds) {
     for (const entry of restraintEntriesFromSupportKind(kind, attrs, nodeElement, config)) {
-      const dir = entry.direction
-        ? `${entry.direction.x.toFixed(6)},${entry.direction.y.toFixed(6)},${entry.direction.z.toFixed(6)}`
-        : '';
+      const dir = entry.direction ? `${entry.direction.x.toFixed(6)},${entry.direction.y.toFixed(6)},${entry.direction.z.toFixed(6)}` : '';
       const key = `${entry.type}|${dir}|${entry.stiffness}|${entry.gap}|${entry.frictionMode}|${entry.fixedFriction}`;
       if (seen.has(key)) continue;
       seen.add(key);
       entries.push(entry);
     }
   }
-
   return entries;
 }
 
 export function xmlCiiTypeEntriesFromSupportKind(kind, config = {}) {
-  if (isKindReference(kind)) {
-    return xmlCiiRestraintEntriesFromSupportMatch({
-      kind: kind.primaryKind,
-      kinds: kind.kinds,
-      attrs: kind.attrs,
-    }, null, config);
-  }
-
+  if (isKindReference(kind)) return xmlCiiRestraintEntriesFromSupportMatch({ kind: kind.primaryKind, kinds: kind.kinds, attrs: kind.attrs }, null, config);
   return restraintEntriesFromSupportKind(kind, {}, null, config).map((entry) => entry.type);
 }
 
 function directionFromRestraint(restraint) {
-  return normalizeDirectionVector({
-    x: xmlText(restraint, 'DirectionCosineX'),
-    y: xmlText(restraint, 'DirectionCosineY'),
-    z: xmlText(restraint, 'DirectionCosineZ'),
-  });
+  return normalizeDirectionVector({ x: xmlText(restraint, 'DirectionCosineX'), y: xmlText(restraint, 'DirectionCosineY'), z: xmlText(restraint, 'DirectionCosineZ') });
 }
 
 export function xmlCiiTypeEntryFromExistingRestraint(restraint, config = {}) {
@@ -575,55 +443,39 @@ function xmlTypeAllowsRealFriction(type) {
 function frictionForEntry(entry, type, existingFriction, config = {}) {
   if (typeof entry === 'string') return existingFriction || toText(config.defaultFriction || '0.3') || '0.3';
   if (toText(entry?.friction)) return toText(entry.friction);
-
   const mode = toText(entry?.frictionMode || 'default').toLowerCase();
   const defaultFriction = toText(config.defaultFriction || '0.3') || '0.3';
-
   if (mode === 'fixed' && toText(entry?.fixedFriction)) return toText(entry.fixedFriction);
   if (mode === 'existing' && toText(existingFriction)) return toText(existingFriction);
-  if (mode === 'sentinel' && config.useFrictionSentinelForNonYSupports !== false && !xmlTypeAllowsRealFriction(type)) {
-    return '-1.010100';
-  }
-
+  if (mode === 'sentinel' && config.useFrictionSentinelForNonYSupports !== false && !xmlTypeAllowsRealFriction(type)) return '-1.010100';
   return defaultFriction;
 }
 
 export function applyXmlRestraints(document, nodeElement, entries, config = {}) {
   if (!entries || entries.length === 0) return;
-
   const existing = xmlChildrenByName(nodeElement, 'Restraint');
   let stiffness = config.defaultStiffness || '1.751270E+12';
   let gap = '0';
   let friction = config.defaultFriction || '0.3';
   let existingDirection = null;
-
   if (existing.length > 0) {
     const r0 = existing[0];
     const s = xmlText(r0, 'Stiffness');
     if (s && Number.isFinite(Number(s)) && Number(s) > 0) stiffness = s;
-    const g = xmlText(r0, 'Gap');
-    if (g) gap = g;
-    const f = xmlText(r0, 'Friction');
-    if (f) friction = f;
+    gap = xmlText(r0, 'Gap') || gap;
+    friction = xmlText(r0, 'Friction') || friction;
     existingDirection = directionFromRestraint(r0);
   }
-
   for (const r of existing) nodeElement.removeChild(r);
-
   for (const entry of entries) {
     const type = normalizeXmlType(typeof entry === 'string' ? entry : entry?.type);
     if (!type) continue;
-
-    const restraint = nodeElement?.namespaceURI
-      ? document.createElementNS(nodeElement.namespaceURI, 'Restraint')
-      : document.createElement('Restraint');
+    const restraint = nodeElement?.namespaceURI ? document.createElementNS(nodeElement.namespaceURI, 'Restraint') : document.createElement('Restraint');
     nodeElement.appendChild(restraint);
-
     xmlSetText(document, restraint, 'Type', type);
     xmlSetText(document, restraint, 'Stiffness', toText(entry?.stiffness).trim() || stiffness);
     xmlSetText(document, restraint, 'Gap', toText(entry?.gap).trim() || gap);
     xmlSetText(document, restraint, 'Friction', frictionForEntry(entry, type, friction, config));
-
     const direction = normalizeDirectionVector(entry?.direction) || (entry?.directionMode === 'from-xml' ? existingDirection : null);
     if (direction) {
       xmlSetText(document, restraint, 'DirectionCosineX', direction.x.toFixed(9));
@@ -639,10 +491,8 @@ export function supportKindForOutput(attrs) {
 
 export function applySupportMapperToAttributes(attrs, config = {}) {
   if (!attrs || typeof attrs !== 'object') return '';
-
   const kind = resolveXmlCiiSupportKind(attrs, config);
   if (!kind) return '';
-
   attrs.SUPPORT_TYPE = kind;
   attrs.SUPPORT_KIND = kind;
   attrs.SUPPORT_MAPPER_KIND = kind;
@@ -651,7 +501,6 @@ export function applySupportMapperToAttributes(attrs, config = {}) {
 
 export function enrichHierarchyWithMapperKinds(nodes, stats = { scanned: 0, mapped: 0 }, config = {}) {
   if (!Array.isArray(nodes)) return stats;
-
   for (const node of nodes) {
     if (!node) continue;
     const typeStr = String(node.type || node.attributes?.TYPE || '').toUpperCase();
@@ -666,6 +515,5 @@ export function enrichHierarchyWithMapperKinds(nodes, stats = { scanned: 0, mapp
     if (Array.isArray(node.items)) enrichHierarchyWithMapperKinds(node.items, stats, config);
     if (Array.isArray(node.branches)) enrichHierarchyWithMapperKinds(node.branches, stats, config);
   }
-
   return stats;
 }
