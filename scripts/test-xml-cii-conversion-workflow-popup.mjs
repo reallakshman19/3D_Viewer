@@ -53,6 +53,7 @@ assert(buttonScope.includes('xmlCiiWorkflowButtonScopeHideAdvancedOptions'), 'bu
 assert(!buttonScope.includes('Simple/direct workflow options'), 'left panel must not show Simple/direct workflow options');
 assert(buttonScope.includes('cloneNode(true)'), 'workflow launchers must be cloned to strip stale anonymous listeners');
 assert(!buttonScope.includes('new MutationObserver'), 'button scope must not use a broad observer');
+assert(!buttonScope.includes('setTimeout('), 'button scope must not use delayed startup repair timers');
 
 assert(workflowPopup.includes('XML->CII(2019) Workflow 1'), 'Workflow 1 popup title must be explicit');
 assert(workflowPopup.includes('XML->CII(2019) Workflow 2'), 'Workflow 2 popup title must be explicit');
@@ -68,13 +69,14 @@ assert(!workflowPopup.includes('./legacy-adapter.js'), 'popup module must not im
 assert(bridge.includes('./legacy-adapter.js'), 'legacy adapter dependency must remain isolated to bridge boundary');
 assert(bridge.includes('ensureDefaultMastersLoaded = async () => null'), 'bridge must block obsolete default-master preload');
 assert(bridge.includes("masterKey === 'pipingClass'"), 'bridge must block obsolete aggregate piping-class default load');
+assert(bridge.includes('hydrateCondenseSnapshot'), 'bridge must own Condense Rigid option hydration without the old bridge patch');
 assert(runner.includes('xmlCiiWorkflowRequestFinalRun'), 'final run handoff must remain in workflow runner boundary');
 assert(runner.includes("document.querySelector('#model-converters-run')"), 'legacy run click handoff must remain contained in runner boundary only');
 
 assert(modelTab.includes('installXmlCiiWorkflowButtonScope'), 'ModelConvertersTab must install button scope');
 assert(modelTab.includes('installXmlCiiWorkflowPopup'), 'ModelConvertersTab must install workflow popup binding');
-assert(modelTab.includes('installXmlCiiWorkflowHotfix'), 'ModelConvertersTab must install neutral workflow hotfix');
-assert(modelTab.includes('20260624-workflow1-workflow2-1'), 'ModelConvertersTab must be cache-busted for Workflow 1/2 identity');
+assert(!modelTab.includes('installXmlCiiWorkflowHotfix'), 'ModelConvertersTab must not install the retired workflow hotfix module');
+assert(modelTab.includes('20260624-workflow-consolidation-1'), 'ModelConvertersTab must be cache-busted for workflow consolidation');
 
 assert(oldGenericShim.includes('Deprecated compatibility shim'), 'old generic popup filename must remain a compatibility shim');
 assert(oldRichShim.includes('Deprecated compatibility shim'), 'old rich popup filename must remain a compatibility shim');
@@ -94,4 +96,5 @@ console.log('XML CII workflow popup identity smoke validation passed', {
   workflow1: 'baseline enriched conversion workflow popup',
   workflow2: 'enhanced customization workflow popup with per-master preview rows',
   duplicateGuard: 'capture-phase stopImmediatePropagation and foreign overlay cleanup',
+  consolidation: 'workflow hotfix removed from active importer; bridge owns condense state',
 });
