@@ -11,13 +11,25 @@ import { normalizeKey, rowNumber, rowValue, text } from './selected-geometry-sha
 
 const MATERIAL_TOKENS = /^(CS|SS|LTCS|DSS|SDSS|ALLOY|GI|CI|DI|PVC|CPVC|HDPE|GRP|GRE)$/i;
 const OD_TO_DN = Object.freeze([[10.3, 6], [13.7, 8], [17.1, 10], [21.3, 15], [26.7, 20], [33.4, 25], [42.2, 32], [48.3, 40], [60.3, 50], [73.0, 65], [88.9, 80], [114.3, 100], [141.3, 125], [168.3, 150], [219.1, 200], [273.0, 250], [323.9, 300], [355.6, 350], [406.4, 400], [457.0, 450], [508.0, 500], [610.0, 600]]);
+const ROW_ALIAS_GROUPS = Object.freeze({
+  lineKey1: ['lineKey1', 'Key 1', 'ColumnX1', 'Service', 'Fluid', 'SERVICE', 'FLUID'],
+  lineKey2: ['lineKey2', 'Key 2', 'ColumnX2', 'Line number', 'Line Number', 'Line No', 'LineNo', 'LINENO', 'LINE_NO', 'PipelineReference', 'Pipeline Reference'],
+  lineNo: ['lineNoKey', 'lineNo', 'lineKey', 'LineNo', 'Line No', 'Line Number', 'LINE_NO', 'LINE NUMBER', 'PipelineReference', 'Pipeline Reference'],
+  pipingClass: ['pipingClass', 'Piping Class', 'PIPING_CLASS', 'Class', 'CLASS', 'Spec', 'SPEC', 'Pipe Class', 'PIPE_CLASS'],
+  rating: ['rating', 'Rating', 'RATING', 'Class Rating', 'Pressure Class', 'CLASS_RATING'],
+  p1: ['p1', 'P1', 'Pressure', 'PRESSURE', 'Pressure1', 'PRESSURE1', 'Design Pressure', 'DESIGN_PRESSURE', 'Design Press', 'DESIGN_PRESS'],
+  t1: ['t1', 'T1', 'Temperature', 'TEMP', 'Temp1', 'TEMP1', 'TEMP_EXP_C1', 'Design Temperature', 'DESIGN_TEMP'],
+  t2: ['t2', 'T2', 'Temp2', 'TEMP2', 'TEMP_EXP_C2', 'Operating Temperature', 'OPERATING_TEMP'],
+  t3: ['t3', 'T3', 'Temp3', 'TEMP3', 'TEMP_EXP_C3', 'Minimum Temperature', 'MIN_TEMP'],
+  density: ['density', 'Density', 'DENSITY', 'Fluid Density', 'FLUID_DENSITY', 'Density kg/m3', 'DENSITY_KG_M3'],
+});
 
 export function branchInfoForObject(object, config) {
   const attrs = object?.sourceAttributes || {};
   const candidates = [attrs.BRANCH_NAME, attrs.BRANCHNAME, attrs.BRANCH, attrs.OWNER, attrs.RVM_OWNER_PATH, attrs.RVM_OWNER_NAME, attrs.SOURCE_PATH, object?.sourcePath, object?.name].map(text).filter(Boolean);
   return {
     branchName: bestBranchNameCandidate(candidates, config),
-    lineKeyFallback: text(attrs.LINEKEY || attrs.LINE_KEY || attrs.LINE_NO || attrs.LINE_NUMBER || rowValue(attrs, ['Line Number', 'Line No'])),
+    lineKeyFallback: text(attrs.LINEKEY || attrs.LINE_KEY || attrs.LINE_NO || attrs.LINE_NUMBER || rowValue(attrs, ROW_ALIAS_GROUPS.lineNo)),
   };
 }
 
@@ -68,7 +80,7 @@ export function deriveBoreFromBranchName(branchName, config) {
 }
 
 export function boreFromGroup(group, lineRow, config) {
-  const lineBore = rowNumber(lineRow, ['convertedBore', 'Bore', 'DN', 'NB']);
+  const lineBore = rowNumber(lineRow, ['convertedBore', 'Bore', 'BORE', 'DN', 'NB', 'NPS', 'Size', 'SIZE']);
   if (lineBore !== null) return lineBore;
   for (const object of group.objects || []) {
     const bore = objectBoreMm(object, config);
@@ -198,13 +210,7 @@ export function processSource(processOverride, row, overrideKey, rowKeys, config
 
 export function rowText(row, keys) {
   if (!row || typeof row !== 'object') return '';
-  for (const key of keys) {
-    const direct = row[key];
-    if (text(direct)) return text(direct);
-    const raw = row._raw?.[key];
-    if (text(raw)) return text(raw);
-  }
-  return '';
+  return text(rowValue(row, expandRowKeys(keys)));
 }
 
 export function ratingOverride(config, keys) {
@@ -227,6 +233,20 @@ export function numberFromText(value) {
   const match = text(value).replace(/,/g, '').match(/[-+]?\d*\.?\d+/);
   const numeric = match ? Number(match[0]) : NaN;
   return Number.isFinite(numeric) ? numeric : null;
+}
+
+function expandRowKeys(keys) {
+  const out = [];
+  for (const key of Array.isArray(keys) ? keys : [keys]) {
+    const clean = text(key);
+    if (!clean) continue;
+    out.push(clean);
+    const normalized = normalizeKey(clean);
+    for (const [aliasKey, aliases] of Object.entries(ROW_ALIAS_GROUPS)) {
+      if (normalizeKey(aliasKey) === normalized || aliases.some((alias) => normalizeKey(alias) === normalized)) out.push(...aliases);
+    }
+  }
+  return [...new Set(out)];
 }
 
 function bestBranchNameCandidate(candidates, config) {
@@ -265,10 +285,10 @@ function looksLikeBranchName(value, delimiter) {
 function lineListRowKey(row, config) {
   const mapped = computeLineNoKey(row, config.linelist?.fieldMap || {});
   if (mapped) return mapped;
-  const key1 = rowText(row, ['lineKey1', 'Key 1', 'ColumnX1', 'Service', 'Fluid']);
-  const key2 = rowText(row, ['lineKey2', 'Key 2', 'ColumnX2', 'Line number', 'Line Number', 'Line No']);
+  const key1 = rowText(row, ROW_ALIAS_GROUPS.lineKey1);
+  const key2 = rowText(row, ROW_ALIAS_GROUPS.lineKey2);
   if (key1 || key2) return `${key1}${key2}`;
-  return rowText(row, ['lineNoKey', 'lineNo', 'lineKey', 'LineNo', 'Line No', 'Line Number', 'PipelineReference']);
+  return rowText(row, ROW_ALIAS_GROUPS.lineNo);
 }
 
 function regexGroup(sourceText, pattern, groupIndex) {
@@ -296,7 +316,7 @@ function normalizeLineKey(value) {
 
 function objectBoreMm(object, config) {
   const attrs = object?.sourceAttributes || {};
-  const direct = firstNumber(attrs, ['BOREMM', 'BORE_MM', 'CONVERTED_BORE', 'DN', 'NB', 'NOMINAL_BORE']);
+  const direct = firstNumber(attrs, ['BOREMM', 'BORE_MM', 'CONVERTED_BORE', 'DN', 'NB', 'NOMINAL_BORE', 'SIZE']);
   if (direct !== null) return direct;
   const nps = firstNumber(attrs, ['NPS', 'NS', 'NOMINAL_SIZE']);
   if (nps !== null) return nominalDnFromNps(nps, config);
@@ -306,7 +326,7 @@ function objectBoreMm(object, config) {
 
 function objectLengthMm(object) {
   const attrs = object?.sourceAttributes || {};
-  const explicit = firstNumber(attrs, ['ELEMENT_LENGTH_MM', 'ElementLengthMm', 'LENGTHMM', 'LENGTH_MM', 'LENGTH']);
+  const explicit = firstNumber(attrs, ['ELEMENT_LENGTH_MM', 'ElementLengthMm', 'LENGTHMM', 'LENGTH_MM', 'LENGTH', 'Length']);
   if (explicit !== null) return explicit;
   const a = pointFromObject(object?.apos);
   const b = pointFromObject(object?.lpos);
