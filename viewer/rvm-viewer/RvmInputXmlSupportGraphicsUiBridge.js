@@ -10,6 +10,7 @@ const INPUTXML_SUPPORT_SYMBOLS_KEY = 'rvm.inputxml.supportSymbols';
 const INPUTXML_LABELS_KEY = 'rvm.inputxml.supportLabels';
 const INPUTXML_SCALE_KEY = 'rvm.inputxml.supportScale';
 const GLOBAL_API = '__PCF_GLB_RVM_INPUTXML_SOURCE_TOOLS__';
+const SOURCE_TOOLS_PANEL_SELECTOR = '#rvm-nonprimitive-source-tools-panel';
 
 function findViewer() {
   return window.__rvmInputXmlSupportGraphicsViewer || window.__3D_RVM_VIEWER__ || null;
@@ -122,6 +123,7 @@ function updateStatus(text) {
 }
 
 function handleLegacyControlEvent(event) {
+  if (event.target?.closest?.(SOURCE_TOOLS_PANEL_SELECTOR)) return;
   const id = event.target?.id || '';
   if (id === 'rvm-inputxml-auto-bend') {
     persistInputXmlSourceToolOption('autoBendEnabled', event.target.checked);
@@ -152,6 +154,7 @@ publishApi();
 document.addEventListener('input', handleLegacyControlEvent, true);
 document.addEventListener('change', handleLegacyControlEvent, true);
 document.addEventListener('click', (event) => {
+  if (event.target?.closest?.(SOURCE_TOOLS_PANEL_SELECTOR)) return;
   if (event.target?.closest?.('#rvm-inputxml-apply-transform')) {
     event.preventDefault();
     refreshInputXmlSourceTools();
