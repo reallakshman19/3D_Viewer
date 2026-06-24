@@ -37,7 +37,7 @@ assert.doesNotMatch(arbiterSource, /shouldForceOrbit/);
 
 assert.match(rendererSource, /installRvmNavigationModeArbiterBridge/);
 assert.match(rendererSource, /RvmNavigationModeArbiterBridge\.js\?v=20260624-rvm-navigation-select-escape-1/);
-assert.match(rendererSource, /installRvmUiEventSafetyBridge\(\);\s*\ninstallRvmNavigationModeArbiterBridge\(\);/);
+assert.match(rendererSource, /installRvmUiEventSafetyBridge\(\);[\s\S]*installRvmNavigationModeArbiterBridge\(\);/, 'UI event safety must install before navigation mode arbiter');
 
 assert.match(interactionSource, /Esc: selection cleared, Select mode/, 'Esc must clear selection and return to Select in one action');
 assert.match(leafPickSource, /currentMode/);
