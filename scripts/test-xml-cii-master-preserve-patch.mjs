@@ -1,49 +1,40 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 
-const patch = readFileSync('viewer/tabs/model-converters/xml-cii-master-preserve-patch.js', 'utf8');
 const tab = readFileSync('viewer/tabs/model-converters/ModelConvertersTab.js', 'utf8');
-const popup = readFileSync('viewer/tabs/model-converters/xml-cii-conversion-workflow-popup.js', 'utf8');
-const legacyAdapter = readFileSync('viewer/tabs/model-converters/legacy-adapter.js', 'utf8');
+const branchSample = readFileSync('viewer/tabs/model-converters/xml-cii-branch-sample-sync.js', 'utf8');
+const runtimeOverride = readFileSync('viewer/tabs/model-converters/xml-cii-runtime-override-sync.js', 'utf8');
+const masterAutoloadLite = readFileSync('viewer/tabs/xml-cii-master-autoload-lite.js', 'utf8');
+const workflowBridge = readFileSync('viewer/tabs/model-converters/xml-cii-workflow-bridge.js', 'utf8');
 
 for (const token of [
+  'xml-cii-master-preserve-patch',
   'installXmlCiiMasterPreservePatch',
-  'xmlCiiGetHydratedWorkflowConfig',
-  'sessionConfig',
-  'lastGood',
-  'preserveMasterRows',
-  'preventedEmptyMasterWrites',
-  '__xmlCiiMasterLifecycleDebug',
-  'data-native-compute-weights',
-  'data-native-build-preview',
-  'data-native-dry-run',
-  'data-xml-cii-save-master',
-  'data-native-save-master',
-  'data-xml-cii-clear-master',
-  'data-native-clear-master',
-  'markExplicitClear',
-  'supportConfigJson',
+  'xml-cii-master-autoload-patch',
+  'installXmlCiiRecoveryPatch',
+  'xml-cii-workflow-hotfix',
+  'installXmlCiiWorkflowHotfix',
+  'xml-cii-linekey-select-patch',
+  'installXmlCiiLineKeySelectPatch',
+  'xml-cii-condense-rigid-ui-bridge',
+  'installXmlCiiCondenseRigidUiBridge',
 ]) {
-  assert.ok(patch.includes(token), `missing patch token: ${token}`);
+  assert.ok(!tab.includes(token), `obsolete XML CII patch module still active in ModelConvertersTab: ${token}`);
 }
 
-for (const token of ['set' + 'Timeout(', 'set' + 'Interval(', 'delay(', 'restoreMissingMasters']) {
-  assert.ok(!patch.includes(token), `unexpected async restore token: ${token}`);
-}
-
-assert.ok(tab.includes('installXmlCiiMasterPreservePatch'));
-assert.ok(tab.includes('xml-cii-master-preserve-patch.js?v=20260620-master-session-1'));
-assert.ok(tab.includes('legacy-adapter.js?v=20260620-master-session-1'));
-assert.ok(tab.includes('master-session-1'));
-assert.ok(popup.includes('legacy-adapter.js?v=20260620-master-session-1'));
-
-for (const token of [
-  'function xmlCiiConfigWithLoadedMasterRows',
-  "const config = xmlCiiConfigWithLoadedMasterRows('XML->CII preview');",
-  "const config = xmlCiiConfigWithLoadedMasterRows('XML->CII diagnostics');",
-  "const config = xmlCiiConfigWithLoadedMasterRows('XML->CII weight match');",
+for (const [name, source] of [
+  ['branch sample service', branchSample],
+  ['runtime override sync', runtimeOverride],
+  ['lite master autoload', masterAutoloadLite],
 ]) {
-  assert.ok(legacyAdapter.includes(token), `missing legacy adapter token: ${token}`);
+  assert.ok(!/document\.addEventListener\(['"]input['"]/.test(source), `${name} must not install broad document input listeners`);
+  assert.ok(!/document\.addEventListener\(['"]change['"]/.test(source), `${name} must not install broad document change listeners`);
 }
 
-console.log('XML CII master session lifecycle regression passed');
+assert.ok(!/new MutationObserver/.test(branchSample), 'branch sample service must not watch document.body');
+assert.ok(!/supportConfigJson/.test(branchSample), 'branch sample service must not serialize hidden supportConfigJson');
+assert.ok(!/dispatchEvent/.test(branchSample), 'branch sample service must not dispatch synthetic input/change events');
+assert.ok(/ensureDefaultMastersLoaded = async \(\) => null/.test(workflowBridge), 'workflow bridge must block stale aggregate default-master preload');
+assert.ok(/hydrateCondenseSnapshot/.test(workflowBridge), 'workflow bridge must own Condense Rigid state without the old bridge patch');
+
+console.log('XML CII workflow patch-retirement guard passed');
