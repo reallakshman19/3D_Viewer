@@ -97,7 +97,6 @@ export function refreshInputXmlSourceTools(viewer = findViewer(), overrides = {}
   const options = { ...readInputXmlSourceToolOptions(), ...overrides };
   refreshInputXmlGraphics(viewer, options);
   applyInputXmlSupportGraphicsOverlay(viewer, options);
-  try { window.__PCF_GLB_RVM_NON_PRIMITIVE_SOURCE_TOOLS_UI__?.reapply?.(root(), viewer); } catch (_) {}
   return {
     status: 'applied',
     system: 'inputxml-source-tools',
