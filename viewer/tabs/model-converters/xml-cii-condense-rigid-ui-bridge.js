@@ -1,8 +1,7 @@
-import { getXmlCiiPhaseBridge } from './legacy-adapter.js?v=20260620-master-session-1';
+import { xmlCiiRichWorkflowGetBridge } from './xml-cii-rich-workflow-bridge.js?v=20260624-simple-rich-isolation-1';
 
-const INSTALL_FLAG = Symbol.for('pcf-glb-xml-cii-condense-rigid-ui-bridge-v5');
-const VERSION = '20260623-inst-length-info-simple-run-1';
-const DIRECT_RUN_FLAG = '__xmlCiiConversionWorkflowAllowDirectRun';
+const INSTALL_FLAG = Symbol.for('pcf-glb-xml-cii-condense-rigid-ui-bridge-v6');
+const VERSION = '20260624-simple-rich-isolation-1';
 
 const XSD_KEY = 'condenseRigidXsd';
 const XSD_SNAKE_KEY = 'condense_rigid_xsd';
@@ -30,7 +29,7 @@ function parseConfigText(text) {
 }
 
 function bridge() {
-  return getXmlCiiPhaseBridge?.() || null;
+  return xmlCiiRichWorkflowGetBridge();
 }
 
 function bridgeConfig(activeBridge = bridge()) {
@@ -129,26 +128,13 @@ function wrapBridge(activeBridge = bridge()) {
   return activeBridge;
 }
 
-function restoreSimpleRunButton(root = document) {
-  if (!browserReady()) return;
-  window[DIRECT_RUN_FLAG] = true;
-  const runButton = root.querySelector?.('#model-converters-run') || document.querySelector('#model-converters-run');
-  if (!runButton) return;
-  runButton.hidden = false;
-  runButton.style.display = '';
-  if (!String(runButton.textContent || '').trim()) runButton.textContent = 'Run Conversion';
-}
-
 export function installXmlCiiCondenseRigidUiBridge(root = document) {
   if (!browserReady()) return null;
   if (window[INSTALL_FLAG]) return window[INSTALL_FLAG];
-  const state = { version: VERSION, wrapBridge, restoreSimpleRunButton };
+  const state = { version: VERSION, wrapBridge };
   window[INSTALL_FLAG] = state;
 
-  const tick = () => {
-    restoreSimpleRunButton(root || document);
-    wrapBridge();
-  };
+  const tick = () => wrapBridge();
   for (const delay of [0, 80, 250, 750, 1500, 3000]) setTimeout(tick, delay);
   tick();
   return state;
