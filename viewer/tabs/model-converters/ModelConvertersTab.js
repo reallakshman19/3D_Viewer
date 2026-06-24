@@ -20,7 +20,7 @@ import { installInputXmlPropertyTransferUi } from './inputxml-property-transfer-
 import { installRvmAttrUxmlAddon } from './rvmattr-uxml-addon.js?v=20260618-port-bore-contract-1';
 import { installXmlCiiWorkflowButtonScope } from './xml-cii-workflow-button-scope.js?v=20260624-workflow-consolidation-1';
 import { installXmlCiiSimpleWorkflowController } from './xml-cii-simple-workflow-controller.js?v=20260624-workflow-consolidation-1';
-import { installXmlCiiWorkflowPopup } from './xml-cii-workflow-popup.js?v=20260624-workflow-consolidation-1';
+import { installXmlCiiWorkflowPopup } from './xml-cii-workflow-popup.js?v=20260624-workflow-tabs-fix-1';
 import { installXmlCiiBranchSampleSync } from './xml-cii-branch-sample-sync.js?v=20260624-workflow-consolidation-1';
 import { installInputXmlBasicGlbBridge } from './inputxml-basic-glb-bridge.js';
 import { installInputXmlManagedStageBridge } from './inputxml-managed-stage-bridge.js?v=20260623-inputxml-direct-stage-1';
