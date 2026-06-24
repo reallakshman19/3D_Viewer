@@ -60,8 +60,8 @@ export function normalizePsKey(value) {
   text = text.replace(/^\/+/, '').replace(/\s+/g, '');
   text = text.replace(/\(REF\)$/i, '');
   text = text.replace(/\/DATUM$/i, '').replace(/\/SREF$/i, '');
-  text = text.replace(/^PS-/, 'PS');
-  return text;
+  const match = text.match(/^PS-?(\d+(?:\.\d+)?)$/i) || text.match(/PS-?(\d+(?:\.\d+)?)/i);
+  return match ? `PS-${match[1]}` : text;
 }
 
 export function psCandidateKeys(value) {
