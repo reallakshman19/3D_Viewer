@@ -48,6 +48,10 @@ assert(/xmlCiiWorkflowButtonScopeCanonicalRichButton/.test(buttonScopeSource), '
 assert(/button\.remove\(\)/.test(buttonScopeSource), 'button scope must remove duplicate rich launchers in the current root');
 assert(/xmlCiiWorkflowButtonScopeRetireLegacyShell/.test(buttonScopeSource), 'button scope must retire the old dark workflow shell');
 assert(/xmlCiiWorkflowButtonScopeIsXmlCiiSelected/.test(buttonScopeSource), 'button scope must toggle rich visibility from the current selected converter');
+assert(/xmlCiiWorkflowButtonScopePlaceAdvancedInSimpleCard/.test(buttonScopeSource), 'button scope must move generic XML CII advanced options into the simple workflow card');
+assert(/Simple\/direct workflow options/.test(buttonScopeSource), 'simple XML CII options must be visibly labelled as simple/direct workflow options');
+assert(/xml-cii-rich-workflow-card > details\.model-converters-advanced/.test(buttonScopeSource), 'rich workflow card must guard against containing generic advanced options');
+assert(/Rich workflow[\s\S]*inside the popup/.test(buttonScopeSource), 'rich workflow card copy must explain that rich options are configured inside the popup');
 assert(!/new MutationObserver/.test(buttonScopeSource), 'button scope must not use a broad observer to chase UI mutations');
 
 assert(/xmlCiiSimpleWorkflowRestoreRunButton/.test(simpleControllerSource), 'simple controller must restore simple Run Conversion visibility');
@@ -70,7 +74,7 @@ assert(/Deprecated compatibility shim/.test(oldPopupShimSource), 'old generic po
 assert(!/restoreSimpleRunButton/.test(oldPopupShimSource), 'old generic popup shim must not restore simple Run Conversion visibility');
 
 console.log('✅ model converters tab lean responsiveness static test passed', {
-  simpleRun: 'direct/no popup interception, owned by simple-prefixed controller',
-  richWorkflow: 'explicit rich-prefixed button popup only',
+  simpleRun: 'direct/no popup interception, owned by simple-prefixed controller with simple-only options card',
+  richWorkflow: 'explicit rich-prefixed button popup only, no generic advanced options inside rich card',
   buttonScope: 'single action row, no dark-shell rich launcher, rich visible only for xml_to_cii',
 });
