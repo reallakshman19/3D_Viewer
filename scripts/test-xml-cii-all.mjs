@@ -13,6 +13,7 @@ const scripts = [
   'scripts/test-xml-cii-matched-preview-publish.mjs',
   'scripts/test-xml-cii-sideload-preview-chain.mjs',
   'scripts/test-xml-cii-conversion-workflow-popup.mjs',
+  'scripts/test-xml-cii-preview-run-parity.mjs',
   'scripts/test-model-converters-tab-responsive.mjs',
 ];
 
