@@ -24,10 +24,10 @@ function parseNodeBlocks(xmlText) {
   const text = asText(xmlText);
   if (!text) return [];
   const blocks = [];
-  const re = /<Node\b[^>]*>([\s\S]*?)<\/Node>/gi;
+  const re = new RegExp('\\x3cNode\\b[^>]*>([\\s\\S]*?)\\x3c\\/Node>', 'gi');
   for (const match of text.matchAll(re)) {
     const body = match[1];
-    const get = (tag) => asText(body.match(new RegExp(`<${tag}\\b[^>]*>([\\s\\S]*?)<\\/${tag}>`, 'i'))?.[1]);
+    const get = (tag) => asText(body.match(new RegExp(`\\x3c${tag}\\b[^>]*>([\\s\\S]*?)\\x3c\\/${tag}>`, 'i'))?.[1]);
     blocks.push({
       nodeNumber: get('NodeNumber'),
       nodeName: get('NodeName'),
@@ -54,21 +54,19 @@ function rowsFromXmlInput(xmlInput) {
   }));
 }
 
-export function normalizePsKey(value, options = {}) {
+export function normalizePsKey(value) {
   let text = asText(value).toUpperCase();
   if (!text) return '';
   text = text.replace(/^\/+/, '').replace(/\s+/g, '');
   text = text.replace(/\(REF\)$/i, '');
   text = text.replace(/\/DATUM$/i, '').replace(/\/SREF$/i, '');
   text = text.replace(/^PS-/, 'PS');
-  if (options.stripDotSuffix === true) text = text.replace(/\.\d+$/, '');
   return text;
 }
 
 export function psCandidateKeys(value) {
   const exact = normalizePsKey(value);
-  const base = normalizePsKey(value, { stripDotSuffix: true });
-  return exact && base && exact !== base ? [exact, base] : [exact].filter(Boolean);
+  return exact ? [exact] : [];
 }
 
 export function parseXmlCiiPosition(value) {
