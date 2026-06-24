@@ -54,10 +54,14 @@
 // app-label-perf-runtime.js?v=20260623-support-load-canvas-overlay-1
 // app-label-perf-runtime.js?v=20260623-xml-cii-rich-worker-1
 // app-label-perf-runtime.js?v=20260624-selected-geometry-floating-workflow-3
+// app-label-perf-runtime.js?v=20260624-optional-rvm-health-startup-1
 import { installAppTabClickStateBridge } from './app-tab-click-state-bridge.js?v=20260622-tab-click-state-1';
-import { installRvmModelHealthBridge } from '../tabs/RvmModelHealthBridge.js?v=20260621-rvm-health-issues-1';
-import { installRvmModelHealthIssuesBridge } from '../tabs/RvmModelHealthIssuesBridge.js?v=20260621-rvm-health-issues-1';
-import { installBrowserRvmNativeFacetGhostPanelPatch } from '../rvm/BrowserRvmNativeFacetGhostPanelPatch.js?v=20260622-rvm-facet-ghost-panels-1';
+
+const DEFAULT_VIEWER_BRIDGE_MODULES = Object.freeze([
+  ['../tabs/RvmModelHealthBridge.js?v=20260624-optional-rvm-health-startup-1', 'installRvmModelHealthBridge'],
+  ['../tabs/RvmModelHealthIssuesBridge.js?v=20260624-optional-rvm-health-startup-1', 'installRvmModelHealthIssuesBridge'],
+  ['../rvm/BrowserRvmNativeFacetGhostPanelPatch.js?v=20260624-optional-rvm-health-startup-1', 'installBrowserRvmNativeFacetGhostPanelPatch'],
+]);
 
 const LEGACY_GEOMETRY_WORKFLOW_FLAG = 'rvm.enableLegacyGeometryWorkflowButtons';
 const LEGACY_GEOMETRY_WORKFLOW_MODULES = Object.freeze([
@@ -82,9 +86,7 @@ installDefaultViewerBridges();
 if (shouldInstallLegacyGeometryWorkflowButtons()) installLegacyGeometryWorkflowBridges();
 
 function installDefaultViewerBridges() {
-  installRvmModelHealthBridge();
-  installRvmModelHealthIssuesBridge();
-  installBrowserRvmNativeFacetGhostPanelPatch();
+  void installOptionalViewerBridges(DEFAULT_VIEWER_BRIDGE_MODULES, 'default viewer bridge');
 }
 
 function shouldInstallLegacyGeometryWorkflowButtons() {
@@ -97,15 +99,18 @@ function shouldInstallLegacyGeometryWorkflowButtons() {
 }
 
 async function installLegacyGeometryWorkflowBridges() {
-  const results = await Promise.allSettled(
-    LEGACY_GEOMETRY_WORKFLOW_MODULES.map((entry) => importLegacyGeometryWorkflowBridge(entry)),
-  );
-  for (const result of results) {
-    if (result.status === 'rejected') console.warn('legacy geometry workflow bridge failed', result.reason);
-  }
+  await installOptionalViewerBridges(LEGACY_GEOMETRY_WORKFLOW_MODULES, 'legacy geometry workflow bridge');
 }
 
-async function importLegacyGeometryWorkflowBridge(entry) {
+async function installOptionalViewerBridges(entries, label) {
+  const results = await Promise.allSettled(entries.map((entry) => importViewerBridge(entry)));
+  for (const result of results) {
+    if (result.status === 'rejected') console.warn(`${label} failed`, result.reason);
+  }
+  return results;
+}
+
+async function importViewerBridge(entry) {
   const specifier = entry[0];
   const installerName = entry[1];
   const module = await import(specifier);
@@ -114,4 +119,4 @@ async function importLegacyGeometryWorkflowBridge(entry) {
   installer();
 }
 
-export { init } from './app-label-perf-runtime.js?v=20260624-selected-geometry-floating-workflow-3';
+export { init } from './app-label-perf-runtime.js?v=20260624-optional-rvm-health-startup-1';
