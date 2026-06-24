@@ -70,11 +70,10 @@ export function pcfSupportPositionKey(point, tolerance = 1) {
     .join('|');
 }
 
-function normalizeSupportTag(value) {
-  const text = toText(value).trim().toUpperCase().replace(/^\/+/, '');
+export function normalizeSupportTag(value) {
+  const text = toText(value).trim().toUpperCase().replace(/^\/+/, '').replace(/\s+/g, ' ');
   const match = text.match(/PS-\d+(?:\.\d+)?/i);
-  if (!match) return '';
-  return match[0].replace(/\.\d+$/, '');
+  return match ? match[0].toUpperCase() : '';
 }
 
 export function supportTagsFromPcfRow(row = {}) {
