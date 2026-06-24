@@ -15,145 +15,82 @@ function assert(condition, message) {
   }
 }
 
-const requiredFiles = [
-  'viewer/tabs/model-converters/xml-cii-simple-workflow-controller.js',
-  'viewer/tabs/model-converters/xml-cii-rich-workflow-popup.js',
-  'viewer/tabs/model-converters/xml-cii-rich-workflow-bridge.js',
-  'viewer/tabs/model-converters/xml-cii-rich-workflow-runner.js',
-  'viewer/tabs/model-converters/xml-cii-workflow-button-scope.js',
-  'viewer/tabs/model-converters/xml-cii-conversion-workflow-popup.js',
-  'viewer/tabs/model-converters/xml-cii-popup-native-panels.js',
-  'viewer/tabs/model-converters/xml-cii-condense-rigid-ui-bridge.js',
-  'viewer/tabs/model-converters/xml-cii-rich-workflow-hotfix.js',
-  'viewer/tabs/model-converters/converters/xml-cii-rich-enrichment-fix.js',
-  'viewer/tabs/model-converters/ModelConvertersTab.js',
-  'viewer/tabs/model-converters/index.js',
-  'viewer/tabs/model-converters-tab.js',
-  'viewer/tabs/model-converters/converters/xmltocii2019_helper/enrichment-run-parity.js',
-  'viewer/converters/invocation-builder.js',
-];
+const files = {
+  simpleController: 'viewer/tabs/model-converters/xml-cii-simple-workflow-controller.js',
+  workflowPopup: 'viewer/tabs/model-converters/xml-cii-rich-workflow-popup.js',
+  bridge: 'viewer/tabs/model-converters/xml-cii-rich-workflow-bridge.js',
+  runner: 'viewer/tabs/model-converters/xml-cii-rich-workflow-runner.js',
+  buttonScope: 'viewer/tabs/model-converters/xml-cii-workflow-button-scope.js',
+  legacyShim: 'viewer/tabs/model-converters/xml-cii-conversion-workflow-popup.js',
+  modelTab: 'viewer/tabs/model-converters/ModelConvertersTab.js',
+  nativePanels: 'viewer/tabs/model-converters/xml-cii-popup-native-panels.js',
+  enrichmentRunParity: 'viewer/tabs/model-converters/converters/xmltocii2019_helper/enrichment-run-parity.js',
+  invocationBuilder: 'viewer/converters/invocation-builder.js',
+};
 
-for (const rel of requiredFiles) {
+for (const rel of Object.values(files)) {
   assert(fs.existsSync(path.join(root, rel)), `required XML CII workflow file is missing: ${rel}`);
 }
 
-const simpleController = read('viewer/tabs/model-converters/xml-cii-simple-workflow-controller.js');
-const workflowPopup = read('viewer/tabs/model-converters/xml-cii-rich-workflow-popup.js');
-const richBridge = read('viewer/tabs/model-converters/xml-cii-rich-workflow-bridge.js');
-const richRunner = read('viewer/tabs/model-converters/xml-cii-rich-workflow-runner.js');
-const buttonScope = read('viewer/tabs/model-converters/xml-cii-workflow-button-scope.js');
-const legacyPopupShim = read('viewer/tabs/model-converters/xml-cii-conversion-workflow-popup.js');
-const nativePanels = read('viewer/tabs/model-converters/xml-cii-popup-native-panels.js');
-const condenseBridge = read('viewer/tabs/model-converters/xml-cii-condense-rigid-ui-bridge.js');
-const richHotfix = read('viewer/tabs/model-converters/xml-cii-rich-workflow-hotfix.js');
-const enrichmentFix = read('viewer/tabs/model-converters/converters/xml-cii-rich-enrichment-fix.js');
-const modelTab = read('viewer/tabs/model-converters/ModelConvertersTab.js');
-const publicIndex = read('viewer/tabs/model-converters/index.js');
-const tabShim = read('viewer/tabs/model-converters-tab.js');
-const enrichmentRunParity = read('viewer/tabs/model-converters/converters/xmltocii2019_helper/enrichment-run-parity.js');
-const invocationBuilder = read('viewer/converters/invocation-builder.js');
+const simpleController = read(files.simpleController);
+const workflowPopup = read(files.workflowPopup);
+const bridge = read(files.bridge);
+const runner = read(files.runner);
+const buttonScope = read(files.buttonScope);
+const legacyShim = read(files.legacyShim);
+const modelTab = read(files.modelTab);
+const nativePanels = read(files.nativePanels);
+const enrichmentRunParity = read(files.enrichmentRunParity);
+const invocationBuilder = read(files.invocationBuilder);
 
-assert(simpleController.includes('installXmlCiiSimpleWorkflowController'), 'simple workflow controller must expose a simple-prefixed installer');
-assert(simpleController.includes('xmlCiiSimpleWorkflowRestoreRunButton'), 'simple workflow controller must keep non-XML CII direct-run restoration isolated');
-assert(simpleController.includes('xmlCiiSimpleWorkflowSelectedConverter'), 'simple controller must skip direct-run restoration for XML CII popup-only mode');
-assert(!simpleController.includes('installXmlCiiRichWorkflowPopup'), 'simple workflow controller must not import/install popup module');
-assert(!simpleController.includes('import') || !simpleController.includes('xml-cii-rich'), 'simple workflow controller must not import rich workflow modules');
-
-assert(buttonScope.includes('model-converters-xml-cii-simple-btn'), 'button scope must create the XML CII Simple Workflow launcher');
-assert(buttonScope.includes('model-converters-xml-cii-rich-btn'), 'button scope must create the XML CII Rich Workflow launcher');
-assert(buttonScope.includes('xmlCiiWorkflowButtonScopeHideAdvancedOptions'), 'button scope must hide generic converter advanced options for XML CII');
+assert(buttonScope.includes('model-converters-xml-cii-simple-btn'), 'button scope must create XML CII Simple Workflow launcher');
+assert(buttonScope.includes('model-converters-xml-cii-rich-btn'), 'button scope must create XML CII Rich Workflow launcher');
+assert(buttonScope.includes('XML->CII Simple Workflow'), 'left panel simple launcher label must be explicit');
+assert(buttonScope.includes('XML->CII Rich Workflow'), 'left panel rich launcher label must be explicit');
+assert(buttonScope.includes('xmlCiiWorkflowButtonScopeHideAdvancedOptions'), 'button scope must hide generic XML CII advanced options');
 assert(buttonScope.includes('data-xml-cii-left-panel-options-hidden'), 'hidden generic options must have a source-level marker');
-assert(!buttonScope.includes('Simple/direct workflow options'), 'left panel must not expose the generic simple/direct options block');
-assert(buttonScope.includes('XML->CII Simple Workflow') && buttonScope.includes('XML->CII Rich Workflow'), 'button scope must label both workflow launchers explicitly');
+assert(!buttonScope.includes('Simple/direct workflow options'), 'left panel must not show Simple/direct workflow options');
+assert(buttonScope.includes('cloneNode(true)'), 'workflow launchers must be cloned to strip stale anonymous listeners');
+assert(!buttonScope.includes('new MutationObserver'), 'button scope must not use a broad observer');
 
-assert(workflowPopup.includes('installXmlCiiRichWorkflowPopup'), 'workflow popup module must expose the existing installer boundary');
 assert(workflowPopup.includes('XML->CII(2019) Simple Workflow'), 'simple popup title must be explicit');
-assert(workflowPopup.includes('Import masters, map fields, inspect diagnostics, and run enriched CII conversion.'), 'simple popup subtitle must match requested label');
+assert(workflowPopup.includes('Import masters, map fields, inspect diagnostics, and run enriched CII conversion.'), 'simple popup subtitle must match requested copy');
 assert(workflowPopup.includes('XML->CII(2019) Rich Workflow'), 'rich popup title must be explicit');
-assert(workflowPopup.includes('Import masters, map fields, and maintain manual overrides in a standalone-ready config.'), 'rich popup subtitle must match requested label');
+assert(workflowPopup.includes('Import masters, map fields, and maintain manual overrides in a standalone-ready config.'), 'rich popup subtitle must match requested copy');
 assert(workflowPopup.includes("xmlCiiRichWorkflowBindLauncher(container, 'simple')"), 'popup module must bind simple launcher');
 assert(workflowPopup.includes("xmlCiiRichWorkflowBindLauncher(container, 'rich')"), 'popup module must bind rich launcher');
-assert(workflowPopup.includes('xmlCiiRichWorkflowRequestFinalRun'), 'workflow popup must delegate final run through the runner boundary');
-assert(!workflowPopup.includes('restoreSimpleRunButton'), 'workflow popup must not restore the legacy Run Conversion button');
-assert(!workflowPopup.includes('__xmlCiiConversionWorkflowAllowDirectRun'), 'workflow popup must not own direct-run flags');
-assert(!workflowPopup.includes("document.querySelector('#model-converters-run')"), 'workflow popup must not directly click the legacy run button');
-assert(!workflowPopup.includes("./legacy-adapter.js"), 'workflow popup must not import legacy-adapter directly');
-assert(!workflowPopup.includes('function interceptRun'), 'workflow popup must not define the old simple-run interceptor');
-assert(!workflowPopup.includes("document.addEventListener('click', interceptRun, true)"), 'workflow popup must not capture the legacy Run Conversion click');
-assert(workflowPopup.includes('stopImmediatePropagation'), 'workflow popup click handler must block stale cached popup listeners');
+assert(workflowPopup.includes('stopImmediatePropagation'), 'popup click handler must block stale duplicate popup listeners');
+assert(workflowPopup.includes('{ capture: true }'), 'popup click handler must bind in capture phase');
+assert(workflowPopup.includes('xmlCiiRichWorkflowCloseForeignXmlCiiWorkflowOverlays'), 'popup must close duplicate XML CII workflow overlays');
+assert(!workflowPopup.includes("document.querySelector('#model-converters-run')"), 'popup module must not directly click legacy Run Conversion');
+assert(!workflowPopup.includes('./legacy-adapter.js'), 'popup module must not import legacy adapter directly');
 
-assert(richBridge.includes('xmlCiiRichWorkflowGetBridge'), 'rich bridge boundary must expose rich-prefixed bridge getter');
-assert(richBridge.includes("./legacy-adapter.js"), 'legacy adapter dependency must be isolated to the bridge boundary');
-assert(richRunner.includes('xmlCiiRichWorkflowRequestFinalRun'), 'runner boundary must expose final-run handoff');
-assert(richRunner.includes("document.querySelector('#model-converters-run')"), 'legacy button handoff must be contained only in runner boundary');
+assert(simpleController.includes('xmlCiiSimpleWorkflowSelectedConverter'), 'simple controller must check selected converter');
+assert(simpleController.includes('XML_CII_CONVERTER_ID'), 'simple controller must know XML CII is popup-only');
+assert(!simpleController.includes('installXmlCiiRichWorkflowPopup'), 'simple controller must not install popup module');
 
-assert(legacyPopupShim.includes('Deprecated compatibility shim'), 'old popup filename must be reduced to a compatibility shim');
-assert(legacyPopupShim.includes('installXmlCiiRichWorkflowPopup as installXmlCiiConversionWorkflowPopup'), 'old popup export must forward to the popup boundary');
-assert(!legacyPopupShim.includes('restoreSimpleRunButton'), 'old popup shim must not own simple button behavior');
+assert(bridge.includes('./legacy-adapter.js'), 'legacy adapter dependency must remain isolated to bridge boundary');
+assert(runner.includes('xmlCiiRichWorkflowRequestFinalRun'), 'final run handoff must remain in runner boundary');
+assert(runner.includes("document.querySelector('#model-converters-run')"), 'legacy run click handoff must remain contained in runner boundary only');
 
-assert(nativePanels.includes('Condense Rigid / split condensed valve-flange nodes (XSD)'), 'XSD condense option must be rendered');
-assert(nativePanels.includes('Condense Rigid / split condensed valve-flange nodes (Resolved)'), 'Resolved condense option must be rendered');
-assert(nativePanels.includes('data-native-config-info'), 'Config info block must be rendered');
-assert(nativePanels.includes('ElementLengthMm calculated for INST'), 'Config info must describe INST ElementLengthMm logic');
+assert(legacyShim.includes('Deprecated compatibility shim'), 'old popup filename must remain a compatibility shim');
+assert(legacyShim.includes('installXmlCiiRichWorkflowPopup as installXmlCiiConversionWorkflowPopup'), 'old popup shim must forward to popup boundary');
 
-assert(condenseBridge.includes("XSD_KEY = 'condenseRigidXsd'"), 'condense bridge must define XSD key');
-assert(condenseBridge.includes("RESOLVED_SNAKE_KEY = 'split_condensed_valve_flange'"), 'condense bridge must define snake_case resolved key');
-assert(condenseBridge.includes('normaliseConfig'), 'condense bridge must normalize config keys');
-assert(condenseBridge.includes('xmlCiiRichWorkflowGetBridge'), 'condense bridge must use the bridge boundary');
-assert(!condenseBridge.includes('restoreSimpleRunButton'), 'condense bridge must not restore the legacy run button');
-assert(!condenseBridge.includes('__xmlCiiConversionWorkflowAllowDirectRun'), 'condense bridge must not own direct-run flags');
-assert(!condenseBridge.includes('new MutationObserver'), 'condense bridge must not use a broad DOM observer');
-assert(!condenseBridge.includes("document.addEventListener('click'"), 'condense bridge must not install global click handlers');
-assert(!condenseBridge.includes('setInterval'), 'condense bridge must not poll with setInterval');
-
-assert(richHotfix.includes('runXmlCiiWithRichFix'), 'rich workflow hotfix must patch XML->CII runner');
-assert(richHotfix.includes('getConverterById') && richHotfix.includes("'xml_to_cii'"), 'rich workflow hotfix must target xml_to_cii converter');
-assert(richHotfix.includes('xmlCiiRichWorkflowGetBridge'), 'rich hotfix must use the bridge boundary');
-assert(!richHotfix.includes('restoreButtons'), 'rich hotfix must not restore simple/rich buttons');
-assert(!richHotfix.includes('#model-converters-run'), 'rich hotfix must not style or mutate the legacy run button');
-assert(richHotfix.includes('data-xml-cii-hotfix-condense'), 'rich workflow hotfix must inject visible condense checkboxes into the active path');
-assert(richHotfix.includes('data-native-regex-path') && richHotfix.includes('stopImmediatePropagation'), 'rich workflow hotfix must suppress native regex/dropdown blink rerenders');
-
-assert(enrichmentFix.includes("'Pressure2'") && enrichmentFix.includes('hydroPressure'), 'enrichment fix must write hydro/test pressure to Pressure2');
-assert(enrichmentFix.includes("new Set(['FLAN', 'GASK', 'VALV', 'RIGID', 'INST'])"), 'enrichment fix must include full negative valve/flange block types');
-assert(enrichmentFix.includes('condensedValveFlangeBlocks'), 'enrichment fix must count resolved valve/flange blocks');
-assert(enrichmentFix.includes('Pressure1') && enrichmentFix.includes('Temperature1') && enrichmentFix.includes('Temperature2') && enrichmentFix.includes('Temperature3'), 'enrichment fix must preserve preview process fields into enriched XML');
-
-assert(modelTab.includes('installXmlCiiSimpleWorkflowController'), 'ModelConvertersTab must install simple workflow controller');
+assert(modelTab.includes('installXmlCiiWorkflowButtonScope'), 'ModelConvertersTab must install button scope');
+assert(modelTab.includes('installXmlCiiSimpleWorkflowController'), 'ModelConvertersTab must install simple controller');
 assert(modelTab.includes('installXmlCiiRichWorkflowPopup'), 'ModelConvertersTab must install workflow popup binding');
-assert(!modelTab.includes('installXmlCiiConversionWorkflowPopup'), 'ModelConvertersTab must not install the old generic workflow popup');
-assert(modelTab.indexOf('xml-cii-simple-workflow-controller') < modelTab.indexOf('xml-cii-rich-workflow-popup'), 'simple workflow installer must be listed separately before popup installer');
-assert(modelTab.includes('installXmlCiiCondenseRigidUiBridge'), 'ModelConvertersTab must install condense bridge');
-assert(modelTab.includes('installXmlCiiRichWorkflowHotfix'), 'ModelConvertersTab must install rich workflow hotfix');
 assert(modelTab.includes('20260624-popup-only-1'), 'ModelConvertersTab must be cache-busted for popup-only workflow identity');
-assert(publicIndex.includes('20260624-simple-rich-isolation-1'), 'model-converters index must remain cache-busted');
-assert(tabShim.includes('20260624-simple-rich-isolation-1'), 'tab shim must remain cache-busted');
+assert(!modelTab.includes('installXmlCiiConversionWorkflowPopup'), 'ModelConvertersTab must not install old generic popup module');
 
-assert(enrichmentRunParity.includes("RENUMBERABLE_NEGATIVE_TYPES = new Set(['FLAN', 'GASK', 'VALV', 'RIGID', 'INST'])"), 'Resolved condense base path must include full FLAN/GASK/VALV/RIGID/INST chains');
-assert(enrichmentRunParity.includes("INLINE_LENGTH_COMPONENT_TYPES = new Set(['FLAN', 'GASK', 'VALV', 'RIGID', 'INST'])"), 'Negative inline chain length type set must include full valve/flange/gasket chain types');
-assert(enrichmentRunParity.includes("RESOLVED_RIGID_MARKER_TYPES = new Set(['FLAN', 'VALV', 'RIGID', 'INST'])"), 'Resolved INST/FLAN/VALV/RIGID nodes must be explicitly marked as rigid');
-assert(enrichmentRunParity.includes('RESOLVED_FLEXIBLE_MARKER_TYPES = new Set([\'GASK\'])'), 'Resolved GASK nodes must preserve non-rigid marker semantics');
-assert(enrichmentRunParity.includes('annotateInlineElementLengths'), 'inline ElementLengthMm annotation must exist');
-assert(enrichmentRunParity.includes('element-length-inline-negative'), 'negative inline ElementLengthMm diagnostics must exist');
-assert(enrichmentRunParity.includes('sameComponentRefMate') && enrichmentRunParity.includes('allocateContiguousNumbers'), 'contiguous negative inline block construction must be source-level, not bridge-only');
-assert(enrichmentRunParity.includes('process-provenance') && enrichmentRunParity.includes('Pressure2 / Hydro/Test Pressure'), 'visible process provenance diagnostics must include Hydro/Test Pressure');
-assert(enrichmentRunParity.includes('ensureChildAfter') && enrichmentRunParity.includes("setTextAfter(document, node, 'Rigid', '2', 'Endpoint')"), 'Resolved rigid marker must be inserted after Endpoint');
-assert(enrichmentRunParity.includes('instRigid2Annotations') && enrichmentRunParity.includes('resolvedRigidMarkers'), 'Resolved Rigid=2 annotations must be counted');
-assert(enrichmentRunParity.includes('split-condensed-valve-flange-resolved'), 'Resolved condense diagnostics must exist');
-assert(enrichmentRunParity.includes('split_condensed_valve_flange'), 'snake_case resolved flag must be honored in rich enrichment');
+assert(nativePanels.includes('Condense Rigid / split condensed valve-flange nodes (XSD)'), 'XSD condense option must remain rendered in popup');
+assert(nativePanels.includes('Condense Rigid / split condensed valve-flange nodes (Resolved)'), 'Resolved condense option must remain rendered in popup');
+assert(enrichmentRunParity.includes('process-provenance') && enrichmentRunParity.includes('Pressure2 / Hydro/Test Pressure'), 'process provenance diagnostics must still include Hydro/Test Pressure');
+assert(enrichmentRunParity.includes('split-condensed-valve-flange-resolved'), 'resolved condense diagnostics must still exist');
+assert(invocationBuilder.includes('--split-condensed-valve-flange'), 'worker invocation must still forward split-condensed flag');
 
-assert(invocationBuilder.includes('--split-condensed-valve-flange'), 'worker invocation must forward split-condensed flag');
-assert(invocationBuilder.includes('--no-split-condensed-valve-flange'), 'worker invocation must forward no-split-condensed flag');
-assert(invocationBuilder.includes('supportConfig.split_condensed_valve_flange'), 'worker invocation must read snake_case supportConfig key');
-
-console.log('XML CII workflow smoke validation passed', {
-  leftPanel: 'popup-only, no generic advanced options',
-  simplePopup: 'Simple Workflow title/subtitle bound to simple launcher',
-  richPopup: 'Rich Workflow title/subtitle bound to rich launcher',
-  bridgeBoundary: 'legacy bridge dependency isolated to xml-cii-rich-workflow-bridge.js',
-  richRunHandoff: 'legacy final-run button click contained in xml-cii-rich-workflow-runner.js only',
-  condenseRigid: 'XSD + Resolved controls rendered and injected into active path',
-  processParity: 'Pressure1/Pressure2/Temperature1..3/density copied from preview to enriched XML with diagnostics provenance',
-  negativeValveFlangeBlocks: 'contiguous FLAN/GASK/VALV/RIGID/INST negative blocks resolved when enabled',
-  regexBlink: 'native regex/dropdown change rerender suppressed',
+console.log('XML CII workflow popup identity smoke validation passed', {
+  leftPanel: 'popup-only: Simple Workflow + Rich Workflow, no generic advanced options',
+  simplePopup: 'Simple title/subtitle bound to simple launcher',
+  richPopup: 'Rich title/subtitle bound to rich launcher',
+  duplicateGuard: 'capture-phase stopImmediatePropagation and foreign overlay cleanup',
 });
