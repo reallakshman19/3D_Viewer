@@ -5,16 +5,18 @@ const uiBridgeSource = await fs.readFile(new URL('../tabs/RvmNonPrimitiveSourceT
 const rendererSource = await fs.readFile(new URL('../tabs/viewer3d-rvm-tab-renderer.js', import.meta.url), 'utf8');
 const autoBridgeSource = await fs.readFile(new URL('../tabs/RvmNonPrimitiveAutoBendBridge.js', import.meta.url), 'utf8');
 const supportSettingsSource = await fs.readFile(new URL('../overlays/support/SupportOverlaySettings.js', import.meta.url), 'utf8');
+const inputXmlUiBridgeSource = await fs.readFile(new URL('../rvm-viewer/RvmInputXmlSupportGraphicsUiBridge.js', import.meta.url), 'utf8');
 
-assert.match(uiBridgeSource, /rvm-non-primitive-source-tools-ui\/v6/, 'source-tools UI exposes v6 schema marker');
+assert.match(uiBridgeSource, /rvm-non-primitive-source-tools-ui\/v7/, 'source-tools UI exposes v7 schema marker');
 assert.match(uiBridgeSource, /rvm-nonprimitive-source-tools-panel/, 'source-tools UI owns a compact panel id');
 assert.match(uiBridgeSource, /installSourceToolsStyles/, 'source-tools UI installs compact layout styles');
-assert.match(uiBridgeSource, /dataset\.rvmNonPrimitiveSourceToolsStyle = 'v6'/, 'source-tools UI style injection is versioned');
-assert.match(uiBridgeSource, /data-source-tools-layout="compact-v1"/, 'source-tools UI renders compact layout marker');
-assert.match(uiBridgeSource, /data-source-tools-group="auto-bend"/, 'source-tools UI groups auto-bend controls');
+assert.match(uiBridgeSource, /dataset\.rvmNonPrimitiveSourceToolsStyle = 'v7'/, 'source-tools UI style injection is versioned');
+assert.match(uiBridgeSource, /data-source-tools-layout="grouped-v2"/, 'source-tools UI renders grouped layout marker');
+assert.match(uiBridgeSource, /data-source-tools-group="inputxml-family"/, 'source-tools UI groups InputXML-family controls');
+assert.match(uiBridgeSource, /InputXML Family/, 'source-tools UI labels the InputXML family group');
 assert.match(uiBridgeSource, /data-source-tools-group="support-overlay"/, 'source-tools UI groups support overlay controls');
 assert.match(uiBridgeSource, /rvm-source-tools-badge/, 'source-tools UI renders compact status/warning badges');
-assert.match(uiBridgeSource, /@media \(max-width: 1150px\)/, 'source-tools UI includes narrow-panel responsive styling');
+assert.match(uiBridgeSource, /@media\(max-width:1150px\)/, 'source-tools UI includes narrow-panel responsive styling');
 assert.match(uiBridgeSource, /rvmModelPrimitiveMode[\s\S]*source-preview/, 'source-tools UI is gated by source-preview mode');
 assert.match(uiBridgeSource, /PRIMITIVE_KIND_RE[\s\S]*rvm\|glb\|gltf\|rev/, 'source-tools UI excludes primitive source kinds');
 assert.match(uiBridgeSource, /clearSourceToolsUi/, 'source-tools UI exposes explicit primitive-mode cleanup');
@@ -24,7 +26,14 @@ assert.match(uiBridgeSource, /sourceToolsCleared/, 'source-tools UI marks cleare
 assert.match(uiBridgeSource, /nonPrimitiveSourceToolsDiagnostics[\s\S]*status: 'cleared'/, 'source-tools UI publishes cleared diagnostics on primitive mode');
 assert.match(uiBridgeSource, /primitiveExcluded: true/, 'source-tools UI cleared diagnostics preserves primitive exclusion marker');
 assert.match(uiBridgeSource, /Auto Bend/, 'source-tools UI renders Auto Bend control');
-assert.match(uiBridgeSource, /Support Overlay/, 'source-tools UI renders Support Overlay control');
+assert.match(uiBridgeSource, /Radius/, 'source-tools UI renders Auto Bend radius control');
+assert.match(uiBridgeSource, /Bend diagnostics/, 'source-tools UI renders bend diagnostics control');
+assert.match(uiBridgeSource, /id="rvm-inputxml-vertical-axis"/, 'source-tools UI renders InputXML vertical-axis selector in right panel');
+assert.match(uiBridgeSource, /id="rvm-inputxml-north-axis"/, 'source-tools UI renders InputXML north-axis selector in right panel');
+assert.match(uiBridgeSource, /id="rvm-inputxml-apply-transform"/, 'source-tools UI renders axis Apply action in right panel');
+assert.match(uiBridgeSource, /Support Overlay/, 'source-tools UI renders Support Overlay group');
+assert.match(uiBridgeSource, /<span>Symbol<\/span>/, 'source-tools UI renders support symbol toggle');
+assert.match(uiBridgeSource, /<span>Label<\/span>/, 'source-tools UI renders support label toggle');
 assert.match(uiBridgeSource, /data-source-tool="support-scale"/, 'source-tools UI renders support overlay scale control');
 assert.match(uiBridgeSource, /data-source-tool="support-filter"/, 'source-tools UI renders support family filter chips');
 assert.match(uiBridgeSource, /SUPPORT_FILTER_FAMILIES/, 'source-tools UI has explicit support family filter list');
@@ -43,9 +52,19 @@ assert.match(uiBridgeSource, /writeNonPrimitiveAutoBendSettings/, 'source-tools 
 assert.match(uiBridgeSource, /writeNonPrimitiveSupportOverlaySettings\(\{ scale/, 'source-tools UI persists support overlay scale');
 assert.match(uiBridgeSource, /writeNonPrimitiveSupportOverlaySettings\(\{ filters: nextSupportFilters/, 'source-tools UI persists support overlay family filters');
 assert.match(uiBridgeSource, /writeNonPrimitiveSupportOverlaySettings/, 'source-tools UI persists support overlay settings');
+assert.match(uiBridgeSource, /readSourceAxisTransformSettings/, 'source-tools UI reads shared source-axis transform settings');
+assert.match(uiBridgeSource, /writeSourceAxisTransformSettings/, 'source-tools UI writes shared source-axis transform settings');
+assert.match(uiBridgeSource, /AUTO_TOOLS[\s\S]*reapplyAutoBendFromControls/, 'source-tools UI routes Auto Bend controls to Auto Bend only');
+assert.match(uiBridgeSource, /SUPPORT_TOOLS[\s\S]*reapplySupportOverlayFromControls/, 'source-tools UI routes Support Overlay controls to support overlay only');
+assert.match(uiBridgeSource, /apply-axis[\s\S]*reapplyFromControls/, 'source-tools UI uses Apply to reapply both source systems after axis changes');
 assert.doesNotMatch(uiBridgeSource, /Support Summary|SupportATT|SupportEngine|Raw\/Symbol\/Both|rvm_support_render_mode_v1|rvm_support_geometry_mode_v1/, 'source-tools UI does not revive retired RVM support UI or keys');
 
-assert.match(rendererSource, /RvmNonPrimitiveSourceToolsUiBridge\.js\?v=20260623-nonprimitive-source-tools-ui-6/, 'renderer imports source-tools UI bridge with v6 cache key');
+assert.match(inputXmlUiBridgeSource, /rvm-inputxml-source-tools-bridge\/v2/, 'InputXML compatibility bridge exposes source-tools API schema');
+assert.doesNotMatch(inputXmlUiBridgeSource, /rvm-inputxml-graphics-controls/, 'InputXML compatibility bridge does not inject a top-ribbon control cluster');
+assert.doesNotMatch(inputXmlUiBridgeSource, /geo-top-ribbon/, 'InputXML compatibility bridge does not own top-ribbon UI');
+assert.doesNotMatch(inputXmlUiBridgeSource, /ensureResizeHandles|persistPanelWidths|panel\.style\.setProperty\(side === 'left'/, 'InputXML compatibility bridge does not own parent panel resizing');
+
+assert.match(rendererSource, /RvmNonPrimitiveSourceToolsUiBridge\.js\?v=20260624-source-tools-grouped-1/, 'renderer imports source-tools UI bridge with grouped cache key');
 assert.match(rendererSource, /installRvmNonPrimitiveSourceToolsUiBridge\(\)/, 'renderer installs source-tools UI bridge');
 
 assert.match(autoBridgeSource, /restoreVisualTrimmedSegments/, 'auto-bend bridge can restore visual trims for live UI toggles');
