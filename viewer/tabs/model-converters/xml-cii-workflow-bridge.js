@@ -11,6 +11,10 @@ import { getXmlCiiPhaseBridge } from './legacy-adapter.js?v=20260624-startup-aut
 
 const XML_CII_OBSOLETE_PIPING_CLASS_MASTER = 'Piping_class_master.json';
 const XML_CII_WORKFLOW_SNAPSHOT_TTL_MS = 5000;
+const XSD_KEY = 'condenseRigidXsd';
+const XSD_SNAKE_KEY = 'condense_rigid_xsd';
+const RESOLVED_KEY = 'splitCondensedValveFlange';
+const RESOLVED_SNAKE_KEY = 'split_condensed_valve_flange';
 
 let cachedBridge = null;
 let cachedSafeBridge = null;
@@ -19,6 +23,22 @@ let snapshotGeneration = 0;
 
 function nowMs() {
   return Date.now ? Date.now() : 0;
+}
+
+function bool(value) {
+  if (value === true) return true;
+  if (value === false || value === null || value === undefined) return false;
+  if (typeof value === 'number') return value !== 0;
+  return /^(1|true|yes|on)$/i.test(String(value).trim());
+}
+
+function parseConfigText(text) {
+  try {
+    const parsed = JSON.parse(String(text || '{}'));
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+  } catch {
+    return {};
+  }
 }
 
 function phaseKey(root) {
@@ -36,6 +56,67 @@ function snapshotKey(root) {
 function clearSnapshotCache() {
   snapshotGeneration += 1;
   snapshotCache = { key: '', value: null, createdAt: 0 };
+}
+
+function normaliseCondenseConfig(config) {
+  const cfg = config && typeof config === 'object' && !Array.isArray(config) ? config : {};
+  const xsd = bool(cfg[XSD_KEY]) || bool(cfg[XSD_SNAKE_KEY]);
+  const resolved = bool(cfg[RESOLVED_KEY]) || bool(cfg[RESOLVED_SNAKE_KEY]);
+  cfg[XSD_KEY] = xsd;
+  cfg[XSD_SNAKE_KEY] = xsd;
+  cfg[RESOLVED_KEY] = resolved;
+  cfg[RESOLVED_SNAKE_KEY] = resolved;
+  return cfg;
+}
+
+function bridgeConfig(base) {
+  return normaliseCondenseConfig(parseConfigText(base?.exportPopupConfigText?.() || '{}'));
+}
+
+function writeBridgeConfig(base, config) {
+  base?.importPopupConfigText?.(JSON.stringify(normaliseCondenseConfig(config || {}), null, 2));
+  clearSnapshotCache();
+}
+
+function mergeCondenseBoolKeys(editedText, bools = {}) {
+  const cfg = normaliseCondenseConfig(parseConfigText(editedText));
+  if (Object.prototype.hasOwnProperty.call(bools, XSD_KEY) || Object.prototype.hasOwnProperty.call(bools, XSD_SNAKE_KEY)) {
+    const enabled = bool(bools[XSD_KEY]) || bool(bools[XSD_SNAKE_KEY]);
+    cfg[XSD_KEY] = enabled;
+    cfg[XSD_SNAKE_KEY] = enabled;
+  }
+  if (Object.prototype.hasOwnProperty.call(bools, RESOLVED_KEY) || Object.prototype.hasOwnProperty.call(bools, RESOLVED_SNAKE_KEY)) {
+    const enabled = bool(bools[RESOLVED_KEY]) || bool(bools[RESOLVED_SNAKE_KEY]);
+    cfg[RESOLVED_KEY] = enabled;
+    cfg[RESOLVED_SNAKE_KEY] = enabled;
+  }
+  return JSON.stringify(cfg, null, 2);
+}
+
+function hydrateCondenseSnapshot(snapshot, base) {
+  if (!snapshot || typeof snapshot !== 'object') return snapshot;
+  const cfg = bridgeConfig(base);
+  snapshot.run = snapshot.run && typeof snapshot.run === 'object' ? snapshot.run : {};
+  snapshot.run.options = snapshot.run.options && typeof snapshot.run.options === 'object' ? snapshot.run.options : {};
+  snapshot.run.options[XSD_KEY] = bool(snapshot.run.options[XSD_KEY]) || cfg[XSD_KEY];
+  snapshot.run.options[RESOLVED_KEY] = bool(snapshot.run.options[RESOLVED_KEY]) || bool(snapshot.run.options[RESOLVED_SNAKE_KEY]) || cfg[RESOLVED_KEY];
+  snapshot.config = snapshot.config && typeof snapshot.config === 'object' ? snapshot.config : {};
+  snapshot.config[XSD_KEY] = cfg[XSD_KEY];
+  snapshot.config[RESOLVED_KEY] = cfg[RESOLVED_KEY];
+  return snapshot;
+}
+
+function writeCondenseRunOption(base, key, enabled) {
+  const cfg = bridgeConfig(base);
+  if (key === XSD_KEY || key === XSD_SNAKE_KEY) {
+    cfg[XSD_KEY] = !!enabled;
+    cfg[XSD_SNAKE_KEY] = !!enabled;
+  }
+  if (key === RESOLVED_KEY || key === RESOLVED_SNAKE_KEY) {
+    cfg[RESOLVED_KEY] = !!enabled;
+    cfg[RESOLVED_SNAKE_KEY] = !!enabled;
+  }
+  writeBridgeConfig(base, cfg);
 }
 
 function sanitizeSnapshot(value) {
@@ -56,7 +137,7 @@ function cachedSnapshot(base, root) {
   if (snapshotCache.key === key && snapshotCache.value && createdAt - snapshotCache.createdAt < XML_CII_WORKFLOW_SNAPSHOT_TTL_MS) {
     return snapshotCache.value;
   }
-  const value = sanitizeSnapshot(base.getPopupSnapshot(root));
+  const value = hydrateCondenseSnapshot(sanitizeSnapshot(base.getPopupSnapshot(root)), base);
   if (value) snapshotCache = { key, value, createdAt };
   return value;
 }
@@ -104,6 +185,24 @@ function xmlCiiWorkflowWrapBridge(base) {
     return result ?? null;
   };
 
+  const originalSetRunOption = base.setPopupRunOption?.bind(base);
+  safe.setPopupRunOption = (key, value, type) => {
+    if (key === XSD_KEY || key === XSD_SNAKE_KEY || key === RESOLVED_KEY || key === RESOLVED_SNAKE_KEY) {
+      writeCondenseRunOption(base, key, !!value);
+    }
+    const result = originalSetRunOption?.(key, value, type);
+    clearSnapshotCache();
+    return result;
+  };
+
+  const originalSaveConfigText = base.savePopupConfigText?.bind(base);
+  safe.savePopupConfigText = (editedText, bools) => {
+    const nextText = mergeCondenseBoolKeys(editedText, bools || {});
+    const result = originalSaveConfigText?.(nextText, bools);
+    clearSnapshotCache();
+    return result;
+  };
+
   safe.getPopupSnapshot = (root) => cachedSnapshot(base, root);
   safe.importPopupMasterFile = wrapInvalidatingAsync(base, 'importPopupMasterFile');
   safe.autoMapPopupMaster = wrapInvalidatingSync(base, 'autoMapPopupMaster');
@@ -111,8 +210,6 @@ function xmlCiiWorkflowWrapBridge(base) {
   safe.savePopupMaster = wrapInvalidatingSync(base, 'savePopupMaster');
   safe.clearPopupMaster = wrapInvalidatingSync(base, 'clearPopupMaster');
   safe.setPopupConfigValue = wrapInvalidatingSync(base, 'setPopupConfigValue');
-  safe.setPopupRunOption = wrapInvalidatingSync(base, 'setPopupRunOption');
-  safe.savePopupConfigText = wrapInvalidatingSync(base, 'savePopupConfigText');
   safe.importPopupConfigText = wrapInvalidatingSync(base, 'importPopupConfigText');
   safe.applyPopupPreferredWeights = wrapInvalidatingSync(base, 'applyPopupPreferredWeights');
 

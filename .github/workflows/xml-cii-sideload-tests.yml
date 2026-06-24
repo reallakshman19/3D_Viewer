@@ -56,5 +56,17 @@ jobs:
       - name: Model Converter responsiveness
         run: node scripts/test-model-converters-tab-responsive.mjs
 
+      - name: Preview/run parity guard
+        run: node scripts/test-xml-cii-preview-run-parity.mjs
+
+      - name: Decimal PS tag restraint guard
+        run: node scripts/test-xml-cii-ps-tag-exact-restraints.mjs
+
+      - name: Master autoload consolidation guard
+        run: node scripts/test-xml-cii-master-autoload-single-session.mjs
+
+      - name: Patch retirement guard
+        run: node scripts/test-xml-cii-master-preserve-patch.mjs
+
       - name: Aggregate runner sanity
         run: node scripts/test-xml-cii-all.mjs
