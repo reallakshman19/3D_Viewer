@@ -8,7 +8,8 @@ export const BRANCH_COLUMNS = [
   { id: 'material', label: 'Material', hint: 'Edit', width: 120, minWidth: 80 },
   { id: 'rating', label: 'Rating', hint: 'Edit', width: 90, minWidth: 60 },
   { id: 'materialCode', label: 'Material Code', hint: 'Edit', width: 130, minWidth: 90 },
-  { id: 'p1', label: 'P1 (MPa)', hint: 'Edit', width: 100, minWidth: 70 },
+  { id: 'p1', label: 'P1 / Design Pressure', hint: 'Edit', width: 130, minWidth: 90 },
+  { id: 'hydroPressure', label: 'Hydro/Test Pressure', hint: 'Edit', width: 130, minWidth: 90 },
   { id: 't1', label: 'T1 (C)', hint: 'Edit', width: 90, minWidth: 60 },
   { id: 't2', label: 'T2 (C)', hint: 'Edit', width: 90, minWidth: 60 },
   { id: 't3', label: 'T3 (C)', hint: 'Edit', width: 90, minWidth: 60 },
@@ -118,6 +119,7 @@ export class EditablePreviewTable {
           ${mcBadge}${row.materialCodeNeedsReview ? fillDownBtn('materialCode', ri) : ''}
         </td>
         <td class="mc-preview-td mc-preview-pd-td">${renderProcessField('p1', row.p1, row.p1Source)}</td>
+        <td class="mc-preview-td mc-preview-pd-td">${renderProcessField('hydroPressure', row.hydroPressure, row.hydroPressureSource)}</td>
         <td class="mc-preview-td mc-preview-pd-td">${renderProcessField('t1', row.t1, row.t1Source)}</td>
         <td class="mc-preview-td mc-preview-pd-td">${renderProcessField('t2', row.t2, row.t2Source)}</td>
         <td class="mc-preview-td mc-preview-pd-td">${renderProcessField('t3', row.t3, row.t3Source)}</td>
