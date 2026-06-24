@@ -61,7 +61,7 @@ export function normalizePsKey(value) {
   text = text.replace(/\(REF\)$/i, '');
   text = text.replace(/\/DATUM$/i, '').replace(/\/SREF$/i, '');
   const match = text.match(/^PS-?(\d+(?:\.\d+)?)$/i) || text.match(/PS-?(\d+(?:\.\d+)?)/i);
-  return match ? `PS-${match[1]}` : text;
+  return match ? `PS${match[1]}` : text;
 }
 
 export function psCandidateKeys(value) {
