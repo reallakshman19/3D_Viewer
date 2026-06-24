@@ -60,7 +60,6 @@ import { installBrowserRvmDishTessellationRuntimePatch } from '../rvm/BrowserRvm
 import { installBrowserRvmRemainingPrimitiveRuntimePatch } from '../rvm/BrowserRvmRemainingPrimitiveRuntimePatch.js?v=20260620-rvm-facetgroup-1';
 import { installBrowserRvmTorusParityRuntimePatch } from '../rvm/BrowserRvmTorusParityRuntimePatch.js?v=20260622-rvm-native-torus-line-elbows-1';
 import { installBrowserRvmSnoutParityRuntimePatch } from '../rvm/BrowserRvmSnoutParityRuntimePatch.js?v=20260620-rvm-snout-parity-1';
-import { installRvmDtxrGeometryCoverageBridge } from '../rvm/RvmDtxrGeometryCoverageBridge.js?v=20260622-rvm-dtxr-coverage-1';
 
 function installToolbarActionCompatibility(RvmViewerClass) {
   const proto = RvmViewerClass?.prototype;
@@ -132,7 +131,6 @@ installRvmDeferredBridgeLoader();
 installRvmLeftPanelResizeCollapseBridge();
 installRvmLeafSelectionIdentityBridge(RvmViewer3D);
 installRvmLeafCanvasPickBridge(RvmViewer3D);
-installRvmDtxrGeometryCoverageBridge();
 publishRvmViewerModuleContract();
 
 export { RvmViewer3D };
