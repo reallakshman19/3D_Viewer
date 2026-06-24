@@ -16,8 +16,6 @@ export const DEFAULT_MATERIAL_MAP_URLS = Object.freeze([
 ]);
 
 export const DEFAULT_PIPING_CLASS_MASTER_URLS = Object.freeze([
-  '../docs/Masters/Piping_class_master.json',
-  'docs/Masters/Piping_class_master.json',
   '../docs/Masters/SpecwisePipingClass/index.json',
   'docs/Masters/SpecwisePipingClass/index.json',
 ]);
