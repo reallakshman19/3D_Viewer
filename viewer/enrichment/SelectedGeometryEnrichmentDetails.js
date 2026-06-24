@@ -11,7 +11,6 @@ import { normalizeKey, objectAliases, text } from './selected-geometry-shared.js
 
 const DETAIL_ATTR = 'data-selected-geometry-enrichment-details';
 const TREE_BADGE_ATTR = 'data-selected-geometry-enrichment-tree-badge';
-const MAX_AUDIT_ITEMS = 8;
 const FIELD_KEYS = Object.freeze(['LINE_NO', 'TAG', 'TYPE', 'NPS', 'NS', 'DIAMETER', 'WALL_THICK', 'MATERIAL', 'OWNER']);
 
 export function renderSelectedGeometryEnrichmentDetails(root, selectedObjects, enrichedScope) {
@@ -139,6 +138,7 @@ function renderDetailsHtml(object, selectedCount, summary) {
     ${renderSection('Material', enrichment.material)}
     ${renderSection('Weight', enrichment.weight)}
     ${renderReadiness(object)}
+    ${renderSection('Bindings / Source', enrichment.masterBindings || sourceBindingRows(object))}
     ${renderAudit(audit)}
     <div class="rvm-selected-geometry-footer">Workspace scope: ${escapeHtml(summary.objects)} objects, ${escapeHtml(summary.resolved)} resolved, ${escapeHtml(summary.conflicts)} conflicts, ${escapeHtml(summary.missing)} missing.</div>`;
 }
@@ -148,8 +148,30 @@ function sourceRows(object) {
   const rows = FIELD_KEYS
     .filter((key) => text(attrs[key]))
     .map((key) => [key, attrs[key]]);
-  if (rows.length) return rows.slice(0, 6);
+  if (rows.length) return rows;
   return [['Source path', object?.sourcePath || '-'], ['Object id', object?.id || '-']];
+}
+
+function sourceBindingRows(object) {
+  const enrichment = object?.attributes?.enrichment || {};
+  const bindingRows = [];
+  for (const [sectionName, sectionValue] of Object.entries(enrichment)) {
+    if (!sectionValue || typeof sectionValue !== 'object' || Array.isArray(sectionValue)) continue;
+    const raw = sectionValue._raw;
+    const bindings = sectionValue._bindings;
+    if (bindings && typeof bindings === 'object' && !Array.isArray(bindings)) {
+      bindingRows.push([`${sectionName} bindings`, bindings]);
+    }
+    if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
+      bindingRows.push([`${sectionName} raw`, raw]);
+    }
+  }
+  if (bindingRows.length) return Object.fromEntries(bindingRows);
+  return {
+    sourcePath: object?.sourcePath || '',
+    objectId: object?.id || '',
+    objectType: object?.type || '',
+  };
 }
 
 function renderReadiness(object) {
@@ -166,8 +188,10 @@ function renderReadiness(object) {
 }
 
 function renderSection(title, value) {
-  const entries = Object.entries(value || {}).filter((entry) => entry[1] !== null && entry[1] !== '');
-  const rows = entries.length ? entries.slice(0, 7) : [['Status', 'No matched data']];
+  const entries = Object.entries(value || {})
+    .filter((entry) => entry[1] !== undefined && entry[1] !== null && entry[1] !== '')
+    .filter((entry) => entry[0] !== '_raw' && entry[0] !== '_bindings');
+  const rows = entries.length ? entries : [['Status', 'No matched data']];
   return `<div class="rvm-selected-geometry-details-title"><span>${escapeHtml(title)}</span><small>${escapeHtml(entries.length)} fields</small></div><div class="rvm-selected-geometry-detail-grid">${rows.map(renderRow).join('')}</div>`;
 }
 
@@ -177,28 +201,41 @@ function renderAudit(audit) {
   const sources = Array.isArray(audit?.sources) ? audit.sources : [];
   const items = [
     ['Method', audit?.method || '-'],
+    ['Confidence', formatConfidence(audit?.confidence)],
     ['Needs review', audit?.needsReview ? 'yes' : 'no'],
     ['Missing', missing.join(', ') || '-'],
     ['Conflicts', conflictText(conflicts) || '-'],
-    ['Sources', sources.map((source) => `${source.source}:${formatConfidence(source.confidence)}`).join(', ') || '-'],
+    ['Sources', sources.map((source) => `${source.source}:${source.method}:${formatConfidence(source.confidence)}`).join(', ') || '-'],
   ];
   return `<div class="rvm-selected-geometry-details-title"><span>Audit</span><small>${escapeHtml(conflicts.length + missing.length)} issues</small></div><div class="rvm-selected-geometry-detail-grid">${items.map(renderRow).join('')}</div>`;
 }
 
 function conflictText(conflicts) {
   return conflicts
-    .slice(0, MAX_AUDIT_ITEMS)
     .map((conflict) => `${conflict.field}: ${conflict.sourceValue} vs ${conflict.enrichedValue}`)
     .join('; ');
 }
 
 function renderRow(entry) {
-  return `<div class="rvm-selected-geometry-detail-row"><span>${escapeHtml(entry[0])}</span><b title="${escapeHtml(entry[1])}">${escapeHtml(displayValue(entry[1]))}</b></div>`;
+  return `<div class="rvm-selected-geometry-detail-row"><span>${escapeHtml(entry[0])}</span><b title="${escapeHtml(formatValue(entry[1]))}">${escapeHtml(displayValue(entry[1]))}</b></div>`;
 }
 
 function displayValue(value) {
+  const formatted = formatValue(value);
+  if (formatted.length > 160) return `${formatted.slice(0, 157)}...`;
+  return formatted;
+}
+
+function formatValue(value) {
   if (value === undefined || value === null || value === '') return '-';
   if (typeof value === 'number') return Number.isFinite(value) ? value.toFixed(3).replace(/\.?0+$/, '') : '-';
+  if (typeof value === 'object') {
+    try {
+      return JSON.stringify(value);
+    } catch (_error) {
+      return String(value);
+    }
+  }
   return String(value);
 }
 

@@ -1,4 +1,4 @@
-/**
+ /**
  * Functionality: parses selected-geometry enrichment master files supplied from
  * the RVM UI. Parameters: browser File/text input plus master kind. Outputs:
  * frozen row arrays with source metadata. Fallback: empty files return no rows;
@@ -8,6 +8,50 @@
 import { freezeDeep, text } from './selected-geometry-shared.js';
 
 const WORKBOOK_FILE_RE = /\.(xlsx|xlsm|xlsb|xls|ods)$/i;
+
+const MASTER_ALIAS_GROUPS = Object.freeze({
+  lineList: Object.freeze({
+    lineNo: ['lineNo', 'Line No', 'Line Number', 'LineNo', 'LINENO', 'LINE_NO', 'LINE NUMBER', 'PipelineReference', 'Pipeline Reference', 'LINE KEY', 'Line Key'],
+    lineNoKey: ['lineNoKey', 'lineNo', 'Line No', 'Line Number', 'LineNo', 'LINENO', 'LINE_NO', 'PipelineReference', 'Pipeline Reference', 'LINE KEY', 'Line Key'],
+    lineKey: ['lineKey', 'Line Key', 'LINEKEY', 'LINE_KEY', 'Key', 'KEY'],
+    lineKey1: ['lineKey1', 'Key 1', 'ColumnX1', 'Service', 'SERVICE', 'Fluid', 'FLUID'],
+    lineKey2: ['lineKey2', 'Key 2', 'ColumnX2', 'Line Number', 'Line No', 'LINENO', 'PipelineReference', 'Pipeline Reference'],
+    pipingClass: ['pipingClass', 'Piping Class', 'PIPING_CLASS', 'Pipe Class', 'PIPE_CLASS', 'Class', 'CLASS', 'Spec', 'SPEC'],
+    rating: ['rating', 'Rating', 'RATING', 'Class Rating', 'Pressure Class', 'CLASS_RATING'],
+    material: ['material', 'Material', 'MATERIAL', 'Material Name', 'MATERIAL_NAME', 'Description'],
+    materialCode: ['materialCode', 'Material Code', 'MATERIAL_CODE', 'MAT_CODE', 'Mat Code', 'CII Code'],
+    p1: ['p1', 'P1', 'Pressure', 'PRESSURE', 'Pressure1', 'PRESSURE1', 'Design Pressure', 'DESIGN_PRESSURE'],
+    t1: ['t1', 'T1', 'Temperature', 'TEMP', 'Temp1', 'TEMP1', 'TEMP_EXP_C1', 'Design Temperature', 'DESIGN_TEMP'],
+    t2: ['t2', 'T2', 'Temp2', 'TEMP2', 'TEMP_EXP_C2', 'Operating Temperature', 'OPERATING_TEMP'],
+    t3: ['t3', 'T3', 'Temp3', 'TEMP3', 'TEMP_EXP_C3', 'Minimum Temperature', 'MIN_TEMP'],
+    density: ['density', 'Density', 'DENSITY', 'Fluid Density', 'FLUID_DENSITY', 'Density kg/m3', 'DENSITY_KG_M3'],
+  }),
+  pipingClass: Object.freeze({
+    pipingClass: ['pipingClass', 'Piping Class', 'PIPING_CLASS', 'Pipe Class', 'PIPE_CLASS', 'Class', 'CLASS', 'Spec', 'SPEC'],
+    convertedBore: ['convertedBore', 'Bore', 'BORE', 'DN', 'NB', 'NPS', 'Size', 'SIZE'],
+    componentType: ['componentType', 'Component Type', 'COMPONENT_TYPE', 'Type', 'TYPE', 'DTXR'],
+    rating: ['rating', 'Rating', 'RATING', 'Class Rating', 'Pressure Class', 'CLASS_RATING'],
+    material: ['material', 'Material', 'MATERIAL', 'Material Name', 'MATERIAL_NAME', 'Description'],
+    materialName: ['materialName', 'Material Name', 'MATERIAL_NAME', 'Material_Name', 'Material', 'MATERIAL', 'Description'],
+    materialCode: ['materialCode', 'Material Code', 'MATERIAL_CODE', 'MAT_CODE', 'Mat Code', 'MATL', 'CII Code'],
+    wallThickness: ['wallThickness', 'Wall Thickness', 'Wall thickness', 'WALL_THICKNESS', 'WALL_THICK', 'Wall Thk', 'WALL THK', 'WT', 'THK', 'Thickness'],
+    corrosion: ['corrosion', 'Corrosion', 'CORROSION', 'corrosionAllowance', 'Corrosion Allowance', 'CORR_ALLOW', 'CA', 'Corr'],
+  }),
+  materialMap: Object.freeze({
+    code: ['code', 'Code', 'CA3', 'PCF Code', 'Material Code', 'MATERIAL_CODE', 'MAT_CODE', 'CII Code'],
+    material: ['material', 'Material', 'MATERIAL', 'materialName', 'Material Name', 'MATERIAL_NAME', 'Material_Name', 'Description', 'Name'],
+    materialCode: ['materialCode', 'Material Code', 'MATERIAL_CODE', 'MAT_CODE', 'CII Code', 'Code', 'CA3'],
+    materialName: ['materialName', 'Material Name', 'MATERIAL_NAME', 'Material_Name', 'Material', 'Description', 'Name'],
+  }),
+  weightMaster: Object.freeze({
+    boreMm: ['boreMm', 'Bore', 'BORE', 'DN', 'NB', 'NPS', 'Size', 'SIZE'],
+    rating: ['rating', 'Rating', 'RATING', 'Class', 'CLASS', 'Pressure Class', 'CLASS_RATING'],
+    lengthMm: ['lengthMm', 'Length', 'LENGTH', 'Length mm', 'LENGTH_MM', 'LENGTH MM', 'Face To Face', 'F2F'],
+    weight: ['weight', 'Weight', 'WEIGHT', 'Weight kg', 'WEIGHT_KG', 'WEIGHT KG', 'Wt', 'WT', 'Mass', 'MASS'],
+    typeDesc: ['typeDesc', 'Type Desc', 'TYPE_DESC', 'Description', 'Type', 'TYPE', 'Component Type', 'COMPONENT_TYPE'],
+    componentType: ['componentType', 'Component Type', 'COMPONENT_TYPE', 'Type', 'TYPE'],
+  }),
+});
 
 export async function parseSelectedGeometryMasterFile(file, masterKind) {
   if (!file || (typeof file.text !== 'function' && typeof file.arrayBuffer !== 'function')) {
@@ -44,8 +88,10 @@ export function parseSelectedGeometryMasterWorkbook(rawBuffer, fileName, masterK
   }
   const firstSheetName = sheetNames[0];
   const worksheet = workbook.Sheets?.[firstSheetName];
-  const rows = XLSX.utils.sheet_to_json(worksheet, { defval: '', raw: false })
-    .map((row, index) => normalizeWorkbookRow(row, index));
+  const rows = normalizeMasterRows(
+    XLSX.utils.sheet_to_json(worksheet, { defval: '', raw: false }).map((row, index) => normalizeWorkbookRow(row, index)),
+    kind,
+  );
   return freezeDeep({
     kind,
     fileName: name,
@@ -68,7 +114,7 @@ export function parseSelectedGeometryMasterText(rawText, fileName, masterKind) {
     return parseJsonMaster(body, name, kind);
   }
   if (kind === 'materialMap') {
-    const materialRows = parseMaterialMapTextRows(body);
+    const materialRows = normalizeMasterRows(parseMaterialMapTextRows(body), kind);
     if (materialRows.length) {
       return freezeDeep({
         kind,
@@ -80,7 +126,7 @@ export function parseSelectedGeometryMasterText(rawText, fileName, masterKind) {
     }
   }
   const delimiter = detectDelimiter(name, body);
-  const rows = parseDelimitedRows(body, delimiter);
+  const rows = normalizeMasterRows(parseDelimitedRows(body, delimiter), kind);
   return freezeDeep({
     kind,
     fileName: name,
@@ -136,7 +182,7 @@ function parseJsonMaster(rawText, fileName, masterKind) {
   } catch (error) {
     throw new SyntaxError(`Cannot parse JSON master file "${fileName}": ${error?.message || error}`);
   }
-  const rows = rowsFromJsonDocument(documentValue);
+  const rows = normalizeMasterRows(rowsFromJsonDocument(documentValue), masterKind);
   return freezeDeep({
     kind: text(masterKind),
     fileName: text(fileName),
@@ -170,6 +216,47 @@ function rowsFromJsonDocument(documentValue) {
 function normalizeJsonRow(row) {
   if (row && typeof row === 'object' && !Array.isArray(row)) return { ...row };
   return { value: row };
+}
+
+function normalizeMasterRows(rows, masterKind) {
+  return (Array.isArray(rows) ? rows : []).map((row) => normalizeMasterRow(row, masterKind));
+}
+
+function normalizeMasterRow(row, masterKind) {
+  const source = row && typeof row === 'object' && !Array.isArray(row) ? row : { value: row };
+  const normalized = { ...source };
+  const raw = source._raw && typeof source._raw === 'object' && !Array.isArray(source._raw) ? source._raw : { ...source };
+  delete raw._raw;
+  delete raw._bindings;
+  normalized._raw = raw;
+  normalized._bindings = {};
+  const aliases = MASTER_ALIAS_GROUPS[text(masterKind)] || {};
+  for (const [target, keys] of Object.entries(aliases)) {
+    const match = readAliasValue(source, keys);
+    if (!text(match.value)) continue;
+    if (!text(normalized[target])) normalized[target] = match.value;
+    normalized._bindings[target] = match.key;
+  }
+  return normalized;
+}
+
+function readAliasValue(row, keys) {
+  const entries = Object.entries(row || {});
+  for (const key of keys || []) {
+    if (text(row?.[key])) return { key, value: row[key] };
+  }
+  const rawEntries = Object.entries(row?._raw || {});
+  const searchable = [...entries, ...rawEntries];
+  for (const key of keys || []) {
+    const normalized = normalizeHeaderKey(key);
+    const match = searchable.find(([name, value]) => normalizeHeaderKey(name) === normalized && text(value));
+    if (match) return { key: match[0], value: match[1] };
+  }
+  return { key: '', value: '' };
+}
+
+function normalizeHeaderKey(value) {
+  return text(value).toUpperCase().replace(/[^A-Z0-9]+/g, '');
 }
 
 function detectDelimiter(fileName, rawText) {

@@ -6,12 +6,35 @@ function text(value) {
   return String(value ?? '').trim();
 }
 
-function firstText(row, keys) {
-  for (const key of keys || []) {
-    const value = row?.[key] ?? row?._raw?.[key];
-    if (text(value)) return text(value);
+function headerKey(value) {
+  return text(value).toUpperCase().replace(/[^A-Z0-9]+/g, '');
+}
+
+function readAny(row, keys) {
+  if (!row || typeof row !== 'object') return '';
+  const wanted = (keys || []).map(headerKey).filter(Boolean);
+  for (const source of [row, row._raw]) {
+    if (!source || typeof source !== 'object') continue;
+    for (const key of keys || []) {
+      const direct = source[key];
+      if (text(direct)) return text(direct);
+    }
+    for (const [key, value] of Object.entries(source)) {
+      if (wanted.includes(headerKey(key)) && text(value)) return text(value);
+    }
   }
   return '';
+}
+
+function numberAny(row, keys) {
+  const raw = readAny(row, keys).replace(/,/g, '');
+  const match = raw.match(/[-+]?\d*\.?\d+/);
+  const numeric = match ? Number(match[0]) : NaN;
+  return Number.isFinite(numeric) ? numeric : null;
+}
+
+function firstText(row, keys) {
+  return readAny(row, keys);
 }
 
 function overrideValue(overrides, bucketName, keys = []) {
@@ -32,19 +55,24 @@ function numericOverrideValue(overrides, bucketName, keys = []) {
 }
 
 function readClassRowRating(row) {
-  return text(row?.rating ?? row?.Rating ?? row?.RATING ?? row?.['Pressure Class'] ?? row?.ratingClass ?? '');
+  return readAny(row, ['rating', 'Rating', 'RATING', 'Pressure Class', 'classRating', 'Class Rating', 'PRESSURE_CLASS']);
 }
 
 function classRowMaterial(row) {
-  return text(row?.materialName || row?.Material_Name || row?.Material || row?.material || row?.MATERIAL || '');
+  return readAny(row, ['materialName', 'Material_Name', 'Material Name', 'Material', 'material', 'MATERIAL', 'Mat', 'MAT', 'MOC']);
 }
 
 function materialMapRowCode(row) {
-  return cleanMaterialCode(row?.code ?? row?.Code ?? row?.materialCode ?? row?.MaterialCode ?? row?.CA3 ?? '');
+  return cleanMaterialCode(readAny(row, ['code', 'Code', 'materialCode', 'MaterialCode', 'Material Code', 'MAT_CODE', 'CII Code', 'CA3']));
 }
 
 function materialMapRowNames(row) {
-  return [row?.material, row?.Material, row?.materialName, row?.Material_Name, row?.description, row?.Description, row?.name, row?.Name].map(text).filter(Boolean);
+  return [
+    readAny(row, ['material', 'Material']),
+    readAny(row, ['materialName', 'Material_Name', 'Material Name']),
+    readAny(row, ['description', 'Description']),
+    readAny(row, ['name', 'Name']),
+  ].map(text).filter(Boolean);
 }
 
 function materialComparable(value) {
@@ -82,7 +110,7 @@ function shouldUseNumericOverride(value, classValue, config) {
 }
 
 export function resolveMaterialCodeFromLineMaterial({ lineRow, materialMap, pipingClassRow, overrides = {}, overrideKeys = [], xmlNode, xmlBranch }) {
-  const lineMaterialRaw = firstText(lineRow, ['material', 'Material', 'MATERIAL', 'Material_Name', 'MOC']);
+  const lineMaterialRaw = firstText(lineRow, ['material', 'Material', 'MATERIAL', 'Material_Name', 'Material Name', 'MOC']);
   const classMaterialRaw = classRowMaterial(pipingClassRow);
   const materialOverride = overrideValue(overrides, 'material', overrideKeys);
 
@@ -98,6 +126,12 @@ export function resolveMaterialCodeFromLineMaterial({ lineRow, materialMap, pipi
   const legacyMaterialCode = overrideValue(overrides, 'material', [classMaterialRaw, lineMaterialRaw, materialText].filter(Boolean));
   if (legacyMaterialCode && legacyMaterialCode !== materialOverride) return { material: materialText, materialCode: cleanMaterialCode(legacyMaterialCode), source: 'override' };
 
+  const directClassCode = cleanMaterialCode(readAny(pipingClassRow, ['materialCode', 'Material Code', 'MATERIAL_CODE', 'MAT_CODE', 'Mat Code', 'MatID', 'MaterialCode', 'CA3']));
+  if (directClassCode) return { material: materialText || cleanMaterialText(classMaterialRaw), materialCode: directClassCode, source: 'piping-class-material-code', matchedRow: pipingClassRow };
+
+  const directLineCode = cleanMaterialCode(readAny(lineRow, ['materialCode', 'Material Code', 'MATERIAL_CODE', 'MAT_CODE', 'Mat Code', 'MatID', 'MaterialCode', 'CA3']));
+  if (directLineCode) return { material: materialText || cleanMaterialText(lineMaterialRaw), materialCode: directLineCode, source: materialOverride ? 'override-material-code' : 'line-list-material-code', matchedRow: lineRow };
+
   const fromClassMaterial = mapMaterialTextToCiiCodeRobust(classMaterialRaw, materialMap);
   const fromClassCode = materialMapRowCode(fromClassMaterial);
   if (fromClassCode) return { material: cleanMaterialText(classMaterialRaw), materialCode: fromClassCode, source: 'piping-class-material-map', matchedRow: fromClassMaterial };
@@ -111,11 +145,11 @@ export function resolveMaterialCodeFromLineMaterial({ lineRow, materialMap, pipi
 }
 
 function classCorrosionValue(row) {
-  return toFiniteNumber(row?.corrosion ?? row?.Corrosion ?? row?.corrosionAllowance ?? row?.CORROSION_ALLOWANCE ?? row?.CA);
+  return numberAny(row, ['corrosion', 'Corrosion', 'corrosionAllowance', 'Corrosion Allowance', 'CORROSION_ALLOWANCE', 'CORR_ALLOW', 'CORR', 'CA']);
 }
 
 function classWallValue(row) {
-  return toFiniteNumber(row?.wallThickness ?? row?.WallThickness ?? row?.['Wall Thickness'] ?? row?.['Wall thickness'] ?? row?.WALL_THICKNESS ?? row?.WT);
+  return numberAny(row, ['wallThickness', 'WallThickness', 'Wall Thickness', 'Wall thickness', 'WALL_THICKNESS', 'WALL_THICK', 'WT', 'THK', 'Thickness']);
 }
 
 export function resolveCorrosionFromPipingClass({ lineRow, boreMm, componentType, rating, pipingClassIndex, overrides = {}, overrideKeys = [], xmlNode, xmlBranch, config = {} }) {

@@ -5,8 +5,7 @@ function toText(value) {
 
 function toFiniteNumber(value, fallback) {
   const numeric = Number(value);
-  if (Number.isFinite(numeric)) return numeric;
-  return fallback;
+  return Number.isFinite(numeric) ? numeric : fallback;
 }
 
 function xmlLocalName(node) {
@@ -29,9 +28,7 @@ function xmlSetText(document, parent, localName, value) {
   if (!document || !parent || !toText(localName)) return null;
   let element = xmlFirstChild(parent, localName);
   if (!element) {
-    element = parent?.namespaceURI
-      ? document.createElementNS(parent.namespaceURI, localName)
-      : document.createElement(localName);
+    element = parent?.namespaceURI ? document.createElementNS(parent.namespaceURI, localName) : document.createElement(localName);
     parent.appendChild(element);
   }
   element.textContent = toText(value);
@@ -40,31 +37,20 @@ function xmlSetText(document, parent, localName, value) {
 
 export function getXmlNodeProperty(node, name) {
   if (!node) return '';
-  if (typeof node.querySelector === 'function') {
-    return node.querySelector(name)?.textContent?.trim() || '';
-  }
-  if (typeof node.getElementsByTagName === 'function') {
-    return xmlText(node, name);
-  }
-  return String(
-    node[name] ??
-    node[name.toLowerCase()] ??
-    node[name.toUpperCase()] ??
-    ''
-  ).trim();
+  if (typeof node.querySelector === 'function') return node.querySelector(name)?.textContent?.trim() || '';
+  if (typeof node.getElementsByTagName === 'function') return xmlText(node, name);
+  return String(node[name] ?? node[name.toLowerCase()] ?? node[name.toUpperCase()] ?? '').trim();
 }
 
-function normalizeSupportTag(value) {
-  const text = toText(value).trim().toUpperCase().replace(/^\/+/, '');
+export function normalizeSupportTag(value) {
+  const text = toText(value).trim().toUpperCase().replace(/^\/+/, '').replace(/\s+/g, ' ');
   const match = text.match(/PS-\d+(?:\.\d+)?/i);
-  if (!match) return '';
-  return match[0].replace(/\.\d+$/, '');
+  return match ? match[0].toUpperCase() : '';
 }
 
 function supportTagsFromText(value) {
-  const text = toText(value);
   const tags = new Set();
-  for (const match of text.matchAll(/\/?PS-\d+(?:\.\d+)?/ig)) {
+  for (const match of toText(value).matchAll(/\/?PS-\d+(?:\.\d+)?/ig)) {
     const tag = normalizeSupportTag(match[0]);
     if (tag) tags.add(tag);
   }
@@ -115,8 +101,7 @@ function normalizePoint(point) {
     const x = Number(point.x ?? point.X);
     const y = Number(point.y ?? point.Y);
     const z = Number(point.z ?? point.Z);
-    if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(z)) return null;
-    return { x, y, z };
+    return Number.isFinite(x) && Number.isFinite(y) && Number.isFinite(z) ? { x, y, z } : null;
   }
   const text = toText(point).trim();
   if (!text) return null;
@@ -140,12 +125,7 @@ function normalizePoint(point) {
 }
 
 function decodeEntities(value) {
-  return toText(value)
-    .replace(/&quot;/gi, '"')
-    .replace(/&#34;/g, '"')
-    .replace(/&apos;/gi, "'")
-    .replace(/&#39;/g, "'")
-    .replace(/&amp;/gi, '&');
+  return toText(value).replace(/&quot;/gi, '"').replace(/&#34;/g, '"').replace(/&apos;/gi, "'").replace(/&#39;/g, "'").replace(/&amp;/gi, '&');
 }
 
 function normalizeOwnerBranchName(value) {
@@ -201,27 +181,10 @@ function walkStagedComponents(value, branchName = '', out = []) {
   if (!value || typeof value !== 'object') return out;
   const attrs = value.attributes && typeof value.attributes === 'object' ? value.attributes : {};
   const type = toText(value.type || attrs.TYPE).toUpperCase();
-  const currentBranch = (type === 'BRANCH' || Array.isArray(value.children))
-    ? toText(value.name || attrs.NAME || attrs.OWNER || branchName)
-    : branchName;
+  const currentBranch = (type === 'BRANCH' || Array.isArray(value.children)) ? toText(value.name || attrs.NAME || attrs.OWNER || branchName) : branchName;
   out.push({ component: value, attrs, branchName: currentBranch, type });
   if (Array.isArray(value.children)) value.children.forEach((child) => walkStagedComponents(child, currentBranch, out));
   return out;
-}
-
-function stagedComponentDtxr(indexed) {
-  const attrs = indexed?.attrs || {};
-  return toText(attrs.DTXR_POS || attrs.DTXR || attrs.DESC || attrs.DESCRIPTION || attrs.NAME || indexed?.component?.name || '').trim();
-}
-
-function stagedComponentDtxrPs(indexed) {
-  const attrs = indexed?.attrs || {};
-  return toText(attrs.DTXR_PS || attrs.DTXRPS || attrs.DTXR || attrs.DESC || attrs.DESCRIPTION || '').trim();
-}
-
-function stagedOwnerValue(indexed) {
-  const attrs = indexed?.attrs || {};
-  return toText(attrs.OWNER || attrs.Owner || attrs.owner || indexed?.component?.OWNER || indexed?.branchName || '').trim();
 }
 
 function stagedAttr(indexed, names = []) {
@@ -235,36 +198,32 @@ function stagedAttr(indexed, names = []) {
   return '';
 }
 
+function stagedComponentDtxr(indexed) {
+  const attrs = indexed?.attrs || {};
+  return toText(attrs.DTXR_POS || attrs.DTXR || attrs.DESC || attrs.DESCRIPTION || attrs.NAME || indexed?.component?.name || '').trim();
+}
+
+function stagedComponentDtxrPs(indexed) {
+  const attrs = indexed?.attrs || {};
+  return stagedAttr({ attrs }, ['DTXR_PS', 'DTXRPS', 'DTXR', 'DESC', 'DESCRIPTION']);
+}
+
+function stagedOwnerValue(indexed) {
+  const attrs = indexed?.attrs || {};
+  return toText(attrs.OWNER || attrs.Owner || attrs.owner || indexed?.component?.OWNER || indexed?.branchName || '').trim();
+}
+
 function cleanDtxr(value) {
-  return String(value ?? '')
-    .replace(/\s+/g, ' ')
-    .replace(/[;,/|]+/g, '+')
-    .replace(/\++/g, '+')
-    .replace(/^\+|\+$/g, '')
-    .trim()
-    .toUpperCase();
+  return String(value ?? '').replace(/\s+/g, ' ').replace(/[;,/|]+/g, '+').replace(/\++/g, '+').replace(/^\+|\+$/g, '').trim().toUpperCase();
 }
 
 function canonKey(value) {
-  return String(value ?? '')
-    .trim()
-    .replace(/\s+/g, '')
-    .replace(/^=/, '')
-    .toUpperCase();
+  return String(value ?? '').trim().replace(/\s+/g, '').replace(/^=/, '').toUpperCase();
 }
 
 function coordKey(coord, precision = 1) {
   if (!coord) return '';
-  return [coord.x, coord.y, coord.z]
-    .map((v) => Math.round(v / precision))
-    .join('|');
-}
-
-function addOwnerIndex(map, item, owner) {
-  for (const key of ownerBranchVariants(owner)) {
-    if (!map.has(key)) map.set(key, []);
-    map.get(key).push(item);
-  }
+  return [coord.x, coord.y, coord.z].map((v) => Math.round(v / precision)).join('|');
 }
 
 function addArrayMap(map, key, item) {
@@ -274,27 +233,22 @@ function addArrayMap(map, key, item) {
   map.get(cleaned).push(item);
 }
 
-function addRefIndex(map, item, refs = []) {
-  for (const ref of refs) addArrayMap(map, ref, item);
+function addOwnerIndex(map, item, owner) {
+  for (const key of ownerBranchVariants(owner)) {
+    if (!map.has(key)) map.set(key, []);
+    map.get(key).push(item);
+  }
 }
 
 function stagedTypeOf(indexed) {
-  return toText(
-    indexed?.type ||
-    indexed?.raw?.type ||
-    indexed?.attrs?.TYPE ||
-    indexed?.attrs?.ComponentType ||
-    indexed?.attrs?.COMPONENTTYPE ||
-    indexed?.component?.type ||
-    ''
-  ).trim().toUpperCase();
+  return toText(indexed?.type || indexed?.raw?.type || indexed?.attrs?.TYPE || indexed?.attrs?.ComponentType || indexed?.attrs?.COMPONENTTYPE || indexed?.component?.type || '').trim().toUpperCase();
 }
 
 export function buildStagedDtxrIndex(stagedJson, config = {}) {
-  let items = [];
+  let walked = [];
   try {
     const parsed = typeof stagedJson === 'string' ? JSON.parse(stagedJson) : stagedJson;
-    items = walkStagedComponents(parsed);
+    walked = walkStagedComponents(parsed);
   } catch {}
 
   const byComponentRefNo = new Map();
@@ -304,8 +258,9 @@ export function buildStagedDtxrIndex(stagedJson, config = {}) {
   const byCoordKey = new Map();
   const byOwnerBranch = new Map();
   const ownerItems = [];
+  const items = [];
 
-  for (const item of items) {
+  for (const item of walked) {
     const dtxr = stagedComponentDtxr(item);
     const dtxrPs = stagedComponentDtxrPs(item);
     const cmpSupGap = stagedAttr(item, ['CMPSUPGAP']);
@@ -322,19 +277,15 @@ export function buildStagedDtxrIndex(stagedJson, config = {}) {
       ownerNorm: normalizeOwnerBranchName(stagedOwnerValue(item)),
       coord: null,
       type: stagedTypeOf(item),
+      component: item.component,
     };
+    items.push(indexedItem);
 
-    addRefIndex(byComponentRefNo, indexedItem, [
-      attrs.ComponentRefNo, attrs.COMPONENTREFNO, attrs.componentRefNo,
-      attrs.RefNo, attrs.REFNO, attrs.REF, attrs.NAME,
-      item.componentRefNo, item.refNo, item.component?.refNo
-    ]);
-
+    for (const ref of [attrs.ComponentRefNo, attrs.COMPONENTREFNO, attrs.componentRefNo, attrs.RefNo, attrs.REFNO, attrs.REF, attrs.NAME, item.componentRefNo, item.refNo, item.component?.refNo]) addArrayMap(byComponentRefNo, ref, indexedItem);
     for (const tag of supportTagsFromAttrs(attrs, item.component?.name || '')) addArrayMap(byPsTag, tag, indexedItem);
 
     const nodeNo = attrs.NodeNumber || attrs.NODE || '';
     if (nodeNo) byNodeNumber.set(String(nodeNo).trim(), indexedItem);
-
     const nodeName = attrs.NodeName || '';
     if (nodeName) byNodeName.set(canonKey(nodeName), indexedItem);
 
@@ -361,17 +312,7 @@ export function buildStagedDtxrIndex(stagedJson, config = {}) {
 
 export function buildDtxrContext(stagedJsonText, config = {}) {
   const stagedIndex = buildStagedDtxrIndex(stagedJsonText, config);
-  return {
-    stagedIndex,
-    items: stagedIndex.items,
-    byComponentRefNo: stagedIndex.byComponentRefNo,
-    byPsTag: stagedIndex.byPsTag,
-    byNodeNumber: stagedIndex.byNodeNumber,
-    byNodeName: stagedIndex.byNodeName,
-    byCoordKey: stagedIndex.byCoordKey,
-    byOwnerBranch: stagedIndex.byOwnerBranch,
-    ownerItems: stagedIndex.ownerItems,
-  };
+  return { stagedIndex, ...stagedIndex };
 }
 
 function chooseBestDtxrCandidate(candidates, xmlNode, config = {}) {
@@ -379,10 +320,7 @@ function chooseBestDtxrCandidate(candidates, xmlNode, config = {}) {
   if (!list.length) return null;
   if (list.length === 1) return list[0];
   const xmlType = getXmlNodeProperty(xmlNode, 'ComponentType').toUpperCase();
-  for (const cand of list) {
-    const candType = stagedTypeOf(cand);
-    if (candType && candType === xmlType) return cand;
-  }
+  for (const cand of list) if (stagedTypeOf(cand) && stagedTypeOf(cand) === xmlType) return cand;
   const allowed = config?._allowedStagedTypes || [];
   if (allowed.length) {
     const typed = list.find((cand) => allowed.includes(stagedTypeOf(cand)));
@@ -394,56 +332,20 @@ function chooseBestDtxrCandidate(candidates, xmlNode, config = {}) {
 function candidateArrayFromMap(map, key) {
   if (!map || !key) return [];
   const direct = map.get(canonKey(key));
-  if (Array.isArray(direct)) return direct;
-  return direct ? [direct] : [];
+  return Array.isArray(direct) ? direct : (direct ? [direct] : []);
 }
 
 function emptyDtxrResult(reason = 'not-found') {
-  return {
-    canonicalText: '',
-    value: '',
-    dtxrPos: '',
-    dtxrPs: '',
-    teeDesc: '',
-    cmpSupGap: '',
-    supportTags: [],
-    source: reason,
-    matchedBy: '',
-    matchedKey: '',
-    stagedType: '',
-    componentRefNo: '',
-    confidence: 0,
-    suppressed: false,
-    suppressionReason: '',
-    candidates: [],
-  };
+  return { canonicalText: '', value: '', dtxrPos: '', dtxrPs: '', teeDesc: '', cmpSupGap: '', supportTags: [], source: reason, matchedBy: '', matchedKey: '', stagedType: '', componentRefNo: '', confidence: 0, suppressed: false, suppressionReason: '', candidates: [] };
 }
 
 function resultFromStagedItem(indexed, { source, matchedBy, matchedKey, purpose, confidence = 1 } = {}) {
-  const dtxrPos = cleanDtxr(indexed?.dtxr || '');
-  const dtxrPs = cleanDtxr(indexed?.dtxrPs || '');
-  const cmpSupGap = toText(indexed?.cmpSupGap || '').trim();
+  const dtxrPos = cleanDtxr(indexed?.dtxr || stagedComponentDtxr(indexed?.raw || indexed) || '');
+  const dtxrPs = cleanDtxr(indexed?.dtxrPs || stagedComponentDtxrPs(indexed?.raw || indexed) || '');
+  const cmpSupGap = toText(indexed?.cmpSupGap || stagedAttr(indexed?.raw || indexed, ['CMPSUPGAP']) || '').trim();
   const stagedType = stagedTypeOf(indexed);
-  const canonicalText = purpose === 'support-restraint'
-    ? (dtxrPs || dtxrPos)
-    : (dtxrPos || dtxrPs);
-
-  return {
-    ...emptyDtxrResult(source || 'staged'),
-    canonicalText,
-    value: canonicalText,
-    dtxrPos,
-    dtxrPs,
-    teeDesc: purpose === 'tee-description' ? dtxrPos : '',
-    cmpSupGap,
-    supportTags: [],
-    source: source || 'staged',
-    matchedBy: matchedBy || '',
-    matchedKey: String(matchedKey || ''),
-    stagedType,
-    componentRefNo: toText(indexed?.attrs?.ComponentRefNo || indexed?.attrs?.COMPONENTREFNO || '').trim(),
-    confidence,
-  };
+  const canonicalText = purpose === 'support-restraint' ? (dtxrPs || dtxrPos) : (dtxrPos || dtxrPs);
+  return { ...emptyDtxrResult(source || 'staged'), canonicalText, value: canonicalText, dtxrPos, dtxrPs, teeDesc: purpose === 'tee-description' ? dtxrPos : '', cmpSupGap, supportTags: [], source: source || 'staged', matchedBy: matchedBy || '', matchedKey: String(matchedKey || ''), stagedType, componentRefNo: toText(indexed?.attrs?.ComponentRefNo || indexed?.attrs?.COMPONENTREFNO || '').trim(), confidence };
 }
 
 function resultFromExistingXml(xmlNode, { purpose, source, matchedBy, confidence = 0.75 } = {}) {
@@ -452,73 +354,14 @@ function resultFromExistingXml(xmlNode, { purpose, source, matchedBy, confidence
   const dtxrPs = cleanDtxr(getXmlNodeProperty(xmlNode, 'DTXR_PS') || getXmlNodeProperty(xmlNode, 'DtxrPs'));
   const canonicalText = purpose === 'support-restraint' ? (dtxrPs || dtxrPos) : (dtxrPos || dtxrPs);
   if (!canonicalText) return null;
-  return {
-    ...emptyDtxrResult(source || 'xml-existing'),
-    canonicalText,
-    value: canonicalText,
-    dtxrPos,
-    dtxrPs,
-    source: source || (dtxrPos ? 'xml-dtxr-pos' : 'xml-dtxr-ps'),
-    matchedBy: matchedBy || (dtxrPos ? 'xml-dtxr-pos' : 'xml-dtxr-ps'),
-    matchedKey: `NodeNumber:${nodeNumber}`,
-    confidence,
-  };
+  return { ...emptyDtxrResult(source || 'xml-existing'), canonicalText, value: canonicalText, dtxrPos, dtxrPs, source: source || (dtxrPs ? 'xml-dtxr-ps' : 'xml-dtxr-pos'), matchedBy: matchedBy || (dtxrPs ? 'xml-dtxr-ps' : 'xml-dtxr-pos'), matchedKey: `NodeNumber:${nodeNumber}`, confidence };
 }
 
 export const DTXR_PURPOSE_RULES = Object.freeze({
-  'weight-review': {
-    allowExistingXmlDtxr: true,
-    allowComponentRef: true,
-    allowPsTag: false,
-    allowNodeNumber: false,
-    allowNodeNameAsDtxr: false,
-    allowCoordinate: true,
-    allowNearestCoordinate: false,
-    allowOwnerFallback: false,
-    allowedStagedTypes: ['RIGID', 'FLAN', 'FLANGE', 'VALV', 'VALVE', 'VLV'],
-    suppressTextPatterns: [
-      /\bTEE\b/i,
-      /\bELBOW\b|\bBEND\b/i,
-      /\bPIPE\s*REST\b|\bSUPPORT\b|\bGUIDE\b|\bSTOP\b|\bWEAR\s*PLATE\b/i,
-      /\bRESTRAINT\b|\bSHOE\b|\bANCHOR\b|\bLINE\s*STOP\b/i,
-    ],
-  },
-  'tee-description': {
-    allowExistingXmlDtxr: true,
-    allowComponentRef: true,
-    allowPsTag: false,
-    allowNodeNumber: true,
-    allowNodeNameAsDtxr: true,
-    allowCoordinate: true,
-    allowNearestCoordinate: true,
-    allowOwnerFallback: true,
-    allowedStagedTypes: ['TEE'],
-    suppressTextPatterns: [/\bPIPE\s*REST\b|\bSUPPORT\b|\bGUIDE\b|\bSTOP\b|\bWEAR\s*PLATE\b/i],
-  },
-  'support-restraint': {
-    allowExistingXmlDtxr: true,
-    allowComponentRef: true,
-    allowPsTag: true,
-    allowNodeNumber: true,
-    allowNodeNameAsDtxr: true,
-    allowCoordinate: true,
-    allowNearestCoordinate: true,
-    allowOwnerFallback: true,
-    allowedStagedTypes: ['SUPPORT', 'ATTA', 'REST', 'RESTRAINT'],
-    suppressTextPatterns: [],
-  },
-  'component-description': {
-    allowExistingXmlDtxr: true,
-    allowComponentRef: true,
-    allowPsTag: false,
-    allowNodeNumber: true,
-    allowNodeNameAsDtxr: true,
-    allowCoordinate: true,
-    allowNearestCoordinate: true,
-    allowOwnerFallback: false,
-    allowedStagedTypes: [],
-    suppressTextPatterns: [],
-  },
+  'weight-review': { allowExistingXmlDtxr: true, allowComponentRef: true, allowPsTag: false, allowNodeNumber: false, allowNodeNameAsDtxr: false, allowCoordinate: true, allowNearestCoordinate: false, allowOwnerFallback: false, allowedStagedTypes: ['RIGID', 'FLAN', 'FLANGE', 'VALV', 'VALVE', 'VLV'], suppressTextPatterns: [/\bTEE\b/i, /\bELBOW\b|\bBEND\b/i, /\bPIPE\s*REST\b|\bSUPPORT\b|\bGUIDE\b|\bSTOP\b|\bWEAR\s*PLATE\b/i, /\bRESTRAINT\b|\bSHOE\b|\bANCHOR\b|\bLINE\s*STOP\b/i] },
+  'tee-description': { allowExistingXmlDtxr: true, allowComponentRef: true, allowPsTag: false, allowNodeNumber: true, allowNodeNameAsDtxr: true, allowCoordinate: true, allowNearestCoordinate: true, allowOwnerFallback: true, allowedStagedTypes: ['TEE'], suppressTextPatterns: [/\bPIPE\s*REST\b|\bSUPPORT\b|\bGUIDE\b|\bSTOP\b|\bWEAR\s*PLATE\b/i] },
+  'support-restraint': { allowExistingXmlDtxr: true, allowComponentRef: true, allowPsTag: true, allowNodeNumber: true, allowNodeNameAsDtxr: true, allowCoordinate: true, allowNearestCoordinate: true, allowOwnerFallback: true, allowedStagedTypes: ['SUPPORT', 'ATTA', 'REST', 'RESTRAINT'], suppressTextPatterns: [] },
+  'component-description': { allowExistingXmlDtxr: true, allowComponentRef: true, allowPsTag: false, allowNodeNumber: true, allowNodeNameAsDtxr: true, allowCoordinate: true, allowNearestCoordinate: false, allowOwnerFallback: false, allowedStagedTypes: [], suppressTextPatterns: [] },
 });
 
 export function dtxrPurposeForComponentType(componentType, fallback = 'component-description') {
@@ -535,26 +378,10 @@ function suppressIfUnsafe(result, { xmlNode, purpose, rules }) {
   const stagedType = toText(result.stagedType).toUpperCase();
   const text = toText(result.canonicalText || result.dtxrPos || result.dtxrPs).toUpperCase();
   const allowed = Array.isArray(rules?.allowedStagedTypes) ? rules.allowedStagedTypes : [];
-  const hasStagedType = !!stagedType;
-  const badStagedType = hasStagedType && allowed.length > 0 && !allowed.includes(stagedType) && result.matchedBy !== 'component-refno';
-  const unsafeStagedForWeight = purpose === 'weight-review'
-    && ['RIGID', 'FLAN', 'VALV', 'VALVE', 'VLV'].some((prefix) => xmlType === prefix || xmlType.startsWith(prefix))
-    && ['TEE', 'ELBO', 'ELBOW', 'BEND', 'SUPPORT', 'ATTA', 'PIPE', 'GASK'].includes(stagedType)
-    && result.matchedBy !== 'component-refno';
-  const unsafeText = Array.isArray(rules?.suppressTextPatterns)
-    && rules.suppressTextPatterns.some((re) => re.test(text));
-
-  if (badStagedType || unsafeStagedForWeight || unsafeText) {
-    return {
-      ...result,
-      canonicalText: '',
-      value: '',
-      suppressed: true,
-      suppressionReason: badStagedType
-        ? `unsafe staged type ${stagedType} for ${purpose}`
-        : (unsafeStagedForWeight ? `unsafe staged type ${stagedType} for ${purpose}` : `text suppressed for ${purpose}`),
-    };
-  }
+  const badStagedType = !!stagedType && allowed.length > 0 && !allowed.includes(stagedType) && result.matchedBy !== 'component-refno';
+  const unsafeStagedForWeight = purpose === 'weight-review' && ['RIGID', 'FLAN', 'VALV', 'VALVE', 'VLV'].some((prefix) => xmlType === prefix || xmlType.startsWith(prefix)) && ['TEE', 'ELBO', 'ELBOW', 'BEND', 'SUPPORT', 'ATTA', 'PIPE', 'GASK'].includes(stagedType) && result.matchedBy !== 'component-refno';
+  const unsafeText = Array.isArray(rules?.suppressTextPatterns) && rules.suppressTextPatterns.some((re) => re.test(text));
+  if (badStagedType || unsafeStagedForWeight || unsafeText) return { ...result, canonicalText: '', value: '', suppressed: true, suppressionReason: badStagedType ? `unsafe staged type ${stagedType} for ${purpose}` : (unsafeStagedForWeight ? `unsafe staged type ${stagedType} for ${purpose}` : `text suppressed for ${purpose}`) };
   return result;
 }
 
@@ -570,9 +397,7 @@ function dtxrPsByOwnerBranch(branchName, stagedIndex, config = {}) {
     const score = ownerBranchSimilarity(branchName, item.owner);
     if (score >= threshold && (!best || score > best.score)) best = { item, score };
   }
-  return best
-    ? resultFromStagedItem(best.item, { purpose: 'support-restraint', source: 'staged-owner-dtxr-ps-fuzzy', matchedBy: 'owner-branch-fuzzy', matchedKey: `OWNER:${best.item.owner} · ${Math.round(best.score * 100)}%`, confidence: best.score })
-    : null;
+  return best ? resultFromStagedItem(best.item, { purpose: 'support-restraint', source: 'staged-owner-dtxr-ps-fuzzy', matchedBy: 'owner-branch-fuzzy', matchedKey: `OWNER:${best.item.owner} · ${Math.round(best.score * 100)}%`, confidence: best.score }) : null;
 }
 
 function xmlAncestorBranchName(node) {
@@ -601,25 +426,15 @@ function findNearestCoordinateMatch(target, items, tolerance) {
     const dy = itemCoord.y - target.y;
     const dz = itemCoord.z - target.z;
     const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
-    if (dist <= tolerance && dist < nearestDist) {
-      nearestDist = dist;
-      nearestItem = item;
-    }
+    if (dist <= tolerance && dist < nearestDist) { nearestDist = dist; nearestItem = item; }
   }
   return nearestItem ? { item: nearestItem, distanceMm: nearestDist } : null;
 }
 
-export function resolveDtxrForXmlNode({
-  xmlNode,
-  context,
-  purpose = 'component-description',
-  config = {},
-  trustExistingXmlDtxr = true,
-} = {}) {
+export function resolveDtxrForXmlNode({ xmlNode, context, purpose = 'component-description', config = {}, trustExistingXmlDtxr = true } = {}) {
   const rules = DTXR_PURPOSE_RULES[purpose] || DTXR_PURPOSE_RULES['component-description'];
   const stagedIndex = context?.stagedIndex || context;
   if (!xmlNode) return emptyDtxrResult('not-found');
-
   const attempts = [];
   const accept = (result) => {
     if (!result) return null;
@@ -627,20 +442,11 @@ export function resolveDtxrForXmlNode({
     attempts.push(checked);
     return checked.suppressed ? null : checked;
   };
-
   const xmlType = getXmlNodeProperty(xmlNode, 'ComponentType').toUpperCase();
   const allowStagedConfig = { ...config, _allowedStagedTypes: rules.allowedStagedTypes || [] };
 
-  if (rules.allowComponentRef && stagedIndex) {
-    const componentRefNo = getXmlNodeProperty(xmlNode, 'ComponentRefNo');
-    const byRef = chooseBestDtxrCandidate(candidateArrayFromMap(stagedIndex.byComponentRefNo, componentRefNo), xmlNode, allowStagedConfig);
-    if (byRef) {
-      const hit = accept(resultFromStagedItem(byRef, { purpose, source: 'staged-component-refno', matchedBy: 'component-refno', matchedKey: componentRefNo, confidence: 1 }));
-      if (hit) return { ...hit, supportTags: xmlNodeSupportTags(xmlNode), candidates: attempts };
-    }
-  }
-
-  if (rules.allowPsTag && stagedIndex) {
+  const resolveByPsTags = () => {
+    if (!rules.allowPsTag || !stagedIndex) return null;
     const tags = xmlNodeSupportTags(xmlNode);
     for (const tag of tags) {
       const byPs = chooseBestDtxrCandidate(candidateArrayFromMap(stagedIndex.byPsTag, tag), xmlNode, allowStagedConfig);
@@ -648,6 +454,20 @@ export function resolveDtxrForXmlNode({
         const hit = accept(resultFromStagedItem(byPs, { purpose, source: 'staged-ps-tag', matchedBy: 'ps-tag', matchedKey: tag, confidence: 1 }));
         if (hit) return { ...hit, supportTags: tags, candidates: attempts };
       }
+    }
+    if (purpose === 'support-restraint' && tags.length) return { ...emptyDtxrResult('not-found'), stagedType: xmlType, supportTags: tags, matchedBy: 'ps-tag', matchedKey: tags.join('|'), candidates: attempts };
+    return null;
+  };
+
+  const psHit = resolveByPsTags();
+  if (psHit) return psHit;
+
+  if (rules.allowComponentRef && stagedIndex) {
+    const componentRefNo = getXmlNodeProperty(xmlNode, 'ComponentRefNo');
+    const byRef = chooseBestDtxrCandidate(candidateArrayFromMap(stagedIndex.byComponentRefNo, componentRefNo), xmlNode, allowStagedConfig);
+    if (byRef) {
+      const hit = accept(resultFromStagedItem(byRef, { purpose, source: 'staged-component-refno', matchedBy: 'component-refno', matchedKey: componentRefNo, confidence: 1 }));
+      if (hit) return { ...hit, supportTags: xmlNodeSupportTags(xmlNode), candidates: attempts };
     }
   }
 
@@ -671,8 +491,7 @@ export function resolveDtxrForXmlNode({
   }
 
   if (trustExistingXmlDtxr && rules.allowExistingXmlDtxr !== false) {
-    const existing = resultFromExistingXml(xmlNode, { purpose });
-    const hit = accept(existing);
+    const hit = accept(resultFromExistingXml(xmlNode, { purpose }));
     if (hit) return { ...hit, supportTags: xmlNodeSupportTags(xmlNode), candidates: attempts };
   }
 
@@ -695,8 +514,7 @@ export function resolveDtxrForXmlNode({
   }
 
   if (rules.allowOwnerFallback && stagedIndex) {
-    const byOwner = dtxrPsByOwnerBranch(xmlAncestorBranchName(xmlNode), stagedIndex, config);
-    const hit = accept(byOwner);
+    const hit = accept(dtxrPsByOwnerBranch(xmlAncestorBranchName(xmlNode), stagedIndex, config));
     if (hit) return { ...hit, supportTags: xmlNodeSupportTags(xmlNode), candidates: attempts };
   }
 
@@ -708,61 +526,28 @@ export function applyDtxrAnnotations(document, node, resolved, purpose = 'compon
   let count = 0;
   if (purpose === 'tee-description') {
     const text = resolved.teeDesc || resolved.dtxrPos || resolved.canonicalText;
-    if (text) {
-      xmlSetText(document, node, 'TEEDESC_POS', text);
-      xmlSetText(document, node, 'DTXR_SOURCE', resolved.source);
-      count += 1;
-    }
+    if (text) { xmlSetText(document, node, 'TEEDESC_POS', text); xmlSetText(document, node, 'DTXR_SOURCE', resolved.source); count += 1; }
     return count;
   }
   if (purpose === 'support-restraint') {
     const text = resolved.dtxrPs || resolved.canonicalText;
-    if (text) {
-      xmlSetText(document, node, 'DTXR_PS', text);
-      xmlSetText(document, node, 'DTXR_SOURCE', resolved.source);
-      count += 1;
-    }
-    if (resolved.cmpSupGap) {
-      xmlSetText(document, node, 'CMPSUPGAP_PS', resolved.cmpSupGap);
-      if (!xmlText(node, 'CMPSUPGAP')) xmlSetText(document, node, 'CMPSUPGAP', resolved.cmpSupGap);
-      count += 1;
-    }
+    if (text) { xmlSetText(document, node, 'DTXR_PS', text); xmlSetText(document, node, 'DTXR_SOURCE', resolved.source); count += 1; }
+    if (resolved.cmpSupGap) { xmlSetText(document, node, 'CMPSUPGAP_PS', resolved.cmpSupGap); if (!xmlText(node, 'CMPSUPGAP')) xmlSetText(document, node, 'CMPSUPGAP', resolved.cmpSupGap); count += 1; }
     return count;
   }
   const text = resolved.dtxrPos || resolved.canonicalText;
-  if (text) {
-    xmlSetText(document, node, 'DTXR_POS', text);
-    xmlSetText(document, node, 'DTXR_SOURCE', resolved.source);
-    count += 1;
-  }
+  if (text) { xmlSetText(document, node, 'DTXR_POS', text); xmlSetText(document, node, 'DTXR_SOURCE', resolved.source); count += 1; }
   return count;
 }
 
-// Legacy API retained for older callers. It now routes through the centralized resolver.
 export function resolveXmlCiiNodeDtxr(xmlNode, stagedIndex, config = {}) {
-  const result = resolveDtxrForXmlNode({
-    xmlNode,
-    context: stagedIndex,
-    purpose: 'component-description',
-    config,
-    trustExistingXmlDtxr: config.trustExistingXmlDtxr !== false,
-  });
-  return {
-    value: result.canonicalText || result.value || '',
-    source: result.source,
-    confidence: result.confidence,
-    matchedKey: result.matchedKey,
-    matchedBy: result.matchedBy,
-    stagedType: result.stagedType,
-    suppressed: result.suppressed,
-    suppressionReason: result.suppressionReason,
-  };
+  const result = resolveDtxrForXmlNode({ xmlNode, context: stagedIndex, purpose: 'component-description', config, trustExistingXmlDtxr: config.trustExistingXmlDtxr !== false });
+  return { value: result.canonicalText || result.value || '', source: result.source, confidence: result.confidence, matchedKey: result.matchedKey, matchedBy: result.matchedBy, stagedType: result.stagedType, suppressed: result.suppressed, suppressionReason: result.suppressionReason };
 }
 
 function componentDescPrefix(node) {
   const type = getXmlNodeProperty(node, 'ComponentType').toUpperCase();
-  if (type === 'TEE') return 'TEEDESC';
-  return '';
+  return type === 'TEE' ? 'TEEDESC' : '';
 }
 
 function annotateComponentDtxr(node, sourceSuffix, value) {
@@ -783,7 +568,6 @@ function annotateFromRefAndTags(node, index) {
   const componentRefNo = getXmlNodeProperty(node, 'ComponentRefNo');
   const ref = chooseBestDtxrCandidate(candidateArrayFromMap(index?.byComponentRefNo, componentRefNo), node, {}) || null;
   if (ref?.dtxr) annotateComponentDtxr(node, 'REFBASIS', ref.dtxr);
-
   const tagCandidates = [];
   for (const tag of xmlNodeSupportTags(node)) tagCandidates.push(...candidateArrayFromMap(index?.byPsTag, tag));
   const ps = chooseBestDtxrCandidate(tagCandidates, node, {}) || null;
@@ -791,7 +575,6 @@ function annotateFromRefAndTags(node, index) {
   return { ref, ps };
 }
 
-// Legacy exports for backwards compatibility
 export function xmlCiiDtxrPsForNode(node, stagedComponentIndex) {
   if (!stagedComponentIndex || stagedComponentIndex.count <= 0) return { text: '', tags: [], values: [] };
   const tags = xmlNodeSupportTags(node);
@@ -800,7 +583,7 @@ export function xmlCiiDtxrPsForNode(node, stagedComponentIndex) {
   for (const tag of tags) {
     const matches = stagedComponentIndex.byTag.get(tag) || [];
     for (const match of matches) {
-      const dtxr = stagedComponentDtxr(match);
+      const dtxr = stagedComponentDtxrPs(match) || stagedComponentDtxr(match);
       const gap = stagedAttr(match, ['CMPSUPGAP']);
       if (dtxr && !values.includes(dtxr)) values.push(dtxr);
       if (gap && !gapValues.includes(gap)) gapValues.push(gap);
@@ -812,13 +595,7 @@ export function xmlCiiDtxrPsForNode(node, stagedComponentIndex) {
 
 export function xmlCiiDtxrPositionOffset(config) {
   const option = config?.dtxrPositionOffset || {};
-  return {
-    enabled: option.enabled === true,
-    xOffset: toFiniteNumber(option.xOffset, 0),
-    yOffset: toFiniteNumber(option.yOffset, 0),
-    zOffset: toFiniteNumber(option.zOffset, 0),
-    tolerance: Math.max(toFiniteNumber(option.tolerance, 0.5), 0),
-  };
+  return { enabled: option.enabled === true, xOffset: toFiniteNumber(option.xOffset, 0), yOffset: toFiniteNumber(option.yOffset, 0), zOffset: toFiniteNumber(option.zOffset, 0), tolerance: Math.max(toFiniteNumber(option.tolerance, 0.5), 0) };
 }
 
 export function xmlCiiApplyDtxrPositionOffset(point, config) {

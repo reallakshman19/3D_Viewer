@@ -6,32 +6,36 @@
  *   2. Install popup/bridge extensions via scheduled installers.
  *   3. Remove deprecated converter options from the dropdown.
  *
- * After Phase 7 (legacy adapter shrinkdown) the bulk of the render logic will
- * migrate into this file, making it the true tab owner rather than a thin
- * orchestrator.
+ * XML->CII(2019) workflow isolation rule:
+ *   - Visible XML->CII workflow buttons are owned by xml-cii-workflow-button-scope.js.
+ *   - The legacy direct Run Conversion button is kept away from XML->CII popup-only mode.
+ *   - Workflow 1 / Workflow 2 popup behavior is installed by xml-cii-workflow-popup.js.
+ *   - Workflow modules must not restore or intercept the legacy direct run button.
  */
 
 import './xml-cii-rich-worker-cache-bust.js?v=20260623-xml-cii-rich-worker-1';
-import { renderLegacyModelConvertersTab } from './legacy-adapter.js?v=20260620-master-session-1';
+import { renderLegacyModelConvertersTab } from './legacy-adapter.js?v=20260624-workflow1-workflow2-1';
 import { installBmCiiSupportAnnotationPopup } from './bm-cii-support-annotation-popup.js?v=20260617-bmcii-open-basic-handoff-2';
 import { installInputXmlPropertyTransferUi } from './inputxml-property-transfer-popup-ui-v4.js?v=20260615-inputxml-property-transfer-popup-host-hide-1';
 import { installRvmAttrUxmlAddon } from './rvmattr-uxml-addon.js?v=20260618-port-bore-contract-1';
-import { installXmlCiiRichWorkflowHotfix } from './xml-cii-rich-workflow-hotfix.js?v=20260624-rich-parity-ui-1';
-import { installXmlCiiConversionWorkflowPopup } from './xml-cii-conversion-workflow-popup.js?v=20260624-rich-parity-ui-1';
-import { installXmlCiiCondenseRigidUiBridge } from './xml-cii-condense-rigid-ui-bridge.js?v=20260624-rich-parity-ui-1';
+import { installXmlCiiWorkflowButtonScope } from './xml-cii-workflow-button-scope.js?v=20260624-workflow1-workflow2-1';
+import { installXmlCiiSimpleWorkflowController } from './xml-cii-simple-workflow-controller.js?v=20260624-popup-only-1';
+import { installXmlCiiWorkflowHotfix } from './xml-cii-workflow-hotfix.js?v=20260624-workflow1-workflow2-1';
+import { installXmlCiiWorkflowPopup } from './xml-cii-workflow-popup.js?v=20260624-workflow1-workflow2-1';
+import { installXmlCiiCondenseRigidUiBridge } from './xml-cii-condense-rigid-ui-bridge.js?v=20260624-simple-rich-isolation-1';
 import { installXmlCiiBranchSampleSync } from './xml-cii-branch-sample-sync.js?v=20260620-rating-runtime-1';
-import { installXmlCiiLineKeySelectPatch } from './xml-cii-linekey-select-patch.js?v=20260622-regex-pos-persist-1';
+import { installXmlCiiLineKeySelectPatch } from './xml-cii-linekey-select-patch.js?v=20260624-simple-rich-isolation-1';
 import { installInputXmlBasicGlbBridge } from './inputxml-basic-glb-bridge.js';
 import { installInputXmlManagedStageBridge } from './inputxml-managed-stage-bridge.js?v=20260623-inputxml-direct-stage-1';
-import { installXmlCiiDefaultMasterAutoload, installXmlCiiRecoveryPatch } from '../xml-cii-master-autoload-patch.js?v=20260620-master-session-1';
+import { installXmlCiiDefaultMasterAutoload, installXmlCiiRecoveryPatch } from '../xml-cii-master-autoload-patch.js?v=20260624-workflow1-workflow2-1';
 import { installXmlCiiPreviewLineKeyRemap } from './xml-cii-preview-linekey-remap.js?v=20260620-rating-runtime-1';
 import { installXmlCiiRuntimeOverrideSync } from './xml-cii-runtime-override-sync.js?v=20260620-rating-runtime-1';
 import { installXmlCiiMasterPreservePatch } from './xml-cii-master-preserve-patch.js?v=20260620-master-session-1';
 
 const TRACE_PREFIX = '[BM_CII_CONVERTER_TRACE]';
 const STYLE_LINKS = Object.freeze([
-  ['model-converters-tab-css', './tabs/model-converters-tab.css?v=20260624-rich-parity-ui-1'],
-  ['model-converters-css-fix', './tabs/model-converters-css-fix.css?v=20260624-rich-parity-ui-1'],
+  ['model-converters-tab-css', './tabs/model-converters-tab.css?v=20260624-button-scope-1'],
+  ['model-converters-css-fix', './tabs/model-converters-css-fix.css?v=20260624-simple-rich-isolation-1'],
 ]);
 
 function ensureStylesheet(id, href) {
@@ -56,9 +60,9 @@ function ensureModelConvertersStyles() {
 function markStylesReady(container) {
   if (!container) return;
   container.classList.add('model-converters-style-ready');
-  container.dataset.modelConvertersCss = '20260624-rich-parity-ui-1';
+  container.dataset.modelConvertersCss = '20260624-button-scope-1';
   const root = container.querySelector?.('.model-converters-root');
-  if (root) root.dataset.modelConvertersCss = '20260624-rich-parity-ui-1';
+  if (root) root.dataset.modelConvertersCss = '20260624-button-scope-1';
 }
 
 function installSafely(name, installer, container) {
@@ -76,14 +80,17 @@ function scheduleInstaller(name, installer, container) {
 
 /**
  * Ordered installer pairs. Each entry is [debugName, installerFn].
- * Adding a new popup/bridge: append one entry here — no other changes needed.
+ * The button scope runs before Workflow 1/Workflow 2 popup binding so both
+ * workflows bind to the same canonical current-root action row.
  *
  * @type {ReadonlyArray<[string, (container: HTMLElement) => void]>}
  */
 const MODEL_CONVERTER_INSTALLERS = Object.freeze([
   ['rvmattr-uxml-addon', installRvmAttrUxmlAddon],
-  ['xml-cii-rich-workflow-hotfix', installXmlCiiRichWorkflowHotfix],
-  ['xml-cii-conversion-workflow-popup', installXmlCiiConversionWorkflowPopup],
+  ['xml-cii-workflow-button-scope', installXmlCiiWorkflowButtonScope],
+  ['xml-cii-simple-workflow-controller', installXmlCiiSimpleWorkflowController],
+  ['xml-cii-workflow-hotfix', installXmlCiiWorkflowHotfix],
+  ['xml-cii-workflow-popup', installXmlCiiWorkflowPopup],
   ['xml-cii-condense-rigid-ui-bridge', installXmlCiiCondenseRigidUiBridge],
   ['xml-cii-branch-sample-sync', installXmlCiiBranchSampleSync],
   ['xml-cii-linekey-select-patch', installXmlCiiLineKeySelectPatch],

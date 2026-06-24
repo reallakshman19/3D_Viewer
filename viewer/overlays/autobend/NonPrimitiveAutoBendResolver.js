@@ -18,6 +18,7 @@ export function resolveNonPrimitiveAutoBends(input = {}, options = {}) {
     candidateNodeCount: 0,
     emittedBendCount: 0,
     skippedCollinearCount: 0,
+    skippedStraightContinuationCount: 0,
     skippedShortSegmentCount: 0,
     skippedAmbiguousBranchCount: 0,
     skippedExistingComponentCount: 0,
@@ -39,6 +40,7 @@ export function resolveNonPrimitiveAutoBends(input = {}, options = {}) {
     const existingKind = String(existingNodeKinds.get(nodeId) || '').toUpperCase();
     if (isExistingComponentNode(existingKind)) {
       diagnostics.skippedExistingComponentCount += 1;
+      diagnostics.warnings.push({ nodeId, code: 'explicitComponentNode', message: `Existing ${existingKind} component blocks auto-bend generation.` });
       continue;
     }
 
@@ -54,6 +56,7 @@ export function resolveNonPrimitiveAutoBends(input = {}, options = {}) {
     const B = getOtherPoint(nodeId, segB);
     if (!P || !A || !B) {
       diagnostics.skippedDegenerateCount += 1;
+      diagnostics.warnings.push({ nodeId, code: 'degenerateCandidate', message: 'Candidate rejected because one or more endpoints are missing.' });
       continue;
     }
 
@@ -61,6 +64,7 @@ export function resolveNonPrimitiveAutoBends(input = {}, options = {}) {
     const lenB = distance(P, B);
     if (lenA < settings.minSegmentLengthMm || lenB < settings.minSegmentLengthMm) {
       diagnostics.skippedShortSegmentCount += 1;
+      diagnostics.warnings.push({ nodeId, code: 'shortAdjacentSegment', message: 'Candidate rejected because an adjacent pipe segment is too short.' });
       continue;
     }
 
@@ -68,24 +72,25 @@ export function resolveNonPrimitiveAutoBends(input = {}, options = {}) {
     const dB = normalize(sub(B, P));
     if (!dA || !dB) {
       diagnostics.skippedDegenerateCount += 1;
+      diagnostics.warnings.push({ nodeId, code: 'zeroDirection', message: 'Candidate rejected because a direction vector is zero length.' });
       continue;
     }
 
-    const turnAngleRad = Math.acos(clamp(-dot(dA, dB), -1, 1));
-    const turnAngleDeg = radToDeg(turnAngleRad);
-    if (turnAngleDeg <= settings.collinearToleranceDeg) {
-      diagnostics.skippedCollinearCount += 1;
-      continue;
-    }
-    if (turnAngleDeg > settings.maxTurnAngleDeg) {
-      diagnostics.skippedDegenerateCount += 1;
-      diagnostics.warnings.push({ nodeId, code: 'excessiveTurnAngle', message: `Turn angle ${turnAngleDeg.toFixed(1)}° is too large for auto-bend.` });
+    const turn = classifyRealTurn(dA, dB, settings);
+    if (!turn.accepted) {
+      if (turn.reason === 'collinear') diagnostics.skippedCollinearCount += 1;
+      else if (turn.reason === 'straightContinuation') diagnostics.skippedStraightContinuationCount += 1;
+      else diagnostics.skippedDegenerateCount += 1;
+      diagnostics.warnings.push({ nodeId, code: turn.code, message: turn.message });
       continue;
     }
 
+    const turnAngleRad = turn.angleRad;
+    const turnAngleDeg = turn.angleDeg;
     const planeNormal = normalize(cross(dA, dB));
     if (!planeNormal) {
       diagnostics.skippedCollinearCount += 1;
+      diagnostics.warnings.push({ nodeId, code: 'collinearNoPlane', message: 'Candidate rejected because collinear pipe vectors do not define a bend plane.' });
       continue;
     }
 
@@ -103,6 +108,7 @@ export function resolveNonPrimitiveAutoBends(input = {}, options = {}) {
     const bisector = normalize(add(dA, dB));
     if (!bisector) {
       diagnostics.skippedDegenerateCount += 1;
+      diagnostics.warnings.push({ nodeId, code: 'missingBisector', message: 'Candidate rejected because turn bisector could not be resolved.' });
       continue;
     }
     const centerDistance = radiusMm / Math.sin(turnAngleRad / 2);
@@ -140,6 +146,11 @@ export function buildVisualTrimLookup(trims = []) {
   return lookup;
 }
 
+export function isRealTurnDirection(directionA, directionB, toleranceDeg = 3, maxTurnAngleDeg = 150) {
+  const turn = classifyRealTurn(directionA, directionB, { collinearToleranceDeg: toleranceDeg, maxTurnAngleDeg });
+  return turn.accepted;
+}
+
 export function resolveBendRadiusMm({ segmentA, segmentB, lenA, lenB, turnAngleRad, defaultRadiusFactor = 1.5 }) {
   const explicit = readPositiveNumber(segmentA.bendRadiusMm)
     || readPositiveNumber(segmentB.bendRadiusMm)
@@ -166,13 +177,38 @@ export function resolveBendRadiusMm({ segmentA, segmentB, lenA, lenB, turnAngleR
   return { radiusMm, source, warnings };
 }
 
+function classifyRealTurn(directionA, directionB, settings = {}) {
+  const dA = normalize(directionA);
+  const dB = normalize(directionB);
+  if (!dA || !dB) {
+    return { accepted: false, reason: 'degenerate', code: 'zeroDirection', message: 'Candidate rejected because a direction vector is zero length.' };
+  }
+  const angleDeg = angleBetweenDeg(dA, dB);
+  const tolerance = settings.collinearToleranceDeg ?? 3;
+  const maxTurn = settings.maxTurnAngleDeg ?? 150;
+  if (!Number.isFinite(angleDeg)) {
+    return { accepted: false, reason: 'degenerate', code: 'invalidAngle', message: 'Candidate rejected because turn angle could not be computed.' };
+  }
+  if (angleDeg <= tolerance) {
+    return { accepted: false, reason: 'collinear', code: 'collinear', message: 'Candidate rejected: straight collinear continuation.' };
+  }
+  if (Math.abs(180 - angleDeg) <= tolerance || angleDeg > maxTurn) {
+    return { accepted: false, reason: 'straightContinuation', code: 'straightContinuation', message: `Candidate rejected: ${angleDeg.toFixed(1)}° is a straight or near-straight continuation, not a bend.` };
+  }
+  return { accepted: true, angleDeg, angleRad: degToRad(angleDeg) };
+}
+
+function angleBetweenDeg(a, b) {
+  return radToDeg(Math.acos(clamp(-dot(a, b), -1, 1)));
+}
+
 function isPlainPipeSegment(segment) {
   const type = String(segment.componentType || segment.type || 'PIPE').toUpperCase();
   return type === 'PIPE';
 }
 
 function isExistingComponentNode(kind) {
-  return ['ELBOW', 'BEND', 'TEE', 'VALVE', 'FLANGE', 'SUPPORT', 'OLET', 'BRANCH'].includes(kind);
+  return ['ELBOW', 'BEND', 'TEE', 'VALVE', 'FLANGE', 'SUPPORT', 'OLET', 'BRANCH', 'ATTA', 'ANCI'].includes(kind);
 }
 
 function sameBranchOrLine(a, b) {
@@ -240,3 +276,4 @@ function distance(a, b) { return length(sub(a, b)); }
 function midpoint(a, b) { return scale(add(toVec3(a), toVec3(b)), 0.5); }
 function clamp(value, min, max) { return Math.max(min, Math.min(max, value)); }
 function radToDeg(rad) { return rad * 180 / Math.PI; }
+function degToRad(deg) { return deg * Math.PI / 180; }

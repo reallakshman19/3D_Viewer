@@ -240,10 +240,10 @@ function resolveCandidateWeight(candidate, xmlLengthMm, config) {
 }
 
 function baseCandidateFromRow(row, config, lengthMm) {
-  const rowBore = pickNumber(row, ['boreMm', 'convertedBore', 'Converted Bore', 'bore', 'Bore', 'DN', 'NB']);
-  const rawLength = pickNumber(row, ['lengthMm', 'length', 'Length (RF-F/F)', 'RF-F/F', 'LEN', 'faceToFace']);
+  const rowBore = pickNumber(row, ['boreMm', 'convertedBore', 'Converted Bore', 'bore', 'Bore', 'BORE', 'DN', 'NB', 'NPS']);
+  const rawLength = pickNumber(row, ['lengthMm', 'length', 'Length', 'LENGTH', 'Length mm', 'LENGTH_MM', 'Length (RF-F/F)', 'RF-F/F', 'LEN', 'faceToFace', 'Face To Face', 'F2F']);
   const rowLength = masterLength(rawLength, Number(lengthMm), config);
-  const weight = pickNumber(row, ['valveWeight', 'directWeight', 'weight', 'Weight', 'RF/RTJ KG', 'Valve Weight']);
+  const weight = pickNumber(row, ['valveWeight', 'directWeight', 'weight', 'Weight', 'WEIGHT', 'Weight kg', 'WEIGHT_KG', 'RF/RTJ KG', 'Valve Weight']);
   const rowRating = normalizedRating(pickText(row, ['ratingClass', 'rating', 'Rating', 'RATING', 'Class', 'CLASS', 'Pressure Class']));
   const type = pickText(row, ['type', 'Type', 'TYPE', 'valveType', 'Valve Type']);
   const typeDesc = pickText(row, ['typeDesc', 'TypeDesc', 'Type Desc', 'Type Description', 'Description', 'Valve Type']);

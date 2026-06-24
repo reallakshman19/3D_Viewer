@@ -1,6 +1,6 @@
-import { getXmlCiiPhaseBridge } from './legacy-adapter.js?v=20260620-master-session-1';
+import { xmlCiiRichWorkflowGetBridge } from './xml-cii-rich-workflow-bridge.js?v=20260624-simple-rich-isolation-1';
 
-const FLAG = '__xmlCiiRegexTokenSelectPatch_v3';
+const FLAG = '__xmlCiiRegexTokenSelectPatch_v4';
 const SUPPORT_CONFIG_SELECTOR = '[data-option-key="supportConfigJson"]';
 const LEGACY_ATTR = 'data-xml-cii-regex-path';
 const NATIVE_ATTR = 'data-native-regex-path';
@@ -67,7 +67,7 @@ function optionHtml(tokens, selected) { const safeSelected = normalizePositionVa
 function setSiblingPreview(select, tokens) { const position = Number(normalizePositionValue(select.value)); const token = Number.isFinite(position) ? (tokens[position - 1] || '') : ''; const row = select.closest('tr'); const strong = row?.querySelector?.('.mc-regex-preview-cell strong, td:last-child strong') || select.parentElement?.querySelector?.('strong'); if (strong) strong.textContent = token || '—'; }
 function persistPosition(path, value) {
   const pos = normalizePositionValue(value) || clean(value);
-  const bridge = getXmlCiiPhaseBridge?.();
+  const bridge = xmlCiiRichWorkflowGetBridge();
   if (bridge && typeof bridge.setPopupConfigValue === 'function') {
     bridge.setPopupConfigValue(path, pos, positionInputType(path));
     return true;
@@ -81,7 +81,7 @@ function shouldPatchElement(element) { if (!element || element.dataset.xmlCiiTok
 function patchOne(element) {
   if (!shouldPatchElement(element)) return false;
   const path = element.getAttribute(LEGACY_ATTR) || element.getAttribute(NATIVE_ATTR);
-  const root = element.closest?.('.model-converters-workflow-popup-overlay, [data-xml-cii-workflow-root], body') || document;
+  const root = element.closest?.('.model-converters-workflow-popup-overlay, [data-xml-cii-rich-workflow-root], [data-xml-cii-workflow-root], body') || document;
   const sample = fieldValue(root, PATHS.sample, '/ASIM-1885-10"-S8810101-91261M7-HC/B1');
   const delimiter = fieldValue(root, PATHS.delimiter, '-');
   const tokens = tokenizeBranchName(sample, delimiter);

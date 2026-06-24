@@ -17,8 +17,11 @@ const indexSource = await read('../index.html');
 const workspaceSource = await read('../geometry-workspace/GeometryExportWorkspaceBridge.js');
 const hierarchySource = await read('../geometry-workspace/GeometryImportHierarchyModel.js');
 
-check(appSource.includes('GeometryExportWorkspaceBridge.js?v=20260622-geometry-import-tree-1'), 'app installs cache-busted geometry import tree bridge');
-check(appSource.includes('installGeometryExportWorkspaceBridge()'), 'app installs geometry workspace bridge before renderer cache can stale-load old version');
+check(appSource.includes('GeometryExportWorkspaceBridge.js?v=20260622-geometry-import-tree-1'), 'app retains cache-busted geometry import tree contract marker');
+check(appSource.includes('GeometryExportWorkspaceBridge.js?v=20260622-geometry-mapping-1'), 'app can dynamically load geometry workspace bridge when legacy workflow is enabled');
+check(appSource.includes('LEGACY_GEOMETRY_WORKFLOW_FLAG'), 'geometry workspace bridge is behind explicit legacy workflow enablement');
+check(appSource.includes('installLegacyGeometryWorkflowBridges'), 'app exposes isolated legacy workspace installer');
+check(!appSource.includes('\ninstallGeometryExportWorkspaceBridge();'), 'geometry workspace bridge is not installed into the default top ribbon');
 check(entrySource.includes('core/app.js?v=20260622-geometry-import-tree-1'), 'entry loads geometry import tree app cache key');
 check(indexSource.includes('main-rhbg-fitguard.js?v=20260622-geometry-import-tree-1'), 'index loads geometry import tree entry cache key');
 

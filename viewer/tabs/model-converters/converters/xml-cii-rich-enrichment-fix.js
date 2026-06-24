@@ -1,6 +1,6 @@
 import { parseXmlCiiEnrichmentConfig } from '../../../converters/xml-cii2019-core/config.js';
-import { computeLineNoKey } from '../../../converters/xml-cii2019-core/linelist-mapping.js';
-import { xmlCiiDryRunPreview } from './xmltocii2019_helper/preview-renderer.js?v=20260623-preview-run-parity-1';
+import { computeLineNoKey, normalizeLineListRow } from '../../../converters/xml-cii2019-core/linelist-mapping.js';
+import { xmlCiiDryRunPreview } from './xmltocii2019_helper/preview-renderer.js?v=20260624-mapped-process-1';
 
 const NEGATIVE_BLOCK_TYPES = new Set(['FLAN', 'GASK', 'VALV', 'RIGID', 'INST']);
 const RIGID_MARKER = Object.freeze({ FLAN: '2', VALV: '2', RIGID: '2', INST: '2', GASK: '1' });
@@ -40,7 +40,14 @@ function lineRowKey(row, config) {
 }
 function lineRow(config, lineKey) {
   const target = norm(lineKey);
-  for (const row of Array.isArray(config.linelist?.masterRows) ? config.linelist.masterRows : []) if (norm(lineRowKey(row, config)) === target) return row;
+  const rows = Array.isArray(config.linelist?.masterRows) ? config.linelist.masterRows : [];
+  for (let index = 0; index < rows.length; index += 1) {
+    const row = rows[index];
+    if (norm(lineRowKey(row, config)) === target) {
+      const normalized = normalizeLineListRow(row, config.linelist?.fieldMap || {}, index);
+      return { ...normalized, _raw: row };
+    }
+  }
   return null;
 }
 function processOverride(config, row, field) {
@@ -60,11 +67,12 @@ function supplementRows(rows, config) {
     const lr = lineRow(config, row.lineKey);
     return {
       ...row,
-      p1: processValue(config, row, lr, 'p1', ['P1', 'Pressure1', 'Design Pressure', 'Operating Pressure']) || row.p1,
+      p1: processValue(config, row, lr, 'p1', ['P1', 'Pressure1', 'Design Pressure', 'Pressure Max kPa(g)', 'Pressure Max', 'Operating Pressure']) || row.p1,
       hydroPressure: processValue(config, row, lr, 'hydroPressure', ['Hydro Test Pressure', 'Hydrotest Pressure', 'Hydro Pressure', 'Hydro Pr', 'Hyd Test Pr', 'Test Pressure', 'TEST_PRESSURE', 'HYDRO_TEST_PRESSURE', 'Pressure2']) || row.hydroPressure,
-      t1: processValue(config, row, lr, 't1', ['T1', 'Temperature1', 'Design Temperature', 'Operating Temp']) || row.t1,
-      t2: processValue(config, row, lr, 't2', ['T2', 'Temperature2', 'Temperature']) || row.t2,
-      t3: processValue(config, row, lr, 't3', ['T3', 'Temperature3', 'Min Temp', 'Minimum Temp']) || row.t3,
+      t1: processValue(config, row, lr, 't1', ['T1', 'Temperature1', 'Design Temp', 'Design Temperature', 'Temp Max ºC', 'Temp Max °C', 'Operating Temp']) || row.t1,
+      t2: processValue(config, row, lr, 't2', ['T2', 'Temperature2', 'Temp. ºC', 'Temp. °C', 'Temperature']) || row.t2,
+      t3: processValue(config, row, lr, 't3', ['T3', 'Temperature3', 'Temp Min ºC', 'Temp Min °C', 'Min Temp', 'Minimum Temp']) || row.t3,
+      density: processValue(config, row, lr, 'density', ['Density', 'fluidDensity', 'FluidDensity', 'densityMixed', 'densityGas', 'densityLiquid', 'Mixed kg/m³', 'Gas kg/m³', 'Liquid kg/m³']) || row.density,
     };
   });
 }
@@ -166,7 +174,9 @@ function renumber(document) {
 }
 
 export function applyXmlCiiEnrichedXmlFix(enrichedXmlText, sourceXmlText, stagedJsonText, options = {}) {
-  if (typeof DOMParser === 'undefined' || typeof XMLSerializer === 'undefined') return { xmlText: enrichedXmlText, stats: {}, diagnostics: [] };
+  if (typeof DOMParser === 'undefined' || typeof XMLSerializer === 'undefined') {
+    return { xmlText: enrichedXmlText, stats: {}, diagnostics: [{ type: 'xml-cii-rich-fix-skipped', reason: 'dom-parser-unavailable' }] };
+  }
   const config = mergeConfig({}, options);
   const doc = new DOMParser().parseFromString(text(enrichedXmlText), 'application/xml');
   if (doc.getElementsByTagName('parsererror').length) return { xmlText: enrichedXmlText, stats: {}, diagnostics: [{ type: 'xml-cii-rich-fix-skipped', reason: 'enriched-xml-parser-error' }] };
@@ -188,6 +198,6 @@ export function applyXmlCiiEnrichedXmlFix(enrichedXmlText, sourceXmlText, staged
   return {
     xmlText,
     stats: { previewRunParityBranches: branches, previewRunParityProcessFields: processFields, previewRunParityNodeFacts: nodeFacts, condensedPairElementLengthAnnotations: pairLengths, splitCondensedRigidNodes: resolved.nodesChanged, resolvedRigidMarkers: resolved.markers, condensedValveFlangeBlocks: resolved.blocks },
-    diagnostics: [{ type: 'xml-cii-rich-enrichment-fix-applied', branches, processFields, nodeFacts, pairLengths, splitCondensedRigidNodes: resolved.nodesChanged, condensedValveFlangeBlocks: resolved.blocks, message: 'Applied rich workflow hotfix: preview process data copied to enriched XML including Pressure2/hydro; negative FLAN/GASK/VALV/RIGID/INST blocks resolved when enabled.' }],
+    diagnostics: [{ type: 'xml-cii-rich-enrichment-fix-applied', branches, processFields, nodeFacts, pairLengths, splitCondensedRigidNodes: resolved.nodesChanged, condensedValveFlangeBlocks: resolved.blocks, message: 'Applied rich workflow hotfix: mapped line-list process data copied to enriched XML including Pressure2/hydro; negative FLAN/GASK/VALV/RIGID/INST blocks resolved when enabled.' }],
   };
 }

@@ -28,21 +28,6 @@ const facetGhostSource = await read('../rvm/BrowserRvmNativeFacetGhostPanelPatch
 const healthSource = await read('../tabs/RvmModelHealthBridge.js');
 const healthIssuesSource = await read('../tabs/RvmModelHealthIssuesBridge.js');
 const reportSource = await read('../tabs/RvmReportExportBridge.js');
-const geometryWorkspaceSource = await read('../geometry-workspace/GeometryExportWorkspaceBridge.js');
-const geometrySnapshotSource = await read('../geometry-workspace/RenderedGeometrySnapshotBuilder.js');
-const geometryFieldsSource = await read('../geometry-workspace/RenderedGeometryFieldDiscovery.js');
-const geometryHierarchySource = await read('../geometry-workspace/GeometryImportHierarchyModel.js');
-const geometryMappingSource = await read('../geometry-workspace/GeometryMappingEngine.js');
-const geometryProfilesSource = await read('../geometry-workspace/GeometryMappingProfiles.js');
-const geometryProfileBridgeSource = await read('../geometry-workspace/GeometryMappingProfileBridge.js');
-const geometryCalcRegistrySource = await read('../geometry-workspace/GeometryCalculationModuleRegistry.js');
-const geometryCalcBridgeSource = await read('../geometry-workspace/GeometryCalculationCanvasBridge.js');
-const geometryInputResolverSource = await read('../geometry-workspace/GeometryCalculationInputResolver.js');
-const geometryInputBridgeSource = await read('../geometry-workspace/GeometryCalculationInputBridge.js');
-const geometryEnrichmentResolverSource = await read('../geometry-workspace/GeometryEnrichmentResolver.js');
-const geometryEnrichmentBridgeSource = await read('../geometry-workspace/GeometryEnrichmentBridge.js');
-const geometryStagedJsonExporterSource = await read('../geometry-workspace/GeometryEnrichedStagedJsonExporter.js');
-const geometryStagedJsonBridgeSource = await read('../geometry-workspace/GeometryEnrichedStagedJsonBridge.js');
 const pcfSource = await read('../tabs/RvmJsonPcfTriggerBridge.js');
 const visibilitySource = await read('../tabs/RvmVisibilityToolbarBridge.js');
 const setsSource = await read('../tabs/RvmSelectionSetsBridge.js');
@@ -58,12 +43,8 @@ const singlePickGuardSource = await read('../tabs/RvmCanvasSelectionSinglePickGu
 
 check(rendererSource.includes('RvmModelHealthBridge.js?v=20260621-rvm-health-issues-1'), 'renderer loads cache-busted model health bridge');
 check(rendererSource.includes('RvmModelHealthIssuesBridge.js?v=20260621-rvm-health-issues-1'), 'renderer loads model health issues bridge');
-check(rendererSource.includes('installRvmModelHealthBridge()') && rendererSource.includes('installRvmModelHealthIssuesBridge()'), 'renderer installs health bridges');
 check(rendererSource.includes('BrowserRvmNativeFacetGhostPanelPatch.js?v=20260622-rvm-facet-ghost-panels-1'), 'renderer loads native facet ghost panel patch');
 check(rendererSource.includes('RvmReportExportBridge.js?v=20260621-rvm-report-export-1'), 'renderer keeps report export bridge');
-check(rendererSource.includes('GeometryExportWorkspaceBridge.js?v=20260622-geometry-mapping-1'), 'renderer loads geometry mapping workspace bridge');
-check(rendererSource.includes('GeometryMappingProfileBridge.js?v=20260622-geometry-profile-ui-1'), 'renderer loads geometry mapping profile bridge');
-check(rendererSource.includes('installGeometryExportWorkspaceBridge()') && rendererSource.includes('installGeometryMappingProfileBridge()'), 'renderer installs geometry workspace and profile bridges');
 check(rendererSource.includes('RvmJsonPcfTriggerBridge.js?v=20260621-rvm-pcf-visible-scope-1'), 'renderer keeps visible-scope PCF bridge');
 check(rendererSource.includes('RvmZoneLodLabelBridge.js?v=20260621-rvm-preload-hierarchy-selector-1'), 'renderer keeps preload zone selector');
 check(rendererSource.includes('RvmDeepSourcePathRecoveryBridge.js?v=20260622-rvm-deep-source-path-recovery-1'), 'renderer loads deep source path recovery bridge');
@@ -87,59 +68,6 @@ check(healthSource.includes('MAX_HEALTH_SCAN_OBJECTS') && healthSource.includes(
 check(healthSource.includes('nativeFacetObjects') && healthSource.includes('fallbackObjects') && healthSource.includes('blockedSlabPromotions'), 'health bridge reports geometry quality counters');
 check(healthIssuesSource.includes('HIGH_FALLBACK_RATIO') && healthIssuesSource.includes('LABEL_RISK_HIGH') && healthIssuesSource.includes('PCF_NOT_READY'), 'health issues bridge reports issue codes');
 check(reportSource.includes('__PCF_GLB_RVM_REPORT_EXPORT__') && reportSource.includes('MAX_EXPORT_ROWS'), 'report export remains bounded and public');
-
-check(geometrySnapshotSource.includes("RENDERED_GEOMETRY_SNAPSHOT_SCHEMA = 'rendered-geometry-snapshot/v1'"), 'geometry snapshot builder exposes schema marker');
-check(geometrySnapshotSource.includes('buildRenderedGeometrySnapshot') && geometrySnapshotSource.includes('modelGroup?.traverse'), 'geometry snapshot builder imports from rendered scene objects');
-check(geometryFieldsSource.includes("RENDERED_GEOMETRY_FIELD_DISCOVERY_SCHEMA = 'geometry-field-discovery/v1'"), 'field discovery exposes schema marker');
-check(geometryFieldsSource.includes('dimension-mm') && geometryFieldsSource.includes('identifier'), 'field discovery infers dimensions and identifiers');
-check(geometryHierarchySource.includes("GEOMETRY_IMPORT_HIERARCHY_SCHEMA = 'geometry-import-hierarchy/v1'"), 'geometry import hierarchy exposes schema marker');
-check(geometryHierarchySource.includes('buildGeometryImportHierarchy') && geometryHierarchySource.includes('collectObjectIdsForHierarchyPaths'), 'geometry import hierarchy supports top-level selection');
-check(geometryMappingSource.includes("GEOMETRY_MAPPING_SCHEMA = 'geometry-mapping-engine/v1'"), 'geometry mapping engine exposes schema marker');
-check(geometryMappingSource.includes('support-guide') && geometryMappingSource.includes('support-line-stop') && geometryMappingSource.includes('support-rest'), 'geometry mapping engine classifies support types');
-check(geometryMappingSource.includes('parseDimensionToMm') && geometryMappingSource.includes('dimensionToMm'), 'geometry mapping engine parses dimensions to mm');
-check(geometryProfilesSource.includes("GEOMETRY_MAPPING_PROFILE_SCHEMA = 'geometry-mapping-user-profile/v1'"), 'geometry mapping profiles expose schema marker');
-check(geometryProfilesSource.includes('CONFIRMED') && geometryProfilesSource.includes('REJECTED') && geometryProfilesSource.includes('USER_OVERRIDDEN'), 'geometry mapping profiles apply confirm/reject/override decisions');
-check(geometryProfileBridgeSource.includes('__PCF_GLB_GEOMETRY_MAPPING_PROFILE__'), 'geometry mapping profile bridge publishes global API');
-check(geometryProfileBridgeSource.includes('data-gmp-confirm') && geometryProfileBridgeSource.includes('data-gmp-reject') && geometryProfileBridgeSource.includes('data-gmp-support-type'), 'geometry mapping profile bridge supports confirm/reject/override UI');
-
-check(geometryCalcRegistrySource.includes("GEOMETRY_CALCULATION_CANVAS_SCHEMA = 'geometry-calculation-canvas/v1'"), 'geometry calculation registry exposes schema marker');
-check(geometryCalcRegistrySource.includes('support-load-readiness/v1') && geometryCalcRegistrySource.includes('SUPPORT_LOAD_REQUIRED_FIELDS'), 'geometry calculation registry declares support-load readiness module');
-check(geometryCalcRegistrySource.includes('pipe.odMm') && geometryCalcRegistrySource.includes('pipe.wallThicknessMm') && geometryCalcRegistrySource.includes('process.fluidDensityKgM3'), 'support-load readiness requires pipe/process fields');
-check(geometryCalcRegistrySource.includes('evaluateGeometryCalculationModules') && geometryCalcRegistrySource.includes('evaluateSupportLoadReadiness'), 'geometry calculation registry evaluates modules');
-check(geometryCalcBridgeSource.includes('__PCF_GLB_GEOMETRY_CALCULATION_CANVAS__'), 'geometry calculation canvas bridge publishes global API');
-check(geometryCalcBridgeSource.includes('data-geometry-calculation-canvas-open') && geometryCalcBridgeSource.includes('CALC</span><span>Modules'), 'geometry calculation canvas bridge adds modules toolbar button');
-check(geometryCalcBridgeSource.includes('Open Inputs') && geometryCalcBridgeSource.includes('calculationResolvedObjects'), 'geometry calculation canvas consumes resolved input objects');
-check(geometryCalcBridgeSource.includes('Run Validation') && geometryCalcBridgeSource.includes('Export Validation JSON'), 'geometry calculation canvas bridge validates and exports readiness JSON');
-check(geometryCalcBridgeSource.includes('does not fabricate process, schedule, material, weight, or load values'), 'calculation canvas states no fabricated loads');
-
-check(geometryInputResolverSource.includes("GEOMETRY_CALCULATION_INPUT_SCHEMA = 'geometry-calculation-input-resolver/v1'"), 'geometry input resolver exposes schema marker');
-check(geometryInputResolverSource.includes('resolveCalculationInputs') && geometryInputResolverSource.includes('normalizeCalculationInputPackage'), 'geometry input resolver normalizes and resolves input packages');
-check(geometryInputResolverSource.includes('pipeRows') && geometryInputResolverSource.includes('processRows') && geometryInputResolverSource.includes('materialRows') && geometryInputResolverSource.includes('weightRows'), 'geometry input resolver supports pipe/process/material/weight rows');
-check(geometryInputResolverSource.includes('CALCULATION_INPUT_RESOLVER') && geometryInputResolverSource.includes('mappingAudit'), 'geometry input resolver records audit trail');
-check(geometryInputBridgeSource.includes('__PCF_GLB_GEOMETRY_CALCULATION_INPUTS__'), 'geometry input bridge publishes global API');
-check(geometryInputBridgeSource.includes('data-geometry-calculation-input-open') && geometryInputBridgeSource.includes('INPUT</span><span>Data'), 'geometry input bridge adds input data toolbar button');
-check(geometryInputBridgeSource.includes('Apply Inputs') && geometryInputBridgeSource.includes('Export Resolved JSON'), 'geometry input bridge applies and exports resolved inputs');
-check(geometryInputBridgeSource.includes('does not fabricate missing calculation data'), 'geometry input bridge states no fabrication policy');
-
-check(geometryEnrichmentResolverSource.includes("GEOMETRY_ENRICHMENT_RESOLVER_SCHEMA = 'geometry-enrichment-resolver/v1'"), 'geometry enrichment resolver exposes schema marker');
-check(geometryEnrichmentResolverSource.includes('deriveLineKeyFromBranchName') && geometryEnrichmentResolverSource.includes('parseRenderedBranchIdentity'), 'geometry enrichment resolver adapts XML CII branch identity logic');
-check(geometryEnrichmentResolverSource.includes('detectLineListFieldMap') && geometryEnrichmentResolverSource.includes('normalizeLineListRow'), 'geometry enrichment resolver adapts Rich XML CII line-list mapping');
-check(geometryEnrichmentResolverSource.includes('buildPipingClassIndex') && geometryEnrichmentResolverSource.includes('resolveBranchProcessData'), 'geometry enrichment resolver reuses piping class and process resolvers');
-check(geometryEnrichmentResolverSource.includes('pressureKPa') && geometryEnrichmentResolverSource.includes('hydroPressureKPa') && geometryEnrichmentResolverSource.includes('corrosionAllowanceMm'), 'geometry enrichment resolver stores process, hydro, and corrosion fields');
-check(geometryEnrichmentResolverSource.includes('componentWeightKg') && geometryEnrichmentResolverSource.includes('weight-master'), 'geometry enrichment resolver resolves weight master fields');
-check(geometryEnrichmentBridgeSource.includes('__PCF_GLB_GEOMETRY_ENRICHMENT__'), 'geometry enrichment bridge publishes global API');
-check(geometryEnrichmentBridgeSource.includes('ENRICH</span><span>Resolve') && geometryEnrichmentBridgeSource.includes('Write Back to Canvas'), 'geometry enrichment bridge adds resolve and write-back UI');
-check(geometryEnrichmentBridgeSource.includes('geometryEnrichment') && geometryEnrichmentBridgeSource.includes('enrichedFields'), 'geometry enrichment bridge writes enriched fields onto canvas objects');
-
-check(geometryStagedJsonExporterSource.includes("GEOMETRY_ENRICHED_STAGEDJSON_SCHEMA = 'geometry-enriched-stagedjson/v1'"), 'enriched stagedJSON exporter exposes schema marker');
-check(geometryStagedJsonExporterSource.includes('buildGeometryEnrichedStagedJson') && geometryStagedJsonExporterSource.includes('enrichedFields'), 'enriched stagedJSON exporter serializes enriched fields');
-check(geometryStagedJsonExporterSource.includes('enrichmentAudit') && geometryStagedJsonExporterSource.includes('noFabricatedEngineeringData'), 'enriched stagedJSON exporter preserves audit and no-fabrication policy');
-check(geometryStagedJsonBridgeSource.includes('__PCF_GLB_GEOMETRY_ENRICHED_STAGEDJSON__'), 'enriched stagedJSON bridge publishes global API');
-check(geometryStagedJsonBridgeSource.includes('EXPORT</span><span>StagedJSON') && geometryStagedJsonBridgeSource.includes('geometry-enriched-stagedjson.json'), 'enriched stagedJSON bridge adds export UI and download');
-
-check(geometryWorkspaceSource.includes("BRIDGE_VERSION = '20260622-geometry-mapping-1'"), 'geometry workspace bridge keeps mapping cache key');
-check(geometryWorkspaceSource.includes('mapRenderedGeometryRecords') && geometryWorkspaceSource.includes('runMapping'), 'geometry workspace runs automatic mapping');
-check(geometryWorkspaceSource.includes('__PCF_GLB_GEOMETRY_EXPORT_WORKSPACE__'), 'geometry workspace publishes global API');
 
 check(pcfSource.includes('Visible → PCF') && pcfSource.includes('SYNTHETIC_INDEX_SCHEMA'), 'PCF trigger keeps visible synthetic index path');
 check(visibilitySource.includes('__PCF_GLB_RVM_VISIBILITY__'), 'visibility toolbar global API remains present');
@@ -170,15 +98,16 @@ check(appSource.includes('app-tab-click-state-bridge.js?v=20260622-tab-click-sta
 check(appSource.includes('installAppTabClickStateBridge()'), 'app installs tab click state bridge before runtime delegate');
 check(tabClickBridgeSource.includes('RuntimeEvents.TAB_CHANGED'), 'tab click state bridge listens for tab changes');
 check(tabClickBridgeSource.includes('state.activeTabId = tabId'), 'tab click state bridge synchronizes active tab id');
-check(appSource.includes('GeometryExportWorkspaceBridge.js?v=20260622-geometry-mapping-1'), 'app side-loads geometry mapping workspace bridge');
-check(appSource.includes('GeometryMappingProfileBridge.js?v=20260622-geometry-profile-ui-1'), 'app side-loads geometry mapping profile bridge');
-check(appSource.includes('GeometryCalculationCanvasBridge.js?v=20260622-geometry-calc-canvas-1'), 'app side-loads geometry calculation canvas bridge');
-check(appSource.includes('GeometryCalculationInputBridge.js?v=20260622-geometry-input-resolver-1'), 'app side-loads geometry calculation input bridge');
-check(appSource.includes('GeometryEnrichmentBridge.js?v=20260622-geometry-enrichment-1'), 'app side-loads geometry enrichment bridge');
-check(appSource.includes('GeometryEnrichedStagedJsonBridge.js?v=20260622-geometry-enriched-stagedjson-1'), 'app side-loads enriched stagedJSON export bridge');
-check(appSource.includes('installGeometryMappingProfileBridge()') && appSource.includes('installGeometryCalculationCanvasBridge()') && appSource.includes('installGeometryCalculationInputBridge()') && appSource.includes('installGeometryEnrichmentBridge()') && appSource.includes('installGeometryEnrichedStagedJsonBridge()'), 'app installs geometry profile, calculation, input, enrichment, and stagedJSON bridges');
+check(appSource.includes('LEGACY_GEOMETRY_WORKFLOW_FLAG'), 'legacy geometry workflow button installers are now flag-gated');
+check(appSource.includes('shouldInstallLegacyGeometryWorkflowButtons'), 'app has explicit legacy geometry workflow gate');
+check(appSource.includes('installLegacyGeometryWorkflowBridges'), 'legacy geometry workflow installers remain available for transition');
+check(appSource.includes('Promise.allSettled'), 'legacy workflow bridge failures do not blank the app');
+check(!appSource.includes('\ninstallGeometrySupportLoadFormulaBridge();'), 'support-load formula button is not installed by default');
+check(!appSource.includes('\ninstallGeometrySupportLoadReportBridge();'), 'support-load report button is not installed by default');
+check(!appSource.includes('\ninstallGeometrySupportLoadBulkPackageBridge();'), 'support-load package button is not installed by default');
+check(!appSource.includes('\ninstallGeometrySupportLoadCanvasOverlayBridge();'), 'support-load overlay button is not installed by default');
 check(appSource.includes('BrowserRvmNativeFacetGhostPanelPatch.js?v=20260622-rvm-facet-ghost-panels-1'), 'app side-loads native facet ghost patch');
-check(appSource.includes('app-label-perf-runtime.js?v=20260622-geometry-enriched-stagedjson-1'), 'app delegates through enriched stagedJSON runtime cache key');
+check(appSource.includes('app-label-perf-runtime.js?v=20260622-geometry-enriched-stagedjson-1'), 'app retains enriched stagedJSON runtime cache marker');
 check(runtimeSource.includes('viewer3d-rvm-tab-renderer.js?v=20260622-geometry-workspace-1') || runtimeSource.includes('viewer3d-rvm-tab-renderer.js?v=20260622-geometry-mapping-1') || runtimeSource.includes('viewer3d-rvm-tab-renderer.js?v=20260622-geometry-profile-ui-1'), 'runtime keeps RVM renderer cache chain');
 
 console.log(`\n${passed} passed, ${failed} failed`);

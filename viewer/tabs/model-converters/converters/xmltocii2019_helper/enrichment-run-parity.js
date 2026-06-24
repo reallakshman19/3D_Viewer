@@ -1,10 +1,12 @@
 import { parseXmlCiiEnrichmentConfig } from '../../../../converters/xml-cii2019-core/config.js';
 import { enrichXmlForCii2019 as enrichXmlForCii2019Base } from './enrichment-core.js?v=20260620-rating-override-1';
-import { xmlCiiDryRunPreview } from './preview-renderer.js?v=20260623-preview-run-parity-1';
+import { xmlCiiDryRunPreview } from './preview-renderer.js?v=20260624-source-parity-1';
 
-const RENUMBERABLE_NEGATIVE_TYPES = new Set(['FLAN', 'RIGID', 'INST']);
-const INLINE_LENGTH_COMPONENT_TYPES = new Set(['INST']);
-const RESOLVED_RIGID_MARKER_TYPES = new Set(['INST']);
+const RENUMBERABLE_NEGATIVE_TYPES = new Set(['FLAN', 'GASK', 'VALV', 'RIGID', 'INST']);
+const INLINE_LENGTH_COMPONENT_TYPES = new Set(['FLAN', 'GASK', 'VALV', 'RIGID', 'INST']);
+const RESOLVED_RIGID_MARKER_TYPES = new Set(['FLAN', 'VALV', 'RIGID', 'INST']);
+const RESOLVED_FLEXIBLE_MARKER_TYPES = new Set(['GASK']);
+const DTXR_POS_SIF_ZERO_TYPES = new Set(['TEE', 'OLET', 'WELDOLET', 'SOCKOLET', 'THREDOLET', 'THREADOLET', 'ELBOLET', 'LATROLET', 'SWEEPOLET', 'NIPOLET']);
 
 function text(value) {
   return value === undefined || value === null ? '' : String(value).trim();
@@ -80,7 +82,7 @@ function numberText(value) {
 function numericValue(value) {
   const clean = text(value);
   if (!clean) return null;
-  const match = clean.replace(/,/g, '').match(/-?\d+(?:\.\d+)?/);
+  const match = clean.replace(/,/g, '').match(/-?\d+(?:\.\d+)?(?:[Ee][-+]?\d+)?/);
   if (!match) return null;
   const numeric = Number(match[0]);
   return Number.isFinite(numeric) ? numeric : null;
@@ -140,6 +142,7 @@ function setProcessBlock(document, branch, row) {
   const temperature = ensureChild(document, branch, 'Temperature');
 
   if (setText(document, pressure, 'Pressure1', rowValue(row, 'p1', 'P1', 'pressure1', 'Pressure1'))) count += 1;
+  if (setText(document, pressure, 'Pressure2', rowValue(row, 'hydroPressure', 'hydro_pressure', 'HydroPressure', 'Hydro Test Pressure', 'Test Pressure', 'Pressure2'))) count += 1;
   if (setText(document, temperature, 'Temperature1', rowValue(row, 't1', 'T1', 'temperature1', 'Temperature1'))) count += 1;
   if (setText(document, temperature, 'Temperature2', rowValue(row, 't2', 'T2', 'temperature2', 'Temperature2'))) count += 1;
   if (setText(document, temperature, 'Temperature3', rowValue(row, 't3', 'T3', 'temperature3', 'Temperature3'))) count += 1;
@@ -190,7 +193,7 @@ function branchNodes(branch) {
 }
 
 function pointFromPosition(positionText) {
-  const values = text(positionText).match(/-?\d+(?:\.\d+)?/g)?.map(Number).filter(Number.isFinite) || [];
+  const values = text(positionText).match(/-?\d+(?:\.\d+)?(?:[Ee][-+]?\d+)?/g)?.map(Number).filter(Number.isFinite) || [];
   if (values.length >= 3) return [values[0], values[2], -values[1]];
   return null;
 }
@@ -214,6 +217,20 @@ function previousPositiveNode(nodes, startIndex) {
   return null;
 }
 
+function sameComponentRefMate(nodes, index) {
+  const node = nodes[index];
+  const ref = childText(node, 'ComponentRefNo');
+  const endpoint = childText(node, 'Endpoint');
+  if (!ref) return null;
+  for (let cursor = index + 1; cursor < nodes.length; cursor += 1) {
+    if (childText(nodes[cursor], 'ComponentRefNo') === ref && childText(nodes[cursor], 'Endpoint') !== endpoint) return nodes[cursor];
+  }
+  for (let cursor = index - 1; cursor >= 0; cursor -= 1) {
+    if (childText(nodes[cursor], 'ComponentRefNo') === ref && childText(nodes[cursor], 'Endpoint') !== endpoint) return nodes[cursor];
+  }
+  return null;
+}
+
 function shouldAnnotateInlineLength(node) {
   return INLINE_LENGTH_COMPONENT_TYPES.has(childText(node, 'ComponentType').toUpperCase());
 }
@@ -225,25 +242,78 @@ function annotateInlineElementLengths(document, enriched) {
     for (let index = 0; index < nodes.length; index += 1) {
       const node = nodes[index];
       if (!shouldAnnotateInlineLength(node)) continue;
+      const nodeNumber = numericValue(childText(node, 'NodeNumber'));
+      if (nodeNumber === null || nodeNumber >= 0) continue;
       const existing = numericValue(childText(node, 'ElementLengthMm'));
       if (existing !== null && existing > 0) continue;
+
+      const mate = sameComponentRefMate(nodes, index);
       const previous = previousPositiveNode(nodes, index - 1);
-      if (!previous) continue;
-      const length = distanceBetweenPositions(childText(previous, 'Position'), childText(node, 'Position'));
+      const length = mate
+        ? distanceBetweenPositions(childText(node, 'Position'), childText(mate, 'Position'))
+        : previous
+          ? distanceBetweenPositions(childText(previous, 'Position'), childText(node, 'Position'))
+          : null;
       if (length === null || length <= 0) continue;
       if (setText(document, node, 'ElementLengthMm', length.toFixed(3))) count += 1;
     }
   }
   enriched.stats = enriched.stats && typeof enriched.stats === 'object' ? enriched.stats : {};
+  enriched.stats.inlineElementLengthAnnotations = count;
   enriched.stats.instElementLengthAnnotations = count;
   if (count > 0) {
     enriched.diagnostics = Array.isArray(enriched.diagnostics) ? enriched.diagnostics : [];
     enriched.diagnostics.push({
-      type: 'element-length-inst',
-      componentType: 'INST',
+      type: 'element-length-inline-negative',
+      componentTypes: [...INLINE_LENGTH_COMPONENT_TYPES],
       annotatedNodes: count,
-      message: 'ElementLengthMm calculated for INST nodes from previous positive-node CII coordinate distance.',
+      message: 'ElementLengthMm calculated for negative inline FLAN/GASK/VALV/RIGID/INST nodes from paired component endpoints or previous positive-node CII coordinate distance.',
     });
+  }
+  return count;
+}
+
+function nodeDescriptor(node) {
+  return [
+    childText(node, 'ComponentType'),
+    childText(node, 'NodeName'),
+    childText(node, 'ComponentRefNo'),
+    childText(node, 'DTXR_POS'),
+    childText(node, 'TEEDESC_POS'),
+  ].map(text).filter(Boolean).join(' ').toUpperCase();
+}
+
+function isDtxrPosTeeOrOletNode(node) {
+  const componentType = childText(node, 'ComponentType').toUpperCase();
+  if (DTXR_POS_SIF_ZERO_TYPES.has(componentType)) return true;
+  const descriptor = nodeDescriptor(node);
+  return /\bTEE\b/.test(descriptor) || /OLET\b/.test(descriptor);
+}
+
+function nodeHasResolvedDtxrPos(node) {
+  return !!(childText(node, 'DTXR_POS') || childText(node, 'TEEDESC_POS'));
+}
+
+function applyDtxrPosSifZero(document, enriched) {
+  let count = 0;
+  const diagnostics = [];
+  for (const node of [...document.getElementsByTagName('Node')]) {
+    if (!nodeHasResolvedDtxrPos(node)) continue;
+    if (!isDtxrPosTeeOrOletNode(node)) continue;
+    if (setText(document, node, 'SIF', '0')) count += 1;
+    diagnostics.push({
+      type: 'dtxr-pos-sif-zero',
+      nodeNumber: childText(node, 'NodeNumber'),
+      componentType: childText(node, 'ComponentType'),
+      dtxrPos: childText(node, 'DTXR_POS') || childText(node, 'TEEDESC_POS'),
+      message: 'DTXR_POS-matched Tee/Olet node assigned SIF=0 before CII worker conversion.',
+    });
+  }
+  enriched.stats = enriched.stats && typeof enriched.stats === 'object' ? enriched.stats : {};
+  enriched.stats.dtxrPosSifZeroAnnotations = count;
+  if (diagnostics.length) {
+    enriched.diagnostics = Array.isArray(enriched.diagnostics) ? enriched.diagnostics : [];
+    enriched.diagnostics.push(...diagnostics);
   }
   return count;
 }
@@ -257,8 +327,39 @@ function positiveNodeNumberFromOriginal(originalNumbers, nodes, startIndex, step
 }
 
 function ensureResolvedRigidMarker(document, node, componentType) {
-  if (!RESOLVED_RIGID_MARKER_TYPES.has(componentType)) return false;
-  return setTextAfter(document, node, 'Rigid', '2', 'Endpoint');
+  if (RESOLVED_RIGID_MARKER_TYPES.has(componentType)) return setTextAfter(document, node, 'Rigid', '2', 'Endpoint');
+  if (RESOLVED_FLEXIBLE_MARKER_TYPES.has(componentType)) return setTextAfter(document, node, 'Rigid', '1', 'Endpoint');
+  return false;
+}
+
+function negativeNodeEligible(originalNumbers, node) {
+  const nodeNumber = originalNumbers.get(node);
+  const componentType = childText(node, 'ComponentType').toUpperCase();
+  const elementLength = numericValue(childText(node, 'ElementLengthMm'));
+  return nodeNumber !== null && nodeNumber !== undefined && nodeNumber < 0
+    && RENUMBERABLE_NEGATIVE_TYPES.has(componentType)
+    && elementLength !== null && elementLength > 0;
+}
+
+function allocateContiguousNumbers(nodes, start, end, originalNumbers, used, fallback) {
+  const count = end - start;
+  const previous = positiveNodeNumberFromOriginal(originalNumbers, nodes, start - 1, -1);
+  const next = positiveNodeNumberFromOriginal(originalNumbers, nodes, end, 1);
+  let first = next !== null && next - count > 0 ? next - count : null;
+  if (first !== null && previous !== null && first <= previous) first = null;
+  if (first === null && previous !== null) first = previous + 1;
+  if (first !== null && next !== null && first + count > next) first = null;
+  if (first !== null) {
+    const candidateNumbers = Array.from({ length: count }, (_, offset) => first + offset);
+    if (!candidateNumbers.some((candidate) => used.has(candidate))) return candidateNumbers;
+  }
+  const fallbackNumbers = [];
+  for (let offset = 0; offset < count; offset += 1) {
+    while (used.has(fallback.value)) fallback.value += 10;
+    fallbackNumbers.push(fallback.value);
+    fallback.value += 10;
+  }
+  return fallbackNumbers;
 }
 
 function renumberLengthBearingNegativeNodes(document) {
@@ -274,38 +375,32 @@ function renumberLengthBearingNegativeNodes(document) {
     }
   }
 
-  let fallback = 10000;
+  const fallback = { value: 10000 };
   let changed = 0;
   let rigidMarkers = 0;
+  let blocks = 0;
   for (const nodes of nodesByBranch) {
-    for (let index = 0; index < nodes.length; index += 1) {
-      const node = nodes[index];
-      const nodeNumber = originalNumbers.get(node);
-      const componentType = childText(node, 'ComponentType').toUpperCase();
-      const elementLength = numericValue(childText(node, 'ElementLengthMm'));
-      if (nodeNumber === null || nodeNumber === undefined || Math.round(nodeNumber) >= 0) continue;
-      if (!RENUMBERABLE_NEGATIVE_TYPES.has(componentType) || elementLength === null || elementLength <= 0) continue;
-
-      const previous = positiveNodeNumberFromOriginal(originalNumbers, nodes, index - 1, -1);
-      const next = positiveNodeNumberFromOriginal(originalNumbers, nodes, index + 1, 1);
-      const candidates = [
-        next !== null ? next - 1 : null,
-        previous !== null ? previous + 1 : null,
-      ].filter((candidate) => candidate !== null && candidate > 0 && !used.has(candidate));
-
-      let assigned = candidates[0];
-      if (!assigned) {
-        while (used.has(fallback)) fallback += 10;
-        assigned = fallback;
-        fallback += 10;
+    let index = 0;
+    while (index < nodes.length) {
+      if (!negativeNodeEligible(originalNumbers, nodes[index])) {
+        index += 1;
+        continue;
       }
-      setText(document, node, 'NodeNumber', assigned);
-      if (ensureResolvedRigidMarker(document, node, componentType)) rigidMarkers += 1;
-      used.add(assigned);
-      changed += 1;
+      const start = index;
+      while (index < nodes.length && negativeNodeEligible(originalNumbers, nodes[index])) index += 1;
+      const numbers = allocateContiguousNumbers(nodes, start, index, originalNumbers, used, fallback);
+      if (numbers.length > 1) blocks += 1;
+      numbers.forEach((assigned, offset) => {
+        const node = nodes[start + offset];
+        const componentType = childText(node, 'ComponentType').toUpperCase();
+        setText(document, node, 'NodeNumber', assigned);
+        if (ensureResolvedRigidMarker(document, node, componentType)) rigidMarkers += 1;
+        used.add(assigned);
+        changed += 1;
+      });
     }
   }
-  return { renumberedNodes: changed, rigidMarkers };
+  return { renumberedNodes: changed, rigidMarkers, condensedValveFlangeBlocks: blocks };
 }
 
 function applyCondenseRigidOption(enriched, document, options = {}) {
@@ -319,6 +414,8 @@ function applyCondenseRigidOption(enriched, document, options = {}) {
   const result = renumberLengthBearingNegativeNodes(document);
   enriched.stats.splitCondensedRigidNodes = result.renumberedNodes;
   enriched.stats.instRigid2Annotations = result.rigidMarkers;
+  enriched.stats.resolvedRigidMarkers = result.rigidMarkers;
+  enriched.stats.condensedValveFlangeBlocks = result.condensedValveFlangeBlocks;
   enriched.diagnostics = Array.isArray(enriched.diagnostics) ? enriched.diagnostics : [];
   enriched.diagnostics.push({
     type: 'split-condensed-valve-flange-resolved',
@@ -326,9 +423,39 @@ function applyCondenseRigidOption(enriched, document, options = {}) {
     split_condensed_valve_flange: true,
     renumberedNodes: result.renumberedNodes,
     instRigid2Annotations: result.rigidMarkers,
-    message: 'Resolved Condense Rigid option applied: length-bearing negative RIGID/FLAN/INST nodes are assigned positive node numbers; resolved INST nodes are marked with Rigid=2 before CII conversion.',
+    condensedValveFlangeBlocks: result.condensedValveFlangeBlocks,
+    message: 'Resolved Condense Rigid option applied: contiguous negative FLAN/GASK/VALV/RIGID/INST inline blocks are length-annotated, assigned stable positive node numbers in order, and resolved rigid/inline components are marked with Rigid after Endpoint before CII conversion.',
   });
   return result.renumberedNodes;
+}
+
+function processProvenanceDiagnostics(row) {
+  const fieldSpecs = [
+    ['p1', 'Pressure1 / P1 / Design Pressure'],
+    ['hydroPressure', 'Pressure2 / Hydro/Test Pressure'],
+    ['t1', 'Temperature1 / T1'],
+    ['t2', 'Temperature2 / T2'],
+    ['t3', 'Temperature3 / T3'],
+    ['density', 'FluidDensity / Density'],
+  ];
+  return fieldSpecs.map(([field, label]) => {
+    const source = row?.[`${field}Source`] || 'none';
+    const sourceField = row?.[`${field}SourceField`] || '';
+    const finalValue = row?.[field] ?? '';
+    return {
+      type: 'process-provenance',
+      branchName: row?.branchName || '',
+      lineKey: row?.lineKey || '',
+      field,
+      fieldLabel: label,
+      lineListRowFound: row?.lineMiss ? 'no' : 'yes',
+      sourceRowIndex: row?._sourceRowIndex || row?.lineListRowIndex || '',
+      method: source,
+      sourceField,
+      value: finalValue,
+      message: `${label}: final=${text(finalValue) || '(blank)'}; source=${source}${sourceField ? `; field=${sourceField}` : ''}; rowFound=${row?.lineMiss ? 'no' : 'yes'}${row?._sourceRowIndex ? `; sourceRow=${row._sourceRowIndex}` : ''}`,
+    };
+  });
 }
 
 function applyPreviewRunParity(enriched, sourceXmlText, stagedJsonText, options = {}) {
@@ -340,6 +467,7 @@ function applyPreviewRunParity(enriched, sourceXmlText, stagedJsonText, options 
   const rows = xmlCiiDryRunPreview(sourceXmlText, enriched.config, stagedJsonText).branchRows || [];
   if (!rows.length) {
     annotateInlineElementLengths(document, enriched);
+    applyDtxrPosSifZero(document, enriched);
     applyCondenseRigidOption(enriched, document, options);
     enriched.xmlText = new XMLSerializer().serializeToString(document);
     enriched.diagnostics = Array.isArray(enriched.diagnostics) ? enriched.diagnostics : [];
@@ -352,6 +480,7 @@ function applyPreviewRunParity(enriched, sourceXmlText, stagedJsonText, options 
   let processCount = 0;
   let nodeFactCount = 0;
   const missedBranches = [];
+  const provenanceRows = [];
 
   for (const branch of [...document.getElementsByTagName('Branch')]) {
     const branchName = childText(branch, 'Branchname');
@@ -363,9 +492,11 @@ function applyPreviewRunParity(enriched, sourceXmlText, stagedJsonText, options 
     branchCount += 1;
     processCount += setProcessBlock(document, branch, row);
     nodeFactCount += setBranchNodeFacts(document, branch, row);
+    provenanceRows.push(...processProvenanceDiagnostics(row));
   }
 
   annotateInlineElementLengths(document, enriched);
+  applyDtxrPosSifZero(document, enriched);
   applyCondenseRigidOption(enriched, document, options);
   enriched.xmlText = new XMLSerializer().serializeToString(document);
   enriched.stats = enriched.stats && typeof enriched.stats === 'object' ? enriched.stats : {};
@@ -380,6 +511,7 @@ function applyPreviewRunParity(enriched, sourceXmlText, stagedJsonText, options 
   enriched.stats.previewRunParityNodeFacts = nodeFactCount;
   enriched.stats.processAnnotations = Math.max(Number(enriched.stats.processAnnotations || 0), processCount);
   enriched.diagnostics = Array.isArray(enriched.diagnostics) ? enriched.diagnostics : [];
+  enriched.diagnostics.push(...provenanceRows);
   enriched.diagnostics.push({
     type: 'preview-run-parity-applied',
     branches: branchCount,
@@ -387,7 +519,7 @@ function applyPreviewRunParity(enriched, sourceXmlText, stagedJsonText, options 
     nodeFacts: nodeFactCount,
     previewRows: rows.length,
     missedBranches: missedBranches.slice(0, 20),
-    message: 'Run/enriched XML was synchronised from the same dry-run preview resolver used by phase 3.',
+    message: 'Run/enriched XML was synchronised from the same dry-run preview resolver used by phase 3, including mapped Pressure2/Hydro-Test pressure and process provenance diagnostics.',
   });
   return enriched;
 }

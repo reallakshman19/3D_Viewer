@@ -1,16 +1,5 @@
 // Stable app-shell export adapter for the 3D RVM Viewer tab.
-// core/app.js expects a renderer named renderViewer3DRvm.
-// The tab implementation currently exposes mountViewer3DRvmTab.
-// Active retired support tools purge cache key: RvmRetiredSupportToolsPurgeBridge.js?v=20260622-rvm-retired-support-tools-purge-2
-// Active generic label performance cache key: RvmLabelPerformanceBridge.js?v=20260622-rvm-label-perf-no-support-runtime-1
-// Active non-primitive support overlay cache key: RvmNonPrimitiveSupportOverlayBridge.js?v=20260623-nonprimitive-support-overlay-9
-// Active non-primitive support hard-disable cache key: RvmNonPrimitiveSupportOverlayHardDisableBridge.js?v=20260623-nonprimitive-support-hard-disable-1
-// Active non-primitive support details panel cache key: RvmNonPrimitiveSupportOverlayDetailsPanelBridge.js?v=20260623-nonprimitive-support-details-panel-4
-// Active non-primitive support hover cache key: RvmNonPrimitiveSupportOverlayHoverBridge.js?v=20260623-nonprimitive-support-hover-2
-// Active RVM navigation arbiter cache key: RvmNavigationModeArbiterBridge.js?v=20260624-rvm-navigation-select-escape-1
-// Active non-primitive auto-bend cache key: RvmNonPrimitiveAutoBendBridge.js?v=20260623-nonprimitive-auto-bend-preview-2
-// Active non-primitive source tools UI cache key: RvmNonPrimitiveSourceToolsUiBridge.js?v=20260623-nonprimitive-source-tools-ui-6
-// Active selected geometry enrichment cache key: SelectedGeometryEnrichmentPanel.js?v=20260624-selected-geometry-floating-workflow-3
+// Active non-primitive source tools UI cache key: RvmNonPrimitiveSourceToolsUiBridge.js?v=20260624-source-tools-grouped-1
 import { RvmViewer3D } from '../rvm-viewer/RvmViewer3D.js?v=20260622-rvm-leaf-picking-2';
 import { installRvmProgressiveModelRootPatch } from '../rvm-viewer/RvmProgressiveModelRootPatchV5.js?v=20260620-rvm-tree-select-nohide-1';
 import { installRvmHierarchySelectionBridge } from './RvmHierarchySelectionBridge.js?v=20260620-rvm-large-box-support-sync-1';
@@ -22,7 +11,7 @@ import { installRvmNonPrimitiveSupportOverlayHardDisableBridge } from './RvmNonP
 import { installRvmNonPrimitiveSupportOverlayDetailsPanelBridge } from './RvmNonPrimitiveSupportOverlayDetailsPanelBridge.js?v=20260623-nonprimitive-support-details-panel-4';
 import { installRvmNonPrimitiveSupportOverlayHoverBridge } from './RvmNonPrimitiveSupportOverlayHoverBridge.js?v=20260623-nonprimitive-support-hover-2';
 import { installRvmNonPrimitiveAutoBendBridge } from './RvmNonPrimitiveAutoBendBridge.js?v=20260623-nonprimitive-auto-bend-preview-2';
-import { installRvmNonPrimitiveSourceToolsUiBridge } from './RvmNonPrimitiveSourceToolsUiBridge.js?v=20260623-nonprimitive-source-tools-ui-6';
+import { installRvmNonPrimitiveSourceToolsUiBridge } from './RvmNonPrimitiveSourceToolsUiBridge.js?v=20260624-source-tools-grouped-1';
 import { installSelectedGeometryEnrichmentPanel } from '../enrichment/SelectedGeometryEnrichmentPanel.js?v=20260624-selected-geometry-floating-workflow-3';
 import { installRvmUiEventSafetyBridge } from './RvmUiEventSafetyBridge.js?v=20260622-rvm-ui-event-safety-2';
 import { installRvmNavigationModeArbiterBridge } from './RvmNavigationModeArbiterBridge.js?v=20260624-rvm-navigation-select-escape-1';
@@ -68,64 +57,8 @@ import { installBrowserRvmRemainingPrimitiveRuntimePatch } from '../rvm/BrowserR
 import { installBrowserRvmTorusParityRuntimePatch } from '../rvm/BrowserRvmTorusParityRuntimePatch.js?v=20260622-rvm-native-torus-line-elbows-1';
 import { installBrowserRvmSnoutParityRuntimePatch } from '../rvm/BrowserRvmSnoutParityRuntimePatch.js?v=20260620-rvm-snout-parity-1';
 import { installRvmDtxrGeometryCoverageBridge } from '../rvm/RvmDtxrGeometryCoverageBridge.js?v=20260622-rvm-dtxr-coverage-1';
-
-installBrowserRvmCppMat3x4WorkerPatch();
-installBrowserRvmNativeTessellationRuntimePatch();
-installBrowserRvmNativeFacetGhostPanelPatch();
-installBrowserRvmRenderPolicyBridge();
-installBrowserRvmCivilFallbackPolicyBridge();
-installBrowserRvmGeometricFallbackPolicyBridge();
-installBrowserRvmPickDiagnosticsBridge();
-installBrowserRvmDishTessellationRuntimePatch();
-installBrowserRvmRemainingPrimitiveRuntimePatch();
-installBrowserRvmTorusParityRuntimePatch();
-installBrowserRvmSnoutParityRuntimePatch();
-installRvmProgressiveModelRootPatch(RvmViewer3D);
-installRvmViewerInteractionPatch(RvmViewer3D);
-installRvmUiInteractionPanelPatch(RvmViewer3D);
-installRvmLabelPerformanceBridge(RvmViewer3D);
-installRvmNonPrimitiveSupportOverlayBridge();
-installRvmNonPrimitiveSupportOverlayHardDisableBridge();
-installRvmNonPrimitiveSupportOverlayDetailsPanelBridge();
-installRvmNonPrimitiveSupportOverlayHoverBridge();
-installRvmNonPrimitiveAutoBendBridge();
-installRvmNonPrimitiveSourceToolsUiBridge();
-installSelectedGeometryEnrichmentPanel();
-installRvmZoneLodLabelBridge();
-installRvmDeepSourcePathRecoveryBridge(RvmViewer3D);
-installRvmZoneDensitySelectorBridge();
-installRvmHierarchySelectionBridge(RvmViewer3D);
-installRvmCanvasSelectionSinglePickGuardBridge(RvmViewer3D);
-installRvmCanvasSelectionBridge(RvmViewer3D);
-installRvmUiEventSafetyBridge();
-installRvmNavigationModeArbiterBridge();
-installRvmNavisHierarchyBridge(RvmViewer3D);
-installRvmZoneLodContextBridge();
-installRvmSelectionDetailsInspectorBridge();
-installRvmJsonPcfTriggerBridge();
-installRvmPolicyInfoBridge();
-installRvmDiagnosticPanelCollapseBridge();
-installRvmVisibilityToolbarBridge(RvmViewer3D);
-installRvmVisibilitySnapshotsBridge();
-installRvmObjectSearchBridge(RvmViewer3D);
-installRvmMeasureBridge(RvmViewer3D);
-installRvmSectionBoxBridge(RvmViewer3D);
-installRvmSelectionSetsBridge();
-installRvmReportExportBridge(RvmViewer3D);
-installGeometryExportWorkspaceBridge();
-installGeometryMappingProfileBridge();
-installRvmModelHealthBridge();
-installRvmModelHealthIssuesBridge();
-installRvmSelectionTreeSyncBridge(RvmViewer3D);
-installRvmMaterialModeBridge(RvmViewer3D);
-installRvmBottomDiagnosticsDrawerBridge();
-installRvmDeferredBridgeLoader();
-installRvmLeftPanelResizeCollapseBridge();
-installRvmLeafSelectionIdentityBridge(RvmViewer3D);
-installRvmLeafCanvasPickBridge(RvmViewer3D);
-
+installBrowserRvmCppMat3x4WorkerPatch(); installBrowserRvmNativeTessellationRuntimePatch(); installBrowserRvmNativeFacetGhostPanelPatch(); installBrowserRvmRenderPolicyBridge(); installBrowserRvmCivilFallbackPolicyBridge(); installBrowserRvmGeometricFallbackPolicyBridge(); installBrowserRvmPickDiagnosticsBridge(); installBrowserRvmDishTessellationRuntimePatch(); installBrowserRvmRemainingPrimitiveRuntimePatch(); installBrowserRvmTorusParityRuntimePatch(); installBrowserRvmSnoutParityRuntimePatch(); installRvmProgressiveModelRootPatch(RvmViewer3D); installRvmViewerInteractionPatch(RvmViewer3D); installRvmUiInteractionPanelPatch(RvmViewer3D); installRvmLabelPerformanceBridge(RvmViewer3D); installRvmNonPrimitiveSupportOverlayBridge(); installRvmNonPrimitiveSupportOverlayHardDisableBridge(); installRvmNonPrimitiveSupportOverlayDetailsPanelBridge(); installRvmNonPrimitiveSupportOverlayHoverBridge(); installRvmNonPrimitiveAutoBendBridge(); installRvmNonPrimitiveSourceToolsUiBridge(); installSelectedGeometryEnrichmentPanel(); installRvmZoneLodLabelBridge(); installRvmDeepSourcePathRecoveryBridge(RvmViewer3D); installRvmZoneDensitySelectorBridge(); installRvmHierarchySelectionBridge(RvmViewer3D); installRvmCanvasSelectionSinglePickGuardBridge(RvmViewer3D); installRvmCanvasSelectionBridge(RvmViewer3D); installRvmUiEventSafetyBridge(); installRvmNavigationModeArbiterBridge(); installRvmNavisHierarchyBridge(RvmViewer3D); installRvmZoneLodContextBridge(); installRvmSelectionDetailsInspectorBridge(); installRvmJsonPcfTriggerBridge(); installRvmPolicyInfoBridge(); installRvmDiagnosticPanelCollapseBridge(); installRvmVisibilityToolbarBridge(RvmViewer3D); installRvmVisibilitySnapshotsBridge(); installRvmObjectSearchBridge(RvmViewer3D); installRvmMeasureBridge(RvmViewer3D); installRvmSectionBoxBridge(RvmViewer3D); installRvmSelectionSetsBridge(); installRvmReportExportBridge(RvmViewer3D); installGeometryExportWorkspaceBridge(); installGeometryMappingProfileBridge(); installRvmModelHealthBridge(); installRvmModelHealthIssuesBridge(); installRvmSelectionTreeSyncBridge(RvmViewer3D); installRvmMaterialModeBridge(RvmViewer3D); installRvmBottomDiagnosticsDrawerBridge(); installRvmDeferredBridgeLoader(); installRvmLeftPanelResizeCollapseBridge(); installRvmLeafSelectionIdentityBridge(RvmViewer3D); installRvmLeafCanvasPickBridge(RvmViewer3D);
 export { RvmViewer3D };
-
 export async function renderViewer3DRvm(root, options = {}) {
   const { mountViewer3DRvmTab } = await import('./viewer3d-rvm-tab.js?v=20260624-selected-geometry-floating-workflow-3');
   return mountViewer3DRvmTab(root, options);

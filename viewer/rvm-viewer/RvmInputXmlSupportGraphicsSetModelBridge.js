@@ -12,25 +12,32 @@ function readSupportSymbolsEnabled() {
 }
 
 function optionsFromUi() {
+  const apiOptions = window.__PCF_GLB_RVM_INPUTXML_SOURCE_TOOLS__?.optionsFromUi?.();
+  if (apiOptions) return apiOptions;
   const root = document.querySelector('[data-rvm-viewer]');
-  const scale = Number(root?.querySelector?.('#rvm-support-scale')?.value);
-  const labelsVisible = root?.querySelector?.('#rvm-support-labels')?.getAttribute?.('aria-pressed') === 'true';
+  const scale = Number(root?.querySelector?.('#rvm-inputxml-support-scale, #rvm-support-scale')?.value);
+  const labels = root?.querySelector?.('#rvm-inputxml-support-labels, #rvm-support-labels');
   const autoBend = root?.querySelector?.('#rvm-inputxml-auto-bend')?.checked;
   return {
     scaleMultiplier: Number.isFinite(scale) ? Math.max(0.25, Math.min(1.5, scale)) : 0.75,
-    labelsVisible,
+    labelsVisible: labels?.checked === true || labels?.getAttribute?.('aria-pressed') === 'true',
     autoBendEnabled: autoBend !== false,
     supportSymbolsEnabled: readSupportSymbolsEnabled(),
   };
 }
 
 function refresh(viewer) {
+  const api = window.__PCF_GLB_RVM_INPUTXML_SOURCE_TOOLS__;
+  if (api?.refresh) {
+    api.refresh(viewer);
+    return;
+  }
   const options = optionsFromUi();
   refreshInputXmlGraphics(viewer, options);
   applyInputXmlSupportGraphicsOverlay(viewer, options);
 }
 
-if (!RvmViewer3D.prototype.__inputXmlGraphicsSetModelBridgeV10) {
+if (!RvmViewer3D.prototype.__inputXmlGraphicsSetModelBridgeV11) {
   const setModelOriginal = RvmViewer3D.prototype.setModel;
   RvmViewer3D.prototype.setModel = function setModelWithInputXmlGraphics(...args) {
     const result = setModelOriginal.apply(this, args);
@@ -39,5 +46,5 @@ if (!RvmViewer3D.prototype.__inputXmlGraphicsSetModelBridgeV10) {
     setTimeout(() => refresh(this), 100);
     return result;
   };
-  RvmViewer3D.prototype.__inputXmlGraphicsSetModelBridgeV10 = true;
+  RvmViewer3D.prototype.__inputXmlGraphicsSetModelBridgeV11 = true;
 }

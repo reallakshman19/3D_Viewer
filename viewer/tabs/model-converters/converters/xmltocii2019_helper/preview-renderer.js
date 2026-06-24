@@ -1,6 +1,6 @@
 import { EditablePreviewTable } from '../../shared/EditablePreviewTable.js';
 import { deriveLineKeyFromBranchName, tokenAtPosition } from '../../../../converters/xml-cii2019-core/regex-line-key.js';
-import { computeLineNoKey } from '../../../../converters/xml-cii2019-core/linelist-mapping.js';
+import { computeLineNoKey, normalizeLineListRow } from '../../../../converters/xml-cii2019-core/linelist-mapping.js';
 import { xmlCiiRigidWeightOverrideKey, isXmlCiiWeightReviewNode, xmlCiiNumberText } from '../../../../converters/xml-cii2019-core/weight-match-model.js';
 import { rankXmlCiiWeightCandidates, formatValveHint } from '../../../../converters/xml-cii2019-core/weight-valve-hints.js';
 import { buildPipingClassIndex } from '../../../../converters/xml-cii2019-core/piping-class-resolver.js';
@@ -53,16 +53,31 @@ function _xmlCiiFindLineListRow(branchLineKey, config) {
   const lookupKey = _xmlCiiNormalizeLineKey(branchLineKey);
   const columnRegex = config.linelist?.linelistColumnRegex || '';
   const columnGroup = config.linelist?.linelistColumnGroup || 1;
-  for (const row of rows) {
+  for (let index = 0; index < rows.length; index += 1) {
+    const row = rows[index];
     const rawKey = _lineListRowKey(row, config);
     const cleanKey = _xmlCiiNormalizeLineKey(_xmlCiiLineKeyRegexValue(rawKey, columnRegex, columnGroup));
-    if (cleanKey && cleanKey === lookupKey) return row;
+    if (cleanKey && cleanKey === lookupKey) return { row, index };
   }
   return null;
 }
+function _normaliseLineListMatch(match, config) {
+  if (!match?.row) return null;
+  const normalized = normalizeLineListRow(match.row, config.linelist?.fieldMap || {}, match.index);
+  return { ...normalized, _raw: match.row };
+}
 function _processDefaultValue(config, fieldKey) { const defaults = config?.processDefaults && typeof config.processDefaults === 'object' ? config.processDefaults : {}; return _toText(defaults[fieldKey]).trim(); }
-function _xmlCiiProcessValue(pdOverride, row, overrideKey, rowKeys, config) { if (pdOverride && Object.prototype.hasOwnProperty.call(pdOverride, overrideKey)) return _toText(pdOverride[overrideKey]).trim(); const rowVal = _rowText(row, rowKeys); if (rowVal) return rowVal; return _processDefaultValue(config, overrideKey); }
-function _xmlCiiProcessSource(pdOverride, row, overrideKey, rowKeys, config) { if (pdOverride && Object.prototype.hasOwnProperty.call(pdOverride, overrideKey)) return 'override'; if (_rowText(row, rowKeys)) return 'linelist'; return _processDefaultValue(config, overrideKey) ? 'default' : 'none'; }
+function _xmlCiiProcessValue(pdOverride, row, overrideKey, rowKeys, config) {
+  if (pdOverride && Object.prototype.hasOwnProperty.call(pdOverride, overrideKey)) return _toText(pdOverride[overrideKey]).trim();
+  const rowVal = _rowText(row, rowKeys);
+  if (rowVal) return rowVal;
+  return _processDefaultValue(config, overrideKey);
+}
+function _xmlCiiProcessSource(pdOverride, row, overrideKey, rowKeys, config) {
+  if (pdOverride && Object.prototype.hasOwnProperty.call(pdOverride, overrideKey)) return 'override';
+  if (_rowText(row, rowKeys)) return 'linelist';
+  return _processDefaultValue(config, overrideKey) ? 'default' : 'none';
+}
 function _looksLikeNpsToken(value) { return /^\s*\d+(?:\.\d+)?\s*(?:"|in|inch|nps)?\s*$/i.test(_toText(value)); }
 function _numericFromSizeToken(value) { const n = Number(_toText(value).replace(/[^0-9.+-]/g, '')); return Number.isFinite(n) ? n : null; }
 function _isLikelyMaterialToken(value) { return /^(CS|SS|LTCS|DSS|SDSS|ALLOY|GI|CI|DI|PVC|CPVC|HDPE|GRP|GRE)$/i.test(_toText(value).trim()); }
@@ -203,7 +218,8 @@ export function xmlCiiDryRunPreview(xmlText, config, stagedJsonText) {
   for (const branch of [...document.getElementsByTagName('Branch')]) {
     const branchName = _xmlText(branch, 'Branchname');
     const lineKey = deriveLineKeyFromBranchName(branchName, config);
-    const lineListMatch = lineKey ? _xmlCiiFindLineListRow(lineKey, config) : null;
+    const lineListRawMatch = lineKey ? _xmlCiiFindLineListRow(lineKey, config) : null;
+    const lineListMatch = _normaliseLineListMatch(lineListRawMatch, config);
     const lineListClass = _rowText(lineListMatch, ['pipingClass', 'Piping Class', 'PIPING_CLASS']);
     const branchClass = _derivePipingClassFromBranchName(branchName, config);
     const derivedClassRaw = lineListClass || branchClass;
@@ -217,10 +233,11 @@ export function xmlCiiDryRunPreview(xmlText, config, stagedJsonText) {
     const branchRating = manualRating || resolved.rating || _deriveRatingFromPipingClass(resolved.pipingClass, config) || rowRating;
     const ratingSource = manualRating ? 'override' : _overrideSource(config.overrides, 'rating', lineKey);
     const pdOverride = (lineKey && config?.overrides?.processData?.[lineKey]) || {};
-    const p1 = _xmlCiiProcessValue(pdOverride, lineListMatch, 'p1', ['p1'], config);
-    const t1 = _xmlCiiProcessValue(pdOverride, lineListMatch, 't1', ['t1'], config);
-    const t2 = _xmlCiiProcessValue(pdOverride, lineListMatch, 't2', ['t2'], config);
-    const t3 = _xmlCiiProcessValue(pdOverride, lineListMatch, 't3', ['t3'], config);
+    const p1 = _xmlCiiProcessValue(pdOverride, lineListMatch, 'p1', ['p1', 'P1', 'Pressure1', 'Design Pressure', 'DesignPressure', 'Pressure Max kPa(g)', 'Pressure Max', 'PressureMax'], config);
+    const hydroPressure = _xmlCiiProcessValue(pdOverride, lineListMatch, 'hydroPressure', ['hydroPressure', 'hydro_pressure', 'HydroPressure', 'Hydro Test Pressure', 'Hydrotest Pressure', 'Hydro Pressure', 'Test Pressure', 'Pressure2'], config);
+    const t1 = _xmlCiiProcessValue(pdOverride, lineListMatch, 't1', ['t1', 'T1', 'Temperature1', 'Design Temp', 'Design Temperature', 'Temp Max ºC', 'Temp Max °C', 'Temp Max'], config);
+    const t2 = _xmlCiiProcessValue(pdOverride, lineListMatch, 't2', ['t2', 'T2', 'Temperature2', 'Temp. ºC', 'Temp. °C', 'Operating Temp', 'Operating Temperature'], config);
+    const t3 = _xmlCiiProcessValue(pdOverride, lineListMatch, 't3', ['t3', 'T3', 'Temperature3', 'Temp Min ºC', 'Temp Min °C', 'Temp Min', 'Minimum Temp'], config);
     const densityInfo = resolveLineListDensity(lineListMatch, pdOverride);
     const density = densityInfo.value || _processDefaultValue(config, 'density');
     const densitySource = densityInfo.value ? densityInfo.source : (_processDefaultValue(config, 'density') ? 'default' : 'none');
@@ -230,7 +247,45 @@ export function xmlCiiDryRunPreview(xmlText, config, stagedJsonText) {
     if (resolved.materialSource === 'override' || resolved.materialSource === 'override-material-map') matMethod = 'override';
     else if (resolved.materialSource === 'line-list-material-map' || resolved.materialSource === 'piping-class-material-map') matMethod = 'exact';
     else if (resolved.materialSource === 'xml-fallback') matMethod = 'xml-fallback';
-    branchRows.push({ branchName, lineKey, lineMiss: !lineListMatch, size: boreMm != null ? `${boreMm}mm` : '', sizeMm: boreMm, pipingClass: resolved.pipingClass || '', pipingClassDerived: derivedClassRaw || '', pipingClassMethod: resolved.pipingClassMatchMethod, pipingClassConfidence: resolved.pipingClassConfidence, pipingClassScore: resolved.pipingClassScore, pipingClassRowScore: resolved.pipingClassRowScore, pipingClassRowReasons: resolved.pipingClassRowReasons || [], pipingClassNeedsReview: resolved.pipingClassNeedsReview, pipingClassCandidates: resolved.pipingClassCandidates || [], material: resolved.material || '', materialSource: resolved.materialSource || _overrideSource(config.overrides, 'material', lineKey), materialCode: resolved.materialCode || '', materialCodeMethod: matMethod, materialCodeNeedsReview: !resolved.materialCode, rating: branchRating || '', ratingSource, p1, t1, t2, t3, density, p1Source: _xmlCiiProcessSource(pdOverride, lineListMatch, 'p1', ['p1'], config), t1Source: _xmlCiiProcessSource(pdOverride, lineListMatch, 't1', ['t1'], config), t2Source: _xmlCiiProcessSource(pdOverride, lineListMatch, 't2', ['t2'], config), t3Source: _xmlCiiProcessSource(pdOverride, lineListMatch, 't3', ['t3'], config), densitySource, wallThickness, wallThicknessSource: resolved.wallThicknessSource || _overrideSource(config.overrides, 'wallThickness', lineKey), corrosion, corrosionSource: resolved.corrosionSource || _overrideSource(config.overrides, 'corrosion', lineKey) });
+    branchRows.push({
+      branchName,
+      lineKey,
+      lineMiss: !lineListMatch,
+      size: boreMm != null ? `${boreMm}mm` : '',
+      sizeMm: boreMm,
+      pipingClass: resolved.pipingClass || '',
+      pipingClassDerived: derivedClassRaw || '',
+      pipingClassMethod: resolved.pipingClassMatchMethod,
+      pipingClassConfidence: resolved.pipingClassConfidence,
+      pipingClassScore: resolved.pipingClassScore,
+      pipingClassRowScore: resolved.pipingClassRowScore,
+      pipingClassRowReasons: resolved.pipingClassRowReasons || [],
+      pipingClassNeedsReview: resolved.pipingClassNeedsReview,
+      pipingClassCandidates: resolved.pipingClassCandidates || [],
+      material: resolved.material || '',
+      materialSource: resolved.materialSource || _overrideSource(config.overrides, 'material', lineKey),
+      materialCode: resolved.materialCode || '',
+      materialCodeMethod: matMethod,
+      materialCodeNeedsReview: !resolved.materialCode,
+      rating: branchRating || '',
+      ratingSource,
+      p1,
+      hydroPressure,
+      t1,
+      t2,
+      t3,
+      density,
+      p1Source: _xmlCiiProcessSource(pdOverride, lineListMatch, 'p1', ['p1', 'P1', 'Pressure1', 'Design Pressure', 'DesignPressure', 'Pressure Max kPa(g)', 'Pressure Max', 'PressureMax'], config),
+      hydroPressureSource: _xmlCiiProcessSource(pdOverride, lineListMatch, 'hydroPressure', ['hydroPressure', 'hydro_pressure', 'HydroPressure', 'Hydro Test Pressure', 'Hydrotest Pressure', 'Hydro Pressure', 'Test Pressure', 'Pressure2'], config),
+      t1Source: _xmlCiiProcessSource(pdOverride, lineListMatch, 't1', ['t1', 'T1', 'Temperature1', 'Design Temp', 'Design Temperature', 'Temp Max ºC', 'Temp Max °C', 'Temp Max'], config),
+      t2Source: _xmlCiiProcessSource(pdOverride, lineListMatch, 't2', ['t2', 'T2', 'Temperature2', 'Temp. ºC', 'Temp. °C', 'Operating Temp', 'Operating Temperature'], config),
+      t3Source: _xmlCiiProcessSource(pdOverride, lineListMatch, 't3', ['t3', 'T3', 'Temperature3', 'Temp Min ºC', 'Temp Min °C', 'Temp Min', 'Minimum Temp'], config),
+      densitySource,
+      wallThickness,
+      wallThicknessSource: resolved.wallThicknessSource || _overrideSource(config.overrides, 'wallThickness', lineKey),
+      corrosion,
+      corrosionSource: resolved.corrosionSource || _overrideSource(config.overrides, 'corrosion', lineKey)
+    });
     let previousPosition = null;
     for (const node of _xmlChildrenByName(branch, 'Node')) {
       const positionText = _xmlText(node, 'Position');
@@ -327,7 +382,7 @@ export async function xmlCiiBuildAndRenderPreview(rootEl, xmlText, config, optio
   });
   host.innerHTML = `${_manualPreviewActionHtml('Rebuild Preview')}${table.renderHTML()}`;
   _bindManualPreviewButton(host, rootEl, xmlText, config, options, 'Rebuilding preview...');
-  const defaultFields = ['p1', 't1', 't2', 't3', 'density', 'wallThickness', 'corrosion'];
+  const defaultFields = ['p1', 'hydroPressure', 't1', 't2', 't3', 'density', 'wallThickness', 'corrosion'];
   const defaultRows = branchRows.map((row, ri) => ({ row, ri, fields: defaultFields.filter((field) => _isDefaultSource(row[`${field}Source`])) })).filter((item) => item.fields.length > 0);
   if (defaultRows.length) host.insertAdjacentHTML('afterbegin', `<div class="model-converters-workflow-detail-note" style="margin:0 0 8px;border-color:#7f1d1d;color:#7f1d1d;background:#fff7f7;">${defaultRows.length} line${defaultRows.length === 1 ? '' : 's'} use config defaults. Default values are shown in dark red.</div>`);
   table.bind(host);

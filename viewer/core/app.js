@@ -55,41 +55,63 @@
 // app-label-perf-runtime.js?v=20260623-xml-cii-rich-worker-1
 // app-label-perf-runtime.js?v=20260624-selected-geometry-floating-workflow-3
 import { installAppTabClickStateBridge } from './app-tab-click-state-bridge.js?v=20260622-tab-click-state-1';
-import { installGeometryExportWorkspaceBridge } from '../geometry-workspace/GeometryExportWorkspaceBridge.js?v=20260622-geometry-mapping-1';
-import { installGeometryMappingProfileBridge } from '../geometry-workspace/GeometryMappingProfileBridge.js?v=20260622-geometry-profile-ui-1';
-import { installGeometryCalculationCanvasBridge } from '../geometry-workspace/GeometryCalculationCanvasBridge.js?v=20260622-pipe-support-load-input-hydrator-1';
-import { installGeometryCalculationInputBridge } from '../geometry-workspace/GeometryCalculationInputBridge.js?v=20260622-geometry-input-resolver-1';
-import { installGeometryEnrichmentBridge } from '../geometry-workspace/GeometryEnrichmentBridge.js?v=20260622-geometry-enrichment-1';
-import { installGeometryEnrichedStagedJsonBridge } from '../geometry-workspace/GeometryEnrichedStagedJsonBridge.js?v=20260622-geometry-enriched-stagedjson-support-loads-1';
-import { installGeometrySupportLoadMasterDataBridge } from '../geometry-workspace/GeometrySupportLoadMasterDataBridge.js?v=20260623-support-load-master-data-1';
-import { installGeometrySupportLoadInputBridge } from '../geometry-workspace/GeometrySupportLoadInputBridge.js?v=20260623-autospan-resolver-1';
-import { installGeometrySupportLoadFormulaBridge } from '../geometry-workspace/GeometrySupportLoadFormulaBridge.js?v=20260622-support-load-result-writeback-audit-1';
-import { installGeometrySupportLoadReportBridge } from '../geometry-workspace/GeometrySupportLoadReportBridge.js?v=20260622-support-load-result-report-1';
-import { installGeometrySupportLoadConflictBridge } from '../geometry-workspace/GeometrySupportLoadConflictBridge.js?v=20260623-support-load-conflict-resolver-1';
-import { installGeometrySupportLoadQaDashboardBridge } from '../geometry-workspace/GeometrySupportLoadQaDashboardBridge.js?v=20260623-support-load-qa-dashboard-1';
-import { installGeometrySupportLoadBulkPackageBridge } from '../geometry-workspace/GeometrySupportLoadBulkPackageBridge.js?v=20260623-support-load-bulk-package-1';
-import { installGeometrySupportLoadCanvasOverlayBridge } from '../geometry-workspace/GeometrySupportLoadCanvasOverlayBridge.js?v=20260623-support-load-canvas-overlay-1';
 import { installRvmModelHealthBridge } from '../tabs/RvmModelHealthBridge.js?v=20260621-rvm-health-issues-1';
 import { installRvmModelHealthIssuesBridge } from '../tabs/RvmModelHealthIssuesBridge.js?v=20260621-rvm-health-issues-1';
 import { installBrowserRvmNativeFacetGhostPanelPatch } from '../rvm/BrowserRvmNativeFacetGhostPanelPatch.js?v=20260622-rvm-facet-ghost-panels-1';
 
+const LEGACY_GEOMETRY_WORKFLOW_FLAG = 'rvm.enableLegacyGeometryWorkflowButtons';
+const LEGACY_GEOMETRY_WORKFLOW_MODULES = Object.freeze([
+  ['../geometry-workspace/GeometryExportWorkspaceBridge.js?v=20260622-geometry-mapping-1', 'installGeometryExportWorkspaceBridge'],
+  ['../geometry-workspace/GeometryMappingProfileBridge.js?v=20260622-geometry-profile-ui-1', 'installGeometryMappingProfileBridge'],
+  ['../geometry-workspace/GeometryCalculationCanvasBridge.js?v=20260622-pipe-support-load-input-hydrator-1', 'installGeometryCalculationCanvasBridge'],
+  ['../geometry-workspace/GeometryCalculationInputBridge.js?v=20260622-geometry-input-resolver-1', 'installGeometryCalculationInputBridge'],
+  ['../geometry-workspace/GeometryEnrichmentBridge.js?v=20260622-geometry-enrichment-1', 'installGeometryEnrichmentBridge'],
+  ['../geometry-workspace/GeometryEnrichedStagedJsonBridge.js?v=20260622-geometry-enriched-stagedjson-support-loads-1', 'installGeometryEnrichedStagedJsonBridge'],
+  ['../geometry-workspace/GeometrySupportLoadMasterDataBridge.js?v=20260623-support-load-master-data-1', 'installGeometrySupportLoadMasterDataBridge'],
+  ['../geometry-workspace/GeometrySupportLoadInputBridge.js?v=20260623-autospan-resolver-1', 'installGeometrySupportLoadInputBridge'],
+  ['../geometry-workspace/GeometrySupportLoadFormulaBridge.js?v=20260622-support-load-result-writeback-audit-1', 'installGeometrySupportLoadFormulaBridge'],
+  ['../geometry-workspace/GeometrySupportLoadReportBridge.js?v=20260622-support-load-result-report-1', 'installGeometrySupportLoadReportBridge'],
+  ['../geometry-workspace/GeometrySupportLoadConflictBridge.js?v=20260623-support-load-conflict-resolver-1', 'installGeometrySupportLoadConflictBridge'],
+  ['../geometry-workspace/GeometrySupportLoadQaDashboardBridge.js?v=20260623-support-load-qa-dashboard-1', 'installGeometrySupportLoadQaDashboardBridge'],
+  ['../geometry-workspace/GeometrySupportLoadBulkPackageBridge.js?v=20260623-support-load-bulk-package-1', 'installGeometrySupportLoadBulkPackageBridge'],
+  ['../geometry-workspace/GeometrySupportLoadCanvasOverlayBridge.js?v=20260623-support-load-canvas-overlay-1', 'installGeometrySupportLoadCanvasOverlayBridge'],
+]);
+
 installAppTabClickStateBridge();
-installGeometryExportWorkspaceBridge();
-installGeometryMappingProfileBridge();
-installGeometryCalculationCanvasBridge();
-installGeometryCalculationInputBridge();
-installGeometryEnrichmentBridge();
-installGeometryEnrichedStagedJsonBridge();
-installGeometrySupportLoadMasterDataBridge();
-installGeometrySupportLoadInputBridge();
-installGeometrySupportLoadFormulaBridge();
-installGeometrySupportLoadReportBridge();
-installGeometrySupportLoadConflictBridge();
-installGeometrySupportLoadQaDashboardBridge();
-installGeometrySupportLoadBulkPackageBridge();
-installGeometrySupportLoadCanvasOverlayBridge();
-installRvmModelHealthBridge();
-installRvmModelHealthIssuesBridge();
-installBrowserRvmNativeFacetGhostPanelPatch();
+installDefaultViewerBridges();
+if (shouldInstallLegacyGeometryWorkflowButtons()) installLegacyGeometryWorkflowBridges();
+
+function installDefaultViewerBridges() {
+  installRvmModelHealthBridge();
+  installRvmModelHealthIssuesBridge();
+  installBrowserRvmNativeFacetGhostPanelPatch();
+}
+
+function shouldInstallLegacyGeometryWorkflowButtons() {
+  if (globalThis.__RVM_ENABLE_LEGACY_GEOMETRY_WORKFLOW_BUTTONS__ === true) return true;
+  try {
+    return globalThis.localStorage?.getItem?.(LEGACY_GEOMETRY_WORKFLOW_FLAG) === 'true';
+  } catch {
+    return false;
+  }
+}
+
+async function installLegacyGeometryWorkflowBridges() {
+  const results = await Promise.allSettled(
+    LEGACY_GEOMETRY_WORKFLOW_MODULES.map((entry) => importLegacyGeometryWorkflowBridge(entry)),
+  );
+  for (const result of results) {
+    if (result.status === 'rejected') console.warn('legacy geometry workflow bridge failed', result.reason);
+  }
+}
+
+async function importLegacyGeometryWorkflowBridge(entry) {
+  const specifier = entry[0];
+  const installerName = entry[1];
+  const module = await import(specifier);
+  const installer = module?.[installerName];
+  if (typeof installer !== 'function') throw new Error(`Missing ${installerName} from ${specifier}`);
+  installer();
+}
 
 export { init } from './app-label-perf-runtime.js?v=20260624-selected-geometry-floating-workflow-3';

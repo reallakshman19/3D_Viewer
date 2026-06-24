@@ -9,6 +9,23 @@ import { normalizeMasters } from './selected-geometry-enrichment.js';
 export const RVM_SELECTED_GEOMETRY_WORKSPACE_PACKAGE_SCHEMA = 'rvm-selected-geometry-workspace-package/v1';
 export const PENDING_WORKSPACE_PACKAGE_STORAGE_KEY = 'rvmSelectedGeometryWorkspacePackage.pending';
 
+const CALCULATION_PAYLOAD_KEYS = new Set([
+  'calculatedFields',
+  'supportLoadInput',
+  'supportLoadInputRef',
+  'supportLoads',
+  'supportLoadReference',
+  'supportLoadFormulaResults',
+  'supportLoadFormulaReport',
+  'supportLoadReport',
+  'supportLoadBulkPackage',
+  'supportLoadCanvasOverlay',
+  'supportLoadQa',
+  'supportLoadQaDashboard',
+  'supportLoadConflictModel',
+  'supportLoadWritebackAudit',
+]);
+
 export function buildSelectedGeometryWorkspacePackage(input) {
   const options = input && typeof input === 'object' ? input : {};
   const scope = options.scope && typeof options.scope === 'object' ? options.scope : {};
@@ -17,8 +34,9 @@ export function buildSelectedGeometryWorkspacePackage(input) {
     : Array.isArray(scope.objects)
       ? scope.objects
       : [];
+  const dbOnlyObjects = objects.map(sanitizeDbOnlyGeometryObject);
   const masters = normalizeMasters(options.masters);
-  const enrichmentSummary = summarizeEnrichmentObjects(objects);
+  const enrichmentSummary = summarizeEnrichmentObjects(dbOnlyObjects);
   const source = options.source && typeof options.source === 'object' ? options.source : {};
   const capturedAt = text(source.capturedAt || scope.capturedAt) || new Date().toISOString();
   return freezeDeep({
@@ -32,9 +50,9 @@ export function buildSelectedGeometryWorkspacePackage(input) {
     },
     axisTransform: normalizeAxisTransform(options.axisTransform || scope.axisTransform),
     geometry: {
-      objects: cloneSafe(objects),
-      supports: cloneSafe(objects.filter((object) => isSupportLikeType(object?.type))),
-      branches: cloneSafe(collectBranches(objects)),
+      objects: freezeDeep(dbOnlyObjects),
+      supports: freezeDeep(dbOnlyObjects.filter((object) => isSupportLikeType(object?.type))),
+      branches: freezeDeep(collectBranches(dbOnlyObjects)),
     },
     enrichment: {
       masters: {
@@ -43,6 +61,7 @@ export function buildSelectedGeometryWorkspacePackage(input) {
         materialMapVersion: masters.versions.materialMapVersion,
         weightMasterVersion: masters.versions.weightMasterVersion,
       },
+      masterBindings: collectMasterBindings(masters),
       stats: {
         objects: enrichmentSummary.objects,
         resolved: enrichmentSummary.resolved,
@@ -55,7 +74,7 @@ export function buildSelectedGeometryWorkspacePackage(input) {
     packageHash: stableHash(JSON.stringify({
       schema: RVM_SELECTED_GEOMETRY_WORKSPACE_PACKAGE_SCHEMA,
       capturedAt,
-      objectIds: objects.map((object) => object?.id),
+      objectIds: dbOnlyObjects.map((object) => object?.id),
     })),
   });
 }
@@ -64,7 +83,7 @@ export function selectedGeometryWorkspacePackageFileName(input) {
   const source = input && typeof input === 'object' ? input : {};
   const name = safeFilePart(source.sourceFileName || source.sourceModelName || source.source || 'rvm');
   const scope = safeFilePart(source.scopeMode || 'selected');
-  return `${name}_${scope}_rvm_enriched_workspace_package.json`;
+  return `${name}_${scope}_db_enriched_workspace_package.json`;
 }
 
 export function serializeSelectedGeometryWorkspacePackage(packageJson) {
@@ -79,6 +98,48 @@ export function writePendingWorkspacePackageToStorage(packageJson, storage) {
   const textPayload = serializeSelectedGeometryWorkspacePackage(packageJson);
   target.setItem(PENDING_WORKSPACE_PACKAGE_STORAGE_KEY, textPayload);
   return freezeDeep({ status: 'written', key: PENDING_WORKSPACE_PACKAGE_STORAGE_KEY, bytes: textPayload.length });
+}
+
+function collectMasterBindings(masters) {
+  return freezeDeep({
+    lineList: summarizeBindings(masters.lineList),
+    pipingClass: summarizeBindings(masters.pipingClass),
+    materialMap: summarizeBindings(masters.materialMap),
+    weightMaster: summarizeBindings(masters.weightMaster),
+  });
+}
+
+function summarizeBindings(rows) {
+  const summary = {};
+  for (const row of rows || []) {
+    const bindings = row?._bindings && typeof row._bindings === 'object' && !Array.isArray(row._bindings) ? row._bindings : null;
+    if (!bindings) continue;
+    for (const [canonical, rawHeader] of Object.entries(bindings)) {
+      if (!summary[canonical]) summary[canonical] = new Set();
+      summary[canonical].add(text(rawHeader));
+    }
+  }
+  const output = {};
+  for (const [canonical, rawHeaders] of Object.entries(summary)) {
+    output[canonical] = Array.from(rawHeaders).filter(Boolean).sort();
+  }
+  return output;
+}
+
+function sanitizeDbOnlyGeometryObject(object) {
+  return stripCalculationPayloads(cloneSafe(object));
+}
+
+function stripCalculationPayloads(value) {
+  if (Array.isArray(value)) return value.map((entry) => stripCalculationPayloads(entry));
+  if (!value || typeof value !== 'object') return value;
+  const output = {};
+  for (const [key, entry] of Object.entries(value)) {
+    if (CALCULATION_PAYLOAD_KEYS.has(key)) continue;
+    if (key.startsWith('supportLoad') && key !== 'supportLoadDbSource') continue;
+    output[key] = stripCalculationPayloads(entry);
+  }
+  return output;
 }
 
 function collectBranches(objects) {
