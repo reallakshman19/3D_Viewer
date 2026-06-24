@@ -1,6 +1,6 @@
 const INSTALL_FLAG = Symbol.for('pcf-glb-rvm-left-panel-resize-collapse-v2');
 const STYLE_ID = 'rvm-left-panel-resize-collapse-style';
-const VERSION = '20260623-rvm-left-panel-resize-collapse-2';
+const VERSION = '20260624-rvm-panel-resize-1';
 
 const PANEL_SELECTORS = [
   '[data-rvm-support-att-panel]',
@@ -12,6 +12,11 @@ const HIERARCHY_KEYS = Object.freeze({
   kindWidth: 'rvm.hierarchy.kindWidth',
   countWidth: 'rvm.hierarchy.countWidth',
   actionWidth: 'rvm.hierarchy.actionWidth',
+});
+
+const PANEL_WIDTH_KEYS = Object.freeze({
+  left: 'rvm.panel.leftWidth',
+  right: 'rvm.panel.rightWidth',
 });
 
 export function installRvmLeftPanelResizeCollapseBridge() {
@@ -32,6 +37,7 @@ function scan() {
   const left = root?.querySelector?.('.rvm-left-panel');
   if (!root || !left) return;
   left.dataset.rvmLeftPanelResizable = 'true';
+  enhanceMainPanelResizers(root);
   const tree = left.querySelector('#rvm-tree');
   if (tree) {
     tree.dataset.rvmResizablePanel = 'hierarchy';
@@ -42,6 +48,79 @@ function scan() {
   for (const selector of PANEL_SELECTORS) {
     root.querySelectorAll(selector).forEach((panel) => enhancePanel(panel));
   }
+}
+
+function enhanceMainPanelResizers(root) {
+  const body = root?.querySelector?.('.rvm-body');
+  const left = root?.querySelector?.('.rvm-left-panel');
+  const right = root?.querySelector?.('.rvm-right-panel');
+  if (!root || !body || !left || !right) return;
+  applyStoredPanelWidth(root, 'left');
+  applyStoredPanelWidth(root, 'right');
+  ensurePanelResizer(root, left, 'left');
+  ensurePanelResizer(root, right, 'right');
+}
+
+function ensurePanelResizer(root, panel, side) {
+  if (!panel || panel.querySelector(`[data-rvm-panel-resizer="${side}"]`)) return;
+  const handle = document.createElement('div');
+  handle.className = `rvm-panel-resizer rvm-panel-resizer-${side}`;
+  handle.dataset.rvmPanelResizer = side;
+  handle.setAttribute('role', 'separator');
+  handle.setAttribute('aria-orientation', 'vertical');
+  handle.setAttribute('aria-label', side === 'left' ? 'Resize hierarchy panel' : 'Resize properties panel');
+  panel.appendChild(handle);
+  let drag = null;
+  handle.addEventListener('pointerdown', (event) => {
+    if (event.button !== 0) return;
+    const body = root.querySelector('.rvm-body');
+    const rect = body?.getBoundingClientRect?.();
+    if (!rect?.width) return;
+    drag = { pointerId: event.pointerId, side, rect };
+    handle.classList.add('is-dragging');
+    handle.setPointerCapture?.(event.pointerId);
+    document.body.style.cursor = 'col-resize';
+    event.preventDefault();
+  });
+  handle.addEventListener('pointermove', (event) => {
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    const width = panelWidthFromPointer(drag.side, drag.rect, event.clientX);
+    setPanelWidth(root, drag.side, `${width}px`);
+  });
+  handle.addEventListener('pointerup', (event) => {
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    drag = null;
+    handle.classList.remove('is-dragging');
+    document.body.style.cursor = '';
+  });
+  handle.addEventListener('pointercancel', () => {
+    drag = null;
+    handle.classList.remove('is-dragging');
+    document.body.style.cursor = '';
+  });
+}
+
+function panelWidthFromPointer(side, rect, clientX) {
+  const raw = side === 'left' ? clientX - rect.left : rect.right - clientX;
+  const min = side === 'left' ? 180 : 210;
+  const max = side === 'left' ? 560 : 760;
+  return Math.max(min, Math.min(max, Math.round(raw)));
+}
+
+function applyStoredPanelWidth(root, side) {
+  const key = PANEL_WIDTH_KEYS[side];
+  if (!key) return;
+  const value = readCssSize(key, side === 'left' ? '260px' : '300px');
+  setPanelWidth(root, side, value);
+}
+
+function setPanelWidth(root, side, value) {
+  const variable = side === 'left' ? '--rvm-left-w' : '--rvm-right-w';
+  const body = root?.querySelector?.('.rvm-body');
+  root?.style?.setProperty(variable, value);
+  body?.style?.setProperty(variable, value);
+  try { localStorage.setItem(PANEL_WIDTH_KEYS[side], value); } catch (_) {}
+  try { window.dispatchEvent(new Event('resize')); } catch (_) {}
 }
 
 function movePanelsToLeft(root, left) {
@@ -171,6 +250,10 @@ function injectStyles() {
     .rvm-left-collapsible-title{display:flex!important;align-items:center;gap:6px;margin:0!important;padding:8px 9px!important;cursor:default;}
     .rvm-left-panel-collapse-btn{width:20px;height:20px;display:inline-grid;place-items:center;border:1px solid rgba(126,190,255,.35);border-radius:5px;background:#101a2b;color:#dbeafe;cursor:pointer;font-size:11px;padding:0;}
     .rvm-left-panel-collapse-btn:hover{background:#1d3150;border-color:#60a5fa;}
+    .rvm-panel-resizer{position:absolute;top:0;bottom:0;width:8px;z-index:35;cursor:col-resize;background:linear-gradient(90deg,transparent,rgba(78,140,214,.24),transparent);opacity:.42;touch-action:none;}
+    .rvm-panel-resizer:hover,.rvm-panel-resizer.is-dragging{opacity:1;background:rgba(74,158,255,.34);}
+    .rvm-panel-resizer-left{right:-4px;}
+    .rvm-panel-resizer-right{left:-4px;}
   `;
   document.head.appendChild(style);
 }

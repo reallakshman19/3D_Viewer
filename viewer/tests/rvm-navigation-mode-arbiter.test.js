@@ -22,23 +22,26 @@ const singlePickSource = fs.readFileSync(
   'utf8',
 );
 
-assert.match(arbiterSource, /rvm-navigation-mode-arbiter\/v1/);
+assert.match(arbiterSource, /rvm-navigation-mode-arbiter\/v2-select-escape/);
 assert.match(arbiterSource, /ensureDefaultNavigationMode/);
-assert.match(arbiterSource, /shouldForceOrbit/);
-assert.match(arbiterSource, /setNavMode\('orbit'\)/);
+assert.match(arbiterSource, /shouldForceSelect/);
+assert.match(arbiterSource, /setNavMode\('select'\)/);
 assert.match(arbiterSource, /__rvmNavigationUserMode/);
+assert.match(arbiterSource, /bindUniversalEscape/);
+assert.match(arbiterSource, /clearViewerSelection/);
 assert.match(arbiterSource, /repairRvmNavigationPointerStack/);
 assert.match(arbiterSource, /labelRenderer\.domElement\.style\.pointerEvents = 'none'/);
 assert.match(arbiterSource, /potentialCanvasBlockers/);
 assert.match(arbiterSource, /__PCF_GLB_RVM_NAVIGATION_ARBITER__/);
+assert.doesNotMatch(arbiterSource, /shouldForceOrbit/);
 
 assert.match(rendererSource, /installRvmNavigationModeArbiterBridge/);
-assert.match(rendererSource, /RvmNavigationModeArbiterBridge\.js\?v=20260623-rvm-navigation-arbiter-1/);
+assert.match(rendererSource, /RvmNavigationModeArbiterBridge\.js\?v=20260624-rvm-navigation-select-escape-1/);
 assert.match(rendererSource, /installRvmUiEventSafetyBridge\(\);\s*\ninstallRvmNavigationModeArbiterBridge\(\);/);
 
-assert.match(interactionSource, /if \(!viewer\._rvmInteractionMode\) setMode\(viewer, 'select'\)/, 'RCA guard documents old forced-select behavior that arbiter must override');
+assert.match(interactionSource, /Esc: selection cleared, Select mode/, 'Esc must clear selection and return to Select in one action');
 assert.match(leafPickSource, /currentMode/);
-assert.match(singlePickSource, /_rvmInteractionMode \|\| viewer\?\._navMode \|\| 'select'/, 'single-pick guard still only runs in select and is covered by arbiter defaulting');
+assert.match(singlePickSource, /_rvmInteractionMode \|\| viewer\?\._navMode \|\| 'select'/, 'single-pick guard still only runs in select and is covered by Select defaulting');
 
 assert.doesNotMatch(arbiterSource, /SupportSummary|SupportATT|SupportEngine|RvmSupportSummaryBridge|RvmSupportGeometryBridge/);
 assert.doesNotMatch(rendererSource, /RvmSupportSummaryBridge|RvmSupportGeometryBridge|RvmSupportAttMappingBridge|RvmIntelligentSupportEngineBridge/);

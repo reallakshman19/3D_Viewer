@@ -53,6 +53,7 @@
 // app-label-perf-runtime.js?v=20260623-support-load-bulk-package-1
 // app-label-perf-runtime.js?v=20260623-support-load-canvas-overlay-1
 // app-label-perf-runtime.js?v=20260623-xml-cii-rich-worker-1
+// app-label-perf-runtime.js?v=20260624-selected-geometry-floating-workflow-3
 import { installAppTabClickStateBridge } from './app-tab-click-state-bridge.js?v=20260622-tab-click-state-1';
 import { installGeometryExportWorkspaceBridge } from '../geometry-workspace/GeometryExportWorkspaceBridge.js?v=20260622-geometry-mapping-1';
 import { installGeometryMappingProfileBridge } from '../geometry-workspace/GeometryMappingProfileBridge.js?v=20260622-geometry-profile-ui-1';
@@ -91,4 +92,4 @@ installRvmModelHealthBridge();
 installRvmModelHealthIssuesBridge();
 installBrowserRvmNativeFacetGhostPanelPatch();
 
-export { init } from './app-label-perf-runtime.js?v=20260623-xml-cii-rich-worker-1';
+export { init } from './app-label-perf-runtime.js?v=20260624-selected-geometry-floating-workflow-3';

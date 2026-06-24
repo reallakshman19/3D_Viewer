@@ -1,6 +1,6 @@
-export const RVM_NAVIGATION_MODE_ARBITER_SCHEMA = 'rvm-navigation-mode-arbiter/v1';
+export const RVM_NAVIGATION_MODE_ARBITER_SCHEMA = 'rvm-navigation-mode-arbiter/v2-select-escape';
 
-const INSTALL_FLAG = Symbol.for('pcf-glb-rvm-navigation-mode-arbiter-v1');
+const INSTALL_FLAG = Symbol.for('pcf-glb-rvm-navigation-mode-arbiter-v2-select-escape');
 const ROOT_SELECTOR = '[data-rvm-viewer]';
 const MODE_ACTIONS = new Set(['NAV_SELECT', 'NAV_ORBIT', 'NAV_PAN', 'MARQUEE_SELECT', 'MEASURE_TOOL', 'VIEW_MARQUEE_ZOOM']);
 const MODE_BY_ACTION = Object.freeze({
@@ -22,10 +22,12 @@ export function installRvmNavigationModeArbiterBridge() {
     ensured: 0,
     toolbarModeEvents: 0,
     pointerRepairs: 0,
+    escapeClears: 0,
     lastReason: 'installed',
     ensure: ensureDefaultNavigationMode,
     diagnose: diagnoseRvmNavigation,
     repair: repairRvmNavigationPointerStack,
+    clearSelection: clearViewerSelection,
   };
 
   globalThis[INSTALL_FLAG] = state;
@@ -33,6 +35,7 @@ export function installRvmNavigationModeArbiterBridge() {
 
   const tick = (reason) => setTimeout(() => ensureDefaultNavigationMode(globalThis.__3D_RVM_VIEWER__, reason), 0);
   bindToolbarModeTracking(state);
+  bindUniversalEscape(state);
   tick('install');
   for (const delay of [80, 250, 750, 1500]) setTimeout(() => ensureDefaultNavigationMode(globalThis.__3D_RVM_VIEWER__, `install-${delay}`), delay);
   try { globalThis.addEventListener?.('rvm-model-loaded', () => tick('model-loaded')); } catch (_) {}
@@ -68,20 +71,20 @@ export function ensureDefaultNavigationMode(viewer = globalThis.__3D_RVM_VIEWER_
 
   const current = normalizeMode(viewer._rvmInteractionMode || viewer._navMode || '');
   const explicit = normalizeMode(viewer.__rvmNavigationUserMode || '');
-  const shouldForceOrbit = !explicit && (!current || current === 'select');
+  const shouldForceSelect = !explicit && (!current || current === 'orbit');
 
-  if (shouldForceOrbit) {
-    if (typeof viewer.setNavMode === 'function') viewer.setNavMode('orbit');
-    else applyOrbitFallback(viewer);
-    viewer.__rvmNavigationArbiterDefaulted = 'orbit';
-    updateModeUi(root, 'orbit');
+  if (shouldForceSelect) {
+    if (typeof viewer.setNavMode === 'function') viewer.setNavMode('select');
+    else applySelectFallback(viewer);
+    viewer.__rvmNavigationArbiterDefaulted = 'select';
+    updateModeUi(root, 'select');
     state.ensured = Number(state.ensured || 0) + 1;
     state.lastReason = reason;
     return writeDiagnostics(viewer, {
-      status: 'defaulted-orbit',
+      status: 'defaulted-select',
       reason,
       previousMode: current || 'unset',
-      mode: 'orbit',
+      mode: 'select',
       controlsEnabled: viewer.controls?.enabled === true,
     });
   }
@@ -90,7 +93,7 @@ export function ensureDefaultNavigationMode(viewer = globalThis.__3D_RVM_VIEWER_
   return writeDiagnostics(viewer, {
     status: 'preserved',
     reason,
-    mode: current || 'orbit',
+    mode: current || 'select',
     explicitMode: explicit || '',
     controlsEnabled: viewer.controls?.enabled === true,
   });
@@ -177,13 +180,71 @@ function dedupeBlockers(items = []) {
   return out;
 }
 
-function applyOrbitFallback(viewer) {
-  viewer._rvmInteractionMode = 'orbit';
-  viewer._navMode = 'orbit';
+function bindUniversalEscape(state) {
+  if (state.escapeBound) return;
+  state.escapeBound = true;
+  document.addEventListener('keydown', (event) => {
+    if (event.key !== 'Escape') return;
+    const viewer = globalThis.__3D_RVM_VIEWER__;
+    const root = event.target?.closest?.(ROOT_SELECTOR) || document.querySelector(ROOT_SELECTOR);
+    if (!viewer || !root) return;
+    event.preventDefault();
+    event.stopPropagation();
+    clearViewerSelection(root, viewer, 'escape');
+    if (typeof viewer.setNavMode === 'function') viewer.setNavMode('select');
+    else applySelectFallback(viewer);
+    viewer.__rvmNavigationUserMode = 'select';
+    viewer.__rvmNavigationUserModeAction = 'NAV_SELECT';
+    viewer.__rvmNavigationUserModeAt = Date.now();
+    updateModeUi(root, 'select');
+    state.escapeClears = Number(state.escapeClears || 0) + 1;
+    writeDiagnostics(viewer, {
+      status: 'escape-select-cleared',
+      reason: 'escape',
+      mode: 'select',
+      selected: selectionCount(viewer),
+    });
+  }, true);
+}
+
+function clearViewerSelection(root, viewer, reason) {
+  const selectedMeshes = Array.isArray(viewer?._rvmCanvasSelectedMeshes) ? viewer._rvmCanvasSelectedMeshes : [];
+  for (const mesh of selectedMeshes) {
+    if (!mesh?.userData?.rvmCanvasSelectionHighlighted) continue;
+    const current = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+    const original = mesh.userData.rvmCanvasSelectionOriginalMaterial;
+    mesh.material = original || mesh.material;
+    for (const mat of current) {
+      const originals = Array.isArray(original) ? original : [original];
+      if (!originals.includes(mat)) mat?.dispose?.();
+    }
+    delete mesh.userData.rvmCanvasSelectionHighlighted;
+    delete mesh.userData.rvmCanvasSelectionOriginalMaterial;
+  }
+  if (viewer) viewer._rvmCanvasSelectedMeshes = [];
+  try { viewer?.selection?.clearSelection?.(); } catch (_) {}
+  root?.querySelectorAll?.('#rvm-tree li.is-selected').forEach((row) => row.classList.remove('is-selected'));
+  const selectionCountEl = root?.querySelector?.('#rvm-sel-count');
+  if (selectionCountEl) selectionCountEl.textContent = '0';
+  const selectedChip = root?.querySelector?.('[data-rvm-status-chip="selected"]');
+  if (selectedChip) selectedChip.textContent = 'Selected: 0';
+  const panel = root?.querySelector?.('#rvm-attributes-panel');
+  if (panel) panel.innerHTML = '<div class="rvm-empty-state">No object selected.</div>';
+  return writeDiagnostics(viewer, { status: 'selection-cleared', reason, mode: normalizeMode(viewer?._rvmInteractionMode || viewer?._navMode || '') });
+}
+
+function selectionCount(viewer) {
+  const selected = viewer?.selection?.getSelectedCanonicalIds?.() || [];
+  return Array.isArray(selected) ? selected.length : 0;
+}
+
+function applySelectFallback(viewer) {
+  viewer._rvmInteractionMode = 'select';
+  viewer._navMode = 'select';
   if (viewer.controls) {
-    viewer.controls.enabled = true;
-    viewer.controls.enableRotate = true;
-    viewer.controls.enablePan = true;
+    viewer.controls.enabled = false;
+    viewer.controls.enableRotate = false;
+    viewer.controls.enablePan = false;
     viewer.controls.enableZoom = true;
   }
 }

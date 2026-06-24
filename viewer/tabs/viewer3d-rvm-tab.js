@@ -8,8 +8,13 @@ import {
   convertUxmlDocumentToAvevaHierarchy,
   isUxmlDocument,
 } from '../rvm/UxmlToAvevaJsonAdapter.js?v=20260618-rvm-rich-ui-source-kind-1';
+import {
+  installSelectedGeometryEnrichmentPanel,
+  syncAllPanels as syncSelectedGeometryEnrichmentPanels,
+} from '../enrichment/SelectedGeometryEnrichmentPanel.js?v=20260624-selected-geometry-floating-workflow-3';
 
 installRvmProgressiveModelRootPatch(RvmViewer3D);
+installSelectedGeometryEnrichmentPanel();
 
 const RVM_TAB_JS_VERSION = '20260622-rvm-support-runtime-retired-2';
 const JSON_TREE_RENDER_LIMIT = 2600;
@@ -120,7 +125,7 @@ async function loadJsonOrUxmlFile(file, viewer, statusEl) {
 function renderToolButton(action) {
   const label = ACTION_LABELS[action] || action;
   const iconOnly = ICON_ONLY_ACTIONS.has(action);
-  return `<button class="rvm-tool-btn ${action === 'NAV_ORBIT' ? 'is-active' : ''} ${iconOnly ? 'is-icon-only' : ''}" data-action="${escapeHtml(action)}" type="button" title="${escapeHtml(label)}" aria-label="${escapeHtml(label)}"><span aria-hidden="true">${escapeHtml(ACTION_ICONS[action] || '')}</span>${iconOnly ? '' : `<span>${escapeHtml(label)}</span>`}</button>`;
+  return `<button class="rvm-tool-btn ${action === 'NAV_SELECT' ? 'is-active' : ''} ${iconOnly ? 'is-icon-only' : ''}" data-action="${escapeHtml(action)}" type="button" title="${escapeHtml(label)}" aria-label="${escapeHtml(label)}"><span aria-hidden="true">${escapeHtml(ACTION_ICONS[action] || '')}</span>${iconOnly ? '' : `<span>${escapeHtml(label)}</span>`}</button>`;
 }
 
 function renderToolGroup(group) {
@@ -128,6 +133,10 @@ function renderToolGroup(group) {
 }
 
 function renderShell(container) {
+  queueMicrotask(() => {
+    const modeChip = container.querySelector('#rvm-mode-chip');
+    if (modeChip) modeChip.textContent = 'Select';
+  });
   container.innerHTML = `<div class="rvm-tab-root geo-theme-navisdark" data-rvm-viewer data-rvm-tab-version="${escapeHtml(RVM_TAB_JS_VERSION)}"><div class="rvm-capability-banner" id="rvm-capability-banner" data-mode="worker-first">RVM / REV / ATT / JSON / UXML viewer ready — direct RVM worker path</div><div class="geo-top-ribbon">${TOOL_GROUPS.map(renderToolGroup).join('')}<div class="rvm-ribbon-section rvm-ribbon-load"><label class="rvm-btn rvm-btn-file" title="Load RVM / REV / ATT / JSON / UXML"><span>Load</span><input id="rvm-file-input" type="file" accept=".json,.jscon,.uxml,.uxml.json,.rvm,.rev,.att" multiple data-browser-rvm-fallback="true" data-browser-rvm-att-sidecar="true" data-rvm-direct-worker-load="true" style="display:none" /></label></div><div class="rvm-ribbon-search"><input id="rvm-search-input" placeholder="Search hierarchy / object…" /></div><span class="mode-chip" id="rvm-mode-chip">Orbit</span></div><div id="rvm-status-strip" class="rvm-status-strip" aria-live="polite"><span class="rvm-status-chip" data-rvm-status-chip="objects">Objects: 0</span><span class="rvm-status-chip" data-rvm-status-chip="visible">Visible: 0</span><span class="rvm-status-chip" data-rvm-status-chip="selected">Selected: 0</span><span class="rvm-status-chip" data-rvm-status-chip="kind">Kinds: -</span></div><div class="rvm-body"><aside class="rvm-left-panel"><div class="rvm-panel-header">Hierarchy</div><div class="rvm-panel-filter-row"><input id="rvm-tree-filter" class="rvm-panel-filter" placeholder="Filter tree…"></div><ul id="rvm-tree" class="rvm-tree"><li class="rvm-empty-state">Load RVM / REV / ATT / JSON / UXML to view hierarchy.</li></ul></aside><section class="rvm-viewport"><div id="rvm-canvas" class="rvm-canvas"></div><div class="rvm-placeholder" id="rvm-placeholder">Load RVM / REV / ATT / JSON / UXML to begin.</div></section><aside class="rvm-right-panel"><div class="rvm-panel-header">Properties</div><div id="rvm-attributes-panel" class="rvm-attributes-panel"><div class="rvm-empty-state">No object selected.</div></div><div class="rvm-panel-header" data-rvm-browser-diagnostics-header="true">Browser RVM Performance</div><div id="rvm-browser-parse-diagnostics" class="rvm-tag-list rvm-browser-parse-diagnostics" aria-live="polite" data-browser-rvm-diagnostics-panel="true"><div class="rvm-empty-state">No browser RVM load yet.</div></div></aside></div><div class="viewer-statusbar"><span id="rvm-sb-msg">Ready</span><span>Selection <b id="rvm-sel-count">0</b></span></div></div>`;
 }
 
@@ -196,6 +205,34 @@ function updateStatus(root, viewer, payload = {}) {
   setChip('kind', `Kinds: ${topKinds || payload?.manifest?.runtime?.upAxis || '-'}`);
   const selectedCount = root.querySelector('#rvm-sel-count');
   if (selectedCount) selectedCount.textContent = String(counts.selected);
+}
+
+function clearRvmSelectionState(root, viewer, reason) {
+  try { globalThis.__PCF_GLB_RVM_INTERACTION__?.clearSelection?.(); } catch (_) {}
+  try { viewer?.selection?.clearSelection?.(); } catch (_) {}
+  try { viewer?.clearSelection?.(); } catch (_) {}
+  if (viewer) viewer._rvmCanvasSelectedMeshes = [];
+  root?.querySelectorAll?.('#rvm-tree li.is-selected').forEach((row) => row.classList.remove('is-selected'));
+  const panel = root?.querySelector?.('#rvm-attributes-panel');
+  if (panel) panel.innerHTML = '<div class="rvm-empty-state">No object selected.</div>';
+  const selectedCount = root?.querySelector?.('#rvm-sel-count');
+  if (selectedCount) selectedCount.textContent = '0';
+  const chip = root?.querySelector?.('[data-rvm-status-chip="selected"]');
+  if (chip) chip.textContent = 'Selected: 0';
+  if (root?.dataset) root.dataset.rvmSelectionClearedReason = reason || 'selection-clear';
+}
+
+function setInitialSelectMode(root, viewer) {
+  try {
+    if (typeof viewer?.handleToolbarAction === 'function') viewer.handleToolbarAction('NAV_SELECT');
+    else if (typeof viewer?.dispatchAction === 'function') viewer.dispatchAction('NAV_SELECT');
+    else viewer?.setNavMode?.('select');
+  } catch (error) {
+    reportRvmActionError(error, { action: 'initial-select-mode' });
+  }
+  root?.querySelectorAll?.('[data-action]').forEach((button) => button.classList.toggle('is-active', button.dataset.action === 'NAV_SELECT'));
+  const modeChip = root?.querySelector?.('#rvm-mode-chip');
+  if (modeChip) modeChip.textContent = 'Select';
 }
 
 function diagnosticRow(label, value) {
@@ -307,6 +344,7 @@ async function loadDirectBrowserRvm({ root, viewer, files, rvmFile, stateBag }) 
     latestDiagnostics.browserRvmTreeNodesRendered = Math.min(nodes.length, RVM_TREE_RENDER_LIMIT);
   }
   root.querySelector('#rvm-placeholder')?.remove();
+  clearRvmSelectionState(root, viewer, 'browser-rvm-load');
   updateStatus(root, viewer, payload);
   latestDiagnostics = {
     ...latestDiagnostics,
@@ -373,6 +411,7 @@ function cleanupRvmTab(root, viewer, stateBag) {
 
 export function mountViewer3DRvmTab(container) {
   renderShell(container);
+  syncSelectedGeometryEnrichmentPanels();
   const root = container.querySelector('[data-rvm-viewer]');
   const canvas = root.querySelector('#rvm-canvas');
   const status = root.querySelector('#rvm-sb-msg');
@@ -381,6 +420,7 @@ export function mountViewer3DRvmTab(container) {
   const stateBag = { abortController: null };
 
   bindToolbar(viewer, root);
+  setInitialSelectMode(root, viewer);
 
   root.querySelector('#rvm-file-input')?.addEventListener('change', async (event) => {
     const files = Array.from(event.target.files || []);
@@ -423,6 +463,7 @@ export function mountViewer3DRvmTab(container) {
       tree.innerHTML = buildNodeTree(nodes, { limit: JSON_TREE_RENDER_LIMIT, recursive: true });
       status.textContent = `Loaded ${jsonFile.name}`;
       root.querySelector('#rvm-placeholder')?.remove();
+      clearRvmSelectionState(root, viewer, 'json-uxml-load');
       updateStatus(root, viewer, payload);
       markRvmModelLoaded(root, 'json-uxml-load-success');
     } catch (err) {

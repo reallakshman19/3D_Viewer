@@ -198,18 +198,12 @@ function bindKeyboardEsc(root, viewer) {
 }
 
 function handleEscape(root, viewer) {
-  const mode = normalizeMode(viewer?._rvmInteractionMode || viewer?._navMode || 'select');
   cancelTransientModes(viewer);
-  if (mode !== 'select') {
-    setMode(viewer, 'select');
-    setStatusMessage(root, 'Esc: Select mode');
-    return true;
-  }
   clearCanvasSelection(viewer, root);
   setMode(viewer, 'select');
   const panel = root?.querySelector?.('#rvm-attributes-panel');
   if (panel) panel.innerHTML = '<div class="rvm-empty-state">No object selected.</div>';
-  setStatusMessage(root, 'Esc: selection cleared');
+  setStatusMessage(root, 'Esc: selection cleared, Select mode');
   return true;
 }
 
