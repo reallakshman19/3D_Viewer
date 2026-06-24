@@ -3,11 +3,11 @@
  *
  * This module preserves the legacy direct Run Conversion button for non-XML->CII
  * converters only. XML->CII itself is popup-only in the left panel: the visible
- * controls are XML->CII Simple Workflow and XML->CII Rich Workflow launchers,
- * owned by xml-cii-workflow-button-scope.js.
+ * controls are XML->CII Workflow 1 and XML->CII Workflow 2 launchers, owned by
+ * xml-cii-workflow-button-scope.js.
  */
 
-const XML_CII_SIMPLE_WORKFLOW_FLAG = '__xmlCiiSimpleWorkflowController_v3';
+const XML_CII_SIMPLE_WORKFLOW_FLAG = '__xmlCiiSimpleWorkflowController_v4';
 const XML_CII_SIMPLE_DIRECT_RUN_FLAG = '__xmlCiiSimpleWorkflowDirectRunAllowed';
 const XML_CII_SIMPLE_STYLE_ID = 'xml-cii-simple-workflow-controller-style';
 const XML_CII_CONVERTER_ID = 'xml_to_cii';
@@ -66,8 +66,6 @@ export function xmlCiiSimpleWorkflowRestoreRunButton(root = document) {
 
 export function installXmlCiiSimpleWorkflowController(root = document) {
   if (!xmlCiiSimpleWorkflowBrowserReady()) return null;
-  if (!window[XML_CII_SIMPLE_WORKFLOW_FLAG]) window[XML_CII_SIMPLE_WORKFLOW_FLAG] = { version: 'v3' };
-  const tick = () => xmlCiiSimpleWorkflowRestoreRunButton(root || document);
-  for (const delay of [0, 80, 250, 750]) setTimeout(tick, delay);
-  return tick();
+  if (!window[XML_CII_SIMPLE_WORKFLOW_FLAG]) window[XML_CII_SIMPLE_WORKFLOW_FLAG] = { version: 'v4' };
+  return xmlCiiSimpleWorkflowRestoreRunButton(root || document);
 }
