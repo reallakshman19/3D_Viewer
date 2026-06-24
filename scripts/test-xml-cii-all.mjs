@@ -15,6 +15,7 @@ const scripts = [
   'scripts/test-xml-cii-conversion-workflow-popup.mjs',
   'scripts/test-xml-cii-preview-run-parity.mjs',
   'scripts/test-xml-cii-ps-tag-exact-restraints.mjs',
+  'scripts/test-xml-cii-master-autoload-single-session.mjs',
   'scripts/test-model-converters-tab-responsive.mjs',
 ];
 
@@ -33,7 +34,6 @@ for (const script of scripts) {
     stdio: 'inherit',
     env: { ...process.env },
   });
-
   results.push({ script, status: result.status ?? 1 });
   if (result.error) {
     console.error(`${script} failed to start: ${result.error.message}`);
