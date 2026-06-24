@@ -7,8 +7,9 @@
  *   3. Remove deprecated converter options from the dropdown.
  *
  * XML->CII(2019) workflow isolation rule:
- *   - Simple/direct Run Conversion is installed by xml-cii-simple-workflow-controller.js.
- *   - Rich Workflow popup is installed by xml-cii-rich-workflow-popup.js.
+ *   - Visible simple/rich buttons are owned by xml-cii-workflow-button-scope.js.
+ *   - Simple/direct Run Conversion behavior is installed by xml-cii-simple-workflow-controller.js.
+ *   - Rich Workflow popup behavior is installed by xml-cii-rich-workflow-popup.js.
  *   - Rich modules must not restore or intercept the simple run button.
  */
 
@@ -17,9 +18,10 @@ import { renderLegacyModelConvertersTab } from './legacy-adapter.js?v=20260620-m
 import { installBmCiiSupportAnnotationPopup } from './bm-cii-support-annotation-popup.js?v=20260617-bmcii-open-basic-handoff-2';
 import { installInputXmlPropertyTransferUi } from './inputxml-property-transfer-popup-ui-v4.js?v=20260615-inputxml-property-transfer-popup-host-hide-1';
 import { installRvmAttrUxmlAddon } from './rvmattr-uxml-addon.js?v=20260618-port-bore-contract-1';
-import { installXmlCiiSimpleWorkflowController } from './xml-cii-simple-workflow-controller.js?v=20260624-simple-rich-isolation-1';
-import { installXmlCiiRichWorkflowHotfix } from './xml-cii-rich-workflow-hotfix.js?v=20260624-simple-rich-isolation-1';
-import { installXmlCiiRichWorkflowPopup } from './xml-cii-rich-workflow-popup.js?v=20260624-simple-rich-isolation-1';
+import { installXmlCiiWorkflowButtonScope } from './xml-cii-workflow-button-scope.js?v=20260624-button-scope-1';
+import { installXmlCiiSimpleWorkflowController } from './xml-cii-simple-workflow-controller.js?v=20260624-button-scope-1';
+import { installXmlCiiRichWorkflowHotfix } from './xml-cii-rich-workflow-hotfix.js?v=20260624-button-scope-1';
+import { installXmlCiiRichWorkflowPopup } from './xml-cii-rich-workflow-popup.js?v=20260624-button-scope-1';
 import { installXmlCiiCondenseRigidUiBridge } from './xml-cii-condense-rigid-ui-bridge.js?v=20260624-simple-rich-isolation-1';
 import { installXmlCiiBranchSampleSync } from './xml-cii-branch-sample-sync.js?v=20260620-rating-runtime-1';
 import { installXmlCiiLineKeySelectPatch } from './xml-cii-linekey-select-patch.js?v=20260624-simple-rich-isolation-1';
@@ -32,7 +34,7 @@ import { installXmlCiiMasterPreservePatch } from './xml-cii-master-preserve-patc
 
 const TRACE_PREFIX = '[BM_CII_CONVERTER_TRACE]';
 const STYLE_LINKS = Object.freeze([
-  ['model-converters-tab-css', './tabs/model-converters-tab.css?v=20260624-simple-rich-isolation-1'],
+  ['model-converters-tab-css', './tabs/model-converters-tab.css?v=20260624-button-scope-1'],
   ['model-converters-css-fix', './tabs/model-converters-css-fix.css?v=20260624-simple-rich-isolation-1'],
 ]);
 
@@ -58,9 +60,9 @@ function ensureModelConvertersStyles() {
 function markStylesReady(container) {
   if (!container) return;
   container.classList.add('model-converters-style-ready');
-  container.dataset.modelConvertersCss = '20260624-simple-rich-isolation-1';
+  container.dataset.modelConvertersCss = '20260624-button-scope-1';
   const root = container.querySelector?.('.model-converters-root');
-  if (root) root.dataset.modelConvertersCss = '20260624-simple-rich-isolation-1';
+  if (root) root.dataset.modelConvertersCss = '20260624-button-scope-1';
 }
 
 function installSafely(name, installer, container) {
@@ -78,12 +80,14 @@ function scheduleInstaller(name, installer, container) {
 
 /**
  * Ordered installer pairs. Each entry is [debugName, installerFn].
- * Simple and Rich XML->CII workflows are deliberately separate entries.
+ * The button scope runs before simple/rich behavior binding so both workflows
+ * bind to the same canonical current-root action row.
  *
  * @type {ReadonlyArray<[string, (container: HTMLElement) => void]>}
  */
 const MODEL_CONVERTER_INSTALLERS = Object.freeze([
   ['rvmattr-uxml-addon', installRvmAttrUxmlAddon],
+  ['xml-cii-workflow-button-scope', installXmlCiiWorkflowButtonScope],
   ['xml-cii-simple-workflow-controller', installXmlCiiSimpleWorkflowController],
   ['xml-cii-rich-workflow-hotfix', installXmlCiiRichWorkflowHotfix],
   ['xml-cii-rich-workflow-popup', installXmlCiiRichWorkflowPopup],
