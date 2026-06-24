@@ -106,6 +106,14 @@ assert.ok(
   parity.includes('element-length-inline-negative') && parity.includes('instElementLengthAnnotations'),
   'Negative INST and inline chain ElementLengthMm diagnostics must exist.',
 );
+assert.ok(
+  parity.includes('DTXR_POS_SIF_ZERO_TYPES')
+    && parity.includes("setText(document, node, 'SIF', '0')")
+    && parity.includes('dtxr-pos-sif-zero')
+    && parity.includes('TEEDESC_POS')
+    && parity.includes('OLET'),
+  'DTXR_POS-matched Tee/Olet nodes must be assigned SIF=0 before final CII worker conversion.',
+);
 assert.deepEqual(
   Object.keys(mappedProcessFixture.expectedEnrichedXml),
   ['Pressure1', 'Pressure2', 'Temperature1', 'Temperature2', 'Temperature3', 'FluidDensity'],
@@ -116,6 +124,6 @@ assert.ok(
   'Regression context: base enrichment still has the broad rating derivation that preview/run parity overrides.',
 );
 
-console.log('✓ XML->CII preview/run mapped process, Pressure2, diagnostics, and negative-chain parity guard passed.', {
+console.log('XML->CII preview/run mapped process, Pressure2, diagnostics, negative-chain, and DTXR_POS SIF=0 parity guard passed.', {
   fixture: mappedProcessFixture.branchName,
 });
