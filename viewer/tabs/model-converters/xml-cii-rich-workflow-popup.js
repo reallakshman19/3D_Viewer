@@ -1,9 +1,13 @@
 /**
- * XML->CII(2019) Rich Workflow popup.
+ * XML->CII(2019) workflow popups.
  *
- * This module owns only the rich phase-tab popup. It does not restore or bind
- * the simple/direct Run Conversion button; that belongs to
- * xml-cii-simple-workflow-controller.js.
+ * This module owns only the popup launchers for the two explicit XML->CII
+ * workflow buttons in the Model Converters left panel:
+ * - Simple workflow popup: enriched conversion inspection/run surface.
+ * - Rich workflow popup: standalone-ready config/manual override surface.
+ *
+ * It does not restore the legacy direct Run Conversion button; that button is
+ * hidden for XML->CII by xml-cii-workflow-button-scope.js.
  */
 
 import { WorkflowModal } from './shared/WorkflowModal.js';
@@ -12,12 +16,27 @@ import { xmlCiiRichWorkflowRequestFinalRun } from './xml-cii-rich-workflow-runne
 import { renderXmlCiiPopupNativePhase } from './xml-cii-popup-native-panels.js?v=20260623-inst-length-info-simple-run-1';
 import { XML_CII_WORKFLOW_PHASES, normalizeWorkflowPhaseId } from './WorkflowShell.js';
 
-const XML_CII_RICH_WORKFLOW_FLAG = '__xmlCiiRichWorkflowPopup_phaseTabs_v4';
+const XML_CII_RICH_WORKFLOW_FLAG = '__xmlCiiWorkflowPopups_phaseTabs_v5';
 const XML_CII_RICH_WORKFLOW_ROOT_ATTR = 'data-xml-cii-rich-workflow-root';
 const XML_CII_RICH_WORKFLOW_OVERLAY_ATTR = 'data-xml-cii-rich-workflow-overlay';
 const XML_CII_RICH_WORKFLOW_ACTIVE_PHASE_KEY = 'xmlCii2019.richWorkflow.activePhase.v1';
 const XML_CII_RICH_WORKFLOW_LEGACY_ACTIVE_PHASE_KEY = 'xmlCii2019.conversionWorkflow.activePhase.v4';
-const XML_CII_RICH_WORKFLOW_CLICK_VERSION = '20260624-popup-identity-1';
+const XML_CII_RICH_WORKFLOW_CLICK_VERSION = '20260624-popup-only-1';
+
+const XML_CII_WORKFLOW_POPUP_META = Object.freeze({
+  simple: Object.freeze({
+    title: 'XML->CII(2019) Simple Workflow',
+    subtitle: 'Import masters, map fields, inspect diagnostics, and run enriched CII conversion.',
+    buttonSelector: '#model-converters-xml-cii-simple-btn',
+    boundDatasetKey: 'xmlCiiSimpleWorkflowPopupBound',
+  }),
+  rich: Object.freeze({
+    title: 'XML->CII(2019) Rich Workflow',
+    subtitle: 'Import masters, map fields, and maintain manual overrides in a standalone-ready config.',
+    buttonSelector: '#model-converters-xml-cii-rich-btn',
+    boundDatasetKey: 'xmlCiiRichWorkflowPopupBound',
+  }),
+});
 
 function xmlCiiRichWorkflowBrowserReady() {
   return typeof window !== 'undefined' && typeof document !== 'undefined';
@@ -61,6 +80,7 @@ function xmlCiiRichWorkflowState(root) {
       configText: null,
       configStatus: '',
       modal: null,
+      mode: 'simple',
     };
     runtime.stateByRoot.set(root, state);
   }
@@ -76,7 +96,7 @@ function xmlCiiRichWorkflowRenderPhase(root, state) {
   if (!body) return;
   const data = xmlCiiRichWorkflowSnapshot(root);
   if (!data) {
-    body.innerHTML = '<div class="model-converters-workflow-detail-note">XML->CII Rich Workflow bridge is not ready. Reopen the Model Converter tab and try again.</div>';
+    body.innerHTML = '<div class="model-converters-workflow-detail-note">XML->CII workflow bridge is not ready. Reopen the Model Converter tab and try again.</div>';
     return;
   }
   state.activeMaster = root.dataset.xmlCiiRichActiveMaster || state.activeMaster || 'linelist';
@@ -98,7 +118,7 @@ async function xmlCiiRichWorkflowPreloadDefaultMasters(root, state) {
     await xmlCiiRichWorkflowGetBridge()?.ensureDefaultMastersLoaded?.(root);
     xmlCiiRichWorkflowRenderPhase(root, state);
   } catch (error) {
-    console.warn('[XML CII Rich Workflow] default master preload failed', error);
+    console.warn('[XML CII Workflow] default master preload failed', error);
   }
 }
 
@@ -296,16 +316,22 @@ function xmlCiiRichWorkflowCloseForeignXmlCiiWorkflowOverlays(exceptOverlay = nu
   });
 }
 
-function xmlCiiRichWorkflowOpenPopup(container) {
+function xmlCiiWorkflowPopupMeta(mode) {
+  return XML_CII_WORKFLOW_POPUP_META[mode] || XML_CII_WORKFLOW_POPUP_META.rich;
+}
+
+function xmlCiiRichWorkflowOpenPopup(container, mode = 'rich') {
   const activeBridge = xmlCiiRichWorkflowGetBridge();
   if (!activeBridge) return;
   const state = xmlCiiRichWorkflowState(container);
+  state.mode = mode === 'simple' ? 'simple' : 'rich';
   state.modal?.close?.();
   xmlCiiRichWorkflowCloseForeignXmlCiiWorkflowOverlays();
+  const meta = xmlCiiWorkflowPopupMeta(state.mode);
 
   const modal = new WorkflowModal({
-    title: 'XML->CII(2019) Rich Workflow',
-    subtitle: 'Canonical rich workflow: import masters, map fields, inspect diagnostics, review weights/supports, and run enriched CII conversion.',
+    title: meta.title,
+    subtitle: meta.subtitle,
     tabs: XML_CII_WORKFLOW_PHASES,
     activeTabId: state.phaseId,
     onTabChange: (phaseId) => xmlCiiRichWorkflowSelectPhase(container, state, phaseId),
@@ -317,7 +343,9 @@ function xmlCiiRichWorkflowOpenPopup(container) {
   const body = modal.open();
   state.modal = modal;
   modal.overlayEl?.setAttribute(XML_CII_RICH_WORKFLOW_OVERLAY_ATTR, 'true');
+  modal.overlayEl?.setAttribute('data-xml-cii-workflow-mode', state.mode);
   body.setAttribute(XML_CII_RICH_WORKFLOW_ROOT_ATTR, 'true');
+  body.setAttribute('data-xml-cii-workflow-mode', state.mode);
   body.innerHTML = '<div data-xml-cii-rich-workflow-body></div>';
   activeBridge.closePopup = () => {
     state.modal?.close();
@@ -327,19 +355,24 @@ function xmlCiiRichWorkflowOpenPopup(container) {
   setTimeout(() => xmlCiiRichWorkflowCloseForeignXmlCiiWorkflowOverlays(modal.overlayEl), 0);
 }
 
-function xmlCiiRichWorkflowOpenFromButtonClick(event, container) {
+function xmlCiiRichWorkflowOpenFromButtonClick(event, container, mode) {
   event?.preventDefault?.();
   event?.stopPropagation?.();
   event?.stopImmediatePropagation?.();
-  xmlCiiRichWorkflowOpenPopup(container.querySelector?.('.model-converters-root') || container);
+  xmlCiiRichWorkflowOpenPopup(container.querySelector?.('.model-converters-root') || container, mode);
+}
+
+function xmlCiiRichWorkflowBindLauncher(container, mode) {
+  const meta = xmlCiiWorkflowPopupMeta(mode);
+  const button = container.querySelector?.(meta.buttonSelector);
+  if (!button || button.dataset[meta.boundDatasetKey] === XML_CII_RICH_WORKFLOW_CLICK_VERSION) return;
+  button.addEventListener('click', (event) => xmlCiiRichWorkflowOpenFromButtonClick(event, container, mode), { capture: true });
+  button.dataset[meta.boundDatasetKey] = XML_CII_RICH_WORKFLOW_CLICK_VERSION;
 }
 
 export function installXmlCiiRichWorkflowPopup(container = document) {
   if (!xmlCiiRichWorkflowBrowserReady()) return;
   xmlCiiRichWorkflowRuntime();
-  const richButton = container.querySelector?.('#model-converters-xml-cii-rich-btn');
-  if (richButton && richButton.dataset.xmlCiiRichWorkflowPopupBound !== XML_CII_RICH_WORKFLOW_CLICK_VERSION) {
-    richButton.addEventListener('click', (event) => xmlCiiRichWorkflowOpenFromButtonClick(event, container), { capture: true });
-    richButton.dataset.xmlCiiRichWorkflowPopupBound = XML_CII_RICH_WORKFLOW_CLICK_VERSION;
-  }
+  xmlCiiRichWorkflowBindLauncher(container, 'simple');
+  xmlCiiRichWorkflowBindLauncher(container, 'rich');
 }

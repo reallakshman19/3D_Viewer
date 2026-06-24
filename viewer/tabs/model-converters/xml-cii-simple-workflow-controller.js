@@ -1,14 +1,16 @@
 /**
  * XML->CII(2019) simple/direct workflow controller.
  *
- * This module owns only the main "Run Conversion" button visibility and direct-run guard.
- * Rich Workflow popup code must not import this module or mutate the simple run
- * button directly.
+ * This module preserves the legacy direct Run Conversion button for non-XML->CII
+ * converters only. XML->CII itself is popup-only in the left panel: the visible
+ * controls are XML->CII Simple Workflow and XML->CII Rich Workflow launchers,
+ * owned by xml-cii-workflow-button-scope.js.
  */
 
-const XML_CII_SIMPLE_WORKFLOW_FLAG = '__xmlCiiSimpleWorkflowController_v2';
+const XML_CII_SIMPLE_WORKFLOW_FLAG = '__xmlCiiSimpleWorkflowController_v3';
 const XML_CII_SIMPLE_DIRECT_RUN_FLAG = '__xmlCiiSimpleWorkflowDirectRunAllowed';
 const XML_CII_SIMPLE_STYLE_ID = 'xml-cii-simple-workflow-controller-style';
+const XML_CII_CONVERTER_ID = 'xml_to_cii';
 
 function xmlCiiSimpleWorkflowBrowserReady() {
   return typeof window !== 'undefined' && typeof document !== 'undefined';
@@ -20,6 +22,11 @@ function xmlCiiSimpleWorkflowText(value) {
 
 function xmlCiiSimpleWorkflowRoot(root = document) {
   return root?.querySelector?.('.model-converters-root') || root;
+}
+
+function xmlCiiSimpleWorkflowSelectedConverter(root) {
+  const scopedRoot = xmlCiiSimpleWorkflowRoot(root);
+  return scopedRoot?.querySelector?.('#model-converters-select')?.value || '';
 }
 
 function xmlCiiSimpleWorkflowEnsureStyle() {
@@ -44,6 +51,7 @@ function xmlCiiSimpleWorkflowRunButton(root = document) {
 export function xmlCiiSimpleWorkflowRestoreRunButton(root = document) {
   if (!xmlCiiSimpleWorkflowBrowserReady()) return null;
   xmlCiiSimpleWorkflowEnsureStyle();
+  if (xmlCiiSimpleWorkflowSelectedConverter(root) === XML_CII_CONVERTER_ID) return null;
   const runButton = xmlCiiSimpleWorkflowRunButton(root);
   if (!runButton) return null;
 
@@ -58,7 +66,7 @@ export function xmlCiiSimpleWorkflowRestoreRunButton(root = document) {
 
 export function installXmlCiiSimpleWorkflowController(root = document) {
   if (!xmlCiiSimpleWorkflowBrowserReady()) return null;
-  if (!window[XML_CII_SIMPLE_WORKFLOW_FLAG]) window[XML_CII_SIMPLE_WORKFLOW_FLAG] = { version: 'v2' };
+  if (!window[XML_CII_SIMPLE_WORKFLOW_FLAG]) window[XML_CII_SIMPLE_WORKFLOW_FLAG] = { version: 'v3' };
   const tick = () => xmlCiiSimpleWorkflowRestoreRunButton(root || document);
   for (const delay of [0, 80, 250, 750]) setTimeout(tick, delay);
   return tick();
