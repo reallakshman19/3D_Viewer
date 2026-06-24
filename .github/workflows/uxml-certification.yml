@@ -19,6 +19,8 @@ on:
       - "viewer/js/pcf2glb/glb/buildExportScene.js"
       - "viewer/tabs/model-converters-tab.js"
       - "viewer/tabs/model-converters/converters/inputxml-to-glb.js"
+      - "viewer/enrichment/**"
+      - "scripts/test-selected-geometry-*.mjs"
       - "viewer/tests/uxml-*.test.js"
       - "viewer/tests/rvm-pcf-*.test.js"
       - "viewer/tests/app-entrypoint-static.test.js"
@@ -49,6 +51,8 @@ on:
       - "viewer/js/pcf2glb/glb/buildExportScene.js"
       - "viewer/tabs/model-converters-tab.js"
       - "viewer/tabs/model-converters/converters/inputxml-to-glb.js"
+      - "viewer/enrichment/**"
+      - "scripts/test-selected-geometry-*.mjs"
       - "viewer/tests/uxml-*.test.js"
       - "viewer/tests/rvm-pcf-*.test.js"
       - "viewer/tests/app-entrypoint-static.test.js"
@@ -105,6 +109,21 @@ jobs:
 
       - name: Run direct InputXML stagedJSON certification
         run: node viewer/tests/inputxml-direct-managed-stage.test.js
+
+      - name: Run selected-geometry enrichment contracts
+        shell: bash
+        run: |
+          set -euo pipefail
+          tests=(
+            scripts/test-selected-geometry-scope.mjs
+            scripts/test-selected-geometry-package.mjs
+            scripts/test-selected-geometry-enrichment.mjs
+            scripts/test-selected-geometry-enrichment-ui.mjs
+          )
+          for test_file in "${tests[@]}"; do
+            echo "Running ${test_file}"
+            node "${test_file}"
+          done
 
       - name: Run browser RVM unit contracts
         shell: bash
