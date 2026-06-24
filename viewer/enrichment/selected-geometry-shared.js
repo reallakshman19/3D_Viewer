@@ -81,13 +81,17 @@ export function typeForNode(node) {
   const data = node?.userData || {};
   const attrs = attributesForNode(node);
   return text(
-    node?.type
-      || node?.kind
-      || data.type
-      || data.kind
-      || attrs.TYPE
+    attrs.TYPE
+      || attrs.RAW_TYPE
+      || attrs.DTXR
       || attrs.RVM_TYPE
       || attrs.COMPONENT_TYPE
+      || data.sourceType
+      || data.componentType
+      || data.kind
+      || node?.kind
+      || data.type
+      || node?.type
       || 'OBJECT'
   ).toUpperCase();
 }
@@ -122,15 +126,19 @@ export function stableObjectId(node) {
   const props = data.browserRvmProperties || {};
   const attrs = attributesForNode(node);
   const direct = text(
-    node?.id
-      || node?.canonicalId
-      || data.canonicalObjectId
-      || data.sourceObjectId
-      || data.name
+    data.sourceObjectId
       || props.sourceObjectId
+      || attrs.SOURCE_ELEMENT_ID
+      || attrs.SOURCE_RESTRAINT_ID
+      || attrs.REF
+      || attrs.NAME
       || attrs.ID
       || attrs.REF_NO
       || attrs.GUID
+      || data.canonicalObjectId
+      || node?.canonicalId
+      || node?.id
+      || data.name
       || node?.uuid
       || ''
   );
@@ -157,7 +165,10 @@ export function objectAliases(node) {
     props.sourceName,
     props.displayName,
     attrs.ID,
+    attrs.REF,
     attrs.NAME,
+    attrs.SOURCE_ELEMENT_ID,
+    attrs.SOURCE_RESTRAINT_ID,
     attrs.REF_NO,
     attrs.FROM_NODE,
     attrs.TO_NODE,
@@ -200,6 +211,9 @@ export function rowValue(row, keys) {
     const normalized = normalizeKey(key);
     const match = entries.find(([name, value]) => normalizeKey(name) === normalized && text(value));
     if (match) return match[1];
+    const rawEntries = Object.entries(row?._raw || {});
+    const rawMatch = rawEntries.find(([name, value]) => normalizeKey(name) === normalized && text(value));
+    if (rawMatch) return rawMatch[1];
   }
   return '';
 }

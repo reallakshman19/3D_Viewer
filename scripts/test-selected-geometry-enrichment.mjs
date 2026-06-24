@@ -6,6 +6,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const scopeUrl = pathToFileURL(path.join(__dirname, '../viewer/enrichment/selected-geometry-scope.js')).href;
 const enrichmentUrl = pathToFileURL(path.join(__dirname, '../viewer/enrichment/selected-geometry-enrichment.js')).href;
+const branchWorkflowUrl = pathToFileURL(path.join(__dirname, '../viewer/enrichment/selected-geometry-branch-workflow.js')).href;
 const { cloneGeometryObjectForWorkspace } = await import(scopeUrl);
 const {
   enrichGeometryObject,
@@ -13,6 +14,7 @@ const {
   matchLineListRow,
   matchWeight,
 } = await import(enrichmentUrl);
+const { buildSelectedGeometryBranchPreview, enrichSelectedGeometryScopeWithBranchWorkflow } = await import(branchWorkflowUrl);
 
 const sourcePipe = {
   id: 'PIPE-100-A',
@@ -125,5 +127,90 @@ const scope = {
 const enrichedScope = enrichSelectedGeometryScope(scope, masters, {});
 assert.strictEqual(enrichedScope.objects[0].attributes.enrichment.lineList.service, 'Steam');
 assert.strictEqual(scope.objects[0].attributes.enrichment, undefined);
+
+const meshBackedPipe = cloneGeometryObjectForWorkspace({
+  type: 'Mesh',
+  name: 'Mesh wrapper',
+  userData: {
+    attributes: {
+      TYPE: 'VALV',
+      OWNER: '/BTRM-1000-10"-P1710011-66620M0-01/B1',
+      DIAMETER: '273.05',
+      APOS: { x: 0, y: 0, z: 0 },
+      LPOS: { x: 300, y: 0, z: 0 },
+    },
+  },
+});
+assert.strictEqual(meshBackedPipe.type, 'VALV');
+
+const branchScope = {
+  schema: 'selected-geometry-scope/v1',
+  scopeMode: 'selected',
+  capturedAt: '2026-06-23T00:00:00.000Z',
+  axisTransform: { verticalAxis: 'Y', northAxis: 'Z', handedness: 'right' },
+  objects: [meshBackedPipe],
+  stats: { objects: 1 },
+};
+const branchMasters = {
+  lineList: [
+    {
+      'Line Number': 'P1710011',
+      'Piping Class': '66620M0',
+      P1: '6000',
+      T1: '90',
+      DENSITY: '100',
+    },
+  ],
+  pipingClass: [
+    {
+      SPEC: '66620M0',
+      BORE: '250',
+      RATING: '600',
+      'Material Code': '106',
+      Material: 'A106 B',
+      'Wall Thickness': '12.7',
+      CA: '0',
+    },
+  ],
+  materialMap: [
+    { 'Material Code': '106', Material: 'A106 B' },
+  ],
+  weightMaster: [
+    {
+      BORE: '250',
+      RATING: '600',
+      LENGTH: '300',
+      WEIGHT: '25',
+      TYPE: 'Gate Valve',
+    },
+  ],
+};
+const branchPreview = buildSelectedGeometryBranchPreview({
+  scope: branchScope,
+  masters: branchMasters,
+  config: {
+    linelist: { lineKeyTokenPositions: '4', tokenDelimiter: '-' },
+    rating: { pipingClassTokenIndex: 5, ratingSequence: [['66620', '600']] },
+    weight: { boreTokenIndex: 3, npsToDn: { 10: 250 } },
+  },
+});
+assert.strictEqual(branchPreview.counts.branches, 1);
+assert.strictEqual(branchPreview.branchRows[0].lineKey, 'P1710011');
+assert.strictEqual(branchPreview.branchRows[0].materialCode, '106');
+assert.strictEqual(branchPreview.branchRows[0].pipingClassNeedsReview, false);
+assert.strictEqual(branchPreview.branchRows[0].weightRows[0].componentType, 'VALV');
+assert.notStrictEqual(branchPreview.branchRows[0].weightRows[0].componentType, 'MESH');
+
+const branchEnriched = enrichSelectedGeometryScopeWithBranchWorkflow({
+  scope: branchScope,
+  masters: branchMasters,
+  config: {
+    linelist: { lineKeyTokenPositions: '4', tokenDelimiter: '-' },
+    rating: { pipingClassTokenIndex: 5, ratingSequence: [['66620', '600']] },
+    weight: { boreTokenIndex: 3, npsToDn: { 10: 250 } },
+  },
+});
+assert.strictEqual(branchEnriched.objects[0].attributes.enrichment.pipingClass.materialCode, '106');
+assert.strictEqual(branchScope.objects[0].attributes.enrichment, undefined);
 
 console.log('selected geometry enrichment tests passed');
