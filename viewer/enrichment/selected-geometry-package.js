@@ -61,6 +61,7 @@ export function buildSelectedGeometryWorkspacePackage(input) {
         materialMapVersion: masters.versions.materialMapVersion,
         weightMasterVersion: masters.versions.weightMasterVersion,
       },
+      masterBindings: collectMasterBindings(masters),
       stats: {
         objects: enrichmentSummary.objects,
         resolved: enrichmentSummary.resolved,
@@ -82,7 +83,7 @@ export function selectedGeometryWorkspacePackageFileName(input) {
   const source = input && typeof input === 'object' ? input : {};
   const name = safeFilePart(source.sourceFileName || source.sourceModelName || source.source || 'rvm');
   const scope = safeFilePart(source.scopeMode || 'selected');
-  return `${name}_${scope}_rvm_enriched_workspace_package.json`;
+  return `${name}_${scope}_db_enriched_workspace_package.json`;
 }
 
 export function serializeSelectedGeometryWorkspacePackage(packageJson) {
@@ -97,6 +98,32 @@ export function writePendingWorkspacePackageToStorage(packageJson, storage) {
   const textPayload = serializeSelectedGeometryWorkspacePackage(packageJson);
   target.setItem(PENDING_WORKSPACE_PACKAGE_STORAGE_KEY, textPayload);
   return freezeDeep({ status: 'written', key: PENDING_WORKSPACE_PACKAGE_STORAGE_KEY, bytes: textPayload.length });
+}
+
+function collectMasterBindings(masters) {
+  return freezeDeep({
+    lineList: summarizeBindings(masters.lineList),
+    pipingClass: summarizeBindings(masters.pipingClass),
+    materialMap: summarizeBindings(masters.materialMap),
+    weightMaster: summarizeBindings(masters.weightMaster),
+  });
+}
+
+function summarizeBindings(rows) {
+  const summary = {};
+  for (const row of rows || []) {
+    const bindings = row?._bindings && typeof row._bindings === 'object' && !Array.isArray(row._bindings) ? row._bindings : null;
+    if (!bindings) continue;
+    for (const [canonical, rawHeader] of Object.entries(bindings)) {
+      if (!summary[canonical]) summary[canonical] = new Set();
+      summary[canonical].add(text(rawHeader));
+    }
+  }
+  const output = {};
+  for (const [canonical, rawHeaders] of Object.entries(summary)) {
+    output[canonical] = Array.from(rawHeaders).filter(Boolean).sort();
+  }
+  return output;
 }
 
 function sanitizeDbOnlyGeometryObject(object) {
