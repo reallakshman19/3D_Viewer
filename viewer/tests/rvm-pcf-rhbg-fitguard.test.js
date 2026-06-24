@@ -91,23 +91,28 @@ check(renderBuilderSource.includes('RVM_NATIVE_FACET_GROUP'), 'render builder ke
 check(renderBuilderSource.includes('wireframe-diagnostic-not-solid-geometry'), 'bbox placeholders remain diagnostic wireframes');
 check(!renderBuilderSource.includes("primitive === 'STRUCTURE_BBOX' || type === 'STRUCTURE'"), 'unconditional structure slab promotion remains blocked');
 
-check(indexSource.includes('main-rhbg-fitguard.js?v=20260622-geometry-enriched-stagedjson-1'), 'index uses enriched stagedJSON entry cache key');
-check(entrySource.includes('core/app.js?v=20260622-geometry-enriched-stagedjson-1'), 'entrypoint uses enriched stagedJSON app cache key');
+check(indexSource.includes('main-rhbg-fitguard.js?v=20260624-optional-rvm-health-startup-1'), 'index uses optional health startup entry cache key');
+check(entrySource.includes('core/app.js?v=20260624-optional-rvm-health-startup-1'), 'entrypoint uses optional health app cache key');
 check(entrySource.includes('await init(startupMount())'), 'entrypoint passes resolved mount root into init');
 check(appSource.includes('app-tab-click-state-bridge.js?v=20260622-tab-click-state-1'), 'app side-loads tab click state bridge');
 check(appSource.includes('installAppTabClickStateBridge()'), 'app installs tab click state bridge before runtime delegate');
 check(tabClickBridgeSource.includes('RuntimeEvents.TAB_CHANGED'), 'tab click state bridge listens for tab changes');
 check(tabClickBridgeSource.includes('state.activeTabId = tabId'), 'tab click state bridge synchronizes active tab id');
+check(appSource.includes('DEFAULT_VIEWER_BRIDGE_MODULES'), 'default viewer bridges are data-driven optional modules');
+check(appSource.includes('RvmModelHealthBridge.js?v=20260624-optional-rvm-health-startup-1'), 'model health bridge is still registered with fresh cache key');
+check(appSource.includes('installOptionalViewerBridges(DEFAULT_VIEWER_BRIDGE_MODULES'), 'default viewer bridges are installed through optional loader');
+check(!appSource.includes('import { installRvmModelHealthBridge }'), 'model health bridge is not a static app dependency');
+check(!appSource.includes('import { installRvmModelHealthIssuesBridge }'), 'model health issues bridge is not a static app dependency');
 check(appSource.includes('LEGACY_GEOMETRY_WORKFLOW_FLAG'), 'legacy geometry workflow button installers are now flag-gated');
 check(appSource.includes('shouldInstallLegacyGeometryWorkflowButtons'), 'app has explicit legacy geometry workflow gate');
 check(appSource.includes('installLegacyGeometryWorkflowBridges'), 'legacy geometry workflow installers remain available for transition');
-check(appSource.includes('Promise.allSettled'), 'legacy workflow bridge failures do not blank the app');
+check(appSource.includes('Promise.allSettled'), 'optional bridge failures do not blank the app');
 check(!appSource.includes('\ninstallGeometrySupportLoadFormulaBridge();'), 'support-load formula button is not installed by default');
 check(!appSource.includes('\ninstallGeometrySupportLoadReportBridge();'), 'support-load report button is not installed by default');
 check(!appSource.includes('\ninstallGeometrySupportLoadBulkPackageBridge();'), 'support-load package button is not installed by default');
 check(!appSource.includes('\ninstallGeometrySupportLoadCanvasOverlayBridge();'), 'support-load overlay button is not installed by default');
-check(appSource.includes('BrowserRvmNativeFacetGhostPanelPatch.js?v=20260622-rvm-facet-ghost-panels-1'), 'app side-loads native facet ghost patch');
-check(appSource.includes('app-label-perf-runtime.js?v=20260622-geometry-enriched-stagedjson-1'), 'app retains enriched stagedJSON runtime cache marker');
+check(appSource.includes('BrowserRvmNativeFacetGhostPanelPatch.js?v=20260624-optional-rvm-health-startup-1'), 'app side-loads native facet ghost patch through optional loader');
+check(appSource.includes('app-label-perf-runtime.js?v=20260624-optional-rvm-health-startup-1'), 'app retains optional health runtime cache marker');
 check(runtimeSource.includes('viewer3d-rvm-tab-renderer.js?v=20260622-geometry-workspace-1') || runtimeSource.includes('viewer3d-rvm-tab-renderer.js?v=20260622-geometry-mapping-1') || runtimeSource.includes('viewer3d-rvm-tab-renderer.js?v=20260622-geometry-profile-ui-1'), 'runtime keeps RVM renderer cache chain');
 
 console.log(`\n${passed} passed, ${failed} failed`);
