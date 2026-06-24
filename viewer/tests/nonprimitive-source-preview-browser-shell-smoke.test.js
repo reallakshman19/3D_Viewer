@@ -178,18 +178,19 @@ assert.equal(snapshot.supportOverlay.coordinateMappings.length, 3, 'snapshot pre
 assert.equal(snapshot.supportOverlay.pipeAxisResolutions.length, 3, 'snapshot preserves pipe-axis diagnostics');
 
 assert.match(rendererSource, /installRvmNonPrimitiveSupportOverlayBridge\(\)[\s\S]*installRvmNonPrimitiveAutoBendBridge\(\)[\s\S]*installRvmNonPrimitiveSourceToolsUiBridge\(\)/, 'renderer installs non-primitive overlay bridges before source tools UI sync');
-assert.match(rendererSource, /RvmNonPrimitiveSupportOverlayBridge\.js\?v=20260623-nonprimitive-support-overlay-8/, 'renderer imports support overlay bridge with current cache key');
+assert.match(rendererSource, /RvmNonPrimitiveSupportOverlayBridge\.js\?v=20260623-nonprimitive-support-overlay-9/, 'renderer imports support overlay bridge with current cache key');
 assert.match(rendererSource, /RvmNonPrimitiveAutoBendBridge\.js\?v=20260623-nonprimitive-auto-bend-preview-2/, 'renderer imports auto-bend bridge with current cache key');
-assert.match(rendererSource, /RvmNonPrimitiveSourceToolsUiBridge\.js\?v=20260623-nonprimitive-source-tools-ui-6/, 'renderer imports source tools UI bridge with current cache key');
+assert.match(rendererSource, /RvmNonPrimitiveSourceToolsUiBridge\.js\?v=20260624-source-tools-grouped-1/, 'renderer imports source tools UI bridge with grouped cache key');
 
 assert.match(sourceToolsSource, /mode === 'source-preview' && isNonPrimitiveKind\(kind\)/, 'source tools UI is source-preview gated');
 assert.match(sourceToolsSource, /PRIMITIVE_KIND_RE[\s\S]*rvm\|glb\|gltf\|rev/, 'source tools UI explicitly excludes primitive formats');
-assert.match(sourceToolsSource, /data-source-tools-layout="compact-v1"/, 'source tools UI uses compact layout schema');
-assert.match(sourceToolsSource, /data-source-tools-group="auto-bend"[\s\S]*data-source-tools-group="support-overlay"/, 'source tools UI groups auto-bend and support controls');
+assert.match(sourceToolsSource, /data-source-tools-layout="grouped-v2"/, 'source tools UI uses grouped layout schema');
+assert.match(sourceToolsSource, /data-source-tools-group="inputxml-family"[\s\S]*data-source-tools-group="support-overlay"/, 'source tools UI groups InputXML family and support controls');
 assert.match(sourceToolsSource, /rvm-source-tools-badge/, 'source tools UI surfaces compact status badges');
 assert.match(sourceToolsSource, /panel\.innerHTML = ''/, 'primitive reload clears stale Source Tools panel content');
 assert.match(sourceToolsSource, /clearNonPrimitiveRuntime[\s\S]*NON_PRIMITIVE_AUTO_BEND[\s\S]*NON_PRIMITIVE_SUPPORT_OVERLAY/, 'primitive reload clears both non-primitive overlay runtimes');
 assert.match(sourceToolsSource, /support-labels[\s\S]*writeNonPrimitiveSupportOverlaySettings\(\{ labels:/, 'support labels are controlled by Source Tools and persisted as non-primitive settings');
+assert.match(sourceToolsSource, /rvm-inputxml-vertical-axis[\s\S]*rvm-inputxml-north-axis[\s\S]*rvm-inputxml-apply-transform/, 'Source Tools owns InputXML axis controls in the right panel');
 assert.match(sourceToolsSource, /copySourceToolsDiagnostics[\s\S]*downloadSourceToolsDiagnostics/, 'Source Tools exposes copy/download diagnostics actions');
 assert.doesNotMatch(sourceToolsSource, /Support Summary|SupportATT|SupportEngine|Raw\/Symbol\/Both|rvm_support_render_mode_v1|rvm_support_geometry_mode_v1/, 'Source Tools does not revive retired RVM support UI');
 
