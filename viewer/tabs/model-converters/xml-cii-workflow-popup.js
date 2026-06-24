@@ -16,12 +16,12 @@ import { xmlCiiWorkflowRequestFinalRun } from './xml-cii-workflow-runner.js?v=20
 import { renderXmlCiiPopupNativePhase } from './xml-cii-popup-native-panels.js?v=20260624-workflow1-workflow2-1';
 import { XML_CII_WORKFLOW_PHASES, normalizeWorkflowPhaseId } from './WorkflowShell.js';
 
-const XML_CII_WORKFLOW_POPUP_FLAG = '__xmlCiiWorkflowPopups_phaseTabs_v8';
+const XML_CII_WORKFLOW_POPUP_FLAG = '__xmlCiiWorkflowPopups_phaseTabs_v9';
 const XML_CII_WORKFLOW_ROOT_ATTR = 'data-xml-cii-workflow-root';
 const XML_CII_WORKFLOW_OVERLAY_ATTR = 'data-xml-cii-workflow-overlay';
 const XML_CII_WORKFLOW_ACTIVE_PHASE_KEY = 'xmlCii2019.workflow.activePhase.v1';
 const XML_CII_WORKFLOW_LEGACY_ACTIVE_PHASE_KEY = 'xmlCii2019.richWorkflow.activePhase.v1';
-const XML_CII_WORKFLOW_CLICK_VERSION = '20260624-workflow-tabs-fix-1';
+const XML_CII_WORKFLOW_CLICK_VERSION = '20260624-phase-render-root-1';
 const XML_CII_WORKFLOW_DELEGATED_DATASET_KEY = 'xmlCiiWorkflowDelegatedPopupBound';
 
 const XML_CII_WORKFLOW_POPUP_META = Object.freeze({
@@ -72,6 +72,8 @@ function xmlCiiWorkflowState(root) {
   let state = runtime.stateByRoot.get(root);
   if (!state) {
     state = {
+      appRoot: root || null,
+      renderRoot: null,
       phaseId: xmlCiiWorkflowNormalizePhase(root?.dataset?.selectedPhase),
       activeMaster: 'linelist',
       previewRows: [],
@@ -88,18 +90,35 @@ function xmlCiiWorkflowState(root) {
     };
     runtime.stateByRoot.set(root, state);
   }
+  if (!state.appRoot && root) state.appRoot = root;
   return state;
 }
 
-function xmlCiiWorkflowSnapshot(root) {
-  return xmlCiiWorkflowGetSnapshot(root);
+function xmlCiiWorkflowIsConnected(node) {
+  if (!node) return false;
+  if (node.isConnected === true) return true;
+  try { return typeof document !== 'undefined' && document.contains(node); } catch { return false; }
+}
+
+function xmlCiiWorkflowRenderTarget(root, state) {
+  if (xmlCiiWorkflowIsConnected(state?.renderRoot)) return state.renderRoot;
+  return root;
+}
+
+function xmlCiiWorkflowSnapshot(root, state) {
+  return xmlCiiWorkflowGetSnapshot(state?.appRoot || root);
+}
+
+function xmlCiiWorkflowSetDataset(target, state) {
+  if (!target) return;
+  target.dataset.selectedPhase = state.phaseId;
+  target.dataset.xmlCiiWorkflowMode = state.mode || 'workflow2';
+  target.dataset.xmlCiiActiveMaster = state.activeMaster || target.dataset.xmlCiiActiveMaster || 'linelist';
 }
 
 function xmlCiiWorkflowSetRootDataset(root, state) {
-  if (!root) return;
-  root.dataset.selectedPhase = state.phaseId;
-  root.dataset.xmlCiiWorkflowMode = state.mode || 'workflow2';
-  root.dataset.xmlCiiActiveMaster = state.activeMaster || root.dataset.xmlCiiActiveMaster || 'linelist';
+  xmlCiiWorkflowSetDataset(root, state);
+  if (state?.appRoot && state.appRoot !== root) xmlCiiWorkflowSetDataset(state.appRoot, state);
 }
 
 function xmlCiiWorkflowRenderError(body, error) {
@@ -112,26 +131,28 @@ function xmlCiiWorkflowRenderPhase(root, state) {
     cancelAnimationFrame(state.renderRaf);
     state.renderRaf = 0;
   }
-  xmlCiiWorkflowSetRootDataset(root, state);
-  const body = root?.querySelector('[data-xml-cii-workflow-body]');
+  const renderRoot = xmlCiiWorkflowRenderTarget(root, state);
+  xmlCiiWorkflowSetRootDataset(renderRoot, state);
+  const body = renderRoot?.querySelector('[data-xml-cii-workflow-body]');
   if (!body) return;
   try {
-    const data = xmlCiiWorkflowSnapshot(root);
+    const data = xmlCiiWorkflowSnapshot(renderRoot, state);
     if (!data) {
       body.innerHTML = '<div class="model-converters-workflow-detail-note">XML->CII workflow bridge is not ready. Reopen the Model Converter tab and try again.</div>';
       return;
     }
-    state.activeMaster = root.dataset.xmlCiiActiveMaster || state.activeMaster || 'linelist';
+    state.activeMaster = renderRoot.dataset.xmlCiiActiveMaster || state.activeMaster || 'linelist';
     body.innerHTML = renderXmlCiiPopupNativePhase(state.phaseId, data, state);
-    xmlCiiWorkflowBindPhase(body, root, state);
+    xmlCiiWorkflowBindPhase(body, renderRoot, state);
   } catch (error) {
     xmlCiiWorkflowRenderError(body, error);
   }
 }
 
 function xmlCiiWorkflowScheduleRenderPhase(root, state, message = 'Loading workflow view...') {
-  xmlCiiWorkflowSetRootDataset(root, state);
-  const body = root?.querySelector('[data-xml-cii-workflow-body]');
+  const renderRoot = xmlCiiWorkflowRenderTarget(root, state);
+  xmlCiiWorkflowSetRootDataset(renderRoot, state);
+  const body = renderRoot?.querySelector('[data-xml-cii-workflow-body]');
   if (body && message) {
     body.innerHTML = `<div class="model-converters-workflow-detail-note">${message}</div>`;
   }
@@ -141,22 +162,23 @@ function xmlCiiWorkflowScheduleRenderPhase(root, state, message = 'Loading workf
     : (callback) => setTimeout(callback, 0);
   state.renderRaf = schedule(() => {
     state.renderRaf = 0;
-    xmlCiiWorkflowRenderPhase(root, state);
+    xmlCiiWorkflowRenderPhase(renderRoot, state);
   });
 }
 
 function xmlCiiWorkflowSelectPhase(root, state, phaseId) {
+  const renderRoot = xmlCiiWorkflowRenderTarget(root, state);
   state.phaseId = xmlCiiWorkflowNormalizePhase(phaseId);
-  root.dataset.selectedPhase = state.phaseId;
+  xmlCiiWorkflowSetRootDataset(renderRoot, state);
   xmlCiiWorkflowWriteStored(XML_CII_WORKFLOW_ACTIVE_PHASE_KEY, state.phaseId);
   const modal = state.modal;
   if (modal?.setActiveTab) modal.setActiveTab(state.phaseId);
-  xmlCiiWorkflowScheduleRenderPhase(root, state, 'Loading workflow phase...');
+  xmlCiiWorkflowScheduleRenderPhase(renderRoot, state, 'Loading workflow phase...');
 }
 
 async function xmlCiiWorkflowPreloadDefaultMasters(root, state) {
   try {
-    await xmlCiiWorkflowGetBridge()?.ensureDefaultMastersLoaded?.(root);
+    await xmlCiiWorkflowGetBridge()?.ensureDefaultMastersLoaded?.(state?.appRoot || root);
     xmlCiiWorkflowScheduleRenderPhase(root, state, 'Refreshing workflow masters...');
   } catch (error) {
     console.warn('[XML CII Workflow] default master preload failed', error);
@@ -279,7 +301,7 @@ function xmlCiiWorkflowBindRun(body, root, state) {
   body.querySelector('[data-native-review-weights]')?.addEventListener('click', () => xmlCiiWorkflowSelectPhase(root, state, 'weight-match'));
   body.querySelector('[data-native-finalise-run]')?.addEventListener('click', () => {
     xmlCiiWorkflowGetBridge()?.closePopup?.();
-    xmlCiiWorkflowRequestFinalRun(root, state.mode);
+    xmlCiiWorkflowRequestFinalRun(state.appRoot || root, state.mode);
   });
 }
 
@@ -366,6 +388,7 @@ function xmlCiiWorkflowOpenPopup(container, mode = 'workflow2') {
   if (!activeBridge) return;
   const root = container?.querySelector?.('.model-converters-root') || container;
   const state = xmlCiiWorkflowState(root);
+  state.appRoot = root;
   state.mode = mode === 'workflow1' ? 'workflow1' : 'workflow2';
   state.modal?.close?.();
   xmlCiiWorkflowCloseForeignXmlCiiWorkflowOverlays();
@@ -376,19 +399,22 @@ function xmlCiiWorkflowOpenPopup(container, mode = 'workflow2') {
     subtitle: meta.subtitle,
     tabs: XML_CII_WORKFLOW_PHASES,
     activeTabId: state.phaseId,
-    onTabChange: (phaseId) => xmlCiiWorkflowSelectPhase(root, state, phaseId),
+    onTabChange: (phaseId) => xmlCiiWorkflowSelectPhase(state.renderRoot || root, state, phaseId),
     onClose: () => {
       state.modal = null;
+      state.renderRoot = null;
       activeBridge.closePopup = null;
     },
   });
   const body = modal.open();
   state.modal = modal;
+  state.renderRoot = body;
   modal.overlayEl?.setAttribute(XML_CII_WORKFLOW_OVERLAY_ATTR, 'true');
   modal.overlayEl?.setAttribute('data-xml-cii-workflow-mode', state.mode);
   body.setAttribute(XML_CII_WORKFLOW_ROOT_ATTR, 'true');
   body.setAttribute('data-xml-cii-workflow-mode', state.mode);
   body.innerHTML = '<div data-xml-cii-workflow-body></div>';
+  xmlCiiWorkflowSetRootDataset(body, state);
   activeBridge.closePopup = () => {
     state.modal?.close();
   };
