@@ -54,9 +54,8 @@
 // app-label-perf-runtime.js?v=20260623-support-load-canvas-overlay-1
 // app-label-perf-runtime.js?v=20260623-xml-cii-rich-worker-1
 // app-label-perf-runtime.js?v=20260624-selected-geometry-floating-workflow-3
+// app-label-perf-runtime.js?v=20260625-rvm-renderer-cache-chain-1
 import { installAppTabClickStateBridge } from './app-tab-click-state-bridge.js?v=20260622-tab-click-state-1';
-import { installRvmModelHealthBridge } from '../tabs/RvmModelHealthBridge.js?v=20260621-rvm-health-issues-1';
-import { installRvmModelHealthIssuesBridge } from '../tabs/RvmModelHealthIssuesBridge.js?v=20260621-rvm-health-issues-1';
 import { installBrowserRvmNativeFacetGhostPanelPatch } from '../rvm/BrowserRvmNativeFacetGhostPanelPatch.js?v=20260622-rvm-facet-ghost-panels-1';
 
 const LEGACY_GEOMETRY_WORKFLOW_FLAG = 'rvm.enableLegacyGeometryWorkflowButtons';
@@ -82,8 +81,6 @@ installDefaultViewerBridges();
 if (shouldInstallLegacyGeometryWorkflowButtons()) installLegacyGeometryWorkflowBridges();
 
 function installDefaultViewerBridges() {
-  installRvmModelHealthBridge();
-  installRvmModelHealthIssuesBridge();
   installBrowserRvmNativeFacetGhostPanelPatch();
 }
 
@@ -114,4 +111,4 @@ async function importLegacyGeometryWorkflowBridge(entry) {
   installer();
 }
 
-export { init } from './app-label-perf-runtime.js?v=20260624-selected-geometry-floating-workflow-3';
+export { init } from './app-label-perf-runtime.js?v=20260625-rvm-renderer-cache-chain-1';
