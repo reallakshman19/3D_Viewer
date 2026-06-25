@@ -24,6 +24,7 @@ assert.match(loader, /__PCF_GLB_RVM_NON_PRIMITIVE_NODE_MARKERS__\?\.clear/, 'loa
 assert.doesNotMatch(renderer, /RvmNonPrimitiveNodeMarkerBridge\.js\?v=/, 'renderer must not eagerly import node marker bridge');
 assert.doesNotMatch(renderer, /installRvmNonPrimitiveNodeMarkerBridge\(\)/, 'renderer must not eagerly install node marker bridge');
 assert.match(bridge, /rvm-non-primitive-node-marker-bridge\/v1/, 'bridge exposes versioned schema');
+assert.match(bridge, /non-primitive-node-marker-api\/v2|evaluateNodeMarkerStaleness/, 'bridge uses stale-aware node marker API');
 assert.doesNotMatch(bridge, /RvmSelectionAdapter|objectSearch|selectObject|pickObject/, 'bridge does not use primitive RVM selection or search');
 
 const source = {
@@ -41,6 +42,7 @@ const source = {
 const apiA = installRvmNonPrimitiveNodeMarkerBridge();
 const apiB = installRvmNonPrimitiveNodeMarkerBridge();
 assert.equal(apiA, apiB, 'bridge install is idempotent');
+assert.equal(apiA.schema, 'rvm-non-primitive-node-marker-bridge/v1');
 
 const viewer = {
   sourceKind: 'json',
