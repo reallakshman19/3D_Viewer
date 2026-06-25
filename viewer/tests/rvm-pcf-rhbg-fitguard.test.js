@@ -56,6 +56,28 @@ check(deferredLoaderSource.includes("id: 'object-search'") && deferredLoaderSour
 check(deferredLoaderSource.includes("id: 'visibility-snapshots'") && deferredLoaderSource.includes('RvmVisibilitySnapshotsBridge.js?v=20260621-rvm-visibility-snapshots-1'), 'postModel deferred loader owns visibility snapshots bridge');
 check(deferredLoaderSource.includes("id: 'selection-sets'") && deferredLoaderSource.includes('RvmSelectionSetsBridge.js?v=20260621-rvm-selection-sets-1'), 'postModel deferred loader owns selection sets bridge');
 check(deferredLoaderSource.includes("id: 'report-export'") && deferredLoaderSource.includes('RvmReportExportBridge.js?v=20260621-rvm-report-export-1'), 'postModel deferred loader owns report export bridge');
+
+for (const bridgeName of [
+  'RvmNonPrimitiveSupportOverlayBridge.js?v=',
+  'RvmNonPrimitiveSupportOverlayHardDisableBridge.js?v=',
+  'RvmNonPrimitiveSupportOverlayDetailsPanelBridge.js?v=',
+  'RvmNonPrimitiveSupportOverlayHoverBridge.js?v=',
+  'RvmNonPrimitiveAutoBendBridge.js?v=',
+  'RvmNonPrimitiveSourceToolsUiBridge.js?v=',
+]) {
+  check(!rendererSource.includes(bridgeName), `renderer defers source-preview bridge ${bridgeName} out of startup path`);
+}
+check(deferredLoaderSource.includes("sourcePreview:") && deferredLoaderSource.includes("id: 'nonprimitive-support-overlay'"), 'deferred loader owns sourcePreview bridge group');
+check(deferredLoaderSource.includes('RvmNonPrimitiveSupportOverlayBridge.js?v=20260623-nonprimitive-support-overlay-9'), 'sourcePreview group owns support overlay bridge');
+check(deferredLoaderSource.includes('RvmNonPrimitiveSupportOverlayHardDisableBridge.js?v=20260623-nonprimitive-support-hard-disable-1'), 'sourcePreview group owns support hard-disable bridge');
+check(deferredLoaderSource.includes('RvmNonPrimitiveSupportOverlayDetailsPanelBridge.js?v=20260623-nonprimitive-support-details-panel-4'), 'sourcePreview group owns support details bridge');
+check(deferredLoaderSource.includes('RvmNonPrimitiveSupportOverlayHoverBridge.js?v=20260623-nonprimitive-support-hover-2'), 'sourcePreview group owns support hover bridge');
+check(deferredLoaderSource.includes('RvmNonPrimitiveAutoBendBridge.js?v=20260623-nonprimitive-auto-bend-preview-2'), 'sourcePreview group owns auto-bend bridge');
+check(deferredLoaderSource.includes('RvmNonPrimitiveSourceToolsUiBridge.js?v=20260624-source-tools-grouped-1'), 'sourcePreview group owns source tools UI bridge');
+check(deferredLoaderSource.includes('ensureSourcePreview') && deferredLoaderSource.includes('SOURCE_PREVIEW_KIND_RE'), 'deferred loader gates source-preview bridge loading by source kind');
+check(deferredLoaderSource.includes("mode === 'source-preview'") && deferredLoaderSource.includes('refreshSourcePreviewRuntime'), 'deferred loader refreshes source-preview runtime only for source-preview mode');
+check(rendererSource.includes('RvmDeferredBridgeLoader.js?v=20260625-rvm-deferred-source-preview-tools-1'), 'renderer imports current deferred source-preview loader cache key');
+
 check(rendererSource.includes('BrowserRvmNativeFacetGhostPanelPatch.js?v=20260622-rvm-facet-ghost-panels-1'), 'renderer loads native facet ghost panel patch');
 check(rendererSource.includes('RvmJsonPcfTriggerBridge.js?v=20260621-rvm-pcf-visible-scope-1'), 'renderer keeps visible-scope PCF bridge');
 check(rendererSource.includes('RvmZoneLodLabelBridge.js?v=20260621-rvm-preload-hierarchy-selector-1'), 'renderer keeps preload zone selector');
@@ -91,6 +113,9 @@ check(labelsSource.includes('setRvmLabelLayerVisible') && labelsSource.includes(
 check(zoneSource.includes('buildPreloadHierarchyZones'), 'zone selector remains manifest-backed');
 
 check(tabSource.includes('beforeRenderInstructions'), 'RVM tab keeps pre-render hook');
+check(tabSource.includes('stampSourcePreviewHierarchy(payload.gltf.scene, source, sourceKind, file.name)'), 'RVM tab stamps source-preview hierarchy before setModel');
+check(tabSource.includes('__rvmNonPrimitiveSourceHierarchy') && tabSource.includes('__rvmNonPrimitiveAutoBendSourceHierarchy'), 'RVM tab owns source-preview hierarchy transfer for deferred bridges');
+check(tabSource.includes('ensureSourcePreview') && tabSource.includes("root?.dataset?.rvmModelPrimitiveMode === 'source-preview'"), 'RVM tab asks deferred loader for source-preview group only after source-preview load');
 check(loadSource.includes('BrowserRvmRenderSceneBuilder.js?v=20260621-rvm-native-facet-primary-1'), 'load bridge keeps native facet renderer');
 check(workerSource.includes('RVM_TRANSFORM_3X4'), 'worker preserves transform matrix');
 check(nativeFacetSource.includes('browser-rvm-native-facetgroup-primary/v3-smart-civil-defer'), 'native facet module uses smart civil defer schema');
