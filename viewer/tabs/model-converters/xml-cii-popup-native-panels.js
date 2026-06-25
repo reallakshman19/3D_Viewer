@@ -8,67 +8,23 @@
  */
 import { getWorkflowPhase } from './WorkflowShell.js';
 
-function text(value) {
-  return value === null || value === undefined ? '' : String(value);
-}
-
-function esc(value) {
-  return text(value)
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;');
-}
-
-function attr(value) {
-  return esc(value).replaceAll("'", '&#39;');
-}
-
-function rowCount(value) {
-  const numeric = Number(value);
-  if (!Number.isFinite(numeric) || numeric <= 0) return 'not loaded';
-  return `${numeric.toLocaleString()} row(s)`;
-}
-
+function text(value) { return value === null || value === undefined ? '' : String(value); }
+function esc(value) { return text(value).replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;'); }
+function attr(value) { return esc(value).replaceAll("'", '&#39;'); }
+function rowCount(value) { const numeric = Number(value); return Number.isFinite(numeric) && numeric > 0 ? `${numeric.toLocaleString()} row(s)` : 'not loaded'; }
 function phaseHeader(phaseId, fallbackSummary) {
   const phase = getWorkflowPhase(phaseId);
-  return `
-    <div class="xml-cii-native-phase-head">
-      <div>
-        <div class="model-converters-workflow-detail-title">${esc(phase?.label || phaseId)}</div>
-        <div class="model-converters-workflow-detail-text">${esc(phase?.summary || fallbackSummary || '')}</div>
-      </div>
-    </div>`;
+  return `<div class="xml-cii-native-phase-head"><div><div class="model-converters-workflow-detail-title">${esc(phase?.label || phaseId)}</div><div class="model-converters-workflow-detail-text">${esc(phase?.summary || fallbackSummary || '')}</div></div></div>`;
 }
-
 function statusRows(rows) {
-  return `
-    <div class="xml-cii-native-status-list">
-      ${rows.map((row) => {
-        const ok = row.ok === true;
-        return `
-          <div class="xml-cii-native-status-row ${ok ? 'is-ok' : 'is-warn'}">
-            <span class="xml-cii-native-status-icon">${ok ? 'OK' : 'WARN'}</span>
-            <span>${esc(row.label)}</span>
-            <strong>${esc(row.value)}</strong>
-          </div>`;
-      }).join('')}
-    </div>`;
+  return `<div class="xml-cii-native-status-list">${rows.map((row) => {
+    const ok = row.ok === true;
+    return `<div class="xml-cii-native-status-row ${ok ? 'is-ok' : 'is-warn'}"><span class="xml-cii-native-status-icon">${ok ? 'OK' : 'WARN'}</span><span>${esc(row.label)}</span><strong>${esc(row.value)}</strong></div>`;
+  }).join('')}</div>`;
 }
-
 function compactTable(columns, rows, emptyText) {
   if (!rows.length) return `<div class="model-converters-workflow-detail-note">${esc(emptyText || 'No rows available.')}</div>`;
-  return `
-    <div class="xml-cii-native-table-wrap">
-      <table class="xml-cii-native-table">
-        <thead><tr>${columns.map((column) => `<th>${esc(column.label)}</th>`).join('')}</tr></thead>
-        <tbody>
-          ${rows.map((row) => `
-            <tr>${columns.map((column) => `<td>${esc(row[column.key] ?? '')}</td>`).join('')}</tr>
-          `).join('')}
-        </tbody>
-      </table>
-    </div>`;
+  return `<div class="xml-cii-native-table-wrap"><table class="xml-cii-native-table"><thead><tr>${columns.map((column) => `<th>${esc(column.label)}</th>`).join('')}</tr></thead><tbody>${rows.map((row) => `<tr>${columns.map((column) => `<td>${esc(row[column.key] ?? '')}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`;
 }
 
 function regexPanel(snapshot) {
@@ -78,364 +34,68 @@ function regexPanel(snapshot) {
     ${phaseHeader('regex')}
     <section class="xml-cii-native-card">
       <div class="xml-cii-native-grid xml-cii-native-grid-wide">
-        <label class="xml-cii-native-field">
-          <span>Sample Branchname</span>
-          <input type="text" value="${attr(regex.sampleBranch || '')}" data-native-regex-path="linelist.sampleBranchName">
-        </label>
-        <label class="xml-cii-native-field">
-          <span>Common Delimiter</span>
-          <input type="text" value="${attr(regex.tokenDelimiter || '-')}" data-native-regex-path="linelist.tokenDelimiter">
-        </label>
-        <label class="xml-cii-native-field">
-          <span>Line Key Joiner</span>
-          <input type="text" value="${attr(regex.lineKeyJoiner || '')}" data-native-regex-path="linelist.lineKeyJoiner">
-        </label>
+        <label class="xml-cii-native-field"><span>Sample Branchname</span><input type="text" value="${attr(regex.sampleBranch || '')}" data-native-regex-path="linelist.sampleBranchName"></label>
+        <label class="xml-cii-native-field"><span>Common Delimiter</span><input type="text" value="${attr(regex.tokenDelimiter || '-')}" data-native-regex-path="linelist.tokenDelimiter"></label>
+        <label class="xml-cii-native-field"><span>Line Key Joiner</span><input type="text" value="${attr(regex.lineKeyJoiner || '')}" data-native-regex-path="linelist.lineKeyJoiner"></label>
       </div>
       <div class="xml-cii-native-hint">Size inch symbols and branch prefixes/suffixes are cleaned before token extraction.</div>
     </section>
-    <section class="xml-cii-native-card">
-      <div class="model-converters-workflow-section-title">Extraction</div>
-      <div class="xml-cii-native-grid">
-        <label class="xml-cii-native-field">
-          <span>Line Key Position(s)</span>
-          <input type="text" value="${attr(regex.lineKeyPositions || '4')}" data-native-regex-path="linelist.lineKeyTokenPositions">
-          <strong>${esc(regex.lineKey || '-')}</strong>
-        </label>
-        <label class="xml-cii-native-field">
-          <span>Piping Class Position</span>
-          <input type="number" value="${attr(regex.pipingClassPosition || 5)}" data-native-regex-path="rating.pipingClassTokenIndex">
-          <strong>${esc(regex.pipingClass || '-')}</strong>
-        </label>
-        <label class="xml-cii-native-field">
-          <span>Size Position</span>
-          <input type="number" value="${attr(regex.sizePosition || 3)}" data-native-regex-path="weight.boreTokenIndex">
-          <strong>${esc(regex.sizeToken || '-')}</strong>
-        </label>
-      </div>
-    </section>
-    <section class="xml-cii-native-card">
-      <details class="xml-cii-native-details" open>
-        <summary>Token Positions</summary>
-        ${compactTable(
-          [{ key: 'position', label: 'Position' }, { key: 'token', label: 'Token' }],
-          tokens.map((token, index) => ({ position: index + 1, token })),
-          'No tokens found.',
-        )}
-      </details>
-      <details class="xml-cii-native-details">
-        <summary>Advanced Regex Overrides</summary>
-        <div class="xml-cii-native-grid">
-          ${[
-            ['Piping Class Regex', 'rating.pipingClassRegex', regex.pipingClassRegex],
-            ['Piping Class Group', 'rating.pipingClassGroup', regex.pipingClassGroup || 1],
-            ['Size Regex', 'weight.boreRegex', regex.sizeRegex],
-            ['Size Group', 'weight.boreGroup', regex.sizeGroup || 1],
-            ['Branch Line Key Regex', 'linelist.branchNameRegex', regex.branchNameRegex],
-            ['Branch Regex Group', 'linelist.lineNoGroup', regex.lineNoGroup || 1],
-          ].map(([label, path, value]) => `
-            <label class="xml-cii-native-field">
-              <span>${esc(label)}</span>
-              <input type="${/Group$/.test(label) ? 'number' : 'text'}" value="${attr(value || '')}" data-native-regex-path="${attr(path)}">
-            </label>
-          `).join('')}
-        </div>
-      </details>
-    </section>`;
+    <section class="xml-cii-native-card"><div class="model-converters-workflow-section-title">Extraction</div><div class="xml-cii-native-grid"><label class="xml-cii-native-field"><span>Line Key Position(s)</span><input type="text" value="${attr(regex.lineKeyPositions || '4')}" data-native-regex-path="linelist.lineKeyTokenPositions"><strong>${esc(regex.lineKey || '-')}</strong></label><label class="xml-cii-native-field"><span>Piping Class Position</span><input type="number" value="${attr(regex.pipingClassPosition || 5)}" data-native-regex-path="rating.pipingClassTokenIndex"><strong>${esc(regex.pipingClass || '-')}</strong></label><label class="xml-cii-native-field"><span>Size Position</span><input type="number" value="${attr(regex.sizePosition || 3)}" data-native-regex-path="weight.boreTokenIndex"><strong>${esc(regex.sizeToken || '-')}</strong></label></div></section>
+    <section class="xml-cii-native-card"><details class="xml-cii-native-details" open><summary>Token Positions</summary>${compactTable([{ key: 'position', label: 'Position' }, { key: 'token', label: 'Token' }], tokens.map((token, index) => ({ position: index + 1, token })), 'No tokens found.')}</details><details class="xml-cii-native-details"><summary>Advanced Regex Overrides</summary><div class="xml-cii-native-grid">${[
+      ['Piping Class Regex', 'rating.pipingClassRegex', regex.pipingClassRegex], ['Piping Class Group', 'rating.pipingClassGroup', regex.pipingClassGroup || 1], ['Size Regex', 'weight.boreRegex', regex.sizeRegex], ['Size Group', 'weight.boreGroup', regex.sizeGroup || 1], ['Branch Line Key Regex', 'linelist.branchNameRegex', regex.branchNameRegex], ['Branch Regex Group', 'linelist.lineNoGroup', regex.lineNoGroup || 1],
+    ].map(([label, path, value]) => `<label class="xml-cii-native-field"><span>${esc(label)}</span><input type="${/Group$/.test(label) ? 'number' : 'text'}" value="${attr(value || '')}" data-native-regex-path="${attr(path)}"></label>`).join('')}</div></details></section>`;
 }
-
 function masterTabs(snapshot, uiState) {
   const active = uiState.activeMaster || 'linelist';
   const masters = Array.isArray(snapshot.masters) ? snapshot.masters : [];
   const overrideCount = Number(snapshot.overrides?.count || 0);
-  return `
-    <div class="xml-cii-native-master-tabs">
-      ${masters.map((master) => `
-        <button type="button" class="xml-cii-native-master-tab ${master.key === active ? 'is-active' : ''}" data-native-master-tab="${attr(master.key)}">
-          <span>${esc(master.title)}</span>
-          <small>${esc(rowCount(master.rows))}</small>
-        </button>
-      `).join('')}
-      <button type="button" class="xml-cii-native-master-tab ${active === 'overrides' ? 'is-active' : ''}" data-native-master-tab="overrides">
-        <span>Manual Overrides</span>
-        <small>${overrideCount.toLocaleString()} override(s)</small>
-      </button>
-    </div>`;
+  return `<div class="xml-cii-native-master-tabs">${masters.map((master) => `<button type="button" class="xml-cii-native-master-tab ${master.key === active ? 'is-active' : ''}" data-native-master-tab="${attr(master.key)}"><span>${esc(master.title)}</span><small>${esc(rowCount(master.rows))}</small></button>`).join('')}<button type="button" class="xml-cii-native-master-tab ${active === 'overrides' ? 'is-active' : ''}" data-native-master-tab="overrides"><span>Manual Overrides</span><small>${overrideCount.toLocaleString()} override(s)</small></button></div>`;
 }
-
 function importMastersPanel(snapshot, uiState) {
   const masters = Array.isArray(snapshot.masters) ? snapshot.masters : [];
   const activeKey = uiState.activeMaster || 'linelist';
   const active = masters.find((master) => master.key === activeKey) || masters[0] || {};
-  return `
-    ${phaseHeader('import-masters')}
-    ${masterTabs(snapshot, uiState)}
-    ${activeKey === 'overrides' ? overridesPanel(snapshot) : masterDetailPanel(active)}`;
+  return `${phaseHeader('import-masters')}${masterTabs(snapshot, uiState)}${activeKey === 'overrides' ? overridesPanel(snapshot) : masterDetailPanel(active)}`;
 }
-
 function masterDetailPanel(master) {
   const fields = Array.isArray(master.fields) ? master.fields : [];
   const previewRows = Array.isArray(master.previewRows) ? master.previewRows : [];
   const defaultDisabled = !master.hasDefault || master.key === 'pipingClass';
-  const defaultTitle = master.key === 'pipingClass'
-    ? 'Specwise piping-class rows are loaded by line/spec context; obsolete aggregate Piping_class_master.json is intentionally disabled.'
-    : 'Load default master';
-  return `
-    <section class="xml-cii-native-card">
-      <div class="xml-cii-native-card-head">
-        <div>
-          <div class="model-converters-workflow-detail-title">${esc(master.title || 'Master')}</div>
-          <div class="model-converters-workflow-detail-text">${esc(master.description || '')}</div>
-        </div>
-        <div class="xml-cii-native-count">${esc(rowCount(master.rows))}</div>
-      </div>
-      <div class="xml-cii-native-toolbar">
-        <label class="model-converters-download-btn xml-cii-native-file-btn">
-          Import file
-          <input type="file" data-native-import-master="${attr(master.key || '')}" accept=".json,.csv,.tsv,.txt,.xlsx,.xls" hidden>
-        </label>
-        <button type="button" class="model-converters-download-btn" data-native-load-default="${attr(master.key || '')}" ${defaultDisabled ? 'disabled' : ''} title="${attr(defaultTitle)}">Load default</button>
-        <button type="button" class="model-converters-download-btn" data-native-auto-map="${attr(master.key || '')}" ${master.rawRows ? '' : 'disabled'}>Auto map</button>
-        <button type="button" class="model-converters-run-btn" data-native-save-master="${attr(master.key || '')}" ${master.rawRows ? '' : 'disabled'}>Save rows</button>
-        <button type="button" class="model-converters-download-btn" data-native-clear-master="${attr(master.key || '')}">Clear</button>
-      </div>
-      <div class="xml-cii-native-hint">Source: ${esc(master.sourceName || (master.hasDefault ? 'default available' : 'manual import required'))}</div>
-    </section>
-    <section class="xml-cii-native-card">
-      <div class="model-converters-workflow-section-title">Column Mapping</div>
-      ${fields.length ? `
-        <div class="xml-cii-native-grid">
-          ${fields.map((field) => `
-            <label class="xml-cii-native-field">
-              <span>${esc(field.label)}${field.required ? ' *' : ''}</span>
-              <select data-native-field-map="${attr(field.name)}" data-native-master-key="${attr(master.key || '')}">
-                <option value="">${field.required ? '-- required --' : '-- optional --'}</option>
-                ${(field.options || []).map((option) => `
-                  <option value="${attr(option.value)}" ${option.value === field.selected ? 'selected' : ''}>${esc(option.label)}</option>
-                `).join('')}
-              </select>
-            </label>
-          `).join('')}
-        </div>` : '<div class="model-converters-workflow-detail-note">Import rows to configure field mapping.</div>'}
-    </section>
-    <section class="xml-cii-native-card" data-xml-cii-unified-master-preview="true" data-xml-cii-workflow2-master-preview="true">
-      <div class="model-converters-workflow-section-title">Preview Rows</div>
-      ${compactTable(master.previewColumns || [], previewRows, 'No imported rows to preview.')}
-    </section>`;
+  const defaultTitle = master.key === 'pipingClass' ? 'Specwise piping-class rows are loaded by line/spec context; obsolete aggregate Piping_class_master.json is intentionally disabled.' : 'Load default master';
+  return `<section class="xml-cii-native-card"><div class="xml-cii-native-card-head"><div><div class="model-converters-workflow-detail-title">${esc(master.title || 'Master')}</div><div class="model-converters-workflow-detail-text">${esc(master.description || '')}</div></div><div class="xml-cii-native-count">${esc(rowCount(master.rows))}</div></div><div class="xml-cii-native-toolbar"><label class="model-converters-download-btn xml-cii-native-file-btn">Import file<input type="file" data-native-import-master="${attr(master.key || '')}" accept=".json,.csv,.tsv,.txt,.xlsx,.xls" hidden></label><button type="button" class="model-converters-download-btn" data-native-load-default="${attr(master.key || '')}" ${defaultDisabled ? 'disabled' : ''} title="${attr(defaultTitle)}">Load default</button><button type="button" class="model-converters-download-btn" data-native-auto-map="${attr(master.key || '')}" ${master.rawRows ? '' : 'disabled'}>Auto map</button><button type="button" class="model-converters-run-btn" data-native-save-master="${attr(master.key || '')}" ${master.rawRows ? '' : 'disabled'}>Save rows</button><button type="button" class="model-converters-download-btn" data-native-clear-master="${attr(master.key || '')}">Clear</button></div><div class="xml-cii-native-hint">Source: ${esc(master.sourceName || (master.hasDefault ? 'default available' : 'manual import required'))}</div></section><section class="xml-cii-native-card"><div class="model-converters-workflow-section-title">Column Mapping</div>${fields.length ? `<div class="xml-cii-native-grid">${fields.map((field) => `<label class="xml-cii-native-field"><span>${esc(field.label)}${field.required ? ' *' : ''}</span><select data-native-field-map="${attr(field.name)}" data-native-master-key="${attr(master.key || '')}"><option value="">${field.required ? '-- required --' : '-- optional --'}</option>${(field.options || []).map((option) => `<option value="${attr(option.value)}" ${option.value === field.selected ? 'selected' : ''}>${esc(option.label)}</option>`).join('')}</select></label>`).join('')}</div>` : '<div class="model-converters-workflow-detail-note">Import rows to configure field mapping.</div>'}</section><section class="xml-cii-native-card" data-xml-cii-unified-master-preview="true" data-xml-cii-workflow2-master-preview="true"><div class="model-converters-workflow-section-title">Preview Rows</div>${compactTable(master.previewColumns || [], previewRows, 'No imported rows to preview.')}</section>`;
 }
-
 function overridesPanel(snapshot) {
   const groups = snapshot.overrides?.groups || [];
-  return `
-    <section class="xml-cii-native-card">
-      <div class="xml-cii-native-card-head">
-        <div>
-          <div class="model-converters-workflow-detail-title">Manual Overrides</div>
-          <div class="model-converters-workflow-detail-text">Manual entries take precedence over regex, master, and approximate matching.</div>
-        </div>
-        <button type="button" class="model-converters-download-btn" data-native-add-override="material">Add Material Override</button>
-      </div>
-      ${groups.map((group) => `
-        <div class="xml-cii-native-override-group">
-          <div class="model-converters-workflow-section-title">${esc(group.label)}</div>
-          ${compactTable(
-            [{ key: 'source', label: 'Source' }, { key: 'target', label: 'Mapped Value' }],
-            (group.entries || []).map((entry) => ({ source: entry.source, target: entry.target })),
-            'No overrides in this group.',
-          )}
-        </div>
-      `).join('')}
-    </section>`;
+  return `<section class="xml-cii-native-card"><div class="xml-cii-native-card-head"><div><div class="model-converters-workflow-detail-title">Manual Overrides</div><div class="model-converters-workflow-detail-text">Manual entries take precedence over regex, master, and approximate matching.</div></div><button type="button" class="model-converters-download-btn" data-native-add-override="material">Add Material Override</button></div>${groups.map((group) => `<div class="xml-cii-native-override-group"><div class="model-converters-workflow-section-title">${esc(group.label)}</div>${compactTable([{ key: 'source', label: 'Source' }, { key: 'target', label: 'Mapped Value' }], (group.entries || []).map((entry) => ({ source: entry.source, target: entry.target })), 'No overrides in this group.')}</div>`).join('')}</section>`;
 }
-
 function previewPanel(snapshot, uiState) {
   const rows = uiState.previewRows || [];
-  return `
-    ${phaseHeader('preview')}
-    <section class="xml-cii-native-card">
-      ${statusRows([
-        { label: 'XML input', value: snapshot.files?.xmlName || 'not loaded', ok: !!snapshot.files?.hasXml },
-        { label: 'Line List', value: rowCount(snapshot.run?.counts?.linelist), ok: snapshot.run?.counts?.linelist > 0 },
-        { label: 'Piping Class Master', value: rowCount(snapshot.run?.counts?.pipingClass), ok: snapshot.run?.counts?.pipingClass > 0 },
-      ])}
-      <div class="xml-cii-native-toolbar">
-        <button type="button" class="model-converters-run-btn" data-native-build-preview>Build Preview</button>
-        <span class="xml-cii-native-status-text">${esc(uiState.previewStatus || '')}</span>
-      </div>
-    </section>
-    <section class="xml-cii-native-card">
-      ${compactTable(
-        [
-          { key: 'branchName', label: 'Branch' },
-          { key: 'lineKey', label: 'Line Key' },
-          { key: 'pipingClass', label: 'Piping Class' },
-          { key: 'material', label: 'Material' },
-          { key: 'rating', label: 'Rating' },
-        ],
-        rows,
-        'Run Build Preview to inspect branch enrichment.',
-      )}
-    </section>`;
+  return `${phaseHeader('preview')}<section class="xml-cii-native-card">${statusRows([{ label: 'XML input', value: snapshot.files?.xmlName || 'not loaded', ok: !!snapshot.files?.hasXml }, { label: 'Line List', value: rowCount(snapshot.run?.counts?.linelist), ok: snapshot.run?.counts?.linelist > 0 }, { label: 'Piping Class Master', value: rowCount(snapshot.run?.counts?.pipingClass), ok: snapshot.run?.counts?.pipingClass > 0 }])}<div class="xml-cii-native-toolbar"><button type="button" class="model-converters-run-btn" data-native-build-preview>Build Preview</button><span class="xml-cii-native-status-text">${esc(uiState.previewStatus || '')}</span></div></section><section class="xml-cii-native-card">${compactTable([{ key: 'branchName', label: 'Branch' }, { key: 'lineKey', label: 'Line Key' }, { key: 'pipingClass', label: 'Piping Class' }, { key: 'material', label: 'Material' }, { key: 'rating', label: 'Rating' }], rows, 'Run Build Preview to inspect branch enrichment.')}</section>`;
 }
-
 function diagnosticsPanel(snapshot, uiState) {
   const rows = uiState.diagnosticsRows || snapshot.diagnostics?.rows || [];
-  return `
-    ${phaseHeader('diagnostics')}
-    <section class="xml-cii-native-card">
-      <div class="xml-cii-native-toolbar">
-        <button type="button" class="model-converters-run-btn" data-native-dry-run>Dry Run</button>
-        <span class="xml-cii-native-status-text">${esc(uiState.diagnosticsStatus || snapshot.diagnostics?.status || 'Not run')}</span>
-      </div>
-    </section>
-    <section class="xml-cii-native-card">
-      ${compactTable(
-        [
-          { key: 'type', label: 'Category' },
-          { key: 'branchName', label: 'Branch' },
-          { key: 'lineKey', label: 'Line Key' },
-          { key: 'message', label: 'Message' },
-        ],
-        rows.slice(0, 500),
-        'No diagnostics yet. Click Dry Run.',
-      )}
-    </section>`;
+  return `${phaseHeader('diagnostics')}<section class="xml-cii-native-card"><div class="xml-cii-native-toolbar"><button type="button" class="model-converters-run-btn" data-native-dry-run>Dry Run</button><span class="xml-cii-native-status-text">${esc(uiState.diagnosticsStatus || snapshot.diagnostics?.status || 'Not run')}</span></div></section><section class="xml-cii-native-card">${compactTable([{ key: 'type', label: 'Category' }, { key: 'branchName', label: 'Branch' }, { key: 'lineKey', label: 'Line Key' }, { key: 'message', label: 'Message' }], rows.slice(0, 500), 'No diagnostics yet. Click Dry Run.')}</section>`;
 }
-
 function weightMatchPanel(snapshot, uiState) {
   const rows = uiState.weightRows || [];
-  return `
-    ${phaseHeader('weight-match')}
-    <section class="xml-cii-native-card">
-      ${statusRows([
-        { label: 'XML input', value: snapshot.files?.xmlName || 'not loaded', ok: !!snapshot.files?.hasXml },
-        { label: 'Valve weight master', value: rowCount(snapshot.run?.counts?.weight), ok: snapshot.run?.counts?.weight > 0 },
-      ])}
-      <div class="xml-cii-native-toolbar">
-        <button type="button" class="model-converters-run-btn" data-native-compute-weights>Compute Matches</button>
-        <button type="button" class="model-converters-download-btn" data-native-apply-preferred-weights ${rows.length ? '' : 'disabled'}>Apply Preferred Weights</button>
-        <button type="button" class="model-converters-download-btn" data-native-skip-weight-review>Skip Review and Run</button>
-        <span class="xml-cii-native-status-text">${esc(uiState.weightStatus || '')}</span>
-      </div>
-    </section>
-    <section class="xml-cii-native-card">
-      ${compactTable(
-        [
-          { key: 'branchName', label: 'Branch' },
-          { key: 'nodeNumber', label: 'Node' },
-          { key: 'componentRefEndpoint', label: 'ComponentRefNo_Endpoint' },
-          { key: 'componentType', label: 'ComponentType' },
-          { key: 'boreMm', label: 'Bore' },
-          { key: 'rating', label: 'Rating' },
-          { key: 'weight', label: 'Preferred Weight' },
-        ],
-        rows.slice(0, 500),
-        'Compute weight matches to review rigid/valve/flange candidates.',
-      )}
-    </section>`;
+  return `${phaseHeader('weight-match')}<section class="xml-cii-native-card">${statusRows([{ label: 'XML input', value: snapshot.files?.xmlName || 'not loaded', ok: !!snapshot.files?.hasXml }, { label: 'Valve weight master', value: rowCount(snapshot.run?.counts?.weight), ok: snapshot.run?.counts?.weight > 0 }])}<div class="xml-cii-native-toolbar"><button type="button" class="model-converters-run-btn" data-native-compute-weights>Compute Matches</button><button type="button" class="model-converters-download-btn" data-native-apply-preferred-weights ${rows.length ? '' : 'disabled'}>Apply Preferred Weights</button><button type="button" class="model-converters-download-btn" data-native-skip-weight-review>Skip Review and Run</button><span class="xml-cii-native-status-text">${esc(uiState.weightStatus || '')}</span></div></section><section class="xml-cii-native-card">${compactTable([{ key: 'branchName', label: 'Branch' }, { key: 'nodeNumber', label: 'Node' }, { key: 'componentRefEndpoint', label: 'ComponentRefNo_Endpoint' }, { key: 'componentType', label: 'ComponentType' }, { key: 'boreMm', label: 'Bore' }, { key: 'rating', label: 'Rating' }, { key: 'weight', label: 'Preferred Weight' }], rows.slice(0, 500), 'Compute weight matches to review rigid/valve/flange candidates.')}</section>`;
 }
-
 function runPanel(snapshot) {
   const run = snapshot.run || {};
   const counts = run.counts || {};
-  return `
-    ${phaseHeader('run')}
-    <section class="xml-cii-native-card">
-      ${statusRows([
-        { label: 'Line List', value: rowCount(counts.linelist), ok: counts.linelist > 0 },
-        { label: 'Piping Class Master', value: rowCount(counts.pipingClass), ok: counts.pipingClass > 0 },
-        { label: 'Material Map', value: rowCount(counts.material), ok: counts.material > 0 },
-        { label: 'Valve Weights', value: rowCount(counts.weight), ok: counts.weight > 0 },
-        { label: 'Sample Line Key', value: run.lineKey || '(no key derived)', ok: !!run.lineKey },
-      ])}
-    </section>
-    <section class="xml-cii-native-card">
-      <div class="model-converters-workflow-section-title">Run Options</div>
-      <div class="xml-cii-native-grid">
-        <label class="xml-cii-native-field">
-          <span>Coords Mode</span>
-          <select data-native-run-option="coordsMode">
-            ${['first', 'all', 'none'].map((option) => `<option value="${option}" ${run.options?.coordsMode === option ? 'selected' : ''}>${option}</option>`).join('')}
-          </select>
-        </label>
-        <label class="xml-cii-native-check"><input type="checkbox" data-native-run-option="createEnrichedXml" ${run.options?.createEnrichedXml ? 'checked' : ''}> Create enriched XML before CII</label>
-        <label class="xml-cii-native-check"><input type="checkbox" data-native-run-option="kgToNewton" ${run.options?.kgToNewton !== false ? 'checked' : ''}> kg -> N weight conversion</label>
-        <label class="xml-cii-native-check"><input type="checkbox" data-native-run-option="condenseRigidXsd" ${run.options?.condenseRigidXsd ? 'checked' : ''}> Record source/XSD condensed rigid intent</label>
-        <label class="xml-cii-native-check"><input type="checkbox" data-native-run-option="splitCondensedValveFlange" ${run.options?.splitCondensedValveFlange ? 'checked' : ''}> Apply resolved split for condensed valve/flange/rigid nodes</label>
-      </div>
-      <div class="xml-cii-native-hint">Resolved ON saves splitCondensedValveFlange / split_condensed_valve_flange and forwards --split-condensed-valve-flange to the Python worker.</div>
-      <div class="xml-cii-native-toolbar">
-        <button type="button" class="model-converters-run-btn" data-native-review-weights>Review Weight Matches</button>
-        <button type="button" class="model-converters-download-btn" data-native-finalise-run>Finalise and Run</button>
-      </div>
-    </section>`;
+  return `${phaseHeader('run')}<section class="xml-cii-native-card">${statusRows([{ label: 'Line List', value: rowCount(counts.linelist), ok: counts.linelist > 0 }, { label: 'Piping Class Master', value: rowCount(counts.pipingClass), ok: counts.pipingClass > 0 }, { label: 'Material Map', value: rowCount(counts.material), ok: counts.material > 0 }, { label: 'Valve Weights', value: rowCount(counts.weight), ok: counts.weight > 0 }, { label: 'Sample Line Key', value: run.lineKey || '(no key derived)', ok: !!run.lineKey }])}</section><section class="xml-cii-native-card"><div class="model-converters-workflow-section-title">Run Options</div><div class="xml-cii-native-grid"><label class="xml-cii-native-field"><span>Coords Mode</span><select data-native-run-option="coordsMode">${['first', 'all', 'none'].map((option) => `<option value="${option}" ${run.options?.coordsMode === option ? 'selected' : ''}>${option}</option>`).join('')}</select></label><label class="xml-cii-native-check"><input type="checkbox" data-native-run-option="createEnrichedXml" ${run.options?.createEnrichedXml ? 'checked' : ''}> Create enriched XML before CII</label><label class="xml-cii-native-check"><input type="checkbox" data-native-run-option="kgToNewton" ${run.options?.kgToNewton !== false ? 'checked' : ''}> kg -> N weight conversion</label><label class="xml-cii-native-check"><input type="checkbox" data-native-run-option="condenseRigidXsd" ${run.options?.condenseRigidXsd ? 'checked' : ''}> Record source/XSD condensed rigid intent</label><label class="xml-cii-native-check"><input type="checkbox" data-native-run-option="splitCondensedValveFlange" ${run.options?.splitCondensedValveFlange ? 'checked' : ''}> Apply resolved split for condensed valve/flange/rigid nodes</label><label class="xml-cii-native-check"><input type="checkbox" data-native-run-option="disableGasketNodes" ${run.options?.disableGasketNodes ? 'checked' : ''}> Disable gasket in output (set GASK NodeNumber to -1)</label></div><div class="xml-cii-native-hint">Resolved ON saves splitCondensedValveFlange / split_condensed_valve_flange and forwards --split-condensed-valve-flange to the Python worker. GASK suppression saves disableGasketNodes / disableGasketInOutput and keeps GASK nodes in enriched XML while writing NodeNumber as -1.</div><div class="xml-cii-native-toolbar"><button type="button" class="model-converters-run-btn" data-native-review-weights>Review Weight Matches</button><button type="button" class="model-converters-download-btn" data-native-finalise-run>Finalise and Run</button></div></section>`;
 }
-
 function supportTypesPanel(snapshot) {
   const support = snapshot.support || {};
-  return `
-    ${phaseHeader('support-mapper')}
-    <section class="xml-cii-native-card">
-      ${statusRows([
-        { label: 'Support mapping rules', value: `${Number(support.ruleCount || 0).toLocaleString()} rule(s)`, ok: Number(support.ruleCount || 0) > 0 },
-        { label: 'Mapped support kinds', value: `${Number(support.kindCount || 0).toLocaleString()} kind(s)`, ok: Number(support.kindCount || 0) > 0 },
-      ])}
-      <div class="xml-cii-native-toolbar">
-        <button type="button" class="model-converters-run-btn" data-native-open-support-table>Open Mapping Table</button>
-      </div>
-    </section>
-    <section class="xml-cii-native-card">
-      <div data-native-support-host>
-        ${compactTable(
-          [{ key: 'source', label: 'Source Type' }, { key: 'target', label: 'CII Type' }, { key: 'status', label: 'Status' }],
-          support.previewRows || [],
-          'Open the mapping table to edit support type rules.',
-        )}
-      </div>
-    </section>`;
+  return `${phaseHeader('support-mapper')}<section class="xml-cii-native-card">${statusRows([{ label: 'Support mapping rules', value: `${Number(support.ruleCount || 0).toLocaleString()} rule(s)`, ok: Number(support.ruleCount || 0) > 0 }, { label: 'Mapped support kinds', value: `${Number(support.kindCount || 0).toLocaleString()} kind(s)`, ok: Number(support.kindCount || 0) > 0 }])}<div class="xml-cii-native-toolbar"><button type="button" class="model-converters-run-btn" data-native-open-support-table>Open Mapping Table</button></div></section><section class="xml-cii-native-card"><div data-native-support-host>${compactTable([{ key: 'source', label: 'Source Type' }, { key: 'target', label: 'CII Type' }, { key: 'status', label: 'Status' }], support.previewRows || [], 'Open the mapping table to edit support type rules.')}</div></section>`;
 }
-
 function logicInfoPanel() {
-  return `
-    <details class="xml-cii-native-details" data-native-config-info>
-      <summary><span aria-hidden="true">ⓘ</span> XML→CII enrichment logic</summary>
-      <div class="xml-cii-native-hint">
-        <strong>ElementLengthMm:</strong> generated in browser-side enrichment. ElementLengthMm calculated for INST nodes uses the previous positive node to the INST position in CII coordinate space when no valid length already exists.
-      </div>
-      <div class="xml-cii-native-hint">
-        <strong>Record source/XSD condensed rigid intent:</strong> stores source/XSD intent only as condenseRigidXsd / condense_rigid_xsd. It does not force resolved conversion.
-      </div>
-      <div class="xml-cii-native-hint">
-        <strong>Apply resolved split for condensed valve/flange/rigid nodes:</strong> writes splitCondensedValveFlange=true and split_condensed_valve_flange=true, forwards --split-condensed-valve-flange, and renumbers length-bearing negative FLAN/RIGID/INST nodes before final CII generation.
-      </div>
-      <div class="xml-cii-native-hint">
-        <strong>Unified Workflow:</strong> import masters, preview enrichment, weight review, support mapping, config, and final run use the same conversion core.
-      </div>
-    </details>`;
+  return `<details class="xml-cii-native-details" data-native-config-info><summary><span aria-hidden="true">ⓘ</span> XML→CII enrichment logic</summary><div class="xml-cii-native-hint"><strong>ElementLengthMm:</strong> generated in browser-side enrichment. ElementLengthMm calculated for INST nodes uses the previous positive node to the INST position in CII coordinate space when no valid length already exists.</div><div class="xml-cii-native-hint"><strong>Record source/XSD condensed rigid intent:</strong> stores source/XSD intent only as condenseRigidXsd / condense_rigid_xsd. It does not force resolved conversion.</div><div class="xml-cii-native-hint"><strong>Apply resolved split for condensed valve/flange/rigid nodes:</strong> writes splitCondensedValveFlange=true and split_condensed_valve_flange=true, forwards --split-condensed-valve-flange, and renumbers length-bearing negative FLAN/RIGID/INST nodes before final CII generation.</div><div class="xml-cii-native-hint"><strong>Disable gasket in output:</strong> writes disableGasketNodes=true and disableGasketInOutput=true. GASK nodes are retained in enriched XML, but their NodeNumber is written as -1.</div><div class="xml-cii-native-hint"><strong>Unified Workflow:</strong> import masters, preview enrichment, weight review, support mapping, config, and final run use the same conversion core.</div></details>`;
 }
-
 function configPanel(snapshot, uiState) {
   const config = snapshot.config || {};
   const textValue = uiState.configText ?? config.compactText ?? '{}';
-  return `
-    ${phaseHeader('config')}
-    <section class="xml-cii-native-card">
-      <div class="xml-cii-native-grid">
-        <label class="xml-cii-native-check"><input type="checkbox" data-native-config-bool="useFrictionSentinelForNonYSupports" ${config.useFrictionSentinel ? 'checked' : ''}> Use friction sentinel for non +Y supports</label>
-        <label class="xml-cii-native-check"><input type="checkbox" data-native-config-bool="convertDensityKgM3ToKgCm3" ${config.convertDensity ? 'checked' : ''}> Convert density kg/m3 -> kg/cm3</label>
-        <label class="xml-cii-native-check"><input type="checkbox" data-native-config-bool="disableCiiSupportTagPopulation" ${config.disableCiiSupportTag ? 'checked' : ''}> Suppress CII support tag/name labels</label>
-        <label class="xml-cii-native-check"><input type="checkbox" data-native-config-bool="condenseRigidXsd" ${config.condenseRigidXsd ? 'checked' : ''}> Record source/XSD condensed rigid intent</label>
-        <label class="xml-cii-native-check"><input type="checkbox" data-native-config-bool="splitCondensedValveFlange" ${config.splitCondensedValveFlange ? 'checked' : ''}> Apply resolved split for condensed valve/flange/rigid nodes</label>
-      </div>
-      <div class="xml-cii-native-hint">Suppress ON blanks Support Tag/GUID restraint records and support-kind-only NODENAME rows such as RESR, REST+GUIDE, or GUIDE+REST. Resolved is saved as both splitCondensedValveFlange and split_condensed_valve_flange for worker compatibility.</div>
-      ${logicInfoPanel()}
-      <div class="xml-cii-native-toolbar">
-        <button type="button" class="model-converters-run-btn" data-native-save-config>Save Config</button>
-        <button type="button" class="model-converters-download-btn" data-native-export-config>Export JSON</button>
-        <label class="model-converters-download-btn xml-cii-native-file-btn">Import JSON<input type="file" data-native-import-config accept=".json" hidden></label>
-        <span class="xml-cii-native-status-text">${esc(uiState.configStatus || `editor ${config.compactKb || 0} KB${config.hiddenRows ? `, ${config.hiddenRows} master rows hidden` : ''}`)}</span>
-      </div>
-    </section>
-    <textarea class="xml-cii-native-config-editor" data-native-config-text spellcheck="false">${esc(textValue)}</textarea>`;
+  return `${phaseHeader('config')}<section class="xml-cii-native-card"><div class="xml-cii-native-grid"><label class="xml-cii-native-check"><input type="checkbox" data-native-config-bool="useFrictionSentinelForNonYSupports" ${config.useFrictionSentinel ? 'checked' : ''}> Use friction sentinel for non +Y supports</label><label class="xml-cii-native-check"><input type="checkbox" data-native-config-bool="convertDensityKgM3ToKgCm3" ${config.convertDensity ? 'checked' : ''}> Convert density kg/m3 -> kg/cm3</label><label class="xml-cii-native-check"><input type="checkbox" data-native-config-bool="disableCiiSupportTagPopulation" ${config.disableCiiSupportTag ? 'checked' : ''}> Suppress CII support tag/name labels</label><label class="xml-cii-native-check"><input type="checkbox" data-native-config-bool="condenseRigidXsd" ${config.condenseRigidXsd ? 'checked' : ''}> Record source/XSD condensed rigid intent</label><label class="xml-cii-native-check"><input type="checkbox" data-native-config-bool="splitCondensedValveFlange" ${config.splitCondensedValveFlange ? 'checked' : ''}> Apply resolved split for condensed valve/flange/rigid nodes</label><label class="xml-cii-native-check"><input type="checkbox" data-native-config-bool="disableGasketNodes" ${config.disableGasketNodes ? 'checked' : ''}> Disable gasket in output (set GASK NodeNumber to -1)</label></div><div class="xml-cii-native-hint">Suppress ON blanks Support Tag/GUID restraint records and support-kind-only NODENAME rows such as RESR, REST+GUIDE, or GUIDE+REST. Resolved is saved as both splitCondensedValveFlange and split_condensed_valve_flange. Gasket suppression is saved as both disableGasketNodes and disableGasketInOutput; GASK nodes stay in enriched XML but write NodeNumber -1.</div>${logicInfoPanel()}<div class="xml-cii-native-toolbar"><button type="button" class="model-converters-run-btn" data-native-save-config>Save Config</button><button type="button" class="model-converters-download-btn" data-native-export-config>Export JSON</button><label class="model-converters-download-btn xml-cii-native-file-btn">Import JSON<input type="file" data-native-import-config accept=".json" hidden></label><span class="xml-cii-native-status-text">${esc(uiState.configStatus || `editor ${config.compactKb || 0} KB${config.hiddenRows ? `, ${config.hiddenRows} master rows hidden` : ''}`)}</span></div></section><textarea class="xml-cii-native-config-editor" data-native-config-text spellcheck="false">${esc(textValue)}</textarea>`;
 }
 
 export function renderXmlCiiPopupNativePhase(phaseId, snapshot, uiState) {

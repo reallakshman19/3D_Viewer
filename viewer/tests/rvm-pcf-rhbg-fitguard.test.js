@@ -103,9 +103,12 @@ check(renderBuilderSource.includes('RVM_NATIVE_FACET_GROUP'), 'render builder ke
 check(renderBuilderSource.includes('wireframe-diagnostic-not-solid-geometry'), 'bbox placeholders remain diagnostic wireframes');
 check(!renderBuilderSource.includes("primitive === 'STRUCTURE_BBOX' || type === 'STRUCTURE'"), 'unconditional structure slab promotion remains blocked');
 
-check(indexSource.includes('main-rhbg-fitguard.js?v=20260625-model-converters-finalise-run-owner-1'), 'index uses current model-converters finalise-owner main cache key');
-check(entrySource.includes('core/app.js?v=20260625-model-converters-finalise-run-owner-1'), 'entrypoint uses current model-converters finalise-owner app cache key');
-check(entrySource.includes('STARTUP_SIDE_EFFECT_MODULES = []'), 'entrypoint has no global startup side-effect modules');
+check(indexSource.includes('main-rhbg-fitguard.js?v=20260625-empty-startup-side-effects-removed-1'), 'index uses current empty-startup-side-effects main cache key');
+check(entrySource.includes('core/app.js?v=20260625-empty-startup-side-effects-removed-1'), 'entrypoint uses current empty-startup-side-effects app cache key');
+check(!entrySource.includes('STARTUP_SIDE_EFFECT_MODULES'), 'entrypoint no longer keeps a global startup side-effect module list');
+check(!entrySource.includes('loadStartupSideEffects'), 'entrypoint no longer keeps startup side-effect loader');
+check(!entrySource.includes('scheduleDeferredStartupSideEffects'), 'entrypoint no longer schedules empty startup side effects');
+check(!entrySource.includes('optional startup module failed'), 'entrypoint no longer keeps dead optional-startup logging');
 check(entrySource.includes('await init(startupMount())'), 'entrypoint passes resolved mount root into init');
 check(!entrySource.includes('RvmInputXmlSupportGraphicsSetModelBridge.js?v='), 'entrypoint does not side-load legacy InputXML support setModel bridge');
 check(!entrySource.includes('RvmInputXmlSupportGraphicsUiBridge.js?v='), 'entrypoint does not side-load legacy InputXML support UI bridge');
@@ -136,7 +139,7 @@ check(!appSource.includes('\ninstallGeometrySupportLoadFormulaBridge();'), 'supp
 check(!appSource.includes('\ninstallGeometrySupportLoadReportBridge();'), 'support-load report button is not installed by default');
 check(!appSource.includes('\ninstallGeometrySupportLoadBulkPackageBridge();'), 'support-load package button is not installed by default');
 check(!appSource.includes('\ninstallGeometrySupportLoadCanvasOverlayBridge();'), 'support-load overlay button is not installed by default');
-check(appSource.includes('app-label-perf-runtime.js?v=20260625-model-converters-finalise-run-owner-1'), 'app exports current model-converters finalise-owner runtime cache marker');
+check(appSource.includes('app-label-perf-runtime.js?v=20260625-empty-startup-side-effects-removed-1'), 'app exports current empty-startup-side-effects runtime cache marker');
 check(runtimeSource.includes('viewer3d-rvm-tab-renderer.js?v=20260625-rvm-renderer-cache-chain-1'), 'runtime imports current RVM renderer cache key');
 check(!runtimeSource.includes('viewer3d-rvm-tab-renderer.js?v=20260624-selected-geometry-floating-workflow-3'), 'runtime does not keep stale selected-geometry renderer cache key');
 
