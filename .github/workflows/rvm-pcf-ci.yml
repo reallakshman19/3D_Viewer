@@ -165,6 +165,9 @@ jobs:
       - name: Verify non-primitive auto-bend resolver
         run: node viewer/tests/nonprimitive-auto-bend-resolver.test.js
 
+      - name: Verify explicit InputXML auto-bend records
+        run: node viewer/tests/nonprimitive-auto-bend-explicit-bend.test.js
+
       - name: Verify non-primitive auto-bend preview integration
         run: node viewer/tests/nonprimitive-auto-bend-preview-integration.test.js
 
