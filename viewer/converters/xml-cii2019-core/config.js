@@ -30,6 +30,10 @@ function bool(value) {
   return /^(1|true|yes|on)$/i.test(toText(value).trim());
 }
 
+function defaultTrue(value) {
+  return value === undefined || value === null ? true : bool(value);
+}
+
 function withNormalizedLineListDensity(config) {
   const rows = config?.linelist?.masterRows;
   if (!Array.isArray(rows) || !rows.length) return config;
@@ -86,11 +90,13 @@ export function migrateXmlCiiSupportConfigJson(rawJson) {
   try {
     const parsed = JSON.parse(text);
     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return text;
-    const disableGasket = bool(parsed.disableGasketNodes) || bool(parsed.disableGasketInOutput);
+    const dropGaskets = bool(parsed.disableGasketNodes) || bool(parsed.disableGasketInOutput) || (defaultTrue(parsed.dropGasketNodes) && defaultTrue(parsed.dropGasketsInEnrichment));
     const normalized = normalizeFullConfig({
       ...parsed,
-      disableGasketNodes: disableGasket,
-      disableGasketInOutput: disableGasket,
+      dropGasketNodes: dropGaskets,
+      dropGasketsInEnrichment: dropGaskets,
+      disableGasketNodes: false,
+      disableGasketInOutput: false,
       allowFallbackHighNodeNumbers: bool(parsed.allowFallbackHighNodeNumbers),
       allow10000FallbackNodeNumbers: bool(parsed.allow10000FallbackNodeNumbers) || bool(parsed.allowFallbackHighNodeNumbers),
       supportKindToXmlType: normalizeXmlCiiSupportKindToTypeConfig(parsed.supportKindToXmlType),
@@ -155,6 +161,8 @@ export function parseXmlCiiEnrichmentConfig(rawJson) {
     useFrictionSentinelForNonYSupports: true,
     convertDensityKgM3ToKgCm3: true,
     disableCiiSupportTagPopulation: false,
+    dropGasketNodes: true,
+    dropGasketsInEnrichment: true,
     disableGasketNodes: false,
     disableGasketInOutput: false,
     allowFallbackHighNodeNumbers: false,
@@ -206,13 +214,15 @@ export function parseXmlCiiEnrichmentConfig(rawJson) {
     const parsedOverrides = parsed.overrides || {};
     const parsedPipingClassMatch = parsed.pipingClassMatch || {};
     const supportKindToXmlType = normalizeXmlCiiSupportKindToTypeConfig({ ...defaults.supportKindToXmlType, ...(parsed.supportKindToXmlType || {}) });
-    const disableGasket = bool(parsed.disableGasketNodes) || bool(parsed.disableGasketInOutput);
+    const dropGaskets = bool(parsed.disableGasketNodes) || bool(parsed.disableGasketInOutput) || (defaultTrue(parsed.dropGasketNodes) && defaultTrue(parsed.dropGasketsInEnrichment));
     const allowHighFallback = bool(parsed.allowFallbackHighNodeNumbers) || bool(parsed.allow10000FallbackNodeNumbers);
     const merged = {
       ...defaults,
       ...parsed,
-      disableGasketNodes: disableGasket,
-      disableGasketInOutput: disableGasket,
+      dropGasketNodes: dropGaskets,
+      dropGasketsInEnrichment: dropGaskets,
+      disableGasketNodes: false,
+      disableGasketInOutput: false,
       allowFallbackHighNodeNumbers: allowHighFallback,
       allow10000FallbackNodeNumbers: allowHighFallback,
       dtxrPositionOffset: { ...defaults.dtxrPositionOffset, ...(parsed.dtxrPositionOffset || {}) },
