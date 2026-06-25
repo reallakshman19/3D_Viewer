@@ -130,7 +130,7 @@ const apiTarget = {};
 const apiA = installNodeMarkerApi(apiTarget);
 const apiB = installNodeMarkerApi(apiTarget);
 assert.equal(apiA, apiB, 'installNodeMarkerApi is idempotent');
-assert.equal(apiA.schema, 'non-primitive-node-marker-api/v1');
+assert.equal(apiA.schema, 'non-primitive-node-marker-api/v2');
 assert.equal(getDiagnostics().markerCount, 2);
 assert.equal(getLastBuild().tables.branchRows.length, 2);
 

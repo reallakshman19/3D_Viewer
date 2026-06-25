@@ -11,6 +11,7 @@ const BRIDGE_GROUPS = Object.freeze({
     { id: 'nonprimitive-support-details-panel', specifier: './RvmNonPrimitiveSupportOverlayDetailsPanelBridge.js?v=20260623-nonprimitive-support-details-panel-4', install: 'installRvmNonPrimitiveSupportOverlayDetailsPanelBridge' },
     { id: 'nonprimitive-support-hover', specifier: './RvmNonPrimitiveSupportOverlayHoverBridge.js?v=20260623-nonprimitive-support-hover-2', install: 'installRvmNonPrimitiveSupportOverlayHoverBridge' },
     { id: 'nonprimitive-auto-bend', specifier: './RvmNonPrimitiveAutoBendBridge.js?v=20260623-nonprimitive-auto-bend-preview-2', install: 'installRvmNonPrimitiveAutoBendBridge' },
+    { id: 'nonprimitive-node-markers', specifier: './RvmNonPrimitiveNodeMarkerBridge.js?v=20260625-node-marker-deferred-1', install: 'installRvmNonPrimitiveNodeMarkerBridge' },
     { id: 'nonprimitive-source-tools-ui', specifier: './RvmNonPrimitiveSourceToolsUiBridge.js?v=20260624-source-tools-grouped-1', install: 'installRvmNonPrimitiveSourceToolsUiBridge' },
   ],
   postModel: [
@@ -175,6 +176,7 @@ function refreshSourcePreviewRuntime(reason = 'source-preview-loaded') {
   const { root, viewer, source, supportSource, sourceKind, fileName } = context;
   try { globalThis.__PCF_GLB_RVM_NON_PRIMITIVE_AUTO_BEND__?.applyFromSource?.({ viewer, source, sourceKind, fileName }); } catch (error) { reportRvmActionError(error, { action: 'source-preview-auto-bend', reason }); }
   try { globalThis.__PCF_GLB_RVM_NON_PRIMITIVE_SUPPORT_OVERLAY__?.applyFromSource?.({ viewer, root, source: supportSource, sourceKind, fileName }); } catch (error) { reportRvmActionError(error, { action: 'source-preview-support-overlay', reason }); }
+  try { globalThis.__PCF_GLB_RVM_NON_PRIMITIVE_NODE_MARKERS__?.applyFromSource?.({ viewer, root, source, sourceKind, fileName }); } catch (error) { reportRvmActionError(error, { action: 'source-preview-node-markers', reason }); }
   try { globalThis.__PCF_GLB_RVM_NON_PRIMITIVE_SOURCE_TOOLS_UI__?.sync?.(); } catch (error) { reportRvmActionError(error, { action: 'source-preview-tools-sync', reason }); }
   return { status: 'refreshed', sourceKind, reason };
 }
@@ -182,6 +184,7 @@ function refreshSourcePreviewRuntime(reason = 'source-preview-loaded') {
 function clearSourcePreviewRuntime(viewer, reason = 'clear-source-preview-runtime') {
   try { globalThis.__PCF_GLB_RVM_NON_PRIMITIVE_AUTO_BEND__?.clear?.(viewer, reason); } catch (_) {}
   try { globalThis.__PCF_GLB_RVM_NON_PRIMITIVE_SUPPORT_OVERLAY__?.clear?.(viewer, reason); } catch (_) {}
+  try { globalThis.__PCF_GLB_RVM_NON_PRIMITIVE_NODE_MARKERS__?.clear?.(viewer, reason); } catch (_) {}
   try { globalThis.__PCF_GLB_RVM_NON_PRIMITIVE_SOURCE_TOOLS_UI__?.sync?.(); } catch (_) {}
   return { status: 'cleared', reason };
 }

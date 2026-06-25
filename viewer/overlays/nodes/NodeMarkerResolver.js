@@ -20,7 +20,7 @@ export function resolveNodeMarkersFromSource(source, options = {}) {
   const sourceFile = options.sourceFile || source?.sourceFile || source?.fileName || '';
   const toleranceMm = Number.isFinite(Number(options.toleranceMm)) ? Number(options.toleranceMm) : 2;
   const records = collectElementRecords(source);
-  const sourceRevision = stableHash({ kind, records: records.map((r) => ({ p: r.path, t: r.type, a: r.points })) });
+  const sourceRevision = stableHash({ kind, records: records.map((r) => ({ p: r.path, t: r.type, points: r.points, attributes: r.attributes })) });
   const groups = groupInterfacePoints(records, toleranceMm);
   const markers = groups.map((group, index) => buildMarker(group, index, { ...options, ...kind, sourceFile, sourceRevision, toleranceMm }));
   const diagnostics = buildNodeMarkerDiagnostics(markers, { ...kind, sourceFile, sourceRevision, toleranceMm, resolverVersion: NODE_MARKER_RESOLVER_VERSION });
