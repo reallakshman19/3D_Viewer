@@ -15,6 +15,7 @@ const files = {
   stagedExport: path.join(viewerRoot, 'tabs/RvmStagedJsonExportBridge.js'),
   stagedValidation: path.join(viewerRoot, 'tabs/RvmStagedJsonValidationBridge.js'),
   deferredLoader: path.join(viewerRoot, 'tabs/RvmDeferredBridgeLoader.js'),
+  toolbarCompact: path.join(viewerRoot, 'tabs/RvmToolbarCompactBridge.js'),
 };
 
 function read(file) {
@@ -58,16 +59,32 @@ function verifySupportPolicyOptionA() {
 
 function verifyDeferredSupportPolicyCacheKeys() {
   const deferredLoader = read(files.deferredLoader);
+  const renderer = read(files.renderer);
   assert.ok(deferredLoader.includes('20260624-rvm-deferred-stagedjson-cache-1'), 'deferred bridge loader must expose refreshed cache contract');
   assert.ok(deferredLoader.includes('RvmStagedJsonExportBridge.js?v=20260624-rvm-stagedjson-support-policy-1'), 'post-model deferred loader must import current Option A staged export bridge');
   assert.ok(deferredLoader.includes('RvmStagedJsonValidationBridge.js?v=20260624-rvm-stagedjson-support-policy-1'), 'post-model deferred loader must import current Option A staged validation bridge');
+  assert.ok(renderer.includes('RvmDeferredBridgeLoader.js?v=20260624-rvm-deferred-stagedjson-cache-1'), 'renderer must import the current deferred loader cache key');
   assert.ok(!deferredLoader.includes('RvmStagedJsonExportBridge.js?v=20260621-rvm-button-hardening-1'), 'deferred loader must not keep stale staged export cache key');
   assert.ok(!deferredLoader.includes('RvmStagedJsonValidationBridge.js?v=20260620-rvm-stagedjson-validation-1'), 'deferred loader must not keep stale staged validation cache key');
+}
+
+function verifyToolbarCompactPolicy() {
+  const renderer = read(files.renderer);
+  const toolbar = read(files.toolbarCompact);
+  assert.ok(renderer.includes('RvmToolbarCompactBridge.js?v=20260624-rvm-toolbar-compact-policy-1'), 'renderer must import compact toolbar policy bridge');
+  assert.ok(renderer.includes('installRvmToolbarCompactBridge()'), 'renderer must install compact toolbar policy bridge');
+  assert.ok(toolbar.includes('rvm-toolbar-compact-policy-1'), 'toolbar policy must expose versioned source contract');
+  assert.ok(toolbar.includes("CORE_LABELS = new Set(['Navigate', 'View'])"), 'toolbar policy must keep core Navigate/View top-level');
+  assert.ok(toolbar.includes('rvm-toolbar-more'), 'toolbar policy must create a More tools tray');
+  assert.ok(toolbar.includes('data-rvm-toolbar-more-panel'), 'toolbar policy must provide a stable More tools panel marker');
+  assert.ok(toolbar.includes("section.dataset.rvmToolbarPolicy = 'advanced'"), 'toolbar policy must mark moved secondary groups as advanced');
+  assert.ok(toolbar.includes("section.dataset.rvmToolbarPolicy = 'duplicate-hidden'"), 'toolbar policy must hide exact duplicate groups rather than stacking them');
 }
 
 verifyModuleIdentity();
 verifyResizablePanels();
 verifySupportPolicyOptionA();
 verifyDeferredSupportPolicyCacheKeys();
+verifyToolbarCompactPolicy();
 
-console.log('Verified RVM viewer module identity, side-panel resize UI contract, Option A staged support policy, and deferred stagedJSON cache keys.');
+console.log('Verified RVM viewer module identity, side-panel resize UI contract, Option A staged support policy, deferred stagedJSON cache keys, and compact toolbar policy.');
