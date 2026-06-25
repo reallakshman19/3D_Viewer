@@ -55,6 +55,7 @@
 // app-label-perf-runtime.js?v=20260623-xml-cii-rich-worker-1
 // app-label-perf-runtime.js?v=20260624-selected-geometry-floating-workflow-3
 // app-label-perf-runtime.js?v=20260625-rvm-renderer-cache-chain-1
+// app-label-perf-runtime.js?v=20260625-rvm-route-preserve-preflight-1
 import { installAppTabClickStateBridge } from './app-tab-click-state-bridge.js?v=20260622-tab-click-state-1';
 
 const LEGACY_GEOMETRY_WORKFLOW_FLAG = 'rvm.enableLegacyGeometryWorkflowButtons';
@@ -105,4 +106,4 @@ async function importLegacyGeometryWorkflowBridge(entry) {
   installer();
 }
 
-export { init } from './app-label-perf-runtime.js?v=20260625-rvm-renderer-cache-chain-1';
+export { init } from './app-label-perf-runtime.js?v=20260625-rvm-route-preserve-preflight-1';
