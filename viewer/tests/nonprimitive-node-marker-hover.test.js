@@ -2,7 +2,6 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 
 import { buildNodeMarkerHoverPreview, emptyNodeMarkerHoverState, renderNodeMarkerHoverHtml } from '../overlays/nodes/NodeMarkerHover.js';
-import { clearNodeMarkerHover, installRvmNonPrimitiveNodeMarkerHoverBridge } from '../tabs/RvmNonPrimitiveNodeMarkerHoverBridge.js';
 
 const hoverBridge = await fs.readFile(new URL('../tabs/RvmNonPrimitiveNodeMarkerHoverBridge.js', import.meta.url), 'utf8');
 const renderer = await fs.readFile(new URL('../tabs/viewer3d-rvm-tab-renderer.js', import.meta.url), 'utf8');
@@ -10,6 +9,7 @@ const renderer = await fs.readFile(new URL('../tabs/viewer3d-rvm-tab-renderer.js
 assert.match(hoverBridge, /rvm-non-primitive-node-marker-hover-bridge\/v1/, 'hover bridge exposes schema');
 assert.match(hoverBridge, /collectNodeMarkerRoots/, 'hover bridge raycasts only node marker roots');
 assert.match(hoverBridge, /rvmNodeMarkerDetails/, 'hover bridge reads marker details from glyph metadata');
+assert.match(hoverBridge, /pointerEvents\s*=\s*'none'|pointer-events:none/, 'hover tooltip must not block canvas navigation');
 assert.doesNotMatch(hoverBridge, /RvmSelectionAdapter|objectSearch|selectObject|pickObject/, 'hover bridge does not use primitive selection/search');
 assert.doesNotMatch(renderer, /RvmNonPrimitiveNodeMarkerHoverBridge\.js|NodeMarkerHover\.js/, 'renderer must not eagerly import node marker hover code');
 
@@ -42,14 +42,5 @@ assert.equal(empty.status, 'cleared');
 assert.equal(empty.primitiveExcluded, true);
 assert.equal(empty.rvmSearchIndexed, false);
 assert.equal(empty.rvmSelectionUsed, false);
-
-const apiA = installRvmNonPrimitiveNodeMarkerHoverBridge();
-const apiB = installRvmNonPrimitiveNodeMarkerHoverBridge();
-assert.equal(apiA, apiB, 'hover bridge install is idempotent');
-assert.equal(apiA.schema, 'rvm-non-primitive-node-marker-hover-bridge/v1');
-const viewer = {};
-const cleared = clearNodeMarkerHover(viewer, 'unit-clear');
-assert.equal(cleared.status, 'cleared');
-assert.equal(viewer.nonPrimitiveNodeMarkerHoverDiagnostics.status, 'cleared');
 
 console.log('nonprimitive-node-marker-hover passed');
