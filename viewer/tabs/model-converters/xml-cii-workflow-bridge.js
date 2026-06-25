@@ -32,9 +32,13 @@ function bool(value) {
   return /^(1|true|yes|on)$/i.test(String(value).trim());
 }
 
-function parseConfigText(text) {
+function text(value) {
+  return value === undefined || value === null ? '' : String(value).trim();
+}
+
+function parseConfigText(textValue) {
   try {
-    const parsed = JSON.parse(String(text || '{}'));
+    const parsed = JSON.parse(String(textValue || '{}'));
     return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
   } catch {
     return {};
@@ -142,6 +146,101 @@ function cachedSnapshot(base, root) {
   return value;
 }
 
+function normalizeComponentRefNo(value) {
+  return text(value).replace(/^=/, '');
+}
+
+function componentRefEndpoint(componentRefNo, endpoint) {
+  const ref = normalizeComponentRefNo(componentRefNo);
+  const ep = text(endpoint);
+  return ref && ep ? `${ref}_${ep}` : ref;
+}
+
+function nodeText(node, name) {
+  const child = [...(node?.childNodes || [])].find((item) => item.nodeType === 1 && String(item.localName || item.nodeName).replace(/^.*:/, '') === name);
+  return text(child?.textContent);
+}
+
+function parseXmlNodeMeta(xmlText) {
+  const byKey = new Map();
+  const source = text(xmlText);
+  if (!source) return byKey;
+  if (typeof DOMParser !== 'undefined') {
+    try {
+      const document = new DOMParser().parseFromString(source, 'application/xml');
+      if (!document.getElementsByTagName('parsererror').length) {
+        for (const branch of [...document.getElementsByTagName('Branch')]) {
+          const branchName = nodeText(branch, 'Branchname');
+          for (const node of [...branch.getElementsByTagName('Node')]) {
+            const nodeNumber = nodeText(node, 'NodeNumber');
+            if (!nodeNumber) continue;
+            const meta = {
+              branchName,
+              nodeNumber,
+              componentRefNo: nodeText(node, 'ComponentRefNo'),
+              endpoint: nodeText(node, 'Endpoint'),
+              componentType: nodeText(node, 'ComponentType'),
+            };
+            meta.componentRefEndpoint = componentRefEndpoint(meta.componentRefNo, meta.endpoint);
+            byKey.set(`${branchName}::${nodeNumber}`, meta);
+            if (!byKey.has(nodeNumber)) byKey.set(nodeNumber, meta);
+          }
+        }
+        return byKey;
+      }
+    } catch {
+      // Fall through to regex fallback.
+    }
+  }
+  for (const branchMatch of source.matchAll(/<Branch\b[\s\S]*?<\/Branch>/gi)) {
+    const branchBlock = branchMatch[0];
+    const branchName = text(branchBlock.match(/<Branchname[^>]*>([\s\S]*?)<\/Branchname>/i)?.[1]?.replace(/<[^>]+>/g, ''));
+    for (const nodeMatch of branchBlock.matchAll(/<Node\b[\s\S]*?<\/Node>/gi)) {
+      const nodeBlock = nodeMatch[0];
+      const read = (name) => text(nodeBlock.match(new RegExp(`<${name}[^>]*>([\\s\\S]*?)<\\/${name}>`, 'i'))?.[1]?.replace(/<[^>]+>/g, ''));
+      const nodeNumber = read('NodeNumber');
+      if (!nodeNumber) continue;
+      const meta = {
+        branchName,
+        nodeNumber,
+        componentRefNo: read('ComponentRefNo'),
+        endpoint: read('Endpoint'),
+        componentType: read('ComponentType'),
+      };
+      meta.componentRefEndpoint = componentRefEndpoint(meta.componentRefNo, meta.endpoint);
+      byKey.set(`${branchName}::${nodeNumber}`, meta);
+      if (!byKey.has(nodeNumber)) byKey.set(nodeNumber, meta);
+    }
+  }
+  return byKey;
+}
+
+async function readCurrentXmlText() {
+  const input = typeof document !== 'undefined' ? document.querySelector?.('#model-converters-primary-input') : null;
+  const file = input?.files?.[0];
+  if (!file || typeof file.text !== 'function') return '';
+  return file.text().catch(() => '');
+}
+
+async function augmentWeightRowsWithNodeMeta(rows) {
+  const safeRows = Array.isArray(rows) ? rows : [];
+  if (!safeRows.length) return safeRows;
+  const meta = parseXmlNodeMeta(await readCurrentXmlText());
+  return safeRows.map((row) => {
+    const key = `${text(row?.branchName)}::${text(row?.nodeNumber)}`;
+    const nodeMeta = meta.get(key) || meta.get(text(row?.nodeNumber)) || {};
+    const componentRefNo = nodeMeta.componentRefNo || row?.componentRefNo || '';
+    const endpoint = nodeMeta.endpoint || row?.endpoint || '';
+    return {
+      ...row,
+      componentRefNo,
+      endpoint,
+      componentType: row?.componentType || nodeMeta.componentType || '',
+      componentRefEndpoint: row?.componentRefEndpoint || nodeMeta.componentRefEndpoint || componentRefEndpoint(componentRefNo, endpoint),
+    };
+  });
+}
+
 function wrapInvalidatingAsync(base, methodName) {
   const original = base?.[methodName]?.bind(base);
   if (!original) return undefined;
@@ -202,6 +301,11 @@ function xmlCiiWorkflowWrapBridge(base) {
     clearSnapshotCache();
     return result;
   };
+
+  const originalComputePopupWeightRows = base.computePopupWeightRows?.bind(base);
+  safe.computePopupWeightRows = originalComputePopupWeightRows
+    ? async (...args) => augmentWeightRowsWithNodeMeta(await originalComputePopupWeightRows(...args))
+    : undefined;
 
   safe.getPopupSnapshot = (root) => cachedSnapshot(base, root);
   safe.importPopupMasterFile = wrapInvalidatingAsync(base, 'importPopupMasterFile');
