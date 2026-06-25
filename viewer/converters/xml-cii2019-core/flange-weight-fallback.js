@@ -71,6 +71,22 @@ function shouldAddFlangeFallback(issue) {
   return !Number.isFinite(selectedWeight(best)) || selectedWeight(best) <= 0;
 }
 
+function formatIssueValveHint(issue) {
+  const existing = clean(issue?.valveHint);
+  if (existing) return existing;
+  const hint = issue?.nodeHint;
+  if (!hint) return '';
+  const code = clean(hint.code);
+  const label = clean(hint.label || hint.subtype || hint.family || 'Valve');
+  return code ? `${code} → ${label}` : label;
+}
+
+function ensureIssueValveHint(issue) {
+  if (!issue) return issue;
+  const valveHint = formatIssueValveHint(issue);
+  return valveHint && issue.valveHint !== valveHint ? { ...issue, valveHint } : issue;
+}
+
 export function buildXmlCiiFlangeWeightFallback(issue, config) {
   const rows = Array.isArray(config?.weight?.masterRows) ? config.weight.masterRows : [];
   const targetLength = Number(issue?.lengthMm);
@@ -110,7 +126,6 @@ export function buildXmlCiiFlangeWeightFallback(issue, config) {
     weightWarning: `Flange weight fallback: same Bore ${bore.toFixed(0)} / Rating ${rating}, ${Number(reference.weight)} kg at ${Number(reference.rowLength).toFixed(1)} mm scaled to ${targetLength.toFixed(1)} mm.`,
     inferredWeight: true,
     fallbackSuggestion: true,
-    flangeWeightFallback: true,
     zeroFallback: false,
     rowBore: bore,
     rowRating: rating,
@@ -123,10 +138,11 @@ export function buildXmlCiiFlangeWeightFallback(issue, config) {
     lengthQualified: false,
     lengthToleranceMm: Number(config?.weight?.valveHintLengthToleranceMm) || 0,
     nodeValveHint: issue?.nodeHint || null,
-    valveHintLabel: issue?.valveHint || '',
+    valveHintLabel: formatIssueValveHint(issue),
     semanticTier: 0,
     semanticPotentialTier: 0,
     semanticReason: 'Flange WT extrapolated by element length',
+    semanticSource: '',
     rejectedReason: '',
     preferred: false,
     type: reference.type || 'FLANGE',
@@ -136,13 +152,14 @@ export function buildXmlCiiFlangeWeightFallback(issue, config) {
 }
 
 export function applyXmlCiiFlangeWeightFallbackToIssue(issue, config) {
-  if (!issue || !shouldAddFlangeFallback(issue)) return issue;
-  const fallback = buildXmlCiiFlangeWeightFallback(issue, config);
-  if (!fallback) return issue;
+  const withHint = ensureIssueValveHint(issue);
+  if (!withHint || !shouldAddFlangeFallback(withHint)) return withHint;
+  const fallback = buildXmlCiiFlangeWeightFallback(withHint, config);
+  if (!fallback) return withHint;
   return {
-    ...issue,
+    ...withHint,
     candidates: [fallback],
-    ranking: { ...(issue.ranking || {}), best: fallback, candidates: [fallback] },
+    ranking: { ...(withHint.ranking || {}), best: fallback, candidates: [fallback] },
     flangeWeightFallback: true,
   };
 }
