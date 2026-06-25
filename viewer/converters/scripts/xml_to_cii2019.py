@@ -1284,11 +1284,12 @@ def _build_reducer_payload(model: ConversionModel) -> list[str]:
         alpha_angle = edge.to_node.alpha_angle
         if alpha_angle is None:
             raise ValueError("Reducer edge without AlphaAngle encountered.")
+        second_thickness = edge.to_node.wall_thickness if edge.to_node.wall_thickness > 0.0 else edge.from_node.wall_thickness
         lines.append(
             _row(
                 [
                     _format_auto_float(edge.to_node.outside_diameter),
-                    _format_fixed_float(0.0, 6),
+                    _format_auto_float(second_thickness if second_thickness > 0.0 else 0.0),
                     _format_fixed_float(alpha_angle, 4),
                     _format_fixed_float(0.0, 6),
                     _format_fixed_float(0.0, 6),

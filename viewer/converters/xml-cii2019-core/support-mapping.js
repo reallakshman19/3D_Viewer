@@ -34,6 +34,11 @@ function parseNumericMm(value) {
   return Number.isFinite(numeric) ? numeric : null;
 }
 
+function parseGapValue(value) {
+  const numeric = parseNumericMm(value);
+  return Number.isFinite(numeric) ? String(numeric) : '';
+}
+
 function normalizeCoordinatePoint(point) {
   if (point === undefined || point === null || point === '') return null;
 
@@ -150,6 +155,10 @@ export function normalizeSupportTag(value) {
   return match ? match[0].toUpperCase() : '';
 }
 
+function supportTagBase(value) {
+  return normalizeSupportTag(value).replace(/\.\d+$/, '');
+}
+
 function supportTagsFromText(value) {
   const tags = new Set();
   for (const match of toText(value).matchAll(/\/?PS-\d+(?:\.\d+)?/ig)) {
@@ -172,6 +181,43 @@ export function xmlNodeSupportTags(node) {
   const parts = [xmlText(node, 'NodeName'), xmlText(node, 'ComponentRefNo')];
   for (const child of xmlChildrenByName(node, 'SupportTag')) parts.push(toText(child.textContent));
   return [...new Set(parts.flatMap(supportTagsFromText))];
+}
+
+function dtxrPositionOffset(config = {}) {
+  const option = config?.dtxrPositionOffset || {};
+  return {
+    enabled: option.enabled === true,
+    xOffset: toFiniteNumber(option.xOffset, 0),
+    yOffset: toFiniteNumber(option.yOffset, 0),
+    zOffset: toFiniteNumber(option.zOffset, 0),
+  };
+}
+
+function applyDtxrPositionOffset(point, config = {}) {
+  if (!point) return null;
+  const option = dtxrPositionOffset(config);
+  if (!option.enabled) return point;
+  return { x: point.x + option.xOffset, y: point.y + option.yOffset, z: point.z + option.zOffset };
+}
+
+function pointWithOffset(point, offset) {
+  if (!point || !offset) return null;
+  return { x: point.x + offset.x, y: point.y + offset.y, z: point.z + offset.z };
+}
+
+function attrsWithoutGeneratedSupportKind(attrs = {}) {
+  const stripped = {};
+  for (const [key, value] of Object.entries(attrs || {})) {
+    const normalized = toText(key).toUpperCase().replace(/[^A-Z0-9]/g, '');
+    if (['SUPPORTKIND', 'SUPPORTMAPPERKIND', 'SUPPORTTYPE'].includes(normalized)) continue;
+    stripped[key] = value;
+  }
+  return stripped;
+}
+
+function supportDescriptorFromKind(kind, attrs, source) {
+  const normalized = normalizeSupportKind(kind);
+  return normalized ? { primaryKind: normalized, kinds: [normalized], dofs: {}, source, attrs } : null;
 }
 
 function normalizeSupportKind(value) {
@@ -197,12 +243,14 @@ function isKindReference(value) {
 
 export function resolveXmlCiiSupportDescriptor(attrs, config = {}) {
   const direct = normalizeSupportKind(attrs?.SUPPORT_KIND || attrs?.SUPPORT_MAPPER_KIND || attrs?.SUPPORT_TYPE);
-  if (direct) return { primaryKind: direct, kinds: [direct], dofs: {}, source: 'explicit' };
+  const directDescriptor = supportDescriptorFromKind(direct, attrs, 'explicit');
+  if (direct && direct !== 'REST') return directDescriptor;
 
   const supportMapping = migrateSupportMappingConfig(config);
   const rules = supportRulesFromMapping(supportMapping);
+  const ruleAttrs = attrsWithoutGeneratedSupportKind(attrs);
   if (rules.length) {
-    const descriptor = resolveKindDescriptor(attrs, {
+    const descriptor = resolveKindDescriptor(ruleAttrs, {
       userRules: rules,
       defaultRules: [],
       kindMap: {},
@@ -211,8 +259,9 @@ export function resolveXmlCiiSupportDescriptor(attrs, config = {}) {
     if (descriptor?.primaryKind) return { ...descriptor, source: 'supportMapping' };
   }
 
-  const legacyKind = normalizeSupportKind(resolveKindFromAttrs(attrs));
+  const legacyKind = normalizeSupportKind(resolveKindFromAttrs(ruleAttrs));
   if (legacyKind) return { primaryKind: legacyKind, kinds: [legacyKind], dofs: {}, source: 'legacyRvmSupportMapper' };
+  if (directDescriptor) return directDescriptor;
   return { primaryKind: '', kinds: [], dofs: {}, source: 'none' };
 }
 
@@ -221,7 +270,7 @@ export function resolveXmlCiiSupportKind(attrs, config = {}) {
 }
 
 export function buildStagedSupportIndex(stagedJsonText, config = {}, diagnostics = []) {
-  const empty = { byCoord: new Map(), byTag: new Map(), count: 0 };
+  const empty = { byCoord: new Map(), byTag: new Map(), byBaseTag: new Map(), items: [], count: 0 };
   const supportMapping = migrateSupportMappingConfig(config);
   if (supportMapping.useJsonForRestraints === false) {
     diagnostics.push({ type: 'staged-support-index', supports: 0, coordinateKeys: 0, psTagKeys: 0, disabled: true });
@@ -237,6 +286,8 @@ export function buildStagedSupportIndex(stagedJsonText, config = {}, diagnostics
 
   const byCoord = new Map();
   const byTag = new Map();
+  const byBaseTag = new Map();
+  const items = [];
   const tolerance = toFiniteNumber(config.coordinateTolerance, 1);
   let count = 0;
 
@@ -246,12 +297,16 @@ export function buildStagedSupportIndex(stagedJsonText, config = {}, diagnostics
     if (!descriptor.primaryKind) continue;
 
     let point = null;
-    for (const key of ['SUPPORTCOORD', 'SUPPORT_COORD', 'POS', 'BPOS', 'APOS', 'LPOS', 'CPOS', 'HPOS', 'TPOS']) {
-      point = normalizeCoordinatePoint(attrs[key]);
+    let rawPoint = null;
+    for (const key of ['SUPPORTCOORD', 'SUPPORT_COORD', 'POS', 'POSI', 'BPOS', 'APOS', 'LPOS', 'CPOS', 'HPOS', 'TPOS']) {
+      rawPoint = normalizeCoordinatePoint(attrs[key]);
+      point = key === 'POSI' ? applyDtxrPositionOffset(rawPoint, config) : rawPoint;
       if (point) break;
     }
 
     const kindRef = createKindReference(descriptor, attrs);
+    const supportTags = supportTagsFromAttrs(attrs, entry.component?.name || '');
+    const supportBaseTags = [...new Set(supportTags.map(supportTagBase).filter(Boolean))];
     const indexed = {
       ...entry,
       kind: kindRef,
@@ -259,8 +314,12 @@ export function buildStagedSupportIndex(stagedJsonText, config = {}, diagnostics
       kinds: descriptor.kinds?.length ? descriptor.kinds : [descriptor.primaryKind],
       dofs: descriptor.dofs || {},
       supportDescriptorSource: descriptor.source,
+      supportTags,
+      supportBaseTags,
       point,
+      rawPoint,
     };
+    items.push(indexed);
 
     if (point) {
       const coordinateKey = xmlPositionKey(`${point.x} ${point.y} ${point.z}`, tolerance);
@@ -270,15 +329,55 @@ export function buildStagedSupportIndex(stagedJsonText, config = {}, diagnostics
       }
     }
 
-    for (const tag of supportTagsFromAttrs(attrs, entry.component?.name || '')) {
+    for (const tag of supportTags) {
       if (!byTag.has(tag)) byTag.set(tag, []);
       byTag.get(tag).push(indexed);
+      const baseTag = supportTagBase(tag);
+      if (baseTag) {
+        if (!byBaseTag.has(baseTag)) byBaseTag.set(baseTag, []);
+        byBaseTag.get(baseTag).push(indexed);
+      }
     }
     count += 1;
   }
 
   diagnostics.push({ type: 'staged-support-index', supports: count, coordinateKeys: byCoord.size, psTagKeys: byTag.size });
-  return { byCoord, byTag, count };
+  return { byCoord, byTag, byBaseTag, items, count };
+}
+
+export function calibrateStagedSupportIndexCoordinates(stagedSupportIndex, offset, config = {}) {
+  const normalizedOffset = normalizeCoordinatePoint(offset);
+  if (!normalizedOffset || !stagedSupportIndex || !Array.isArray(stagedSupportIndex.items)) return stagedSupportIndex;
+
+  const byCoord = new Map();
+  const byTag = new Map();
+  const byBaseTag = new Map();
+  const tolerance = toFiniteNumber(config.coordinateTolerance, 1);
+  const items = stagedSupportIndex.items.map((item) => {
+    const point = pointWithOffset(item.rawPoint, normalizedOffset) || item.point || null;
+    const indexed = { ...item, point, inferredOffset: normalizedOffset };
+
+    if (point) {
+      const coordinateKey = xmlPositionKey(`${point.x} ${point.y} ${point.z}`, tolerance);
+      if (coordinateKey) {
+        if (!byCoord.has(coordinateKey)) byCoord.set(coordinateKey, []);
+        byCoord.get(coordinateKey).push(indexed);
+      }
+    }
+
+    for (const tag of indexed.supportTags || []) {
+      if (!byTag.has(tag)) byTag.set(tag, []);
+      byTag.get(tag).push(indexed);
+      const baseTag = supportTagBase(tag);
+      if (baseTag) {
+        if (!byBaseTag.has(baseTag)) byBaseTag.set(baseTag, []);
+        byBaseTag.get(baseTag).push(indexed);
+      }
+    }
+    return indexed;
+  });
+
+  return { ...stagedSupportIndex, byCoord, byTag, byBaseTag, items, inferredOffset: normalizedOffset };
 }
 
 const XML_CII_NATIVE_RESTRAINT_TYPE_ALIASES = Object.freeze({
@@ -340,6 +439,26 @@ function supportProfileForKind(kind, config = {}) {
   return supportMapping.kindProfiles?.[normalizeSupportKind(kind)] || {};
 }
 
+function gapForSupportKind(kind, attrs, fallbackGap) {
+  const upperKind = normalizeSupportKind(kind);
+  if (upperKind !== 'LINESTOP' && upperKind !== 'LIMIT') return fallbackGap;
+  return parseGapValue(attrs?.CMPSUPGAP || attrs?.CMPSUPGAP_POS || attrs?.CMPSUPGAP_PS) || fallbackGap;
+}
+
+function restraintTypeUsesSupportGap(type, entry = null) {
+  const restraintType = normalizeXmlType(type);
+  const supportKind = normalizeSupportKind(entry?.supportKind);
+  return restraintType === 'LIM' || supportKind === 'LINESTOP' || supportKind === 'LIMIT';
+}
+
+function firstNodeSupportGapText(nodeElement) {
+  return toText(
+    xmlText(nodeElement, 'CMPSUPGAP')
+    || xmlText(nodeElement, 'CMPSUPGAP_POS')
+    || xmlText(nodeElement, 'CMPSUPGAP_PS')
+  ).trim();
+}
+
 function normalizeXmlType(type) {
   const upper = toText(type).trim().toUpperCase();
   return XML_CII_NATIVE_RESTRAINT_TYPE_ALIASES[upper] || upper;
@@ -384,10 +503,12 @@ export function restraintEntriesFromSupportKind(kind, attrs = {}, nodeElement = 
   const profile = supportProfileForKind(upperKind, config);
   const values = normalizeXmlTypes(profile.xmlTypes || config.supportKindToXmlType?.[upperKind] || []);
   const direction = resolveSupportDirectionCosines({ profile, attrs, nodeElement });
+  const gap = gapForSupportKind(upperKind, attrs, profile.gap ?? '0');
   return values.map(normalizeXmlType).filter(Boolean).map((type) => createRestraintEntry({
     type,
     stiffness: profile.stiffness && profile.stiffness !== 'default' ? profile.stiffness : config.defaultStiffness,
-    gap: profile.gap ?? '0',
+    gap,
+    cmpSupGap: upperKind === 'LINESTOP' || upperKind === 'LIMIT' ? toText(attrs?.CMPSUPGAP || attrs?.CMPSUPGAP_POS || attrs?.CMPSUPGAP_PS).trim() : '',
     frictionMode: profile.frictionMode || 'default',
     fixedFriction: profile.fixedFriction || '',
     supportTagMode: profile.supportTagMode || 'kind',
@@ -398,21 +519,32 @@ export function restraintEntriesFromSupportKind(kind, attrs = {}, nodeElement = 
   }));
 }
 
+export function dedupeXmlCiiRestraintEntries(entries = []) {
+  const seen = new Set();
+  const out = [];
+  for (const entry of Array.isArray(entries) ? entries : []) {
+    const type = normalizeXmlType(typeof entry === 'string' ? entry : entry?.type);
+    if (!type) continue;
+    const direction = normalizeDirectionVector(entry?.direction);
+    const dir = direction ? `${direction.x.toFixed(6)},${direction.y.toFixed(6)},${direction.z.toFixed(6)}` : '';
+    const key = `${type}|${dir}|${toText(entry?.stiffness)}|${toText(entry?.gap)}|${toText(entry?.frictionMode)}|${toText(entry?.fixedFriction)}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(entry);
+  }
+  return out;
+}
+
 export function xmlCiiRestraintEntriesFromSupportMatch(match, nodeElement, config = {}) {
   const attrs = match?.attrs || {};
   const kinds = Array.isArray(match?.kinds) && match.kinds.length ? match.kinds : [match?.kind].filter(Boolean);
-  const seen = new Set();
   const entries = [];
   for (const kind of kinds) {
     for (const entry of restraintEntriesFromSupportKind(kind, attrs, nodeElement, config)) {
-      const dir = entry.direction ? `${entry.direction.x.toFixed(6)},${entry.direction.y.toFixed(6)},${entry.direction.z.toFixed(6)}` : '';
-      const key = `${entry.type}|${dir}|${entry.stiffness}|${entry.gap}|${entry.frictionMode}|${entry.fixedFriction}`;
-      if (seen.has(key)) continue;
-      seen.add(key);
       entries.push(entry);
     }
   }
-  return entries;
+  return dedupeXmlCiiRestraintEntries(entries);
 }
 
 export function xmlCiiTypeEntriesFromSupportKind(kind, config = {}) {
@@ -454,6 +586,8 @@ function frictionForEntry(entry, type, existingFriction, config = {}) {
 export function applyXmlRestraints(document, nodeElement, entries, config = {}) {
   if (!entries || entries.length === 0) return;
   const existing = xmlChildrenByName(nodeElement, 'Restraint');
+  const nodeSupportGapText = firstNodeSupportGapText(nodeElement);
+  const nodeSupportGap = parseGapValue(nodeSupportGapText);
   let stiffness = config.defaultStiffness || '1.751270E+12';
   let gap = '0';
   let friction = config.defaultFriction || '0.3';
@@ -474,8 +608,15 @@ export function applyXmlRestraints(document, nodeElement, entries, config = {}) 
     nodeElement.appendChild(restraint);
     xmlSetText(document, restraint, 'Type', type);
     xmlSetText(document, restraint, 'Stiffness', toText(entry?.stiffness).trim() || stiffness);
-    xmlSetText(document, restraint, 'Gap', toText(entry?.gap).trim() || gap);
+    const entryGap = toText(entry?.gap).trim();
+    const usesSupportGap = restraintTypeUsesSupportGap(type, entry);
+    const gapValue = usesSupportGap && (!entryGap || Number(entryGap) === 0) && nodeSupportGap
+      ? String(nodeSupportGap)
+      : (entryGap || gap);
+    xmlSetText(document, restraint, 'Gap', gapValue);
     xmlSetText(document, restraint, 'Friction', frictionForEntry(entry, type, friction, config));
+    const cmpSupGap = toText(entry?.cmpSupGap).trim() || (usesSupportGap ? nodeSupportGapText : '');
+    if (cmpSupGap) xmlSetText(document, restraint, 'CMPSUPGAP', cmpSupGap);
     const direction = normalizeDirectionVector(entry?.direction) || (entry?.directionMode === 'from-xml' ? existingDirection : null);
     if (direction) {
       xmlSetText(document, restraint, 'DirectionCosineX', direction.x.toFixed(9));

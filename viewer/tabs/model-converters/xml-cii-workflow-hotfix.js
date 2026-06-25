@@ -53,7 +53,7 @@ async function runXmlCiiWithWorkflowFix(context) {
       } catch {}
     }
   }
-  return { ...response, outputs, logs: { ...(response.logs || {}), stdout: [...(response.logs?.stdout || []), 'XML CII workflow fix: Pressure2/hydro and resolved negative valve/flange blocks applied.'] } };
+  return { ...response, outputs, logs: { ...(response.logs || {}), stdout: [...(response.logs?.stdout || []), 'XML CII workflow fix: HydroPressure and resolved negative valve/flange blocks applied.'] } };
 }
 
 function patchRunner() {
@@ -78,7 +78,7 @@ function injectControls(scope, root) {
   const anchor = scope.querySelector('[data-xml-cii-run-option="kgToNewton"]')?.closest('label') || scope.querySelector('[data-native-run-option="kgToNewton"]')?.closest('label');
   if (anchor && !scope.querySelector('[data-xml-cii-hotfix-condense="splitCondensedValveFlange"]')) anchor.insertAdjacentHTML('afterend', checkbox('xsd', xsd) + checkbox('resolved', resolved));
   const configAnchor = scope.querySelector('[data-native-config-bool="disableCiiSupportTagPopulation"]')?.closest('.xml-cii-native-grid') || scope.querySelector('[data-old-workflow-config-json]')?.parentElement;
-  if (configAnchor && !scope.querySelector('[data-xml-cii-hotfix-info]')) configAnchor.insertAdjacentHTML('afterend', '<div class="xml-cii-hotfix-info" data-xml-cii-hotfix-info><strong>ⓘ XML→CII enrichment logic</strong><br>Pressure1, Hydro Pressure/Pressure2, Temperature1..3 and density are copied from the same Preview resolver into enriched XML. Resolved condense constructs negative FLAN/GASK/VALV/RIGID/INST chains before CII generation.</div>');
+  if (configAnchor && !scope.querySelector('[data-xml-cii-hotfix-info]')) configAnchor.insertAdjacentHTML('afterend', '<div class="xml-cii-hotfix-info" data-xml-cii-hotfix-info><strong>ⓘ XML→CII enrichment logic</strong><br>Pressure1, HydroPressure, Temperature1..3 and density are copied from the same Preview resolver into enriched XML. Resolved condense constructs negative FLAN/GASK/VALV/RIGID/INST chains before CII generation.</div>');
   scope.querySelectorAll('[data-xml-cii-hotfix-condense]').forEach((input) => {
     if (input.dataset.hotfixBound === 'true') return;
     input.dataset.hotfixBound = 'true';

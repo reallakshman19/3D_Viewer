@@ -17,7 +17,7 @@ import { deriveLineKeyFromBranchName } from '../../converters/xml-cii2019-core/r
 import { buildPipingClassIndex } from '../../converters/xml-cii2019-core/piping-class-resolver.js';
 import { resolveBranchProcessData } from '../../converters/xml-cii2019-core/branch-process-resolver.js';
 import { buildStagedDtxrIndex, resolveXmlCiiNodeDtxr } from '../../converters/xml-cii2019-core/dtxr-resolver.js';
-import { xmlCiiDtxrPsForNode, xmlCiiDtxrPosForNode, buildStagedDtxrPositionIndex } from '../../converters/xml-cii2019-core/dtxr-resolver.js';
+import { xmlCiiDtxrPsForNode, xmlCiiDtxrPosForNode, buildStagedDtxrPositionIndex, xmlCiiCalibrateDtxrPositionIndex } from '../../converters/xml-cii2019-core/dtxr-resolver.js';
 import {
   findWeightMasterMatch,
   collectXmlCiiZeroRigidWeightIssues,
@@ -52,7 +52,7 @@ import {
   computeLineNoKey as _computeLineNoKey,
   normalizeLineListRow as _normalizeLineListRow
 } from '../../converters/xml-cii2019-core/linelist-mapping.js';
-import { buildStagedSupportIndex, xmlCiiTypeEntriesFromSupportKind, xmlCiiTypeEntryFromExistingRestraint, applyXmlRestraints, enrichHierarchyWithMapperKinds } from '../../converters/xml-cii2019-core/support-mapping.js';
+import { buildStagedSupportIndex, calibrateStagedSupportIndexCoordinates, xmlCiiTypeEntriesFromSupportKind, xmlCiiRestraintEntriesFromSupportMatch, xmlCiiTypeEntryFromExistingRestraint, dedupeXmlCiiRestraintEntries, applyXmlRestraints, enrichHierarchyWithMapperKinds } from '../../converters/xml-cii2019-core/support-mapping.js';
 import { CONVERTERS, getConverterById } from './converter-registry.js?v=20260617-basic-glb-3';
 import { XML_CII_WORKFLOW_PHASES } from './WorkflowShell.js';
 import { loadStoredState, saveStoredState } from './core/config-store.js';
@@ -2623,7 +2623,7 @@ function _normalizeSupportTag(value) {
   const text = _toText(value).trim().toUpperCase().replace(/^\/+/, '');
   const match = text.match(/PS-\d+(?:\.\d+)?/i);
   if (!match) return '';
-  return match[0].replace(/\.\d+$/, '');
+  return match[0].toUpperCase();
 }
 
 function _supportTagsFromText(value) {
@@ -2649,6 +2649,45 @@ function _xmlNodeSupportTags(node) {
   const parts = [_xmlText(node, 'NodeName'), _xmlText(node, 'ComponentRefNo')];
   for (const child of _xmlChildrenByName(node, 'SupportTag')) parts.push(_toText(child.textContent));
   return [...new Set(parts.flatMap(_supportTagsFromText))];
+}
+
+function _supportTagBase(value) {
+  return _normalizeSupportTag(value).replace(/\.\d+$/, '');
+}
+
+function _relaxedSameDtxrPosSupportMatches(xmlSupportTags, coordMatches) {
+  if (!Array.isArray(coordMatches) || !coordMatches.length) return [];
+  const baseTags = new Set(xmlSupportTags.map(_supportTagBase).filter(Boolean));
+  if (!baseTags.size) return [];
+  return coordMatches.filter((match) => {
+    const stagedBaseTags = Array.isArray(match?.supportBaseTags) ? match.supportBaseTags : [];
+    return stagedBaseTags.some((tag) => baseTags.has(tag));
+  });
+}
+
+function _stagedSupportMatchKey(match) {
+  const attrs = match?.attrs || {};
+  return [
+    attrs.REF,
+    attrs.NAME,
+    attrs.CMPSUPREFN,
+    match?.component?.name,
+    match?.primaryKind || match?.kind,
+  ].map(_toText).join('|');
+}
+
+function _mergeUniqueSupportMatches(...groups) {
+  const out = [];
+  const seen = new Set();
+  for (const group of groups) {
+    for (const match of Array.isArray(group) ? group : []) {
+      const key = _stagedSupportMatchKey(match);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push(match);
+    }
+  }
+  return out;
 }
 
 // Resolve a staged-support kind (REST / GUIDE / LINESTOP / ANCHOR) for restraint
@@ -2695,7 +2734,7 @@ function _buildStagedComponentIndex(stagedJsonText, config) {
   for (const entry of _walkStagedComponents(parsed)) {
     const attrs = entry.attrs || {};
     let point = null;
-    for (const key of ['SUPPORTCOORD', 'POS', 'BPOS', 'APOS', 'LPOS', 'CPOS', 'HPOS', 'TPOS']) {
+    for (const key of ['SUPPORTCOORD', 'POS', 'POSI', 'BPOS', 'APOS', 'LPOS', 'CPOS', 'HPOS', 'TPOS']) {
       point = _normalizePoint(attrs[key]);
       if (point) break;
     }
@@ -2738,6 +2777,10 @@ function _xmlCiiDtxrPsForNode(node, stagedComponentIndex) {
 
 function _buildStagedDtxrPositionIndex(stagedJsonText, config) {
   return buildStagedDtxrPositionIndex(stagedJsonText, config);
+}
+
+function _xmlCiiCalibrateDtxrPositionIndex(dtxrPositionIndex, document, config) {
+  return xmlCiiCalibrateDtxrPositionIndex(dtxrPositionIndex, document, config);
 }
 
 function _xmlCiiDtxrPosForNode(node, dtxrPositionIndex, config) {
@@ -3261,33 +3304,7 @@ function _xmlCiiTypeEntryFromExistingRestraint(restraint, config) {
 }
 
 function _applyXmlRestraints(document, nodeElement, entries, config) {
-  if (!entries || entries.length === 0) return;
-  const existing = _xmlChildrenByName(nodeElement, 'Restraint');
-  let stiffness = config.defaultStiffness || '1.751270E+12';
-  let gap = '0';
-  let friction = config.defaultFriction || '0.3';
-  if (existing.length > 0) {
-    const r0 = existing[0];
-    const s = _xmlText(r0, 'Stiffness');
-    if (s && Number.isFinite(Number(s)) && Number(s) > 0) stiffness = s;
-    const g = _xmlText(r0, 'Gap');
-    if (g) gap = g;
-    const f = _xmlText(r0, 'Friction');
-    if (f) friction = f;
-  }
-  for (const r of existing) nodeElement.removeChild(r);
-  for (const entry of entries) {
-    const type = _toText(typeof entry === 'string' ? entry : entry?.type).trim();
-    if (!type) continue;
-    const restraint = nodeElement?.namespaceURI
-      ? document.createElementNS(nodeElement.namespaceURI, 'Restraint')
-      : document.createElement('Restraint');
-    nodeElement.appendChild(restraint);
-    _xmlSetText(document, restraint, 'Type', type);
-    _xmlSetText(document, restraint, 'Stiffness', _toText(entry?.stiffness).trim() || stiffness);
-    _xmlSetText(document, restraint, 'Gap', _toText(entry?.gap).trim() || gap);
-    _xmlSetText(document, restraint, 'Friction', _toText(entry?.friction).trim() || friction);
-  }
+  applyXmlRestraints(document, nodeElement, entries, config);
 }
 
 async function _enrichXmlForCii2019(xmlText, stagedJsonText, options = {}) {
@@ -3304,9 +3321,21 @@ async function _enrichXmlForCii2019(xmlText, stagedJsonText, options = {}) {
   await _loadXmlCiiWeightMasterRows(config, diagnostics);
   await _loadXmlCiiMasterRows(config.pipingClass, [], 'piping-class', diagnostics);
   await _loadXmlCiiMaterialMap(config, diagnostics);
-  const stagedSupportIndex = _buildStagedSupportIndex(stagedJsonText, config, diagnostics);
+  let stagedSupportIndex = _buildStagedSupportIndex(stagedJsonText, config, diagnostics);
   const stagedComponentIndex = _buildStagedComponentIndex(stagedJsonText, config);
-  const stagedDtxrPositionIndex = _buildStagedDtxrPositionIndex(stagedJsonText, config);
+  let stagedDtxrPositionIndex = _buildStagedDtxrPositionIndex(stagedJsonText, config);
+  stagedDtxrPositionIndex = _xmlCiiCalibrateDtxrPositionIndex(stagedDtxrPositionIndex, document, config);
+  if (stagedDtxrPositionIndex?.inferredOffset) {
+    stagedSupportIndex = calibrateStagedSupportIndexCoordinates(stagedSupportIndex, stagedDtxrPositionIndex.inferredOffset, config);
+    diagnostics.push({
+      type: 'dtxr-position-offset-calibrated',
+      samples: stagedDtxrPositionIndex.calibration?.samples || 0,
+      uniqueTags: stagedDtxrPositionIndex.calibration?.uniqueTags || 0,
+      xOffset: stagedDtxrPositionIndex.inferredOffset.x,
+      yOffset: stagedDtxrPositionIndex.inferredOffset.y,
+      zOffset: stagedDtxrPositionIndex.inferredOffset.z,
+    });
+  }
   const tolerance = _toFiniteNumber(config.coordinateTolerance, 1);
   const stats = { removedDuplicateSupports: 0, normalizedRestraints: 0, stagedSupportsMapped: 0, dtxrPsAnnotations: 0, dtxrPosAnnotations: 0, branchLineKeys: 0, lineListMatches: 0, processAnnotations: 0, ratingAnnotations: 0, weightAnnotations: 0 };
   diagnostics.push({ type: 'config', duplicateSupportPolicy: config.duplicateSupportPolicy, coordinateTolerance: tolerance, rating: config.rating, weight: { ...config.weight, masterRows: Array.isArray(config.weight?.masterRows) ? `${config.weight.masterRows.length} row(s)` : 'none' } });
@@ -3455,13 +3484,20 @@ async function _enrichXmlForCii2019(xmlText, stagedJsonText, options = {}) {
     const componentType = _xmlText(node, 'ComponentType').toUpperCase();
     const positionKey = _xmlPositionKey(_xmlText(node, 'Position'), tolerance);
     const coordMatches = positionKey ? (stagedSupportIndex.byCoord.get(positionKey) || []) : [];
-    const tagMatches = _xmlNodeSupportTags(node).flatMap((tag) => stagedSupportIndex.byTag.get(tag) || []);
+    const supportTags = _xmlNodeSupportTags(node);
+    const tagMatches = supportTags.flatMap((tag) => stagedSupportIndex.byTag.get(tag) || []);
+    const relaxedTagMatches = tagMatches.length ? [] : _relaxedSameDtxrPosSupportMatches(supportTags, coordMatches);
     // The XML restraint type is not trusted; the staged support is the source of
     // truth. Match by PS-tag first, then fall back to coordinate proximity.
-    const stagedMatches = tagMatches.length > 0 ? tagMatches : coordMatches;
+    const stagedMatches = tagMatches.length > 0
+      ? _mergeUniqueSupportMatches(tagMatches, coordMatches)
+      : (relaxedTagMatches.length > 0 ? relaxedTagMatches : coordMatches);
+    const supportMatchMethod = tagMatches.length > 0
+      ? (coordMatches.length > 0 ? 'ps-tag+coordinate-cluster' : 'ps-tag')
+      : (relaxedTagMatches.length > 0 ? 'ps-tag-relaxed-same-dtxr-pos' : 'coordinate-multi');
     const staged = stagedMatches[0] || null;
     const restraints = _xmlChildrenByName(node, 'Restraint');
-    const combinedTypes = Array.from(new Set(stagedMatches.flatMap(m => _xmlCiiTypeEntriesFromSupportKind(m.kind, config))));
+    const combinedTypes = dedupeXmlCiiRestraintEntries(stagedMatches.flatMap(m => xmlCiiRestraintEntriesFromSupportMatch(m, node, config)));
     const dtxrPs = _xmlCiiDtxrPsForNode(node, stagedComponentIndex);
     if (dtxrPs.text) {
       _xmlSetText(document, node, 'DTXR_PS', dtxrPs.text);
@@ -3479,7 +3515,7 @@ async function _enrichXmlForCii2019(xmlText, stagedJsonText, options = {}) {
       // Show the revalidation: the original (possibly erroneous) XML restraint
       // types vs the types derived from the staged support kinds.
       const xmlTypes = restraints.map((r) => _xmlText(r, 'Type')).filter(Boolean).join('+');
-      diagnostics.push({ type: 'support-match', nodeNumber: _xmlText(node, 'NodeNumber'), nodeName: _xmlText(node, 'NodeName'), method: tagMatches.length > 0 ? 'ps-tag' : 'coordinate-multi', kind: allKinds.join('+'), xmlRestraintTypes: xmlTypes, restraintTypes: combinedTypes.join('+'), stagedName: staged.component?.name || staged.attrs?.NAME || '', tags: _xmlNodeSupportTags(node) });
+      diagnostics.push({ type: 'support-match', nodeNumber: _xmlText(node, 'NodeNumber'), nodeName: _xmlText(node, 'NodeName'), method: supportMatchMethod, kind: allKinds.join('+'), xmlRestraintTypes: xmlTypes, restraintTypes: combinedTypes.join('+'), stagedName: staged.component?.name || staged.attrs?.NAME || '', tags: supportTags });
     }
 
     let targetEntries = [];

@@ -108,7 +108,7 @@ assert(nativePanels.includes('data-xml-cii-unified-master-preview'), 'fallback p
 assert(!nativePanels.includes('Workflow 1 keeps master setup compact'), 'fallback popup must not show retired Workflow 1 compact wording');
 assert(!nativePanels.includes('Workflow 1 / Workflow 2'), 'fallback popup config notes must not expose retired dual-workflow wording');
 assert(nativePanels.includes("master.key === 'pipingClass'"), 'native panels must disable default loading for piping-class master');
-assert(enrichmentRunParity.includes('process-provenance') && enrichmentRunParity.includes('Pressure2 / Hydro/Test Pressure'), 'process provenance diagnostics must still include Hydro/Test Pressure');
+assert(enrichmentRunParity.includes('process-provenance') && enrichmentRunParity.includes('Hydro/Test Pressure'), 'process provenance diagnostics must still include Hydro/Test Pressure');
 assert(enrichmentRunParity.includes('split-condensed-valve-flange-resolved'), 'resolved condense diagnostics must still exist');
 assert(invocationBuilder.includes('--split-condensed-valve-flange'), 'worker invocation must still forward split-condensed flag');
 

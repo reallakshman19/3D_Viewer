@@ -23,16 +23,8 @@ function normalizeMatch(match) {
 const HALT = 'ST' + 'OP';
 const LINE_LIMIT_KIND = `LINE${HALT}`;
 const SUPPORT_INTENT_FIELDS = 'SPRE,SKEY,NAME,DESCRIPTION,DESC,CMPSUPTYPE,DTXR,SUPPORT_TYPE,SUPPORT_KIND,SUPPORT_MAPPER_KIND,MDSSUPPTYPE';
-const LIMIT_PATTERN = [
-  `LIMIT ${HALT}`,
-  `AXIAL ${HALT}`,
-  'LIMIT',
-  `PIPE ${HALT}`,
-  `PIPE${HALT}`,
-  `LINE ${HALT}`,
-  `LINE${HALT}`,
-  `${HALT}PER`,
-].join(',');
+export const DEFAULT_STOP_KEYWORD_HELP = 'Default stop detection: Line stop, Limit stop, Axial stop, Directional anchor. Generic Anchor maps to ANCHOR. Generic REST/LINE text is not used as stop evidence.';
+const LIMIT_PATTERN = String.raw`\b(?:LINE\s*STOP|LIMIT\s*STOP|AXIAL\s*STOP|DIRECTIONAL\s+ANCHOR)\b`;
 
 function normalizeXmlType(type) {
   const t = toText(type).toUpperCase();
@@ -103,9 +95,31 @@ function normalizeDirection(value) {
 
 const REQUIRED_SUPPORT_RULES = Object.freeze([
   Object.freeze({
-    id: 'builtin-user-rest',
+    id: 'builtin-user-limit',
     enabled: true,
     priority: 10,
+    source: 'all',
+    field: SUPPORT_INTENT_FIELDS,
+    pattern: LIMIT_PATTERN,
+    match: 'regex',
+    kind: LINE_LIMIT_KIND,
+    label: ['LIMIT/PIPE/LINE', HALT, '-> LIM'].join(' '),
+  }),
+  Object.freeze({
+    id: 'builtin-user-guide',
+    enabled: true,
+    priority: 20,
+    source: 'all',
+    field: SUPPORT_INTENT_FIELDS,
+    pattern: 'GUIDE',
+    match: 'contains',
+    kind: 'GUIDE',
+    label: 'GUIDE -> GUIDE',
+  }),
+  Object.freeze({
+    id: 'builtin-user-rest',
+    enabled: true,
+    priority: 30,
     source: 'all',
     field: SUPPORT_INTENT_FIELDS,
     pattern: 'REST,SHOE,BP,BEARING PLATE,WP,WEAR PAD,ANCI',
@@ -114,37 +128,15 @@ const REQUIRED_SUPPORT_RULES = Object.freeze([
     label: 'REST/SHOE/BP/WP/ANCI -> REST',
   }),
   Object.freeze({
-    id: 'builtin-user-limit',
-    enabled: true,
-    priority: 20,
-    source: 'all',
-    field: SUPPORT_INTENT_FIELDS,
-    pattern: LIMIT_PATTERN,
-    match: 'contains',
-    kind: 'LIMIT',
-    label: ['LIMIT/PIPE/LINE', HALT, '-> LIM'].join(' '),
-  }),
-  Object.freeze({
     id: 'builtin-atta-rest',
     enabled: true,
-    priority: 30,
+    priority: 40,
     source: 'all',
     field: 'ComponentType,COMPONENTTYPE',
     pattern: 'ATTA',
     match: 'equals',
     kind: 'REST',
     label: 'ComponentType ATTA -> REST (+Y)',
-  }),
-  Object.freeze({
-    id: 'builtin-user-guide',
-    enabled: true,
-    priority: 40,
-    source: 'all',
-    field: SUPPORT_INTENT_FIELDS,
-    pattern: 'GUIDE',
-    match: 'contains',
-    kind: 'GUIDE',
-    label: 'GUIDE -> GUIDE',
   }),
 ]);
 

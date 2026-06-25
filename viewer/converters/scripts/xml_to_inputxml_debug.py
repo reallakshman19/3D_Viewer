@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import math
+import re
 import xml.etree.ElementTree as ET
 from pathlib import Path
 from typing import Any
@@ -10,7 +11,16 @@ from typing import Any
 import xml_to_cii2019 as base
 import xml_to_cii2019_patched as patched
 
-POINT_FIELDS = ("ComponentType", "DTXR_POS", "DTXR_PS", "PipingClass", "Rating", "Position")
+POINT_FIELDS = ("ComponentType", "DTXR_POS", "DTXR_PS", "TEEDESC_POS", "TEEDESC", "PipingClass", "Rating", "Position")
+
+DEFAULT_TEE_SIF_TYPE_MAPPING = [
+    {"code": 1, "patterns": [r"\bREINF(?:ORCED)?\b.*\bTEE\b"]},
+    {"code": 2, "patterns": [r"\bUN[-\s]?REINF(?:ORCED)?\b.*\bTEE\b"]},
+    {"code": 3, "patterns": [r"\bWELD(?:ING)?\s+TEE\b", r"\bTEE\b.*\bB\s*\.?\s*W\.?\b", r"\bTEE\b.*\bBUTT\s*[- ]?\s*WELD\b", r"\bTEE\b.*\bBUTTWELD\b", r"\bTEE\s+(?:EQUAL|REDUC(?:ING|ER)?)\b"]},
+    {"code": 4, "patterns": [r"\bSWEEPOLET\b", r"\bSWEEP\s*OLET\b"]},
+    {"code": 5, "patterns": [r"\bWELDOLET\b", r"\bWELD\s*OLET\b", r"\bWOLET\b", r"\bBRANCH\s+OUTLET\b.*\bB\s*\.?\s*W\.?\b", r"\bBRANCH\s+FITTING\b.*\bB\s*\.?\s*W\.?\b", r"\bOLET\b.*\bB\s*\.?\s*W\.?\b"]},
+    {"code": 6, "patterns": [r"\bEXTRUDED\b.*\bTEE\b", r"\bEXT(?:RUDED)?\s+TEE\b"]},
+]
 
 
 def _safe_text(value: object) -> str:
@@ -115,6 +125,18 @@ def _merge_spec_maps(*maps: dict[int, tuple[base.RestraintSpec, ...]]) -> dict[i
     return merged
 
 
+def _prefer_xml_spec_map(
+    xml_specs: dict[int, tuple[base.RestraintSpec, ...]],
+    *fallback_maps: dict[int, tuple[base.RestraintSpec, ...]],
+) -> dict[int, tuple[base.RestraintSpec, ...]]:
+    merged = dict(xml_specs)
+    for spec_map in fallback_maps:
+        for node_number, specs in spec_map.items():
+            if node_number not in merged or not merged[node_number]:
+                merged[node_number] = specs
+    return merged
+
+
 def _add_restraint(parent: ET.Element, restraint: base.RestraintSpec, node_number: int, support_config: dict[str, Any]) -> None:
     fric = _inputxml_friction_value(restraint, support_config)
     ET.SubElement(parent, "RESTRAINT", {
@@ -131,6 +153,40 @@ def _add_restraint(parent: ET.Element, restraint: base.RestraintSpec, node_numbe
         "TAG": "ANCI/DTXR-derived",
         "GUID": "",
     })
+
+
+def _regex_or_contains(pattern: str, text: str) -> bool:
+    try:
+        return re.search(pattern, text, flags=re.I) is not None
+    except re.error:
+        return pattern.upper() in text.upper()
+
+
+def _tee_sif_type_from_meta(meta: dict[str, str], support_config: dict[str, Any]) -> int:
+    text = _safe_text(meta.get("TEEDESC_POS") or meta.get("TEEDESC") or meta.get("DTXR_POS") or meta.get("DTXR_PS"))
+    normalized = re.sub(r"\s+", " ", text).upper()
+    normalized = re.sub(r"\bB\s*\.?\s*W\.?\b", "BW", normalized)
+    normalized = re.sub(r"\bBUTT\s*[- ]?\s*WELD\b", "BUTT WELD", normalized)
+    if not normalized:
+        return int(float(support_config.get("defaultTeeSifType", 0) or 0))
+    mapping = support_config.get("teeSifTypeMapping")
+    if not isinstance(mapping, list) or not mapping:
+        mapping = DEFAULT_TEE_SIF_TYPE_MAPPING
+    for entry in mapping:
+        if not isinstance(entry, dict):
+            continue
+        try:
+            code = int(float(entry.get("code")))
+        except (TypeError, ValueError):
+            continue
+        patterns = entry.get("patterns") if isinstance(entry.get("patterns"), list) else []
+        if any(_regex_or_contains(str(pattern), normalized) for pattern in patterns):
+            return code
+    if re.search(r"\b(?:BRANCH\s+OUTLET|BRANCH\s+FITTING|OLET)\b", normalized) and re.search(r"\b(BW|BUTT\s*WELD|BUTTWELD|WELD(?:ING)?)\b", normalized):
+        return 5
+    if re.search(r"\bTEE\b", normalized) and re.search(r"\b(BW|BUTT\s*WELD|BUTTWELD|WELD(?:ING)?|EQUAL|REDUC(?:ING|ER)?)\b", normalized):
+        return 3
+    return int(float(support_config.get("defaultTeeSifType", 0) or 0))
 
 
 def _node_meta(final_xml: Path) -> tuple[dict[int, dict[str, str]], dict[str, dict[str, str]], dict[str, float]]:
@@ -190,7 +246,11 @@ def _inputxml_from_final_xml(final_xml: Path, support_config: dict[str, Any], us
     dtxr_specs, node_number_kind_map = patched._build_keyword_restraint_specs(final_xml, support_config)
     xml_specs = base._build_explicit_restraint_specs(document.branches)
     component_specs = _component_type_restraint_specs(document, support_config)
-    explicit_specs = _merge_spec_maps(component_specs, dtxr_specs) if use_json_restraints else _merge_spec_maps(component_specs, xml_specs, dtxr_specs)
+    explicit_specs = (
+        dict(xml_specs)
+        if use_json_restraints and patched._xml_restraints_are_authoritative(final_xml, support_config)
+        else (_prefer_xml_spec_map(xml_specs, component_specs, dtxr_specs) if use_json_restraints else _merge_spec_maps(component_specs, xml_specs, dtxr_specs))
+    )
     root = ET.Element("CAESARII", {"XML_TYPE": "Input", "VERSION": "2019", "SOURCE": "XML->CII enriched InputXML debug export"})
     model = ET.SubElement(root, "PIPINGMODEL", {"JOBNAME": document.metadata.project_name or Path(final_xml).stem, "TIME": document.metadata.date_time, "NORTH_Y": "1", "NORTH_Z": "0", "NUMELEMENTS": "0", "NUMREST": "0"})
     element_count = 0
@@ -226,7 +286,8 @@ def _inputxml_from_final_xml(final_xml: Path, support_config: dict[str, Any], us
             if to_node.rigid is not None or abs(to_node.weight) > 1e-9:
                 ET.SubElement(element, "RIGID", {"WEIGHT": _fmt(to_node.weight, 6)})
             if to_node.component_type.upper() in {"TEE", "OLET", "BRAN"}:
-                ET.SubElement(element, "SIF", {"NODE": _fmt(to_node.node_number)})
+                meta = by_number.get(to_node.node_number) or by_name.get(to_node.node_name) or {}
+                ET.SubElement(element, "SIF", {"NODE": _fmt(to_node.node_number), "TYPE": _fmt(_tee_sif_type_from_meta(meta, support_config))})
             for slot, restraint in enumerate(explicit_specs.get(to_node.node_number, tuple()), start=1):
                 _add_restraint(element, restraint, to_node.node_number, support_config)
                 element[-1].set("NUM", str(slot))
