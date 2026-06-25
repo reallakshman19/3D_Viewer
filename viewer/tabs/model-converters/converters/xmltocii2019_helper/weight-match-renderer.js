@@ -1,5 +1,6 @@
 import { collectXmlCiiWeightMatchRows } from '../../../../converters/xml-cii2019-core/weight-match-model.js?v=20260620-weight-fallback-1';
 import { applyXmlCiiFlangeWeightFallbackToIssue } from '../../../../converters/xml-cii2019-core/flange-weight-fallback.js?v=20260620-flange-fallback-1';
+import { applyXmlCiiStagedGeometryAuthority } from '../../../../converters/xml-cii2019-core/staged-geometry-authority.js?v=20260625-staged-geometry-1';
 import {
   ensureValveHintConfig,
   formatValveHint,
@@ -292,7 +293,8 @@ export function bindXmlCiiWeightMatchPhase(detailEl, { xmlFile, stagedJsonText, 
       const enrichedConfig = await ensureWeightMasterRows(enriched.config || liveConfig);
       const cfg = await ensureWeightMasterRows(mergeRuntimeOverrides(mergeRuntimeOverrides(enrichedConfig, liveConfig), getXmlCiiPreviewRuntimeConfig()));
       if (!hasWeightMasterRows(cfg)) { localIssues = []; renderWeightMasterBlocked(contentEl); status('Weight master not ready', 'bad'); return; }
-      localIssues = collectXmlCiiWeightMatchRows(xmlText, jsonText, cfg).map(cleanRow).filter(Boolean).map((row) => applyXmlCiiFlangeWeightFallbackToIssue(rerankWithRating(row, cfg), cfg));
+      const geometryXml = applyXmlCiiStagedGeometryAuthority(enriched.xmlText || xmlText, jsonText, { config: cfg }).xmlText;
+      localIssues = collectXmlCiiWeightMatchRows(geometryXml, jsonText, cfg).map(cleanRow).filter(Boolean).map((row) => applyXmlCiiFlangeWeightFallbackToIssue(rerankWithRating(row, cfg), cfg));
       const mapped = localIssues.filter((row) => row.mapped).length;
       const suggested = localIssues.filter((row) => row.candidates?.[0]?.preferred).length;
       const flange = localIssues.filter((row) => row.candidates?.[0]?.flangeWeightFallback).length;
