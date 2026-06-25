@@ -104,6 +104,10 @@ check(!renderBuilderSource.includes("primitive === 'STRUCTURE_BBOX' || type === 
 check(indexSource.includes('main-rhbg-fitguard.js?v=20260625-rvm-renderer-cache-chain-1'), 'index uses current RVM renderer main cache key');
 check(entrySource.includes('core/app.js?v=20260625-rvm-renderer-cache-chain-1'), 'entrypoint uses current RVM renderer app cache key');
 check(entrySource.includes('await init(startupMount())'), 'entrypoint passes resolved mount root into init');
+check(!entrySource.includes('RvmInputXmlSupportGraphicsSetModelBridge.js?v='), 'entrypoint does not side-load legacy InputXML support setModel bridge');
+check(!entrySource.includes('RvmInputXmlSupportGraphicsUiBridge.js?v='), 'entrypoint does not side-load legacy InputXML support UI bridge');
+check(entrySource.includes('AvevaJsonAutoConnectOverride.js?v=20260618-inputxml-auto-connect-1'), 'entrypoint keeps InputXML route-preserve loader override');
+check(entrySource.includes('xml-cii-finalise-run-button.js?v=20260619-workflow-perf-1'), 'entrypoint keeps XML CII finalise-run compatibility side effect');
 check(appSource.includes('app-tab-click-state-bridge.js?v=20260622-tab-click-state-1'), 'app side-loads tab click state bridge');
 check(appSource.includes('installAppTabClickStateBridge()'), 'app installs tab click state bridge before runtime delegate');
 check(tabClickBridgeSource.includes('RuntimeEvents.TAB_CHANGED'), 'tab click state bridge listens for tab changes');

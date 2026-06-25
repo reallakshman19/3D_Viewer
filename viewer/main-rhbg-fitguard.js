@@ -1,7 +1,5 @@
 const STARTUP_SIDE_EFFECT_MODULES = [
   './rvm/AvevaJsonAutoConnectOverride.js?v=20260618-inputxml-auto-connect-1',
-  './rvm-viewer/RvmInputXmlSupportGraphicsSetModelBridge.js?v=20260619-source-bend-collapse-1',
-  './rvm-viewer/RvmInputXmlSupportGraphicsUiBridge.js?v=20260619-source-bend-collapse-1',
   './tabs/model-converters/xml-cii-finalise-run-button.js?v=20260619-workflow-perf-1',
 ];
 // Previous cache marker: core/app.js?v=20260622-geometry-import-tree-1
