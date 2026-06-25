@@ -1,8 +1,18 @@
-const VERSION = '20260624-rvm-deferred-postmodel-advanced-tools-1';
+const VERSION = '20260625-rvm-deferred-source-preview-tools-1';
 const API_KEY = '__PCF_GLB_RVM_BRIDGE_LOADER__';
 const ACTION_DIAGNOSTICS_KEY = '__PCF_GLB_RVM_ACTION_DIAGNOSTICS__';
 
+const SOURCE_PREVIEW_KIND_RE = /^(json|jscon|inputxml|uxml|txt|source-preview|stagedjson)$/i;
+
 const BRIDGE_GROUPS = Object.freeze({
+  sourcePreview: [
+    { id: 'nonprimitive-support-overlay', specifier: './RvmNonPrimitiveSupportOverlayBridge.js?v=20260623-nonprimitive-support-overlay-9', install: 'installRvmNonPrimitiveSupportOverlayBridge' },
+    { id: 'nonprimitive-support-hard-disable', specifier: './RvmNonPrimitiveSupportOverlayHardDisableBridge.js?v=20260623-nonprimitive-support-hard-disable-1', install: 'installRvmNonPrimitiveSupportOverlayHardDisableBridge' },
+    { id: 'nonprimitive-support-details-panel', specifier: './RvmNonPrimitiveSupportOverlayDetailsPanelBridge.js?v=20260623-nonprimitive-support-details-panel-4', install: 'installRvmNonPrimitiveSupportOverlayDetailsPanelBridge' },
+    { id: 'nonprimitive-support-hover', specifier: './RvmNonPrimitiveSupportOverlayHoverBridge.js?v=20260623-nonprimitive-support-hover-2', install: 'installRvmNonPrimitiveSupportOverlayHoverBridge' },
+    { id: 'nonprimitive-auto-bend', specifier: './RvmNonPrimitiveAutoBendBridge.js?v=20260623-nonprimitive-auto-bend-preview-2', install: 'installRvmNonPrimitiveAutoBendBridge' },
+    { id: 'nonprimitive-source-tools-ui', specifier: './RvmNonPrimitiveSourceToolsUiBridge.js?v=20260624-source-tools-grouped-1', install: 'installRvmNonPrimitiveSourceToolsUiBridge' },
+  ],
   postModel: [
     { id: 'stagedjson-export', specifier: './RvmStagedJsonExportBridge.js?v=20260624-rvm-stagedjson-support-policy-1', install: 'installRvmStagedJsonExportBridge' },
     { id: 'stagedjson-validation', specifier: './RvmStagedJsonValidationBridge.js?v=20260624-rvm-stagedjson-support-policy-1', install: 'installRvmStagedJsonValidationBridge' },
@@ -37,17 +47,23 @@ export function installRvmDeferredBridgeLoader() {
     groups: Object.keys(BRIDGE_GROUPS),
     ensureGroup: (groupName, reason = 'api') => ensureRvmBridgeGroup(groupName, reason),
     ensurePostModel: (reason = 'api') => ensureRvmBridgeGroup('postModel', reason),
+    ensureSourcePreview: (reason = 'api') => ensureSourcePreviewGroupIfNeeded(reason),
     getLoadedBridgeIds: () => [...loadedSpecs.keys()],
     getDiagnostics: () => globalThis[ACTION_DIAGNOSTICS_KEY] || null,
   };
   api.version = VERSION;
+  api.groups = Object.keys(BRIDGE_GROUPS);
+  api.ensureSourcePreview = (reason = 'api') => ensureSourcePreviewGroupIfNeeded(reason);
   globalThis[API_KEY] = api;
   installRvmBridgeActionDiagnostics();
   installModelLoadedListener();
   startModelReadyPolling(api);
   afterFirstPaint(() => {
     const root = document.querySelector('[data-rvm-viewer]');
-    if (root?.dataset?.rvmModelLoaded === 'true') api.ensurePostModel('already-loaded-after-first-paint');
+    if (root?.dataset?.rvmModelLoaded === 'true') {
+      api.ensurePostModel('already-loaded-after-first-paint');
+      api.ensureSourcePreview('already-loaded-after-first-paint');
+    }
   });
   return api;
 }
@@ -65,6 +81,7 @@ export function ensureRvmBridgeGroup(groupName, reason = 'manual') {
     if (failures.length) {
       for (const { result, spec } of failures) reportRvmActionError(result.reason, { action: 'bridge-install', bridge: spec.id, group: groupName, reason });
     }
+    if (groupName === 'sourcePreview' && !failures.length) refreshSourcePreviewRuntime(reason);
     refreshDiagnosticsDrawer();
     return { group: groupName, reason, results, failures };
   });
@@ -95,8 +112,12 @@ function refreshRootInstallEpoch() {
 function installModelLoadedListener() {
   if (modelLoadedListenerInstalled || typeof globalThis.addEventListener !== 'function') return;
   modelLoadedListenerInstalled = true;
-  globalThis.addEventListener('rvm-model-loaded', () => {
-    afterFirstPaint(() => ensureRvmBridgeGroup('postModel', 'rvm-model-loaded'));
+  globalThis.addEventListener('rvm-model-loaded', (event) => {
+    const reason = event?.detail?.reason || 'rvm-model-loaded';
+    afterFirstPaint(() => {
+      ensureRvmBridgeGroup('postModel', reason);
+      ensureSourcePreviewGroupIfNeeded(reason);
+    });
   });
 }
 
@@ -111,12 +132,58 @@ function startModelReadyPolling(api) {
     const modelReady = Boolean(root && viewer?.modelGroup?.children?.length);
     if (modelReady) {
       root.dataset.rvmModelLoaded = 'true';
-      afterFirstPaint(() => api.ensurePostModel('detected-model-group'));
+      afterFirstPaint(() => {
+        api.ensurePostModel('detected-model-group');
+        api.ensureSourcePreview('detected-model-group');
+      });
       return;
     }
     if (attempts < 240) setTimeout(tick, 500);
   };
   afterFirstPaint(tick);
+}
+
+function ensureSourcePreviewGroupIfNeeded(reason = 'source-preview-check') {
+  const context = getSourcePreviewContext();
+  if (!context.active) {
+    clearSourcePreviewRuntime(context.viewer, context.reason || 'not-source-preview');
+    return Promise.resolve({ group: 'sourcePreview', reason, skipped: true, status: 'not-source-preview' });
+  }
+  return ensureRvmBridgeGroup('sourcePreview', reason);
+}
+
+function getSourcePreviewContext() {
+  const root = document.querySelector('[data-rvm-viewer]');
+  const viewer = globalThis.__3D_RVM_VIEWER__;
+  const model = viewer?.modelGroup || viewer?.scene || null;
+  const userData = model?.userData || {};
+  const mode = String(root?.dataset?.rvmModelPrimitiveMode || viewer?.modelPrimitiveMode || '').toLowerCase();
+  const sourceKind = normalizeSourceKind(root?.dataset?.rvmLoadedSourceKind || userData.__rvmNonPrimitiveSourceKind || userData.__rvmNonPrimitiveAutoBendSourceKind || viewer?.sourceKind || '');
+  const source = userData.__rvmNonPrimitiveAutoBendSourceHierarchy || userData.__rvmNonPrimitiveSourceHierarchy || null;
+  const supportSource = userData.__rvmNonPrimitiveSourceHierarchy || source;
+  const active = mode === 'source-preview' && SOURCE_PREVIEW_KIND_RE.test(sourceKind) && Boolean(source);
+  return { root, viewer, model, source, supportSource, sourceKind, fileName: userData.fileName || '', active, reason: active ? '' : `mode:${mode || '-'} kind:${sourceKind || '-'}` };
+}
+
+function normalizeSourceKind(value) {
+  return String(value || '').trim().toLowerCase();
+}
+
+function refreshSourcePreviewRuntime(reason = 'source-preview-loaded') {
+  const context = getSourcePreviewContext();
+  if (!context.active) return clearSourcePreviewRuntime(context.viewer, context.reason || reason);
+  const { root, viewer, source, supportSource, sourceKind, fileName } = context;
+  try { globalThis.__PCF_GLB_RVM_NON_PRIMITIVE_AUTO_BEND__?.applyFromSource?.({ viewer, source, sourceKind, fileName }); } catch (error) { reportRvmActionError(error, { action: 'source-preview-auto-bend', reason }); }
+  try { globalThis.__PCF_GLB_RVM_NON_PRIMITIVE_SUPPORT_OVERLAY__?.applyFromSource?.({ viewer, root, source: supportSource, sourceKind, fileName }); } catch (error) { reportRvmActionError(error, { action: 'source-preview-support-overlay', reason }); }
+  try { globalThis.__PCF_GLB_RVM_NON_PRIMITIVE_SOURCE_TOOLS_UI__?.sync?.(); } catch (error) { reportRvmActionError(error, { action: 'source-preview-tools-sync', reason }); }
+  return { status: 'refreshed', sourceKind, reason };
+}
+
+function clearSourcePreviewRuntime(viewer, reason = 'clear-source-preview-runtime') {
+  try { globalThis.__PCF_GLB_RVM_NON_PRIMITIVE_AUTO_BEND__?.clear?.(viewer, reason); } catch (_) {}
+  try { globalThis.__PCF_GLB_RVM_NON_PRIMITIVE_SUPPORT_OVERLAY__?.clear?.(viewer, reason); } catch (_) {}
+  try { globalThis.__PCF_GLB_RVM_NON_PRIMITIVE_SOURCE_TOOLS_UI__?.sync?.(); } catch (_) {}
+  return { status: 'cleared', reason };
 }
 
 function installRvmBridgeActionDiagnostics() {
