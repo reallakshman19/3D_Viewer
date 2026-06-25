@@ -24,6 +24,7 @@ on:
       - 'viewer/tabs/viewer3d-rvm-tab-renderer.js'
       - 'viewer/tabs/RvmViewerInteractionPatch.js'
       - 'viewer/tabs/RvmNavigationModeArbiterBridge.js'
+      - 'viewer/tabs/RvmDeferredBridgeLoader.js'
       - 'viewer/tabs/RvmNonPrimitiveSupportOverlayBridge.js'
       - 'viewer/tabs/RvmNonPrimitiveSupportOverlayDetailsPanelBridge.js'
       - 'viewer/tabs/RvmNonPrimitiveSupportOverlayHoverBridge.js'
@@ -42,6 +43,7 @@ on:
       - 'viewer/core/event-bus.js'
       - 'viewer/core/state.js'
       - 'viewer/tests/rvm-pcf-*.test.js'
+      - 'viewer/tests/rvm-viewer-ui-contract.test.js'
       - 'viewer/tests/inputxml-direct-managed-stage.test.js'
       - 'viewer/tests/rvm-geometry-workspace-*.test.js'
       - 'viewer/tests/nonprimitive-auto-bend-*.test.js'
@@ -85,6 +87,9 @@ jobs:
 
       - name: Verify JSON/RVM PCF adapter preview and run
         run: node viewer/tests/rvm-pcf-json-adapter-preview-run.test.js
+
+      - name: Verify RVM viewer UI contracts
+        run: node viewer/tests/rvm-viewer-ui-contract.test.js
 
       - name: Verify direct InputXML stagedJSON conversion
         run: node viewer/tests/inputxml-direct-managed-stage.test.js
