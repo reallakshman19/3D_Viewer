@@ -9,6 +9,9 @@ const dtxrWall = read('viewer/converters/xml-cii2019-core/dtxr-wall-thickness-re
 const nativePanels = read('viewer/tabs/model-converters/xml-cii-popup-native-panels.js');
 const bridge = read('viewer/tabs/model-converters/xml-cii-workflow-bridge.js');
 const stagedGeometry = read('viewer/converters/xml-cii2019-core/staged-geometry-authority.js');
+const postSplitCleanup = read('viewer/converters/xml-cii2019-core/post-split-element-length-cleanup.js');
+const weightValveHints = read('viewer/converters/xml-cii2019-core/weight-valve-hints.js');
+const flangeFallback = read('viewer/converters/xml-cii2019-core/flange-weight-fallback.js');
 const config = read('viewer/converters/xml-cii2019-core/config.js');
 const sideloadConfig = read('viewer/converters/xml-cii2019-core/sideload-json-config.js');
 const branchSample = read('viewer/tabs/model-converters/xml-cii-branch-sample-sync.js');
@@ -16,6 +19,8 @@ const branchResolver = read('viewer/converters/xml-cii2019-core/branch-process-r
 const previewTable = read('viewer/tabs/model-converters/shared/EditablePreviewTable.js');
 const runParity = read('viewer/tabs/model-converters/converters/xmltocii2019_helper/enrichment-run-parity.js');
 const openRegex = read('viewer/tabs/model-converters/xml-cii-workflow-open-regex.js');
+const shortToggle = read('viewer/tabs/model-converters/xml-cii-short-element-toggle.js');
+const semanticInfo = read('viewer/tabs/model-converters/xml-cii-weight-semantic-info.js');
 function assert(condition, message) { if (!condition) { console.error('FAIL: ' + message); process.exit(1); } }
 assert(/ComponentType/.test(renderer), 'Workflow 4A table must show ComponentType');
 assert(/ComponentRefNo_Endpoint/.test(renderer), 'Workflow 4A table must show ComponentRefNo_Endpoint');
@@ -37,6 +42,16 @@ assert(/Update Wall thickness based on DTXR/.test(preview), 'Preview must expose
 assert(/resolveXmlCiiWallThicknessFromDtxr/.test(preview), 'Preview must resolve Wall thickness from DTXR schedule and bore');
 assert(/createPipeDataDb/.test(dtxrWall), 'DTXR wall resolver must use the existing pipe database first');
 assert(/SCH|SCHEDULE|schedule/.test(dtxrWall) && /ASME B36\.10/.test(dtxrWall), 'DTXR wall resolver must parse schedule and include B36.10 fallback table');
+assert(/applyXmlCiiPostSplitElementLengthCleanup/.test(stagedGeometry), 'Staged geometry authority must run post-split ElementLength cleanup');
+assert(/postSplitElementLengthsRecalculated/.test(postSplitCleanup), 'Post-split cleanup must recalculate ElementLengthMm');
+assert(/shortElementLengthNodesDropped/.test(postSplitCleanup), 'Post-split cleanup must drop short ElementLength node blocks');
+assert(/dropShortElementLengthNodes/.test(config) && /shortElementLengthDropThresholdMm/.test(config), 'Config must expose short ElementLength drop toggle and threshold');
+assert(/dropShortElementLengthNodes/.test(shortToggle) && /ElementLength <= 6 mm/.test(shortToggle), 'UI must expose short ElementLength drop toggle');
+assert(/semanticKeywordRules/.test(weightValveHints), 'Weight matching must expose configurable semantic keyword rules');
+assert(/FULL_BORE/.test(weightValveHints) && /REDUCED_BORE/.test(weightValveHints) && /WAFER_BUTTERFLY/.test(weightValveHints), 'Weight semantic keyword order must include full/reduced/wafer butterfly rules');
+assert(/semanticSourceForContext/.test(weightValveHints) && /source: 'DTXR'/.test(weightValveHints), 'Weight ranking must prefer DTXR semantic source before Valve Hint');
+assert(/Valve Hint/.test(semanticInfo) && /DTXR keywords are used first/.test(semanticInfo), 'UI must explain DTXR-first semantic weight tie-break with info marker');
+assert(/formatIssueValveHint/.test(flangeFallback), 'Post-run rigid review fallback issues must carry Valve Hint');
 assert(/Build Weight Data/.test(nativePanels), 'Popup-native weight match must use Build Weight Data label');
 assert(/is-loaded/.test(nativePanels) && /is-empty/.test(nativePanels), 'Popup-native Import Masters tabs must color loaded and empty states');
 assert(!/data-native-run-option="allowFallbackHighNodeNumbers"/.test(nativePanels), '10000+ fallback run toggle must not be exposed in UI');
@@ -73,4 +88,4 @@ assert(!/dispatchEvent/.test(branchSample), 'Regex sample autoload must not disp
 assert(!/setTimeout\(/.test(branchSample), 'Regex sample autoload must not use delayed startup repair loops');
 assert(/requestAnimationFrame/.test(branchSample), 'Regex sample autoload may refresh passively after Regex tab render');
 assert(/data-modal-tab="regex"/.test(branchSample), 'Regex sample autoload must refresh when the Regex tab is opened');
-console.log('XML CII weight match, DTXR wall thickness, gasket drop, regex sample, master-state colors, fallback-node policy, and smart propagation guards passed.');
+console.log('XML CII weight match, DTXR-first keywords, post-split length cleanup, short element drop, gasket drop, regex sample, and smart propagation guards passed.');
