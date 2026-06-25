@@ -56,7 +56,6 @@
 // app-label-perf-runtime.js?v=20260624-selected-geometry-floating-workflow-3
 // app-label-perf-runtime.js?v=20260625-rvm-renderer-cache-chain-1
 import { installAppTabClickStateBridge } from './app-tab-click-state-bridge.js?v=20260622-tab-click-state-1';
-import { installBrowserRvmNativeFacetGhostPanelPatch } from '../rvm/BrowserRvmNativeFacetGhostPanelPatch.js?v=20260622-rvm-facet-ghost-panels-1';
 
 const LEGACY_GEOMETRY_WORKFLOW_FLAG = 'rvm.enableLegacyGeometryWorkflowButtons';
 const LEGACY_GEOMETRY_WORKFLOW_MODULES = Object.freeze([
@@ -77,12 +76,7 @@ const LEGACY_GEOMETRY_WORKFLOW_MODULES = Object.freeze([
 ]);
 
 installAppTabClickStateBridge();
-installDefaultViewerBridges();
 if (shouldInstallLegacyGeometryWorkflowButtons()) installLegacyGeometryWorkflowBridges();
-
-function installDefaultViewerBridges() {
-  installBrowserRvmNativeFacetGhostPanelPatch();
-}
 
 function shouldInstallLegacyGeometryWorkflowButtons() {
   if (globalThis.__RVM_ENABLE_LEGACY_GEOMETRY_WORKFLOW_BUTTONS__ === true) return true;
