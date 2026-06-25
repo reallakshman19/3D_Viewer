@@ -1,6 +1,6 @@
-export const RVM_NAVIGATION_MODE_ARBITER_SCHEMA = 'rvm-navigation-mode-arbiter/v2-select-escape';
+export const RVM_NAVIGATION_MODE_ARBITER_SCHEMA = 'rvm-navigation-mode-arbiter/v3-interaction-contract';
 
-const INSTALL_FLAG = Symbol.for('pcf-glb-rvm-navigation-mode-arbiter-v2-select-escape');
+const INSTALL_FLAG = Symbol.for('pcf-glb-rvm-navigation-mode-arbiter-v3-interaction-contract');
 const ROOT_SELECTOR = '[data-rvm-viewer]';
 const MODE_ACTIONS = new Set(['NAV_SELECT', 'NAV_ORBIT', 'NAV_PAN', 'MARQUEE_SELECT', 'MEASURE_TOOL', 'VIEW_MARQUEE_ZOOM']);
 const MODE_BY_ACTION = Object.freeze({
@@ -11,6 +11,7 @@ const MODE_BY_ACTION = Object.freeze({
   MEASURE_TOOL: 'measure_tool',
   VIEW_MARQUEE_ZOOM: 'view_marquee_zoom',
 });
+const TRANSIENT_MODES = new Set(['marquee_select', 'measure_tool', 'view_marquee_zoom']);
 const CANVAS_BLOCKER_ALLOW_RE = /^(canvas|rvm-canvas|rvm-viewport|rvm-placeholder)$/i;
 
 export function installRvmNavigationModeArbiterBridge() {
@@ -23,6 +24,8 @@ export function installRvmNavigationModeArbiterBridge() {
     toolbarModeEvents: 0,
     pointerRepairs: 0,
     escapeClears: 0,
+    escapeDelegated: 0,
+    staleExplicitModeRepairs: 0,
     lastReason: 'installed',
     ensure: ensureDefaultNavigationMode,
     diagnose: diagnoseRvmNavigation,
@@ -54,9 +57,14 @@ function bindToolbarModeTracking(state) {
     const viewer = globalThis.__3D_RVM_VIEWER__;
     const mode = MODE_BY_ACTION[action] || '';
     if (viewer && mode) {
-      viewer.__rvmNavigationUserMode = mode;
-      viewer.__rvmNavigationUserModeAction = action;
-      viewer.__rvmNavigationUserModeAt = Date.now();
+      viewer.__rvmNavigationPendingUserMode = mode;
+      viewer.__rvmNavigationPendingUserModeAction = action;
+      viewer.__rvmNavigationPendingUserModeAt = Date.now();
+      if (!globalThis.__PCF_GLB_RVM_INTERACTION__?.setMode) {
+        viewer.__rvmNavigationUserMode = mode;
+        viewer.__rvmNavigationUserModeAction = action;
+        viewer.__rvmNavigationUserModeAt = Date.now();
+      }
     }
     state.toolbarModeEvents += 1;
   }, true);
@@ -69,9 +77,17 @@ export function ensureDefaultNavigationMode(viewer = globalThis.__3D_RVM_VIEWER_
 
   repairRvmNavigationPointerStack(viewer, reason);
 
-  const current = normalizeMode(viewer._rvmInteractionMode || viewer._navMode || '');
+  const current = currentInteractionMode(viewer);
   const explicit = normalizeMode(viewer.__rvmNavigationUserMode || '');
-  const shouldForceSelect = !explicit && (!current || current === 'orbit');
+  const staleTransientExplicit = isStaleTransientExplicit(explicit, current);
+  const effectiveExplicit = staleTransientExplicit ? '' : explicit;
+  const shouldForceSelect = !effectiveExplicit && (!current || current === 'orbit');
+
+  if (staleTransientExplicit) {
+    viewer.__rvmNavigationUserMode = '';
+    viewer.__rvmNavigationUserModeAction = '';
+    state.staleExplicitModeRepairs = Number(state.staleExplicitModeRepairs || 0) + 1;
+  }
 
   if (shouldForceSelect) {
     if (typeof viewer.setNavMode === 'function') viewer.setNavMode('select');
@@ -85,6 +101,8 @@ export function ensureDefaultNavigationMode(viewer = globalThis.__3D_RVM_VIEWER_
       reason,
       previousMode: current || 'unset',
       mode: 'select',
+      explicitMode: effectiveExplicit || '',
+      staleTransientExplicit,
       controlsEnabled: viewer.controls?.enabled === true,
     });
   }
@@ -94,7 +112,8 @@ export function ensureDefaultNavigationMode(viewer = globalThis.__3D_RVM_VIEWER_
     status: 'preserved',
     reason,
     mode: current || 'select',
-    explicitMode: explicit || '',
+    explicitMode: effectiveExplicit || '',
+    staleTransientExplicit,
     controlsEnabled: viewer.controls?.enabled === true,
   });
 }
@@ -126,11 +145,15 @@ export function diagnoseRvmNavigation(viewer = globalThis.__3D_RVM_VIEWER__) {
   const root = document.querySelector(ROOT_SELECTOR);
   const canvas = viewer?.renderer?.domElement || null;
   const blockers = collectPotentialCanvasBlockers(canvas);
+  const current = currentInteractionMode(viewer);
+  const explicit = normalizeMode(viewer?.__rvmNavigationUserMode || '');
   return writeDiagnostics(viewer, {
     status: 'diagnosed',
     schema: RVM_NAVIGATION_MODE_ARBITER_SCHEMA,
-    mode: normalizeMode(viewer?._rvmInteractionMode || viewer?._navMode || ''),
-    explicitMode: normalizeMode(viewer?.__rvmNavigationUserMode || ''),
+    mode: current,
+    interactionContractMode: normalizeMode(viewer?.__rvmInteractionCurrentMode || ''),
+    explicitMode: explicit,
+    staleTransientExplicit: isStaleTransientExplicit(explicit, current),
     controlsEnabled: viewer?.controls?.enabled === true,
     enableRotate: viewer?.controls?.enableRotate === true,
     enablePan: viewer?.controls?.enablePan === true,
@@ -190,13 +213,19 @@ function bindUniversalEscape(state) {
     if (!viewer || !root) return;
     event.preventDefault();
     event.stopPropagation();
-    clearViewerSelection(root, viewer, 'escape');
-    if (typeof viewer.setNavMode === 'function') viewer.setNavMode('select');
-    else applySelectFallback(viewer);
-    viewer.__rvmNavigationUserMode = 'select';
-    viewer.__rvmNavigationUserModeAction = 'NAV_SELECT';
-    viewer.__rvmNavigationUserModeAt = Date.now();
-    updateModeUi(root, 'select');
+    event.stopImmediatePropagation?.();
+    if (globalThis.__PCF_GLB_RVM_INTERACTION__?.escape) {
+      globalThis.__PCF_GLB_RVM_INTERACTION__.escape();
+      state.escapeDelegated = Number(state.escapeDelegated || 0) + 1;
+    } else {
+      clearViewerSelection(root, viewer, 'escape');
+      if (typeof viewer.setNavMode === 'function') viewer.setNavMode('select');
+      else applySelectFallback(viewer);
+      viewer.__rvmNavigationUserMode = 'select';
+      viewer.__rvmNavigationUserModeAction = 'NAV_SELECT';
+      viewer.__rvmNavigationUserModeAt = Date.now();
+      updateModeUi(root, 'select');
+    }
     state.escapeClears = Number(state.escapeClears || 0) + 1;
     writeDiagnostics(viewer, {
       status: 'escape-select-cleared',
@@ -230,7 +259,7 @@ function clearViewerSelection(root, viewer, reason) {
   if (selectedChip) selectedChip.textContent = 'Selected: 0';
   const panel = root?.querySelector?.('#rvm-attributes-panel');
   if (panel) panel.innerHTML = '<div class="rvm-empty-state">No object selected.</div>';
-  return writeDiagnostics(viewer, { status: 'selection-cleared', reason, mode: normalizeMode(viewer?._rvmInteractionMode || viewer?._navMode || '') });
+  return writeDiagnostics(viewer, { status: 'selection-cleared', reason, mode: currentInteractionMode(viewer) });
 }
 
 function selectionCount(viewer) {
@@ -241,6 +270,8 @@ function selectionCount(viewer) {
 function applySelectFallback(viewer) {
   viewer._rvmInteractionMode = 'select';
   viewer._navMode = 'select';
+  viewer.__rvmInteractionCurrentMode = 'select';
+  viewer.__rvmInteractionCurrentAction = 'NAV_SELECT';
   if (viewer.controls) {
     viewer.controls.enabled = false;
     viewer.controls.enableRotate = false;
@@ -275,6 +306,14 @@ function writeDiagnostics(viewer, state = {}) {
   };
   if (viewer) viewer.rvmNavigationArbiterDiagnostics = payload;
   return payload;
+}
+
+function currentInteractionMode(viewer) {
+  return normalizeMode(viewer?.__rvmInteractionCurrentMode || viewer?._rvmInteractionMode || viewer?._navMode || '');
+}
+
+function isStaleTransientExplicit(explicit, current) {
+  return Boolean(explicit && TRANSIENT_MODES.has(explicit) && current && current !== explicit);
 }
 
 function normalizeMode(mode) {
