@@ -14,8 +14,8 @@ const DROP_GASKET_KEY = 'dropGasketNodes';
 const DROP_GASKET_ENRICHMENT_KEY = 'dropGasketsInEnrichment';
 const DISABLE_GASKET_KEY = 'disableGasketNodes';
 const DISABLE_GASKET_LEGACY_KEY = 'disableGasketInOutput';
-const HIGH_FALLBACK_KEY = 'allowFallbackHighNodeNumbers';
-const HIGH_FALLBACK_LEGACY_KEY = 'allow10000FallbackNodeNumbers';
+// Generated 10000+ fallback node-number keeping is intentionally not user-configurable.
+// Split fallback outputs are always suppressed back to -1 in staged-geometry-authority.
 
 let cachedBridge = null;
 let cachedSafeBridge = null;
@@ -36,7 +36,6 @@ function normaliseCondenseConfig(config) {
   const xsd = bool(cfg[XSD_KEY]) || bool(cfg[XSD_SNAKE_KEY]);
   const resolved = bool(cfg[RESOLVED_KEY]) || bool(cfg[RESOLVED_SNAKE_KEY]);
   const dropGasket = bool(cfg[DISABLE_GASKET_KEY]) || bool(cfg[DISABLE_GASKET_LEGACY_KEY]) || (defaultTrue(cfg[DROP_GASKET_KEY]) && defaultTrue(cfg[DROP_GASKET_ENRICHMENT_KEY]));
-  const highFallback = bool(cfg[HIGH_FALLBACK_KEY]) || bool(cfg[HIGH_FALLBACK_LEGACY_KEY]);
   cfg[XSD_KEY] = xsd;
   cfg[XSD_SNAKE_KEY] = xsd;
   cfg[RESOLVED_KEY] = resolved;
@@ -45,8 +44,8 @@ function normaliseCondenseConfig(config) {
   cfg[DROP_GASKET_ENRICHMENT_KEY] = dropGasket;
   cfg[DISABLE_GASKET_KEY] = false;
   cfg[DISABLE_GASKET_LEGACY_KEY] = false;
-  cfg[HIGH_FALLBACK_KEY] = highFallback;
-  cfg[HIGH_FALLBACK_LEGACY_KEY] = highFallback;
+  delete cfg.allowFallbackHighNodeNumbers;
+  delete cfg.allow10000FallbackNodeNumbers;
   return cfg;
 }
 
@@ -55,22 +54,9 @@ function writeBridgeConfig(base, config) { base?.importPopupConfigText?.(JSON.st
 
 function mergeCondenseBoolKeys(editedText, bools = {}) {
   const cfg = normaliseCondenseConfig(parseConfigText(editedText));
-  if (Object.prototype.hasOwnProperty.call(bools, XSD_KEY) || Object.prototype.hasOwnProperty.call(bools, XSD_SNAKE_KEY)) {
-    const enabled = bool(bools[XSD_KEY]) || bool(bools[XSD_SNAKE_KEY]);
-    cfg[XSD_KEY] = enabled; cfg[XSD_SNAKE_KEY] = enabled;
-  }
-  if (Object.prototype.hasOwnProperty.call(bools, RESOLVED_KEY) || Object.prototype.hasOwnProperty.call(bools, RESOLVED_SNAKE_KEY)) {
-    const enabled = bool(bools[RESOLVED_KEY]) || bool(bools[RESOLVED_SNAKE_KEY]);
-    cfg[RESOLVED_KEY] = enabled; cfg[RESOLVED_SNAKE_KEY] = enabled;
-  }
-  if (Object.prototype.hasOwnProperty.call(bools, HIGH_FALLBACK_KEY) || Object.prototype.hasOwnProperty.call(bools, HIGH_FALLBACK_LEGACY_KEY)) {
-    const enabled = bool(bools[HIGH_FALLBACK_KEY]) || bool(bools[HIGH_FALLBACK_LEGACY_KEY]);
-    cfg[HIGH_FALLBACK_KEY] = enabled; cfg[HIGH_FALLBACK_LEGACY_KEY] = enabled;
-  }
-  if (Object.prototype.hasOwnProperty.call(bools, DISABLE_GASKET_KEY) || Object.prototype.hasOwnProperty.call(bools, DISABLE_GASKET_LEGACY_KEY) || Object.prototype.hasOwnProperty.call(bools, DROP_GASKET_KEY) || Object.prototype.hasOwnProperty.call(bools, DROP_GASKET_ENRICHMENT_KEY)) {
-    const enabled = bool(bools[DISABLE_GASKET_KEY]) || bool(bools[DISABLE_GASKET_LEGACY_KEY]) || bool(bools[DROP_GASKET_KEY]) || bool(bools[DROP_GASKET_ENRICHMENT_KEY]);
-    cfg[DROP_GASKET_KEY] = enabled; cfg[DROP_GASKET_ENRICHMENT_KEY] = enabled; cfg[DISABLE_GASKET_KEY] = false; cfg[DISABLE_GASKET_LEGACY_KEY] = false;
-  }
+  if (Object.prototype.hasOwnProperty.call(bools, XSD_KEY) || Object.prototype.hasOwnProperty.call(bools, XSD_SNAKE_KEY)) { const enabled = bool(bools[XSD_KEY]) || bool(bools[XSD_SNAKE_KEY]); cfg[XSD_KEY] = enabled; cfg[XSD_SNAKE_KEY] = enabled; }
+  if (Object.prototype.hasOwnProperty.call(bools, RESOLVED_KEY) || Object.prototype.hasOwnProperty.call(bools, RESOLVED_SNAKE_KEY)) { const enabled = bool(bools[RESOLVED_KEY]) || bool(bools[RESOLVED_SNAKE_KEY]); cfg[RESOLVED_KEY] = enabled; cfg[RESOLVED_SNAKE_KEY] = enabled; }
+  if (Object.prototype.hasOwnProperty.call(bools, DISABLE_GASKET_KEY) || Object.prototype.hasOwnProperty.call(bools, DISABLE_GASKET_LEGACY_KEY) || Object.prototype.hasOwnProperty.call(bools, DROP_GASKET_KEY) || Object.prototype.hasOwnProperty.call(bools, DROP_GASKET_ENRICHMENT_KEY)) { const enabled = bool(bools[DISABLE_GASKET_KEY]) || bool(bools[DISABLE_GASKET_LEGACY_KEY]) || bool(bools[DROP_GASKET_KEY]) || bool(bools[DROP_GASKET_ENRICHMENT_KEY]); cfg[DROP_GASKET_KEY] = enabled; cfg[DROP_GASKET_ENRICHMENT_KEY] = enabled; cfg[DISABLE_GASKET_KEY] = false; cfg[DISABLE_GASKET_LEGACY_KEY] = false; }
   return JSON.stringify(normaliseCondenseConfig(cfg), null, 2);
 }
 
@@ -82,7 +68,8 @@ function hydrateCondenseSnapshot(snapshot, base) {
   snapshot.run.options[XSD_KEY] = bool(snapshot.run.options[XSD_KEY]) || cfg[XSD_KEY];
   snapshot.run.options[RESOLVED_KEY] = bool(snapshot.run.options[RESOLVED_KEY]) || bool(snapshot.run.options[RESOLVED_SNAKE_KEY]) || cfg[RESOLVED_KEY];
   snapshot.run.options[DROP_GASKET_KEY] = cfg[DROP_GASKET_KEY];
-  snapshot.run.options[HIGH_FALLBACK_KEY] = cfg[HIGH_FALLBACK_KEY];
+  delete snapshot.run.options.allowFallbackHighNodeNumbers;
+  delete snapshot.run.options.allow10000FallbackNodeNumbers;
   snapshot.config = snapshot.config && typeof snapshot.config === 'object' ? snapshot.config : {};
   snapshot.config[XSD_KEY] = cfg[XSD_KEY];
   snapshot.config[RESOLVED_KEY] = cfg[RESOLVED_KEY];
@@ -90,8 +77,8 @@ function hydrateCondenseSnapshot(snapshot, base) {
   snapshot.config[DROP_GASKET_ENRICHMENT_KEY] = cfg[DROP_GASKET_KEY];
   snapshot.config[DISABLE_GASKET_KEY] = false;
   snapshot.config[DISABLE_GASKET_LEGACY_KEY] = false;
-  snapshot.config[HIGH_FALLBACK_KEY] = cfg[HIGH_FALLBACK_KEY];
-  snapshot.config[HIGH_FALLBACK_LEGACY_KEY] = cfg[HIGH_FALLBACK_KEY];
+  delete snapshot.config.allowFallbackHighNodeNumbers;
+  delete snapshot.config.allow10000FallbackNodeNumbers;
   return snapshot;
 }
 
@@ -99,7 +86,6 @@ function writeCondenseRunOption(base, key, enabled) {
   const cfg = bridgeConfig(base);
   if (key === XSD_KEY || key === XSD_SNAKE_KEY) { cfg[XSD_KEY] = !!enabled; cfg[XSD_SNAKE_KEY] = !!enabled; }
   if (key === RESOLVED_KEY || key === RESOLVED_SNAKE_KEY) { cfg[RESOLVED_KEY] = !!enabled; cfg[RESOLVED_SNAKE_KEY] = !!enabled; }
-  if (key === HIGH_FALLBACK_KEY || key === HIGH_FALLBACK_LEGACY_KEY) { cfg[HIGH_FALLBACK_KEY] = !!enabled; cfg[HIGH_FALLBACK_LEGACY_KEY] = !!enabled; }
   if (key === DISABLE_GASKET_KEY || key === DISABLE_GASKET_LEGACY_KEY || key === DROP_GASKET_KEY || key === DROP_GASKET_ENRICHMENT_KEY) { cfg[DROP_GASKET_KEY] = !!enabled; cfg[DROP_GASKET_ENRICHMENT_KEY] = !!enabled; cfg[DISABLE_GASKET_KEY] = false; cfg[DISABLE_GASKET_LEGACY_KEY] = false; }
   writeBridgeConfig(base, cfg);
 }
@@ -109,42 +95,13 @@ function cachedSnapshot(base, root) { if (!base?.getPopupSnapshot) return null; 
 function normalizeComponentRefNo(value) { return text(value).replace(/^=/, ''); }
 function componentRefEndpoint(componentRefNo, endpoint) { const ref = normalizeComponentRefNo(componentRefNo); const ep = text(endpoint); return ref && ep ? `${ref}_${ep}` : ref; }
 function nodeText(node, name) { const child = [...(node?.childNodes || [])].find((item) => item.nodeType === 1 && String(item.localName || item.nodeName).replace(/^.*:/, '') === name); return text(child?.textContent); }
-function parseXmlNodeMeta(xmlText) {
-  const byKey = new Map(); const source = text(xmlText); if (!source) return byKey;
-  if (typeof DOMParser !== 'undefined') { try { const document = new DOMParser().parseFromString(source, 'application/xml'); if (!document.getElementsByTagName('parsererror').length) { for (const branch of [...document.getElementsByTagName('Branch')]) { const branchName = nodeText(branch, 'Branchname'); for (const node of [...branch.getElementsByTagName('Node')]) { const nodeNumber = nodeText(node, 'NodeNumber'); if (!nodeNumber) continue; const meta = { branchName, nodeNumber, componentRefNo: nodeText(node, 'ComponentRefNo'), endpoint: nodeText(node, 'Endpoint'), componentType: nodeText(node, 'ComponentType') }; meta.componentRefEndpoint = componentRefEndpoint(meta.componentRefNo, meta.endpoint); byKey.set(`${branchName}::${nodeNumber}`, meta); if (!byKey.has(nodeNumber)) byKey.set(nodeNumber, meta); } } return byKey; } } catch {} }
-  for (const branchMatch of source.matchAll(/<Branch\b[\s\S]*?<\/Branch>/gi)) { const branchBlock = branchMatch[0]; const branchName = text(branchBlock.match(/<Branchname[^>]*>([\s\S]*?)<\/Branchname>/i)?.[1]?.replace(/<[^>]+>/g, '')); for (const nodeMatch of branchBlock.matchAll(/<Node\b[\s\S]*?<\/Node>/gi)) { const nodeBlock = nodeMatch[0]; const read = (name) => text(nodeBlock.match(new RegExp(`<${name}[^>]*>([\\s\\S]*?)<\\/${name}>`, 'i'))?.[1]?.replace(/<[^>]+>/g, '')); const nodeNumber = read('NodeNumber'); if (!nodeNumber) continue; const meta = { branchName, nodeNumber, componentRefNo: read('ComponentRefNo'), endpoint: read('Endpoint'), componentType: read('ComponentType') }; meta.componentRefEndpoint = componentRefEndpoint(meta.componentRefNo, meta.endpoint); byKey.set(`${branchName}::${nodeNumber}`, meta); if (!byKey.has(nodeNumber)) byKey.set(nodeNumber, meta); } }
-  return byKey;
-}
+function parseXmlNodeMeta(xmlText) { const byKey = new Map(); const source = text(xmlText); if (!source) return byKey; if (typeof DOMParser !== 'undefined') { try { const document = new DOMParser().parseFromString(source, 'application/xml'); if (!document.getElementsByTagName('parsererror').length) { for (const branch of [...document.getElementsByTagName('Branch')]) { const branchName = nodeText(branch, 'Branchname'); for (const node of [...branch.getElementsByTagName('Node')]) { const nodeNumber = nodeText(node, 'NodeNumber'); if (!nodeNumber) continue; const meta = { branchName, nodeNumber, componentRefNo: nodeText(node, 'ComponentRefNo'), endpoint: nodeText(node, 'Endpoint'), componentType: nodeText(node, 'ComponentType') }; meta.componentRefEndpoint = componentRefEndpoint(meta.componentRefNo, meta.endpoint); byKey.set(`${branchName}::${nodeNumber}`, meta); if (!byKey.has(nodeNumber)) byKey.set(nodeNumber, meta); } } return byKey; } } catch {} } for (const branchMatch of source.matchAll(/<Branch\b[\s\S]*?<\/Branch>/gi)) { const branchBlock = branchMatch[0]; const branchName = text(branchBlock.match(/<Branchname[^>]*>([\s\S]*?)<\/Branchname>/i)?.[1]?.replace(/<[^>]+>/g, '')); for (const nodeMatch of branchBlock.matchAll(/<Node\b[\s\S]*?<\/Node>/gi)) { const nodeBlock = nodeMatch[0]; const read = (name) => text(nodeBlock.match(new RegExp(`<${name}[^>]*>([\\s\\S]*?)<\\/${name}>`, 'i'))?.[1]?.replace(/<[^>]+>/g, '')); const nodeNumber = read('NodeNumber'); if (!nodeNumber) continue; const meta = { branchName, nodeNumber, componentRefNo: read('ComponentRefNo'), endpoint: read('Endpoint'), componentType: read('ComponentType') }; meta.componentRefEndpoint = componentRefEndpoint(meta.componentRefNo, meta.endpoint); byKey.set(`${branchName}::${nodeNumber}`, meta); if (!byKey.has(nodeNumber)) byKey.set(nodeNumber, meta); } } return byKey; }
 async function readCurrentXmlText() { const input = typeof document !== 'undefined' ? document.querySelector?.('#model-converters-primary-input') : null; const file = input?.files?.[0]; if (!file || typeof file.text !== 'function') return ''; return file.text().catch(() => ''); }
 async function augmentWeightRowsWithNodeMeta(rows) { const safeRows = Array.isArray(rows) ? rows : []; if (!safeRows.length) return safeRows; const meta = parseXmlNodeMeta(await readCurrentXmlText()); return safeRows.map((row) => { const key = `${text(row?.branchName)}::${text(row?.nodeNumber)}`; const nodeMeta = meta.get(key) || meta.get(text(row?.nodeNumber)) || {}; const componentRefNo = nodeMeta.componentRefNo || row?.componentRefNo || ''; const endpoint = nodeMeta.endpoint || row?.endpoint || ''; return { ...row, componentRefNo, endpoint, componentType: row?.componentType || nodeMeta.componentType || '', componentRefEndpoint: row?.componentRefEndpoint || nodeMeta.componentRefEndpoint || componentRefEndpoint(componentRefNo, endpoint) }; }); }
 function wrapInvalidatingAsync(base, methodName) { const original = base?.[methodName]?.bind(base); if (!original) return undefined; return async (...args) => { const result = await original(...args); clearSnapshotCache(); return result; }; }
 function wrapInvalidatingSync(base, methodName) { const original = base?.[methodName]?.bind(base); if (!original) return undefined; return (...args) => { const result = original(...args); clearSnapshotCache(); return result; }; }
 
-function xmlCiiWorkflowWrapBridge(base) {
-  if (!base) return null;
-  if (base === cachedBridge && cachedSafeBridge) return cachedSafeBridge;
-  const safe = Object.create(base); Object.assign(safe, base); safe.__xmlCiiWorkflowSafeBridge = true; safe.ensureDefaultMastersLoaded = async () => null;
-  const originalLoadDefault = base.loadPopupDefaultMaster?.bind(base);
-  safe.loadPopupDefaultMaster = async (masterKey) => { if (masterKey === 'pipingClass') return null; const result = await originalLoadDefault?.(masterKey); clearSnapshotCache(); return result ?? null; };
-  const originalSetRunOption = base.setPopupRunOption?.bind(base);
-  safe.setPopupRunOption = (key, value, type) => { if ([XSD_KEY, XSD_SNAKE_KEY, RESOLVED_KEY, RESOLVED_SNAKE_KEY, DROP_GASKET_KEY, DROP_GASKET_ENRICHMENT_KEY, DISABLE_GASKET_KEY, DISABLE_GASKET_LEGACY_KEY, HIGH_FALLBACK_KEY, HIGH_FALLBACK_LEGACY_KEY].includes(key)) writeCondenseRunOption(base, key, !!value); const result = originalSetRunOption?.(key, value, type); clearSnapshotCache(); return result; };
-  const originalSaveConfigText = base.savePopupConfigText?.bind(base);
-  safe.savePopupConfigText = (editedText, bools) => { const nextText = mergeCondenseBoolKeys(editedText, bools || {}); const result = originalSaveConfigText?.(nextText, bools); clearSnapshotCache(); return result; };
-  const originalComputePopupWeightRows = base.computePopupWeightRows?.bind(base);
-  safe.computePopupWeightRows = originalComputePopupWeightRows ? async (...args) => augmentWeightRowsWithNodeMeta(await originalComputePopupWeightRows(...args)) : undefined;
-  safe.getPopupSnapshot = (root) => cachedSnapshot(base, root);
-  safe.importPopupMasterFile = wrapInvalidatingAsync(base, 'importPopupMasterFile');
-  safe.autoMapPopupMaster = wrapInvalidatingSync(base, 'autoMapPopupMaster');
-  safe.setPopupMasterField = wrapInvalidatingSync(base, 'setPopupMasterField');
-  safe.savePopupMaster = wrapInvalidatingSync(base, 'savePopupMaster');
-  safe.clearPopupMaster = wrapInvalidatingSync(base, 'clearPopupMaster');
-  safe.setPopupConfigValue = wrapInvalidatingSync(base, 'setPopupConfigValue');
-  safe.importPopupConfigText = wrapInvalidatingSync(base, 'importPopupConfigText');
-  safe.applyPopupPreferredWeights = wrapInvalidatingSync(base, 'applyPopupPreferredWeights');
-  const originalNotify = base.notify?.bind(base);
-  safe.notify = (message, options = {}) => { const msg = `${message || ''} ${options?.message || ''} ${options?.url || ''}`; if (msg.includes(XML_CII_OBSOLETE_PIPING_CLASS_MASTER)) return null; return originalNotify?.(message, options) ?? null; };
-  cachedBridge = base; cachedSafeBridge = safe; clearSnapshotCache(); return safe;
-}
+function xmlCiiWorkflowWrapBridge(base) { if (!base) return null; if (base === cachedBridge && cachedSafeBridge) return cachedSafeBridge; const safe = Object.create(base); Object.assign(safe, base); safe.__xmlCiiWorkflowSafeBridge = true; safe.ensureDefaultMastersLoaded = async () => null; const originalLoadDefault = base.loadPopupDefaultMaster?.bind(base); safe.loadPopupDefaultMaster = async (masterKey) => { if (masterKey === 'pipingClass') return null; const result = await originalLoadDefault?.(masterKey); clearSnapshotCache(); return result ?? null; }; const originalSetRunOption = base.setPopupRunOption?.bind(base); safe.setPopupRunOption = (key, value, type) => { if ([XSD_KEY, XSD_SNAKE_KEY, RESOLVED_KEY, RESOLVED_SNAKE_KEY, DROP_GASKET_KEY, DROP_GASKET_ENRICHMENT_KEY, DISABLE_GASKET_KEY, DISABLE_GASKET_LEGACY_KEY].includes(key)) writeCondenseRunOption(base, key, !!value); const result = originalSetRunOption?.(key, value, type); clearSnapshotCache(); return result; }; const originalSaveConfigText = base.savePopupConfigText?.bind(base); safe.savePopupConfigText = (editedText, bools) => { const nextText = mergeCondenseBoolKeys(editedText, bools || {}); const result = originalSaveConfigText?.(nextText, bools); clearSnapshotCache(); return result; }; const originalComputePopupWeightRows = base.computePopupWeightRows?.bind(base); safe.computePopupWeightRows = originalComputePopupWeightRows ? async (...args) => augmentWeightRowsWithNodeMeta(await originalComputePopupWeightRows(...args)) : undefined; safe.getPopupSnapshot = (root) => cachedSnapshot(base, root); safe.importPopupMasterFile = wrapInvalidatingAsync(base, 'importPopupMasterFile'); safe.autoMapPopupMaster = wrapInvalidatingSync(base, 'autoMapPopupMaster'); safe.setPopupMasterField = wrapInvalidatingSync(base, 'setPopupMasterField'); safe.savePopupMaster = wrapInvalidatingSync(base, 'savePopupMaster'); safe.clearPopupMaster = wrapInvalidatingSync(base, 'clearPopupMaster'); safe.setPopupConfigValue = wrapInvalidatingSync(base, 'setPopupConfigValue'); safe.importPopupConfigText = wrapInvalidatingSync(base, 'importPopupConfigText'); safe.applyPopupPreferredWeights = wrapInvalidatingSync(base, 'applyPopupPreferredWeights'); const originalNotify = base.notify?.bind(base); safe.notify = (message, options = {}) => { const msg = `${message || ''} ${options?.message || ''} ${options?.url || ''}`; if (msg.includes(XML_CII_OBSOLETE_PIPING_CLASS_MASTER)) return null; return originalNotify?.(message, options) ?? null; }; cachedBridge = base; cachedSafeBridge = safe; clearSnapshotCache(); return safe; }
 
 export function xmlCiiWorkflowGetBridge() { return xmlCiiWorkflowWrapBridge(getXmlCiiPhaseBridge?.() || null); }
 export function xmlCiiWorkflowGetSnapshot(root) { return xmlCiiWorkflowGetBridge()?.getPopupSnapshot?.(root) || null; }
