@@ -38,6 +38,7 @@ on:
       - 'viewer/tabs/RvmNonPrimitiveSupportOverlayHoverBridge.js'
       - 'viewer/tabs/RvmNonPrimitiveSupportOverlayHardDisableBridge.js'
       - 'viewer/tabs/RvmNonPrimitiveAutoBendBridge.js'
+      - 'viewer/tabs/RvmNonPrimitiveNodeMarkerBridge.js'
       - 'viewer/tabs/RvmNonPrimitiveSourceToolsUiBridge.js'
       - 'viewer/tabs/RvmLeftPanelResizeCollapseBridge.js'
       - 'viewer/geometry-workspace/**'
@@ -179,6 +180,12 @@ jobs:
 
       - name: Verify non-primitive node marker core API
         run: node viewer/tests/nonprimitive-node-marker-core-api.test.js
+
+      - name: Verify non-primitive node marker stale diagnostics
+        run: node viewer/tests/nonprimitive-node-marker-stale-diagnostics.test.js
+
+      - name: Verify non-primitive node marker deferred bridge
+        run: node viewer/tests/nonprimitive-node-marker-deferred-bridge.test.js
 
       - name: Verify RHBG RVM fit guard
         run: |
