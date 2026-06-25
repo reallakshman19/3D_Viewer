@@ -23,6 +23,13 @@ function firstRowText(row, keys) {
   return '';
 }
 
+function bool(value) {
+  if (value === true) return true;
+  if (value === false || value === undefined || value === null) return false;
+  if (typeof value === 'number') return value !== 0;
+  return /^(1|true|yes|on)$/i.test(toText(value).trim());
+}
+
 function withNormalizedLineListDensity(config) {
   const rows = config?.linelist?.masterRows;
   if (!Array.isArray(rows) || !rows.length) return config;
@@ -79,8 +86,11 @@ export function migrateXmlCiiSupportConfigJson(rawJson) {
   try {
     const parsed = JSON.parse(text);
     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return text;
+    const disableGasket = bool(parsed.disableGasketNodes) || bool(parsed.disableGasketInOutput);
     const normalized = normalizeFullConfig({
       ...parsed,
+      disableGasketNodes: disableGasket,
+      disableGasketInOutput: disableGasket,
       supportKindToXmlType: normalizeXmlCiiSupportKindToTypeConfig(parsed.supportKindToXmlType),
     });
     return JSON.stringify(normalized, null, 2);
@@ -134,7 +144,7 @@ const DEFAULT_TEE_SIF_TYPE_MAPPING = Object.freeze([
   { code: 2, label: 'Unreinforced Fabricated Tee', patterns: ['\\bUN[-\\s]?REINFORCED\\b.*\\bFAB(?:RICATED)?\\b.*\\bTEE\\b', '\\bFAB(?:RICATED)?\\b.*\\bUN[-\\s]?REINFORCED\\b.*\\bTEE\\b', '\\bUNREINF(?:ORCED)?\\b.*\\bTEE\\b'] },
   { code: 3, label: 'Welding Tee', patterns: ['\\bWELD(?:ING)?\\s+TEE\\b', '\\bTEE\\b.*\\bB\\s*\\.?\\s*W\\.?\\b', '\\bTEE\\b.*\\bBUTT\\s*[- ]?\\s*WELD\\b', '\\bTEE\\b.*\\bBUTTWELD\\b', '\\bTEE\\s+(?:EQUAL|REDUC(?:ING|ER)?)\\b', '\\bTEEB?\\b'] },
   { code: 4, label: 'Sweepolet', patterns: ['\\bSWEEPOLET\\b', '\\bSWEEP\\s*OLET\\b'] },
-  { code: 5, label: 'Weldolet', patterns: ['\\bWELDOLET\\b', '\\bWELD\\s*OLET\\b', '\\bWOLET\\b', '\\bBRANCH\\s+OUTLET\\b.*\\bB\\s*\\.?\\s*W\\.?\\b', '\\bBRANCH\\s+FITTING\\b.*\\bB\\s*\\.?\\s*W\\.?\\b', '\\bOLET\\b.*\\bB\\s*\\.?\\s*W\\.?\\b'] },
+  { code: 5, label: 'Weldolet', patterns: ['\\bWELDOLET\\b', '\\bWELD\\s*OLET\\b', '\\bWOLET\\b', '\\bBRANCH\\s+OUTLET\\b.*\\bB\\s*\\.?\\s*W\\.?\\b', '\\bBRANCH\\s+FITTING\\b.*\\bB\\s*\\.?\\s*W\\.?\\b', '\\bOLET\\b.*\\bB\\s*\\.?\\b'] },
   { code: 6, label: 'Extruded Welding Tee', patterns: ['\\bEXTRUDED\\b.*\\bWELD(?:ING)?\\b.*\\bTEE\\b', '\\bEXTRUDED\\b.*\\bTEE\\b', '\\bEXT(?:RUDED)?\\s+TEE\\b'] },
 ]);
 
@@ -143,6 +153,8 @@ export function parseXmlCiiEnrichmentConfig(rawJson) {
     useFrictionSentinelForNonYSupports: true,
     convertDensityKgM3ToKgCm3: true,
     disableCiiSupportTagPopulation: false,
+    disableGasketNodes: false,
+    disableGasketInOutput: false,
     condenseRigidXsd: false,
     condense_rigid_xsd: false,
     splitCondensedValveFlange: false,
@@ -190,9 +202,12 @@ export function parseXmlCiiEnrichmentConfig(rawJson) {
     const parsedOverrides = parsed.overrides || {};
     const parsedPipingClassMatch = parsed.pipingClassMatch || {};
     const supportKindToXmlType = normalizeXmlCiiSupportKindToTypeConfig({ ...defaults.supportKindToXmlType, ...(parsed.supportKindToXmlType || {}) });
+    const disableGasket = bool(parsed.disableGasketNodes) || bool(parsed.disableGasketInOutput);
     const merged = {
       ...defaults,
       ...parsed,
+      disableGasketNodes: disableGasket,
+      disableGasketInOutput: disableGasket,
       dtxrPositionOffset: { ...defaults.dtxrPositionOffset, ...(parsed.dtxrPositionOffset || {}) },
       xmlAxisToCiiAxis: { ...defaults.xmlAxisToCiiAxis, ...(parsed.xmlAxisToCiiAxis || {}) },
       supportKindToXmlType,
