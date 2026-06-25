@@ -38,7 +38,9 @@ assert.equal(glyph.userData.primitiveExcluded, true);
 assert.equal(glyph.userData.rvmSearchIndexed, false);
 assert.equal(glyph.userData.rvmSelectionUsed, false);
 assert.equal(glyph.userData.excludeFromRvmSearch, true);
-assert.deepEqual(glyph.position.toArray(), [10, 20, 30]);
+assert.equal(Number(glyph.position.x), 10);
+assert.equal(Number(glyph.position.y), 20);
+assert.equal(Number(glyph.position.z), 30);
 
 const scene = new THREE.Group();
 const viewer = { scene };
@@ -50,6 +52,7 @@ assert.equal(roots.length, 1);
 assert.equal(roots[0].name, NODE_MARKER_ROOT_NAME);
 assert.equal(roots[0].userData.primitiveExcluded, true);
 assert.equal(roots[0].userData.rvmSearchIndexed, false);
+assert.equal(roots[0].children.length, 1);
 assert.equal(roots[0].children[0].userData.rvmNodeMarkerDetails.markerId, 'NODE-00001');
 
 const cleared = clearNodeMarkerGlyphRoot(viewer, 'test-clear');
