@@ -2,6 +2,13 @@ function text(value) {
   return value === undefined || value === null ? '' : String(value).trim();
 }
 
+function truthy(value) {
+  if (value === true) return true;
+  if (value === false || value === null || value === undefined) return false;
+  if (typeof value === 'number') return value !== 0;
+  return /^(1|true|yes|on)$/i.test(text(value));
+}
+
 function numberValue(value) {
   const match = text(value).replace(/,/g, '').match(/-?\d+(?:\.\d+)?(?:[Ee][-+]?\d+)?/);
   if (!match) return null;
@@ -149,11 +156,7 @@ export function buildXmlCiiStagedGeometryIndex(stagedJsonText) {
   try { parsed = typeof stagedJsonText === 'string' ? JSON.parse(stagedJsonText) : stagedJsonText; } catch { return index; }
   for (const item of walkStaged(parsed)) {
     const attrs = item.attrs || {};
-    const refs = [
-      readAttr(attrs, ['REF', 'ComponentRefNo', 'COMPONENTREFNO']),
-      readAttr(attrs, ['NAME']),
-      item.component?.name,
-    ].map(normalizeRef).filter(Boolean);
+    const refs = [readAttr(attrs, ['REF', 'ComponentRefNo', 'COMPONENTREFNO']), readAttr(attrs, ['NAME']), item.component?.name].map(normalizeRef).filter(Boolean);
     if (!refs.length) continue;
     const geometry = {
       ref: refs[0],
@@ -203,76 +206,121 @@ function setOrInsertInNodeBlock(block, tag, value) {
   return block.replace(/<\/Node>\s*$/i, `<${tag}>${formatted}</${tag}></Node>`);
 }
 
-function applyRegexFallback(xmlText, index) {
-  let stats = { stagedGeometryMatches: 0, stagedLengthAnnotations: 0, stagedBoreAnnotations: 0 };
+function shouldSuppressGasketNodes(options = {}) {
+  const config = options?.config && typeof options.config === 'object' ? options.config : {};
+  return truthy(options.disableGasketNodes)
+    || truthy(options.disableGasketInOutput)
+    || truthy(config.disableGasketNodes)
+    || truthy(config.disableGasketInOutput);
+}
+
+function suppressGasketNodeNumbersInDom(document) {
+  let count = 0;
+  for (const node of [...document.getElementsByTagName('Node')]) {
+    if (normalizeType(childText(node, 'ComponentType')) !== 'GASK') continue;
+    if (ensureText(document, node, 'NodeNumber', '-1')) count += 1;
+  }
+  return count;
+}
+
+function suppressGasketNodeNumbersInText(xmlText) {
+  let count = 0;
   const xmlOut = text(xmlText).replace(/<Node\b[\s\S]*?<\/Node>/gi, (block) => {
-    const ref = normalizeRef(block.match(/<ComponentRefNo>([\s\S]*?)<\/ComponentRefNo>/i)?.[1] || '');
-    const geometry = ref ? index.byRef.get(ref) : null;
-    if (!geometry) return block;
-    let out = block;
-    let changed = false;
-    if (geometry.lengthMm !== null) {
-      out = setOrInsertInNodeBlock(out, 'ElementLengthMm', geometry.lengthMm);
-      stats.stagedLengthAnnotations += 1;
-      changed = true;
-    }
-    const od = numberValue(block.match(/<OutsideDiameter>([\s\S]*?)<\/OutsideDiameter>/i)?.[1] || '');
-    const bore = geometry.boreMm || xmlCiiNominalDnFromOd(od);
-    if (bore !== null) {
-      out = setOrInsertInNodeBlock(out, 'BoreMm', bore);
-      stats.stagedBoreAnnotations += 1;
-      changed = true;
-    }
-    if (changed) stats.stagedGeometryMatches += 1;
-    return out;
+    const componentType = normalizeType(block.match(/<ComponentType>([\s\S]*?)<\/ComponentType>/i)?.[1] || '');
+    if (componentType !== 'GASK') return block;
+    count += 1;
+    if (/<NodeNumber>[\s\S]*?<\/NodeNumber>/i.test(block)) return block.replace(/<NodeNumber>[\s\S]*?<\/NodeNumber>/i, '<NodeNumber>-1</NodeNumber>');
+    return block.replace(/(<Node\b[^>]*>)/i, '$1<NodeNumber>-1</NodeNumber>');
   });
-  return { xmlText: xmlOut, stats, diagnostics: [] };
+  return { xmlText: xmlOut, count };
+}
+
+function applyRegexFallback(xmlText, index, options = {}) {
+  let stats = { stagedGeometryMatches: 0, stagedLengthAnnotations: 0, stagedBoreAnnotations: 0, gasketNodesSuppressed: 0 };
+  let xmlOut = text(xmlText);
+  if (index?.count) {
+    xmlOut = xmlOut.replace(/<Node\b[\s\S]*?<\/Node>/gi, (block) => {
+      const ref = normalizeRef(block.match(/<ComponentRefNo>([\s\S]*?)<\/ComponentRefNo>/i)?.[1] || '');
+      const geometry = ref ? index.byRef.get(ref) : null;
+      if (!geometry) return block;
+      let out = block;
+      let changed = false;
+      if (geometry.lengthMm !== null) {
+        out = setOrInsertInNodeBlock(out, 'ElementLengthMm', geometry.lengthMm);
+        stats.stagedLengthAnnotations += 1;
+        changed = true;
+      }
+      const od = numberValue(block.match(/<OutsideDiameter>([\s\S]*?)<\/OutsideDiameter>/i)?.[1] || '');
+      const bore = geometry.boreMm || xmlCiiNominalDnFromOd(od);
+      if (bore !== null) {
+        out = setOrInsertInNodeBlock(out, 'BoreMm', bore);
+        stats.stagedBoreAnnotations += 1;
+        changed = true;
+      }
+      if (changed) stats.stagedGeometryMatches += 1;
+      return out;
+    });
+  }
+  if (shouldSuppressGasketNodes(options)) {
+    const suppressed = suppressGasketNodeNumbersInText(xmlOut);
+    xmlOut = suppressed.xmlText;
+    stats.gasketNodesSuppressed = suppressed.count;
+  }
+  const diagnostics = stats.gasketNodesSuppressed > 0 ? [{ type: 'gasket-node-suppressed', count: stats.gasketNodesSuppressed, message: 'GASK nodes were retained in XML but their NodeNumber was set to -1 by config.' }] : [];
+  return { xmlText: xmlOut, stats, diagnostics };
 }
 
 export function applyXmlCiiStagedGeometryAuthority(xmlText, stagedJsonText, options = {}) {
   const index = options.stagedIndex || buildXmlCiiStagedGeometryIndex(stagedJsonText);
-  if (!index.count) return { xmlText, stats: { stagedGeometryMatches: 0, stagedLengthAnnotations: 0, stagedBoreAnnotations: 0 }, diagnostics: [] };
-  if (typeof DOMParser === 'undefined' || typeof XMLSerializer === 'undefined') return applyRegexFallback(xmlText, index);
+  if (typeof DOMParser === 'undefined' || typeof XMLSerializer === 'undefined') return applyRegexFallback(xmlText, index, options);
   let document = null;
   try {
     document = new DOMParser().parseFromString(text(xmlText), 'application/xml');
-    if (document.getElementsByTagName('parsererror').length) return applyRegexFallback(xmlText, index);
+    if (document.getElementsByTagName('parsererror').length) return applyRegexFallback(xmlText, index, options);
   } catch {
-    return applyRegexFallback(xmlText, index);
+    return applyRegexFallback(xmlText, index, options);
   }
-  const stats = { stagedGeometryMatches: 0, stagedLengthAnnotations: 0, stagedBoreAnnotations: 0 };
+  const stats = { stagedGeometryMatches: 0, stagedLengthAnnotations: 0, stagedBoreAnnotations: 0, gasketNodesSuppressed: 0 };
   const diagnostics = [];
-  for (const branch of [...document.getElementsByTagName('Branch')]) {
-    const branchName = childText(branch, 'Branchname');
-    for (const node of childrenByName(branch, 'Node')) {
-      const geometry = resolveXmlCiiStagedGeometryForNode(node, index);
-      if (!geometry) continue;
-      let changed = false;
-      if (geometry.lengthMm !== null && geometry.lengthMm > 0) {
-        if (ensureText(document, node, 'ElementLengthMm', formatMm(geometry.lengthMm))) changed = true;
-        stats.stagedLengthAnnotations += 1;
+  if (index.count) {
+    for (const branch of [...document.getElementsByTagName('Branch')]) {
+      const branchName = childText(branch, 'Branchname');
+      for (const node of childrenByName(branch, 'Node')) {
+        const geometry = resolveXmlCiiStagedGeometryForNode(node, index);
+        if (!geometry) continue;
+        let changed = false;
+        if (geometry.lengthMm !== null && geometry.lengthMm > 0) {
+          if (ensureText(document, node, 'ElementLengthMm', formatMm(geometry.lengthMm))) changed = true;
+          stats.stagedLengthAnnotations += 1;
+        }
+        const odDn = xmlCiiNominalDnFromOd(numberValue(childText(node, 'OutsideDiameter')));
+        const bore = geometry.boreMm || odDn;
+        if (bore !== null && bore > 0) {
+          if (ensureText(document, node, 'BoreMm', formatMm(bore))) changed = true;
+          stats.stagedBoreAnnotations += 1;
+        }
+        if (changed) {
+          stats.stagedGeometryMatches += 1;
+          diagnostics.push({
+            type: 'staged-geometry-authority',
+            branchName,
+            nodeNumber: childText(node, 'NodeNumber'),
+            componentRefNo: childText(node, 'ComponentRefNo'),
+            stagedType: geometry.stagedType,
+            dtxr: geometry.dtxr,
+            lengthMm: geometry.lengthMm,
+            boreMm: bore,
+            lengthSource: geometry.lengthMm !== null ? 'staged-component-refno' : '',
+            boreSource: geometry.boreMm ? 'staged-component-refno' : (odDn ? 'xml-outside-diameter' : ''),
+          });
+        }
       }
-      const odDn = xmlCiiNominalDnFromOd(numberValue(childText(node, 'OutsideDiameter')));
-      const bore = geometry.boreMm || odDn;
-      if (bore !== null && bore > 0) {
-        if (ensureText(document, node, 'BoreMm', formatMm(bore))) changed = true;
-        stats.stagedBoreAnnotations += 1;
-      }
-      if (changed) {
-        stats.stagedGeometryMatches += 1;
-        diagnostics.push({
-          type: 'staged-geometry-authority',
-          branchName,
-          nodeNumber: childText(node, 'NodeNumber'),
-          componentRefNo: childText(node, 'ComponentRefNo'),
-          stagedType: geometry.stagedType,
-          dtxr: geometry.dtxr,
-          lengthMm: geometry.lengthMm,
-          boreMm: bore,
-          lengthSource: geometry.lengthMm !== null ? 'staged-component-refno' : '',
-          boreSource: geometry.boreMm ? 'staged-component-refno' : (odDn ? 'xml-outside-diameter' : ''),
-        });
-      }
+    }
+  }
+  if (shouldSuppressGasketNodes(options)) {
+    stats.gasketNodesSuppressed = suppressGasketNodeNumbersInDom(document);
+    if (stats.gasketNodesSuppressed > 0) {
+      diagnostics.push({ type: 'gasket-node-suppressed', count: stats.gasketNodesSuppressed, message: 'GASK nodes were retained in XML but their NodeNumber was set to -1 by config.' });
     }
   }
   return { xmlText: new XMLSerializer().serializeToString(document), stats, diagnostics };
