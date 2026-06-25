@@ -1,23 +1,24 @@
 import * as THREE from 'three';
 
-const PATCH_FLAG = Symbol.for('pcf-glb-rvm-toolbar-canvas-selection-patch-v2-esc-hide-fit');
-const BRIDGE_VERSION = '20260620-rvm-esc-hide-selection-1';
+const PATCH_FLAG = Symbol.for('pcf-glb-rvm-toolbar-canvas-selection-patch-v3-state-contract');
+const BRIDGE_VERSION = '20260624-rvm-interaction-state-contract-1';
 const CLICK_DRAG_TOLERANCE_PX = 5;
 const SELECTED_COLOR = 0x60a5fa;
 const SELECTED_EMISSIVE = 0x2563eb;
+const MODE_ACTIONS = new Set(['NAV_SELECT', 'NAV_ORBIT', 'NAV_PAN', 'MARQUEE_SELECT', 'MEASURE_TOOL', 'VIEW_MARQUEE_ZOOM']);
 
 export function installRvmViewerInteractionPatch(RvmViewer3D) {
   const proto = RvmViewer3D?.prototype;
   if (!proto || proto[PATCH_FLAG]) return;
 
   proto.dispatchAction = function dispatchRvmToolbarAction(action) {
-    return executeToolbarAction(this, action);
+    return executeToolbarAction(this, action, { source: 'toolbar', user: MODE_ACTIONS.has(normalizeAction(action)) });
   };
 
   proto.setToolMode = function setRvmToolMode(action) {
     const mode = modeForAction(action);
     if (!mode) return false;
-    return setMode(this, mode);
+    return setMode(this, mode, { source: 'setToolMode', action: normalizeAction(action), user: true });
   };
 
   const originalSetNavMode = proto.setNavMode;
@@ -26,6 +27,7 @@ export function installRvmViewerInteractionPatch(RvmViewer3D) {
       const normalized = normalizeMode(mode || 'select');
       const result = originalSetNavMode.call(this, normalized);
       applyInteractionMode(this, normalized);
+      publishInteractionState(this, normalized, { source: 'viewer.setNavMode', action: actionForMode(normalized), user: false });
       return result;
     };
   }
@@ -51,20 +53,20 @@ function bindInteraction(root, viewer) {
   bindCanvasSelection(root, viewer);
   bindKeyboardEsc(root, viewer);
   publishInteractionApi(root, viewer);
-  if (!viewer._rvmInteractionMode) setMode(viewer, 'select');
-  updateModeUi(root, 'select');
+  if (!viewer._rvmInteractionMode) setMode(viewer, 'select', { source: 'bind-default', user: false });
+  updateModeUi(root, normalizeMode(viewer._rvmInteractionMode || 'select'));
 }
 
-function executeToolbarAction(viewer, action) {
+function executeToolbarAction(viewer, action, options = {}) {
   const key = normalizeAction(action);
   try {
     switch (key) {
-      case 'NAV_SELECT': return setMode(viewer, 'select');
-      case 'NAV_ORBIT': return setMode(viewer, 'orbit');
-      case 'NAV_PAN': return setMode(viewer, 'pan');
-      case 'MARQUEE_SELECT': return setMode(viewer, 'marquee_select');
-      case 'MEASURE_TOOL': return setMode(viewer, 'measure_tool');
-      case 'VIEW_MARQUEE_ZOOM': return setMode(viewer, 'view_marquee_zoom');
+      case 'NAV_SELECT': return setMode(viewer, 'select', { ...options, action: key });
+      case 'NAV_ORBIT': return setMode(viewer, 'orbit', { ...options, action: key });
+      case 'NAV_PAN': return setMode(viewer, 'pan', { ...options, action: key });
+      case 'MARQUEE_SELECT': return setMode(viewer, 'marquee_select', { ...options, action: key });
+      case 'MEASURE_TOOL': return setMode(viewer, 'measure_tool', { ...options, action: key });
+      case 'VIEW_MARQUEE_ZOOM': return setMode(viewer, 'view_marquee_zoom', { ...options, action: key });
       case 'VIEW_FIT_ALL': return fitAllRvm(viewer);
       case 'VIEW_FIT_SELECTION': return fitCurrentSelection(viewer) || fitAllRvm(viewer);
       case 'VIEW_HIDE_SELECTION': return hideCurrentSelection(viewer);
@@ -99,10 +101,12 @@ function modeForAction(action) {
   return '';
 }
 
-function setMode(viewer, mode) {
+function setMode(viewer, mode, options = {}) {
   const normalized = normalizeMode(mode);
+  prepareModeTransition(viewer, normalized);
   if (typeof viewer?.setNavMode === 'function') viewer.setNavMode(normalized);
   else applyInteractionMode(viewer, normalized);
+  publishInteractionState(viewer, normalized, { ...options, action: options.action || actionForMode(normalized) });
   updateModeUi(document.querySelector('[data-rvm-viewer]'), normalized);
   return true;
 }
@@ -112,7 +116,38 @@ function normalizeMode(mode) {
   if (text === 'nav_select') return 'select';
   if (text === 'nav_orbit') return 'orbit';
   if (text === 'nav_pan') return 'pan';
+  if (text === 'measure') return 'measure_tool';
+  if (text === 'zoom') return 'view_marquee_zoom';
   return text || 'select';
+}
+
+function prepareModeTransition(viewer, mode) {
+  if (!viewer) return;
+  const normalized = normalizeMode(mode);
+  const enteringMeasure = normalized === 'measure_tool';
+  const enteringMarqueeSelect = normalized === 'marquee_select';
+  const enteringMarqueeZoom = normalized === 'view_marquee_zoom';
+  if (!enteringMeasure) {
+    try { viewer.clearMeasurement?.(); } catch (_) {}
+    try { globalThis.__PCF_GLB_RVM_MEASURE__?.clear?.({ silent: true }); } catch (_) {}
+    viewer.measureModeEnabled = false;
+    viewer._measureStart = null;
+  }
+  if (!enteringMarqueeSelect && !enteringMarqueeZoom) {
+    viewer.marqueeModeEnabled = false;
+    viewer.marqueeMode = '';
+    viewer._marqueeStart = null;
+    if (viewer.marqueeElement) viewer.marqueeElement.style.display = 'none';
+  }
+  if (enteringMeasure) {
+    viewer.measureModeEnabled = true;
+    viewer.marqueeModeEnabled = false;
+    viewer.marqueeMode = '';
+  } else if (enteringMarqueeSelect || enteringMarqueeZoom) {
+    viewer.measureModeEnabled = false;
+    viewer.marqueeModeEnabled = true;
+    viewer.marqueeMode = enteringMarqueeSelect ? 'select' : 'zoom';
+  }
 }
 
 function applyInteractionMode(viewer, mode) {
@@ -139,6 +174,11 @@ function applyInteractionMode(viewer, mode) {
       viewer.controls.enablePan = true;
       viewer.controls.enableZoom = true;
       viewer.controls.mouseButtons = { LEFT: THREE.MOUSE.PAN, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.ROTATE };
+    } else {
+      viewer.controls.enabled = false;
+      viewer.controls.enableRotate = false;
+      viewer.controls.enablePan = false;
+      viewer.controls.enableZoom = true;
     }
   }
 
@@ -146,9 +186,42 @@ function applyInteractionMode(viewer, mode) {
     if (normalized === 'select') viewer.container.style.cursor = 'crosshair';
     else if (normalized === 'pan') viewer.container.style.cursor = 'grab';
     else if (normalized === 'measure_tool' || normalized === 'measure') viewer.container.style.cursor = 'crosshair';
+    else if (normalized === 'marquee_select') viewer.container.style.cursor = 'crosshair';
     else if (normalized === 'view_marquee_zoom') viewer.container.style.cursor = 'zoom-in';
     else viewer.container.style.cursor = 'default';
   }
+
+  const canvas = viewer.renderer?.domElement;
+  if (canvas?.dataset) canvas.dataset.rvmInteractionMode = normalized;
+}
+
+function publishInteractionState(viewer, mode, options = {}) {
+  if (!viewer) return null;
+  const normalized = normalizeMode(mode);
+  const action = options.action || actionForMode(normalized);
+  const payload = {
+    version: BRIDGE_VERSION,
+    mode: normalized,
+    action,
+    source: options.source || 'interaction',
+    userIntent: options.user !== false,
+    at: Date.now(),
+    controlsEnabled: viewer.controls?.enabled === true,
+    measureModeEnabled: viewer.measureModeEnabled === true,
+    marqueeModeEnabled: viewer.marqueeModeEnabled === true,
+    marqueeMode: viewer.marqueeMode || '',
+  };
+  viewer.__rvmInteractionCurrentMode = normalized;
+  viewer.__rvmInteractionCurrentAction = action;
+  viewer.__rvmInteractionState = payload;
+  if (options.user !== false) {
+    viewer.__rvmNavigationUserMode = normalized;
+    viewer.__rvmNavigationUserModeAction = action;
+    viewer.__rvmNavigationUserModeAt = payload.at;
+  }
+  globalThis.__PCF_GLB_RVM_INTERACTION_STATE__ = payload;
+  try { globalThis.__PCF_GLB_RVM_NAVIGATION_ARBITER__?.ensure?.(viewer, `interaction-${normalized}`); } catch (_) {}
+  return payload;
 }
 
 function bindCanvasSelection(root, viewer) {
@@ -159,8 +232,8 @@ function bindCanvasSelection(root, viewer) {
 
   canvas.addEventListener('pointerdown', (event) => {
     if (event.button !== 0) return;
-    down = { x: event.clientX, y: event.clientY, time: performanceNow() };
-    if (viewer._rvmInteractionMode === 'select' && !viewer.measureModeEnabled && !viewer.marqueeModeEnabled) {
+    down = { x: event.clientX, y: event.clientY, time: performanceNow(), mode: normalizeMode(viewer._rvmInteractionMode || viewer._navMode || 'select') };
+    if (down.mode === 'select' && !viewer.measureModeEnabled && !viewer.marqueeModeEnabled) {
       event.preventDefault();
       event.stopPropagation();
       event.stopImmediatePropagation?.();
@@ -171,11 +244,13 @@ function bindCanvasSelection(root, viewer) {
     if (event.button !== 0 || !down) return;
     const moved = Math.hypot(event.clientX - down.x, event.clientY - down.y);
     const elapsed = performanceNow() - down.time;
+    const modeAtUp = normalizeMode(viewer._rvmInteractionMode || viewer._navMode || down.mode || 'select');
     down = null;
     if (moved > CLICK_DRAG_TOLERANCE_PX || elapsed > 900) return;
+    if (modeAtUp !== 'select') return;
     if (viewer.measureModeEnabled || viewer.marqueeModeEnabled) return;
     const selected = selectGeometryAtClientPoint(root, viewer, event.clientX, event.clientY, { additive: event.ctrlKey || event.shiftKey || event.metaKey });
-    if (selected || viewer._rvmInteractionMode === 'select') {
+    if (selected || modeAtUp === 'select') {
       event.preventDefault();
       event.stopPropagation();
       event.stopImmediatePropagation?.();
@@ -200,7 +275,7 @@ function bindKeyboardEsc(root, viewer) {
 function handleEscape(root, viewer) {
   cancelTransientModes(viewer);
   clearCanvasSelection(viewer, root);
-  setMode(viewer, 'select');
+  setMode(viewer, 'select', { source: 'escape', action: 'NAV_SELECT', user: true });
   const panel = root?.querySelector?.('#rvm-attributes-panel');
   if (panel) panel.innerHTML = '<div class="rvm-empty-state">No object selected.</div>';
   setStatusMessage(root, 'Esc: selection cleared, Select mode');
@@ -209,9 +284,12 @@ function handleEscape(root, viewer) {
 
 function cancelTransientModes(viewer) {
   try { viewer?.clearMeasurement?.(); } catch (_) {}
+  try { globalThis.__PCF_GLB_RVM_MEASURE__?.clear?.({ silent: true }); } catch (_) {}
   viewer.measureModeEnabled = false;
   viewer.marqueeModeEnabled = false;
   viewer.marqueeMode = '';
+  viewer._measureStart = null;
+  viewer._marqueeStart = null;
   if (viewer.marqueeElement) viewer.marqueeElement.style.display = 'none';
   if (viewer.controls) {
     viewer.controls.enabled = false;
@@ -481,7 +559,9 @@ function renderCanvasSelectionDetails(root, viewer, object, meshes, point) {
 function publishInteractionApi(root, viewer) {
   globalThis.__PCF_GLB_RVM_INTERACTION__ = {
     version: BRIDGE_VERSION,
-    setMode: (mode) => setMode(viewer, mode),
+    getMode: () => normalizeMode(viewer?._rvmInteractionMode || viewer?._navMode || 'select'),
+    getState: () => viewer?.__rvmInteractionState || globalThis.__PCF_GLB_RVM_INTERACTION_STATE__ || null,
+    setMode: (mode) => setMode(viewer, mode, { source: 'api.setMode', user: true }),
     escape: () => handleEscape(root, viewer),
     fitSelection: () => fitCurrentSelection(viewer),
     hideSelection: () => hideCurrentSelection(viewer),

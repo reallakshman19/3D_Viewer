@@ -7,7 +7,7 @@ import {
 import { RvmViewer3D } from '../rvm-viewer/RvmViewer3D.js?v=20260620-rvm-direct-tab-1';
 import { installRvmProgressiveModelRootPatch } from '../rvm-viewer/RvmProgressiveModelRootPatchV5.js?v=20260620-rvm-tree-select-nohide-1';
 import { installRvmHierarchySelectionBridge } from './RvmHierarchySelectionBridge.js?v=20260620-rvm-large-box-support-sync-1';
-import { installRvmViewerInteractionPatch, installRvmCanvasSelectionBridge } from './RvmViewerInteractionPatch.js?v=20260621-rvm-button-hardening-1';
+import { installRvmViewerInteractionPatch, installRvmCanvasSelectionBridge } from './RvmViewerInteractionPatch.js?v=20260624-rvm-interaction-state-contract-1';
 import { installRvmCanvasSelectionSinglePickGuardBridge } from './RvmCanvasSelectionSinglePickGuardBridge.js?v=20260622-rvm-canvas-single-pick-guard-1';
 import { installRvmRetiredSupportToolsPurgeBridge } from './RvmRetiredSupportToolsPurgeBridge.js?v=20260622-rvm-retired-support-tools-purge-2';
 import { installRvmNonPrimitiveSupportOverlayBridge } from './RvmNonPrimitiveSupportOverlayBridge.js?v=20260623-nonprimitive-support-overlay-9';
@@ -18,7 +18,7 @@ import { installRvmNonPrimitiveAutoBendBridge } from './RvmNonPrimitiveAutoBendB
 import { installRvmNonPrimitiveSourceToolsUiBridge } from './RvmNonPrimitiveSourceToolsUiBridge.js?v=20260624-source-tools-grouped-1';
 import { installSelectedGeometryEnrichmentPanel } from '../enrichment/SelectedGeometryEnrichmentPanel.js?v=20260624-selected-geometry-floating-workflow-3';
 import { installRvmUiEventSafetyBridge } from './RvmUiEventSafetyBridge.js?v=20260622-rvm-ui-event-safety-2';
-import { installRvmNavigationModeArbiterBridge } from './RvmNavigationModeArbiterBridge.js?v=20260624-rvm-navigation-select-escape-1';
+import { installRvmNavigationModeArbiterBridge } from './RvmNavigationModeArbiterBridge.js?v=20260624-rvm-navigation-interaction-contract-1';
 import { installRvmUiInteractionPanelPatch, installRvmUiPanelBridge } from './RvmUiInteractionPanelPatch.js?v=20260621-rvm-ui-interaction-panels-1';
 import { installRvmPropertyPanelCollapseAuditBridge } from './RvmPropertyPanelCollapseAuditBridge.js?v=20260621-rvm-property-collapse-1';
 import { installRvmLabelPerformanceBridge } from './RvmLabelPerformanceBridge.js?v=20260622-rvm-label-perf-no-support-runtime-1';
