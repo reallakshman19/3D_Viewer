@@ -116,11 +116,12 @@ check(!appSource.includes('RvmModelHealthBridge.js?v='), 'app startup does not e
 check(!appSource.includes('RvmModelHealthIssuesBridge.js?v='), 'app startup does not eagerly import model health issues bridge');
 check(!appSource.includes('\ninstallRvmModelHealthBridge();'), 'app startup does not eagerly install model health bridge');
 check(!appSource.includes('\ninstallRvmModelHealthIssuesBridge();'), 'app startup does not eagerly install model health issues bridge');
+check(!appSource.includes('BrowserRvmNativeFacetGhostPanelPatch.js?v='), 'app startup does not eagerly import native facet ghost patch');
+check(!appSource.includes('\ninstallBrowserRvmNativeFacetGhostPanelPatch();'), 'app startup does not eagerly install native facet ghost patch');
 check(!appSource.includes('\ninstallGeometrySupportLoadFormulaBridge();'), 'support-load formula button is not installed by default');
 check(!appSource.includes('\ninstallGeometrySupportLoadReportBridge();'), 'support-load report button is not installed by default');
 check(!appSource.includes('\ninstallGeometrySupportLoadBulkPackageBridge();'), 'support-load package button is not installed by default');
 check(!appSource.includes('\ninstallGeometrySupportLoadCanvasOverlayBridge();'), 'support-load overlay button is not installed by default');
-check(appSource.includes('BrowserRvmNativeFacetGhostPanelPatch.js?v=20260622-rvm-facet-ghost-panels-1'), 'app side-loads native facet ghost patch');
 check(appSource.includes('app-label-perf-runtime.js?v=20260625-rvm-renderer-cache-chain-1'), 'app exports current RVM renderer runtime cache marker');
 check(runtimeSource.includes('viewer3d-rvm-tab-renderer.js?v=20260625-rvm-renderer-cache-chain-1'), 'runtime imports current RVM renderer cache key');
 check(!runtimeSource.includes('viewer3d-rvm-tab-renderer.js?v=20260624-selected-geometry-floating-workflow-3'), 'runtime does not keep stale selected-geometry renderer cache key');
