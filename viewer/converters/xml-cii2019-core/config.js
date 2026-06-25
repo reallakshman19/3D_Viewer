@@ -91,6 +91,8 @@ export function migrateXmlCiiSupportConfigJson(rawJson) {
       ...parsed,
       disableGasketNodes: disableGasket,
       disableGasketInOutput: disableGasket,
+      allowFallbackHighNodeNumbers: bool(parsed.allowFallbackHighNodeNumbers),
+      allow10000FallbackNodeNumbers: bool(parsed.allow10000FallbackNodeNumbers) || bool(parsed.allowFallbackHighNodeNumbers),
       supportKindToXmlType: normalizeXmlCiiSupportKindToTypeConfig(parsed.supportKindToXmlType),
     });
     return JSON.stringify(normalized, null, 2);
@@ -144,7 +146,7 @@ const DEFAULT_TEE_SIF_TYPE_MAPPING = Object.freeze([
   { code: 2, label: 'Unreinforced Fabricated Tee', patterns: ['\\bUN[-\\s]?REINFORCED\\b.*\\bFAB(?:RICATED)?\\b.*\\bTEE\\b', '\\bFAB(?:RICATED)?\\b.*\\bUN[-\\s]?REINFORCED\\b.*\\bTEE\\b', '\\bUNREINF(?:ORCED)?\\b.*\\bTEE\\b'] },
   { code: 3, label: 'Welding Tee', patterns: ['\\bWELD(?:ING)?\\s+TEE\\b', '\\bTEE\\b.*\\bB\\s*\\.?\\s*W\\.?\\b', '\\bTEE\\b.*\\bBUTT\\s*[- ]?\\s*WELD\\b', '\\bTEE\\b.*\\bBUTTWELD\\b', '\\bTEE\\s+(?:EQUAL|REDUC(?:ING|ER)?)\\b', '\\bTEEB?\\b'] },
   { code: 4, label: 'Sweepolet', patterns: ['\\bSWEEPOLET\\b', '\\bSWEEP\\s*OLET\\b'] },
-  { code: 5, label: 'Weldolet', patterns: ['\\bWELDOLET\\b', '\\bWELD\\s*OLET\\b', '\\bWOLET\\b', '\\bBRANCH\\s+OUTLET\\b.*\\bB\\s*\\.?\\s*W\\.?\\b', '\\bBRANCH\\s+FITTING\\b.*\\bB\\s*\\.?\\s*W\\.?\\b', '\\bOLET\\b.*\\bB\\s*\\.?\\b'] },
+  { code: 5, label: 'Weldolet', patterns: ['\\bWELDOLET\\b', '\\bWELD\\s*OLET\\b', '\\bWOLET\\b', '\\bBRANCH\\s+OUTLET\\b.*\\bB\\s*\\.?\\s*W\\.?\\b', '\\bBRANCH\\s+FITTING\\b.*\\bB\\s*\\.?\\s*W\\.?\\b', '\\bOLET\\b.*\\bB\\s*\\.?\\s*W\\.?\\b'] },
   { code: 6, label: 'Extruded Welding Tee', patterns: ['\\bEXTRUDED\\b.*\\bWELD(?:ING)?\\b.*\\bTEE\\b', '\\bEXTRUDED\\b.*\\bTEE\\b', '\\bEXT(?:RUDED)?\\s+TEE\\b'] },
 ]);
 
@@ -155,6 +157,8 @@ export function parseXmlCiiEnrichmentConfig(rawJson) {
     disableCiiSupportTagPopulation: false,
     disableGasketNodes: false,
     disableGasketInOutput: false,
+    allowFallbackHighNodeNumbers: false,
+    allow10000FallbackNodeNumbers: false,
     condenseRigidXsd: false,
     condense_rigid_xsd: false,
     splitCondensedValveFlange: false,
@@ -203,11 +207,14 @@ export function parseXmlCiiEnrichmentConfig(rawJson) {
     const parsedPipingClassMatch = parsed.pipingClassMatch || {};
     const supportKindToXmlType = normalizeXmlCiiSupportKindToTypeConfig({ ...defaults.supportKindToXmlType, ...(parsed.supportKindToXmlType || {}) });
     const disableGasket = bool(parsed.disableGasketNodes) || bool(parsed.disableGasketInOutput);
+    const allowHighFallback = bool(parsed.allowFallbackHighNodeNumbers) || bool(parsed.allow10000FallbackNodeNumbers);
     const merged = {
       ...defaults,
       ...parsed,
       disableGasketNodes: disableGasket,
       disableGasketInOutput: disableGasket,
+      allowFallbackHighNodeNumbers: allowHighFallback,
+      allow10000FallbackNodeNumbers: allowHighFallback,
       dtxrPositionOffset: { ...defaults.dtxrPositionOffset, ...(parsed.dtxrPositionOffset || {}) },
       xmlAxisToCiiAxis: { ...defaults.xmlAxisToCiiAxis, ...(parsed.xmlAxisToCiiAxis || {}) },
       supportKindToXmlType,

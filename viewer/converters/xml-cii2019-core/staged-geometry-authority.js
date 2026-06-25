@@ -158,15 +158,7 @@ export function buildXmlCiiStagedGeometryIndex(stagedJsonText) {
     const attrs = item.attrs || {};
     const refs = [readAttr(attrs, ['REF', 'ComponentRefNo', 'COMPONENTREFNO']), readAttr(attrs, ['NAME']), item.component?.name].map(normalizeRef).filter(Boolean);
     if (!refs.length) continue;
-    const geometry = {
-      ref: refs[0],
-      rawRefs: refs,
-      stagedType: item.type,
-      branchName: item.branchName,
-      lengthMm: stagedLengthMm(attrs),
-      boreMm: stagedBoreMm(attrs),
-      dtxr: stagedDtxr(attrs, item.component),
-    };
+    const geometry = { ref: refs[0], rawRefs: refs, stagedType: item.type, branchName: item.branchName, lengthMm: stagedLengthMm(attrs), boreMm: stagedBoreMm(attrs), dtxr: stagedDtxr(attrs, item.component) };
     if (geometry.lengthMm === null && geometry.boreMm === null) continue;
     for (const ref of refs) if (!index.byRef.has(ref)) index.byRef.set(ref, geometry);
     index.count += 1;
@@ -175,6 +167,7 @@ export function buildXmlCiiStagedGeometryIndex(stagedJsonText) {
 }
 
 const OD_TO_DN = [[10.3,6],[13.7,8],[17.1,10],[21.3,15],[26.7,20],[33.4,25],[42.2,32],[48.3,40],[60.3,50],[73.0,65],[88.9,80],[114.3,100],[141.3,125],[168.3,150],[219.1,200],[273.0,250],[323.8,300],[355.6,350],[406.4,400],[457.2,450],[508.0,500],[609.6,600],[711.0,700],[762.0,750]];
+const FALLBACK_HIGH_TYPES = new Set(['FLAN', 'GASK', 'VALV', 'RIGID', 'INST']);
 
 export function xmlCiiNominalDnFromOd(odMm) {
   const numeric = Number(odMm);
@@ -208,10 +201,23 @@ function setOrInsertInNodeBlock(block, tag, value) {
 
 function shouldSuppressGasketNodes(options = {}) {
   const config = options?.config && typeof options.config === 'object' ? options.config : {};
-  return truthy(options.disableGasketNodes)
-    || truthy(options.disableGasketInOutput)
-    || truthy(config.disableGasketNodes)
-    || truthy(config.disableGasketInOutput);
+  return truthy(options.disableGasketNodes) || truthy(options.disableGasketInOutput) || truthy(config.disableGasketNodes) || truthy(config.disableGasketInOutput);
+}
+
+function allowFallbackHighNodeNumbers(options = {}) {
+  const config = options?.config && typeof options.config === 'object' ? options.config : {};
+  return truthy(options.allowFallbackHighNodeNumbers) || truthy(options.allow10000FallbackNodeNumbers) || truthy(config.allowFallbackHighNodeNumbers) || truthy(config.allow10000FallbackNodeNumbers);
+}
+
+function shouldSuppressFallbackHighNodeNumbers(options = {}) {
+  const config = options?.config && typeof options.config === 'object' ? options.config : {};
+  const splitEnabled = truthy(options.splitCondensedValveFlange) || truthy(options.split_condensed_valve_flange) || truthy(config.splitCondensedValveFlange) || truthy(config.split_condensed_valve_flange);
+  return splitEnabled && !allowFallbackHighNodeNumbers(options);
+}
+
+function isFallbackHighNode(componentType, nodeNumber) {
+  const number = Number(nodeNumber);
+  return Number.isFinite(number) && number >= 10000 && FALLBACK_HIGH_TYPES.has(normalizeType(componentType));
 }
 
 function suppressGasketNodeNumbersInDom(document) {
@@ -223,11 +229,21 @@ function suppressGasketNodeNumbersInDom(document) {
   return count;
 }
 
-function suppressGasketNodeNumbersInText(xmlText) {
+function suppressFallbackHighNodeNumbersInDom(document) {
+  let count = 0;
+  for (const node of [...document.getElementsByTagName('Node')]) {
+    if (!isFallbackHighNode(childText(node, 'ComponentType'), childText(node, 'NodeNumber'))) continue;
+    if (ensureText(document, node, 'NodeNumber', '-1')) count += 1;
+  }
+  return count;
+}
+
+function suppressNodeNumbersInText(xmlText, predicate) {
   let count = 0;
   const xmlOut = text(xmlText).replace(/<Node\b[\s\S]*?<\/Node>/gi, (block) => {
     const componentType = normalizeType(block.match(/<ComponentType>([\s\S]*?)<\/ComponentType>/i)?.[1] || '');
-    if (componentType !== 'GASK') return block;
+    const nodeNumber = text(block.match(/<NodeNumber>([\s\S]*?)<\/NodeNumber>/i)?.[1] || '');
+    if (!predicate(componentType, nodeNumber)) return block;
     count += 1;
     if (/<NodeNumber>[\s\S]*?<\/NodeNumber>/i.test(block)) return block.replace(/<NodeNumber>[\s\S]*?<\/NodeNumber>/i, '<NodeNumber>-1</NodeNumber>');
     return block.replace(/(<Node\b[^>]*>)/i, '$1<NodeNumber>-1</NodeNumber>');
@@ -236,7 +252,7 @@ function suppressGasketNodeNumbersInText(xmlText) {
 }
 
 function applyRegexFallback(xmlText, index, options = {}) {
-  let stats = { stagedGeometryMatches: 0, stagedLengthAnnotations: 0, stagedBoreAnnotations: 0, gasketNodesSuppressed: 0 };
+  let stats = { stagedGeometryMatches: 0, stagedLengthAnnotations: 0, stagedBoreAnnotations: 0, gasketNodesSuppressed: 0, fallbackHighNodeNumbersSuppressed: 0 };
   let xmlOut = text(xmlText);
   if (index?.count) {
     xmlOut = xmlOut.replace(/<Node\b[\s\S]*?<\/Node>/gi, (block) => {
@@ -245,28 +261,27 @@ function applyRegexFallback(xmlText, index, options = {}) {
       if (!geometry) return block;
       let out = block;
       let changed = false;
-      if (geometry.lengthMm !== null) {
-        out = setOrInsertInNodeBlock(out, 'ElementLengthMm', geometry.lengthMm);
-        stats.stagedLengthAnnotations += 1;
-        changed = true;
-      }
+      if (geometry.lengthMm !== null) { out = setOrInsertInNodeBlock(out, 'ElementLengthMm', geometry.lengthMm); stats.stagedLengthAnnotations += 1; changed = true; }
       const od = numberValue(block.match(/<OutsideDiameter>([\s\S]*?)<\/OutsideDiameter>/i)?.[1] || '');
       const bore = geometry.boreMm || xmlCiiNominalDnFromOd(od);
-      if (bore !== null) {
-        out = setOrInsertInNodeBlock(out, 'BoreMm', bore);
-        stats.stagedBoreAnnotations += 1;
-        changed = true;
-      }
+      if (bore !== null) { out = setOrInsertInNodeBlock(out, 'BoreMm', bore); stats.stagedBoreAnnotations += 1; changed = true; }
       if (changed) stats.stagedGeometryMatches += 1;
       return out;
     });
   }
+  if (shouldSuppressFallbackHighNodeNumbers(options)) {
+    const suppressedHigh = suppressNodeNumbersInText(xmlOut, isFallbackHighNode);
+    xmlOut = suppressedHigh.xmlText;
+    stats.fallbackHighNodeNumbersSuppressed = suppressedHigh.count;
+  }
   if (shouldSuppressGasketNodes(options)) {
-    const suppressed = suppressGasketNodeNumbersInText(xmlOut);
+    const suppressed = suppressNodeNumbersInText(xmlOut, (type) => type === 'GASK');
     xmlOut = suppressed.xmlText;
     stats.gasketNodesSuppressed = suppressed.count;
   }
-  const diagnostics = stats.gasketNodesSuppressed > 0 ? [{ type: 'gasket-node-suppressed', count: stats.gasketNodesSuppressed, message: 'GASK nodes were retained in XML but their NodeNumber was set to -1 by config.' }] : [];
+  const diagnostics = [];
+  if (stats.fallbackHighNodeNumbersSuppressed > 0) diagnostics.push({ type: 'fallback-high-node-number-suppressed', count: stats.fallbackHighNodeNumbersSuppressed, message: 'Generated fallback 10000+ inline node numbers were set back to -1 because allowFallbackHighNodeNumbers is OFF.' });
+  if (stats.gasketNodesSuppressed > 0) diagnostics.push({ type: 'gasket-node-suppressed', count: stats.gasketNodesSuppressed, message: 'GASK nodes were retained in XML but their NodeNumber was set to -1 by config.' });
   return { xmlText: xmlOut, stats, diagnostics };
 }
 
@@ -280,7 +295,7 @@ export function applyXmlCiiStagedGeometryAuthority(xmlText, stagedJsonText, opti
   } catch {
     return applyRegexFallback(xmlText, index, options);
   }
-  const stats = { stagedGeometryMatches: 0, stagedLengthAnnotations: 0, stagedBoreAnnotations: 0, gasketNodesSuppressed: 0 };
+  const stats = { stagedGeometryMatches: 0, stagedLengthAnnotations: 0, stagedBoreAnnotations: 0, gasketNodesSuppressed: 0, fallbackHighNodeNumbersSuppressed: 0 };
   const diagnostics = [];
   if (index.count) {
     for (const branch of [...document.getElementsByTagName('Branch')]) {
@@ -301,27 +316,18 @@ export function applyXmlCiiStagedGeometryAuthority(xmlText, stagedJsonText, opti
         }
         if (changed) {
           stats.stagedGeometryMatches += 1;
-          diagnostics.push({
-            type: 'staged-geometry-authority',
-            branchName,
-            nodeNumber: childText(node, 'NodeNumber'),
-            componentRefNo: childText(node, 'ComponentRefNo'),
-            stagedType: geometry.stagedType,
-            dtxr: geometry.dtxr,
-            lengthMm: geometry.lengthMm,
-            boreMm: bore,
-            lengthSource: geometry.lengthMm !== null ? 'staged-component-refno' : '',
-            boreSource: geometry.boreMm ? 'staged-component-refno' : (odDn ? 'xml-outside-diameter' : ''),
-          });
+          diagnostics.push({ type: 'staged-geometry-authority', branchName, nodeNumber: childText(node, 'NodeNumber'), componentRefNo: childText(node, 'ComponentRefNo'), stagedType: geometry.stagedType, dtxr: geometry.dtxr, lengthMm: geometry.lengthMm, boreMm: bore, lengthSource: geometry.lengthMm !== null ? 'staged-component-refno' : '', boreSource: geometry.boreMm ? 'staged-component-refno' : (odDn ? 'xml-outside-diameter' : '') });
         }
       }
     }
   }
+  if (shouldSuppressFallbackHighNodeNumbers(options)) {
+    stats.fallbackHighNodeNumbersSuppressed = suppressFallbackHighNodeNumbersInDom(document);
+    if (stats.fallbackHighNodeNumbersSuppressed > 0) diagnostics.push({ type: 'fallback-high-node-number-suppressed', count: stats.fallbackHighNodeNumbersSuppressed, message: 'Generated fallback 10000+ inline node numbers were set back to -1 because allowFallbackHighNodeNumbers is OFF.' });
+  }
   if (shouldSuppressGasketNodes(options)) {
     stats.gasketNodesSuppressed = suppressGasketNodeNumbersInDom(document);
-    if (stats.gasketNodesSuppressed > 0) {
-      diagnostics.push({ type: 'gasket-node-suppressed', count: stats.gasketNodesSuppressed, message: 'GASK nodes were retained in XML but their NodeNumber was set to -1 by config.' });
-    }
+    if (stats.gasketNodesSuppressed > 0) diagnostics.push({ type: 'gasket-node-suppressed', count: stats.gasketNodesSuppressed, message: 'GASK nodes were retained in XML but their NodeNumber was set to -1 by config.' });
   }
   return { xmlText: new XMLSerializer().serializeToString(document), stats, diagnostics };
 }
