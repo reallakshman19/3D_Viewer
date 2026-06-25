@@ -188,7 +188,7 @@ function verifyStartupBlankPageGuard(moduleScripts) {
   assert.deepEqual(
     scriptPaths.length,
     1,
-    'viewer/index.html must expose exactly one guarded module entrypoint; optional addons belong behind guarded dynamic imports',
+    'viewer/index.html must expose exactly one guarded module entrypoint; optional addons belong behind tab-owned dynamic imports',
   );
   assert.ok(
     /^\.\/main(?:-[A-Za-z0-9_-]+)?\.js$/.test(scriptPaths[0]),
@@ -203,8 +203,10 @@ function verifyStartupBlankPageGuard(moduleScripts) {
     !/^\s*import\s+(?!\()/m.test(mainSource),
     `${path.relative(viewerRoot, activeMainPath)} must not use eager static imports because module-load failures bypass reportStartupError and can blank the page`,
   );
-  assert.ok(mainSource.includes('Promise.allSettled'), `${path.relative(viewerRoot, activeMainPath)} must load optional startup side effects with Promise.allSettled`);
-  assert.ok(mainSource.includes('optional startup module failed'), `${path.relative(viewerRoot, activeMainPath)} must log optional startup side-effect failures without aborting the shell`);
+  assert.ok(!mainSource.includes('STARTUP_SIDE_EFFECT_MODULES'), `${path.relative(viewerRoot, activeMainPath)} must not keep a global startup side-effect module list`);
+  assert.ok(!mainSource.includes('loadStartupSideEffects'), `${path.relative(viewerRoot, activeMainPath)} must not keep a no-op startup side-effect loader`);
+  assert.ok(!mainSource.includes('scheduleDeferredStartupSideEffects'), `${path.relative(viewerRoot, activeMainPath)} must not schedule empty startup side effects`);
+  assert.ok(!mainSource.includes('optional startup module failed'), `${path.relative(viewerRoot, activeMainPath)} must not contain dead optional-startup logging`);
   assert.ok(/import\s*\(\s*["']\.\/core\/app\.js\?v=/.test(mainSource), `${path.relative(viewerRoot, activeMainPath)} must dynamically import core/app.js through the guarded startup path`);
   assert.ok(mainSource.includes('startViewer().catch(reportStartupError)'), `${path.relative(viewerRoot, activeMainPath)} must catch startup failures and render the startup error boundary`);
   assert.ok(mainSource.includes("document.getElementById('app-layout')"), 'startup error boundary must target the deployed #app-layout mount');
