@@ -53,6 +53,8 @@ jobs:
         run: node scripts/test-xml-cii-ps-tag-exact-restraints.mjs
       - name: Staged geometry authority guard
         run: node scripts/test-xml-cii-staged-geometry-authority.mjs
+      - name: Short node invariant cleanup
+        run: node scripts/test-xml-cii-short-node-invariant-cleanup.mjs
       - name: Weight Match ComponentRefNo guard
         run: node scripts/test-xml-cii-weight-match-component-ref-column.mjs
       - name: Custom Input source guard
