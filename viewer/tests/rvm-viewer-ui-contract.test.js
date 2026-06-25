@@ -14,6 +14,7 @@ const files = {
   resizeBridge: path.join(viewerRoot, 'tabs/RvmLeftPanelResizeCollapseBridge.js'),
   stagedExport: path.join(viewerRoot, 'tabs/RvmStagedJsonExportBridge.js'),
   stagedValidation: path.join(viewerRoot, 'tabs/RvmStagedJsonValidationBridge.js'),
+  deferredLoader: path.join(viewerRoot, 'tabs/RvmDeferredBridgeLoader.js'),
 };
 
 function read(file) {
@@ -55,8 +56,18 @@ function verifySupportPolicyOptionA() {
   assert.ok(stagedValidation.includes('supportModeAvailable'), 'support validation must expose a support availability gate');
 }
 
+function verifyDeferredSupportPolicyCacheKeys() {
+  const deferredLoader = read(files.deferredLoader);
+  assert.ok(deferredLoader.includes('20260624-rvm-deferred-stagedjson-cache-1'), 'deferred bridge loader must expose refreshed cache contract');
+  assert.ok(deferredLoader.includes('RvmStagedJsonExportBridge.js?v=20260624-rvm-stagedjson-support-policy-1'), 'post-model deferred loader must import current Option A staged export bridge');
+  assert.ok(deferredLoader.includes('RvmStagedJsonValidationBridge.js?v=20260624-rvm-stagedjson-support-policy-1'), 'post-model deferred loader must import current Option A staged validation bridge');
+  assert.ok(!deferredLoader.includes('RvmStagedJsonExportBridge.js?v=20260621-rvm-button-hardening-1'), 'deferred loader must not keep stale staged export cache key');
+  assert.ok(!deferredLoader.includes('RvmStagedJsonValidationBridge.js?v=20260620-rvm-stagedjson-validation-1'), 'deferred loader must not keep stale staged validation cache key');
+}
+
 verifyModuleIdentity();
 verifyResizablePanels();
 verifySupportPolicyOptionA();
+verifyDeferredSupportPolicyCacheKeys();
 
-console.log('Verified RVM viewer module identity, side-panel resize UI contract, and Option A staged support policy.');
+console.log('Verified RVM viewer module identity, side-panel resize UI contract, Option A staged support policy, and deferred stagedJSON cache keys.');
