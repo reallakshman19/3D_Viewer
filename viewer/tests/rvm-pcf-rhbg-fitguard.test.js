@@ -101,7 +101,7 @@ check(renderBuilderSource.includes('RVM_NATIVE_FACET_GROUP'), 'render builder ke
 check(renderBuilderSource.includes('wireframe-diagnostic-not-solid-geometry'), 'bbox placeholders remain diagnostic wireframes');
 check(!renderBuilderSource.includes("primitive === 'STRUCTURE_BBOX' || type === 'STRUCTURE'"), 'unconditional structure slab promotion remains blocked');
 
-check(indexSource.includes('main-rhbg-fitguard.js?v=20260622-geometry-enriched-stagedjson-1'), 'index uses enriched stagedJSON entry cache key');
+check(indexSource.includes('main-rhbg-fitguard.js?v=20260625-rvm-renderer-cache-chain-1'), 'index uses current RVM renderer main cache key');
 check(entrySource.includes('core/app.js?v=20260625-rvm-renderer-cache-chain-1'), 'entrypoint uses current RVM renderer app cache key');
 check(entrySource.includes('await init(startupMount())'), 'entrypoint passes resolved mount root into init');
 check(appSource.includes('app-tab-click-state-bridge.js?v=20260622-tab-click-state-1'), 'app side-loads tab click state bridge');
