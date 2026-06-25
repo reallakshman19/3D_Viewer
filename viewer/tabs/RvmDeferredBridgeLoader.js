@@ -1,11 +1,11 @@
-const VERSION = '20260622-rvm-support-tools-retired-1';
+const VERSION = '20260624-rvm-deferred-stagedjson-cache-1';
 const API_KEY = '__PCF_GLB_RVM_BRIDGE_LOADER__';
 const ACTION_DIAGNOSTICS_KEY = '__PCF_GLB_RVM_ACTION_DIAGNOSTICS__';
 
 const BRIDGE_GROUPS = Object.freeze({
   postModel: [
-    { id: 'stagedjson-export', specifier: './RvmStagedJsonExportBridge.js?v=20260621-rvm-button-hardening-1', install: 'installRvmStagedJsonExportBridge' },
-    { id: 'stagedjson-validation', specifier: './RvmStagedJsonValidationBridge.js?v=20260620-rvm-stagedjson-validation-1', install: 'installRvmStagedJsonValidationBridge' },
+    { id: 'stagedjson-export', specifier: './RvmStagedJsonExportBridge.js?v=20260624-rvm-stagedjson-support-policy-1', install: 'installRvmStagedJsonExportBridge' },
+    { id: 'stagedjson-validation', specifier: './RvmStagedJsonValidationBridge.js?v=20260624-rvm-stagedjson-support-policy-1', install: 'installRvmStagedJsonValidationBridge' },
     { id: 'primitive-fallback', specifier: './RvmPrimitiveFallbackBridge.js?v=20260620-rvm-primitive-fallback-clickable-1', install: 'installRvmPrimitiveFallbackBridge' },
     { id: 'native-glb-export', specifier: './RvmNativeSceneGlbExportBridge.js?v=20260620-rvm-glb-component-hierarchy-v3-1', install: 'installRvmNativeSceneGlbExportBridge' },
     { id: 'glb-export-profile', specifier: './RvmGlbExportProfileBridge.js?v=20260620-rvm-glb-export-profile-units-1', install: 'installRvmGlbExportProfileBridge' },
