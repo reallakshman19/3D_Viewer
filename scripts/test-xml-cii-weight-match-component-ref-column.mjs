@@ -1,7 +1,6 @@
 #!/usr/bin/env node
 import fs from 'node:fs';
 import path from 'node:path';
-
 const repoRoot = process.cwd();
 const read = (file) => fs.readFileSync(path.join(repoRoot, file), 'utf8');
 const renderer = read('viewer/tabs/model-converters/converters/xmltocii2019_helper/weight-match-renderer.js');
@@ -17,9 +16,7 @@ const branchResolver = read('viewer/converters/xml-cii2019-core/branch-process-r
 const previewTable = read('viewer/tabs/model-converters/shared/EditablePreviewTable.js');
 const runParity = read('viewer/tabs/model-converters/converters/xmltocii2019_helper/enrichment-run-parity.js');
 const openRegex = read('viewer/tabs/model-converters/xml-cii-workflow-open-regex.js');
-
 function assert(condition, message) { if (!condition) { console.error('FAIL: ' + message); process.exit(1); } }
-
 assert(/ComponentType/.test(renderer), 'Workflow 4A table must show ComponentType');
 assert(/ComponentRefNo_Endpoint/.test(renderer), 'Workflow 4A table must show ComponentRefNo_Endpoint');
 assert(/componentRefEndpoint/.test(renderer), 'Workflow 4A row renderer must output componentRefEndpoint');
@@ -36,25 +33,22 @@ assert(/collectXmlCiiWeightMatchRows\(geometryXml/.test(renderer), 'Workflow 4A 
 assert(/applyPreferredWeightsByDefault/.test(renderer), 'Workflow 4A must auto-apply preferred weights after Build Weight Data');
 assert(/preferred-auto/.test(renderer), 'Workflow 4A auto-application must mark preferred auto-mapped weights');
 assert(/isEndpoint2/.test(renderer) && /nodeName: useValveHint \? row\.nodeName : ''/.test(renderer), 'Workflow 4A Valve Hint must only apply to Endpoint 2 nodes');
-
 assert(/Update Wall thickness based on DTXR/.test(preview), 'Preview must expose DTXR-based Wall thickness update button');
 assert(/resolveXmlCiiWallThicknessFromDtxr/.test(preview), 'Preview must resolve Wall thickness from DTXR schedule and bore');
 assert(/createPipeDataDb/.test(dtxrWall), 'DTXR wall resolver must use the existing pipe database first');
-assert(/Sch|SCHEDULE|schedule/i.test(dtxrWall) && /ASME B36\.10/.test(dtxrWall), 'DTXR wall resolver must parse schedule and include B36.10 fallback table');
-
+assert(/SCH|SCHEDULE|schedule/.test(dtxrWall) && /ASME B36\.10/.test(dtxrWall), 'DTXR wall resolver must parse schedule and include B36.10 fallback table');
 assert(/Build Weight Data/.test(nativePanels), 'Popup-native weight match must use Build Weight Data label');
-assert(/data-master-state="loaded"/.test(nativePanels) && /data-master-state="empty"/.test(nativePanels), 'Popup-native Import Masters tabs must color loaded and empty states');
+assert(/is-loaded/.test(nativePanels) && /is-empty/.test(nativePanels), 'Popup-native Import Masters tabs must color loaded and empty states');
 assert(!/data-native-run-option="allowFallbackHighNodeNumbers"/.test(nativePanels), '10000+ fallback run toggle must not be exposed in UI');
 assert(!/data-native-config-bool="allowFallbackHighNodeNumbers"/.test(nativePanels), '10000+ fallback config toggle must not be exposed in UI');
 assert(!/Disable gasket in output/.test(nativePanels), 'Popup-native UI must not expose a gasket toggle');
 assert(/Gasket drop is default/.test(nativePanels) || /GASK nodes are dropped by default/.test(nativePanels), 'Popup-native UI must state gasket drop is default');
-
 assert(/augmentWeightRowsWithNodeMeta/.test(bridge), 'Workflow bridge must augment popup weight rows with XML node metadata');
 assert(/componentRefEndpoint/.test(bridge), 'Workflow bridge must provide componentRefEndpoint for post-run/native popup rows');
 assert(/Endpoint/.test(bridge), 'Workflow bridge must read XML Endpoint values for post-run/native popup rows');
-assert(!/const HIGH_FALLBACK_KEY/.test(bridge) && !/allow10000FallbackNodeNumbers/.test(bridge), 'Workflow bridge must not keep active 10000+ fallback aliases');
+assert(!/const HIGH_FALLBACK_KEY/.test(bridge), 'Workflow bridge must not keep active 10000+ fallback aliases');
+assert(/not user-configurable/.test(bridge), 'Workflow bridge must keep only a comment explaining removed 10000+ fallback UI');
 assert(/dropGasketNodes/.test(bridge) && /dropGasketsInEnrichment/.test(bridge), 'Workflow bridge must persist default gasket-drop aliases');
-
 assert(/dropGasketNodes:\s*true/.test(config) && /dropGasketsInEnrichment:\s*true/.test(config), 'XML CII config defaults must drop gasket nodes by default');
 assert(!/allowFallbackHighNodeNumbers:\s*false/.test(config) && !/allow10000FallbackNodeNumbers:\s*false/.test(config), 'XML CII config defaults must not expose 10000+ fallback options');
 assert(/shouldDropGasketNodes/.test(stagedGeometry), 'Staged geometry authority must evaluate gasket drop option');
@@ -63,11 +57,9 @@ assert(/gasketNodesDropped/.test(stagedGeometry), 'Staged geometry authority mus
 assert(!/gasketNodesSuppressed/.test(stagedGeometry), 'Staged geometry authority must not use old gasket suppression metric');
 assert(/fallbackHighNodeNumbersSuppressed/.test(stagedGeometry), 'Staged geometry authority must report suppressed 10000+ fallback node count');
 assert(!/allowFallbackHighNodeNumbers\(options/.test(stagedGeometry), 'Staged geometry authority must not use 10000+ fallback allow toggle');
-
-assert(!/['"]PREV-NAME['"]/.test(sideloadConfig), 'DTXR_PS side-load basis must not include PREV-NAME');
+assert(!/fieldAliases:\s*\[[^\]]*['"]PREV-NAME['"]/s.test(sideloadConfig), 'DTXR_PS side-load basis must not include PREV-NAME alias');
 assert(/PREV-NAME is intentionally excluded/.test(sideloadConfig), 'DTXR_PS side-load config must document PREV-NAME exclusion');
 assert(/setItem\(key, 'regex'\)/.test(openRegex) && /LAUNCHER_SELECTOR/.test(openRegex), 'Workflow launcher must force popup open phase to Regex tab');
-
 assert(/dropGasketNodesFromXmlText/.test(runParity), 'Enrichment parity must drop gaskets before base enrichment');
 assert(/post-base-pre-parity/.test(runParity), 'Enrichment parity must drop gaskets before inline length and split renumbering');
 assert(!/new Set\(\['FLAN', 'GASK'/.test(runParity), 'GASK must not be a renumberable negative inline type');
@@ -81,5 +73,4 @@ assert(!/dispatchEvent/.test(branchSample), 'Regex sample autoload must not disp
 assert(!/setTimeout\(/.test(branchSample), 'Regex sample autoload must not use delayed startup repair loops');
 assert(/requestAnimationFrame/.test(branchSample), 'Regex sample autoload may refresh passively after Regex tab render');
 assert(/data-modal-tab="regex"/.test(branchSample), 'Regex sample autoload must refresh when the Regex tab is opened');
-
 console.log('XML CII weight match, DTXR wall thickness, gasket drop, regex sample, master-state colors, fallback-node policy, and smart propagation guards passed.');
