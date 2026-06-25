@@ -50,10 +50,11 @@ const MODEL_CONVERTER_INSTALLERS = Object.freeze([
   ['xml-cii-runtime-override-sync', installXmlCiiRuntimeOverrideSync],
 ]);
 
-export class ModelConvertersTab {
-  constructor() { this.container = null; }
-  render(container) { this.container = container; ensureModelConvertersStyles(); renderLegacyModelConvertersTab(container); markStylesReady(container); scheduleInstallerQueue(container); }
-  destroy() { this.container = null; }
+export function renderModelConvertersTab(container, ctx) {
+  console.log('RENDER MODEL CONVERTERS TAB CALLED!', container);
+  ensureModelConvertersStyles();
+  renderLegacyModelConvertersTab(container, ctx);
+  console.log('RENDER LEGACY MODEL CONVERTERS TAB RETURNED!');
+  markStylesReady(container);
+  scheduleInstallerQueue(container);
 }
-
-export default ModelConvertersTab;
