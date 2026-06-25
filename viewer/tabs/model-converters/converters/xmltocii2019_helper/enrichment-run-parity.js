@@ -2,10 +2,10 @@ import { parseXmlCiiEnrichmentConfig } from '../../../../converters/xml-cii2019-
 import { enrichXmlForCii2019 as enrichXmlForCii2019Base } from './enrichment-core.js?v=20260620-rating-override-1';
 import { xmlCiiDryRunPreview } from './preview-renderer.js?v=20260624-source-parity-1';
 
-const RENUMBERABLE_NEGATIVE_TYPES = new Set(['FLAN', 'GASK', 'VALV', 'RIGID', 'INST']);
-const INLINE_LENGTH_COMPONENT_TYPES = new Set(['FLAN', 'GASK', 'VALV', 'RIGID', 'INST']);
+const RENUMBERABLE_NEGATIVE_TYPES = new Set(['FLAN', 'VALV', 'RIGID', 'INST']);
+const INLINE_LENGTH_COMPONENT_TYPES = new Set(['FLAN', 'VALV', 'RIGID', 'INST']);
 const RESOLVED_RIGID_MARKER_TYPES = new Set(['FLAN', 'VALV', 'RIGID', 'INST']);
-const RESOLVED_FLEXIBLE_MARKER_TYPES = new Set(['GASK']);
+const RESOLVED_FLEXIBLE_MARKER_TYPES = new Set([]);
 const DTXR_POS_SIF_ZERO_TYPES = new Set(['TEE', 'OLET', 'WELDOLET', 'SOCKOLET', 'THREDOLET', 'THREADOLET', 'ELBOLET', 'LATROLET', 'SWEEPOLET', 'NIPOLET']);
 
 function text(value) {
@@ -95,6 +95,10 @@ function truthy(value) {
   return /^(1|true|yes|on)$/i.test(text(value));
 }
 
+function defaultTrue(value) {
+  return value === undefined || value === null ? true : truthy(value);
+}
+
 function rowValue(row, ...keys) {
   for (const key of keys) {
     const value = row?.[key] ?? row?._raw?.[key];
@@ -133,7 +137,56 @@ function configWithRuntimeOptions(baseConfig, options = {}) {
   if (Object.prototype.hasOwnProperty.call(merged || {}, 'split_condensed_valve_flange') && !Object.prototype.hasOwnProperty.call(merged || {}, 'splitCondensedValveFlange')) {
     merged.splitCondensedValveFlange = truthy(merged.split_condensed_valve_flange);
   }
+  if (Object.prototype.hasOwnProperty.call(options || {}, 'dropGasketNodes')) merged.dropGasketNodes = truthy(options.dropGasketNodes);
+  if (Object.prototype.hasOwnProperty.call(options || {}, 'dropGasketsInEnrichment')) merged.dropGasketsInEnrichment = truthy(options.dropGasketsInEnrichment);
   return merged;
+}
+
+function shouldDropGasketNodes(config = {}, options = {}) {
+  return truthy(config.disableGasketNodes)
+    || truthy(config.disableGasketInOutput)
+    || truthy(options.disableGasketNodes)
+    || truthy(options.disableGasketInOutput)
+    || (defaultTrue(config.dropGasketNodes) && defaultTrue(config.dropGasketsInEnrichment) && defaultTrue(options.dropGasketNodes) && defaultTrue(options.dropGasketsInEnrichment));
+}
+
+function dropGasketNodesFromDocument(document, statsTarget, diagnosticsTarget, stage) {
+  let dropped = 0;
+  for (const node of [...document.getElementsByTagName('Node')]) {
+    if (childText(node, 'ComponentType').toUpperCase() !== 'GASK') continue;
+    node.parentNode?.removeChild(node);
+    dropped += 1;
+  }
+  if (dropped > 0 && statsTarget) statsTarget.gasketNodesDropped = Number(statsTarget.gasketNodesDropped || 0) + dropped;
+  if (dropped > 0 && Array.isArray(diagnosticsTarget)) {
+    diagnosticsTarget.push({ type: 'gasket-node-dropped', stage, count: dropped, message: 'GASK Node blocks were removed before inline length annotation and split-condensed renumbering.' });
+  }
+  return dropped;
+}
+
+function dropGasketNodesFromXmlText(xmlTextVal, options = {}) {
+  const config = configWithRuntimeOptions({}, options);
+  if (!shouldDropGasketNodes(config, options)) return { xmlText: xmlTextVal, stats: {}, diagnostics: [] };
+  if (typeof DOMParser !== 'undefined' && typeof XMLSerializer !== 'undefined') {
+    try {
+      const document = new DOMParser().parseFromString(text(xmlTextVal), 'application/xml');
+      if (!document.getElementsByTagName('parsererror').length) {
+        const stats = {};
+        const diagnostics = [];
+        dropGasketNodesFromDocument(document, stats, diagnostics, 'pre-enrichment-source');
+        return { xmlText: new XMLSerializer().serializeToString(document), stats, diagnostics };
+      }
+    } catch {}
+  }
+  let count = 0;
+  const xmlText = text(xmlTextVal).replace(/<Node\b[\s\S]*?<\/Node>/gi, (block) => {
+    const type = text(block.match(/<ComponentType[^>]*>([\s\S]*?)<\/ComponentType>/i)?.[1]?.replace(/<[^>]+>/g, '')).toUpperCase();
+    if (type !== 'GASK') return block;
+    count += 1;
+    return '';
+  });
+  const diagnostics = count ? [{ type: 'gasket-node-dropped', stage: 'pre-enrichment-source-regex', count, message: 'GASK Node blocks were removed before XML enrichment.' }] : [];
+  return { xmlText, stats: { gasketNodesDropped: count }, diagnostics };
 }
 
 function setProcessBlock(document, branch, row) {
@@ -267,20 +320,14 @@ function annotateInlineElementLengths(document, enriched) {
       type: 'element-length-inline-negative',
       componentTypes: [...INLINE_LENGTH_COMPONENT_TYPES],
       annotatedNodes: count,
-      message: 'ElementLengthMm calculated for negative inline FLAN/GASK/VALV/RIGID/INST nodes from paired component endpoints or previous positive-node CII coordinate distance.',
+      message: 'ElementLengthMm calculated for negative inline FLAN/VALV/RIGID/INST nodes from paired component endpoints or previous positive-node CII coordinate distance. GASK nodes are dropped before this step.',
     });
   }
   return count;
 }
 
 function nodeDescriptor(node) {
-  return [
-    childText(node, 'ComponentType'),
-    childText(node, 'NodeName'),
-    childText(node, 'ComponentRefNo'),
-    childText(node, 'DTXR_POS'),
-    childText(node, 'TEEDESC_POS'),
-  ].map(text).filter(Boolean).join(' ').toUpperCase();
+  return [childText(node, 'ComponentType'), childText(node, 'NodeName'), childText(node, 'ComponentRefNo'), childText(node, 'DTXR_POS'), childText(node, 'TEEDESC_POS')].map(text).filter(Boolean).join(' ').toUpperCase();
 }
 
 function isDtxrPosTeeOrOletNode(node) {
@@ -301,13 +348,7 @@ function applyDtxrPosSifZero(document, enriched) {
     if (!nodeHasResolvedDtxrPos(node)) continue;
     if (!isDtxrPosTeeOrOletNode(node)) continue;
     if (setText(document, node, 'SIF', '0')) count += 1;
-    diagnostics.push({
-      type: 'dtxr-pos-sif-zero',
-      nodeNumber: childText(node, 'NodeNumber'),
-      componentType: childText(node, 'ComponentType'),
-      dtxrPos: childText(node, 'DTXR_POS') || childText(node, 'TEEDESC_POS'),
-      message: 'DTXR_POS-matched Tee/Olet node assigned SIF=0 before CII worker conversion.',
-    });
+    diagnostics.push({ type: 'dtxr-pos-sif-zero', nodeNumber: childText(node, 'NodeNumber'), componentType: childText(node, 'ComponentType'), dtxrPos: childText(node, 'DTXR_POS') || childText(node, 'TEEDESC_POS'), message: 'DTXR_POS-matched Tee/Olet node assigned SIF=0 before CII worker conversion.' });
   }
   enriched.stats = enriched.stats && typeof enriched.stats === 'object' ? enriched.stats : {};
   enriched.stats.dtxrPosSifZeroAnnotations = count;
@@ -382,10 +423,7 @@ function renumberLengthBearingNegativeNodes(document) {
   for (const nodes of nodesByBranch) {
     let index = 0;
     while (index < nodes.length) {
-      if (!negativeNodeEligible(originalNumbers, nodes[index])) {
-        index += 1;
-        continue;
-      }
+      if (!negativeNodeEligible(originalNumbers, nodes[index])) { index += 1; continue; }
       const start = index;
       while (index < nodes.length && negativeNodeEligible(originalNumbers, nodes[index])) index += 1;
       const numbers = allocateContiguousNumbers(nodes, start, index, originalNumbers, used, fallback);
@@ -424,37 +462,18 @@ function applyCondenseRigidOption(enriched, document, options = {}) {
     renumberedNodes: result.renumberedNodes,
     instRigid2Annotations: result.rigidMarkers,
     condensedValveFlangeBlocks: result.condensedValveFlangeBlocks,
-    message: 'Resolved Condense Rigid option applied: contiguous negative FLAN/GASK/VALV/RIGID/INST inline blocks are length-annotated, assigned stable positive node numbers in order, and resolved rigid/inline components are marked with Rigid after Endpoint before CII conversion.',
+    message: 'Resolved Condense Rigid option applied: contiguous negative FLAN/VALV/RIGID/INST inline blocks are length-annotated, assigned stable positive node numbers in order, and resolved rigid/inline components are marked with Rigid after Endpoint before CII conversion. GASK nodes are dropped before this step.',
   });
   return result.renumberedNodes;
 }
 
 function processProvenanceDiagnostics(row) {
-  const fieldSpecs = [
-    ['p1', 'Pressure1 / P1 / Design Pressure'],
-    ['hydroPressure', 'Hydro/Test Pressure'],
-    ['t1', 'Temperature1 / T1'],
-    ['t2', 'Temperature2 / T2'],
-    ['t3', 'Temperature3 / T3'],
-    ['density', 'FluidDensity / Density'],
-  ];
+  const fieldSpecs = [['p1', 'Pressure1 / P1 / Design Pressure'], ['hydroPressure', 'Hydro/Test Pressure'], ['t1', 'Temperature1 / T1'], ['t2', 'Temperature2 / T2'], ['t3', 'Temperature3 / T3'], ['density', 'FluidDensity / Density']];
   return fieldSpecs.map(([field, label]) => {
     const source = row?.[`${field}Source`] || 'none';
     const sourceField = row?.[`${field}SourceField`] || '';
     const finalValue = row?.[field] ?? '';
-    return {
-      type: 'process-provenance',
-      branchName: row?.branchName || '',
-      lineKey: row?.lineKey || '',
-      field,
-      fieldLabel: label,
-      lineListRowFound: row?.lineMiss ? 'no' : 'yes',
-      sourceRowIndex: row?._sourceRowIndex || row?.lineListRowIndex || '',
-      method: source,
-      sourceField,
-      value: finalValue,
-      message: `${label}: final=${text(finalValue) || '(blank)'}; source=${source}${sourceField ? `; field=${sourceField}` : ''}; rowFound=${row?.lineMiss ? 'no' : 'yes'}${row?._sourceRowIndex ? `; sourceRow=${row._sourceRowIndex}` : ''}`,
-    };
+    return { type: 'process-provenance', branchName: row?.branchName || '', lineKey: row?.lineKey || '', field, fieldLabel: label, lineListRowFound: row?.lineMiss ? 'no' : 'yes', sourceRowIndex: row?._sourceRowIndex || row?.lineListRowIndex || '', method: source, sourceField, value: finalValue, message: `${label}: final=${text(finalValue) || '(blank)'}; source=${source}${sourceField ? `; field=${sourceField}` : ''}; rowFound=${row?.lineMiss ? 'no' : 'yes'}${row?._sourceRowIndex ? `; sourceRow=${row._sourceRowIndex}` : ''}` };
   });
 }
 
@@ -463,6 +482,7 @@ function applyPreviewRunParity(enriched, sourceXmlText, stagedJsonText, options 
   enriched.config = configWithRuntimeOptions(enriched.config, options);
   const document = new DOMParser().parseFromString(enriched.xmlText, 'application/xml');
   if (document.getElementsByTagName('parsererror').length) return enriched;
+  if (shouldDropGasketNodes(enriched.config, options)) dropGasketNodesFromDocument(document, enriched.stats, enriched.diagnostics, 'post-base-pre-parity');
 
   const rows = xmlCiiDryRunPreview(sourceXmlText, enriched.config, stagedJsonText).branchRows || [];
   if (!rows.length) {
@@ -485,10 +505,7 @@ function applyPreviewRunParity(enriched, sourceXmlText, stagedJsonText, options 
   for (const branch of [...document.getElementsByTagName('Branch')]) {
     const branchName = childText(branch, 'Branchname');
     const row = rowForBranch(byBranch, branchName);
-    if (!row) {
-      if (branchName) missedBranches.push(branchName);
-      continue;
-    }
+    if (!row) { if (branchName) missedBranches.push(branchName); continue; }
     branchCount += 1;
     processCount += setProcessBlock(document, branch, row);
     nodeFactCount += setBranchNodeFacts(document, branch, row);
@@ -512,19 +529,14 @@ function applyPreviewRunParity(enriched, sourceXmlText, stagedJsonText, options 
   enriched.stats.processAnnotations = Math.max(Number(enriched.stats.processAnnotations || 0), processCount);
   enriched.diagnostics = Array.isArray(enriched.diagnostics) ? enriched.diagnostics : [];
   enriched.diagnostics.push(...provenanceRows);
-  enriched.diagnostics.push({
-    type: 'preview-run-parity-applied',
-    branches: branchCount,
-    processFields: processCount,
-    nodeFacts: nodeFactCount,
-    previewRows: rows.length,
-    missedBranches: missedBranches.slice(0, 20),
-    message: 'Run/enriched XML was synchronised from the same dry-run preview resolver used by phase 3, including mapped Hydro/Test pressure and process provenance diagnostics.',
-  });
+  enriched.diagnostics.push({ type: 'preview-run-parity-applied', branches: branchCount, processFields: processCount, nodeFacts: nodeFactCount, previewRows: rows.length, missedBranches: missedBranches.slice(0, 20), message: 'Run/enriched XML was synchronised from the same dry-run preview resolver used by phase 3, including mapped Hydro/Test pressure and process provenance diagnostics.' });
   return enriched;
 }
 
 export async function enrichXmlForCii2019(xmlTextVal, stagedJsonText, options = {}) {
-  const enriched = await enrichXmlForCii2019Base(xmlTextVal, stagedJsonText, options);
-  return applyPreviewRunParity(enriched, xmlTextVal, stagedJsonText, options);
+  const preparedSource = dropGasketNodesFromXmlText(xmlTextVal, options);
+  const enriched = await enrichXmlForCii2019Base(preparedSource.xmlText, stagedJsonText, options);
+  enriched.stats = { ...(enriched.stats || {}), ...(preparedSource.stats || {}) };
+  enriched.diagnostics = [...(preparedSource.diagnostics || []), ...(Array.isArray(enriched.diagnostics) ? enriched.diagnostics : [])];
+  return applyPreviewRunParity(enriched, preparedSource.xmlText, stagedJsonText, options);
 }
