@@ -65,6 +65,9 @@ jobs:
       - name: Staged geometry authority guard
         run: node scripts/test-xml-cii-staged-geometry-authority.mjs
 
+      - name: Weight Match ComponentRefNo guard
+        run: node scripts/test-xml-cii-weight-match-component-ref-column.mjs
+
       - name: Master autoload consolidation guard
         run: node scripts/test-xml-cii-master-autoload-single-session.mjs
 
