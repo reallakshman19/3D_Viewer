@@ -1,5 +1,6 @@
 const COMPONENT_BLOCKERS = new Set(['ELBOW', 'BEND', 'TEE', 'VALVE', 'FLANGE', 'SUPPORT', 'OLET', 'BRANCH']);
 const PIPE_TYPES = new Set(['PIPE', 'TUBI']);
+const BEND_TYPES = new Set(['BEND', 'ELBOW']);
 
 export function collectNonPrimitiveAutoBendSegments(source, options = {}) {
   const roots = Array.isArray(source) ? source : [source];
@@ -45,14 +46,64 @@ export function collectNonPrimitiveAutoBendSegments(source, options = {}) {
     };
     for (const key of ['children', 'items', 'branches', 'nodes', 'hierarchy']) {
       const children = node[key];
-      if (Array.isArray(children)) {
-        for (const child of children) walk(child, currentPath, nextInherited);
-      }
+      if (Array.isArray(children)) for (const child of children) walk(child, currentPath, nextInherited);
     }
   };
 
   for (const root of roots) walk(root, '', {});
   return segments;
+}
+
+export function collectExplicitNonPrimitiveAutoBends(source) {
+  const roots = Array.isArray(source) ? source : [source];
+  const bends = [];
+  let nodeIdCounter = 1;
+
+  const walk = (node, parentPath, inherited = {}) => {
+    if (!node || typeof node !== 'object') return;
+    const name = String(node.name || node.id || `Node-${nodeIdCounter}`).trim() || `Node-${nodeIdCounter}`;
+    nodeIdCounter += 1;
+    const currentPath = parentPath ? `${parentPath}/${name}` : name;
+    const attrs = attrsOf(node);
+    const componentType = normalizedType(node, attrs);
+    const branchId = token(attrs.BRANCH_ID ?? attrs.BRANCH ?? attrs.OWNER ?? node.BRANCH_ID ?? inherited.branchId);
+    const lineNo = token(attrs.LINE_NO ?? attrs.LINE ?? attrs.LINE_ID ?? node.LINE_NO ?? inherited.lineNo);
+
+    if (BEND_TYPES.has(componentType)) {
+      const from = pickCoord(attrs, node, ['APOS', 'A_POS', 'EP1', 'END_POINT1', 'POS_START', 'START_POINT', 'START', 'ABOP']);
+      const to = pickCoord(attrs, node, ['LPOS', 'L_POS', 'EP2', 'END_POINT2', 'POS_END', 'END_POINT', 'END', 'LBOP']);
+      const radiusMm = readPositiveNumber(attrs.BEND_RADIUS_MM ?? attrs.BEND_RADIUS ?? attrs.RADIUS ?? attrs.RADI ?? node.radiusMm ?? node.bendRadiusMm);
+      const turnAngleDeg = readPositiveNumber(attrs.BEND_ANGLE ?? attrs.BEND_ANGLE1 ?? attrs.ANGLE1 ?? attrs.ANGLE ?? node.turnAngleDeg);
+      if (from && to && radiusMm && turnAngleDeg) {
+        bends.push({
+          id: currentPath,
+          nodeId: token(attrs.BEND_NODE1 ?? attrs.NODE1 ?? attrs.NODE ?? attrs.FROM_NODE ?? node.nodeId) || coordNodeKey(from),
+          bendNode1: token(attrs.BEND_NODE1 ?? attrs.NODE1 ?? ''),
+          bendNode2: token(attrs.BEND_NODE2 ?? attrs.NODE2 ?? ''),
+          from,
+          to,
+          branchId,
+          lineNo,
+          componentType: 'BEND',
+          radiusMm,
+          turnAngleDeg,
+          pipeOdMm: readPositiveNumber(attrs.PIPE_OD_MM ?? attrs.OD_MM ?? attrs.OD ?? attrs.OUTSIDE_DIAMETER ?? attrs.DIAMETER ?? node.pipeOdMm),
+          boreMm: readPositiveNumber(attrs.HBOR ?? attrs.TBOR ?? attrs.ABORE ?? attrs.LBORE ?? attrs.BORE ?? attrs.DIAMETER ?? node.boreMm),
+          source: sourceForExplicitBend(attrs),
+          attrs: { ...attrs },
+        });
+      }
+    }
+
+    const nextInherited = { branchId: branchId || inherited.branchId, lineNo: lineNo || inherited.lineNo };
+    for (const key of ['children', 'items', 'branches', 'nodes', 'hierarchy']) {
+      const children = node[key];
+      if (Array.isArray(children)) for (const child of children) walk(child, currentPath, nextInherited);
+    }
+  };
+
+  for (const root of roots) walk(root, '', {});
+  return bends;
 }
 
 export function collectExistingAutoBendNodeKinds(source) {
@@ -102,7 +153,7 @@ function normalizedType(node, attrs = attrsOf(node)) {
   if (raw) return raw;
   const name = String(node?.name || node?.id || '').toUpperCase();
   if (name.includes('PIPE') || name.includes('TUBI')) return 'PIPE';
-  if (name.includes('ELBO') || name.includes('BEND')) return 'ELBOW';
+  if (name.includes('ELBO') || name.includes('BEND')) return 'BEND';
   if (name.includes('TEE')) return 'TEE';
   if (name.includes('VALV')) return 'VALVE';
   if (name.includes('FLAN')) return 'FLANGE';
@@ -154,37 +205,17 @@ function parseCoord(value) {
   return values.length >= 3 ? { x: values[0], y: values[1], z: values[2] } : null;
 }
 
+function sourceForExplicitBend(attrs = {}) {
+  return String(attrs.SOURCE_FORMAT || attrs.SOURCE_CONVERTER || '').toUpperCase().includes('INPUTXML') ? 'explicit-inputxml-bend' : 'explicit-staged-bend';
+}
+
 function numberValue(value) {
   const n = Number.parseFloat(String(value ?? '').replace(/mm/gi, '').trim());
   return Number.isFinite(n) ? n : null;
 }
-
-function readPositiveNumber(value) {
-  const n = numberValue(value);
-  return Number.isFinite(n) && n > 0 ? n : null;
-}
-
-function token(value) {
-  const text = String(value ?? '').trim();
-  return text || undefined;
-}
-
-function nodeKey(explicit, point) {
-  const explicitText = String(explicit ?? '').trim();
-  return explicitText || coordNodeKey(point);
-}
-
-function coordNodeKey(point) {
-  return `coord:${roundCoord(point.x)}:${roundCoord(point.y)}:${roundCoord(point.z)}`;
-}
-
-function roundCoord(value) {
-  return Number(value || 0).toFixed(3);
-}
-
-function distance(a, b) {
-  const dx = a.x - b.x;
-  const dy = a.y - b.y;
-  const dz = a.z - b.z;
-  return Math.sqrt((dx * dx) + (dy * dy) + (dz * dz));
-}
+function readPositiveNumber(value) { const n = numberValue(value); return Number.isFinite(n) && n > 0 ? n : null; }
+function token(value) { const text = String(value ?? '').trim(); return text || undefined; }
+function nodeKey(explicit, point) { const explicitText = String(explicit ?? '').trim(); return explicitText || coordNodeKey(point); }
+function coordNodeKey(point) { return `coord:${roundCoord(point.x)}:${roundCoord(point.y)}:${roundCoord(point.z)}`; }
+function roundCoord(value) { return Number(value || 0).toFixed(3); }
+function distance(a, b) { const dx = a.x - b.x; const dy = a.y - b.y; const dz = a.z - b.z; return Math.sqrt((dx * dx) + (dy * dy) + (dz * dz)); }

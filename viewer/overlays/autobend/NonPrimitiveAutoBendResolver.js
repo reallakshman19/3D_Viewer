@@ -3,6 +3,7 @@ const EPS = 1e-9;
 export function resolveNonPrimitiveAutoBends(input = {}, options = {}) {
   const sourceKind = input.sourceKind || 'unknown';
   const segments = Array.isArray(input.segments) ? input.segments : [];
+  const explicitBends = Array.isArray(input.explicitBends) ? input.explicitBends : [];
   const existingNodeKinds = normalizeNodeKindMap(input.existingNodeKinds);
   const settings = {
     enabled: options.enabled !== false,
@@ -17,6 +18,9 @@ export function resolveNonPrimitiveAutoBends(input = {}, options = {}) {
     sourceKind,
     candidateNodeCount: 0,
     emittedBendCount: 0,
+    explicitBendCount: 0,
+    explicitBendInvalidCount: 0,
+    syntheticSuppressedByExplicitBendCount: 0,
     skippedCollinearCount: 0,
     skippedStraightContinuationCount: 0,
     skippedShortSegmentCount: 0,
@@ -27,6 +31,15 @@ export function resolveNonPrimitiveAutoBends(input = {}, options = {}) {
   };
 
   if (!settings.enabled) return { enabled: false, sourceKind, bends: [], trims: [], diagnostics };
+
+  const explicit = buildExplicitBends(explicitBends, diagnostics);
+  if (explicit.length) {
+    diagnostics.explicitBendCount = explicit.length;
+    diagnostics.syntheticSuppressedByExplicitBendCount = explicit.length;
+    diagnostics.emittedBendCount = explicit.length;
+    diagnostics.warnings.push({ code: 'explicitBendSourceOfTruth', message: 'Explicit staged/InputXML BEND records are used as source of truth; synthetic 1.5D endpoint trims are suppressed.' });
+    return { enabled: true, sourceKind, bends: explicit, trims: [], diagnostics };
+  }
 
   const pipeSegments = segments.filter(isPlainPipeSegment);
   const nodeMap = buildNodeIncidenceMap(pipeSegments);
@@ -177,101 +190,103 @@ export function resolveBendRadiusMm({ segmentA, segmentB, lenA, lenB, turnAngleR
   return { radiusMm, source, warnings };
 }
 
+function buildExplicitBends(records = [], diagnostics) {
+  const bends = [];
+  for (const [index, record] of records.entries()) {
+    const bend = buildExplicitBend(record, index, diagnostics);
+    if (bend) bends.push(bend);
+    else diagnostics.explicitBendInvalidCount += 1;
+  }
+  return bends;
+}
+
+function buildExplicitBend(record = {}, index, diagnostics) {
+  const tangentA = toVec3(record.from || record.tangentA || record.apos || record.APOS);
+  const tangentB = toVec3(record.to || record.tangentB || record.lpos || record.LPOS);
+  const radiusMm = readPositiveNumber(record.radiusMm ?? record.bendRadiusMm ?? record.radius);
+  const turnAngleDeg = readPositiveNumber(record.turnAngleDeg ?? record.angleDeg ?? record.angle);
+  if (!tangentA || !tangentB || !radiusMm || !turnAngleDeg) return null;
+  const chord = sub(tangentB, tangentA);
+  const chordLength = length(chord);
+  if (!(chordLength > EPS)) return null;
+  const chordDir = normalize(chord);
+  const planeNormal = choosePlaneNormal(chordDir, record.planeNormal);
+  const radialDir = normalize(cross(planeNormal, chordDir)) || choosePerpendicular(chordDir);
+  const halfChord = chordLength / 2;
+  const centerOffset = Math.sqrt(Math.max(0, (radiusMm * radiusMm) - (halfChord * halfChord)));
+  const center = add(midpoint(tangentA, tangentB), scale(radialDir, centerOffset));
+  const expectedChord = 2 * radiusMm * Math.sin(degToRad(turnAngleDeg) / 2);
+  const warnings = [...(record.warnings || [])];
+  if (Number.isFinite(expectedChord) && expectedChord > EPS && Math.abs(expectedChord - chordLength) > Math.max(1, expectedChord * 0.05)) {
+    warnings.push('explicitBendChordDoesNotMatchRadiusAngle');
+    diagnostics.warnings.push({ nodeId: record.nodeId || `explicit:${index + 1}`, code: 'explicitBendChordDoesNotMatchRadiusAngle', message: 'Explicit BEND radius/angle do not match APOS/LPOS chord; preview keeps source radius/angle and suppresses synthetic 1.5D trim.' });
+  }
+  return {
+    id: record.id || `explicit-bend:${index + 1}`,
+    nodeId: record.nodeId || record.bendNode1 || `explicit:${index + 1}`,
+    segmentAId: record.segmentAId || '',
+    segmentBId: record.segmentBId || '',
+    center,
+    tangentA,
+    tangentB,
+    radiusMm,
+    turnAngleDeg,
+    planeNormal,
+    pipeOdMm: readPositiveNumber(record.pipeOdMm) || null,
+    boreMm: readPositiveNumber(record.boreMm) || null,
+    source: record.source || 'explicit-staged-bend',
+    bendNode1: record.bendNode1 || '',
+    bendNode2: record.bendNode2 || '',
+    sourcePath: record.id || record.sourcePath || '',
+    warnings,
+  };
+}
+
+function choosePlaneNormal(chordDir, explicitNormal) {
+  const explicit = explicitNormal ? normalize(toVec3(explicitNormal)) : null;
+  if (explicit) return explicit;
+  return normalize(cross(chordDir, { x: 0, y: 1, z: 0 }))
+    || normalize(cross(chordDir, { x: 0, y: 0, z: 1 }))
+    || { x: 0, y: 1, z: 0 };
+}
+
+function choosePerpendicular(direction) {
+  return normalize(cross(direction, { x: 0, y: 1, z: 0 }))
+    || normalize(cross(direction, { x: 0, y: 0, z: 1 }))
+    || { x: 1, y: 0, z: 0 };
+}
+
 function classifyRealTurn(directionA, directionB, settings = {}) {
   const dA = normalize(directionA);
   const dB = normalize(directionB);
-  if (!dA || !dB) {
-    return { accepted: false, reason: 'degenerate', code: 'zeroDirection', message: 'Candidate rejected because a direction vector is zero length.' };
-  }
+  if (!dA || !dB) return { accepted: false, reason: 'degenerate', code: 'zeroDirection', message: 'Candidate rejected because a direction vector is zero length.' };
   const angleDeg = angleBetweenDeg(dA, dB);
   const tolerance = settings.collinearToleranceDeg ?? 3;
   const maxTurn = settings.maxTurnAngleDeg ?? 150;
-  if (!Number.isFinite(angleDeg)) {
-    return { accepted: false, reason: 'degenerate', code: 'invalidAngle', message: 'Candidate rejected because turn angle could not be computed.' };
-  }
-  if (angleDeg <= tolerance) {
-    return { accepted: false, reason: 'collinear', code: 'collinear', message: 'Candidate rejected: straight collinear continuation.' };
-  }
-  if (Math.abs(180 - angleDeg) <= tolerance || angleDeg > maxTurn) {
-    return { accepted: false, reason: 'straightContinuation', code: 'straightContinuation', message: `Candidate rejected: ${angleDeg.toFixed(1)}° is a straight or near-straight continuation, not a bend.` };
-  }
+  if (!Number.isFinite(angleDeg)) return { accepted: false, reason: 'degenerate', code: 'invalidAngle', message: 'Candidate rejected because turn angle could not be computed.' };
+  if (angleDeg <= tolerance) return { accepted: false, reason: 'collinear', code: 'collinear', message: 'Candidate rejected: straight collinear continuation.' };
+  if (Math.abs(180 - angleDeg) <= tolerance || angleDeg > maxTurn) return { accepted: false, reason: 'straightContinuation', code: 'straightContinuation', message: `Candidate rejected: ${angleDeg.toFixed(1)}° is a straight or near-straight continuation, not a bend.` };
   return { accepted: true, angleDeg, angleRad: degToRad(angleDeg) };
 }
 
-function angleBetweenDeg(a, b) {
-  return radToDeg(Math.acos(clamp(-dot(a, b), -1, 1)));
-}
-
-function isPlainPipeSegment(segment) {
-  const type = String(segment.componentType || segment.type || 'PIPE').toUpperCase();
-  return type === 'PIPE';
-}
-
-function isExistingComponentNode(kind) {
-  return ['ELBOW', 'BEND', 'TEE', 'VALVE', 'FLANGE', 'SUPPORT', 'OLET', 'BRANCH', 'ATTA', 'ANCI'].includes(kind);
-}
-
-function sameBranchOrLine(a, b) {
-  if (a.branchId && b.branchId && a.branchId !== b.branchId) return false;
-  if (a.lineNo && b.lineNo && a.lineNo !== b.lineNo) return false;
-  return true;
-}
-
-function buildNodeIncidenceMap(segments) {
-  const map = new Map();
-  for (const segment of segments) {
-    addNodeSegment(map, segment.fromNode, segment);
-    addNodeSegment(map, segment.toNode, segment);
-  }
-  return map;
-}
-
-function addNodeSegment(map, nodeId, segment) {
-  if (!nodeId) return;
-  if (!map.has(nodeId)) map.set(nodeId, []);
-  map.get(nodeId).push(segment);
-}
-
-function getSharedPoint(nodeId, a, b) {
-  const pa = a.fromNode === nodeId ? a.from : a.toNode === nodeId ? a.to : null;
-  const pb = b.fromNode === nodeId ? b.from : b.toNode === nodeId ? b.to : null;
-  if (!pa || !pb) return null;
-  return distance(pa, pb) > 1e-4 ? midpoint(pa, pb) : toVec3(pa);
-}
-
-function getOtherPoint(nodeId, segment) {
-  if (segment.fromNode === nodeId) return toVec3(segment.to);
-  if (segment.toNode === nodeId) return toVec3(segment.from);
-  return null;
-}
-
-function normalizeNodeKindMap(value) {
-  if (value instanceof Map) return value;
-  return new Map(Object.entries(value || {}));
-}
-
-function readPositiveNumber(value) {
-  const number = Number(value);
-  return Number.isFinite(number) && number > 0 ? number : null;
-}
-
-function toVec3(value = {}) {
-  if (Array.isArray(value)) return { x: Number(value[0]) || 0, y: Number(value[1]) || 0, z: Number(value[2]) || 0 };
-  return { x: Number(value.x) || 0, y: Number(value.y) || 0, z: Number(value.z) || 0 };
-}
-
-function sub(a, b) {
-  const av = toVec3(a);
-  const bv = toVec3(b);
-  return { x: av.x - bv.x, y: av.y - bv.y, z: av.z - bv.z };
-}
-
+function angleBetweenDeg(a, b) { return radToDeg(Math.acos(clamp(-dot(a, b), -1, 1))); }
+function isPlainPipeSegment(segment) { const type = String(segment.componentType || segment.type || 'PIPE').toUpperCase(); return type === 'PIPE'; }
+function isExistingComponentNode(kind) { return ['ELBOW', 'BEND', 'TEE', 'VALVE', 'FLANGE', 'SUPPORT', 'OLET', 'BRANCH', 'ATTA', 'ANCI'].includes(kind); }
+function sameBranchOrLine(a, b) { if (a.branchId && b.branchId && a.branchId !== b.branchId) return false; if (a.lineNo && b.lineNo && a.lineNo !== b.lineNo) return false; return true; }
+function buildNodeIncidenceMap(segments) { const map = new Map(); for (const segment of segments) { addNodeSegment(map, segment.fromNode, segment); addNodeSegment(map, segment.toNode, segment); } return map; }
+function addNodeSegment(map, nodeId, segment) { if (!nodeId) return; if (!map.has(nodeId)) map.set(nodeId, []); map.get(nodeId).push(segment); }
+function getSharedPoint(nodeId, a, b) { const pa = a.fromNode === nodeId ? a.from : a.toNode === nodeId ? a.to : null; const pb = b.fromNode === nodeId ? b.from : b.toNode === nodeId ? b.to : null; if (!pa || !pb) return null; return distance(pa, pb) > 1e-4 ? midpoint(pa, pb) : toVec3(pa); }
+function getOtherPoint(nodeId, segment) { if (segment.fromNode === nodeId) return toVec3(segment.to); if (segment.toNode === nodeId) return toVec3(segment.from); return null; }
+function normalizeNodeKindMap(value) { if (value instanceof Map) return value; return new Map(Object.entries(value || {})); }
+function readPositiveNumber(value) { const number = Number(value); return Number.isFinite(number) && number > 0 ? number : null; }
+function toVec3(value = {}) { if (!value && value !== 0) return null; if (Array.isArray(value)) return { x: Number(value[0]) || 0, y: Number(value[1]) || 0, z: Number(value[2]) || 0 }; return { x: Number(value.x) || 0, y: Number(value.y) || 0, z: Number(value.z) || 0 }; }
+function sub(a, b) { const av = toVec3(a); const bv = toVec3(b); return { x: av.x - bv.x, y: av.y - bv.y, z: av.z - bv.z }; }
 function add(a, b) { return { x: a.x + b.x, y: a.y + b.y, z: a.z + b.z }; }
 function scale(a, k) { return { x: a.x * k, y: a.y * k, z: a.z * k }; }
 function dot(a, b) { return a.x * b.x + a.y * b.y + a.z * b.z; }
 function cross(a, b) { return { x: a.y * b.z - a.z * b.y, y: a.z * b.x - a.x * b.z, z: a.x * b.y - a.y * b.x }; }
 function length(a) { return Math.sqrt(dot(a, a)); }
-function normalize(a) { const len = length(a); return len > EPS ? scale(a, 1 / len) : null; }
+function normalize(a) { const len = length(a || {}); return len > EPS ? scale(a, 1 / len) : null; }
 function distance(a, b) { return length(sub(a, b)); }
 function midpoint(a, b) { return scale(add(toVec3(a), toVec3(b)), 0.5); }
 function clamp(value, min, max) { return Math.max(min, Math.min(max, value)); }
