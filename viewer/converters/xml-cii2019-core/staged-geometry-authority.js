@@ -9,6 +9,10 @@ function truthy(value) {
   return /^(1|true|yes|on)$/i.test(text(value));
 }
 
+function defaultTrue(value) {
+  return value === undefined || value === null ? true : truthy(value);
+}
+
 function numberValue(value) {
   const match = text(value).replace(/,/g, '').match(/-?\d+(?:\.\d+)?(?:[Ee][-+]?\d+)?/);
   if (!match) return null;
@@ -167,7 +171,7 @@ export function buildXmlCiiStagedGeometryIndex(stagedJsonText) {
 }
 
 const OD_TO_DN = [[10.3,6],[13.7,8],[17.1,10],[21.3,15],[26.7,20],[33.4,25],[42.2,32],[48.3,40],[60.3,50],[73.0,65],[88.9,80],[114.3,100],[141.3,125],[168.3,150],[219.1,200],[273.0,250],[323.8,300],[355.6,350],[406.4,400],[457.2,450],[508.0,500],[609.6,600],[711.0,700],[762.0,750]];
-const FALLBACK_HIGH_TYPES = new Set(['FLAN', 'GASK', 'VALV', 'RIGID', 'INST']);
+const FALLBACK_HIGH_TYPES = new Set(['FLAN', 'VALV', 'RIGID', 'INST']);
 
 export function xmlCiiNominalDnFromOd(odMm) {
   const numeric = Number(odMm);
@@ -199,9 +203,13 @@ function setOrInsertInNodeBlock(block, tag, value) {
   return block.replace(/<\/Node>\s*$/i, `<${tag}>${formatted}</${tag}></Node>`);
 }
 
-function shouldSuppressGasketNodes(options = {}) {
+function shouldDropGasketNodes(options = {}) {
   const config = options?.config && typeof options.config === 'object' ? options.config : {};
-  return truthy(options.disableGasketNodes) || truthy(options.disableGasketInOutput) || truthy(config.disableGasketNodes) || truthy(config.disableGasketInOutput);
+  return truthy(options.disableGasketNodes)
+    || truthy(options.disableGasketInOutput)
+    || truthy(config.disableGasketNodes)
+    || truthy(config.disableGasketInOutput)
+    || (defaultTrue(options.dropGasketNodes) && defaultTrue(options.dropGasketsInEnrichment) && defaultTrue(config.dropGasketNodes) && defaultTrue(config.dropGasketsInEnrichment));
 }
 
 function allowFallbackHighNodeNumbers(options = {}) {
@@ -220,11 +228,12 @@ function isFallbackHighNode(componentType, nodeNumber) {
   return Number.isFinite(number) && number >= 10000 && FALLBACK_HIGH_TYPES.has(normalizeType(componentType));
 }
 
-function suppressGasketNodeNumbersInDom(document) {
+function dropGasketNodesInDom(document) {
   let count = 0;
   for (const node of [...document.getElementsByTagName('Node')]) {
     if (normalizeType(childText(node, 'ComponentType')) !== 'GASK') continue;
-    if (ensureText(document, node, 'NodeNumber', '-1')) count += 1;
+    node.parentNode?.removeChild(node);
+    count += 1;
   }
   return count;
 }
@@ -236,6 +245,17 @@ function suppressFallbackHighNodeNumbersInDom(document) {
     if (ensureText(document, node, 'NodeNumber', '-1')) count += 1;
   }
   return count;
+}
+
+function dropNodeBlocksInText(xmlText, predicate) {
+  let count = 0;
+  const xmlOut = text(xmlText).replace(/<Node\b[\s\S]*?<\/Node>/gi, (block) => {
+    const componentType = normalizeType(block.match(/<ComponentType>([\s\S]*?)<\/ComponentType>/i)?.[1] || '');
+    if (!predicate(componentType)) return block;
+    count += 1;
+    return '';
+  });
+  return { xmlText: xmlOut, count };
 }
 
 function suppressNodeNumbersInText(xmlText, predicate) {
@@ -252,8 +272,13 @@ function suppressNodeNumbersInText(xmlText, predicate) {
 }
 
 function applyRegexFallback(xmlText, index, options = {}) {
-  let stats = { stagedGeometryMatches: 0, stagedLengthAnnotations: 0, stagedBoreAnnotations: 0, gasketNodesSuppressed: 0, fallbackHighNodeNumbersSuppressed: 0 };
+  let stats = { stagedGeometryMatches: 0, stagedLengthAnnotations: 0, stagedBoreAnnotations: 0, gasketNodesDropped: 0, fallbackHighNodeNumbersSuppressed: 0 };
   let xmlOut = text(xmlText);
+  if (shouldDropGasketNodes(options)) {
+    const dropped = dropNodeBlocksInText(xmlOut, (type) => type === 'GASK');
+    xmlOut = dropped.xmlText;
+    stats.gasketNodesDropped = dropped.count;
+  }
   if (index?.count) {
     xmlOut = xmlOut.replace(/<Node\b[\s\S]*?<\/Node>/gi, (block) => {
       const ref = normalizeRef(block.match(/<ComponentRefNo>([\s\S]*?)<\/ComponentRefNo>/i)?.[1] || '');
@@ -274,14 +299,9 @@ function applyRegexFallback(xmlText, index, options = {}) {
     xmlOut = suppressedHigh.xmlText;
     stats.fallbackHighNodeNumbersSuppressed = suppressedHigh.count;
   }
-  if (shouldSuppressGasketNodes(options)) {
-    const suppressed = suppressNodeNumbersInText(xmlOut, (type) => type === 'GASK');
-    xmlOut = suppressed.xmlText;
-    stats.gasketNodesSuppressed = suppressed.count;
-  }
   const diagnostics = [];
+  if (stats.gasketNodesDropped > 0) diagnostics.push({ type: 'gasket-node-dropped', count: stats.gasketNodesDropped, message: 'GASK nodes were removed from enriched XML before staged geometry/weight matching.' });
   if (stats.fallbackHighNodeNumbersSuppressed > 0) diagnostics.push({ type: 'fallback-high-node-number-suppressed', count: stats.fallbackHighNodeNumbersSuppressed, message: 'Generated fallback 10000+ inline node numbers were set back to -1 because allowFallbackHighNodeNumbers is OFF.' });
-  if (stats.gasketNodesSuppressed > 0) diagnostics.push({ type: 'gasket-node-suppressed', count: stats.gasketNodesSuppressed, message: 'GASK nodes were retained in XML but their NodeNumber was set to -1 by config.' });
   return { xmlText: xmlOut, stats, diagnostics };
 }
 
@@ -295,8 +315,12 @@ export function applyXmlCiiStagedGeometryAuthority(xmlText, stagedJsonText, opti
   } catch {
     return applyRegexFallback(xmlText, index, options);
   }
-  const stats = { stagedGeometryMatches: 0, stagedLengthAnnotations: 0, stagedBoreAnnotations: 0, gasketNodesSuppressed: 0, fallbackHighNodeNumbersSuppressed: 0 };
+  const stats = { stagedGeometryMatches: 0, stagedLengthAnnotations: 0, stagedBoreAnnotations: 0, gasketNodesDropped: 0, fallbackHighNodeNumbersSuppressed: 0 };
   const diagnostics = [];
+  if (shouldDropGasketNodes(options)) {
+    stats.gasketNodesDropped = dropGasketNodesInDom(document);
+    if (stats.gasketNodesDropped > 0) diagnostics.push({ type: 'gasket-node-dropped', count: stats.gasketNodesDropped, message: 'GASK nodes were removed from enriched XML before staged geometry/weight matching.' });
+  }
   if (index.count) {
     for (const branch of [...document.getElementsByTagName('Branch')]) {
       const branchName = childText(branch, 'Branchname');
@@ -324,10 +348,6 @@ export function applyXmlCiiStagedGeometryAuthority(xmlText, stagedJsonText, opti
   if (shouldSuppressFallbackHighNodeNumbers(options)) {
     stats.fallbackHighNodeNumbersSuppressed = suppressFallbackHighNodeNumbersInDom(document);
     if (stats.fallbackHighNodeNumbersSuppressed > 0) diagnostics.push({ type: 'fallback-high-node-number-suppressed', count: stats.fallbackHighNodeNumbersSuppressed, message: 'Generated fallback 10000+ inline node numbers were set back to -1 because allowFallbackHighNodeNumbers is OFF.' });
-  }
-  if (shouldSuppressGasketNodes(options)) {
-    stats.gasketNodesSuppressed = suppressGasketNodeNumbersInDom(document);
-    if (stats.gasketNodesSuppressed > 0) diagnostics.push({ type: 'gasket-node-suppressed', count: stats.gasketNodesSuppressed, message: 'GASK nodes were retained in XML but their NodeNumber was set to -1 by config.' });
   }
   return { xmlText: new XMLSerializer().serializeToString(document), stats, diagnostics };
 }
