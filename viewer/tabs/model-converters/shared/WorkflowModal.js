@@ -58,7 +58,6 @@ export class WorkflowModal {
             ${this.tabs.map(t => `
               <button type="button" class="model-converters-workflow-phase ${t.id === this.activeTabId ? 'is-active' : ''} ${t.disabled ? 'is-disabled' : ''}" data-modal-tab="${t.id}" data-xml-cii-phase="${t.id}" ${t.disabled ? 'disabled aria-disabled="true"' : ''} title="${t.disabledReason || ''}">
                 <span>${t.label}</span>
-                ${t.disabled ? '<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 16 16" fill="currentColor" style="opacity:0.55;vertical-align:middle;margin-left:4px;flex-shrink:0;" aria-hidden="true"><path d="M8 1a4 4 0 0 0-4 4v1H3a1 1 0 0 0-1 1v7a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1V7a1 1 0 0 0-1-1h-1V5a4 4 0 0 0-4-4zm0 2a2 2 0 0 1 2 2v1H6V5a2 2 0 0 1 2-2z"/></svg>' : ''}
                 ${t.state ? `<small>${t.state}</small>` : ''}
               </button>
             `).join('')}

@@ -12,7 +12,7 @@ export const XML_CII_WORKFLOW_ACTIVE_PHASE_KEY = 'xmlCii2019.workflow.activePhas
 export const XML_CII_WORKFLOW_LEGACY_ACTIVE_PHASE_KEY = 'xmlCii2019.richWorkflow.activePhase.v1';
 
 const STATE_SERVICE_FLAG = '__xmlCiiWorkflowStateService_v1';
-const CUSTOM_INPUT_DISABLED_REASON = 'Disabled since XML is already loaded.';
+const CUSTOM_INPUT_DISABLED_REASON = 'Custom Input is only for generating XML when no main XML file is loaded.';
 
 function browserReady() {
   return typeof window !== 'undefined' && typeof document !== 'undefined';
