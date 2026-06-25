@@ -2,7 +2,7 @@ import fs from 'node:fs/promises';
 import assert from 'node:assert/strict';
 
 const uiBridgeSource = await fs.readFile(new URL('../tabs/RvmNonPrimitiveSourceToolsUiBridge.js', import.meta.url), 'utf8');
-const rendererSource = await fs.readFile(new URL('../tabs/viewer3d-rvm-tab-renderer.js', import.meta.url), 'utf8');
+const deferredLoaderSource = await fs.readFile(new URL('../tabs/RvmDeferredBridgeLoader.js', import.meta.url), 'utf8');
 const autoBridgeSource = await fs.readFile(new URL('../tabs/RvmNonPrimitiveAutoBendBridge.js', import.meta.url), 'utf8');
 const supportSettingsSource = await fs.readFile(new URL('../overlays/support/SupportOverlaySettings.js', import.meta.url), 'utf8');
 const inputXmlUiBridgeSource = await fs.readFile(new URL('../rvm-viewer/RvmInputXmlSupportGraphicsUiBridge.js', import.meta.url), 'utf8');
@@ -39,8 +39,8 @@ assert.match(inputXmlUiBridgeSource, /rvm-inputxml-source-tools-bridge\/v2/, 'In
 assert.doesNotMatch(inputXmlUiBridgeSource, /rvm-inputxml-graphics-controls|geo-top-ribbon/, 'InputXML compatibility bridge does not own top-ribbon UI');
 assert.doesNotMatch(inputXmlUiBridgeSource, /ensureResizeHandles|persistPanelWidths|panel\.style\.setProperty/, 'InputXML compatibility bridge does not own parent panel resizing');
 
-assert.match(rendererSource, /RvmNonPrimitiveSourceToolsUiBridge\.js\?v=20260624-source-tools-grouped-1/, 'renderer imports source-tools UI bridge with grouped cache key');
-assert.match(rendererSource, /installRvmNonPrimitiveSourceToolsUiBridge\(\)/, 'renderer installs source-tools UI bridge');
+assert.match(deferredLoaderSource, /RvmNonPrimitiveSourceToolsUiBridge\.js\?v=20260624-source-tools-grouped-1/, 'sourcePreview deferred loader imports source-tools UI bridge with grouped cache key');
+assert.match(deferredLoaderSource, /installRvmNonPrimitiveSourceToolsUiBridge/, 'sourcePreview deferred loader installs source-tools UI bridge');
 
 assert.match(autoBridgeSource, /restoreVisualTrimmedSegments/, 'auto-bend bridge can restore visual trims for live UI toggles');
 assert.match(autoBridgeSource, /nonPrimitiveAutoBendOriginalSegmentChild/, 'auto-bend bridge preserves original source-preview segment children');

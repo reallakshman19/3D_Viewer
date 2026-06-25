@@ -136,7 +136,7 @@ assert.equal(empty.selectable, false);
 
 const helper = await fs.readFile(new URL('../overlays/support/SupportOverlayHover.js', import.meta.url), 'utf8');
 const bridge = await fs.readFile(new URL('../tabs/RvmNonPrimitiveSupportOverlayHoverBridge.js', import.meta.url), 'utf8');
-const renderer = await fs.readFile(new URL('../tabs/viewer3d-rvm-tab-renderer.js', import.meta.url), 'utf8');
+const deferredLoader = await fs.readFile(new URL('../tabs/RvmDeferredBridgeLoader.js', import.meta.url), 'utf8');
 
 assert.match(helper, /support-overlay-hover\/v1/, 'hover helper exposes schema');
 assert.match(helper, /__supportOverlayHoverOriginalMaterial/, 'hover helper stores original material for restore');
@@ -157,6 +157,6 @@ assert.match(bridge, /__RVM_NON_PRIMITIVE_SUPPORT_OVERLAY__/, 'hover bridge scop
 assert.match(bridge, /nonPrimitiveSupportOverlayHoverState/, 'hover state is stored outside RVM primitive selection state');
 assert.match(bridge, /rvm-support-hover-preview/, 'hover bridge renders a lightweight preview tooltip');
 assert.doesNotMatch(bridge, /selection\.select|selection\.pick|RvmSelectionAdapter|objectSearch/, 'hover bridge does not call RVM primitive selection or search code');
-assert.match(renderer, /RvmNonPrimitiveSupportOverlayHoverBridge\.js\?v=20260623-nonprimitive-support-hover-2/, 'renderer installs navigation-safe hover bridge cache key');
+assert.match(deferredLoader, /RvmNonPrimitiveSupportOverlayHoverBridge\.js\?v=20260623-nonprimitive-support-hover-2/, 'sourcePreview deferred loader owns navigation-safe hover bridge cache key');
 
 console.log('non-primitive support overlay hover tests passed');

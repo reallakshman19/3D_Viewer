@@ -99,13 +99,13 @@ assert.match(html, /data-support-details-action="download-json"/);
 assert.match(html, /data-support-details-action="clear"/);
 
 const bridge = await fs.readFile(new URL('../tabs/RvmNonPrimitiveSupportOverlayDetailsPanelBridge.js', import.meta.url), 'utf8');
-const renderer = await fs.readFile(new URL('../tabs/viewer3d-rvm-tab-renderer.js', import.meta.url), 'utf8');
+const deferredLoader = await fs.readFile(new URL('../tabs/RvmDeferredBridgeLoader.js', import.meta.url), 'utf8');
 assert.match(bridge, /SUPPORT_OVERLAY_DETAILS_EXPORT_SCHEMA/, 'details panel bridge exposes the export schema constant');
 assert.match(bridge, /copySupportOverlayDetailsJson/, 'details panel bridge wires copy JSON action');
 assert.match(bridge, /downloadSupportOverlayDetailsJson/, 'details panel bridge wires download JSON action');
 assert.match(bridge, /supportDetailsExportStatus/, 'details panel publishes panel-local export status');
 assert.match(bridge, /mode === 'source-preview' && isNonPrimitiveKind\(kind\)/, 'details export stays source-preview gated through details panel');
-assert.doesNotMatch(bridge, /selection\.select|selection\.pick|RvmSelectionAdapter|RvmSupportSymbols|Support Summary|SupportATT|SupportEngine/, 'details export does not revive RVM support runtime or primitive selection');
-assert.match(renderer, /RvmNonPrimitiveSupportOverlayDetailsPanelBridge\.js\?v=20260623-nonprimitive-support-details-panel-4/, 'renderer imports details panel bridge with export cache key');
+assert.doesNotMatch(bridge, /RvmSupportSymbols|RvmSupportGeometryBridge|RvmRawSupportCylinderGuardBridge/, 'details export does not revive retired RVM support modules');
+assert.match(deferredLoader, /RvmNonPrimitiveSupportOverlayDetailsPanelBridge\.js\?v=20260623-nonprimitive-support-details-panel-4/, 'sourcePreview deferred loader owns details panel bridge with export cache key');
 
 console.log('non-primitive support overlay details export tests passed');

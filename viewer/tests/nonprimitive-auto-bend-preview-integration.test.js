@@ -4,7 +4,7 @@ import { collectExistingAutoBendNodeKinds, collectNonPrimitiveAutoBendSegments }
 import { resolveNonPrimitiveAutoBends } from '../overlays/autobend/NonPrimitiveAutoBendResolver.js';
 
 const bridgeSource = await fs.readFile(new URL('../tabs/RvmNonPrimitiveAutoBendBridge.js', import.meta.url), 'utf8');
-const rendererSource = await fs.readFile(new URL('../tabs/viewer3d-rvm-tab-renderer.js', import.meta.url), 'utf8');
+const deferredLoaderSource = await fs.readFile(new URL('../tabs/RvmDeferredBridgeLoader.js', import.meta.url), 'utf8');
 
 function pipe(name, apos, lpos, extra = {}) {
   return {
@@ -63,12 +63,12 @@ assert.equal(explicitResult.diagnostics.skippedExistingComponentCount, 1, 'expli
 
 assert.match(bridgeSource, /RVM_NON_PRIMITIVE_AUTO_BEND_SCHEMA = 'rvm-non-primitive-auto-bend\/v1'/, 'bridge exposes schema marker');
 assert.match(bridgeSource, /__NON_PRIMITIVE_AUTO_BEND_OVERLAY__/, 'bridge uses isolated auto-bend overlay root');
-assert.match(bridgeSource, /setModelWithNonPrimitiveAutoBend/, 'bridge patches setModel after source-preview load');
+assert.match(bridgeSource, /setModelWithNonPrimitiveAutoBend/, 'bridge can patch setModel after source-preview load');
 assert.match(bridgeSource, /applyVisualTrimmedSegments/, 'bridge applies visual source-preview trim contract');
 assert.match(bridgeSource, /createTrimmedSegmentCylinder/, 'bridge replaces straight preview segment with trimmed cylinder');
 assert.match(bridgeSource, /canUseAutoBend/, 'bridge uses central primitive-exclusion gate');
 assert.doesNotMatch(bridgeSource, /RvmSupportSymbols|RvmSupportGeometryBridge|RvmRawSupportCylinderGuardBridge/, 'bridge does not reintroduce retired support runtime');
-assert.match(rendererSource, /RvmNonPrimitiveAutoBendBridge\.js\?v=20260623-nonprimitive-auto-bend-preview-2/, 'renderer imports auto-bend bridge with updated cache key');
-assert.match(rendererSource, /installRvmNonPrimitiveAutoBendBridge\(\)/, 'renderer installs non-primitive auto-bend bridge');
+assert.match(deferredLoaderSource, /RvmNonPrimitiveAutoBendBridge\.js\?v=20260623-nonprimitive-auto-bend-preview-2/, 'sourcePreview deferred loader imports auto-bend bridge with updated cache key');
+assert.match(deferredLoaderSource, /installRvmNonPrimitiveAutoBendBridge/, 'sourcePreview deferred loader installs non-primitive auto-bend bridge');
 
 console.log('nonprimitive-auto-bend-preview-integration passed');

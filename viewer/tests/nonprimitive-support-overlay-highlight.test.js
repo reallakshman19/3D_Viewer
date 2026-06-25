@@ -19,12 +19,8 @@ function fakeMaterial(colorHex = 0x60c864) {
     transparent: true,
     depthTest: true,
     disposed: false,
-    clone() {
-      return fakeMaterial(this.color.value);
-    },
-    dispose() {
-      this.disposed = true;
-    },
+    clone() { return fakeMaterial(this.color.value); },
+    dispose() { this.disposed = true; },
   };
 }
 
@@ -57,7 +53,7 @@ const glyph = object({
   },
   children: [
     object({ userData: { supportGlyphPart: 'arrow' }, material: originalA }),
-    object({ userData: { supportGlyphPart: 'warning-marker' }, material: originalB }),
+    object({ userData: { supportGlyphPart: 'marker' }, material: originalB }),
   ],
 });
 const root = object({ userData: { nonPrimitiveSupportOverlay: true }, children: [glyph] });
@@ -73,8 +69,8 @@ assert.equal(highlighted.rvmSearchIndexed, false);
 assert.equal(highlighted.pickable, false);
 assert.equal(highlighted.selectable, false);
 assert.equal(glyph.userData.supportOverlayHighlighted, true);
-assert.equal(glyph.children[0].material === originalA, false, 'highlight clones child material instead of mutating original');
-assert.equal(glyph.children[1].material === originalB, false, 'highlight clones warning material instead of mutating original');
+assert.equal(glyph.children[0].material === originalA, false);
+assert.equal(glyph.children[1].material === originalB, false);
 assert.equal(glyph.children[0].userData.pickable, false);
 assert.equal(glyph.children[0].userData.selectable, false);
 
@@ -84,8 +80,8 @@ assert.equal(cleared.status, 'cleared');
 assert.equal(cleared.clearedOwners, 1);
 assert.equal(cleared.restoredParts, 2);
 assert.equal(glyph.userData.supportOverlayHighlighted, false);
-assert.equal(glyph.children[0].material, originalA, 'clear restores original material');
-assert.equal(glyph.children[1].material, originalB, 'clear restores original warning material');
+assert.equal(glyph.children[0].material, originalA);
+assert.equal(glyph.children[1].material, originalB);
 
 const empty = createEmptySupportOverlayHighlightState('primitive-or-no-source-hierarchy');
 assert.equal(empty.status, 'empty');
@@ -96,20 +92,20 @@ assert.equal(empty.selectable, false);
 
 const helper = await fs.readFile(new URL('../overlays/support/SupportOverlayHighlight.js', import.meta.url), 'utf8');
 const bridge = await fs.readFile(new URL('../tabs/RvmNonPrimitiveSupportOverlayDetailsPanelBridge.js', import.meta.url), 'utf8');
-const renderer = await fs.readFile(new URL('../tabs/viewer3d-rvm-tab-renderer.js', import.meta.url), 'utf8');
+const deferredLoader = await fs.readFile(new URL('../tabs/RvmDeferredBridgeLoader.js', import.meta.url), 'utf8');
 const geometry = await fs.readFile(new URL('../overlays/support/SupportOverlayGlyphGeometry.js', import.meta.url), 'utf8');
 
-assert.match(helper, /support-overlay-highlight\/v1/, 'highlight helper exposes schema');
-assert.match(helper, /__supportOverlayOriginalMaterial/, 'highlight helper stores original material for restore');
-assert.match(helper, /material\.clone/, 'highlight helper clones materials before highlighting');
-assert.match(helper, /clearSupportOverlayHighlights/, 'highlight helper exposes clear function');
-assert.match(bridge, /rvm-non-primitive-support-overlay-details-panel\/v4/, 'details panel bridge schema bumped for keyboard and miss-clear behavior');
-assert.match(bridge, /highlightSupportOverlayGlyph/, 'details panel highlights selected source support glyph');
-assert.match(bridge, /clearSupportOverlayHighlights/, 'details panel clears scoped source support highlights');
-assert.match(bridge, /nonPrimitiveSupportOverlayHighlightState/, 'highlight state is stored outside RVM primitive selection state');
-assert.match(bridge, /__RVM_NON_PRIMITIVE_SUPPORT_OVERLAY__/, 'highlight is scoped to the non-primitive support overlay root');
-assert.doesNotMatch(bridge, /selection\.select|selection\.pick|RvmSelectionAdapter|objectSearch|searchIndex/, 'highlight bridge does not call RVM primitive selection or search/index code');
-assert.match(geometry, /pickable:\s*false[\s\S]*selectable:\s*false/, 'glyph geometry remains non-pickable and non-selectable');
-assert.match(renderer, /RvmNonPrimitiveSupportOverlayDetailsPanelBridge\.js\?v=20260623-nonprimitive-support-details-panel-4/, 'renderer imports highlighted details panel bridge cache key');
+assert.match(helper, /support-overlay-highlight\/v1/);
+assert.match(helper, /__supportOverlayOriginalMaterial/);
+assert.match(helper, /material\.clone/);
+assert.match(helper, /clearSupportOverlayHighlights/);
+assert.match(bridge, /rvm-non-primitive-support-overlay-details-panel\/v4/);
+assert.match(bridge, /highlightSupportOverlayGlyph/);
+assert.match(bridge, /clearSupportOverlayHighlights/);
+assert.match(bridge, /nonPrimitiveSupportOverlayHighlightState/);
+assert.match(bridge, /__RVM_NON_PRIMITIVE_SUPPORT_OVERLAY__/);
+assert.doesNotMatch(bridge, /selection\.select|selection\.pick|RvmSelectionAdapter|objectSearch|searchIndex/);
+assert.match(geometry, /pickable:\s*false[\s\S]*selectable:\s*false/);
+assert.match(deferredLoader, /RvmNonPrimitiveSupportOverlayDetailsPanelBridge\.js\?v=20260623-nonprimitive-support-details-panel-4/);
 
 console.log('non-primitive support overlay highlight tests passed');

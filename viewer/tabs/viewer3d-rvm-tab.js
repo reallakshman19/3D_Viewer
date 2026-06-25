@@ -110,13 +110,31 @@ function parseJsonSource(text, fileName = '') {
   return doc;
 }
 
-async function loadJsonOrUxmlFile(file, viewer, statusEl) {
+function sourceKindForJsonFileName(fileName = '') {
+  const lower = String(fileName || '').toLowerCase();
+  if (lower.endsWith('.jscon')) return 'jscon';
+  if (lower.endsWith('.uxml') || lower.endsWith('.uxml.json')) return 'inputxml';
+  return 'json';
+}
+
+function stampSourcePreviewHierarchy(scene, source, sourceKind, fileName = '') {
+  if (!scene?.userData || !source) return;
+  scene.userData.__rvmNonPrimitiveSourceHierarchy = source;
+  scene.userData.__rvmNonPrimitiveSourceKind = sourceKind;
+  scene.userData.__rvmNonPrimitiveAutoBendSourceHierarchy = source;
+  scene.userData.__rvmNonPrimitiveAutoBendSourceKind = sourceKind;
+  scene.userData.__rvmSourcePreviewStampedByTab = RVM_TAB_JS_VERSION;
+  scene.userData.fileName = fileName;
+}
+
+async function loadJsonOrUxmlFile(file, viewer, statusEl, sourceKind = sourceKindForJsonFileName(file?.name)) {
   if (isLikelyRvmFileName(file?.name)) throw new Error('Internal routing error: binary RVM reached JSON/UXML loader.');
   const text = await file.text();
   const source = parseJsonSource(text, file.name);
   const loader = new AvevaJsonLoader();
   const payload = await loader.load(source, {}, makeAsyncSession(statusEl));
   if (!payload?.gltf?.scene) throw new Error('RVM/AVEVA JSON loader produced no scene.');
+  stampSourcePreviewHierarchy(payload.gltf.scene, source, sourceKind, file.name);
   viewer.ctx.identityMap = payload.identityMap;
   viewer.setModel(payload.gltf.scene, payload.manifest?.runtime?.upAxis || 'Z');
   return payload;
@@ -385,6 +403,9 @@ function markRvmModelLoaded(root, reason = 'model-loaded') {
   if (root?.dataset) root.dataset.rvmModelLoaded = 'true';
   try { globalThis.dispatchEvent?.(new CustomEvent('rvm-model-loaded', { detail: { reason, version: RVM_TAB_JS_VERSION } })); } catch (_) {}
   try { globalThis.__PCF_GLB_RVM_BRIDGE_LOADER__?.ensurePostModel?.(reason); } catch (error) { reportRvmActionError(error, { action: 'post-model-bridge-loader', reason }); }
+  if (root?.dataset?.rvmModelPrimitiveMode === 'source-preview') {
+    try { globalThis.__PCF_GLB_RVM_BRIDGE_LOADER__?.ensureSourcePreview?.(reason); } catch (error) { reportRvmActionError(error, { action: 'source-preview-bridge-loader', reason }); }
+  }
 }
 
 function reportRvmActionError(error, context = {}) {
@@ -453,12 +474,12 @@ export function mountViewer3DRvmTab(container) {
       return;
     }
 
-    const lowerName = jsonFile.name.toLowerCase();
-    root.dataset.rvmLoadedSourceKind = lowerName.endsWith('.jscon') ? 'jscon' : (lowerName.endsWith('.uxml') || lowerName.endsWith('.uxml.json') ? 'inputxml' : 'json');
+    const sourceKind = sourceKindForJsonFileName(jsonFile.name);
+    root.dataset.rvmLoadedSourceKind = sourceKind;
     root.dataset.rvmModelPrimitiveMode = 'source-preview';
     status.textContent = `Loading ${jsonFile.name}…`;
     try {
-      const payload = await loadJsonOrUxmlFile(jsonFile, viewer, status);
+      const payload = await loadJsonOrUxmlFile(jsonFile, viewer, status, sourceKind);
       const nodes = payload.manifest?.nodes || payload.manifest?.items || payload.manifest?.runtime?.nodes || [];
       tree.innerHTML = buildNodeTree(nodes, { limit: JSON_TREE_RENDER_LIMIT, recursive: true });
       status.textContent = `Loaded ${jsonFile.name}`;

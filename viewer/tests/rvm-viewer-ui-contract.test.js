@@ -26,6 +26,15 @@ const ADVANCED_POSTMODEL_TOOLS = [
   ['report-export', 'RvmReportExportBridge.js?v=20260621-rvm-report-export-1', 'installRvmReportExportBridge'],
 ];
 
+const SOURCE_PREVIEW_TOOLS = [
+  ['nonprimitive-support-overlay', 'RvmNonPrimitiveSupportOverlayBridge.js?v=20260623-nonprimitive-support-overlay-9', 'installRvmNonPrimitiveSupportOverlayBridge'],
+  ['nonprimitive-support-hard-disable', 'RvmNonPrimitiveSupportOverlayHardDisableBridge.js?v=20260623-nonprimitive-support-hard-disable-1', 'installRvmNonPrimitiveSupportOverlayHardDisableBridge'],
+  ['nonprimitive-support-details-panel', 'RvmNonPrimitiveSupportOverlayDetailsPanelBridge.js?v=20260623-nonprimitive-support-details-panel-4', 'installRvmNonPrimitiveSupportOverlayDetailsPanelBridge'],
+  ['nonprimitive-support-hover', 'RvmNonPrimitiveSupportOverlayHoverBridge.js?v=20260623-nonprimitive-support-hover-2', 'installRvmNonPrimitiveSupportOverlayHoverBridge'],
+  ['nonprimitive-auto-bend', 'RvmNonPrimitiveAutoBendBridge.js?v=20260623-nonprimitive-auto-bend-preview-2', 'installRvmNonPrimitiveAutoBendBridge'],
+  ['nonprimitive-source-tools-ui', 'RvmNonPrimitiveSourceToolsUiBridge.js?v=20260624-source-tools-grouped-1', 'installRvmNonPrimitiveSourceToolsUiBridge'],
+];
+
 function read(file) {
   assert.ok(fs.existsSync(file), `missing source file: ${path.relative(viewerRoot, file)}`);
   return fs.readFileSync(file, 'utf8');
@@ -68,10 +77,10 @@ function verifySupportPolicyOptionA() {
 function verifyDeferredSupportPolicyCacheKeys() {
   const deferredLoader = read(files.deferredLoader);
   const renderer = read(files.renderer);
-  assert.ok(deferredLoader.includes('20260624-rvm-deferred-postmodel-advanced-tools-1'), 'deferred bridge loader must expose post-model advanced-tools cache contract');
+  assert.ok(deferredLoader.includes('20260625-rvm-deferred-source-preview-tools-1'), 'deferred bridge loader must expose source-preview deferral cache contract');
   assert.ok(deferredLoader.includes('RvmStagedJsonExportBridge.js?v=20260624-rvm-stagedjson-support-policy-1'), 'post-model deferred loader must import current Option A staged export bridge');
   assert.ok(deferredLoader.includes('RvmStagedJsonValidationBridge.js?v=20260624-rvm-stagedjson-support-policy-1'), 'post-model deferred loader must import current Option A staged validation bridge');
-  assert.ok(renderer.includes('RvmDeferredBridgeLoader.js?v=20260624-rvm-deferred-postmodel-advanced-tools-1'), 'renderer must import the current deferred loader cache key');
+  assert.ok(renderer.includes('RvmDeferredBridgeLoader.js?v=20260625-rvm-deferred-source-preview-tools-1'), 'renderer must import the current deferred loader cache key');
   assert.ok(!deferredLoader.includes('RvmStagedJsonExportBridge.js?v=20260621-rvm-button-hardening-1'), 'deferred loader must not keep stale staged export cache key');
   assert.ok(!deferredLoader.includes('RvmStagedJsonValidationBridge.js?v=20260620-rvm-stagedjson-validation-1'), 'deferred loader must not keep stale staged validation cache key');
 }
@@ -95,7 +104,7 @@ function verifyDockedDiagnosticsDrawer() {
   assert.ok(renderer.includes('RvmBottomDiagnosticsDrawerBridge.js?v=20260624-rvm-diagnostics-docked-drawer-1'), 'renderer must import docked diagnostics drawer cache key');
   assert.ok(drawer.includes('20260624-rvm-diagnostics-docked-drawer-1'), 'bottom diagnostics drawer must expose docked cache key');
   assert.ok(drawer.includes('function dockDrawer'), 'bottom diagnostics drawer must dock itself through a layout function');
-  assert.ok(drawer.includes("root.insertBefore(drawer, statusbar)"), 'bottom diagnostics drawer must insert before the status bar, not overlay the viewport');
+  assert.ok(drawer.includes('root.insertBefore(drawer, statusbar)'), 'bottom diagnostics drawer must insert before the status bar, not overlay the viewport');
   assert.ok(drawer.includes('data-rvm-bottom-diagnostics-docked'), 'bottom diagnostics drawer must mark docked layout state');
   assert.ok(drawer.includes('.rvm-bottom-diagnostics-drawer{position:relative'), 'bottom diagnostics drawer CSS must be relative/docked');
   assert.ok(!drawer.includes('.rvm-bottom-diagnostics-drawer{position:fixed'), 'bottom diagnostics drawer must not use fixed viewport positioning');
@@ -130,6 +139,25 @@ function verifyPostModelAdvancedToolDeferral() {
   assert.ok(renderer.includes('RvmVisibilityToolbarBridge.js?v=20260621-rvm-isolate-visibility-toolbar-1'), 'core Visibility bridge must stay eager');
 }
 
+function verifySourcePreviewToolDeferral() {
+  const renderer = read(files.renderer);
+  const deferredLoader = read(files.deferredLoader);
+  const tab = read(files.tab);
+  for (const [id, specifier, installName] of SOURCE_PREVIEW_TOOLS) {
+    assert.ok(!renderer.includes(`${specifier.split('?')[0]}?v=`), `renderer must not eagerly import source-preview bridge ${id}`);
+    assert.ok(!renderer.includes(`${installName}()`), `renderer must not eagerly install source-preview bridge ${id}`);
+    assert.ok(deferredLoader.includes(`id: '${id}'`), `deferred sourcePreview group must include ${id}`);
+    assert.ok(deferredLoader.includes(specifier), `deferred sourcePreview group must import ${id}`);
+    assert.ok(deferredLoader.includes(installName), `deferred sourcePreview group must install ${id}`);
+  }
+  assert.ok(deferredLoader.includes('SOURCE_PREVIEW_KIND_RE'), 'deferred loader must gate source-preview bridge loading by source kind');
+  assert.ok(deferredLoader.includes("mode === 'source-preview'"), 'deferred loader must gate source-preview bridge loading by primitive mode');
+  assert.ok(deferredLoader.includes('refreshSourcePreviewRuntime'), 'deferred loader must refresh source-preview runtime after lazy install');
+  assert.ok(tab.includes('stampSourcePreviewHierarchy(payload.gltf.scene, source, sourceKind, file.name)'), 'mounted RVM tab must stamp source hierarchy before setModel');
+  assert.ok(tab.includes('__rvmNonPrimitiveSourceHierarchy') && tab.includes('__rvmNonPrimitiveAutoBendSourceHierarchy'), 'mounted RVM tab must preserve source hierarchy for lazy preview tools');
+  assert.ok(tab.includes('ensureSourcePreview') && tab.includes("rvmModelPrimitiveMode === 'source-preview'"), 'mounted RVM tab must request source-preview bridges only for source-preview loads');
+}
+
 verifyModuleIdentity();
 verifyResizablePanels();
 verifySupportPolicyOptionA();
@@ -138,5 +166,6 @@ verifyToolbarCompactPolicy();
 verifyDockedDiagnosticsDrawer();
 verifyPostModelHealthDeferral();
 verifyPostModelAdvancedToolDeferral();
+verifySourcePreviewToolDeferral();
 
-console.log('Verified RVM viewer module identity, side-panel resize UI contract, Option A staged support policy, deferred stagedJSON cache keys, compact toolbar policy, docked diagnostics drawer, post-model Health deferral, and post-model advanced tool deferral.');
+console.log('Verified RVM viewer module identity, side-panel resize UI contract, Option A staged support policy, deferred stagedJSON cache keys, compact toolbar policy, docked diagnostics drawer, post-model Health deferral, post-model advanced tool deferral, and source-preview tool deferral.');
