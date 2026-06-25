@@ -45,6 +45,7 @@ on:
       - 'viewer/overlays/support/**'
       - 'viewer/overlays/source-tools/**'
       - 'viewer/core/app.js'
+      - 'viewer/core/app-label-perf-runtime.js'
       - 'viewer/index.html'
       - 'viewer/main-rhbg-fitguard.js'
       - 'viewer/contracts/runtime-events.js'
