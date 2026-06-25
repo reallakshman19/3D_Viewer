@@ -3,6 +3,8 @@ const INSTALL_FLAG = Symbol.for('pcf-glb-rvm-toolbar-compact-policy-1');
 const GLOBAL_KEY = '__PCF_GLB_RVM_TOOLBAR_POLICY__';
 const ROOT_SELECTOR = '[data-rvm-viewer]';
 const CORE_LABELS = new Set(['Navigate', 'View']);
+let scheduledReconcile = 0;
+let scheduledReason = '';
 
 export function installRvmToolbarCompactBridge() {
   if (typeof document === 'undefined') return null;
@@ -19,15 +21,25 @@ export function installRvmToolbarCompactBridge() {
   };
   globalThis[INSTALL_FLAG] = state;
   globalThis[GLOBAL_KEY] = state;
-  const schedule = (reason) => setTimeout(() => reconcileToolbar(reason), 0);
-  schedule('install');
+  scheduleToolbarReconcile('install');
   for (const delay of [80, 250, 750, 1500, 3000]) setTimeout(() => reconcileToolbar(`install-${delay}`), delay);
-  try { globalThis.addEventListener?.('rvm-model-loaded', () => schedule('model-loaded')); } catch (_) {}
-  try { globalThis.addEventListener?.('rvm-action-diagnostics', () => schedule('action-diagnostics')); } catch (_) {}
-  const observer = new MutationObserver(() => schedule('toolbar-mutation'));
+  try { globalThis.addEventListener?.('rvm-model-loaded', () => scheduleToolbarReconcile('model-loaded')); } catch (_) {}
+  try { globalThis.addEventListener?.('rvm-action-diagnostics', () => scheduleToolbarReconcile('action-diagnostics')); } catch (_) {}
+  const observer = new MutationObserver(() => scheduleToolbarReconcile('toolbar-mutation'));
   observer.observe(document.documentElement, { childList: true, subtree: true });
   state.observer = observer;
   return state;
+}
+
+function scheduleToolbarReconcile(reason) {
+  scheduledReason = scheduledReason || reason;
+  if (scheduledReconcile) return;
+  scheduledReconcile = setTimeout(() => {
+    const nextReason = scheduledReason || 'scheduled';
+    scheduledReason = '';
+    scheduledReconcile = 0;
+    reconcileToolbar(nextReason);
+  }, 0);
 }
 
 function reconcileToolbar(reason = 'manual') {
