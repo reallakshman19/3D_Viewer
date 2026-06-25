@@ -6,9 +6,7 @@ import { fileURLToPath } from 'node:url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, '..');
 
-function read(rel) {
-  return readFileSync(path.join(root, rel), 'utf8');
-}
+function read(rel) { return readFileSync(path.join(root, rel), 'utf8'); }
 
 const runner = read('viewer/tabs/model-converters/converters/xmltocii2019_runner.js');
 const parity = read('viewer/tabs/model-converters/converters/xmltocii2019_helper/enrichment-run-parity.js');
@@ -42,7 +40,7 @@ assert.ok(parity.includes("RENUMBERABLE_NEGATIVE_TYPES = new Set(['FLAN', 'VALV'
 assert.ok(parity.includes("INLINE_LENGTH_COMPONENT_TYPES = new Set(['FLAN', 'VALV', 'RIGID', 'INST'])"), 'ElementLengthMm calculation must exclude GASK after default gasket drop.');
 assert.ok(parity.includes('sameComponentRefMate') && parity.includes('allocateContiguousNumbers') && parity.includes('condensedValveFlangeBlocks'), 'Resolved condense must detect contiguous negative component chains and assign stable positive ordered node numbers.');
 assert.ok(parity.includes("setTextAfter(document, node, 'Rigid', '2', 'Endpoint')"), 'Resolved inline FLAN/VALV/RIGID/INST components must emit Rigid=2 after Endpoint.');
-assert.ok(!parity.includes("setTextAfter(document, node, 'Rigid', '1', 'Endpoint')"), 'GASK is dropped and must not be preserved as non-rigid in split logic.');
+assert.ok(parity.includes('RESOLVED_FLEXIBLE_MARKER_TYPES = new Set([])') && !parity.includes('GASK: \'1\''), 'GASK is dropped and must not be preserved as a non-rigid split marker.');
 assert.ok(parity.includes('element-length-inline-negative') && parity.includes('instElementLengthAnnotations'), 'Negative INST and inline chain ElementLengthMm diagnostics must exist.');
 assert.ok(parity.includes('DTXR_POS_SIF_ZERO_TYPES') && parity.includes("setText(document, node, 'SIF', '0')") && parity.includes('dtxr-pos-sif-zero') && parity.includes('TEEDESC_POS') && parity.includes('OLET'), 'DTXR_POS-matched Tee/Olet nodes must be assigned SIF=0 before final CII worker conversion.');
 assert.ok(config.includes('BRANCH\\s+OUTLET') && directionWorker.includes('BRANCH\\s+OUTLET') && directionWorker.includes('OLET\\b.*\\bBW') && inputXmlDebug.includes('BRANCH\\s+OUTLET') && inputXmlDebug.includes('return 5'), 'Branch Outlet BW OLET descriptions must map to CII SIF&TEES type 5, not type 0.');
