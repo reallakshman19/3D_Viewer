@@ -128,16 +128,22 @@ function sampleTargets(root = document) {
     .filter(isSampleTarget);
 }
 
-function setElementValue(element, value) {
+function dispatchValueEvents(element) {
+  try { element.dispatchEvent(new Event('input', { bubbles: true })); } catch {}
+  try { element.dispatchEvent(new Event('change', { bubbles: true })); } catch {}
+}
+
+function setElementValue(element, value, dispatch = false) {
   if (!element || !value) return false;
   const current = 'value' in element ? element.value : element.textContent;
   if (current === value) return false;
   if ('value' in element) element.value = value;
   else element.textContent = value;
+  if (dispatch) dispatchValueEvents(element);
   return true;
 }
 
-export function applyXmlCiiBranchSample(root = document, value = readStored(BRANCH_SAMPLE_KEY, '')) {
+export function applyXmlCiiBranchSample(root = document, value = readStored(BRANCH_SAMPLE_KEY, ''), options = {}) {
   const sample = normalizeBranchName(value);
   if (!sample) return 0;
   writeStored(BRANCH_SAMPLE_KEY, sample);
@@ -145,7 +151,7 @@ export function applyXmlCiiBranchSample(root = document, value = readStored(BRAN
   if (scope !== document) scope.setAttribute?.(ROOT_ATTR, 'true');
   let updated = 0;
   for (const target of sampleTargets(scope)) {
-    if (setElementValue(target, sample)) updated += 1;
+    if (setElementValue(target, sample, options.dispatch === true)) updated += 1;
   }
   return updated;
 }
@@ -154,19 +160,19 @@ export async function syncLoadedXmlCiiBranchSample(root = document, force = fals
   const input = primaryXmlInput(root);
   const file = input?.files?.[0];
   if (!file) {
-    applyXmlCiiBranchSample(root);
+    applyXmlCiiBranchSample(root, undefined, { dispatch: false });
     return '';
   }
   const key = currentFileKey(file);
   if (!force && key && readStored(FILE_KEY, '') === key && readStored(BRANCH_SAMPLE_KEY, '')) {
-    applyXmlCiiBranchSample(root);
+    applyXmlCiiBranchSample(root, undefined, { dispatch: true });
     return readStored(BRANCH_SAMPLE_KEY, '');
   }
   const xmlText = await file.text();
   const sample = extractXmlCiiBranchSample(xmlText);
   if (sample) {
     writeStored(FILE_KEY, key);
-    applyXmlCiiBranchSample(root, sample);
+    applyXmlCiiBranchSample(root, sample, { dispatch: true });
   }
   return sample;
 }
@@ -180,17 +186,30 @@ function bindPrimaryInput(root, state) {
   input.addEventListener('change', state.onPrimaryChange);
 }
 
+function bindWorkflowTabRefresh(root, state) {
+  if (state.tabRefreshBound) return;
+  state.tabRefreshBound = true;
+  const handler = (event) => {
+    const target = event.target?.closest?.('[data-modal-tab="regex"], [data-old-xml-cii-phase="regex"], [data-native-regex-path], [data-xml-cii-regex-path]');
+    if (!target) return;
+    setTimeout(() => applyXmlCiiBranchSample(root, undefined, { dispatch: true }), 0);
+  };
+  document.addEventListener('click', handler, true);
+  state.onTabRefresh = handler;
+}
+
 export function installXmlCiiBranchSampleSync(container = document) {
   if (!browserReady()) return;
   const root = container && container.nodeType === 1 ? container : document;
   if (!window[FLAG]) window[FLAG] = { stateByRoot: new WeakMap() };
   let state = window[FLAG].stateByRoot.get(root);
   if (!state) {
-    state = { primaryInput: null, onPrimaryChange: null };
+    state = { primaryInput: null, onPrimaryChange: null, tabRefreshBound: false, onTabRefresh: null };
     window[FLAG].stateByRoot.set(root, state);
   }
 
   bindPrimaryInput(root, state);
-  applyXmlCiiBranchSample(root);
+  bindWorkflowTabRefresh(root, state);
+  applyXmlCiiBranchSample(root, undefined, { dispatch: false });
   syncLoadedXmlCiiBranchSample(root).catch(() => {});
 }
