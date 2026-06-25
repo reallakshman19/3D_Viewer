@@ -54,7 +54,9 @@ assert(/fallbackHighNodeNumbersSuppressed/.test(stagedGeometry), 'Staged geometr
 assert(/allowFallbackHighNodeNumbers/.test(stagedGeometry), 'Staged geometry authority must gate fallback 10000+ node numbers');
 assert(/<NodeNumber>-1<\/NodeNumber>/.test(stagedGeometry), 'Suppression must renumber disabled GASK/fallback nodes to -1');
 
-assert(/dispatchValueEvents/.test(branchSample), 'Regex sample autoload must dispatch targeted value events after popup tab render');
+assert(!/dispatchEvent/.test(branchSample), 'Regex sample autoload must not dispatch synthetic input/change churn');
+assert(!/setTimeout\(/.test(branchSample), 'Regex sample autoload must not use delayed startup repair loops');
+assert(/requestAnimationFrame/.test(branchSample), 'Regex sample autoload may refresh passively after Regex tab render');
 assert(/data-modal-tab="regex"/.test(branchSample), 'Regex sample autoload must refresh when the Regex tab is opened');
 
-console.log('XML CII weight match ComponentRefNo_Endpoint, manual build, endpoint-2 valve hints, and suppression guards passed.');
+console.log('XML CII weight match ComponentRefNo_Endpoint, manual build, endpoint-2 valve hints, and passive sample/suppression guards passed.');
