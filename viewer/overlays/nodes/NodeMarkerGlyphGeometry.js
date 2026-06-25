@@ -44,7 +44,7 @@ export function createNodeMarkerGlyph(marker = {}, options = {}) {
   const z = Number(position.z);
   if (![x, y, z].every(Number.isFinite)) return null;
   const radius = Number(options.radius || options.glyphRadius || 35) || 35;
-  const geometry = new THREE.OctahedronGeometry(radius, 0);
+  const geometry = createMarkerGeometry(radius);
   const material = new THREE.MeshBasicMaterial({ color: marker.status === 'stale' ? 0xff9b44 : 0x50d6ff, transparent: true, opacity: 0.92, depthTest: false });
   const mesh = new THREE.Mesh(geometry, material);
   mesh.name = `NODE_MARKER_${marker.nodeNumber || marker.markerId || 'UNKNOWN'}`;
@@ -77,6 +77,12 @@ export function collectNodeMarkerRoots(viewer) {
   scan(viewer?.scene);
   scan(viewer?.modelGroup);
   return [...new Set(roots)];
+}
+
+function createMarkerGeometry(radius) {
+  if (typeof THREE.OctahedronGeometry === 'function') return new THREE.OctahedronGeometry(radius, 0);
+  if (typeof THREE.SphereGeometry === 'function') return new THREE.SphereGeometry(radius, 8, 6);
+  return new THREE.BoxGeometry(radius, radius, radius);
 }
 
 function writeGlyphDiagnostics(viewer, state = {}) {
