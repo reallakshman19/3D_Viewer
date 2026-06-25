@@ -61,10 +61,10 @@ function verifySupportPolicyOptionA() {
 function verifyDeferredSupportPolicyCacheKeys() {
   const deferredLoader = read(files.deferredLoader);
   const renderer = read(files.renderer);
-  assert.ok(deferredLoader.includes('20260624-rvm-deferred-stagedjson-cache-1'), 'deferred bridge loader must expose refreshed cache contract');
+  assert.ok(deferredLoader.includes('20260624-rvm-deferred-postmodel-health-1'), 'deferred bridge loader must expose post-model health cache contract');
   assert.ok(deferredLoader.includes('RvmStagedJsonExportBridge.js?v=20260624-rvm-stagedjson-support-policy-1'), 'post-model deferred loader must import current Option A staged export bridge');
   assert.ok(deferredLoader.includes('RvmStagedJsonValidationBridge.js?v=20260624-rvm-stagedjson-support-policy-1'), 'post-model deferred loader must import current Option A staged validation bridge');
-  assert.ok(renderer.includes('RvmDeferredBridgeLoader.js?v=20260624-rvm-deferred-stagedjson-cache-1'), 'renderer must import the current deferred loader cache key');
+  assert.ok(renderer.includes('RvmDeferredBridgeLoader.js?v=20260624-rvm-deferred-postmodel-health-1'), 'renderer must import the current deferred loader cache key');
   assert.ok(!deferredLoader.includes('RvmStagedJsonExportBridge.js?v=20260621-rvm-button-hardening-1'), 'deferred loader must not keep stale staged export cache key');
   assert.ok(!deferredLoader.includes('RvmStagedJsonValidationBridge.js?v=20260620-rvm-stagedjson-validation-1'), 'deferred loader must not keep stale staged validation cache key');
 }
@@ -95,11 +95,25 @@ function verifyDockedDiagnosticsDrawer() {
   assert.ok(!drawer.includes('left:14px;right:14px;bottom:10px'), 'bottom diagnostics drawer must not retain old fixed overlay offsets');
 }
 
+function verifyPostModelHealthDeferral() {
+  const renderer = read(files.renderer);
+  const deferredLoader = read(files.deferredLoader);
+  assert.ok(!renderer.includes('RvmModelHealthBridge.js?v='), 'renderer must not eagerly import model health bridge');
+  assert.ok(!renderer.includes('RvmModelHealthIssuesBridge.js?v='), 'renderer must not eagerly import model health issues bridge');
+  assert.ok(!renderer.includes('installRvmModelHealthBridge()'), 'renderer must not eagerly install model health bridge');
+  assert.ok(!renderer.includes('installRvmModelHealthIssuesBridge()'), 'renderer must not eagerly install model health issues bridge');
+  assert.ok(deferredLoader.includes("id: 'model-health'"), 'deferred postModel group must include model health bridge');
+  assert.ok(deferredLoader.includes("id: 'model-health-issues'"), 'deferred postModel group must include model health issues bridge');
+  assert.ok(deferredLoader.includes('RvmModelHealthBridge.js?v=20260621-rvm-health-issues-1'), 'deferred postModel group must import model health bridge');
+  assert.ok(deferredLoader.includes('RvmModelHealthIssuesBridge.js?v=20260621-rvm-health-issues-1'), 'deferred postModel group must import model health issues bridge');
+}
+
 verifyModuleIdentity();
 verifyResizablePanels();
 verifySupportPolicyOptionA();
 verifyDeferredSupportPolicyCacheKeys();
 verifyToolbarCompactPolicy();
 verifyDockedDiagnosticsDrawer();
+verifyPostModelHealthDeferral();
 
-console.log('Verified RVM viewer module identity, side-panel resize UI contract, Option A staged support policy, deferred stagedJSON cache keys, compact toolbar policy, and docked diagnostics drawer.');
+console.log('Verified RVM viewer module identity, side-panel resize UI contract, Option A staged support policy, deferred stagedJSON cache keys, compact toolbar policy, docked diagnostics drawer, and post-model Health deferral.');
