@@ -32,6 +32,7 @@ const SOURCE_PREVIEW_TOOLS = [
   ['nonprimitive-support-details-panel', 'RvmNonPrimitiveSupportOverlayDetailsPanelBridge.js?v=20260623-nonprimitive-support-details-panel-4', 'installRvmNonPrimitiveSupportOverlayDetailsPanelBridge'],
   ['nonprimitive-support-hover', 'RvmNonPrimitiveSupportOverlayHoverBridge.js?v=20260623-nonprimitive-support-hover-2', 'installRvmNonPrimitiveSupportOverlayHoverBridge'],
   ['nonprimitive-auto-bend', 'RvmNonPrimitiveAutoBendBridge.js?v=20260623-nonprimitive-auto-bend-preview-2', 'installRvmNonPrimitiveAutoBendBridge'],
+  ['nonprimitive-node-markers', 'RvmNonPrimitiveNodeMarkerBridge.js?v=20260625-node-marker-deferred-1', 'installRvmNonPrimitiveNodeMarkerBridge'],
   ['nonprimitive-source-tools-ui', 'RvmNonPrimitiveSourceToolsUiBridge.js?v=20260624-source-tools-grouped-1', 'installRvmNonPrimitiveSourceToolsUiBridge'],
 ];
 
