@@ -9,7 +9,7 @@ const nativePanels = read('viewer/tabs/model-converters/xml-cii-popup-native-pan
 const bridge = read('viewer/tabs/model-converters/xml-cii-workflow-bridge.js');
 const stagedGeometry = read('viewer/converters/xml-cii2019-core/staged-geometry-authority.js');
 const config = read('viewer/converters/xml-cii2019-core/config.js');
-const hotfix = read('viewer/tabs/model-converters/xml-cii-workflow-hotfix.js');
+const modelConvertersTab = read('viewer/tabs/model-converters/ModelConvertersTab.js');
 
 function assert(condition, message) {
   if (!condition) {
@@ -44,6 +44,12 @@ assert(/disableGasketNodes/.test(config) && /disableGasketInOutput/.test(config)
 assert(/shouldSuppressGasketNodes/.test(stagedGeometry), 'Staged geometry authority must evaluate gasket suppression option');
 assert(/gasketNodesSuppressed/.test(stagedGeometry), 'Staged geometry authority must report suppressed gasket node count');
 assert(/<NodeNumber>-1<\/NodeNumber>/.test(stagedGeometry), 'Gasket suppression must renumber GASK nodes to -1');
-assert(/data-xml-cii-hotfix-gasket/.test(hotfix), 'Workflow UI hotfix must expose a gasket suppression checkbox');
 
-console.log('XML CII weight match ComponentRefNo_Endpoint, post-split matching, and gasket suppression guards passed.');
+assert(/data-native-config-bool="disableGasketNodes"/.test(nativePanels), 'Native Config panel must expose disableGasketNodes as a source-owned config checkbox');
+assert(/data-native-run-option="disableGasketNodes"/.test(nativePanels), 'Native Run panel must expose disableGasketNodes as a source-owned run option');
+assert(/Disable gasket in output \(set GASK NodeNumber to -1\)/.test(nativePanels), 'Native workflow UI must display the gasket suppression engineering label');
+assert(/disableGasketNodes and disableGasketInOutput/.test(nativePanels), 'Native workflow UI must document gasket alias persistence');
+assert(/GASK nodes (?:stay|are retained) in enriched XML/.test(nativePanels), 'Native workflow UI must document that gasket nodes are retained');
+assert(!/xml-cii-workflow-hotfix\.js/.test(modelConvertersTab), 'ModelConvertersTab must not reintroduce the old XML CII workflow hotfix module as UI owner');
+
+console.log('XML CII weight match ComponentRefNo_Endpoint, post-split matching, and native disable-option UI guards passed.');
