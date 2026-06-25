@@ -16,6 +16,7 @@ const files = {
   stagedValidation: path.join(viewerRoot, 'tabs/RvmStagedJsonValidationBridge.js'),
   deferredLoader: path.join(viewerRoot, 'tabs/RvmDeferredBridgeLoader.js'),
   toolbarCompact: path.join(viewerRoot, 'tabs/RvmToolbarCompactBridge.js'),
+  bottomDiagnostics: path.join(viewerRoot, 'tabs/RvmBottomDiagnosticsDrawerBridge.js'),
 };
 
 function read(file) {
@@ -81,10 +82,24 @@ function verifyToolbarCompactPolicy() {
   assert.ok(toolbar.includes("section.dataset.rvmToolbarPolicy = 'duplicate-hidden'"), 'toolbar policy must hide exact duplicate groups rather than stacking them');
 }
 
+function verifyDockedDiagnosticsDrawer() {
+  const renderer = read(files.renderer);
+  const drawer = read(files.bottomDiagnostics);
+  assert.ok(renderer.includes('RvmBottomDiagnosticsDrawerBridge.js?v=20260624-rvm-diagnostics-docked-drawer-1'), 'renderer must import docked diagnostics drawer cache key');
+  assert.ok(drawer.includes('20260624-rvm-diagnostics-docked-drawer-1'), 'bottom diagnostics drawer must expose docked cache key');
+  assert.ok(drawer.includes('function dockDrawer'), 'bottom diagnostics drawer must dock itself through a layout function');
+  assert.ok(drawer.includes("root.insertBefore(drawer, statusbar)"), 'bottom diagnostics drawer must insert before the status bar, not overlay the viewport');
+  assert.ok(drawer.includes('data-rvm-bottom-diagnostics-docked'), 'bottom diagnostics drawer must mark docked layout state');
+  assert.ok(drawer.includes('.rvm-bottom-diagnostics-drawer{position:relative'), 'bottom diagnostics drawer CSS must be relative/docked');
+  assert.ok(!drawer.includes('.rvm-bottom-diagnostics-drawer{position:fixed'), 'bottom diagnostics drawer must not use fixed viewport positioning');
+  assert.ok(!drawer.includes('left:14px;right:14px;bottom:10px'), 'bottom diagnostics drawer must not retain old fixed overlay offsets');
+}
+
 verifyModuleIdentity();
 verifyResizablePanels();
 verifySupportPolicyOptionA();
 verifyDeferredSupportPolicyCacheKeys();
 verifyToolbarCompactPolicy();
+verifyDockedDiagnosticsDrawer();
 
-console.log('Verified RVM viewer module identity, side-panel resize UI contract, Option A staged support policy, deferred stagedJSON cache keys, and compact toolbar policy.');
+console.log('Verified RVM viewer module identity, side-panel resize UI contract, Option A staged support policy, deferred stagedJSON cache keys, compact toolbar policy, and docked diagnostics drawer.');
