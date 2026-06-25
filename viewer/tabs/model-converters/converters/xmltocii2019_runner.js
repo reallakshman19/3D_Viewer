@@ -6,7 +6,7 @@ import { buildXmlCiiNodeResolverIndex } from '../../../converters/xml-cii2019-co
 import { resolveManualRestraintRows } from '../../../converters/xml-cii2019-core/sideload-restraints.js';
 import { mergeXmlCiiMatchedFacts, matchedFactsFromEnrichmentDiagnostics } from '../../../converters/xml-cii2019-core/sideload-ledger.js';
 import { applyManualMatchedFactsToEnrichedXml } from '../../../converters/xml-cii2019-core/sideload-apply.js';
-import { enrichXmlForCii2019 } from './xmltocii2019_helper/enrichment-run-parity.js?v=20260623-preview-run-parity-2';
+import { enrichXmlForCii2019, dropGasketNodesFromXmlText } from './xmltocii2019_helper/enrichment-run-parity.js?v=20260623-preview-run-parity-2';
 
 const XML_CII_STAGE_TIMEOUT_MS = 120000;
 const MATCHED_PREVIEW_STORAGE_KEY = 'xmlCii2019.matchedPreview.lastDiagnostics.v1';
@@ -321,8 +321,12 @@ export async function run(context) {
     if (!context.workerRunner) throw new Error('Python worker runtime is not available.');
     context.setStatus?.('Starting Python worker...', 'running');
     const serializableOptions = Object.fromEntries(Object.entries(runValues).filter(([, v]) => typeof v !== 'function'));
+    const prepared = dropGasketNodesFromXmlText(originalXmlText, runValues);
+    const inputFiles = prepared.xmlText !== originalXmlText
+      ? context.inputFiles.map((f) => f === primary ? { ...f, bytes: encodeTextUtf8(prepared.xmlText) } : f)
+      : context.inputFiles;
     return await withTimeout(
-      context.workerRunner.runJob({ converterId: context.converterId, inputFiles: context.inputFiles, options: serializableOptions }),
+      context.workerRunner.runJob({ converterId: context.converterId, inputFiles, options: serializableOptions }),
       'Python worker conversion',
     );
   }
