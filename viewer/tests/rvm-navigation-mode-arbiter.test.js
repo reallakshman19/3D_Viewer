@@ -39,7 +39,8 @@ assert.match(arbiterSource, /__PCF_GLB_RVM_NAVIGATION_ARBITER__/);
 assert.doesNotMatch(arbiterSource, /shouldForceOrbit/);
 
 assert.match(rendererSource, /installRvmNavigationModeArbiterBridge/);
-assert.match(rendererSource, /RvmNavigationModeArbiterBridge\.js\?v=20260624-rvm-navigation-select-escape-1/);
+assert.match(rendererSource, /RvmViewerInteractionPatch\.js\?v=20260624-rvm-interaction-state-contract-1/);
+assert.match(rendererSource, /RvmNavigationModeArbiterBridge\.js\?v=20260624-rvm-navigation-interaction-contract-1/);
 assert.match(rendererSource, /installRvmUiEventSafetyBridge\(\);[\s\S]*installRvmNavigationModeArbiterBridge\(\);/, 'UI event safety must install before navigation mode arbiter');
 
 assert.match(interactionSource, /20260624-rvm-interaction-state-contract-1/, 'interaction patch must publish a state-contract version');
