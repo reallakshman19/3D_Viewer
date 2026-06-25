@@ -15,6 +15,8 @@ const XSD_KEY = 'condenseRigidXsd';
 const XSD_SNAKE_KEY = 'condense_rigid_xsd';
 const RESOLVED_KEY = 'splitCondensedValveFlange';
 const RESOLVED_SNAKE_KEY = 'split_condensed_valve_flange';
+const DISABLE_GASKET_KEY = 'disableGasketNodes';
+const DISABLE_GASKET_LEGACY_KEY = 'disableGasketInOutput';
 
 let cachedBridge = null;
 let cachedSafeBridge = null;
@@ -32,9 +34,13 @@ function bool(value) {
   return /^(1|true|yes|on)$/i.test(String(value).trim());
 }
 
-function parseConfigText(text) {
+function text(value) {
+  return value === undefined || value === null ? '' : String(value).trim();
+}
+
+function parseConfigText(textValue) {
   try {
-    const parsed = JSON.parse(String(text || '{}'));
+    const parsed = JSON.parse(String(textValue || '{}'));
     return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
   } catch {
     return {};
@@ -46,9 +52,6 @@ function phaseKey(root) {
 }
 
 function snapshotKey(root) {
-  // Master tabs only change the visible active master. The legacy snapshot already
-  // contains all master metadata, so reusing the Import Masters snapshot across
-  // active-master tab clicks avoids rebuilding all column maps on every click.
   const phase = phaseKey(root);
   return `${snapshotGeneration}|${phase}`;
 }
@@ -62,10 +65,13 @@ function normaliseCondenseConfig(config) {
   const cfg = config && typeof config === 'object' && !Array.isArray(config) ? config : {};
   const xsd = bool(cfg[XSD_KEY]) || bool(cfg[XSD_SNAKE_KEY]);
   const resolved = bool(cfg[RESOLVED_KEY]) || bool(cfg[RESOLVED_SNAKE_KEY]);
+  const disableGasket = bool(cfg[DISABLE_GASKET_KEY]) || bool(cfg[DISABLE_GASKET_LEGACY_KEY]);
   cfg[XSD_KEY] = xsd;
   cfg[XSD_SNAKE_KEY] = xsd;
   cfg[RESOLVED_KEY] = resolved;
   cfg[RESOLVED_SNAKE_KEY] = resolved;
+  cfg[DISABLE_GASKET_KEY] = disableGasket;
+  cfg[DISABLE_GASKET_LEGACY_KEY] = disableGasket;
   return cfg;
 }
 
@@ -90,6 +96,11 @@ function mergeCondenseBoolKeys(editedText, bools = {}) {
     cfg[RESOLVED_KEY] = enabled;
     cfg[RESOLVED_SNAKE_KEY] = enabled;
   }
+  if (Object.prototype.hasOwnProperty.call(bools, DISABLE_GASKET_KEY) || Object.prototype.hasOwnProperty.call(bools, DISABLE_GASKET_LEGACY_KEY)) {
+    const enabled = bool(bools[DISABLE_GASKET_KEY]) || bool(bools[DISABLE_GASKET_LEGACY_KEY]);
+    cfg[DISABLE_GASKET_KEY] = enabled;
+    cfg[DISABLE_GASKET_LEGACY_KEY] = enabled;
+  }
   return JSON.stringify(cfg, null, 2);
 }
 
@@ -100,9 +111,12 @@ function hydrateCondenseSnapshot(snapshot, base) {
   snapshot.run.options = snapshot.run.options && typeof snapshot.run.options === 'object' ? snapshot.run.options : {};
   snapshot.run.options[XSD_KEY] = bool(snapshot.run.options[XSD_KEY]) || cfg[XSD_KEY];
   snapshot.run.options[RESOLVED_KEY] = bool(snapshot.run.options[RESOLVED_KEY]) || bool(snapshot.run.options[RESOLVED_SNAKE_KEY]) || cfg[RESOLVED_KEY];
+  snapshot.run.options[DISABLE_GASKET_KEY] = cfg[DISABLE_GASKET_KEY];
   snapshot.config = snapshot.config && typeof snapshot.config === 'object' ? snapshot.config : {};
   snapshot.config[XSD_KEY] = cfg[XSD_KEY];
   snapshot.config[RESOLVED_KEY] = cfg[RESOLVED_KEY];
+  snapshot.config[DISABLE_GASKET_KEY] = cfg[DISABLE_GASKET_KEY];
+  snapshot.config[DISABLE_GASKET_LEGACY_KEY] = cfg[DISABLE_GASKET_KEY];
   return snapshot;
 }
 
@@ -115,6 +129,10 @@ function writeCondenseRunOption(base, key, enabled) {
   if (key === RESOLVED_KEY || key === RESOLVED_SNAKE_KEY) {
     cfg[RESOLVED_KEY] = !!enabled;
     cfg[RESOLVED_SNAKE_KEY] = !!enabled;
+  }
+  if (key === DISABLE_GASKET_KEY || key === DISABLE_GASKET_LEGACY_KEY) {
+    cfg[DISABLE_GASKET_KEY] = !!enabled;
+    cfg[DISABLE_GASKET_LEGACY_KEY] = !!enabled;
   }
   writeBridgeConfig(base, cfg);
 }
@@ -140,6 +158,93 @@ function cachedSnapshot(base, root) {
   const value = hydrateCondenseSnapshot(sanitizeSnapshot(base.getPopupSnapshot(root)), base);
   if (value) snapshotCache = { key, value, createdAt };
   return value;
+}
+
+function normalizeComponentRefNo(value) {
+  return text(value).replace(/^=/, '');
+}
+
+function componentRefEndpoint(componentRefNo, endpoint) {
+  const ref = normalizeComponentRefNo(componentRefNo);
+  const ep = text(endpoint);
+  return ref && ep ? `${ref}_${ep}` : ref;
+}
+
+function nodeText(node, name) {
+  const child = [...(node?.childNodes || [])].find((item) => item.nodeType === 1 && String(item.localName || item.nodeName).replace(/^.*:/, '') === name);
+  return text(child?.textContent);
+}
+
+function parseXmlNodeMeta(xmlText) {
+  const byKey = new Map();
+  const source = text(xmlText);
+  if (!source) return byKey;
+  if (typeof DOMParser !== 'undefined') {
+    try {
+      const document = new DOMParser().parseFromString(source, 'application/xml');
+      if (!document.getElementsByTagName('parsererror').length) {
+        for (const branch of [...document.getElementsByTagName('Branch')]) {
+          const branchName = nodeText(branch, 'Branchname');
+          for (const node of [...branch.getElementsByTagName('Node')]) {
+            const nodeNumber = nodeText(node, 'NodeNumber');
+            if (!nodeNumber) continue;
+            const meta = {
+              branchName,
+              nodeNumber,
+              componentRefNo: nodeText(node, 'ComponentRefNo'),
+              endpoint: nodeText(node, 'Endpoint'),
+              componentType: nodeText(node, 'ComponentType'),
+            };
+            meta.componentRefEndpoint = componentRefEndpoint(meta.componentRefNo, meta.endpoint);
+            byKey.set(`${branchName}::${nodeNumber}`, meta);
+            if (!byKey.has(nodeNumber)) byKey.set(nodeNumber, meta);
+          }
+        }
+        return byKey;
+      }
+    } catch {}
+  }
+  for (const branchMatch of source.matchAll(/<Branch\b[\s\S]*?<\/Branch>/gi)) {
+    const branchBlock = branchMatch[0];
+    const branchName = text(branchBlock.match(/<Branchname[^>]*>([\s\S]*?)<\/Branchname>/i)?.[1]?.replace(/<[^>]+>/g, ''));
+    for (const nodeMatch of branchBlock.matchAll(/<Node\b[\s\S]*?<\/Node>/gi)) {
+      const nodeBlock = nodeMatch[0];
+      const read = (name) => text(nodeBlock.match(new RegExp(`<${name}[^>]*>([\\s\\S]*?)<\\/${name}>`, 'i'))?.[1]?.replace(/<[^>]+>/g, ''));
+      const nodeNumber = read('NodeNumber');
+      if (!nodeNumber) continue;
+      const meta = { branchName, nodeNumber, componentRefNo: read('ComponentRefNo'), endpoint: read('Endpoint'), componentType: read('ComponentType') };
+      meta.componentRefEndpoint = componentRefEndpoint(meta.componentRefNo, meta.endpoint);
+      byKey.set(`${branchName}::${nodeNumber}`, meta);
+      if (!byKey.has(nodeNumber)) byKey.set(nodeNumber, meta);
+    }
+  }
+  return byKey;
+}
+
+async function readCurrentXmlText() {
+  const input = typeof document !== 'undefined' ? document.querySelector?.('#model-converters-primary-input') : null;
+  const file = input?.files?.[0];
+  if (!file || typeof file.text !== 'function') return '';
+  return file.text().catch(() => '');
+}
+
+async function augmentWeightRowsWithNodeMeta(rows) {
+  const safeRows = Array.isArray(rows) ? rows : [];
+  if (!safeRows.length) return safeRows;
+  const meta = parseXmlNodeMeta(await readCurrentXmlText());
+  return safeRows.map((row) => {
+    const key = `${text(row?.branchName)}::${text(row?.nodeNumber)}`;
+    const nodeMeta = meta.get(key) || meta.get(text(row?.nodeNumber)) || {};
+    const componentRefNo = nodeMeta.componentRefNo || row?.componentRefNo || '';
+    const endpoint = nodeMeta.endpoint || row?.endpoint || '';
+    return {
+      ...row,
+      componentRefNo,
+      endpoint,
+      componentType: row?.componentType || nodeMeta.componentType || '',
+      componentRefEndpoint: row?.componentRefEndpoint || nodeMeta.componentRefEndpoint || componentRefEndpoint(componentRefNo, endpoint),
+    };
+  });
 }
 
 function wrapInvalidatingAsync(base, methodName) {
@@ -169,12 +274,6 @@ function xmlCiiWorkflowWrapBridge(base) {
   const safe = Object.create(base);
   Object.assign(safe, base);
   safe.__xmlCiiWorkflowSafeBridge = true;
-
-  // The popup's old legacy preload path probes the removed aggregate
-  // docs/Masters/Piping_class_master.json. Default Material/Weight autoload is
-  // owned by xml-cii-master-autoload-lite.js, and specwise piping class rows are
-  // resolved from docs/Masters/SpecwisePipingClass by line/spec context. Do not
-  // call the stale aggregate preload from Workflow 1/2 popups.
   safe.ensureDefaultMastersLoaded = async () => null;
 
   const originalLoadDefault = base.loadPopupDefaultMaster?.bind(base);
@@ -187,7 +286,7 @@ function xmlCiiWorkflowWrapBridge(base) {
 
   const originalSetRunOption = base.setPopupRunOption?.bind(base);
   safe.setPopupRunOption = (key, value, type) => {
-    if (key === XSD_KEY || key === XSD_SNAKE_KEY || key === RESOLVED_KEY || key === RESOLVED_SNAKE_KEY) {
+    if (key === XSD_KEY || key === XSD_SNAKE_KEY || key === RESOLVED_KEY || key === RESOLVED_SNAKE_KEY || key === DISABLE_GASKET_KEY || key === DISABLE_GASKET_LEGACY_KEY) {
       writeCondenseRunOption(base, key, !!value);
     }
     const result = originalSetRunOption?.(key, value, type);
@@ -202,6 +301,11 @@ function xmlCiiWorkflowWrapBridge(base) {
     clearSnapshotCache();
     return result;
   };
+
+  const originalComputePopupWeightRows = base.computePopupWeightRows?.bind(base);
+  safe.computePopupWeightRows = originalComputePopupWeightRows
+    ? async (...args) => augmentWeightRowsWithNodeMeta(await originalComputePopupWeightRows(...args))
+    : undefined;
 
   safe.getPopupSnapshot = (root) => cachedSnapshot(base, root);
   safe.importPopupMasterFile = wrapInvalidatingAsync(base, 'importPopupMasterFile');

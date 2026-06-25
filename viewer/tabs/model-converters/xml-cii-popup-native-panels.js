@@ -322,7 +322,8 @@ function weightMatchPanel(snapshot, uiState) {
         [
           { key: 'branchName', label: 'Branch' },
           { key: 'nodeNumber', label: 'Node' },
-          { key: 'componentType', label: 'Type' },
+          { key: 'componentRefEndpoint', label: 'ComponentRefNo_Endpoint' },
+          { key: 'componentType', label: 'ComponentType' },
           { key: 'boreMm', label: 'Bore' },
           { key: 'rating', label: 'Rating' },
           { key: 'weight', label: 'Preferred Weight' },
