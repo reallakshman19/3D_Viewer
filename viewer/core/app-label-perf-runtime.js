@@ -9,6 +9,7 @@ import { initDevDebugWindow } from '../debug/dev-debug-window.js';
 const TAB_VISIBILITY_URL = new URL('../config/tab-visibility.json', import.meta.url).href;
 const APP_ICON_URL = new URL('../assets/app-icon.svg?v=20260621-app-brand-icon-1', import.meta.url).href;
 const RVM_RENDERER_PREFLIGHT_MODULES = [
+  '../rvm/AvevaJsonAutoConnectOverride.js?v=20260618-inputxml-auto-connect-1',
   '../rvm/RvmFileLoadedBridge.js?v=20260618-modular-rvm-file-loaded-1',
   '../rvm/AvevaJsonVisibleFallbackPatch.js?v=20260618-staged-visible-fallback-1',
   '../rvm-viewer/RvmSupportSymbols.js?v=20260618-support-kind-authority-1',
