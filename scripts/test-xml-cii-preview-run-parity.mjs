@@ -15,6 +15,10 @@ const parity = read('viewer/tabs/model-converters/converters/xmltocii2019_helper
 const preview = read('viewer/tabs/model-converters/converters/xmltocii2019_helper/preview-renderer.js');
 const table = read('viewer/tabs/model-converters/shared/EditablePreviewTable.js');
 const base = read('viewer/tabs/model-converters/converters/xmltocii2019_helper/enrichment-core.js');
+const config = read('viewer/converters/xml-cii2019-core/config.js');
+const directionWorker = read('viewer/converters/scripts/xml_to_cii2019_direction.py');
+const inputXmlDebug = read('viewer/converters/scripts/xml_to_inputxml_debug.py');
+const baseWorker = read('viewer/converters/scripts/xml_to_cii2019.py');
 
 const mappedProcessFixture = Object.freeze({
   branchName: '/ASIM-1835-4"-P8810212-31441C4-PP/B1',
@@ -31,7 +35,7 @@ const mappedProcessFixture = Object.freeze({
   }),
   expectedEnrichedXml: Object.freeze({
     Pressure1: '3210',
-    Pressure2: '4815',
+    HydroPressure: '4815',
     Temperature1: '205',
     Temperature2: '180',
     Temperature3: '-29',
@@ -64,8 +68,8 @@ assert.ok(
   'Parity helper must write preview P1 into enriched XML Pressure1.',
 );
 assert.ok(
-  parity.includes("setText(document, pressure, 'Pressure2'") && parity.includes('hydroPressure'),
-  'Parity helper must write mapped Hydro/Test Pressure into enriched XML Pressure2.',
+  parity.includes("setText(document, pressure, 'HydroPressure'") && parity.includes('hydroPressure'),
+  'Parity helper must write mapped Hydro/Test Pressure into enriched XML HydroPressure.',
 );
 assert.ok(
   parity.includes("setText(document, temperature, 'Temperature1'")
@@ -79,7 +83,7 @@ assert.ok(
 );
 assert.ok(
   parity.includes('process-provenance')
-    && parity.includes('Pressure2 / Hydro/Test Pressure')
+    && parity.includes('Hydro/Test Pressure')
     && parity.includes('lineListRowFound')
     && parity.includes('sourceRowIndex')
     && parity.includes('final='),
@@ -114,9 +118,29 @@ assert.ok(
     && parity.includes('OLET'),
   'DTXR_POS-matched Tee/Olet nodes must be assigned SIF=0 before final CII worker conversion.',
 );
+assert.ok(
+  config.includes('BRANCH\\\\s+OUTLET')
+    && directionWorker.includes('BRANCH\\s+OUTLET')
+    && directionWorker.includes('OLET\\b.*\\bBW')
+    && inputXmlDebug.includes('BRANCH\\s+OUTLET')
+    && inputXmlDebug.includes('return 5'),
+  'Branch Outlet BW OLET descriptions must map to CII SIF&TEES type 5, not type 0.',
+);
+assert.ok(
+  config.includes('TEE\\\\b.*\\\\bB\\\\s*\\\\.?\\\\s*W\\\\.?\\\\b')
+    && directionWorker.includes('TEE\\b.*\\bB\\s*\\.?\\s*W\\.?\\b')
+    && directionWorker.includes('BUTTWELD')
+    && inputXmlDebug.includes('TEE\\b.*\\bB\\s*\\.?\\s*W\\.?\\b')
+    && inputXmlDebug.includes('return 3'),
+  'TEE BW/Buttweld descriptions must map to CII SIF&TEES type 3 in browser config, CII worker, and InputXML debug export.',
+);
+assert.ok(
+  baseWorker.includes('second_thickness = edge.to_node.wall_thickness') && !baseWorker.includes("_format_fixed_float(0.0, 6),\n                    _format_fixed_float(alpha_angle"),
+  'Reducer REDUCERS payload must write second thickness from reducer/adjacent wall data, not hard-code zero.',
+);
 assert.deepEqual(
   Object.keys(mappedProcessFixture.expectedEnrichedXml),
-  ['Pressure1', 'Pressure2', 'Temperature1', 'Temperature2', 'Temperature3', 'FluidDensity'],
+  ['Pressure1', 'HydroPressure', 'Temperature1', 'Temperature2', 'Temperature3', 'FluidDensity'],
   'Regression fixture must assert all mapped process fields expected in enriched XML.',
 );
 assert.ok(
@@ -124,6 +148,6 @@ assert.ok(
   'Regression context: base enrichment still has the broad rating derivation that preview/run parity overrides.',
 );
 
-console.log('XML->CII preview/run mapped process, Pressure2, diagnostics, negative-chain, and DTXR_POS SIF=0 parity guard passed.', {
+console.log('XML->CII preview/run mapped process, HydroPressure, diagnostics, negative-chain, and DTXR_POS SIF=0 parity guard passed.', {
   fixture: mappedProcessFixture.branchName,
 });

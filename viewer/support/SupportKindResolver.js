@@ -21,7 +21,7 @@ export const DEFAULT_KIND_MAP = {
 export const DEFAULT_RULES = [
   // Custom text patterns for specific support mapping (Higher precedence)
   { id: 'builtin-user-rest',       field: 'SPRE,SKEY,NAME,DESCRIPTION,DESC,CMPSUPTYPE', pattern: 'REST,SHOE,BP,BEARING PLATE,WP,WEAR PAD,ANCI', match: 'contains', kind: 'REST', label: 'REST/SHOE/BP/WP/ANCI -> REST' },
-  { id: 'builtin-user-limit',      field: 'SPRE,SKEY,NAME,DESCRIPTION,DESC,CMPSUPTYPE', pattern: 'LIMIT STOP,AXIAL STOP,LIMIT', match: 'contains', kind: 'LIMIT', label: 'LIMIT STOP/AXIAL STOP -> LIMIT' },
+  { id: 'builtin-user-limit',      field: 'SPRE,SKEY,NAME,DESCRIPTION,DESC,CMPSUPTYPE', pattern: 'LIMIT STOP,AXIAL STOP,LINE STOP,DIRECTIONAL ANCHOR', match: 'contains', kind: 'LINESTOP', label: 'LINE/LIMIT/AXIAL STOP/DIRECTIONAL ANCHOR -> LINESTOP' },
   { id: 'builtin-user-guide',      field: 'SPRE,SKEY,NAME,DESCRIPTION,DESC,CMPSUPTYPE', pattern: 'GUIDE', match: 'contains', kind: 'GUIDE', label: 'GUIDE -> GUIDE' },
 
   { id: 'builtin-ca150',     field: 'SKEY',                            pattern: 'CA150',     match: 'equals',     kind: 'REST',     label: 'SKEY CA150 -> REST' },
@@ -112,13 +112,11 @@ export function resolveKindFromDirection(rawText, options = {}) {
 // patterns before generic (ANCHOR before REST, LINESTOP/STOPPER before STOP).
 export function resolveKindFromText(rawText) {
   const t = String(rawText || '').toUpperCase();
+  if (/\bDIRECTIONAL\s+ANCHOR\b|\bLINE\s*STOP\b|\bLINESTOP\b|\bLIMIT\s*STOP\b|\bAXIAL\s*STOP\b/.test(t)) return 'LINESTOP';
   if (/\bANC(HOR)?\b|\bFIX(ED)?\b|\bRIGID\b/.test(t))          return 'ANCHOR';
   if (/\bGUIDE\b|\bGDE\b|\bGUI\b|\bSLIDE\b|\bSLID\b|\bLATERAL\b/.test(t))  return 'GUIDE';
   if (/\bSPRING\b|\bHANGER\b/.test(t))                           return 'SPRING';
-  if (/\bLINE\s*STOP\b|\bLINESTOP\b|\bSTOPPER\b/.test(t))       return 'LINESTOP';
-  if (/\bLIMIT\s*STOP\b|\bLIMIT\b/.test(t))                      return 'LIMIT';
   if (/\bREST(ING)?\b|\bRST\b|\bSHOE\b|\bBASE\s*PLATE\b|\bBEARING\s*PLATE\b|\bWEAR\s*PAD\b|\bBP\b|\bWP\b|\bANCI\b|\+Y\b/.test(t)) return 'REST';
-  if (/\bSTOP\b/.test(t))                                         return 'LINESTOP';
   return '';
 }
 

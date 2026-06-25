@@ -84,7 +84,7 @@ function writeProcess(document, branch, row) {
   const p = ensure(document, branch, 'Pressure');
   const t = ensure(document, branch, 'Temperature');
   if (setText(document, p, 'Pressure1', rowVal(row, 'p1', 'P1', 'pressure1', 'Pressure1'))) count += 1;
-  if (setText(document, p, 'Pressure2', rowVal(row, 'hydroPressure', 'hydro_pressure', 'HydroPressure', 'Hydro Test Pressure', 'Test Pressure', 'Pressure2'))) count += 1;
+  if (setText(document, p, 'HydroPressure', rowVal(row, 'hydroPressure', 'hydro_pressure', 'HydroPressure', 'Hydro Test Pressure', 'Test Pressure'))) count += 1;
   if (setText(document, t, 'Temperature1', rowVal(row, 't1', 'T1', 'temperature1', 'Temperature1'))) count += 1;
   if (setText(document, t, 'Temperature2', rowVal(row, 't2', 'T2', 'temperature2', 'Temperature2'))) count += 1;
   if (setText(document, t, 'Temperature3', rowVal(row, 't3', 'T3', 'temperature3', 'Temperature3'))) count += 1;
@@ -198,6 +198,6 @@ export function applyXmlCiiEnrichedXmlFix(enrichedXmlText, sourceXmlText, staged
   return {
     xmlText,
     stats: { previewRunParityBranches: branches, previewRunParityProcessFields: processFields, previewRunParityNodeFacts: nodeFacts, condensedPairElementLengthAnnotations: pairLengths, splitCondensedRigidNodes: resolved.nodesChanged, resolvedRigidMarkers: resolved.markers, condensedValveFlangeBlocks: resolved.blocks },
-    diagnostics: [{ type: 'xml-cii-rich-enrichment-fix-applied', branches, processFields, nodeFacts, pairLengths, splitCondensedRigidNodes: resolved.nodesChanged, condensedValveFlangeBlocks: resolved.blocks, message: 'Applied rich workflow hotfix: mapped line-list process data copied to enriched XML including Pressure2/hydro; negative FLAN/GASK/VALV/RIGID/INST blocks resolved when enabled.' }],
+    diagnostics: [{ type: 'xml-cii-rich-enrichment-fix-applied', branches, processFields, nodeFacts, pairLengths, splitCondensedRigidNodes: resolved.nodesChanged, condensedValveFlangeBlocks: resolved.blocks, message: 'Applied rich workflow hotfix: mapped line-list process data copied to enriched XML including HydroPressure; negative FLAN/GASK/VALV/RIGID/INST blocks resolved when enabled.' }],
   };
 }

@@ -33,6 +33,7 @@ from dataclasses import dataclass
 import json
 import math
 from pathlib import Path
+import re
 from typing import Any, Final
 import xml.etree.ElementTree as ET
 
@@ -610,13 +611,70 @@ def _build_degree_map(edges: list[Edge]) -> Counter[int]:
     return degrees
 
 
-def _build_nodename_lines(edges: list[Edge]) -> tuple[list[str], dict[int, int]]:
+SUPPORT_NODE_NAME_TOKENS = {
+    "+Y",
+    "-Y",
+    "ANCHOR",
+    "ANC",
+    "A",
+    "GUIDE",
+    "GUID",
+    "GUI",
+    "LINESTOP",
+    "LINE",
+    "STOP",
+    "LIMIT",
+    "LIM",
+    "PIPESTOP",
+    "PIPE",
+    "REST",
+    "RESR",
+    "RESTRAINT",
+    "SUPPORT",
+    "XST",
+    "X",
+    "Y",
+    "Z",
+}
+
+
+def _support_label_like_node_name(value: str | None) -> bool:
+    """Return true for generated support-kind labels, not real stress node names.
+
+    Inputs are XML NodeName values. Output only controls optional CII NODENAME
+    emission when support tag population is disabled. Fallback is conservative:
+    PS-/numeric names and mixed names remain unchanged unless the value is made
+    only from support tokens such as REST, RESR, GUIDE, REST+GUIDE, or LINE STOP.
+    """
+    text = _safe_text(value).upper()
+    if not text:
+        return False
+    if re.search(r"\bPS[-_ ]?\d", text) or re.fullmatch(r"[-+]?\d+(?:\.\d+)?", text):
+        return False
+    normalized = re.sub(r"[^A-Z0-9+\-]+", " ", text).strip()
+    if not normalized:
+        return False
+    compact = re.sub(r"[\s+\-/_,;:|&]+", "", normalized)
+    if compact in SUPPORT_NODE_NAME_TOKENS:
+        return True
+    tokens = [token for token in re.split(r"[\s+\-/_,;:|&]+", normalized) if token]
+    return bool(tokens) and all(token in SUPPORT_NODE_NAME_TOKENS for token in tokens)
+
+
+def _node_name_for_cii(value: str | None, support_config: dict[str, Any] | None) -> str:
+    text = _safe_text(value)[:25]
+    if _disable_cii_support_tag_population(support_config or {}) and _support_label_like_node_name(text):
+        return ""
+    return text
+
+
+def _build_nodename_lines(edges: list[Edge], support_config: dict[str, Any] | None = None) -> tuple[list[str], dict[int, int]]:
     lines: list[str] = []
     edge_to_index: dict[int, int] = {}
 
     for edge_index, edge in enumerate(edges):
-        left = _safe_text(edge.from_node.node_name)[:25]
-        right = _safe_text(edge.to_node.node_name)[:25]
+        left = _node_name_for_cii(edge.from_node.node_name, support_config)
+        right = _node_name_for_cii(edge.to_node.node_name, support_config)
         if not left and not right:
             continue
         lines.append(f"  {left:<26}{right:<25}")
@@ -770,11 +828,15 @@ def _build_restraints(
     return restraints, edge_to_index
 
 
-def _build_conversion_model(document: XmlDocument, support_map: dict | None = None) -> ConversionModel:
+def _build_conversion_model(
+    document: XmlDocument,
+    support_map: dict | None = None,
+    support_config: dict[str, Any] | None = None,
+) -> ConversionModel:
     edges = _build_edges(document.branches)
     degrees = _build_degree_map(edges)
 
-    nodename_lines, edge_to_nodename_index = _build_nodename_lines(edges)
+    nodename_lines, edge_to_nodename_index = _build_nodename_lines(edges, support_config)
     bend_edges, edge_to_bend_index = _build_bend_indices(edges)
     rigid_edges, edge_to_rigid_index = _build_rigid_indices(edges)
     sif_edges, edge_to_sif_index = _build_sif_indices(edges)
@@ -1284,11 +1346,12 @@ def _build_reducer_payload(model: ConversionModel) -> list[str]:
         alpha_angle = edge.to_node.alpha_angle
         if alpha_angle is None:
             raise ValueError("Reducer edge without AlphaAngle encountered.")
+        second_thickness = edge.to_node.wall_thickness if edge.to_node.wall_thickness > 0.0 else edge.from_node.wall_thickness
         lines.append(
             _row(
                 [
                     _format_auto_float(edge.to_node.outside_diameter),
-                    _format_fixed_float(0.0, 6),
+                    _format_auto_float(second_thickness if second_thickness > 0.0 else 0.0),
                     _format_fixed_float(alpha_angle, 4),
                     _format_fixed_float(0.0, 6),
                     _format_fixed_float(0.0, 6),

@@ -358,10 +358,10 @@ function runPanel(snapshot) {
         </label>
         <label class="xml-cii-native-check"><input type="checkbox" data-native-run-option="createEnrichedXml" ${run.options?.createEnrichedXml ? 'checked' : ''}> Create enriched XML before CII</label>
         <label class="xml-cii-native-check"><input type="checkbox" data-native-run-option="kgToNewton" ${run.options?.kgToNewton !== false ? 'checked' : ''}> kg -> N weight conversion</label>
-        <label class="xml-cii-native-check"><input type="checkbox" data-native-run-option="condenseRigidXsd" ${run.options?.condenseRigidXsd ? 'checked' : ''}> Condense Rigid / split condensed valve-flange nodes (XSD)</label>
-        <label class="xml-cii-native-check"><input type="checkbox" data-native-run-option="splitCondensedValveFlange" ${run.options?.splitCondensedValveFlange ? 'checked' : ''}> Condense Rigid / split condensed valve-flange nodes (Resolved)</label>
+        <label class="xml-cii-native-check"><input type="checkbox" data-native-run-option="condenseRigidXsd" ${run.options?.condenseRigidXsd ? 'checked' : ''}> Record source/XSD condensed rigid intent</label>
+        <label class="xml-cii-native-check"><input type="checkbox" data-native-run-option="splitCondensedValveFlange" ${run.options?.splitCondensedValveFlange ? 'checked' : ''}> Apply resolved split for condensed valve/flange/rigid nodes</label>
       </div>
-      <div class="xml-cii-native-hint">Resolved ON forces supportConfigJson.split_condensed_valve_flange=True and the Python worker flag --split-condensed-valve-flange.</div>
+      <div class="xml-cii-native-hint">Resolved ON saves splitCondensedValveFlange / split_condensed_valve_flange and forwards --split-condensed-valve-flange to the Python worker.</div>
       <div class="xml-cii-native-toolbar">
         <button type="button" class="model-converters-run-btn" data-native-review-weights>Review Weight Matches</button>
         <button type="button" class="model-converters-download-btn" data-native-finalise-run>Finalise and Run</button>
@@ -401,10 +401,10 @@ function logicInfoPanel() {
         <strong>ElementLengthMm:</strong> generated in browser-side enrichment. ElementLengthMm calculated for INST nodes uses the previous positive node to the INST position in CII coordinate space when no valid length already exists.
       </div>
       <div class="xml-cii-native-hint">
-        <strong>Condense Rigid / split condensed valve-flange nodes (XSD):</strong> stores source/XSD intent only as condenseRigidXsd / condense_rigid_xsd. It does not force resolved conversion.
+        <strong>Record source/XSD condensed rigid intent:</strong> stores source/XSD intent only as condenseRigidXsd / condense_rigid_xsd. It does not force resolved conversion.
       </div>
       <div class="xml-cii-native-hint">
-        <strong>Condense Rigid / split condensed valve-flange nodes (Resolved):</strong> writes splitCondensedValveFlange=true and split_condensed_valve_flange=true, forwards --split-condensed-valve-flange, and renumbers length-bearing negative FLAN/RIGID/INST nodes before final CII generation.
+        <strong>Apply resolved split for condensed valve/flange/rigid nodes:</strong> writes splitCondensedValveFlange=true and split_condensed_valve_flange=true, forwards --split-condensed-valve-flange, and renumbers length-bearing negative FLAN/RIGID/INST nodes before final CII generation.
       </div>
       <div class="xml-cii-native-hint">
         <strong>Unified Workflow:</strong> import masters, preview enrichment, weight review, support mapping, config, and final run use the same conversion core.
@@ -421,11 +421,11 @@ function configPanel(snapshot, uiState) {
       <div class="xml-cii-native-grid">
         <label class="xml-cii-native-check"><input type="checkbox" data-native-config-bool="useFrictionSentinelForNonYSupports" ${config.useFrictionSentinel ? 'checked' : ''}> Use friction sentinel for non +Y supports</label>
         <label class="xml-cii-native-check"><input type="checkbox" data-native-config-bool="convertDensityKgM3ToKgCm3" ${config.convertDensity ? 'checked' : ''}> Convert density kg/m3 -> kg/cm3</label>
-        <label class="xml-cii-native-check"><input type="checkbox" data-native-config-bool="disableCiiSupportTagPopulation" ${config.disableCiiSupportTag ? 'checked' : ''}> Disable CII Support Tag population</label>
-        <label class="xml-cii-native-check"><input type="checkbox" data-native-config-bool="condenseRigidXsd" ${config.condenseRigidXsd ? 'checked' : ''}> Condense Rigid / split condensed valve-flange nodes (XSD)</label>
-        <label class="xml-cii-native-check"><input type="checkbox" data-native-config-bool="splitCondensedValveFlange" ${config.splitCondensedValveFlange ? 'checked' : ''}> Condense Rigid / split condensed valve-flange nodes (Resolved)</label>
+        <label class="xml-cii-native-check"><input type="checkbox" data-native-config-bool="disableCiiSupportTagPopulation" ${config.disableCiiSupportTag ? 'checked' : ''}> Suppress CII support tag/name labels</label>
+        <label class="xml-cii-native-check"><input type="checkbox" data-native-config-bool="condenseRigidXsd" ${config.condenseRigidXsd ? 'checked' : ''}> Record source/XSD condensed rigid intent</label>
+        <label class="xml-cii-native-check"><input type="checkbox" data-native-config-bool="splitCondensedValveFlange" ${config.splitCondensedValveFlange ? 'checked' : ''}> Apply resolved split for condensed valve/flange/rigid nodes</label>
       </div>
-      <div class="xml-cii-native-hint">Resolved is saved as both splitCondensedValveFlange and split_condensed_valve_flange for worker compatibility.</div>
+      <div class="xml-cii-native-hint">Suppress ON blanks Support Tag/GUID restraint records and support-kind-only NODENAME rows such as RESR, REST+GUIDE, or GUIDE+REST. Resolved is saved as both splitCondensedValveFlange and split_condensed_valve_flange for worker compatibility.</div>
       ${logicInfoPanel()}
       <div class="xml-cii-native-toolbar">
         <button type="button" class="model-converters-run-btn" data-native-save-config>Save Config</button>

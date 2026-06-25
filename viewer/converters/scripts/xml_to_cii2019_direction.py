@@ -42,8 +42,9 @@ DEFAULT_TEE_SIF_TYPE_MAPPING = [
         "label": "Welding Tee",
         "patterns": [
             r"\bWELD(?:ING)?\s+TEE\b",
-            r"\bTEE\b.*\bBW\b",
-            r"\bTEE\b.*\bBUTT\s*WELD\b",
+            r"\bTEE\b.*\bB\s*\.?\s*W\.?\b",
+            r"\bTEE\b.*\bBUTT\s*[- ]?\s*WELD\b",
+            r"\bTEE\b.*\bBUTTWELD\b",
             r"\bTEE\s+(?:EQUAL|REDUC(?:ING|ER)?)\b",
             r"\bTEEB?\b",
         ],
@@ -56,7 +57,14 @@ DEFAULT_TEE_SIF_TYPE_MAPPING = [
     {
         "code": 5,
         "label": "Weldolet",
-        "patterns": [r"\bWELDOLET\b", r"\bWELD\s*OLET\b", r"\bWOLET\b"],
+        "patterns": [
+            r"\bWELDOLET\b",
+            r"\bWELD\s*OLET\b",
+            r"\bWOLET\b",
+            r"\bBRANCH\s+OUTLET\b.*\bB\s*\.?\s*W\.?\b",
+            r"\bBRANCH\s+FITTING\b.*\bB\s*\.?\s*W\.?\b",
+            r"\bOLET\b.*\bB\s*\.?\s*W\.?\b",
+        ],
     },
     {
         "code": 6,
@@ -125,13 +133,16 @@ def _parse_cmpsupgap_value(text: str) -> float | None:
     return value if math.isfinite(value) else None
 
 
-def _cmpsupgap_for_restraint(node_element: ET.Element, restraint_element: ET.Element, namespace: str) -> float | None:
-    # PS value is preferred over POS because support tag matching is less ambiguous
-    # than coordinate matching. Restraint-level fields are accepted for forward
-    # compatibility; current enrichment writes node-level fields.
-    for parent in (restraint_element, node_element):
-        value = _first_child_text(parent, namespace, ("CMPSUPGAP_PS", "CMPSUPGAP_POS", "CMPSUPGAP"))
-        parsed = _parse_cmpsupgap_value(value)
+def _restraint_type_uses_gap(type_text: str) -> bool:
+    try:
+        return int(round(base._restraint_type_to_code(type_text))) == patched.SUPPORT_KIND_TO_CII_CODE["LINESTOP"]
+    except Exception:
+        return False
+
+
+def _cmpsupgap_for_restraint(restraint_element: ET.Element, namespace: str) -> float | None:
+    for name in ("CMPSUPGAP", "CMPSUPGAP_PS", "CMPSUPGAP_POS"):
+        parsed = _parse_cmpsupgap_value(base._child_text(restraint_element, namespace, name))
         if parsed is not None:
             return parsed
     return None
@@ -154,7 +165,7 @@ def _parse_restraints_with_direction(node_element: ET.Element, namespace: str) -
         stiffness = base._parse_optional_float(
             base._child_text(restraint_element, namespace, "Stiffness"), "Restraint/Stiffness"
         )
-        cmpsupgap = _cmpsupgap_for_restraint(node_element, restraint_element, namespace)
+        cmpsupgap = _cmpsupgap_for_restraint(restraint_element, namespace) if _restraint_type_uses_gap(type_text) else None
         xml_gap = base._parse_optional_float(base._child_text(restraint_element, namespace, "Gap"), "Restraint/Gap")
         gap = cmpsupgap if cmpsupgap is not None else xml_gap
         friction = base._parse_optional_float(
@@ -266,13 +277,22 @@ def _regex_or_contains(pattern: str, text: str) -> bool:
 
 def _tee_sif_type_from_description(text: str, support_config: dict) -> int:
     normalized = re.sub(r"\s+", " ", base._safe_text(text)).upper()
+    normalized = re.sub(r"\bB\s*\.?\s*W\.?\b", "BW", normalized)
+    normalized = re.sub(r"\bBUTT\s*[- ]?\s*WELD\b", "BUTT WELD", normalized)
     if not normalized:
         return int(support_config.get("defaultTeeSifType", 0) or 0)
 
     # Specific hard guards run before any broad TEE/BW rule.
     specific = [
         (4, (r"\bSWEEPOLET\b", r"\bSWEEP\s*OLET\b")),
-        (5, (r"\bWELDOLET\b", r"\bWELD\s*OLET\b", r"\bWOLET\b")),
+        (5, (
+            r"\bWELDOLET\b",
+            r"\bWELD\s*OLET\b",
+            r"\bWOLET\b",
+            r"\bBRANCH\s+OUTLET\b.*\bBW\b",
+            r"\bBRANCH\s+FITTING\b.*\bBW\b",
+            r"\bOLET\b.*\bBW\b",
+        )),
         (6, (r"\bEXTRUDED\b.*\bTEE\b", r"\bEXT(?:RUDED)?\s+TEE\b")),
         (2, (r"\bUN[-\s]?REINF(?:ORCED)?\b.*\bTEE\b",)),
         (1, (r"\bREINF(?:ORCED)?\b.*\bTEE\b",)),
@@ -292,7 +312,7 @@ def _tee_sif_type_from_description(text: str, support_config: dict) -> int:
         if any(term and _regex_or_contains(str(term), normalized) for term in search_terms):
             return code
 
-    if re.search(r"\bTEE\b", normalized) and re.search(r"\b(BW|BUTT\s*WELD|WELD(?:ING)?|EQUAL|REDUC(?:ING|ER)?)\b", normalized):
+    if re.search(r"\bTEE\b", normalized) and re.search(r"\b(BW|BUTT\s*WELD|BUTTWELD|WELD(?:ING)?|EQUAL|REDUC(?:ING|ER)?)\b", normalized):
         return 3
     return int(support_config.get("defaultTeeSifType", 0) or 0)
 
@@ -394,6 +414,18 @@ def _merge_spec_maps(*maps: dict[int, tuple[base.RestraintSpec, ...]]) -> dict[i
     for spec_map in maps:
         for node_number, specs in spec_map.items():
             merged[node_number] = _merge_restraint_specs(merged.get(node_number, tuple()), specs)
+    return merged
+
+
+def _prefer_xml_spec_map(
+    xml_specs: dict[int, tuple[base.RestraintSpec, ...]],
+    *fallback_maps: dict[int, tuple[base.RestraintSpec, ...]],
+) -> dict[int, tuple[base.RestraintSpec, ...]]:
+    merged = dict(xml_specs)
+    for spec_map in fallback_maps:
+        for node_number, specs in spec_map.items():
+            if node_number not in merged or not merged[node_number]:
+                merged[node_number] = specs
     return merged
 
 
@@ -524,8 +556,17 @@ def main() -> None:
     component_specs = _component_type_restraint_specs(document, support_config)
     dtxr_specs, node_number_kind_map = patched._build_keyword_restraint_specs(input_xml, support_config)
     xml_specs = base._build_explicit_restraint_specs(document.branches)
-    explicit_specs = _merge_spec_maps(component_specs, dtxr_specs) if args.use_restraint_type_based_on_json else _merge_spec_maps(component_specs, xml_specs, dtxr_specs)
-    model = patched._build_conversion_model(document, explicit_specs, patched._node_name_kind_map(document, node_number_kind_map))
+    explicit_specs = (
+        dict(xml_specs)
+        if args.use_restraint_type_based_on_json and patched._xml_restraints_are_authoritative(input_xml, support_config)
+        else (_prefer_xml_spec_map(xml_specs, component_specs, dtxr_specs) if args.use_restraint_type_based_on_json else _merge_spec_maps(component_specs, xml_specs, dtxr_specs))
+    )
+    model = patched._build_conversion_model(
+        document,
+        explicit_specs,
+        patched._node_name_kind_map(document, node_number_kind_map),
+        support_config,
+    )
     temperature_map, pressure_map = patched._branch_case_maps(document)
     base._build_restraint_payload = _direction_enabled_restraint_payload_factory(support_config)
     base._build_elements_payload = patched._patched_elements_payload_factory(temperature_map, pressure_map, insulation_density_map, hydro_pressure_map, support_config)  # type: ignore[assignment]

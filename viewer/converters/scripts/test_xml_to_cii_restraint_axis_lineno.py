@@ -365,6 +365,41 @@ class TestSupportTagConfig(unittest.TestCase):
             if idx % 4 in (0, 1):
                 self.assertEqual(payload_off[idx], payload_on[idx])
 
+    def test_disable_tag_population_blanks_support_like_nodename_rows(self):
+        xml_text = """<?xml version="1.0"?>
+<PipeStressExport>
+  <Metadata><Units>SI</Units><RestrainOpenEnds>No</RestrainOpenEnds></Metadata>
+  <Pipe>
+    <Branch><Branchname>/B1</Branchname>
+      <Node>
+        <NodeNumber>10</NodeNumber><NodeName>PS-100</NodeName><Endpoint>0</Endpoint><ComponentType>PIPE</ComponentType>
+        <OutsideDiameter>100</OutsideDiameter><WallThickness>5</WallThickness>
+        <CorrosionAllowance>0</CorrosionAllowance><InsulationThickness>0</InsulationThickness>
+        <Position>0 0 0</Position>
+      </Node>
+      <Node>
+        <NodeNumber>20</NodeNumber><NodeName>REST+GUIDE</NodeName><Endpoint>0</Endpoint><ComponentType>ATTA</ComponentType>
+        <OutsideDiameter>100</OutsideDiameter><WallThickness>5</WallThickness>
+        <CorrosionAllowance>0</CorrosionAllowance><InsulationThickness>0</InsulationThickness>
+        <Position>1000 0 0</Position>
+        <Restraint><Type>+Y</Type><Stiffness>1751270000000</Stiffness><Gap>0</Gap><Friction>0.3</Friction></Restraint>
+      </Node>
+    </Branch>
+  </Pipe>
+</PipeStressExport>"""
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "support_name.xml"
+            path.write_text(xml_text, encoding="utf-8")
+            document = X._parse_xml_document(path)
+
+        edges = X._build_edges(document.branches)
+        names_off, _ = X._build_nodename_lines(edges, {"disableCiiSupportTagPopulation": False})
+        names_on, _ = X._build_nodename_lines(edges, {"disableCiiSupportTagPopulation": True})
+
+        self.assertTrue(any("REST+GUIDE" in line for line in names_off))
+        self.assertFalse(any("REST+GUIDE" in line for line in names_on))
+        self.assertTrue(any("PS-100" in line for line in names_on))
+
 
 if __name__ == "__main__":
     unittest.main()

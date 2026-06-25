@@ -10,7 +10,7 @@ import { deriveLineKeyFromBranchName } from '../../../../converters/xml-cii2019-
 import { buildPipingClassIndex } from '../../../../converters/xml-cii2019-core/piping-class-resolver.js';
 import { resolveBranchProcessData } from '../../../../converters/xml-cii2019-core/branch-process-resolver.js';
 import { buildStagedDtxrIndex, resolveXmlCiiNodeDtxr } from '../../../../converters/xml-cii2019-core/dtxr-resolver.js';
-import { xmlCiiDtxrPsForNode, xmlCiiDtxrPosForNode, buildStagedDtxrPositionIndex } from '../../../../converters/xml-cii2019-core/dtxr-resolver.js';
+import { xmlCiiDtxrPsForNode, xmlCiiDtxrPosForNode, buildStagedDtxrPositionIndex, xmlCiiCalibrateDtxrPositionIndex } from '../../../../converters/xml-cii2019-core/dtxr-resolver.js';
 import {
   findWeightMasterMatch,
   collectXmlCiiZeroRigidWeightIssues,
@@ -27,8 +27,10 @@ import {
 } from '../../../../converters/xml-cii2019-core/weight-match-model.js';
 import {
   buildStagedSupportIndex,
-  xmlCiiTypeEntriesFromSupportKind,
+  calibrateStagedSupportIndexCoordinates,
+  xmlCiiRestraintEntriesFromSupportMatch,
   xmlCiiTypeEntryFromExistingRestraint,
+  dedupeXmlCiiRestraintEntries,
   applyXmlRestraints
 } from '../../../../converters/xml-cii2019-core/support-mapping.js';
 
@@ -495,9 +497,21 @@ export async function enrichXmlForCii2019(xmlTextVal, stagedJsonText, options = 
   await loadXmlCiiWeightMasterRows(config, diagnostics);
   await loadXmlCiiMasterRows(config.pipingClass, [], 'piping-class', diagnostics);
   await loadXmlCiiMaterialMap(config, diagnostics);
-  const stagedSupportIndex = buildStagedSupportIndex(stagedJsonText, config, diagnostics);
+  let stagedSupportIndex = buildStagedSupportIndex(stagedJsonText, config, diagnostics);
   const stagedComponentIndex = buildStagedComponentIndex(stagedJsonText, config);
-  const stagedDtxrPositionIndex = buildStagedDtxrPositionIndex(stagedJsonText, config);
+  let stagedDtxrPositionIndex = buildStagedDtxrPositionIndex(stagedJsonText, config);
+  stagedDtxrPositionIndex = xmlCiiCalibrateDtxrPositionIndex(stagedDtxrPositionIndex, document, config);
+  if (stagedDtxrPositionIndex?.inferredOffset) {
+    stagedSupportIndex = calibrateStagedSupportIndexCoordinates(stagedSupportIndex, stagedDtxrPositionIndex.inferredOffset, config);
+    diagnostics.push({
+      type: 'dtxr-position-offset-calibrated',
+      samples: stagedDtxrPositionIndex.calibration?.samples || 0,
+      uniqueTags: stagedDtxrPositionIndex.calibration?.uniqueTags || 0,
+      xOffset: stagedDtxrPositionIndex.inferredOffset.x,
+      yOffset: stagedDtxrPositionIndex.inferredOffset.y,
+      zOffset: stagedDtxrPositionIndex.inferredOffset.z,
+    });
+  }
   const tolerance = toFiniteNumber(config.coordinateTolerance, 1);
   const stats = { removedDuplicateSupports: 0, normalizedRestraints: 0, stagedSupportsMapped: 0, dtxrPsAnnotations: 0, dtxrPosAnnotations: 0, branchLineKeys: 0, lineListMatches: 0, processAnnotations: 0, ratingAnnotations: 0, weightAnnotations: 0 };
   diagnostics.push({ type: 'config', duplicateSupportPolicy: config.duplicateSupportPolicy, coordinateTolerance: tolerance, rating: config.rating, weight: { ...config.weight, masterRows: Array.isArray(config.weight?.masterRows) ? `${config.weight.masterRows.length} row(s)` : 'none' } });
@@ -640,22 +654,19 @@ export async function enrichXmlForCii2019(xmlTextVal, stagedJsonText, options = 
     const componentType = xmlText(node, 'ComponentType').toUpperCase();
     const positionKey = xmlPositionKey(xmlText(node, 'Position'), tolerance);
     const coordMatches = positionKey ? (stagedSupportIndex.byCoord.get(positionKey) || []) : [];
-    const tagMatches = [...new Set(
-      [xmlText(node, 'NodeName'), xmlText(node, 'ComponentRefNo'), ...xmlChildrenByName(node, 'SupportTag').map(c => toText(c.textContent))]
-        .flatMap(text => {
-          const tags = new Set();
-          for (const match of text.matchAll(/\/?PS-\d+(?:\.\d+)?/ig)) {
-            const cleanTag = match[0].trim().toUpperCase().replace(/^\/+/, '').replace(/\.\d+$/, '');
-            if (cleanTag) tags.add(cleanTag);
-          }
-          return [...tags];
-        })
-    )].flatMap((tag) => stagedSupportIndex.byTag.get(tag) || []);
+    const supportTags = xmlNodeSupportTags(node);
+    const tagMatches = supportTags.flatMap((tag) => stagedSupportIndex.byTag.get(tag) || []);
+    const relaxedTagMatches = tagMatches.length ? [] : relaxedSameDtxrPosSupportMatches(supportTags, coordMatches);
     
-    const stagedMatches = tagMatches.length > 0 ? tagMatches : coordMatches;
+    const stagedMatches = tagMatches.length > 0
+      ? mergeUniqueSupportMatches(tagMatches, coordMatches)
+      : (relaxedTagMatches.length > 0 ? relaxedTagMatches : coordMatches);
+    const supportMatchMethod = tagMatches.length > 0
+      ? (coordMatches.length > 0 ? 'ps-tag+coordinate-cluster' : 'ps-tag')
+      : (relaxedTagMatches.length > 0 ? 'ps-tag-relaxed-same-dtxr-pos' : 'coordinate-multi');
     const staged = stagedMatches[0] || null;
     const restraints = xmlChildrenByName(node, 'Restraint');
-    const combinedTypes = Array.from(new Set(stagedMatches.flatMap(m => xmlCiiTypeEntriesFromSupportKind(m.kind, config))));
+    const combinedTypes = dedupeXmlCiiRestraintEntries(stagedMatches.flatMap(m => xmlCiiRestraintEntriesFromSupportMatch(m, node, config)));
     const dtxrPs = xmlCiiDtxrPsForNode(node, stagedComponentIndex);
     if (dtxrPs.text) {
       xmlSetText(document, node, 'DTXR_PS', dtxrPs.text);
@@ -671,7 +682,7 @@ export async function enrichXmlForCii2019(xmlTextVal, stagedJsonText, options = 
     if (staged) {
       const allKinds = Array.from(new Set(stagedMatches.map(m => m.kind).filter(Boolean)));
       const xmlTypes = restraints.map((r) => xmlText(r, 'Type')).filter(Boolean).join('+');
-      diagnostics.push({ type: 'support-match', nodeNumber: xmlText(node, 'NodeNumber'), nodeName: xmlText(node, 'NodeName'), method: tagMatches.length > 0 ? 'ps-tag' : 'coordinate-multi', kind: allKinds.join('+'), xmlRestraintTypes: xmlTypes, restraintTypes: combinedTypes.join('+'), stagedName: staged.component?.name || staged.attrs?.NAME || '', tags: xmlNodeSupportTags(node) });
+      diagnostics.push({ type: 'support-match', nodeNumber: xmlText(node, 'NodeNumber'), nodeName: xmlText(node, 'NodeName'), method: supportMatchMethod, kind: allKinds.join('+'), xmlRestraintTypes: xmlTypes, restraintTypes: combinedTypes.join('+'), stagedName: staged.component?.name || staged.attrs?.NAME || '', tags: supportTags });
     }
 
     let targetEntries = [];
@@ -719,9 +730,48 @@ function xmlNodeSupportTags(node) {
   const tags = new Set();
   for (const text of parts) {
     for (const match of text.matchAll(/\/?PS-\d+(?:\.\d+)?/ig)) {
-      const cleanTag = match[0].trim().toUpperCase().replace(/^\/+/, '').replace(/\.\d+$/, '');
+      const cleanTag = match[0].trim().toUpperCase().replace(/^\/+/, '');
       if (cleanTag) tags.add(cleanTag);
     }
   }
   return [...tags];
+}
+
+function supportTagBase(value) {
+  return toText(value).trim().toUpperCase().replace(/^\/+/, '').replace(/\.\d+$/, '');
+}
+
+function relaxedSameDtxrPosSupportMatches(xmlSupportTags, coordMatches) {
+  if (!Array.isArray(coordMatches) || !coordMatches.length) return [];
+  const baseTags = new Set(xmlSupportTags.map(supportTagBase).filter(Boolean));
+  if (!baseTags.size) return [];
+  return coordMatches.filter((match) => {
+    const stagedBaseTags = Array.isArray(match?.supportBaseTags) ? match.supportBaseTags : [];
+    return stagedBaseTags.some((tag) => baseTags.has(tag));
+  });
+}
+
+function stagedSupportMatchKey(match) {
+  const attrs = match?.attrs || {};
+  return [
+    attrs.REF,
+    attrs.NAME,
+    attrs.CMPSUPREFN,
+    match?.component?.name,
+    match?.primaryKind || match?.kind,
+  ].map(toText).join('|');
+}
+
+function mergeUniqueSupportMatches(...groups) {
+  const out = [];
+  const seen = new Set();
+  for (const group of groups) {
+    for (const match of Array.isArray(group) ? group : []) {
+      const key = stagedSupportMatchKey(match);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push(match);
+    }
+  }
+  return out;
 }

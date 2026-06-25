@@ -25,6 +25,7 @@ const files = {
   oldRichShim: 'viewer/tabs/model-converters/xml-cii-rich-workflow-popup.js',
   modelTab: 'viewer/tabs/model-converters/ModelConvertersTab.js',
   nativePanels: 'viewer/tabs/model-converters/xml-cii-popup-native-panels.js',
+  legacyAdapter: 'viewer/tabs/model-converters/legacy-adapter.js',
   enrichmentRunParity: 'viewer/tabs/model-converters/converters/xmltocii2019_helper/enrichment-run-parity.js',
   invocationBuilder: 'viewer/converters/invocation-builder.js',
 };
@@ -42,6 +43,7 @@ const oldGenericShim = read(files.oldGenericShim);
 const oldRichShim = read(files.oldRichShim);
 const modelTab = read(files.modelTab);
 const nativePanels = read(files.nativePanels);
+const legacyAdapter = read(files.legacyAdapter);
 const enrichmentRunParity = read(files.enrichmentRunParity);
 const invocationBuilder = read(files.invocationBuilder);
 
@@ -102,13 +104,17 @@ assert(oldGenericShim.includes('Deprecated compatibility shim'), 'old generic po
 assert(oldRichShim.includes('Deprecated compatibility shim'), 'old rich popup filename must remain a compatibility shim');
 assert(oldRichShim.includes('installXmlCiiWorkflowPopup as installXmlCiiRichWorkflowPopup'), 'old rich popup shim must forward to neutral popup boundary');
 
-assert(nativePanels.includes('Condense Rigid / split condensed valve-flange nodes (XSD)'), 'XSD condense option must remain rendered in popup');
-assert(nativePanels.includes('Condense Rigid / split condensed valve-flange nodes (Resolved)'), 'Resolved condense option must remain rendered in popup');
+assert(nativePanels.includes('Record source/XSD condensed rigid intent'), 'XSD condense option must remain rendered in popup with clear metadata-only label');
+assert(nativePanels.includes('Apply resolved split for condensed valve/flange/rigid nodes'), 'Resolved condense option must remain rendered in popup with clear action label');
+assert(nativePanels.includes('Suppress CII support tag/name labels'), 'support tag suppress option must clarify that support-kind NODENAME labels are also blanked');
+assert(legacyAdapter.includes('data-xml-cii-config-bool="condenseRigidXsd"'), 'legacy config tab must expose source/XSD condensed rigid intent option');
+assert(legacyAdapter.includes('data-xml-cii-config-bool="splitCondensedValveFlange"'), 'legacy config tab must expose resolved condensed split option');
+assert(legacyAdapter.includes('Suppress ON blanks Support Tag/GUID restraint records and support-kind-only NODENAME rows'), 'legacy config tab must document support-kind-only NODENAME suppression');
 assert(nativePanels.includes('data-xml-cii-unified-master-preview'), 'fallback popup must expose enhanced per-master preview rows for the unified workflow');
 assert(!nativePanels.includes('Workflow 1 keeps master setup compact'), 'fallback popup must not show retired Workflow 1 compact wording');
 assert(!nativePanels.includes('Workflow 1 / Workflow 2'), 'fallback popup config notes must not expose retired dual-workflow wording');
 assert(nativePanels.includes("master.key === 'pipingClass'"), 'native panels must disable default loading for piping-class master');
-assert(enrichmentRunParity.includes('process-provenance') && enrichmentRunParity.includes('Pressure2 / Hydro/Test Pressure'), 'process provenance diagnostics must still include Hydro/Test Pressure');
+assert(enrichmentRunParity.includes('process-provenance') && enrichmentRunParity.includes('Hydro/Test Pressure'), 'process provenance diagnostics must still include Hydro/Test Pressure');
 assert(enrichmentRunParity.includes('split-condensed-valve-flange-resolved'), 'resolved condense diagnostics must still exist');
 assert(invocationBuilder.includes('--split-condensed-valve-flange'), 'worker invocation must still forward split-condensed flag');
 

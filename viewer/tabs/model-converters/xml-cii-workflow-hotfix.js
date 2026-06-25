@@ -53,7 +53,7 @@ async function runXmlCiiWithWorkflowFix(context) {
       } catch {}
     }
   }
-  return { ...response, outputs, logs: { ...(response.logs || {}), stdout: [...(response.logs?.stdout || []), 'XML CII workflow fix: Pressure2/hydro and resolved negative valve/flange blocks applied.'] } };
+  return { ...response, outputs, logs: { ...(response.logs || {}), stdout: [...(response.logs?.stdout || []), 'XML CII workflow fix: HydroPressure and resolved negative valve/flange blocks applied.'] } };
 }
 
 function patchRunner() {
@@ -69,7 +69,7 @@ function style() {
   s.textContent = `.xml-cii-hotfix-check{display:flex;flex-direction:row;align-items:center;gap:8px;color:#d8ecff;font-size:12px;line-height:1.35}.xml-cii-hotfix-info{border:1px solid #315070;border-radius:8px;padding:8px 10px;background:#102033;color:#bcd8f7;font-size:12px;margin:8px 0}`;
   document.head.appendChild(s);
 }
-function checkbox(kind, checked) { const key = kind === 'xsd' ? 'condenseRigidXsd' : 'splitCondensedValveFlange'; const label = kind === 'xsd' ? 'Condense Rigid / split condensed valve-flange nodes (XSD)' : 'Condense Rigid / split condensed valve-flange nodes (Resolved)'; return `<label class="xml-cii-hotfix-check"><input type="checkbox" data-xml-cii-hotfix-condense="${key}" ${checked ? 'checked' : ''}> <span>${label}</span></label>`; }
+function checkbox(kind, checked) { const key = kind === 'xsd' ? 'condenseRigidXsd' : 'splitCondensedValveFlange'; const label = kind === 'xsd' ? 'Record source/XSD condensed rigid intent' : 'Apply resolved split for condensed valve/flange/rigid nodes'; return `<label class="xml-cii-hotfix-check"><input type="checkbox" data-xml-cii-hotfix-condense="${key}" ${checked ? 'checked' : ''}> <span>${label}</span></label>`; }
 function setBool(root, key, checked) { const cfg = normalise(readConfig(root)); cfg[key] = !!checked; if (key === 'splitCondensedValveFlange') { cfg.splitCondensedValveFlange = !!checked; cfg.split_condensed_valve_flange = !!checked; } if (key === 'condenseRigidXsd') { cfg.condenseRigidXsd = !!checked; cfg.condense_rigid_xsd = !!checked; } writeConfig(root, cfg); return cfg; }
 function injectControls(scope, root) {
   const cfg = normalise(readConfig(root));
@@ -78,7 +78,7 @@ function injectControls(scope, root) {
   const anchor = scope.querySelector('[data-xml-cii-run-option="kgToNewton"]')?.closest('label') || scope.querySelector('[data-native-run-option="kgToNewton"]')?.closest('label');
   if (anchor && !scope.querySelector('[data-xml-cii-hotfix-condense="splitCondensedValveFlange"]')) anchor.insertAdjacentHTML('afterend', checkbox('xsd', xsd) + checkbox('resolved', resolved));
   const configAnchor = scope.querySelector('[data-native-config-bool="disableCiiSupportTagPopulation"]')?.closest('.xml-cii-native-grid') || scope.querySelector('[data-old-workflow-config-json]')?.parentElement;
-  if (configAnchor && !scope.querySelector('[data-xml-cii-hotfix-info]')) configAnchor.insertAdjacentHTML('afterend', '<div class="xml-cii-hotfix-info" data-xml-cii-hotfix-info><strong>ⓘ XML→CII enrichment logic</strong><br>Pressure1, Hydro Pressure/Pressure2, Temperature1..3 and density are copied from the same Preview resolver into enriched XML. Resolved condense constructs negative FLAN/GASK/VALV/RIGID/INST chains before CII generation.</div>');
+  if (configAnchor && !scope.querySelector('[data-xml-cii-hotfix-info]')) configAnchor.insertAdjacentHTML('afterend', '<div class="xml-cii-hotfix-info" data-xml-cii-hotfix-info><strong>ⓘ XML→CII enrichment logic</strong><br>Pressure1, HydroPressure, Temperature1..3 and density are copied from the same Preview resolver into enriched XML. Resolved condense constructs negative FLAN/GASK/VALV/RIGID/INST chains before CII generation.</div>');
   scope.querySelectorAll('[data-xml-cii-hotfix-condense]').forEach((input) => {
     if (input.dataset.hotfixBound === 'true') return;
     input.dataset.hotfixBound = 'true';

@@ -39,7 +39,7 @@ DEFAULT_SUPPORT_CONFIG: dict[str, Any] = {
     "splitCondensedValveFlange": False,
     "keywordRules": [
         {"kind": "GUIDE", "patterns": [r"\bGUIDE\b", r"\bGUI\b", r"\bPDO-TYPE-603\b"]},
-        {"kind": "LINESTOP", "patterns": [r"\bLINE\s*STOP\b", r"\bLINESTOP\b", r"\bLIMIT\s*STOP\b", r"\bLIMIT\b", r"\bLIM\b", r"\bDIRECTIONAL\s+ANCHOR\b", r"\bXST\d+\b"]},
+        {"kind": "LINESTOP", "patterns": [r"\bLINE\s*STOP\b", r"\bLINESTOP\b", r"\bLIMIT\s*STOP\b", r"\bAXIAL\s*STOP\b", r"\bDIRECTIONAL\s+ANCHOR\b"]},
         {"kind": "REST", "patterns": [r"\bREST\b", r"\bSHOE\b", r"\bSADDLE\b", r"\bWEAR\s+PLATE\b", r"\bPAD\b"]},
         {"kind": "ANCHOR", "patterns": [r"\bANCHOR\b"]},
         {"kind": "SPRING", "patterns": [r"\bSPRING\b", r"\bHANGER\b"]},
@@ -392,6 +392,7 @@ def _apply_process_data_to_xml(xml_path: Path, support_config: dict[str, Any]) -
     if namespace:
         ET.register_namespace("", namespace)
     changed = False
+    skip_dtxr_restraint_fallback = _xml_restraints_are_authoritative(xml_path, support_config)
     insulation_density_default = _to_float(support_config.get("insulationDensityDefault"), 210.0)
     for branch in root.iter():
         if _local_name(branch.tag) != "Branch":
@@ -425,7 +426,8 @@ def _apply_process_data_to_xml(xml_path: Path, support_config: dict[str, Any]) -
             max_insulation = max(max_insulation, _numeric_text(_child_text(node, namespace, "InsulationThickness")) or 0.0)
             if _child_text(node, namespace, "ComponentType").upper() in NO_AUTO_WEIGHT_COMPONENT_TYPES and (_numeric_text(_child_text(node, namespace, "Weight")) or 0.0) != 0.0:
                 _set_child(node, namespace, "Weight", "0"); changed = True
-            if _apply_dtxr_restraints_to_node(node, namespace, support_config, use_dtxr_only=True):
+            has_explicit_restraints = any(_local_name(child.tag) == "Restraint" for child in list(node))
+            if not skip_dtxr_restraint_fallback and not has_explicit_restraints and _apply_dtxr_restraints_to_node(node, namespace, support_config, use_dtxr_only=True):
                 changed = True
         _set_child(branch, namespace, "InsulationDensity", insulation_density_default if max_insulation >= 50.0 else 0)
         changed = True
@@ -456,9 +458,35 @@ def _branch_hydro_pressure_map(xml_path: Path) -> dict[str, float]:
     return out
 
 
-def _specs_from_dtxr_text(text: str, support_config: dict[str, Any]) -> tuple[base.RestraintSpec, ...]:
+def _parse_cmpsupgap_value(text: str) -> float | None:
+    match = re.search(r"[-+]?\d*\.?\d+(?:[Ee][-+]?\d+)?", _safe_text(text))
+    if not match:
+        return None
+    value = float(match.group(0))
+    return value if math.isfinite(value) else None
+
+
+def _restraint_type_uses_gap(type_text: str) -> bool:
+    try:
+        return int(round(base._restraint_type_to_code(type_text))) == SUPPORT_KIND_TO_CII_CODE["LINESTOP"]
+    except Exception:
+        return False
+
+
+def _line_stop_gap_for_node(node: ET.Element, namespace: str) -> float | None:
+    for restraint in node.findall(_q(namespace, "Restraint")):
+        if not _restraint_type_uses_gap(_child_text(restraint, namespace, "Type")):
+            continue
+        for name in ("CMPSUPGAP", "Gap"):
+            parsed = _parse_cmpsupgap_value(_child_text(restraint, namespace, name))
+            if parsed is not None:
+                return parsed
+    return None
+
+
+def _specs_from_dtxr_text(text: str, support_config: dict[str, Any], gap_by_kind: dict[str, float] | None = None) -> tuple[base.RestraintSpec, ...]:
     stiffness = _to_float(support_config.get("defaultStiffness"), base.DEFAULT_LINEAR_STIFFNESS)
-    gap = _to_float(support_config.get("defaultGap"), 0.0)
+    default_gap = _to_float(support_config.get("defaultGap"), 0.0)
     friction = _to_float(support_config.get("defaultFriction"), 0.3)
     specs: list[base.RestraintSpec] = []
     seen: set[int] = set()
@@ -468,9 +496,10 @@ def _specs_from_dtxr_text(text: str, support_config: dict[str, Any]) -> tuple[ba
             code = base._restraint_type_to_code(SUPPORT_KIND_TO_XML_TYPE.get(kind, kind))
         xml_type = SUPPORT_KIND_TO_XML_TYPE.get(kind, kind)
         spec_friction = -1.0101 if (_truthy(support_config.get("useFrictionSentinelForNonYSupports", True)) and xml_type != "+Y") else friction
+        spec_gap = (gap_by_kind or {}).get(kind, default_gap)
         if code not in seen:
             seen.add(code)
-            specs.append(base.RestraintSpec(type_code=code, stiffness=stiffness, gap=gap, friction=spec_friction, is_open_end=False))
+            specs.append(base.RestraintSpec(type_code=code, stiffness=stiffness, gap=spec_gap, friction=spec_friction, is_open_end=False))
     return tuple(specs)
 
 
@@ -493,8 +522,21 @@ def _node_dtxr_texts(xml_path: Path) -> dict[int, str]:
 def _build_keyword_restraint_specs(xml_path: Path, support_config: dict[str, Any]) -> tuple[dict[int, tuple[base.RestraintSpec, ...]], dict[str, str]]:
     specs_by_node: dict[int, tuple[base.RestraintSpec, ...]] = {}
     support_map: dict[str, str] = {}
+    node_gaps: dict[int, float] = {}
+    root = ET.parse(xml_path).getroot()
+    namespace = _namespace(root.tag)
+    for node in root.iter():
+        if _local_name(node.tag) != "Node":
+            continue
+        node_no = base._parse_optional_int(_child_text(node, namespace, "NodeNumber"), "Node/NodeNumber")
+        if node_no is None or node_no <= 0:
+            continue
+        gap = _line_stop_gap_for_node(node, namespace)
+        if gap is not None:
+            node_gaps[node_no] = gap
     for node_no, text in _node_dtxr_texts(xml_path).items():
-        specs = _specs_from_dtxr_text(text, support_config)
+        gap_by_kind = {"LINESTOP": node_gaps[node_no], "LIMIT": node_gaps[node_no]} if node_no in node_gaps else None
+        specs = _specs_from_dtxr_text(text, support_config, gap_by_kind)
         if specs:
             specs_by_node[node_no] = specs
             kinds = _kind_from_dtxr(text, support_config)
@@ -514,6 +556,18 @@ def _merge_specs(left: tuple[base.RestraintSpec, ...], right: tuple[base.Restrai
         if len(out) >= base.RESTRAINT_SLOTS_PER_AUX:
             break
     return tuple(out)
+
+
+def _prefer_xml_specs(
+    xml_specs: dict[int, tuple[base.RestraintSpec, ...]],
+    *fallback_maps: dict[int, tuple[base.RestraintSpec, ...]],
+) -> dict[int, tuple[base.RestraintSpec, ...]]:
+    out = dict(xml_specs)
+    for spec_map in fallback_maps:
+        for node_number, specs in spec_map.items():
+            if node_number not in out or not out[node_number]:
+                out[node_number] = specs
+    return out
 
 
 def _node_name_kind_map(document: base.XmlDocument, node_number_kind_map: dict[str, str]) -> dict[str, str]:
@@ -628,18 +682,44 @@ def _patched_elements_payload_factory(temperature_map: dict[str, tuple[float, ..
 def _maybe_enrich_from_staged_json(input_xml: Path, staged_json: Path | None, support_config: dict[str, Any]) -> Path:
     if staged_json is None:
         return input_xml
+    if _xml_has_dtxr_annotations(input_xml):
+        support_config["_inputAlreadyEnriched"] = True
+        return input_xml
     if addon is None:
         raise ValueError("--staged-json requires xml_to_cii2019_master_addon.py to be available.")
     result = addon.enrich_xml_addons(input_xml, linelist=None, overrides=None, staged_json=staged_json.read_text(encoding="utf-8-sig"), dtxr_position_offset=support_config.get("dtxrPositionOffset") if isinstance(support_config, dict) else None)
     temp_path = Path(tempfile.gettempdir()) / f"{input_xml.stem}_dtxr_enriched.xml"
     temp_path.write_text(result["xmlText"], encoding="utf-8")
+    support_config["_generatedDtxrEnrichment"] = True
     return temp_path
 
 
-def _build_conversion_model(document: base.XmlDocument, explicit_specs: dict[int, tuple[base.RestraintSpec, ...]], support_map: dict[str, str] | None) -> base.ConversionModel:
+def _xml_has_dtxr_annotations(xml_path: Path) -> bool:
+    root = ET.parse(xml_path).getroot()
+    namespace = _namespace(root.tag)
+    for node in root.iter():
+        if _local_name(node.tag) != "Node":
+            continue
+        if _child_text(node, namespace, "DTXR_POS") or _child_text(node, namespace, "DTXR_PS"):
+            return True
+    return False
+
+
+def _xml_restraints_are_authoritative(xml_path: Path, support_config: dict[str, Any]) -> bool:
+    return bool(support_config.get("_inputAlreadyEnriched")) or (
+        _xml_has_dtxr_annotations(xml_path) and not bool(support_config.get("_generatedDtxrEnrichment"))
+    )
+
+
+def _build_conversion_model(
+    document: base.XmlDocument,
+    explicit_specs: dict[int, tuple[base.RestraintSpec, ...]],
+    support_map: dict[str, str] | None,
+    support_config: dict[str, Any] | None = None,
+) -> base.ConversionModel:
     edges = base._build_edges(document.branches)
     degrees = base._build_degree_map(edges)
-    nodename_lines, edge_to_nodename_index = base._build_nodename_lines(edges)
+    nodename_lines, edge_to_nodename_index = base._build_nodename_lines(edges, support_config)
     bend_edges, edge_to_bend_index = base._build_bend_indices(edges)
     rigid_edges, edge_to_rigid_index = base._build_rigid_indices(edges)
     sif_edges, edge_to_sif_index = base._build_sif_indices(edges)
@@ -677,11 +757,8 @@ def main() -> None:
     document = base._parse_xml_document(input_xml)
     dtxr_specs, node_number_kind_map = _build_keyword_restraint_specs(input_xml, support_config)
     xml_specs = base._build_explicit_restraint_specs(document.branches)
-    explicit_specs = dtxr_specs if args.use_restraint_type_based_on_json else dict(xml_specs)
-    if not args.use_restraint_type_based_on_json:
-        for node_number, specs in dtxr_specs.items():
-            explicit_specs[node_number] = _merge_specs(explicit_specs.get(node_number, tuple()), specs)
-    model = _build_conversion_model(document, explicit_specs, _node_name_kind_map(document, node_number_kind_map))
+    explicit_specs = dict(xml_specs) if _xml_restraints_are_authoritative(input_xml, support_config) else _prefer_xml_specs(xml_specs, dtxr_specs)
+    model = _build_conversion_model(document, explicit_specs, _node_name_kind_map(document, node_number_kind_map), support_config)
     temperature_map, pressure_map = _branch_case_maps(document)
     base._build_restraint_payload = _patched_build_restraint_payload_factory(support_config)
     base._build_elements_payload = _patched_elements_payload_factory(temperature_map, pressure_map, insulation_density_map, hydro_pressure_map, support_config)  # type: ignore[assignment]

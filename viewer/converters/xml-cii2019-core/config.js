@@ -132,9 +132,9 @@ const DEFAULT_PIPING_CLASS_MATCH = Object.freeze({
 const DEFAULT_TEE_SIF_TYPE_MAPPING = Object.freeze([
   { code: 1, label: 'Reinforced Fabricated Tee', patterns: ['\\bREINFORCED\\b.*\\bFAB(?:RICATED)?\\b.*\\bTEE\\b', '\\bFAB(?:RICATED)?\\b.*\\bREINFORCED\\b.*\\bTEE\\b', '\\bREINF(?:ORCED)?\\b.*\\bTEE\\b'] },
   { code: 2, label: 'Unreinforced Fabricated Tee', patterns: ['\\bUN[-\\s]?REINFORCED\\b.*\\bFAB(?:RICATED)?\\b.*\\bTEE\\b', '\\bFAB(?:RICATED)?\\b.*\\bUN[-\\s]?REINFORCED\\b.*\\bTEE\\b', '\\bUNREINF(?:ORCED)?\\b.*\\bTEE\\b'] },
-  { code: 3, label: 'Welding Tee', patterns: ['\\bWELD(?:ING)?\\s+TEE\\b', '\\bTEE\\b.*\\bBW\\b', '\\bTEE\\b.*\\bBUTT\\s*WELD\\b', '\\bTEE\\s+(?:EQUAL|REDUC(?:ING|ER)?)\\b', '\\bTEEB?\\b'] },
+  { code: 3, label: 'Welding Tee', patterns: ['\\bWELD(?:ING)?\\s+TEE\\b', '\\bTEE\\b.*\\bB\\s*\\.?\\s*W\\.?\\b', '\\bTEE\\b.*\\bBUTT\\s*[- ]?\\s*WELD\\b', '\\bTEE\\b.*\\bBUTTWELD\\b', '\\bTEE\\s+(?:EQUAL|REDUC(?:ING|ER)?)\\b', '\\bTEEB?\\b'] },
   { code: 4, label: 'Sweepolet', patterns: ['\\bSWEEPOLET\\b', '\\bSWEEP\\s*OLET\\b'] },
-  { code: 5, label: 'Weldolet', patterns: ['\\bWELDOLET\\b', '\\bWELD\\s*OLET\\b', '\\bWOLET\\b'] },
+  { code: 5, label: 'Weldolet', patterns: ['\\bWELDOLET\\b', '\\bWELD\\s*OLET\\b', '\\bWOLET\\b', '\\bBRANCH\\s+OUTLET\\b.*\\bB\\s*\\.?\\s*W\\.?\\b', '\\bBRANCH\\s+FITTING\\b.*\\bB\\s*\\.?\\s*W\\.?\\b', '\\bOLET\\b.*\\bB\\s*\\.?\\s*W\\.?\\b'] },
   { code: 6, label: 'Extruded Welding Tee', patterns: ['\\bEXTRUDED\\b.*\\bWELD(?:ING)?\\b.*\\bTEE\\b', '\\bEXTRUDED\\b.*\\bTEE\\b', '\\bEXT(?:RUDED)?\\s+TEE\\b'] },
 ]);
 
@@ -143,6 +143,10 @@ export function parseXmlCiiEnrichmentConfig(rawJson) {
     useFrictionSentinelForNonYSupports: true,
     convertDensityKgM3ToKgCm3: true,
     disableCiiSupportTagPopulation: false,
+    condenseRigidXsd: false,
+    condense_rigid_xsd: false,
+    splitCondensedValveFlange: false,
+    split_condensed_valve_flange: false,
     duplicateSupportPolicy: 'prefer_datum',
     coordinateTolerance: 1,
     dtxrPositionOffset: { enabled: true, xOffset: 150500, yOffset: 43000, zOffset: 100000, tolerance: 0.5 },

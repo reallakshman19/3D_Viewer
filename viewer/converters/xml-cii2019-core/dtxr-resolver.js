@@ -48,6 +48,10 @@ export function normalizeSupportTag(value) {
   return match ? match[0].toUpperCase() : '';
 }
 
+function supportTagBase(value) {
+  return normalizeSupportTag(value).replace(/\.\d+$/, '');
+}
+
 function supportTagsFromText(value) {
   const tags = new Set();
   for (const match of toText(value).matchAll(/\/?PS-\d+(?:\.\d+)?/ig)) {
@@ -253,6 +257,7 @@ export function buildStagedDtxrIndex(stagedJson, config = {}) {
 
   const byComponentRefNo = new Map();
   const byPsTag = new Map();
+  const byPsBaseTag = new Map();
   const byNodeNumber = new Map();
   const byNodeName = new Map();
   const byCoordKey = new Map();
@@ -282,7 +287,11 @@ export function buildStagedDtxrIndex(stagedJson, config = {}) {
     items.push(indexedItem);
 
     for (const ref of [attrs.ComponentRefNo, attrs.COMPONENTREFNO, attrs.componentRefNo, attrs.RefNo, attrs.REFNO, attrs.REF, attrs.NAME, item.componentRefNo, item.refNo, item.component?.refNo]) addArrayMap(byComponentRefNo, ref, indexedItem);
-    for (const tag of supportTagsFromAttrs(attrs, item.component?.name || '')) addArrayMap(byPsTag, tag, indexedItem);
+    for (const tag of supportTagsFromAttrs(attrs, item.component?.name || '')) {
+      addArrayMap(byPsTag, tag, indexedItem);
+      const baseTag = supportTagBase(tag);
+      if (baseTag) addArrayMap(byPsBaseTag, baseTag, indexedItem);
+    }
 
     const nodeNo = attrs.NodeNumber || attrs.NODE || '';
     if (nodeNo) byNodeNumber.set(String(nodeNo).trim(), indexedItem);
@@ -296,7 +305,8 @@ export function buildStagedDtxrIndex(stagedJson, config = {}) {
 
     let coord = null;
     for (const key of ['SUPPORTCOORD', 'POS', 'POSI', 'BPOS', 'APOS', 'LPOS', 'CPOS', 'HPOS', 'TPOS']) {
-      coord = normalizePoint(attrs[key]);
+      const rawCoord = normalizePoint(attrs[key]);
+      coord = key === 'POSI' ? xmlCiiApplyDtxrPositionOffset(rawCoord, config) : rawCoord;
       if (coord) break;
     }
     if (coord) {
@@ -307,7 +317,7 @@ export function buildStagedDtxrIndex(stagedJson, config = {}) {
     }
   }
 
-  return { items, byComponentRefNo, byPsTag, byNodeNumber, byNodeName, byCoordKey, byOwnerBranch, ownerItems };
+  return { items, byComponentRefNo, byPsTag, byPsBaseTag, byNodeNumber, byNodeName, byCoordKey, byOwnerBranch, ownerItems };
 }
 
 export function buildDtxrContext(stagedJsonText, config = {}) {
@@ -333,6 +343,30 @@ function candidateArrayFromMap(map, key) {
   if (!map || !key) return [];
   const direct = map.get(canonKey(key));
   return Array.isArray(direct) ? direct : (direct ? [direct] : []);
+}
+
+function sameDtxrPositionEvidence(xmlNode, indexed, config = {}) {
+  const xmlDtxrPos = cleanDtxr(getXmlNodeProperty(xmlNode, 'DTXR_POS') || getXmlNodeProperty(xmlNode, 'DtxrPos'));
+  const stagedDtxrPos = cleanDtxr(indexed?.dtxr || stagedComponentDtxr(indexed?.raw || indexed) || '');
+  if (xmlDtxrPos && stagedDtxrPos && xmlDtxrPos === stagedDtxrPos) return true;
+
+  const xmlPoint = normalizePoint(getXmlNodeProperty(xmlNode, 'Position'));
+  const stagedPoint = indexed?.coord || null;
+  if (!xmlPoint || !stagedPoint) return false;
+  const tolerances = [
+    toFiniteNumber(config?.dtxrPositionOffset?.tolerance, null),
+    toFiniteNumber(config?.dtxrCoordinateToleranceMm, null),
+    toFiniteNumber(config?.coordinateTolerance, 1),
+  ].filter(Number.isFinite);
+  const tolerance = Math.max(...tolerances, 0);
+  return xmlCiiPositionsMatch(xmlPoint, stagedPoint, tolerance || 1);
+}
+
+function relaxedPsTagCandidates(stagedIndex, xmlNode, tag, config = {}) {
+  const baseTag = supportTagBase(tag);
+  if (!baseTag || baseTag === normalizeSupportTag(tag)) return [];
+  return candidateArrayFromMap(stagedIndex?.byPsBaseTag, baseTag)
+    .filter((candidate) => sameDtxrPositionEvidence(xmlNode, candidate, config));
 }
 
 function emptyDtxrResult(reason = 'not-found') {
@@ -452,6 +486,13 @@ export function resolveDtxrForXmlNode({ xmlNode, context, purpose = 'component-d
       const byPs = chooseBestDtxrCandidate(candidateArrayFromMap(stagedIndex.byPsTag, tag), xmlNode, allowStagedConfig);
       if (byPs) {
         const hit = accept(resultFromStagedItem(byPs, { purpose, source: 'staged-ps-tag', matchedBy: 'ps-tag', matchedKey: tag, confidence: 1 }));
+        if (hit) return { ...hit, supportTags: tags, candidates: attempts };
+      }
+    }
+    for (const tag of tags) {
+      const byRelaxedPs = chooseBestDtxrCandidate(relaxedPsTagCandidates(stagedIndex, xmlNode, tag, config), xmlNode, allowStagedConfig);
+      if (byRelaxedPs) {
+        const hit = accept(resultFromStagedItem(byRelaxedPs, { purpose, source: 'staged-ps-tag-relaxed-same-dtxr-pos', matchedBy: 'ps-tag-relaxed-same-dtxr-pos', matchedKey: `${tag} -> ${supportTagBase(tag)}`, confidence: 0.95 }));
         if (hit) return { ...hit, supportTags: tags, candidates: attempts };
       }
     }
@@ -605,28 +646,120 @@ export function xmlCiiApplyDtxrPositionOffset(point, config) {
   return { x: point.x + option.xOffset, y: point.y + option.yOffset, z: point.z + option.zOffset };
 }
 
+function pointWithOffset(point, offset) {
+  if (!point || !offset) return null;
+  return { x: point.x + offset.x, y: point.y + offset.y, z: point.z + offset.z };
+}
+
 export function xmlCiiPositionsMatch(left, right, tolerance) {
   if (!left || !right) return false;
   return Math.abs(left.x - right.x) <= tolerance && Math.abs(left.y - right.y) <= tolerance && Math.abs(left.z - right.z) <= tolerance;
 }
 
 export function buildStagedDtxrPositionIndex(stagedJsonText, config) {
-  const empty = { entries: [], count: 0 };
+  const empty = { entries: [], byTag: new Map(), count: 0 };
   if (!toText(stagedJsonText).trim()) return empty;
   let parsed = null;
   try { parsed = JSON.parse(stagedJsonText); } catch { return empty; }
   const entries = [];
+  const byTag = new Map();
   for (const entry of walkStagedComponents(parsed)) {
     const attrs = entry.attrs || {};
-    const dtxr = stagedComponentDtxr(entry);
+    const dtxrPos = stagedComponentDtxr(entry);
+    const dtxrPs = stagedComponentDtxrPs(entry);
+    const dtxr = dtxrPos || dtxrPs;
     const cmpSupGap = stagedAttr(entry, ['CMPSUPGAP']);
     const rawPoint = normalizePoint(attrs.POSI);
     const point = xmlCiiApplyDtxrPositionOffset(rawPoint, config);
+    const supportTags = supportTagsFromAttrs(attrs, entry.component?.name || '');
     if (!dtxr && !cmpSupGap) continue;
     if (!point) continue;
-    entries.push({ ...entry, dtxr, cmpSupGap, point, rawPoint });
+    const indexed = { ...entry, dtxr, dtxrPos, dtxrPs, cmpSupGap, point, rawPoint, supportTags };
+    entries.push(indexed);
+    for (const tag of supportTags) {
+      if (!byTag.has(tag)) byTag.set(tag, []);
+      byTag.get(tag).push(indexed);
+    }
   }
-  return { entries, count: entries.length };
+  return { entries, byTag, count: entries.length };
+}
+
+function xmlCiiDtxrPositionAutoCalibration(config = {}) {
+  const option = config?.dtxrPositionOffset || {};
+  return {
+    enabled: option.enabled !== false && option.autoCalibrate !== false,
+    precision: Math.max(toFiniteNumber(option.autoCalibratePrecision, 1), 0.001),
+    minSamples: Math.max(Math.round(toFiniteNumber(option.autoCalibrateMinSamples, 2)), 1),
+  };
+}
+
+function offsetKey(offset, precision) {
+  return [offset.x, offset.y, offset.z].map((value) => Math.round(value / precision)).join('|');
+}
+
+function inferDtxrPositionOffsetFromXml(document, dtxrPositionIndex, config = {}) {
+  const calibration = xmlCiiDtxrPositionAutoCalibration(config);
+  if (!calibration.enabled || !document || !dtxrPositionIndex?.byTag) return null;
+  const nodes = typeof document.getElementsByTagName === 'function'
+    ? [...document.getElementsByTagName('Node')]
+    : [];
+  const grouped = new Map();
+  for (const node of nodes) {
+    const target = normalizePoint(xmlText(node, 'Position'));
+    if (!target) continue;
+    for (const tag of xmlNodeSupportTags(node)) {
+      for (const entry of dtxrPositionIndex.byTag.get(tag) || []) {
+        if (!entry?.rawPoint) continue;
+        const offset = {
+          x: target.x - entry.rawPoint.x,
+          y: target.y - entry.rawPoint.y,
+          z: target.z - entry.rawPoint.z,
+        };
+        const key = offsetKey(offset, calibration.precision);
+        const group = grouped.get(key) || { count: 0, x: 0, y: 0, z: 0, tags: new Set() };
+        group.count += 1;
+        group.x += offset.x;
+        group.y += offset.y;
+        group.z += offset.z;
+        group.tags.add(tag);
+        grouped.set(key, group);
+      }
+    }
+  }
+
+  let best = null;
+  for (const [key, group] of grouped.entries()) {
+    if (group.count < calibration.minSamples) continue;
+    if (!best || group.count > best.group.count) best = { key, group };
+  }
+  if (!best) return null;
+  return {
+    x: best.group.x / best.group.count,
+    y: best.group.y / best.group.count,
+    z: best.group.z / best.group.count,
+    samples: best.group.count,
+    uniqueTags: best.group.tags.size,
+    precision: calibration.precision,
+    key: best.key,
+  };
+}
+
+export function xmlCiiCalibrateDtxrPositionIndex(dtxrPositionIndex, document, config = {}) {
+  const inferred = inferDtxrPositionOffsetFromXml(document, dtxrPositionIndex, config);
+  if (!inferred) return dtxrPositionIndex;
+  const offset = { x: inferred.x, y: inferred.y, z: inferred.z };
+  const entries = [];
+  const byTag = new Map();
+  for (const entry of dtxrPositionIndex.entries || []) {
+    const point = pointWithOffset(entry.rawPoint, offset) || entry.point || null;
+    const indexed = { ...entry, point, inferredOffset: offset };
+    entries.push(indexed);
+    for (const tag of indexed.supportTags || []) {
+      if (!byTag.has(tag)) byTag.set(tag, []);
+      byTag.get(tag).push(indexed);
+    }
+  }
+  return { ...dtxrPositionIndex, entries, byTag, count: entries.length, inferredOffset: offset, calibration: inferred };
 }
 
 export function xmlCiiDtxrPosForNode(node, dtxrPositionIndex, config) {

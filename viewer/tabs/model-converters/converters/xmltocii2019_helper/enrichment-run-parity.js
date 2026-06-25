@@ -142,7 +142,7 @@ function setProcessBlock(document, branch, row) {
   const temperature = ensureChild(document, branch, 'Temperature');
 
   if (setText(document, pressure, 'Pressure1', rowValue(row, 'p1', 'P1', 'pressure1', 'Pressure1'))) count += 1;
-  if (setText(document, pressure, 'Pressure2', rowValue(row, 'hydroPressure', 'hydro_pressure', 'HydroPressure', 'Hydro Test Pressure', 'Test Pressure', 'Pressure2'))) count += 1;
+  if (setText(document, pressure, 'HydroPressure', rowValue(row, 'hydroPressure', 'hydro_pressure', 'HydroPressure', 'Hydro Test Pressure', 'Test Pressure'))) count += 1;
   if (setText(document, temperature, 'Temperature1', rowValue(row, 't1', 'T1', 'temperature1', 'Temperature1'))) count += 1;
   if (setText(document, temperature, 'Temperature2', rowValue(row, 't2', 'T2', 'temperature2', 'Temperature2'))) count += 1;
   if (setText(document, temperature, 'Temperature3', rowValue(row, 't3', 'T3', 'temperature3', 'Temperature3'))) count += 1;
@@ -432,7 +432,7 @@ function applyCondenseRigidOption(enriched, document, options = {}) {
 function processProvenanceDiagnostics(row) {
   const fieldSpecs = [
     ['p1', 'Pressure1 / P1 / Design Pressure'],
-    ['hydroPressure', 'Pressure2 / Hydro/Test Pressure'],
+    ['hydroPressure', 'Hydro/Test Pressure'],
     ['t1', 'Temperature1 / T1'],
     ['t2', 'Temperature2 / T2'],
     ['t3', 'Temperature3 / T3'],
@@ -519,7 +519,7 @@ function applyPreviewRunParity(enriched, sourceXmlText, stagedJsonText, options 
     nodeFacts: nodeFactCount,
     previewRows: rows.length,
     missedBranches: missedBranches.slice(0, 20),
-    message: 'Run/enriched XML was synchronised from the same dry-run preview resolver used by phase 3, including mapped Pressure2/Hydro-Test pressure and process provenance diagnostics.',
+    message: 'Run/enriched XML was synchronised from the same dry-run preview resolver used by phase 3, including mapped Hydro/Test pressure and process provenance diagnostics.',
   });
   return enriched;
 }

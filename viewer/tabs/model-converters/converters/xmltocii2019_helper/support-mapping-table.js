@@ -10,6 +10,7 @@ import {
   removeSupportMappingRule,
   supportKindToXmlTypeFromMapping,
   supportMappingRowsForTable,
+  DEFAULT_STOP_KEYWORD_HELP,
 } from '../../../../converters/xml-cii2019-core/support-mapping-config.js';
 
 function text(value) {
@@ -30,6 +31,10 @@ function selected(actual, expected) {
 
 function checked(value) {
   return value ? 'checked' : '';
+}
+
+function infoIcon(textValue) {
+  return `<span title="${esc(textValue)}" style="cursor:help;color:#8bb7ff;border:1px solid #406089;border-radius:50%;padding:0 5px;font-size:11px;line-height:1.3;">i</span>`;
 }
 
 function inputCell(row, field, value, width = '96px') {
@@ -82,7 +87,7 @@ export function renderUnifiedSupportMappingTable(container, config) {
   const rows = supportMappingRowsForTable(config);
 
   container.innerHTML = `
-    <div class="model-converters-workflow-detail-title">6 Support Types</div>
+    <div class="model-converters-workflow-detail-title">6 Support Types ${infoIcon(DEFAULT_STOP_KEYWORD_HELP)}</div>
     <div class="model-converters-workflow-detail-text">
       One table for support detection and XML/CII restraint output. Detection columns map staged/XML/RVM/ATT attributes to support kinds.
       Output columns map each kind to XML/CII type, direction cosines, stiffness, gap, friction, and support tag behavior.

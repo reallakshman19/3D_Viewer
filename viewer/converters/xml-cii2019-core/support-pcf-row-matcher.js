@@ -76,6 +76,10 @@ export function normalizeSupportTag(value) {
   return match ? match[0].toUpperCase() : '';
 }
 
+function supportTagBase(value) {
+  return normalizeSupportTag(value).replace(/\.\d+$/, '');
+}
+
 export function supportTagsFromPcfRow(row = {}) {
   const tags = new Set();
   const addFromText = (value) => {
@@ -117,16 +121,25 @@ export function resolveSupportMatchForPcfRow(row, supportIndex, config = {}) {
   const tolerance = toFiniteNumber(config.coordinateTolerance, 1) || 1;
   const point = row?.supportCoor || row?.cp || row?.ep1 || row?.position;
   const coordKey = pcfSupportPositionKey(point, tolerance);
+  const tags = supportTagsFromPcfRow(row);
 
-  if (coordKey && supportIndex?.byCoord?.has(coordKey)) {
-    return supportIndex.byCoord.get(coordKey)[0] || null;
-  }
-
-  for (const tag of supportTagsFromPcfRow(row)) {
+  for (const tag of tags) {
     if (supportIndex?.byTag?.has(tag)) {
       return supportIndex.byTag.get(tag)[0] || null;
     }
   }
+
+  const coordMatches = coordKey && supportIndex?.byCoord?.has(coordKey)
+    ? supportIndex.byCoord.get(coordKey)
+    : [];
+  const baseTags = new Set(tags.map(supportTagBase).filter(Boolean));
+  const relaxedSamePosition = coordMatches.find((match) => {
+    const stagedBaseTags = Array.isArray(match?.supportBaseTags) ? match.supportBaseTags : [];
+    return stagedBaseTags.some((tag) => baseTags.has(tag));
+  });
+  if (relaxedSamePosition) return relaxedSamePosition;
+
+  if (coordMatches.length) return coordMatches[0] || null;
 
   return directDescriptorMatch(row, config);
 }
