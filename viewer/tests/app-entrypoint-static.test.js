@@ -11,6 +11,9 @@ const indexPath = path.join(viewerRoot, 'index.html');
 const runtimeEventsPath = path.join(viewerRoot, 'contracts/runtime-events.js');
 const appPath = path.join(viewerRoot, 'core/app.js');
 const eventBusPath = path.join(viewerRoot, 'core/event-bus.js');
+const rvmRendererPath = path.join(viewerRoot, 'tabs/viewer3d-rvm-tab-renderer.js');
+const rvmTabPath = path.join(viewerRoot, 'tabs/viewer3d-rvm-tab.js');
+const rvmModuleContractPath = path.join(viewerRoot, 'tabs/rvm-viewer-module-contract.js');
 
 function stripUrlSuffix(value) {
   return String(value || '').split('?')[0].split('#')[0];
@@ -207,6 +210,35 @@ function verifyStartupBlankPageGuard(moduleScripts) {
   assert.ok(mainSource.includes("document.getElementById('app-layout')"), 'startup error boundary must target the deployed #app-layout mount');
 }
 
+function extractRvmViewerImportSpecifiers(sourceText) {
+  const specs = [];
+  for (const match of sourceText.matchAll(/from\s+["']([^"']*RvmViewer3D\.js\?v=[^"']+)["']/g)) {
+    specs.push(match[1]);
+  }
+  return specs;
+}
+
+function verifyRvmViewerModuleIdentityContract() {
+  const contractSource = fs.readFileSync(rvmModuleContractPath, 'utf8');
+  const rendererSource = fs.readFileSync(rvmRendererPath, 'utf8');
+  const tabSource = fs.readFileSync(rvmTabPath, 'utf8');
+  const keyMatch = contractSource.match(/RVM_VIEWER3D_MODULE_CACHE_KEY\s*=\s*["']([^"']+)["']/);
+  assert.ok(keyMatch, 'RVM viewer module contract must expose RVM_VIEWER3D_MODULE_CACHE_KEY');
+  const expectedSuffix = `RvmViewer3D.js?v=${keyMatch[1]}`;
+  const imports = [
+    ...extractRvmViewerImportSpecifiers(rendererSource),
+    ...extractRvmViewerImportSpecifiers(tabSource),
+  ];
+  assert.ok(imports.length >= 2, 'RVM renderer and mounted tab must both import RvmViewer3D.js');
+  assert.deepEqual(
+    [...new Set(imports.map((specifier) => specifier.slice(specifier.lastIndexOf('RvmViewer3D.js'))))],
+    [expectedSuffix],
+    `RVM renderer and mounted tab must use one RvmViewer3D module identity from ${path.relative(viewerRoot, rvmModuleContractPath)}`,
+  );
+  assert.ok(rendererSource.includes('installToolbarActionCompatibility'), 'RVM renderer must publish handleToolbarAction compatibility for the mounted toolbar binding');
+  assert.ok(rendererSource.includes('RVM_VIEWER3D_MODULE_SPECIFIER'), 'RVM renderer must publish the module identity contract for live diagnostics');
+}
+
 const indexHtml = fs.readFileSync(indexPath, 'utf8');
 const moduleScripts = extractHtmlRefs(indexHtml, 'script', 'src', (tag) => /type=["']module["']/i.test(tag));
 const stylesheets = extractHtmlRefs(indexHtml, 'link', 'href', (tag) => /rel=["']stylesheet["']/i.test(tag));
@@ -232,4 +264,5 @@ const checkedModules = verifyModuleGraph(entryFiles);
 verifyRuntimeEventReferences(checkedModules);
 verifyRuntimeFetchAssets(checkedModules);
 verifyAppTabLifecycleIsolation();
-console.log(`Verified ${moduleScripts.length} viewer module entrypoint(s), ${stylesheets.length} stylesheet(s), ${checkedModules.size} local module file(s), runtime events, runtime fetch assets, startup blank-page guard, and app tab lifecycle isolation.`);
+verifyRvmViewerModuleIdentityContract();
+console.log(`Verified ${moduleScripts.length} viewer module entrypoint(s), ${stylesheets.length} stylesheet(s), ${checkedModules.size} local module file(s), runtime events, runtime fetch assets, startup blank-page guard, app tab lifecycle isolation, and RVM viewer module identity.`);

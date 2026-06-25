@@ -2,6 +2,7 @@ const CACHE_KEY = '20260621-rvm-button-hardening-1';
 const SCHEMA = 'rvm-stagedjson-export/v2-no-hidden-support-replace';
 const GLOBAL_KEY = '__PCF_GLB_RVM_STAGEDJSON_EXPORT_DIAGNOSTICS__';
 const SUPPORT_API = '__PCF_GLB_RVM_INTELLIGENT_SUPPORT_ENGINE__';
+const SUPPORT_UNAVAILABLE_REASON = 'Support StagedJSON is source-preview/InputXML only. Binary RVM support tools are retired by policy.';
 
 export function installRvmStagedJsonExportBridge() {
   injectStyles();
@@ -55,6 +56,10 @@ async function exportStagedJson(mode) {
   const staged = buildStagedJson(mode);
   publish(staged);
   renderPanel(staged);
+  if (mode === 'support' && staged?.diagnostics?.supportPolicy?.available === false) {
+    setStatusMessage(staged.diagnostics.supportPolicy.message || SUPPORT_UNAVAILABLE_REASON);
+    throw new Error(staged.diagnostics.supportPolicy.message || SUPPORT_UNAVAILABLE_REASON);
+  }
   downloadJson(staged, fileName(mode));
   return staged;
 }
@@ -62,10 +67,11 @@ async function exportStagedJson(mode) {
 function buildStagedJson(mode = 'geometry') {
   const viewer = globalThis.__3D_RVM_VIEWER__;
   const root = document.querySelector('[data-rvm-viewer]');
-  const supportPreparation = mode === 'support' ? prepareSupport(root, viewer) : null;
+  const supportPolicy = mode === 'support' ? evaluateSupportPolicy(root) : { available: true, mode: 'geometry' };
+  const supportPreparation = mode === 'support' && supportPolicy.available ? prepareSupport(root, viewer) : supportPolicy;
   viewer?.modelGroup?.updateMatrixWorld?.(true);
   const components = collectComponents(viewer, mode);
-  const supports = collectSupports(viewer, mode);
+  const supports = supportPolicy.available ? collectSupports(viewer, mode) : [];
   const modelName = modelLabel(viewer);
   const doc = {
     schema: SCHEMA,
@@ -90,14 +96,38 @@ function buildStagedJson(mode = 'geometry') {
       supportKindCounts: countBy(supports, 'SUPPORT_KIND'),
       componentPrimitiveCodeCounts: mergeCounts(components.map((c) => c.RVM_PRIMITIVE_CODE_COUNTS || {})),
       metadataFieldCounts: fieldCounts([...components, ...supports]),
+      supportPolicy,
       supportPreparation,
       supportEngine: slim(globalThis.__PCF_GLB_RVM_INTELLIGENT_SUPPORT_ENGINE_DIAGNOSTICS__),
       supportAtt: slim(globalThis.__PCF_GLB_RVM_SUPPORT_ATT_MAPPING_DIAGNOSTICS__),
     },
   };
+  if (mode === 'support' && supportPolicy.available === false) {
+    doc.diagnostics.errors = ['support-mode-unavailable-for-binary-rvm'];
+    setStatusMessage(supportPolicy.message || SUPPORT_UNAVAILABLE_REASON);
+  }
   publish(doc);
   renderPanel(doc);
   return doc;
+}
+
+function evaluateSupportPolicy(root) {
+  const sourceKind = String(root?.dataset?.rvmLoadedSourceKind || '').toLowerCase();
+  const primitiveMode = String(root?.dataset?.rvmModelPrimitiveMode || '').toLowerCase();
+  const isSourcePreview = primitiveMode === 'source-preview' || ['json', 'jscon', 'inputxml', 'uxml'].includes(sourceKind);
+  const attRecords = globalThis.__PCF_GLB_RVM_SUPPORT_ATT_MAPPING_DIAGNOSTICS__?.supportStagedJsonRecords;
+  const hasSupportRecords = Array.isArray(attRecords) && attRecords.length > 0;
+  const hasSupportApi = Boolean(globalThis[SUPPORT_API]);
+  if (isSourcePreview || hasSupportRecords || hasSupportApi) {
+    return { available: true, sourceKind, primitiveMode, reason: 'source-preview-support-flow' };
+  }
+  return {
+    available: false,
+    sourceKind: sourceKind || 'unknown',
+    primitiveMode: primitiveMode || 'unknown',
+    reason: 'binary-rvm-support-tools-retired',
+    message: SUPPORT_UNAVAILABLE_REASON,
+  };
 }
 
 function prepareSupport(root, viewer) {
@@ -208,7 +238,8 @@ function slim(d) { if (!d) return null; try { return JSON.parse(JSON.stringify(d
 function publish(doc) { globalThis[GLOBAL_KEY] = doc; try { globalThis.dispatchEvent?.(new CustomEvent('rvm-stagedjson-export', { detail: doc })); } catch (_) {} }
 function fileName(mode) { const stamp = new Date().toISOString().replace(/[:.]/g, '').replace('T', '-').replace('Z', ''); return `rvm-${mode}-stagedjson-${stamp}.json`; }
 function reportActionError(error, context) { try { globalThis.__PCF_GLB_RVM_REPORT_ACTION_ERROR__?.(error, context); } catch (_) {} console.warn('[RVM StagedJSON] action failed', context, error); }
+function setStatusMessage(text) { const root = document.querySelector('[data-rvm-viewer]'); const el = root?.querySelector?.('#rvm-sb-msg'); if (el) el.textContent = text; }
 function downloadJson(payload, filename) { const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' }); const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = filename; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 2000); }
-function renderPanel(doc) { const root = document.querySelector('[data-rvm-viewer]'); const panel = root?.querySelector?.('.rvm-side-panel') || root?.querySelector?.('.rvm-inspector') || root; if (!panel) return; let s = panel.querySelector('[data-rvm-stagedjson-panel]'); if (!s) { s = document.createElement('section'); s.className = 'rvm-stagedjson-panel'; s.dataset.rvmStagedjsonPanel = CACHE_KEY; panel.appendChild(s); } s.innerHTML = `<h3>StagedJSON Export</h3><div class="rvm-stagedjson-grid"><span>Mode</span><b>${escapeHtml(doc.mode)}</b><span>Components</span><b>${doc.model?.componentCount || 0}</b><span>Supports</span><b>${doc.model?.supportCount || 0}</b><span>Schema</span><b>${escapeHtml(doc.schema)}</b></div>`; }
+function renderPanel(doc) { const root = document.querySelector('[data-rvm-viewer]'); const panel = root?.querySelector?.('.rvm-side-panel') || root?.querySelector?.('.rvm-inspector') || root; if (!panel) return; let s = panel.querySelector('[data-rvm-stagedjson-panel]'); if (!s) { s = document.createElement('section'); s.className = 'rvm-stagedjson-panel'; s.dataset.rvmStagedjsonPanel = CACHE_KEY; panel.appendChild(s); } const policy = doc.diagnostics?.supportPolicy; const policyHtml = policy?.available === false ? `<div class="rvm-stagedjson-warning">${escapeHtml(policy.message || SUPPORT_UNAVAILABLE_REASON)}</div>` : ''; s.innerHTML = `<h3>StagedJSON Export</h3><div class="rvm-stagedjson-grid"><span>Mode</span><b>${escapeHtml(doc.mode)}</b><span>Components</span><b>${doc.model?.componentCount || 0}</b><span>Supports</span><b>${doc.model?.supportCount || 0}</b><span>Schema</span><b>${escapeHtml(doc.schema)}</b></div>${policyHtml}`; }
 function escapeHtml(v) { return String(v ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
-function injectStyles() { if (document.getElementById('rvm-stagedjson-export-style')) return; const s = document.createElement('style'); s.id = 'rvm-stagedjson-export-style'; s.textContent = '.rvm-stagedjson-export-section .rvm-stagedjson-buttons{display:flex;gap:4px;flex-wrap:wrap}.rvm-stagedjson-panel{margin-top:10px;padding:10px;border:1px solid rgba(125,211,252,.28);border-radius:10px;background:rgba(15,23,42,.72)}.rvm-stagedjson-panel h3{margin:0 0 8px;font-size:12px;color:#bae6fd}.rvm-stagedjson-grid{display:grid;grid-template-columns:auto 1fr;gap:4px 8px;font-size:11px}.rvm-stagedjson-grid span{color:#94a3b8}.rvm-stagedjson-grid b{color:#f8fafc}'; document.head.appendChild(s); }
+function injectStyles() { if (document.getElementById('rvm-stagedjson-export-style')) return; const s = document.createElement('style'); s.id = 'rvm-stagedjson-export-style'; s.textContent = '.rvm-stagedjson-export-section .rvm-stagedjson-buttons{display:flex;gap:4px;flex-wrap:wrap}.rvm-stagedjson-panel{margin-top:10px;padding:10px;border:1px solid rgba(125,211,252,.28);border-radius:10px;background:rgba(15,23,42,.72)}.rvm-stagedjson-panel h3{margin:0 0 8px;font-size:12px;color:#bae6fd}.rvm-stagedjson-grid{display:grid;grid-template-columns:auto 1fr;gap:4px 8px;font-size:11px}.rvm-stagedjson-grid span{color:#94a3b8}.rvm-stagedjson-grid b{color:#f8fafc}.rvm-stagedjson-warning{margin-top:8px;padding:7px 8px;border:1px solid rgba(251,191,36,.36);border-radius:8px;background:rgba(113,63,18,.30);color:#fde68a;font-size:11px;line-height:1.35}'; document.head.appendChild(s); }
