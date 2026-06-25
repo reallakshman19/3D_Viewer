@@ -1,3 +1,5 @@
+import { xmlCiiWorkflowSetConfigValue, xmlCiiWorkflowInvalidateSnapshot } from './xml-cii-workflow-bridge.js?v=20260624-workflow1-workflow2-1';
+
 const FLAG = '__xmlCiiBranchSampleSync_v2';
 const BRANCH_SAMPLE_KEY = 'xmlCii2019.regex.branchNameSampleFromXml.v1';
 const FILE_KEY = 'xmlCii2019.regex.branchNameSampleFileKey.v1';
@@ -137,10 +139,20 @@ function setElementValue(element, value) {
   return true;
 }
 
-export function applyXmlCiiBranchSample(root = document, value = readStored(BRANCH_SAMPLE_KEY, '')) {
+function persistBranchSampleToConfig(sample) {
+  const value = normalizeBranchName(sample);
+  if (!value) return;
+  try {
+    xmlCiiWorkflowSetConfigValue?.(SAMPLE_PATH, value, 'text');
+    xmlCiiWorkflowInvalidateSnapshot?.();
+  } catch {}
+}
+
+export function applyXmlCiiBranchSample(root = document, value = readStored(BRANCH_SAMPLE_KEY, ''), options = {}) {
   const sample = normalizeBranchName(value);
   if (!sample) return 0;
   writeStored(BRANCH_SAMPLE_KEY, sample);
+  if (options.persistConfig === true) persistBranchSampleToConfig(sample);
   const scope = root?.querySelectorAll ? root : document;
   if (scope !== document) scope.setAttribute?.(ROOT_ATTR, 'true');
   let updated = 0;
@@ -159,14 +171,15 @@ export async function syncLoadedXmlCiiBranchSample(root = document, force = fals
   }
   const key = currentFileKey(file);
   if (!force && key && readStored(FILE_KEY, '') === key && readStored(BRANCH_SAMPLE_KEY, '')) {
-    applyXmlCiiBranchSample(root);
-    return readStored(BRANCH_SAMPLE_KEY, '');
+    const stored = readStored(BRANCH_SAMPLE_KEY, '');
+    applyXmlCiiBranchSample(root, stored, { persistConfig: true });
+    return stored;
   }
   const xmlText = await file.text();
   const sample = extractXmlCiiBranchSample(xmlText);
   if (sample) {
     writeStored(FILE_KEY, key);
-    applyXmlCiiBranchSample(root, sample);
+    applyXmlCiiBranchSample(root, sample, { persistConfig: true });
   }
   return sample;
 }
@@ -186,7 +199,7 @@ function bindWorkflowTabRefresh(root, state) {
   state.onTabRefresh = (event) => {
     const target = event.target?.closest?.('[data-modal-tab="regex"], [data-old-xml-cii-phase="regex"], [data-native-regex-path], [data-xml-cii-regex-path]');
     if (!target) return;
-    const run = () => applyXmlCiiBranchSample(root);
+    const run = () => applyXmlCiiBranchSample(root, undefined, { persistConfig: true });
     if (typeof requestAnimationFrame === 'function') requestAnimationFrame(run);
     else Promise.resolve().then(run);
   };
@@ -205,6 +218,6 @@ export function installXmlCiiBranchSampleSync(container = document) {
 
   bindPrimaryInput(root, state);
   bindWorkflowTabRefresh(root, state);
-  applyXmlCiiBranchSample(root);
+  applyXmlCiiBranchSample(root, undefined, { persistConfig: true });
   syncLoadedXmlCiiBranchSample(root).catch(() => {});
 }
