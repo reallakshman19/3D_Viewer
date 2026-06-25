@@ -10,15 +10,17 @@ import {
 } from './NodeMarkerXmlCiiTableMapper.js';
 import { stableHash } from './NodeMarkerDiagnostics.js';
 
-export const NODE_MARKER_API_SCHEMA = 'non-primitive-node-marker-api/v1';
+export const NODE_MARKER_API_SCHEMA = 'non-primitive-node-marker-api/v2';
 const GLOBAL_KEY = 'rvmNodeMarkers';
 let lastBuild = null;
 
 export function buildNodeMarkersFromSource(source, options = {}) {
-  lastBuild = resolveNodeMarkersFromSource(source, options);
-  lastBuild.tables = buildNodeMarkerXmlCiiTables(lastBuild.markers, { ...options, ...lastBuild.diagnostics });
-  lastBuild.exportStatus = lastBuild.markers.some((marker) => marker.status === 'stale') ? 'stale' : 'fresh';
+  lastBuild = completeBuild(resolveNodeMarkersFromSource(source, options), options);
   return lastBuild;
+}
+
+export function rebuildNodeMarkersFromSource(source, options = {}) {
+  return buildNodeMarkersFromSource(source, { ...options, reason: options.reason || 'manual-rebuild' });
 }
 
 export function buildNodeMarkerXmlCiiTablesFromSource(source, options = {}) {
@@ -27,6 +29,23 @@ export function buildNodeMarkerXmlCiiTablesFromSource(source, options = {}) {
 
 export function buildNodeMarkerXmlCiiTablesFromMarkers(markers, options = {}) {
   return buildNodeMarkerXmlCiiTables(markers, options);
+}
+
+export function evaluateNodeMarkerStaleness(source, options = {}, previousBuild = lastBuild) {
+  if (!previousBuild?.diagnostics?.sourceRevision) return { schema: 'non-primitive-node-marker-stale/v1', status: 'blocked', staleReason: 'no-previous-build' };
+  const next = resolveNodeMarkersFromSource(source, options);
+  const currentRevision = next.diagnostics?.sourceRevision || '';
+  const previousRevision = previousBuild.diagnostics.sourceRevision;
+  const stale = currentRevision !== previousRevision;
+  return {
+    schema: 'non-primitive-node-marker-stale/v1',
+    status: stale ? 'stale' : 'fresh',
+    staleReason: stale ? 'source-revision-changed' : '',
+    previousSourceRevision: previousRevision,
+    currentSourceRevision: currentRevision,
+    previousMarkerCount: previousBuild.markers?.length || 0,
+    currentMarkerCount: next.markers?.length || 0,
+  };
 }
 
 export function buildNodeMarkerJson(markersOrTables, options = {}) {
@@ -47,6 +66,8 @@ export function installNodeMarkerApi(target = globalThis) {
   const api = {
     schema: NODE_MARKER_API_SCHEMA,
     buildNodeMarkersFromSource,
+    rebuildNodeMarkersFromSource,
+    evaluateNodeMarkerStaleness,
     buildNodeMarkerXmlCiiTablesFromSource,
     buildNodeMarkerXmlCiiTablesFromMarkers,
     buildNodeMarkerBranchRows,
@@ -62,6 +83,13 @@ export function installNodeMarkerApi(target = globalThis) {
   };
   target[GLOBAL_KEY] = api;
   return api;
+}
+
+function completeBuild(build, options = {}) {
+  build.tables = buildNodeMarkerXmlCiiTables(build.markers, { ...options, ...build.diagnostics });
+  build.tableHash = build.tables?.tableHash || '';
+  build.exportStatus = build.markers.some((marker) => marker.status === 'stale' || marker.status === 'unresolved') ? 'blocked' : 'fresh';
+  return build;
 }
 
 installNodeMarkerApi(typeof window !== 'undefined' ? window : globalThis);
