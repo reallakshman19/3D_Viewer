@@ -62,6 +62,9 @@ jobs:
       - name: Decimal PS tag restraint guard
         run: node scripts/test-xml-cii-ps-tag-exact-restraints.mjs
 
+      - name: Staged geometry authority guard
+        run: node scripts/test-xml-cii-staged-geometry-authority.mjs
+
       - name: Master autoload consolidation guard
         run: node scripts/test-xml-cii-master-autoload-single-session.mjs
 
