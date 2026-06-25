@@ -1,4 +1,4 @@
-const CACHE_KEY = '20260622-rvm-support-tools-retired-1';
+const CACHE_KEY = '20260624-rvm-diagnostics-docked-drawer-1';
 const API_KEY = '__PCF_GLB_RVM_BOTTOM_DIAGNOSTICS_DRAWER__';
 
 const PANEL_SPECS = [
@@ -77,10 +77,14 @@ function scheduleRefresh(root) {
 
 function ensureDrawer(root) {
   let drawer = root.querySelector('[data-rvm-bottom-diagnostics-drawer]');
-  if (drawer) return drawer;
+  if (drawer) {
+    dockDrawer(root, drawer);
+    return drawer;
+  }
   drawer = document.createElement('aside');
   drawer.className = 'rvm-bottom-diagnostics-drawer';
   drawer.dataset.rvmBottomDiagnosticsDrawer = CACHE_KEY;
+  drawer.dataset.rvmBottomDiagnosticsDocked = 'true';
   drawer.dataset.collapsed = String(isCollapsed());
   drawer.innerHTML = `
     <button class="rvm-bottom-diagnostics-header" type="button" aria-expanded="${String(!isCollapsed())}" data-rvm-bottom-diagnostics-toggle>
@@ -94,8 +98,15 @@ function ensureDrawer(root) {
     if (!toggle) return;
     event.preventDefault(); event.stopPropagation(); setCollapsed(!isCollapsed(), root);
   });
-  root.appendChild(drawer);
+  dockDrawer(root, drawer);
   return drawer;
+}
+
+function dockDrawer(root, drawer) {
+  const statusbar = root.querySelector('.viewer-statusbar');
+  drawer.dataset.rvmBottomDiagnosticsDocked = 'true';
+  if (statusbar && drawer.nextSibling !== statusbar) root.insertBefore(drawer, statusbar);
+  else if (!drawer.parentElement) root.appendChild(drawer);
 }
 
 function relocateAndSummarize(root) {
@@ -179,13 +190,14 @@ function injectStyles() {
   const style = document.createElement('style');
   style.id = 'rvm-bottom-diagnostics-drawer-style';
   style.textContent = `
-    .rvm-bottom-diagnostics-drawer{position:fixed;left:14px;right:14px;bottom:10px;z-index:90;border:1px solid rgba(148,163,184,.30);border-radius:12px;background:rgba(15,23,42,.94);box-shadow:0 18px 55px rgba(0,0,0,.45);color:#e5e7eb;backdrop-filter:blur(8px);overflow:hidden}
+    .rvm-bottom-diagnostics-drawer{position:relative;left:auto;right:auto;bottom:auto;z-index:20;flex:0 0 auto;margin:0;border-top:1px solid rgba(148,163,184,.30);border-right:0;border-bottom:0;border-left:0;border-radius:0;background:rgba(15,23,42,.94);box-shadow:0 -8px 22px rgba(0,0,0,.22);color:#e5e7eb;backdrop-filter:blur(8px);overflow:hidden}
+    .rvm-bottom-diagnostics-drawer[data-rvm-bottom-diagnostics-docked="true"]{order:90;width:100%;max-height:42vh;}
     .rvm-bottom-diagnostics-header{display:flex;align-items:center;gap:10px;width:100%;min-height:34px;padding:7px 12px;border:0;background:linear-gradient(90deg,rgba(30,41,59,.95),rgba(15,23,42,.95));color:inherit;text-align:left;cursor:pointer;font-size:12px}
     .rvm-bottom-diagnostics-header strong{white-space:nowrap;color:#f8fafc}.rvm-bottom-diagnostics-caret{display:inline-block;transition:transform .15s ease;color:#93c5fd}.rvm-bottom-diagnostics-summary{margin-left:auto;display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end;color:#cbd5e1;font-size:11px}
     .rvm-bottom-diagnostics-body{display:grid;grid-template-columns:repeat(auto-fit,minmax(245px,1fr));gap:8px;max-height:34vh;overflow:auto;padding:8px;background:rgba(2,6,23,.52)}
-    .rvm-bottom-diagnostics-drawer[data-collapsed="true"] .rvm-bottom-diagnostics-body{display:none}.rvm-bottom-diagnostics-drawer[data-collapsed="true"] .rvm-bottom-diagnostics-caret{transform:rotate(180deg)}
+    .rvm-bottom-diagnostics-drawer[data-collapsed="true"]{max-height:34px}.rvm-bottom-diagnostics-drawer[data-collapsed="true"] .rvm-bottom-diagnostics-body{display:none}.rvm-bottom-diagnostics-drawer[data-collapsed="true"] .rvm-bottom-diagnostics-caret{transform:rotate(180deg)}
     .rvm-bottom-diagnostics-card{margin:0!important;min-width:0;max-height:30vh;overflow:auto;border-radius:9px!important;background:rgba(15,23,42,.76)!important}.rvm-bottom-diagnostics-card h3,.rvm-bottom-diagnostics-card .rvm-glb-selection-parity-title{font-size:12px!important;margin-top:0!important}
-    @media (max-width:760px){.rvm-bottom-diagnostics-drawer{left:8px;right:8px;bottom:6px}.rvm-bottom-diagnostics-summary span:nth-child(n+3){display:none}.rvm-bottom-diagnostics-body{grid-template-columns:1fr;max-height:48vh}}
+    @media (max-width:760px){.rvm-bottom-diagnostics-summary span:nth-child(n+3){display:none}.rvm-bottom-diagnostics-body{grid-template-columns:1fr;max-height:48vh}.rvm-bottom-diagnostics-drawer[data-rvm-bottom-diagnostics-docked="true"]{max-height:56vh}}
   `;
   document.head.appendChild(style);
 }

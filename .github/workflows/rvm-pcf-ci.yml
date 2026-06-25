@@ -26,6 +26,7 @@ on:
       - 'viewer/tabs/RvmNavigationModeArbiterBridge.js'
       - 'viewer/tabs/RvmDeferredBridgeLoader.js'
       - 'viewer/tabs/RvmToolbarCompactBridge.js'
+      - 'viewer/tabs/RvmBottomDiagnosticsDrawerBridge.js'
       - 'viewer/tabs/RvmNonPrimitiveSupportOverlayBridge.js'
       - 'viewer/tabs/RvmNonPrimitiveSupportOverlayDetailsPanelBridge.js'
       - 'viewer/tabs/RvmNonPrimitiveSupportOverlayHoverBridge.js'
