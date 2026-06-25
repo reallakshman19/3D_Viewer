@@ -11,6 +11,7 @@ import { installXmlCiiWorkflowButtonScope } from './xml-cii-workflow-button-scop
 import { installXmlCiiSimpleWorkflowController } from './xml-cii-simple-workflow-controller.js?v=20260624-workflow-consolidation-1';
 import { installXmlCiiWorkflowOpenRegex } from './xml-cii-workflow-open-regex.js?v=20260625-open-regex-1';
 import { installXmlCiiWorkflowPopup } from './xml-cii-workflow-popup.js?v=20260624-unified-wf2-1';
+import { installXmlCiiCustomInputWorkflowTab } from './custom-input/xml-cii-custom-input-workflow-tab.js?v=20260625-custom-input-1';
 import { installXmlCiiBranchSampleSync } from './xml-cii-branch-sample-sync.js?v=20260624-workflow-consolidation-1';
 import { installXmlCiiFinaliseRunButton } from './xml-cii-finalise-run-button.js?v=20260625-model-converters-finalise-run-owner-1';
 import { installXmlCiiShortElementToggle } from './xml-cii-short-element-toggle.js?v=20260625-short-element-drop-1';
@@ -26,7 +27,6 @@ const STYLE_LINKS = Object.freeze([
   ['model-converters-tab-css', './tabs/model-converters-tab.css?v=20260624-button-scope-1'],
   ['model-converters-css-fix', './tabs/model-converters-css-fix.css?v=20260624-simple-rich-isolation-1'],
 ]);
-
 function ensureStylesheet(id, href) { const existing = document.getElementById(id); if (existing) { if (existing.getAttribute('href') !== href) existing.setAttribute('href', href); return; } const link = document.createElement('link'); link.id = id; link.rel = 'stylesheet'; link.href = href; link.dataset.owner = 'model-converters-tab'; document.head.appendChild(link); }
 function ensureModelConvertersStyles() { if (typeof document === 'undefined') return; for (const [id, href] of STYLE_LINKS) ensureStylesheet(id, href); }
 function markStylesReady(container) { if (!container) return; container.classList.add('model-converters-style-ready'); container.dataset.modelConvertersCss = '20260624-button-scope-1'; const root = container.querySelector?.('.model-converters-root'); if (root) root.dataset.modelConvertersCss = '20260624-button-scope-1'; }
@@ -34,31 +34,7 @@ function installSafely(name, installer, container) { try { installer(container);
 function monotonicNow() { return typeof performance !== 'undefined' && typeof performance.now === 'function' ? performance.now() : Date.now(); }
 function scheduleModelConverterTask(callback) { if (typeof requestIdleCallback === 'function') return requestIdleCallback(callback, { timeout: 750 }); if (typeof requestAnimationFrame === 'function') return requestAnimationFrame(() => callback(null)); return Promise.resolve().then(() => callback(null)); }
 function scheduleInstallerQueue(container) { const queue = MODEL_CONVERTER_INSTALLERS.map((entry) => entry); const runNext = (deadline) => { const startedAt = monotonicNow(); while (queue.length) { const [name, install] = queue.shift(); installSafely(name, install, container); const elapsed = monotonicNow() - startedAt; if (deadline?.timeRemaining && deadline.timeRemaining() <= 4) break; if (!deadline?.timeRemaining && elapsed > 12) break; } if (queue.length) scheduleModelConverterTask(runNext); }; scheduleModelConverterTask(runNext); }
-
 const MODEL_CONVERTER_INSTALLERS = Object.freeze([
-  ['rvmattr-uxml-addon', installRvmAttrUxmlAddon],
-  ['xml-cii-workflow-button-scope', installXmlCiiWorkflowButtonScope],
-  ['xml-cii-simple-workflow-controller', installXmlCiiSimpleWorkflowController],
-  ['xml-cii-open-regex', installXmlCiiWorkflowOpenRegex],
-  ['xml-cii-workflow-popup', installXmlCiiWorkflowPopup],
-  ['xml-cii-branch-sample-sync', installXmlCiiBranchSampleSync],
-  ['xml-cii-finalise-run-button', installXmlCiiFinaliseRunButton],
-  ['xml-cii-short-element-toggle', installXmlCiiShortElementToggle],
-  ['xml-cii-weight-semantic-info', installXmlCiiWeightSemanticInfo],
-  ['bm-cii-support-annotation-popup', installBmCiiSupportAnnotationPopup],
-  ['inputxml-property-transfer-popup-ui-v4', installInputXmlPropertyTransferUi],
-  ['inputxml-basic-glb-bridge', installInputXmlBasicGlbBridge],
-  ['inputxml-managed-stage-bridge', installInputXmlManagedStageBridge],
-  ['xml-cii-default-master-autoload-lite', installXmlCiiDefaultMasterAutoloadLite],
-  ['xml-cii-preview-linekey-remap', installXmlCiiPreviewLineKeyRemap],
-  ['xml-cii-runtime-override-sync', installXmlCiiRuntimeOverrideSync],
+  ['rvmattr-uxml-addon', installRvmAttrUxmlAddon], ['xml-cii-workflow-button-scope', installXmlCiiWorkflowButtonScope], ['xml-cii-simple-workflow-controller', installXmlCiiSimpleWorkflowController], ['xml-cii-open-regex', installXmlCiiWorkflowOpenRegex], ['xml-cii-workflow-popup', installXmlCiiWorkflowPopup], ['xml-cii-custom-input-workflow-tab', installXmlCiiCustomInputWorkflowTab], ['xml-cii-branch-sample-sync', installXmlCiiBranchSampleSync], ['xml-cii-finalise-run-button', installXmlCiiFinaliseRunButton], ['xml-cii-short-element-toggle', installXmlCiiShortElementToggle], ['xml-cii-weight-semantic-info', installXmlCiiWeightSemanticInfo], ['bm-cii-support-annotation-popup', installBmCiiSupportAnnotationPopup], ['inputxml-property-transfer-popup-ui-v4', installInputXmlPropertyTransferUi], ['inputxml-basic-glb-bridge', installInputXmlBasicGlbBridge], ['inputxml-managed-stage-bridge', installInputXmlManagedStageBridge], ['xml-cii-default-master-autoload-lite', installXmlCiiDefaultMasterAutoloadLite], ['xml-cii-preview-linekey-remap', installXmlCiiPreviewLineKeyRemap], ['xml-cii-runtime-override-sync', installXmlCiiRuntimeOverrideSync],
 ]);
-
-export function renderModelConvertersTab(container, ctx) {
-  console.log('RENDER MODEL CONVERTERS TAB CALLED!', container);
-  ensureModelConvertersStyles();
-  renderLegacyModelConvertersTab(container, ctx);
-  console.log('RENDER LEGACY MODEL CONVERTERS TAB RETURNED!');
-  markStylesReady(container);
-  scheduleInstallerQueue(container);
-}
+export function renderModelConvertersTab(container, ctx) { console.log('RENDER MODEL CONVERTERS TAB CALLED!', container); ensureModelConvertersStyles(); renderLegacyModelConvertersTab(container, ctx); console.log('RENDER LEGACY MODEL CONVERTERS TAB RETURNED!'); markStylesReady(container); scheduleInstallerQueue(container); }
