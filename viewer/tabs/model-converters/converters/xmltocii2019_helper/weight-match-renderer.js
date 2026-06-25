@@ -23,6 +23,8 @@ function unsafeDtxr(row) { const source = clean(row?.dtxrSource).toLowerCase(); 
 function cleanRow(row) { if (!allowedType(row?.componentType)) return null; return unsafeDtxr(row) ? { ...row, dtxr: '', dtxrSource: 'weight-dtxr-suppressed' } : row; }
 async function stagedText(stagedJsonText) { const direct = clean(stagedJsonText); if (direct) return direct; const file = document?.querySelector?.('#model-converters-secondary-input')?.files?.[0]; return file ? await file.text().catch(() => '') : ''; }
 function currentXmlFile(passedFile) { return passedFile || document?.querySelector?.('#model-converters-primary-input')?.files?.[0] || null; }
+function normalizeComponentRefNo(value) { return clean(value).replace(/^=/, ''); }
+function componentRefEndpoint(componentRefNo, endpoint) { const ref = normalizeComponentRefNo(componentRefNo); const ep = clean(endpoint); return ref && ep ? `${ref}_${ep}` : ref; }
 
 function parseConfigText(value) {
   try {
@@ -40,6 +42,79 @@ function currentDomSupportConfig() {
 
 function plainObject(value) {
   return value && typeof value === 'object' && !Array.isArray(value);
+}
+
+function xmlLocalName(node) {
+  return clean(node?.localName || node?.nodeName).replace(/^.*:/, '');
+}
+
+function xmlChildText(node, name) {
+  const child = [...(node?.childNodes || [])].find((item) => item.nodeType === 1 && xmlLocalName(item) === name);
+  return clean(child?.textContent);
+}
+
+function regexXmlValue(block, name) {
+  return clean(block.match(new RegExp(`<${name}[^>]*>([\\s\\S]*?)<\\/${name}>`, 'i'))?.[1]?.replace(/<[^>]+>/g, ''));
+}
+
+function nodeMetaFromXml(xmlText) {
+  const out = new Map();
+  const source = t(xmlText);
+  if (!source) return out;
+  if (typeof DOMParser !== 'undefined') {
+    try {
+      const doc = new DOMParser().parseFromString(source, 'application/xml');
+      if (!doc.getElementsByTagName('parsererror').length) {
+        for (const branch of [...doc.getElementsByTagName('Branch')]) {
+          const branchName = xmlChildText(branch, 'Branchname');
+          for (const node of [...branch.getElementsByTagName('Node')]) {
+            const nodeNumber = xmlChildText(node, 'NodeNumber');
+            if (!nodeNumber) continue;
+            const componentRefNo = xmlChildText(node, 'ComponentRefNo');
+            const endpoint = xmlChildText(node, 'Endpoint');
+            const meta = { branchName, nodeNumber, componentRefNo, endpoint, componentType: xmlChildText(node, 'ComponentType'), componentRefEndpoint: componentRefEndpoint(componentRefNo, endpoint) };
+            out.set(`${branchName}::${nodeNumber}`, meta);
+            if (!out.has(nodeNumber)) out.set(nodeNumber, meta);
+          }
+        }
+        return out;
+      }
+    } catch {
+      // Fall through to regex fallback.
+    }
+  }
+  for (const branchMatch of source.matchAll(/<Branch\b[\s\S]*?<\/Branch>/gi)) {
+    const branchBlock = branchMatch[0];
+    const branchName = regexXmlValue(branchBlock, 'Branchname');
+    for (const nodeMatch of branchBlock.matchAll(/<Node\b[\s\S]*?<\/Node>/gi)) {
+      const nodeBlock = nodeMatch[0];
+      const nodeNumber = regexXmlValue(nodeBlock, 'NodeNumber');
+      if (!nodeNumber) continue;
+      const componentRefNo = regexXmlValue(nodeBlock, 'ComponentRefNo');
+      const endpoint = regexXmlValue(nodeBlock, 'Endpoint');
+      const meta = { branchName, nodeNumber, componentRefNo, endpoint, componentType: regexXmlValue(nodeBlock, 'ComponentType'), componentRefEndpoint: componentRefEndpoint(componentRefNo, endpoint) };
+      out.set(`${branchName}::${nodeNumber}`, meta);
+      if (!out.has(nodeNumber)) out.set(nodeNumber, meta);
+    }
+  }
+  return out;
+}
+
+function applyNodeMeta(rows, xmlText) {
+  const meta = nodeMetaFromXml(xmlText);
+  return (Array.isArray(rows) ? rows : []).map((row) => {
+    const key = `${clean(row?.branchName)}::${clean(row?.nodeNumber)}`;
+    const nodeMeta = meta.get(key) || meta.get(clean(row?.nodeNumber)) || {};
+    const componentRefNo = nodeMeta.componentRefNo || row?.componentRefNo || '';
+    const endpoint = nodeMeta.endpoint || row?.endpoint || '';
+    return {
+      ...row,
+      componentRefNo,
+      endpoint,
+      componentType: row?.componentType || nodeMeta.componentType || '',
+      componentRefEndpoint: row?.componentRefEndpoint || nodeMeta.componentRefEndpoint || componentRefEndpoint(componentRefNo, endpoint),
+    };
+  });
 }
 
 let defaultWeightMasterRowsPromise = null;
@@ -272,10 +347,11 @@ export function bindXmlCiiWeightMatchPhase(detailEl, { xmlFile, stagedJsonText, 
       const rejectedBlock = rejected ? `<span class="mc-wm-rejected-label">Rejected by length</span>${rejected}` : '';
       const chips = accepted || rejectedBlock || '<span class="model-converters-muted">No suggestion</span>';
       const statusText = issue.mapped ? `Mapped (${issue.weightSource || 'weight'})` : (methodLabel(best) || (best?.preferred ? 'Suggested' : 'Unresolved'));
-      return `<tr style="${rowStyle}"><td>${esc(statusText)}</td><td title="${attr(issue.branchName)}">${esc(issue.branchName)}</td><td>${esc(issue.lineKey || '')}</td><td>${esc(issue.componentType || '')}</td><td>${esc(issue.boreMm == null ? '' : `${Number(issue.boreMm).toFixed(0)} mm`)}</td><td>${esc(issue.rating || '')}</td><td>${esc(issue.nodeNumber)}</td><td title="${attr(issue.componentRefNo || '')}">${esc(issue.componentRefNo || '')}</td><td title="${attr([issue.dtxrSource, issue.dtxrMatchedKey, issue.dtxrSuppressionReason].filter(Boolean).join(' · '))}">${esc(issue.dtxr || 'Not found')}</td><td>${esc(issue.valveHint || '—')}</td><td title="${attr(issue.elementLengthSource || '')}">${esc(issue.lengthMm == null ? '' : `${Number(issue.lengthMm).toFixed(1)} mm`)}</td><td><input type="number" min="0" step="0.001" class="mc-rigid-review-input" data-wm-key="${attr(issue.key)}" value="${attr(initial)}" placeholder="kg" style="${inputStyle}"></td><td style="max-width:540px;"><div style="display:flex;flex-wrap:wrap;gap:4px;max-height:72px;overflow:auto;align-items:flex-start;">${chips}</div></td></tr>`;
+      const refEndpoint = issue.componentRefEndpoint || componentRefEndpoint(issue.componentRefNo, issue.endpoint);
+      return `<tr style="${rowStyle}"><td>${esc(statusText)}</td><td title="${attr(issue.branchName)}">${esc(issue.branchName)}</td><td>${esc(issue.lineKey || '')}</td><td>${esc(issue.componentType || '')}</td><td>${esc(issue.boreMm == null ? '' : `${Number(issue.boreMm).toFixed(0)} mm`)}</td><td>${esc(issue.rating || '')}</td><td>${esc(issue.nodeNumber)}</td><td title="${attr(refEndpoint)}">${esc(refEndpoint)}</td><td title="${attr([issue.dtxrSource, issue.dtxrMatchedKey, issue.dtxrSuppressionReason].filter(Boolean).join(' · '))}">${esc(issue.dtxr || 'Not found')}</td><td>${esc(issue.valveHint || '—')}</td><td title="${attr(issue.elementLengthSource || '')}">${esc(issue.lengthMm == null ? '' : `${Number(issue.lengthMm).toFixed(1)} mm`)}</td><td><input type="number" min="0" step="0.001" class="mc-rigid-review-input" data-wm-key="${attr(issue.key)}" value="${attr(initial)}" placeholder="kg" style="${inputStyle}"></td><td style="max-width:540px;"><div style="display:flex;flex-wrap:wrap;gap:4px;max-height:72px;overflow:auto;align-items:flex-start;">${chips}</div></td></tr>`;
     }).join('');
     const cfg = activeConfig();
-    contentEl.innerHTML = `<div class="model-converters-workflow-detail-note" style="margin-bottom:8px;">Exact candidate length gate is ±${nfmt(valveHintLengthToleranceMm(cfg))} mm. Add-on fallback scales same Bore + Rating flange WT to the XML element length only when no usable suggestion exists. Length conversion is ${convOn(cfg) ? 'ON' : 'OFF'}.</div><div class="mc-rigid-review-table-wrap" style="overflow:auto;max-height:48vh;"><table class="mc-rigid-review-table" style="border-collapse:collapse;font-size:12px;"><thead><tr><th>Status</th><th>Branch</th><th>Line Key</th><th>Type</th><th>Bore</th><th>Rating</th><th>Node</th><th>ComponentRefNo</th><th>DTXR</th><th>Valve Hint</th><th>Length</th><th>Weight (kg)</th><th>Nearest Suggestions</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+    contentEl.innerHTML = `<div class="model-converters-workflow-detail-note" style="margin-bottom:8px;">Exact candidate length gate is ±${nfmt(valveHintLengthToleranceMm(cfg))} mm. Add-on fallback scales same Bore + Rating flange WT to the XML element length only when no usable suggestion exists. Length conversion is ${convOn(cfg) ? 'ON' : 'OFF'}.</div><div class="mc-rigid-review-table-wrap" style="overflow:auto;max-height:48vh;"><table class="mc-rigid-review-table" style="border-collapse:collapse;font-size:12px;"><thead><tr><th>Status</th><th>Branch</th><th>Line Key</th><th>ComponentType</th><th>Bore</th><th>Rating</th><th>Node</th><th>ComponentRefNo_Endpoint</th><th>DTXR</th><th>Valve Hint</th><th>Length</th><th>Weight (kg)</th><th>Nearest Suggestions</th></tr></thead><tbody>${rows}</tbody></table></div>`;
     contentEl.querySelectorAll('[data-wm-candidate]').forEach((button) => button.addEventListener('click', () => { const input = contentEl.querySelectorAll('.mc-rigid-review-input')[Number(button.dataset.wmCandidate)]; if (!input) return; input.value = button.dataset.wmWeight || ''; input.dispatchEvent(new Event('change', { bubbles: true })); }));
   };
   const compute = async () => {
@@ -294,7 +370,7 @@ export function bindXmlCiiWeightMatchPhase(detailEl, { xmlFile, stagedJsonText, 
       const cfg = await ensureWeightMasterRows(mergeRuntimeOverrides(mergeRuntimeOverrides(enrichedConfig, liveConfig), getXmlCiiPreviewRuntimeConfig()));
       if (!hasWeightMasterRows(cfg)) { localIssues = []; renderWeightMasterBlocked(contentEl); status('Weight master not ready', 'bad'); return; }
       const geometryXml = applyXmlCiiStagedGeometryAuthority(enriched.xmlText || xmlText, jsonText, { config: cfg }).xmlText;
-      localIssues = collectXmlCiiWeightMatchRows(geometryXml, jsonText, cfg).map(cleanRow).filter(Boolean).map((row) => applyXmlCiiFlangeWeightFallbackToIssue(rerankWithRating(row, cfg), cfg));
+      localIssues = applyNodeMeta(collectXmlCiiWeightMatchRows(geometryXml, jsonText, cfg), geometryXml).map(cleanRow).filter(Boolean).map((row) => applyXmlCiiFlangeWeightFallbackToIssue(rerankWithRating(row, cfg), cfg));
       const mapped = localIssues.filter((row) => row.mapped).length;
       const suggested = localIssues.filter((row) => row.candidates?.[0]?.preferred).length;
       const flange = localIssues.filter((row) => row.candidates?.[0]?.flangeWeightFallback).length;
