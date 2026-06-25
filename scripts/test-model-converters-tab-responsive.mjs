@@ -114,8 +114,9 @@ assert(/master\.key === 'pipingClass'/.test(source.nativePanels), 'native panels
 assert(/data-xml-cii-unified-master-preview/.test(source.nativePanels), 'fallback popup must expose enhanced per-master preview rows');
 assert(!/Workflow 1 keeps master setup compact/.test(source.nativePanels), 'fallback popup must not show retired Workflow 1 compact wording');
 assert(!/Workflow 1 \/ Workflow 2/.test(source.nativePanels), 'fallback popup config notes must not expose retired dual-workflow wording');
-assert(/Condense Rigid \/ split condensed valve-flange nodes \(XSD\)/.test(source.nativePanels), 'Run Options must show Condense Rigid XSD in both workflows');
-assert(/Condense Rigid \/ split condensed valve-flange nodes \(Resolved\)/.test(source.nativePanels), 'Run Options must show Condense Rigid Resolved in both workflows');
+assert(/Record source\/XSD condensed rigid intent/.test(source.nativePanels), 'Run Options must show source/XSD condensed rigid intent in both workflows');
+assert(/Apply resolved split for condensed valve\/flange\/rigid nodes/.test(source.nativePanels), 'Run Options must show resolved condensed split action in both workflows');
+assert(/Suppress CII support tag\/name labels/.test(source.nativePanels), 'Config must clarify support tag and support-kind NODENAME suppression');
 
 assert(!/new MutationObserver/.test(source.branchSample), 'branch sample service must not observe the whole document');
 assert(!/setTimeout\(/.test(source.branchSample), 'branch sample service must not use delayed startup repair loops');

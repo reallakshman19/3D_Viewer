@@ -69,7 +69,7 @@ function style() {
   s.textContent = `.xml-cii-hotfix-check{display:flex;flex-direction:row;align-items:center;gap:8px;color:#d8ecff;font-size:12px;line-height:1.35}.xml-cii-hotfix-info{border:1px solid #315070;border-radius:8px;padding:8px 10px;background:#102033;color:#bcd8f7;font-size:12px;margin:8px 0}`;
   document.head.appendChild(s);
 }
-function checkbox(kind, checked) { const key = kind === 'xsd' ? 'condenseRigidXsd' : 'splitCondensedValveFlange'; const label = kind === 'xsd' ? 'Condense Rigid / split condensed valve-flange nodes (XSD)' : 'Condense Rigid / split condensed valve-flange nodes (Resolved)'; return `<label class="xml-cii-hotfix-check"><input type="checkbox" data-xml-cii-hotfix-condense="${key}" ${checked ? 'checked' : ''}> <span>${label}</span></label>`; }
+function checkbox(kind, checked) { const key = kind === 'xsd' ? 'condenseRigidXsd' : 'splitCondensedValveFlange'; const label = kind === 'xsd' ? 'Record source/XSD condensed rigid intent' : 'Apply resolved split for condensed valve/flange/rigid nodes'; return `<label class="xml-cii-hotfix-check"><input type="checkbox" data-xml-cii-hotfix-condense="${key}" ${checked ? 'checked' : ''}> <span>${label}</span></label>`; }
 function setBool(root, key, checked) { const cfg = normalise(readConfig(root)); cfg[key] = !!checked; if (key === 'splitCondensedValveFlange') { cfg.splitCondensedValveFlange = !!checked; cfg.split_condensed_valve_flange = !!checked; } if (key === 'condenseRigidXsd') { cfg.condenseRigidXsd = !!checked; cfg.condense_rigid_xsd = !!checked; } writeConfig(root, cfg); return cfg; }
 function injectControls(scope, root) {
   const cfg = normalise(readConfig(root));

@@ -711,10 +711,15 @@ def _xml_restraints_are_authoritative(xml_path: Path, support_config: dict[str, 
     )
 
 
-def _build_conversion_model(document: base.XmlDocument, explicit_specs: dict[int, tuple[base.RestraintSpec, ...]], support_map: dict[str, str] | None) -> base.ConversionModel:
+def _build_conversion_model(
+    document: base.XmlDocument,
+    explicit_specs: dict[int, tuple[base.RestraintSpec, ...]],
+    support_map: dict[str, str] | None,
+    support_config: dict[str, Any] | None = None,
+) -> base.ConversionModel:
     edges = base._build_edges(document.branches)
     degrees = base._build_degree_map(edges)
-    nodename_lines, edge_to_nodename_index = base._build_nodename_lines(edges)
+    nodename_lines, edge_to_nodename_index = base._build_nodename_lines(edges, support_config)
     bend_edges, edge_to_bend_index = base._build_bend_indices(edges)
     rigid_edges, edge_to_rigid_index = base._build_rigid_indices(edges)
     sif_edges, edge_to_sif_index = base._build_sif_indices(edges)
@@ -753,7 +758,7 @@ def main() -> None:
     dtxr_specs, node_number_kind_map = _build_keyword_restraint_specs(input_xml, support_config)
     xml_specs = base._build_explicit_restraint_specs(document.branches)
     explicit_specs = dict(xml_specs) if _xml_restraints_are_authoritative(input_xml, support_config) else _prefer_xml_specs(xml_specs, dtxr_specs)
-    model = _build_conversion_model(document, explicit_specs, _node_name_kind_map(document, node_number_kind_map))
+    model = _build_conversion_model(document, explicit_specs, _node_name_kind_map(document, node_number_kind_map), support_config)
     temperature_map, pressure_map = _branch_case_maps(document)
     base._build_restraint_payload = _patched_build_restraint_payload_factory(support_config)
     base._build_elements_payload = _patched_elements_payload_factory(temperature_map, pressure_map, insulation_density_map, hydro_pressure_map, support_config)  # type: ignore[assignment]

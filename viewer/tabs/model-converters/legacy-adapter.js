@@ -579,6 +579,10 @@ const CONVERTER_DEFS = Object.freeze({
         useFrictionSentinelForNonYSupports: true,
         convertDensityKgM3ToKgCm3: true,
         disableCiiSupportTagPopulation: false,
+        condenseRigidXsd: false,
+        condense_rigid_xsd: false,
+        splitCondensedValveFlange: false,
+        split_condensed_valve_flange: false,
         duplicateSupportPolicy: 'prefer_datum',
         coordinateTolerance: 1.0,
         xmlAxisToCiiAxis: { Z: 'Y' },
@@ -7513,9 +7517,15 @@ export function renderModelConvertersTab(container) {
     if (config.disableCiiSupportTagPopulation == null) {
       config.disableCiiSupportTagPopulation = false;
     }
+    if (config.condenseRigidXsd == null && config.condense_rigid_xsd != null) config.condenseRigidXsd = config.condense_rigid_xsd === true;
+    if (config.condense_rigid_xsd == null) config.condense_rigid_xsd = config.condenseRigidXsd === true;
+    if (config.splitCondensedValveFlange == null && config.split_condensed_valve_flange != null) config.splitCondensedValveFlange = config.split_condensed_valve_flange === true;
+    if (config.split_condensed_valve_flange == null) config.split_condensed_valve_flange = config.splitCondensedValveFlange === true;
     const useFrictionSentinel = config.useFrictionSentinelForNonYSupports !== false;
     const convertDensity = config.convertDensityKgM3ToKgCm3 !== false;
     const disableCiiSupportTag = config.disableCiiSupportTagPopulation === true;
+    const condenseRigidXsd = config.condenseRigidXsd === true || config.condense_rigid_xsd === true;
+    const splitResolved = config.splitCondensedValveFlange === true || config.split_condensed_valve_flange === true;
     return `
       <div class="model-converters-workflow-detail-title">7 Config</div>
       <div class="model-converters-workflow-detail-text">Edit the enrichment configuration JSON. Master tables are hidden here for speed — manage them in “2 Import Masters”. Saving keeps them; Export JSON includes everything.</div>
@@ -7531,11 +7541,19 @@ export function renderModelConvertersTab(container) {
           </label>
           <label class="model-converters-workflow-map-field" style="display:flex;flex-direction:row;align-items:center;gap:8px;cursor:pointer;user-select:none;font-size:12px;color:#c9d1d9;margin:0;">
             <input type="checkbox" data-xml-cii-config-bool="disableCiiSupportTagPopulation" ${disableCiiSupportTag ? 'checked' : ''} style="cursor:pointer;margin:0;">
-            <span>Disable CII Support Tag population</span>
+            <span>Suppress CII support tag/name labels</span>
+          </label>
+          <label class="model-converters-workflow-map-field" style="display:flex;flex-direction:row;align-items:center;gap:8px;cursor:pointer;user-select:none;font-size:12px;color:#c9d1d9;margin:0;">
+            <input type="checkbox" data-xml-cii-config-bool="condenseRigidXsd" ${condenseRigidXsd ? 'checked' : ''} style="cursor:pointer;margin:0;">
+            <span>Record source/XSD condensed rigid intent</span>
+          </label>
+          <label class="model-converters-workflow-map-field" style="display:flex;flex-direction:row;align-items:center;gap:8px;cursor:pointer;user-select:none;font-size:12px;color:#c9d1d9;margin:0;">
+            <input type="checkbox" data-xml-cii-config-bool="splitCondensedValveFlange" ${splitResolved ? 'checked' : ''} style="cursor:pointer;margin:0;">
+            <span>Apply resolved split for condensed valve/flange/rigid nodes</span>
           </label>
         </div>
         <div style="font-size:11px;color:#8b9eb7;margin-top:4px;">
-          ON: writes blank length-0 Support Tag/GUID auxiliary records in the CII restraint block. Restraint behavior is unchanged.
+          Suppress ON blanks Support Tag/GUID restraint records and support-kind-only NODENAME rows such as RESR, REST+GUIDE, or GUIDE+REST. Source/XSD records intent only; Resolved applies the final split/renumber step before CII.
         </div>
       </div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;align-items:center;">
@@ -7570,6 +7588,8 @@ export function renderModelConvertersTab(container) {
         const cbFriction = detailEl?.querySelector('#mc-cfg-friction-sentinel');
         const cbDensity = detailEl?.querySelector('#mc-cfg-convert-density');
         const cbSupportTag = detailEl?.querySelector('[data-xml-cii-config-bool="disableCiiSupportTagPopulation"]');
+        const cbCondenseXsd = detailEl?.querySelector('[data-xml-cii-config-bool="condenseRigidXsd"]');
+        const cbSplitResolved = detailEl?.querySelector('[data-xml-cii-config-bool="splitCondensedValveFlange"]');
         if (cbFriction) {
           config.useFrictionSentinelForNonYSupports = cbFriction.checked;
         }
@@ -7578,6 +7598,14 @@ export function renderModelConvertersTab(container) {
         }
         if (cbSupportTag) {
           config.disableCiiSupportTagPopulation = cbSupportTag.checked;
+        }
+        if (cbCondenseXsd) {
+          config.condenseRigidXsd = cbCondenseXsd.checked;
+          config.condense_rigid_xsd = cbCondenseXsd.checked;
+        }
+        if (cbSplitResolved) {
+          config.splitCondensedValveFlange = cbSplitResolved.checked;
+          config.split_condensed_valve_flange = cbSplitResolved.checked;
         }
         
         xmlCiiSaveConfig(config);
@@ -7599,6 +7627,8 @@ export function renderModelConvertersTab(container) {
         const cbFriction = detailEl?.querySelector('#mc-cfg-friction-sentinel');
         const cbDensity = detailEl?.querySelector('#mc-cfg-convert-density');
         const cbSupportTag = detailEl?.querySelector('[data-xml-cii-config-bool="disableCiiSupportTagPopulation"]');
+        const cbCondenseXsd = detailEl?.querySelector('[data-xml-cii-config-bool="condenseRigidXsd"]');
+        const cbSplitResolved = detailEl?.querySelector('[data-xml-cii-config-bool="splitCondensedValveFlange"]');
         if (cbFriction) {
           config.useFrictionSentinelForNonYSupports = cbFriction.checked;
         }
@@ -7607,6 +7637,14 @@ export function renderModelConvertersTab(container) {
         }
         if (cbSupportTag) {
           config.disableCiiSupportTagPopulation = cbSupportTag.checked;
+        }
+        if (cbCondenseXsd) {
+          config.condenseRigidXsd = cbCondenseXsd.checked;
+          config.condense_rigid_xsd = cbCondenseXsd.checked;
+        }
+        if (cbSplitResolved) {
+          config.splitCondensedValveFlange = cbSplitResolved.checked;
+          config.split_condensed_valve_flange = cbSplitResolved.checked;
         }
         textarea.value = JSON.stringify(config, null, 2);
         setStatus('Unsaved changes - click Save', false);
@@ -7618,6 +7656,8 @@ export function renderModelConvertersTab(container) {
     detailEl?.querySelector('#mc-cfg-friction-sentinel')?.addEventListener('change', updateTextareaFromCheckboxes);
     detailEl?.querySelector('#mc-cfg-convert-density')?.addEventListener('change', updateTextareaFromCheckboxes);
     detailEl?.querySelector('[data-xml-cii-config-bool="disableCiiSupportTagPopulation"]')?.addEventListener('change', updateTextareaFromCheckboxes);
+    detailEl?.querySelector('[data-xml-cii-config-bool="condenseRigidXsd"]')?.addEventListener('change', updateTextareaFromCheckboxes);
+    detailEl?.querySelector('[data-xml-cii-config-bool="splitCondensedValveFlange"]')?.addEventListener('change', updateTextareaFromCheckboxes);
 
     detailEl?.querySelector('#mc-cfg-save')?.addEventListener('click', saveNow);
     detailEl?.querySelector('#mc-cfg-export')?.addEventListener('click', () => {
@@ -7639,6 +7679,8 @@ export function renderModelConvertersTab(container) {
         const cbFriction = detailEl?.querySelector('#mc-cfg-friction-sentinel');
         const cbDensity = detailEl?.querySelector('#mc-cfg-convert-density');
         const cbSupportTag = detailEl?.querySelector('[data-xml-cii-config-bool="disableCiiSupportTagPopulation"]');
+        const cbCondenseXsd = detailEl?.querySelector('[data-xml-cii-config-bool="condenseRigidXsd"]');
+        const cbSplitResolved = detailEl?.querySelector('[data-xml-cii-config-bool="splitCondensedValveFlange"]');
         if (cbFriction) {
           cbFriction.checked = parsed.useFrictionSentinelForNonYSupports !== false;
         }
@@ -7647,6 +7689,12 @@ export function renderModelConvertersTab(container) {
         }
         if (cbSupportTag) {
           cbSupportTag.checked = parsed.disableCiiSupportTagPopulation === true;
+        }
+        if (cbCondenseXsd) {
+          cbCondenseXsd.checked = parsed.condenseRigidXsd === true || parsed.condense_rigid_xsd === true;
+        }
+        if (cbSplitResolved) {
+          cbSplitResolved.checked = parsed.splitCondensedValveFlange === true || parsed.split_condensed_valve_flange === true;
         }
         
         setStatus(`✓ Imported ${file.name}`, true);
@@ -7811,6 +7859,8 @@ export function renderModelConvertersTab(container) {
           coordsMode: _toText(values.coordsMode || 'first'),
           createEnrichedXml: !!values.createEnrichedXml,
           kgToNewton: values.kgToNewton !== false,
+          condenseRigidXsd: config.condenseRigidXsd === true || config.condense_rigid_xsd === true,
+          splitCondensedValveFlange: config.splitCondensedValveFlange === true || config.split_condensed_valve_flange === true,
         },
       },
       diagnostics: {
@@ -7830,6 +7880,8 @@ export function renderModelConvertersTab(container) {
         useFrictionSentinel: config.useFrictionSentinelForNonYSupports !== false,
         convertDensity: config.convertDensityKgM3ToKgCm3 !== false,
         disableCiiSupportTag: config.disableCiiSupportTagPopulation === true,
+        condenseRigidXsd: config.condenseRigidXsd === true || config.condense_rigid_xsd === true,
+        splitCondensedValveFlange: config.splitCondensedValveFlange === true || config.split_condensed_valve_flange === true,
       },
     };
   }
@@ -7967,6 +8019,16 @@ export function renderModelConvertersTab(container) {
       if ('useFrictionSentinelForNonYSupports' in bools) config.useFrictionSentinelForNonYSupports = !!bools.useFrictionSentinelForNonYSupports;
       if ('convertDensityKgM3ToKgCm3' in bools) config.convertDensityKgM3ToKgCm3 = !!bools.convertDensityKgM3ToKgCm3;
       if ('disableCiiSupportTagPopulation' in bools) config.disableCiiSupportTagPopulation = !!bools.disableCiiSupportTagPopulation;
+      if ('condenseRigidXsd' in bools || 'condense_rigid_xsd' in bools) {
+        const enabled = !!(bools.condenseRigidXsd || bools.condense_rigid_xsd);
+        config.condenseRigidXsd = enabled;
+        config.condense_rigid_xsd = enabled;
+      }
+      if ('splitCondensedValveFlange' in bools || 'split_condensed_valve_flange' in bools) {
+        const enabled = !!(bools.splitCondensedValveFlange || bools.split_condensed_valve_flange);
+        config.splitCondensedValveFlange = enabled;
+        config.split_condensed_valve_flange = enabled;
+      }
     }
     xmlCiiSaveConfig(config);
     return _xmlCiiCompactConfigForEditor(activeValues().supportConfigJson || '{}').text;

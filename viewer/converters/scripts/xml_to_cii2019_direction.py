@@ -561,7 +561,12 @@ def main() -> None:
         if args.use_restraint_type_based_on_json and patched._xml_restraints_are_authoritative(input_xml, support_config)
         else (_prefer_xml_spec_map(xml_specs, component_specs, dtxr_specs) if args.use_restraint_type_based_on_json else _merge_spec_maps(component_specs, xml_specs, dtxr_specs))
     )
-    model = patched._build_conversion_model(document, explicit_specs, patched._node_name_kind_map(document, node_number_kind_map))
+    model = patched._build_conversion_model(
+        document,
+        explicit_specs,
+        patched._node_name_kind_map(document, node_number_kind_map),
+        support_config,
+    )
     temperature_map, pressure_map = patched._branch_case_maps(document)
     base._build_restraint_payload = _direction_enabled_restraint_payload_factory(support_config)
     base._build_elements_payload = patched._patched_elements_payload_factory(temperature_map, pressure_map, insulation_density_map, hydro_pressure_map, support_config)  # type: ignore[assignment]
