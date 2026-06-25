@@ -5,7 +5,7 @@ import { canUseAutoBend, sourceKindFromContext } from '../overlays/autobend/NonP
 import { readNonPrimitiveAutoBendSettings } from '../overlays/autobend/NonPrimitiveAutoBendSettings.js';
 import { resolveNonPrimitiveAutoBends, buildVisualTrimLookup } from '../overlays/autobend/NonPrimitiveAutoBendResolver.js';
 import { sampleBendArc } from '../overlays/autobend/NonPrimitiveAutoBendGeometry.js';
-import { collectExistingAutoBendNodeKinds, collectNonPrimitiveAutoBendSegments } from '../overlays/autobend/NonPrimitiveAutoBendSourceAdapter.js';
+import { collectExistingAutoBendNodeKinds, collectExplicitNonPrimitiveAutoBends, collectNonPrimitiveAutoBendSegments } from '../overlays/autobend/NonPrimitiveAutoBendSourceAdapter.js';
 
 export const RVM_NON_PRIMITIVE_AUTO_BEND_SCHEMA = 'rvm-non-primitive-auto-bend/v1';
 
@@ -24,6 +24,7 @@ export function installRvmNonPrimitiveAutoBendBridge() {
     applyFromSource,
     clear,
     collectSegments: collectNonPrimitiveAutoBendSegments,
+    collectExplicitBends: collectExplicitNonPrimitiveAutoBends,
   };
   patchAvevaJsonLoaderForAutoBendSource();
   patchRvmViewerSetModelForAutoBendOverlay();
@@ -82,9 +83,10 @@ export function applyFromSource({ viewer, source, sourceKind = '', fileName = ''
   }
 
   const segments = collectNonPrimitiveAutoBendSegments(source);
+  const explicitBends = collectExplicitNonPrimitiveAutoBends(source);
   const existingNodeKinds = collectExistingAutoBendNodeKinds(source);
   const result = resolveNonPrimitiveAutoBends(
-    { sourceKind: normalizedKind, segments, existingNodeKinds },
+    { sourceKind: normalizedKind, segments, explicitBends, existingNodeKinds },
     { enabled: true, defaultRadiusFactor: settings.defaultRadiusFactor }
   );
   const trimmedSegmentCount = applyVisualTrimmedSegments(viewer, result, segments);
@@ -98,6 +100,7 @@ export function applyFromSource({ viewer, source, sourceKind = '', fileName = ''
     sourceFile: fileName,
     settings: { ...settings },
     segmentCount: segments.length,
+    explicitBendCount: explicitBends.length,
     bendCount: result.bends.length,
     trimCount: result.trims.length,
     trimmedSegmentCount,
