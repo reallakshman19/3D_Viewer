@@ -1,4 +1,3 @@
-const STARTUP_SIDE_EFFECT_MODULES = [];
 // Previous cache marker: core/app.js?v=20260622-geometry-import-tree-1
 // Previous cache marker: core/app.js?v=20260622-geometry-enriched-stagedjson-1
 // Previous cache marker: core/app.js?v=20260622-geometry-support-load-inputs-1
@@ -11,10 +10,9 @@ const STARTUP_SIDE_EFFECT_MODULES = [];
 // Previous cache marker: core/app.js?v=20260624-selected-geometry-floating-workflow-3
 // Previous cache marker: core/app.js?v=20260625-rvm-renderer-cache-chain-1
 // Previous cache marker: core/app.js?v=20260625-rvm-route-preserve-preflight-1
-// Active cache key: core/app.js?v=20260625-model-converters-finalise-run-owner-1
+// Previous cache marker: core/app.js?v=20260625-model-converters-finalise-run-owner-1
+// Active cache key: core/app.js?v=20260625-empty-startup-side-effects-removed-1
 function startupMount() { return document.getElementById('app') || document.getElementById('app-layout') || document.getElementById('app-shell') || document.body; }
 function reportStartupError(error) { console.error('3D Viewer startup error', error); const label = document.getElementById('app-loading-label'); if (label) label.textContent = 'Viewer startup error. Check the browser console.'; const shell = startupMount(); if (!shell) return; shell.innerHTML = '<div style="padding:24px;color:#fca5a5;background:#111827;min-height:100vh;font-family:system-ui,sans-serif;"><h1 style="margin-top:0;color:#fecaca;">3D Viewer startup error</h1><p>Refresh once. If the problem remains, check the browser console.</p></div>'; }
-async function loadStartupSideEffects() { const results = await Promise.allSettled(STARTUP_SIDE_EFFECT_MODULES.map((specifier) => import(specifier))); const failures = results.map((result, index) => ({ result, specifier: STARTUP_SIDE_EFFECT_MODULES[index] })).filter(({ result }) => result.status === 'rejected'); for (const { result, specifier } of failures) console.warn(`[3D Viewer] optional startup module failed: ${specifier}`, result.reason); return failures; }
-function scheduleDeferredStartupSideEffects() { const run = () => loadStartupSideEffects().catch((error) => { console.warn('[3D Viewer] deferred startup side effects failed', error); }); if (typeof window !== 'undefined' && typeof window.requestIdleCallback === 'function') window.requestIdleCallback(run, { timeout: 1600 }); else if (typeof window !== 'undefined' && typeof window.requestAnimationFrame === 'function') window.requestAnimationFrame(() => setTimeout(run, 0)); else setTimeout(run, 0); }
-async function startViewer() { const { init } = await import('./core/app.js?v=20260625-model-converters-finalise-run-owner-1'); await init(startupMount()); scheduleDeferredStartupSideEffects(); }
+async function startViewer() { const { init } = await import('./core/app.js?v=20260625-empty-startup-side-effects-removed-1'); await init(startupMount()); }
 startViewer().catch(reportStartupError);
