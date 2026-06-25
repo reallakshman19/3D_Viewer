@@ -1,4 +1,4 @@
-/**
+/*
  * ModelConvertersTab — orchestration shell for the Model Converters tab.
  *
  * Responsibilities:
@@ -22,6 +22,7 @@ import { installXmlCiiWorkflowButtonScope } from './xml-cii-workflow-button-scop
 import { installXmlCiiSimpleWorkflowController } from './xml-cii-simple-workflow-controller.js?v=20260624-workflow-consolidation-1';
 import { installXmlCiiWorkflowPopup } from './xml-cii-workflow-popup.js?v=20260624-unified-wf2-1';
 import { installXmlCiiBranchSampleSync } from './xml-cii-branch-sample-sync.js?v=20260624-workflow-consolidation-1';
+import { installXmlCiiFinaliseRunButton } from './xml-cii-finalise-run-button.js?v=20260625-model-converters-finalise-run-owner-1';
 import { installInputXmlBasicGlbBridge } from './inputxml-basic-glb-bridge.js';
 import { installInputXmlManagedStageBridge } from './inputxml-managed-stage-bridge.js?v=20260623-inputxml-direct-stage-1';
 import { installXmlCiiDefaultMasterAutoloadLite } from '../xml-cii-master-autoload-lite.js?v=20260624-startup-autoload-noise-1';
@@ -95,7 +96,7 @@ function scheduleInstallerQueue(container) {
   scheduleModelConverterTask(runNext);
 }
 
-/**
+/*
  * Ordered installer pairs. Each entry is [debugName, installerFn].
  * The XML->CII entries here are source-level owners only; active hotfix/patch
  * modules are deliberately excluded from the runtime import path.
@@ -108,6 +109,7 @@ const MODEL_CONVERTER_INSTALLERS = Object.freeze([
   ['xml-cii-simple-workflow-controller', installXmlCiiSimpleWorkflowController],
   ['xml-cii-workflow-popup', installXmlCiiWorkflowPopup],
   ['xml-cii-branch-sample-sync', installXmlCiiBranchSampleSync],
+  ['xml-cii-finalise-run-button', installXmlCiiFinaliseRunButton],
   ['bm-cii-support-annotation-popup', installBmCiiSupportAnnotationPopup],
   ['inputxml-property-transfer-popup-ui-v4', installInputXmlPropertyTransferUi],
   ['inputxml-basic-glb-bridge', installInputXmlBasicGlbBridge],
