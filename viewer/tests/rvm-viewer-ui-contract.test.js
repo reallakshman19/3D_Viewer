@@ -19,6 +19,13 @@ const files = {
   bottomDiagnostics: path.join(viewerRoot, 'tabs/RvmBottomDiagnosticsDrawerBridge.js'),
 };
 
+const ADVANCED_POSTMODEL_TOOLS = [
+  ['object-search', 'RvmObjectSearchBridge.js?v=20260621-rvm-object-search-1', 'installRvmObjectSearchBridge'],
+  ['visibility-snapshots', 'RvmVisibilitySnapshotsBridge.js?v=20260621-rvm-visibility-snapshots-1', 'installRvmVisibilitySnapshotsBridge'],
+  ['selection-sets', 'RvmSelectionSetsBridge.js?v=20260621-rvm-selection-sets-1', 'installRvmSelectionSetsBridge'],
+  ['report-export', 'RvmReportExportBridge.js?v=20260621-rvm-report-export-1', 'installRvmReportExportBridge'],
+];
+
 function read(file) {
   assert.ok(fs.existsSync(file), `missing source file: ${path.relative(viewerRoot, file)}`);
   return fs.readFileSync(file, 'utf8');
@@ -61,10 +68,10 @@ function verifySupportPolicyOptionA() {
 function verifyDeferredSupportPolicyCacheKeys() {
   const deferredLoader = read(files.deferredLoader);
   const renderer = read(files.renderer);
-  assert.ok(deferredLoader.includes('20260624-rvm-deferred-postmodel-health-1'), 'deferred bridge loader must expose post-model health cache contract');
+  assert.ok(deferredLoader.includes('20260624-rvm-deferred-postmodel-advanced-tools-1'), 'deferred bridge loader must expose post-model advanced-tools cache contract');
   assert.ok(deferredLoader.includes('RvmStagedJsonExportBridge.js?v=20260624-rvm-stagedjson-support-policy-1'), 'post-model deferred loader must import current Option A staged export bridge');
   assert.ok(deferredLoader.includes('RvmStagedJsonValidationBridge.js?v=20260624-rvm-stagedjson-support-policy-1'), 'post-model deferred loader must import current Option A staged validation bridge');
-  assert.ok(renderer.includes('RvmDeferredBridgeLoader.js?v=20260624-rvm-deferred-postmodel-health-1'), 'renderer must import the current deferred loader cache key');
+  assert.ok(renderer.includes('RvmDeferredBridgeLoader.js?v=20260624-rvm-deferred-postmodel-advanced-tools-1'), 'renderer must import the current deferred loader cache key');
   assert.ok(!deferredLoader.includes('RvmStagedJsonExportBridge.js?v=20260621-rvm-button-hardening-1'), 'deferred loader must not keep stale staged export cache key');
   assert.ok(!deferredLoader.includes('RvmStagedJsonValidationBridge.js?v=20260620-rvm-stagedjson-validation-1'), 'deferred loader must not keep stale staged validation cache key');
 }
@@ -108,6 +115,21 @@ function verifyPostModelHealthDeferral() {
   assert.ok(deferredLoader.includes('RvmModelHealthIssuesBridge.js?v=20260621-rvm-health-issues-1'), 'deferred postModel group must import model health issues bridge');
 }
 
+function verifyPostModelAdvancedToolDeferral() {
+  const renderer = read(files.renderer);
+  const deferredLoader = read(files.deferredLoader);
+  for (const [id, specifier, installName] of ADVANCED_POSTMODEL_TOOLS) {
+    assert.ok(!renderer.includes(`${specifier.split('?')[0]}?v=`), `renderer must not eagerly import ${id}`);
+    assert.ok(!renderer.includes(`${installName}()`), `renderer must not eagerly install ${id}`);
+    assert.ok(deferredLoader.includes(`id: '${id}'`), `deferred postModel group must include ${id}`);
+    assert.ok(deferredLoader.includes(specifier), `deferred postModel group must import ${id}`);
+    assert.ok(deferredLoader.includes(installName), `deferred postModel group must install ${id}`);
+  }
+  assert.ok(renderer.includes('RvmMeasureBridge.js?v=20260621-rvm-measure-tools-1'), 'core Measure bridge must stay eager');
+  assert.ok(renderer.includes('RvmSectionBoxBridge.js?v=20260621-rvm-section-box-1'), 'core Section bridge must stay eager');
+  assert.ok(renderer.includes('RvmVisibilityToolbarBridge.js?v=20260621-rvm-isolate-visibility-toolbar-1'), 'core Visibility bridge must stay eager');
+}
+
 verifyModuleIdentity();
 verifyResizablePanels();
 verifySupportPolicyOptionA();
@@ -115,5 +137,6 @@ verifyDeferredSupportPolicyCacheKeys();
 verifyToolbarCompactPolicy();
 verifyDockedDiagnosticsDrawer();
 verifyPostModelHealthDeferral();
+verifyPostModelAdvancedToolDeferral();
 
-console.log('Verified RVM viewer module identity, side-panel resize UI contract, Option A staged support policy, deferred stagedJSON cache keys, compact toolbar policy, docked diagnostics drawer, and post-model Health deferral.');
+console.log('Verified RVM viewer module identity, side-panel resize UI contract, Option A staged support policy, deferred stagedJSON cache keys, compact toolbar policy, docked diagnostics drawer, post-model Health deferral, and post-model advanced tool deferral.');

@@ -1,4 +1,4 @@
-const VERSION = '20260624-rvm-deferred-postmodel-health-1';
+const VERSION = '20260624-rvm-deferred-postmodel-advanced-tools-1';
 const API_KEY = '__PCF_GLB_RVM_BRIDGE_LOADER__';
 const ACTION_DIAGNOSTICS_KEY = '__PCF_GLB_RVM_ACTION_DIAGNOSTICS__';
 
@@ -14,6 +14,10 @@ const BRIDGE_GROUPS = Object.freeze({
     { id: 'glb-selection-parity', specifier: './RvmGlbSelectionParityBridge.js?v=20260620-rvm-glb-selection-details-parity-1', install: 'installRvmGlbSelectionParityBridge' },
     { id: 'glb-acceptance-pack', specifier: './RvmGlbAcceptancePackBridge.js?v=20260620-rvm-stagedjson-validation-1', install: 'installRvmGlbAcceptancePackBridge' },
     { id: 'native-tessellation-diagnostics', specifier: './RvmNativeTessellationDiagnosticsBridge.js?v=20260620-rvm-native-diagnostics-1', install: 'installRvmNativeTessellationDiagnosticsBridge' },
+    { id: 'object-search', specifier: './RvmObjectSearchBridge.js?v=20260621-rvm-object-search-1', install: 'installRvmObjectSearchBridge' },
+    { id: 'visibility-snapshots', specifier: './RvmVisibilitySnapshotsBridge.js?v=20260621-rvm-visibility-snapshots-1', install: 'installRvmVisibilitySnapshotsBridge' },
+    { id: 'selection-sets', specifier: './RvmSelectionSetsBridge.js?v=20260621-rvm-selection-sets-1', install: 'installRvmSelectionSetsBridge' },
+    { id: 'report-export', specifier: './RvmReportExportBridge.js?v=20260621-rvm-report-export-1', install: 'installRvmReportExportBridge' },
     { id: 'model-health', specifier: './RvmModelHealthBridge.js?v=20260621-rvm-health-issues-1', install: 'installRvmModelHealthBridge' },
     { id: 'model-health-issues', specifier: './RvmModelHealthIssuesBridge.js?v=20260621-rvm-health-issues-1', install: 'installRvmModelHealthIssuesBridge' },
   ],
