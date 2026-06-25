@@ -1,6 +1,7 @@
 import { decodeTextUtf8, encodeTextUtf8, baseNameWithoutExtension } from '../core/output-utils.js';
 import { collectXmlCiiZeroRigidWeightIssues, applyXmlCiiRigidWeightOverrides } from '../../../converters/xml-cii2019-core/weight-match-model.js?v=20260620-weight-fallback-1';
 import { applyXmlCiiFlangeWeightFallbackToIssues } from '../../../converters/xml-cii2019-core/flange-weight-fallback.js?v=20260620-flange-fallback-1';
+import { applyXmlCiiStagedGeometryAuthority } from '../../../converters/xml-cii2019-core/staged-geometry-authority.js?v=20260625-staged-geometry-1';
 import { buildXmlCiiNodeResolverIndex } from '../../../converters/xml-cii2019-core/sideload-resolver.js';
 import { resolveManualRestraintRows } from '../../../converters/xml-cii2019-core/sideload-restraints.js';
 import { mergeXmlCiiMatchedFacts, matchedFactsFromEnrichmentDiagnostics } from '../../../converters/xml-cii2019-core/sideload-ledger.js';
@@ -288,6 +289,24 @@ function buildEnrichedStageJson(xmlText, meta = {}) {
   return payload;
 }
 
+function applyStagedGeometryAuthorityToEnriched(enriched, stagedJsonText) {
+  const result = applyXmlCiiStagedGeometryAuthority(enriched.xmlText, stagedJsonText, { config: enriched.config });
+  enriched.xmlText = result.xmlText;
+  enriched.stats = { ...(enriched.stats || {}), ...(result.stats || {}) };
+  enriched.diagnostics = Array.isArray(enriched.diagnostics) ? enriched.diagnostics : [];
+  enriched.diagnostics.push(...(result.diagnostics || []));
+  if ((result.stats?.stagedGeometryMatches || 0) > 0) {
+    enriched.diagnostics.push({
+      type: 'staged-geometry-authority-summary',
+      matched: result.stats.stagedGeometryMatches,
+      lengthAnnotations: result.stats.stagedLengthAnnotations,
+      boreAnnotations: result.stats.stagedBoreAnnotations,
+      message: 'ElementLengthMm and BoreMm corrected from exact staged ComponentRefNo geometry before weight review and Python CII conversion.',
+    });
+  }
+  return enriched;
+}
+
 export async function run(context) {
   const primary = context.inputFiles.find(f => f.role === 'primary');
   if (!primary || !primary.bytes) throw new Error('Primary XML input is required for XML->CII(2019).');
@@ -315,6 +334,7 @@ export async function run(context) {
     'browser-side XML enrichment',
   );
   enriched.config = mergeRuntimeOverridesIntoConfig(enriched.config, liveSupportConfig);
+  applyStagedGeometryAuthorityToEnriched(enriched, stagedJsonText);
   const rigidReviewLogLines = [];
   const rigidWeightIssues = applyXmlCiiFlangeWeightFallbackToIssues(
     collectXmlCiiZeroRigidWeightIssues(enriched.xmlText, stagedJsonText, enriched.config),
@@ -422,6 +442,7 @@ export async function run(context) {
         `DTXR_POS annotations: ${stats.dtxrPosAnnotations || 0}.`,
         `Branch line keys annotated from Branchname: ${stats.branchLineKeys}.`,
         `Preview/run parity branches: ${stats.previewRunParityBranches || 0}; process fields: ${stats.previewRunParityProcessFields || 0}; node facts: ${stats.previewRunParityNodeFacts || 0}.`,
+        `Staged geometry matches: ${stats.stagedGeometryMatches || 0}; lengths: ${stats.stagedLengthAnnotations || 0}; bores: ${stats.stagedBoreAnnotations || 0}.`,
         `Rating annotations: ${stats.ratingAnnotations}; weight annotations: ${stats.weightAnnotations}.`,
         `Matched enrichment preview facts: ${stats.previewMatchedFacts || 0}.`,
         `Rejected enrichment preview facts: ${stats.previewRejectedFacts || 0}.`,
