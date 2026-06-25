@@ -3,8 +3,10 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 const repoRoot = process.cwd();
-const file = path.join(repoRoot, 'viewer/tabs/model-converters/converters/xmltocii2019_helper/weight-match-renderer.js');
-const source = fs.readFileSync(file, 'utf8');
+const read = (file) => fs.readFileSync(path.join(repoRoot, file), 'utf8');
+const renderer = read('viewer/tabs/model-converters/converters/xmltocii2019_helper/weight-match-renderer.js');
+const nativePanels = read('viewer/tabs/model-converters/xml-cii-popup-native-panels.js');
+const bridge = read('viewer/tabs/model-converters/xml-cii-workflow-bridge.js');
 
 function assert(condition, message) {
   if (!condition) {
@@ -13,9 +15,19 @@ function assert(condition, message) {
   }
 }
 
-assert(/<th>Node<\/th><th>ComponentRefNo<\/th><th>DTXR<\/th>/.test(source), 'Weight Match table header must show ComponentRefNo between Node and DTXR');
-assert(/issue\.componentRefNo/.test(source), 'Weight Match row renderer must output issue.componentRefNo');
-assert(/title="\$\{attr\(issue\.componentRefNo \|\| ''\)\}"/.test(source), 'ComponentRefNo cell must include a title for long references');
-assert(/componentRefNo:\s*row\.componentRefNo|componentRefNo,/.test(source), 'ComponentRefNo must remain part of ranking and row data flow');
+assert(/<th>ComponentType<\/th>/.test(renderer), 'Workflow 4A table header must show ComponentType');
+assert(/<th>Node<\/th><th>ComponentRefNo_Endpoint<\/th><th>DTXR<\/th>/.test(renderer), 'Workflow 4A table header must show ComponentRefNo_Endpoint between Node and DTXR');
+assert(/componentRefEndpoint/.test(renderer), 'Workflow 4A row renderer must output componentRefEndpoint');
+assert(/Endpoint/.test(renderer), 'Workflow 4A renderer must read XML Endpoint values');
+assert(/componentRefEndpoint\(issue\.componentRefNo, issue\.endpoint\)/.test(renderer), 'Workflow 4A must derive ComponentRefNo_Endpoint from ComponentRefNo and Endpoint');
+assert(!/<th>Node<\/th><th>ComponentRefNo<\/th><th>DTXR<\/th>/.test(renderer), 'Workflow 4A must not keep the old ComponentRefNo-only header');
 
-console.log('XML CII weight match ComponentRefNo column guard passed.');
+assert(/ComponentRefNo_Endpoint/.test(nativePanels), 'Popup-native approximate weight match table must show ComponentRefNo_Endpoint');
+assert(/ComponentType/.test(nativePanels), 'Popup-native approximate weight match table must show ComponentType');
+assert(/componentRefEndpoint/.test(nativePanels), 'Popup-native approximate weight match table must consume componentRefEndpoint rows');
+
+assert(/augmentWeightRowsWithNodeMeta/.test(bridge), 'Workflow bridge must augment popup weight rows with XML node metadata');
+assert(/componentRefEndpoint/.test(bridge), 'Workflow bridge must provide componentRefEndpoint for post-run/native popup rows');
+assert(/Endpoint/.test(bridge), 'Workflow bridge must read XML Endpoint values for post-run/native popup rows');
+
+console.log('XML CII weight match ComponentRefNo_Endpoint and ComponentType column guard passed.');
