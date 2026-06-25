@@ -44,6 +44,7 @@ on:
       - 'viewer/overlays/autobend/**'
       - 'viewer/overlays/support/**'
       - 'viewer/overlays/source-tools/**'
+      - 'viewer/overlays/nodes/**'
       - 'viewer/core/app.js'
       - 'viewer/core/app-label-perf-runtime.js'
       - 'viewer/index.html'
@@ -66,6 +67,7 @@ on:
       - 'viewer/tests/nonprimitive-source-tools-stagedjson-controls.test.js'
       - 'viewer/tests/nonprimitive-source-tools-diagnostics-export.test.js'
       - 'viewer/tests/nonprimitive-source-tools-diagnostics-module.test.js'
+      - 'viewer/tests/nonprimitive-node-marker-*.test.js'
       - 'viewer/tests/rvm-navigation-mode-arbiter.test.js'
       - '.github/workflows/rvm-pcf-ci.yml'
   workflow_dispatch:
@@ -174,6 +176,9 @@ jobs:
 
       - name: Verify non-primitive source tools diagnostics module
         run: node viewer/tests/nonprimitive-source-tools-diagnostics-module.test.js
+
+      - name: Verify non-primitive node marker core API
+        run: node viewer/tests/nonprimitive-node-marker-core-api.test.js
 
       - name: Verify RHBG RVM fit guard
         run: |
