@@ -180,17 +180,31 @@ function bindPrimaryInput(root, state) {
   input.addEventListener('change', state.onPrimaryChange);
 }
 
+function bindWorkflowTabRefresh(root, state) {
+  if (state.tabRefreshBound) return;
+  state.tabRefreshBound = true;
+  state.onTabRefresh = (event) => {
+    const target = event.target?.closest?.('[data-modal-tab="regex"], [data-old-xml-cii-phase="regex"], [data-native-regex-path], [data-xml-cii-regex-path]');
+    if (!target) return;
+    const run = () => applyXmlCiiBranchSample(root);
+    if (typeof requestAnimationFrame === 'function') requestAnimationFrame(run);
+    else Promise.resolve().then(run);
+  };
+  document.addEventListener('click', state.onTabRefresh, true);
+}
+
 export function installXmlCiiBranchSampleSync(container = document) {
   if (!browserReady()) return;
   const root = container && container.nodeType === 1 ? container : document;
   if (!window[FLAG]) window[FLAG] = { stateByRoot: new WeakMap() };
   let state = window[FLAG].stateByRoot.get(root);
   if (!state) {
-    state = { primaryInput: null, onPrimaryChange: null };
+    state = { primaryInput: null, onPrimaryChange: null, tabRefreshBound: false, onTabRefresh: null };
     window[FLAG].stateByRoot.set(root, state);
   }
 
   bindPrimaryInput(root, state);
+  bindWorkflowTabRefresh(root, state);
   applyXmlCiiBranchSample(root);
   syncLoadedXmlCiiBranchSample(root).catch(() => {});
 }
