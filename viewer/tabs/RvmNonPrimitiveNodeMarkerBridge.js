@@ -4,6 +4,7 @@ import {
   buildNodeMarkersFromSource,
   evaluateNodeMarkerStaleness,
 } from '../overlays/nodes/NodeMarkerApi.js';
+import * as NodeMarkerSourceTools from './RvmNonPrimitiveNodeMarkerSourceToolsBridge.js';
 
 export const RVM_NON_PRIMITIVE_NODE_MARKER_BRIDGE_SCHEMA = 'rvm-non-primitive-node-marker-bridge/v1';
 
@@ -13,6 +14,7 @@ const INSTALL_FLAG = Symbol.for('pcf-glb-rvm-non-primitive-node-marker-bridge-v1
 export function installRvmNonPrimitiveNodeMarkerBridge() {
   if (globalThis[INSTALL_FLAG] && globalThis[GLOBAL_KEY]) return globalThis[GLOBAL_KEY];
   globalThis[INSTALL_FLAG] = true;
+  NodeMarkerSourceTools.installRvmNonPrimitiveNodeMarkerSourceToolsBridge();
   const api = {
     schema: RVM_NON_PRIMITIVE_NODE_MARKER_BRIDGE_SCHEMA,
     applyFromSource,
@@ -37,6 +39,7 @@ export function applyFromSource({ viewer = globalThis.__3D_RVM_VIEWER__, source,
   viewer.nonPrimitiveNodeMarkerTables = build.tables || null;
   viewer.nonPrimitiveNodeMarkerDiagnostics = build.diagnostics || null;
   viewer.nonPrimitiveNodeMarkerExportStatus = build.exportStatus || 'fresh';
+  scheduleSourceToolsSync(viewer);
   return build;
 }
 
@@ -56,6 +59,7 @@ export function clear(viewer = globalThis.__3D_RVM_VIEWER__, reason = 'clear-nod
     viewer.nonPrimitiveNodeMarkerDiagnostics = { schema: 'non-primitive-node-marker-clear/v1', status: 'cleared', reason };
     viewer.nonPrimitiveNodeMarkerExportStatus = 'blocked';
   }
+  NodeMarkerSourceTools.clear(viewer, reason);
   return { schema: 'non-primitive-node-marker-clear/v1', status: 'cleared', reason };
 }
 
@@ -89,4 +93,12 @@ export function getStaleStatus(viewer = globalThis.__3D_RVM_VIEWER__) {
     sourceKind: userData.__rvmNonPrimitiveSourceKind || userData.__rvmNonPrimitiveAutoBendSourceKind || viewer?.sourceKind || 'json',
     sourceFile: userData.fileName || '',
   }, viewer?.nonPrimitiveNodeMarkerBuild || null);
+}
+
+function scheduleSourceToolsSync(viewer) {
+  const run = () => NodeMarkerSourceTools.sync(viewer);
+  try {
+    if (typeof globalThis.queueMicrotask === 'function') globalThis.queueMicrotask(run);
+    else setTimeout(run, 0);
+  } catch (_) {}
 }
