@@ -56,13 +56,13 @@ function walkSourceNode(node, ctx, out) {
   if (points.length) out.push({
     order: out.length,
     path: ctx.path,
-    name: node.name || attrs.NAME || attrs.Name || attrs.ComponentRefNo || ctx.path,
+    name: node.name || attrs.NAME || attrs.Name || attrs.supportNo || attrs.SupportNo || attrs.ComponentRefNo || ctx.path,
     type,
     sourceType: String(node.type || node.kind || type),
     branchName,
     attributes: attrs,
     points,
-    isSupport: SUPPORT_RE.test(`${type} ${node.name || ''}`),
+    isSupport: SUPPORT_RE.test(`${type} ${node.name || attrs.supportNo || ''}`),
   });
   const kids = node.children || node.items || node.components || [];
   kids.forEach((child, i) => walkSourceNode(child, { path: `${ctx.path}/${child?.name || child?.id || i}`, branchName, order: out.length }, out));
