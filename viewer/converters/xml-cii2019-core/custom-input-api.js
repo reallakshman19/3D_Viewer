@@ -5,6 +5,7 @@ import { applyCustomInputBends, detectCustomInputBends } from './custom-input-au
 import { applyCustomInputTees, detectCustomInputTees } from './custom-input-auto-tee.js';
 import { applyCustomInputReducers, detectCustomInputReducers } from './custom-input-auto-reducer.js';
 import { parseStagedJsonToInputSource, stagedTraceToCsv } from './custom-input-staged-json-source.js';
+export { parseStagedJsonToInputSource, stagedTraceToCsv };
 const HEADERS={branchRows:['branchName','nodeNumber','boreMm','wallThickness','p1','t1','t2','t3','fluidDensity'],coordinateRows:['branchName','nodeNumber','x','y','z'],weightRows:['branchName','nodeNumber','componentType','rigid','endpoint','weight','componentRefNo'],restraintRows:['branchName','nodeNumber','nodeName','restraintType','gap','stiffness','friction','direction'],dtxrRows:['branchName','nodeNumber','dtxr']};
 export function buildXmlCiiCustomInputModelFromTables(tables={},options={}){
   const rows={}; for(const [key,headers] of Object.entries(HEADERS)){rows[key]=Array.isArray(tables[key])?tables[key]:parseCustomInputTable(tables[key]||'',{defaultHeaders:headers});}
