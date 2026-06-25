@@ -22,6 +22,7 @@ import { installRvmNavigationModeArbiterBridge } from './RvmNavigationModeArbite
 import { installRvmUiInteractionPanelPatch, installRvmUiPanelBridge } from './RvmUiInteractionPanelPatch.js?v=20260621-rvm-ui-interaction-panels-1';
 import { installRvmPropertyPanelCollapseAuditBridge } from './RvmPropertyPanelCollapseAuditBridge.js?v=20260621-rvm-property-collapse-1';
 import { installRvmLabelPerformanceBridge } from './RvmLabelPerformanceBridge.js?v=20260622-rvm-label-perf-no-support-runtime-1';
+import { installRvmToolbarCompactBridge } from './RvmToolbarCompactBridge.js?v=20260624-rvm-toolbar-compact-policy-1';
 import { installRvmZoneLodLabelBridge } from './RvmZoneLodLabelBridge.js?v=20260621-rvm-preload-hierarchy-selector-1';
 import { installRvmDeepSourcePathRecoveryBridge } from './RvmDeepSourcePathRecoveryBridge.js?v=20260622-rvm-deep-source-path-recovery-1';
 import { installRvmZoneDensitySelectorBridge } from './RvmZoneDensitySelectorBridgeV5.js?v=20260622-rvm-zone-density-selector-5';
@@ -45,7 +46,7 @@ import { installRvmModelHealthIssuesBridge } from './RvmModelHealthIssuesBridge.
 import { installRvmSelectionTreeSyncBridge } from './RvmSelectionTreeSyncBridge.js?v=20260620-rvm-large-box-support-sync-1';
 import { installRvmMaterialModeBridge } from './RvmMaterialModeBridge.js?v=20260620-rvm-remaining-material-modes-1';
 import { installRvmBottomDiagnosticsDrawerBridge } from './RvmBottomDiagnosticsDrawerBridge.js?v=20260622-rvm-support-tools-retired-1';
-import { installRvmDeferredBridgeLoader } from './RvmDeferredBridgeLoader.js?v=20260622-rvm-support-tools-retired-1';
+import { installRvmDeferredBridgeLoader } from './RvmDeferredBridgeLoader.js?v=20260624-rvm-deferred-stagedjson-cache-1';
 import { installRvmLeftPanelResizeCollapseBridge } from './RvmLeftPanelResizeCollapseBridge.js?v=20260624-rvm-panel-resize-1';
 import { installRvmLeafSelectionIdentityBridge } from './RvmLeafSelectionIdentityBridge.js?v=20260622-rvm-leaf-selection-identity-1';
 import { installRvmLeafCanvasPickBridge } from './RvmLeafCanvasPickBridge.js?v=20260622-rvm-leaf-canvas-pick-orbit-guard-2';
@@ -92,6 +93,7 @@ installRvmViewerInteractionPatch(RvmViewer3D);
 installToolbarActionCompatibility(RvmViewer3D);
 installRvmUiInteractionPanelPatch(RvmViewer3D);
 installRvmLabelPerformanceBridge(RvmViewer3D);
+installRvmToolbarCompactBridge();
 installRvmNonPrimitiveSupportOverlayBridge();
 installRvmNonPrimitiveSupportOverlayHardDisableBridge();
 installRvmNonPrimitiveSupportOverlayDetailsPanelBridge();
