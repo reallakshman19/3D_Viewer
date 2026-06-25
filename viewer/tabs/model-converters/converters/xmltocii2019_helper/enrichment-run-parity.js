@@ -164,7 +164,7 @@ function dropGasketNodesFromDocument(document, statsTarget, diagnosticsTarget, s
   return dropped;
 }
 
-export function dropGasketNodesFromXmlText(xmlTextVal, options = {}) {
+function dropGasketNodesFromXmlText(xmlTextVal, options = {}) {
   const config = configWithRuntimeOptions({}, options);
   if (!shouldDropGasketNodes(config, options)) return { xmlText: xmlTextVal, stats: {}, diagnostics: [] };
   if (typeof DOMParser !== 'undefined' && typeof XMLSerializer !== 'undefined') {
