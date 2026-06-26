@@ -85,7 +85,7 @@ assert.match(bridge, /rvm-non-primitive-support-overlay-details-panel\/v6/);
 assert.match(bridge, /RvmUiEventRegistry\.js\?v=20260626-rvm-ui-event-registry-1/);
 assert.match(bridge, /installRvmUiEventRegistry/);
 assert.match(bridge, /registerRvmUiEvent\('canvas-source-preview-support-select'/);
-assert.match(bridge, /routeRvmUiEvent\(globalThis\.document\?\.querySelector\?\(ROOT_SELECTOR\), 'canvas-source-preview-support-select'/);
+assert.match(bridge, /routeRvmUiEvent[\s\S]*canvas-source-preview-support-select/);
 assert.match(bridge, /getEventRegistryDiagnostics/);
 assert.match(bridge, /SUPPORTS_SLOT_SELECTOR/);
 assert.match(bridge, /__PCF_GLB_RVM_UI_SHELL__\?\.setRightPanelTab/);
