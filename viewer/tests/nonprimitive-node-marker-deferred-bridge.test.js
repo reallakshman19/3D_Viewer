@@ -12,8 +12,8 @@ assert.match(loader, /__PCF_GLB_RVM_NON_PRIMITIVE_NODE_MARKERS__\?\.applyFromSou
 assert.match(loader, /__PCF_GLB_RVM_NON_PRIMITIVE_NODE_MARKERS__\?\.clear/, 'loader clear path clears node marker runtime');
 assert.doesNotMatch(renderer, /RvmNonPrimitiveNodeMarkerBridge\.js\?v=/, 'renderer must not eagerly import node marker bridge');
 assert.doesNotMatch(renderer, /installRvmNonPrimitiveNodeMarkerBridge\(\)/, 'renderer must not eagerly install node marker bridge');
-assert.match(bridge, /rvm-non-primitive-node-marker-bridge\/v2/, 'bridge exposes glyph-aware schema');
-assert.match(bridge, /attachNodeMarkerGlyphs|ensureNodeMarkerHover/, 'bridge attaches glyphs and hover through deferred runtime');
+assert.match(bridge, /rvm-non-primitive-node-marker-bridge\/v3/, 'bridge exposes details-aware schema');
+assert.match(bridge, /attachNodeMarkerGlyphs|ensureNodeMarkerHover|ensureNodeMarkerDetailsPanel/, 'bridge attaches glyphs, hover, and details through deferred runtime');
 assert.match(bridge, /non-primitive-node-marker-api\/v2|evaluateNodeMarkerStaleness/, 'bridge uses stale-aware node marker API');
 assert.doesNotMatch(bridge, /RvmSelectionAdapter|objectSearch|selectObject|pickObject/, 'bridge does not use primitive RVM selection or search');
 
