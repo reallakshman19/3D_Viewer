@@ -4,7 +4,7 @@
 // Previous source-preview loader cache key: RvmDeferredBridgeLoader.js?v=20260626-rvm-deferred-source-preview-hover-events-1
 // Previous shell cache key: RvmViewerUiShell.js?v=20260626-rvm-ui-shell-slots-1
 // Previous diagnostics drawer cache key: RvmBottomDiagnosticsDrawerBridge.js?v=20260624-rvm-diagnostics-docked-drawer-1
-// Previous RVM tab shell cache key: viewer3d-rvm-tab.js?v=20260626-rvm-internal-toolbar-object-browser-1
+// Previous RVM tab shell cache key: viewer3d-rvm-tab.js?v=20260626-rvm-object-browser-quick-filters-1
 import {
   RVM_VIEWER3D_MODULE_SPECIFIER,
   RVM_VIEWER_MODULE_CONTRACT_VERSION,
@@ -120,6 +120,6 @@ publishRvmViewerModuleContract();
 
 export { RvmViewer3D };
 export async function renderViewer3DRvm(root, options = {}) {
-  const { mountViewer3DRvmTab } = await import('./viewer3d-rvm-tab.js?v=20260626-rvm-object-browser-quick-filters-1');
+  const { mountViewer3DRvmTab } = await import('./viewer3d-rvm-tab.js?v=20260626-rvm-statusbar-structured-summary-1');
   return mountViewer3DRvmTab(root, options);
 }
