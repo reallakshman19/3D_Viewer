@@ -1,6 +1,7 @@
 const VERSION = '20260626-rvm-ui-shell-slots-1';
 const API_KEY = '__PCF_GLB_RVM_UI_SHELL__';
 const ROOT_SELECTOR = '[data-rvm-viewer]';
+const STYLE_ID = 'rvm-ui-shell-slots-style';
 let bootstrapScheduled = false;
 
 export const RVM_UI_SHELL_SLOTS = Object.freeze({
@@ -25,6 +26,7 @@ const stateByRoot = new WeakMap();
 
 export function installRvmViewerUiShell(root, options = {}) {
   if (typeof document === 'undefined') return null;
+  injectStyles();
   const resolvedRoot = resolveRoot(root);
   publishApi();
   if (!resolvedRoot) {
@@ -315,6 +317,21 @@ function getRvmViewerUiShellApi() {
     audit: auditRvmViewerUiShell,
     getDiagnostics: getRvmViewerUiShellDiagnostics,
   };
+}
+
+function injectStyles() {
+  if (typeof document === 'undefined' || document.getElementById?.(STYLE_ID)) return;
+  const style = document.createElement('style');
+  style.id = STYLE_ID;
+  style.textContent = `
+    .rvm-right-panel-tabs{display:flex;flex-wrap:wrap;gap:4px;padding:6px;border-bottom:1px solid rgba(148,163,184,.22);}
+    .rvm-right-panel-tab{border:1px solid rgba(148,163,184,.28);border-radius:999px;background:rgba(15,23,42,.62);color:inherit;font:inherit;font-size:11px;padding:3px 7px;cursor:pointer;}
+    .rvm-right-panel-tab.is-active{background:var(--geo-accent,#4a9eff);border-color:var(--geo-accent,#4a9eff);color:#fff;}
+    .rvm-panel-slot{min-height:0;}
+    .rvm-panel-slot[hidden]{display:none!important;}
+    .rvm-panel-slot-empty{padding:8px;color:#94a3b8;font-size:12px;border:1px dashed rgba(148,163,184,.22);border-radius:8px;margin:6px;}
+  `;
+  document.head?.appendChild?.(style);
 }
 
 function resolveRoot(root) {
