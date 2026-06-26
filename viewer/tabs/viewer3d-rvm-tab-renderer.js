@@ -11,7 +11,7 @@ import { installRvmViewerInteractionPatch, installRvmCanvasSelectionBridge } fro
 import { installRvmCanvasSelectionSinglePickGuardBridge } from './RvmCanvasSelectionSinglePickGuardBridge.js?v=20260622-rvm-canvas-single-pick-guard-1';
 import { installRvmRetiredSupportToolsPurgeBridge } from './RvmRetiredSupportToolsPurgeBridge.js?v=20260622-rvm-retired-support-tools-purge-2';
 import { installSelectedGeometryEnrichmentPanel } from '../enrichment/SelectedGeometryEnrichmentPanel.js?v=20260624-selected-geometry-floating-workflow-3';
-import { installRvmUiEventSafetyBridge } from './RvmUiEventSafetyBridge.js?v=20260622-rvm-ui-event-safety-2';
+import { installRvmUiEventSafetyBridge } from './RvmUiEventSafetyBridge.js?v=20260626-rvm-ui-event-registry-1';
 import { installRvmNavigationModeArbiterBridge } from './RvmNavigationModeArbiterBridge.js?v=20260624-rvm-navigation-interaction-contract-1';
 import { installRvmUiInteractionPanelPatch, installRvmUiPanelBridge } from './RvmUiInteractionPanelPatch.js?v=20260621-rvm-ui-interaction-panels-1';
 import { installRvmPropertyPanelCollapseAuditBridge } from './RvmPropertyPanelCollapseAuditBridge.js?v=20260621-rvm-property-collapse-1';
