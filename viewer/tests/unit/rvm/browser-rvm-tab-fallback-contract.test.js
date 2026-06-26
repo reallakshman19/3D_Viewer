@@ -19,9 +19,16 @@ async function run() {
   );
   assert.match(
     tabSource,
-    /RVM_TAB_JS_VERSION\s*=\s*['"]20260622-rvm-support-runtime-retired-2['"]/, 
-    'The RVM tab diagnostics version must identify the support-runtime-retired worker-first path.'
+    /RVM_TAB_JS_VERSION\s*=\s*['"]20260626-rvm-internal-toolbar-object-browser-1['"]/, 
+    'The RVM tab diagnostics version must identify the internal-toolbar/object-browser worker-first path.'
   );
+  assert.match(tabSource, /data-rvm-internal-toolbar="object-browser-1"/, 'RVM tab must scope the toolbar redesign inside the RVM viewer domain.');
+  assert.match(tabSource, /data-rvm-object-browser="true"/, 'RVM tab must promote the left hierarchy panel to Object Browser.');
+  assert.match(tabSource, /data-rvm-object-browser-search="true"[\s\S]*id="rvm-search-input"/, 'RVM hierarchy search must be hosted by the Object Browser.');
+  assert.doesNotMatch(tabSource, /class="rvm-ribbon-search"/, 'RVM hierarchy search must not remain in the top toolbar.');
+  assert.match(tabSource, /label: 'Navigate \/ View'/, 'RVM toolbar must keep primary navigation and view actions together.');
+  assert.match(tabSource, /label: 'Review'/, 'RVM toolbar must keep review tools visible.');
+  assert.doesNotMatch(tabSource, /PCF GLB VIEWER/, 'RVM tab must not redefine the landing page or main ribbon.');
   assert.match(tabSource, /beforeRenderInstructions[\s\S]*__PCF_GLB_RVM_ZONE_LOD_LABELS__/, 'The direct RVM branch must pass the pre-render zone/LOD instruction hook.');
   assert.match(tabSource, /buildFlatNodeTree[\s\S]*flat:\s*true/, 'The RVM tab must render manifest nodes as flat selectable rows before Navis hierarchy bridge upgrades it.');
   assert.doesNotMatch(tabSource, /RvmSupportIndexAttributeBridge|RvmSupportSymbols|applyRvmSupportSymbolSettings|getRvmSupportSymbolSettings/, 'The RVM tab must not import retired support runtime/index/symbol engines.');
@@ -43,7 +50,7 @@ async function run() {
   const rvmBranch = tabSource.slice(rvmBranchStart, jsonBranchStart);
   assert.doesNotMatch(rvmBranch, /loadJsonOrUxmlFile|JSON\.parse|\.text\(\)/, 'The .rvm/.rev path must never call the JSON/UXML text loader.');
 
-  console.log('Browser RVM direct tab support-runtime-retired contract test passed');
+  console.log('Browser RVM direct tab internal-toolbar/object-browser contract test passed');
 }
 
 run();
