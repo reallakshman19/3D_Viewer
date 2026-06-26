@@ -16,6 +16,7 @@ const files = {
   stagedValidation: path.join(viewerRoot, 'tabs/RvmStagedJsonValidationBridge.js'),
   deferredLoader: path.join(viewerRoot, 'tabs/RvmDeferredBridgeLoader.js'),
   toolbarCompact: path.join(viewerRoot, 'tabs/RvmToolbarCompactBridge.js'),
+  toolbarOverflow: path.join(viewerRoot, 'tabs/RvmToolbarOverflowController.js'),
   bottomDiagnostics: path.join(viewerRoot, 'tabs/RvmBottomDiagnosticsDrawerBridge.js'),
 };
 
@@ -89,14 +90,25 @@ function verifyDeferredSupportPolicyCacheKeys() {
 function verifyToolbarCompactPolicy() {
   const renderer = read(files.renderer);
   const toolbar = read(files.toolbarCompact);
-  assert.ok(renderer.includes('RvmToolbarCompactBridge.js?v=20260624-rvm-toolbar-compact-policy-1'), 'renderer must import compact toolbar policy bridge');
+  const overflow = read(files.toolbarOverflow);
+  assert.ok(renderer.includes('RvmToolbarCompactBridge.js?v=20260626-rvm-toolbar-compact-policy-2'), 'renderer must import compact toolbar policy bridge v2');
   assert.ok(renderer.includes('installRvmToolbarCompactBridge()'), 'renderer must install compact toolbar policy bridge');
-  assert.ok(toolbar.includes('rvm-toolbar-compact-policy-1'), 'toolbar policy must expose versioned source contract');
+  assert.ok(toolbar.includes('rvm-toolbar-compact-policy-2'), 'toolbar policy must expose versioned source contract');
+  assert.ok(toolbar.includes('RvmToolbarOverflowController.js?v=20260626-rvm-toolbar-overflow-controller-1'), 'toolbar policy must use the single overflow owner module');
   assert.ok(toolbar.includes("CORE_LABELS = new Set(['Navigate', 'View'])"), 'toolbar policy must keep core Navigate/View top-level');
-  assert.ok(toolbar.includes('rvm-toolbar-more'), 'toolbar policy must create a More tools tray');
-  assert.ok(toolbar.includes('data-rvm-toolbar-more-panel'), 'toolbar policy must provide a stable More tools panel marker');
+  assert.ok(toolbar.includes('data-rvm-toolbar-more'), 'toolbar policy must create a stable More tools button');
+  assert.ok(toolbar.includes('data-rvm-tools-menu'), 'toolbar policy must provide a stable More tools menu marker');
+  assert.ok(toolbar.includes('data-rvm-toolbar-more-panel'), 'toolbar policy must preserve legacy panel marker for compatibility');
   assert.ok(toolbar.includes("section.dataset.rvmToolbarPolicy = 'advanced'"), 'toolbar policy must mark moved secondary groups as advanced');
   assert.ok(toolbar.includes("section.dataset.rvmToolbarPolicy = 'duplicate-hidden'"), 'toolbar policy must hide exact duplicate groups rather than stacking them');
+  assert.ok(!toolbar.includes('<details'), 'More Tools must not depend on native details toggling');
+  assert.ok(overflow.includes('installRvmToolbarOverflow'), 'overflow controller must expose install lifecycle');
+  assert.ok(overflow.includes('disposeRvmToolbarOverflow'), 'overflow controller must expose dispose lifecycle');
+  assert.ok(overflow.includes('syncRvmToolbarOverflow'), 'overflow controller must expose sync lifecycle');
+  assert.ok(overflow.includes('aria-expanded'), 'overflow controller must own aria-expanded state');
+  assert.ok(overflow.includes('outside-pointerdown'), 'overflow controller must close on outside pointerdown');
+  assert.ok(overflow.includes("event?.key !== 'Escape'"), 'overflow controller must close on Escape');
+  assert.ok(!overflow.includes('MutationObserver'), 'overflow controller must not use MutationObserver as the More Tools behavior fix');
 }
 
 function verifyDockedDiagnosticsDrawer() {
@@ -169,4 +181,4 @@ verifyPostModelHealthDeferral();
 verifyPostModelAdvancedToolDeferral();
 verifySourcePreviewToolDeferral();
 
-console.log('Verified RVM viewer module identity, side-panel resize UI contract, Option A staged support policy, deferred stagedJSON cache keys, compact toolbar policy, docked diagnostics drawer, post-model Health deferral, post-model advanced tool deferral, and source-preview tool deferral.');
+console.log('Verified RVM viewer module identity, side-panel resize UI contract, Option A staged support policy, deferred stagedJSON cache keys, controlled toolbar overflow policy, docked diagnostics drawer, post-model Health deferral, post-model advanced tool deferral, and source-preview tool deferral.');
