@@ -1,7 +1,8 @@
 import * as THREE from 'three';
+import { installRvmUiEventRegistry, registerRvmUiEvent, routeRvmUiEvent } from './RvmUiEventRegistry.js?v=20260626-rvm-ui-event-registry-1';
 
-const PATCH_FLAG = Symbol.for('pcf-glb-rvm-toolbar-canvas-selection-patch-v3-state-contract');
-const BRIDGE_VERSION = '20260624-rvm-interaction-state-contract-1';
+const PATCH_FLAG = Symbol.for('pcf-glb-rvm-toolbar-canvas-selection-patch-v4-registry');
+const BRIDGE_VERSION = '20260626-rvm-canvas-selection-registry-1';
 const CLICK_DRAG_TOLERANCE_PX = 5;
 const SELECTED_COLOR = 0x60a5fa;
 const SELECTED_EMISSIVE = 0x2563eb;
@@ -37,6 +38,7 @@ export function installRvmViewerInteractionPatch(RvmViewer3D) {
 
 export function installRvmCanvasSelectionBridge() {
   injectStyles();
+  installRvmUiEventRegistry();
   let attempts = 0;
   const attach = () => {
     attempts += 1;
@@ -50,11 +52,30 @@ export function installRvmCanvasSelectionBridge() {
 }
 
 function bindInteraction(root, viewer) {
+  registerCanvasPrimitiveSelectionHandler(root, viewer);
   bindCanvasSelection(root, viewer);
   bindKeyboardEsc(root, viewer);
   publishInteractionApi(root, viewer);
   if (!viewer._rvmInteractionMode) setMode(viewer, 'select', { source: 'bind-default', user: false });
   updateModeUi(root, normalizeMode(viewer._rvmInteractionMode || 'select'));
+}
+
+function registerCanvasPrimitiveSelectionHandler(root, viewer) {
+  if (!root || root.dataset.rvmCanvasPrimitiveSelectionRegistry === BRIDGE_VERSION) return;
+  root.dataset.rvmCanvasPrimitiveSelectionRegistry = BRIDGE_VERSION;
+  registerRvmUiEvent('canvas-primitive-select', ({ root: eventRoot, detail }) => {
+    const localRoot = eventRoot || root;
+    const localViewer = detail.viewer || viewer || globalThis.__3D_RVM_VIEWER__;
+    const event = detail.sourceEvent || {};
+    if (!localViewer?.renderer?.domElement) return false;
+    const clientX = Number.isFinite(detail.clientX) ? detail.clientX : event.clientX;
+    const clientY = Number.isFinite(detail.clientY) ? detail.clientY : event.clientY;
+    if (!Number.isFinite(clientX) || !Number.isFinite(clientY)) return false;
+    const selected = selectGeometryAtClientPoint(localRoot, localViewer, clientX, clientY, {
+      additive: detail.additive ?? Boolean(event.ctrlKey || event.shiftKey || event.metaKey),
+    });
+    return selected || { status: 'empty-or-cleared' };
+  }, { id: 'rvm-canvas-primitive-selection', priority: 40 });
 }
 
 function executeToolbarAction(viewer, action, options = {}) {
@@ -249,8 +270,14 @@ function bindCanvasSelection(root, viewer) {
     if (moved > CLICK_DRAG_TOLERANCE_PX || elapsed > 900) return;
     if (modeAtUp !== 'select') return;
     if (viewer.measureModeEnabled || viewer.marqueeModeEnabled) return;
-    const selected = selectGeometryAtClientPoint(root, viewer, event.clientX, event.clientY, { additive: event.ctrlKey || event.shiftKey || event.metaKey });
-    if (selected || modeAtUp === 'select') {
+    const routed = routeRvmUiEvent(root, 'canvas-primitive-select', {
+      viewer,
+      sourceEvent: event,
+      clientX: event.clientX,
+      clientY: event.clientY,
+      additive: event.ctrlKey || event.shiftKey || event.metaKey,
+    });
+    if (routed?.status === 'handled' || modeAtUp === 'select') {
       event.preventDefault();
       event.stopPropagation();
       event.stopImmediatePropagation?.();
@@ -568,6 +595,7 @@ function publishInteractionApi(root, viewer) {
     showHidden: () => showHiddenObjects(viewer),
     clearSelection: () => clearCanvasSelection(viewer, root),
     setSelectionFromObjects: (objects, options = {}) => setSelectionFromObjects(root, viewer, Array.from(objects || []), options),
+    getEventRegistryDiagnostics: () => globalThis.__PCF_GLB_RVM_UI_EVENT_REGISTRY__?.getDiagnostics?.() || null,
   };
 }
 
