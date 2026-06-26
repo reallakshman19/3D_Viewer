@@ -56,8 +56,10 @@ assert.ok(renderer.includes('installToolbarActionCompatibility'), 'renderer must
 assert.equal(activeImport(renderer, 'RvmViewerUiShell'), './RvmViewerUiShell.js?v=20260626-rvm-ui-shell-slots-2', 'renderer must actively import current UI shell cache key');
 assert.equal(activeImport(renderer, 'RvmBottomDiagnosticsDrawerBridge'), './RvmBottomDiagnosticsDrawerBridge.js?v=20260626-rvm-diagnostics-shell-slot-1', 'renderer must actively import shell-slot diagnostics drawer cache key');
 assert.equal(activeImport(renderer, 'RvmDeferredBridgeLoader'), './RvmDeferredBridgeLoader.js?v=20260626-rvm-deferred-report-export-shell-slot-1', 'renderer must actively import current deferred-loader cache key');
+assert.equal(activeImport(renderer, 'RvmToolbarCompactBridge'), './RvmToolbarCompactBridge.js?v=20260626-rvm-toolbar-compact-policy-3', 'renderer must actively import internal-toolbar compact policy v3');
 assert.equal(activeImport(renderer, 'RvmCanvasSelectionSinglePickGuardBridge'), './RvmCanvasSelectionSinglePickGuardBridge.js?v=20260626-rvm-canvas-single-pick-registry-1', 'renderer must actively import routed canvas single-pick bridge');
 assert.equal(activeImport(renderer, 'RvmViewerInteractionPatch'), './RvmViewerInteractionPatch.js?v=20260626-rvm-canvas-selection-registry-1', 'renderer must actively import routed canvas selection bridge');
+assert.ok(renderer.includes("viewer3d-rvm-tab.js?v=20260626-rvm-internal-toolbar-object-browser-1"), 'renderer must dynamically import current RVM tab shell cache key');
 
 for (const eagerForbidden of [
   'RvmModelHealthBridge.js?v=',
@@ -75,6 +77,20 @@ for (const eagerForbidden of [
 ]) {
   assert.ok(!renderer.includes(`import`) || !activeImport(renderer, eagerForbidden.replace('.js?v=', '')), `renderer must not eagerly import ${eagerForbidden}`);
 }
+
+assert.ok(tab.includes("const RVM_TAB_JS_VERSION = '20260626-rvm-internal-toolbar-object-browser-1'"), 'RVM tab shell must expose internal toolbar/object browser cache key');
+assert.ok(tab.includes('data-rvm-internal-toolbar="object-browser-1"'), 'RVM internal toolbar must be explicitly scoped to this tab');
+assert.ok(tab.includes("label: 'Navigate / View'"), 'RVM toolbar must combine primary navigation/view actions into one visible group');
+assert.ok(tab.includes("label: 'Review'"), 'RVM toolbar must keep review actions visible inside the RVM tab');
+assert.ok(tab.includes("label: 'Orient'"), 'RVM toolbar must keep Orient available for More Tools');
+assert.ok(tab.indexOf('rvm-ribbon-load') < tab.indexOf('TOOL_GROUPS.map(renderToolGroup)'), 'Load must stay first inside the RVM internal toolbar');
+assert.ok(!tab.includes('class="rvm-ribbon-search"'), 'RVM hierarchy/object search must not stay in the top toolbar');
+assert.ok(tab.includes('data-rvm-object-browser="true"'), 'left panel must be promoted to Object Browser');
+assert.ok(tab.includes('data-rvm-object-browser-search="true"'), 'Object Browser must own the hierarchy/object search row');
+assert.ok(tab.includes('id="rvm-search-input"') && tab.includes('Search hierarchy / object'), 'Object Browser must retain the existing hierarchy/object search input id');
+assert.ok(tab.includes('id="rvm-tree-filter"'), 'Object Browser must retain tree filter binding compatibility');
+assert.ok(tab.includes("bindFilter('#rvm-search-input')") && tab.includes("bindFilter('#rvm-tree-filter')"), 'RVM tab must bind both Object Browser search inputs');
+assert.ok(!tab.includes('PCF GLB VIEWER'), 'RVM internal tab source must not redefine the landing/header app chrome');
 
 assert.ok(deferredLoader.includes("const VERSION = '20260626-rvm-deferred-report-export-shell-slot-1'"), 'deferred loader must expose current report/export shell-slot cache key');
 assert.ok(deferredLoader.includes("PREVIOUS_SOURCE_PREVIEW_LOADER_VERSION = '20260626-rvm-deferred-node-marker-events-1'"), 'deferred loader must preserve previous node-marker event cache key evidence');
@@ -111,7 +127,9 @@ assert.ok(reportExport.includes('registerExportsPanel'), 'report export must reg
 assert.ok(reportExport.includes("setRightPanelTab?.(root, 'exports'"), 'report export must activate Exports tab when opened');
 assert.ok(reportExport.includes('MAX_EXPORT_ROWS') && reportExport.includes('MAX_SCAN_OBJECTS'), 'report export must remain bounded');
 
-assert.ok(toolbar.includes('rvm-toolbar-compact-policy-2'), 'toolbar policy must expose versioned source contract');
+assert.ok(toolbar.includes('rvm-toolbar-compact-policy-3'), 'toolbar policy must expose internal-toolbar v3 source contract');
+assert.ok(toolbar.includes("const PREVIOUS_VERSION = '20260626-rvm-toolbar-compact-policy-2'"), 'toolbar policy must preserve previous cache evidence');
+assert.ok(toolbar.includes("'Navigate / View'") && toolbar.includes("'Review'"), 'toolbar policy must keep primary and review groups top-level');
 assert.ok(toolbar.includes('RvmToolbarOverflowController.js?v=20260626-rvm-toolbar-overflow-controller-1'), 'toolbar policy must use the single overflow owner module');
 assert.ok(toolbar.includes('data-rvm-toolbar-more'), 'toolbar policy must create stable More button');
 assert.ok(toolbar.includes('data-rvm-tools-menu'), 'toolbar policy must create stable More menu');
@@ -134,4 +152,4 @@ assert.ok(!uiShell.includes('convertXmlToCii'), 'UI shell must not include XML->
 assert.ok(!uiShell.includes('xml-cii2019'), 'UI shell must not import XML CII worker logic');
 assert.ok(!renderer.includes('installRvmViewerUiShell(RvmViewer3D'), 'UI shell install must not patch RvmViewer3D prototype');
 
-console.log('Verified active RVM viewer runtime cache ownership, shell slots, deferred bridge ownership, toolbar overflow, diagnostics/export ownership, and XML-CII isolation.');
+console.log('Verified active RVM viewer runtime cache ownership, internal toolbar/object browser layout, shell slots, deferred bridge ownership, toolbar overflow, diagnostics/export ownership, and XML-CII isolation.');
