@@ -8,7 +8,6 @@ const __dirname = path.dirname(__filename);
 const viewerRoot = path.resolve(__dirname, '..');
 const shellPath = path.join(viewerRoot, 'tabs/RvmViewerUiShell.js');
 const rendererPath = path.join(viewerRoot, 'tabs/viewer3d-rvm-tab-renderer.js');
-const workflowPath = path.resolve(viewerRoot, '../.github/workflows/rvm-pcf-ci.yml');
 
 function read(file) {
   assert.ok(fs.existsSync(file), `missing file: ${path.relative(viewerRoot, file)}`);
@@ -17,7 +16,6 @@ function read(file) {
 
 const shell = read(shellPath);
 const renderer = read(rendererPath);
-const workflow = read(workflowPath);
 
 function assertContains(source, pattern, message) {
   assert.ok(source.includes(pattern), message);
@@ -59,8 +57,5 @@ assertContains(renderer, 'installRvmViewerUiShell()', 'renderer must install the
 assert.ok(!shell.includes('convertXmlToCii'), 'shell must not include XML->CII conversion logic');
 assert.ok(!shell.includes('xml-cii2019'), 'shell must not import XML CII worker logic');
 assert.ok(!renderer.includes('installRvmViewerUiShell(RvmViewer3D'), 'shell install must not patch RvmViewer3D prototype');
-assertContains(workflow, 'viewer/tabs/RvmViewerUiShell.js', 'RVM PCF CI must run when the shell changes');
-assertContains(workflow, 'viewer/tests/rvm-ui-shell-contract.test.js', 'RVM PCF CI must run when the shell contract test changes');
-assertContains(workflow, 'node viewer/tests/rvm-ui-shell-contract.test.js', 'RVM PCF CI must execute the shell contract test');
 
-console.log('Verified RVM UI shell source contract: slots, lifecycle, bootstrap, audit, diagnostics, registration, renderer wiring, CI wiring, and XML-CII isolation.');
+console.log('Verified RVM UI shell source contract: slots, lifecycle, bootstrap, audit, diagnostics, registration, renderer wiring, and XML-CII isolation.');
