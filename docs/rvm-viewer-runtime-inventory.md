@@ -33,9 +33,11 @@ Fix in this branch:
   - `data-rvm-toolbar-more`
   - `data-rvm-tools-menu`
   - compatibility marker `data-rvm-toolbar-more-panel`
-- The controller owns click toggle, Escape close, outside pointerdown close, `aria-expanded`, menu hidden state, idempotent install, diagnostics, and dispose.
+- The controller owns click toggle, Escape close, outside pointerdown close, `aria-expanded`, menu hidden state, idempotent install, diagnostics, bounded trace history, DOM-contract validation, and dispose.
+- Runtime diagnostics are available through `globalThis.__PCF_GLB_RVM_TOOLBAR_OVERFLOW__.getDiagnostics(root)` and include `domAudit`, `syncCount`, and a bounded `trace` array.
 - `viewer3d-rvm-tab-renderer.js` now imports compact toolbar policy v2.
 - `viewer/tests/rvm-toolbar-more-tools.test.js` verifies the behavior without relying on browser `<details>` behavior.
+- `viewer/tests/rvm-toolbar-overflow-audit.test.js` verifies the selector contract, DOM validation, bounded trace, diagnostics, and inventory evidence.
 
 ## Eager runtime modules
 
@@ -57,7 +59,7 @@ These modules are imported and installed by `viewer/tabs/viewer3d-rvm-tab-render
 | `RvmPropertyPanelCollapseAuditBridge.js` | Eager | Property panel collapse audit | Global bridge state | Yes | Yes | Possible | Medium |
 | `RvmLabelPerformanceBridge.js` | Eager | Label performance | Patches viewer class | Possible | Possible | Yes | Medium |
 | `RvmToolbarCompactBridge.js` | Eager | Toolbar compaction | `__PCF_GLB_RVM_TOOLBAR_POLICY__` | Yes | MutationObserver + model/action events | Root dataset | High |
-| `RvmToolbarOverflowController.js` | Eager through compact bridge | More Tools open/close | `__PCF_GLB_RVM_TOOLBAR_OVERFLOW__` | Yes | Root click, document keydown/pointerdown | Root dataset only | Medium |
+| `RvmToolbarOverflowController.js` | Eager through compact bridge | More Tools open/close | `__PCF_GLB_RVM_TOOLBAR_OVERFLOW__` | Yes | Root click, document keydown/pointerdown | Root dataset, diagnostics trace | Medium |
 | `RvmZoneLodLabelBridge.js` | Eager | Zone label LOD | Global bridge behavior | Yes | Possible | Yes | Medium |
 | `RvmDeepSourcePathRecoveryBridge.js` | Eager | Source path recovery | Patches viewer class | Possible | Possible | Yes | Medium |
 | `RvmZoneDensitySelectorBridgeV5.js` | Eager | Zone density UI | Global bridge behavior | Yes | Yes | Yes | Medium |
@@ -154,7 +156,9 @@ Covered in this branch:
 - Outside pointerdown closes menu.
 - Repeat install does not duplicate listeners.
 - Dispose removes listeners.
-- RVM PCF CI includes the new test.
+- DOM ownership is auditable through `validateRvmToolbarOverflowDom()`.
+- Runtime state is traceable through bounded controller `trace` diagnostics.
+- RVM PCF CI includes the behavior and audit contract tests.
 
 Not covered in this branch:
 
