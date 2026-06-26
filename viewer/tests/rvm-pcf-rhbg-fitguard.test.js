@@ -84,7 +84,7 @@ check(rendererSource.includes('RvmZoneLodLabelBridge.js?v=20260621-rvm-preload-h
 check(rendererSource.includes('RvmDeepSourcePathRecoveryBridge.js?v=20260622-rvm-deep-source-path-recovery-1'), 'renderer loads deep source path recovery bridge');
 check(rendererSource.includes('RvmZoneDensitySelectorBridgeV5.js?v=20260622-rvm-zone-density-selector-5'), 'renderer loads synthetic Navis zone density selector v5');
 check(!rendererSource.includes('RvmSupportAssemblyMarkerModeBridge'), 'renderer keeps retired support assembly marker bridge removed');
-check(rendererSource.includes('RvmCanvasSelectionSinglePickGuardBridge.js?v=20260622-rvm-canvas-single-pick-guard-1'), 'renderer loads canvas single-pick guard bridge');
+check(rendererSource.includes('RvmCanvasSelectionSinglePickGuardBridge.js?v=20260626-rvm-canvas-single-pick-registry-1'), 'renderer loads routed canvas single-pick guard bridge');
 check(rendererSource.includes('RvmLeafCanvasPickBridge.js?v=20260622-rvm-leaf-canvas-pick-orbit-guard-2'), 'renderer loads navigation-safe leaf canvas pick bridge');
 
 check(deepPathSource.includes('recoverRvmDeepSourcePathFromInstruction') && deepPathSource.includes('isWeakRvmSourcePath'), 'deep path bridge recovers shallow paths');
