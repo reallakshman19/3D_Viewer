@@ -2,10 +2,10 @@ import * as THREE from 'three';
 import { collectNodeMarkerRoots } from '../overlays/nodes/NodeMarkerGlyphGeometry.js';
 import { buildNodeMarkerDetailsJson, buildNodeMarkerDetailsPanelState, emptyNodeMarkerDetailsPanelState, renderNodeMarkerDetailsPanelHtml } from '../overlays/nodes/NodeMarkerDetailsPanel.js';
 
-export const RVM_NON_PRIMITIVE_NODE_MARKER_DETAILS_PANEL_SCHEMA = 'rvm-non-primitive-node-marker-details-panel-bridge/v1';
+export const RVM_NON_PRIMITIVE_NODE_MARKER_DETAILS_PANEL_SCHEMA = 'rvm-non-primitive-node-marker-details-panel-bridge/v2';
 const GLOBAL_KEY = '__PCF_GLB_RVM_NON_PRIMITIVE_NODE_MARKER_DETAILS_PANEL__';
-const INSTALL_FLAG = Symbol.for('pcf-glb-rvm-non-primitive-node-marker-details-panel-v1');
-const PICKING_FLAG = Symbol.for('pcf-glb-rvm-non-primitive-node-marker-details-picking-v1');
+const INSTALL_FLAG = Symbol.for('pcf-glb-rvm-non-primitive-node-marker-details-panel-v2');
+const PICKING_FLAG = Symbol.for('pcf-glb-rvm-non-primitive-node-marker-details-picking-v2');
 const PANEL_ID = 'rvm-nonprimitive-node-marker-details-panel';
 const ROOT_SELECTOR = '[data-rvm-viewer]';
 
@@ -114,10 +114,45 @@ function bindPanel(panel, viewer) {
   panel.addEventListener('click', (event) => {
     const control = event.target?.closest?.('[data-node-marker-details-action]');
     if (!control) return;
-    if (control.dataset.nodeMarkerDetailsAction === 'clear') clear(viewer || globalThis.__3D_RVM_VIEWER__, 'user-clear');
-    if (control.dataset.nodeMarkerDetailsAction === 'copy-json') void copyJson(viewer || globalThis.__3D_RVM_VIEWER__);
-    if (control.dataset.nodeMarkerDetailsAction === 'download-json') downloadJson(viewer || globalThis.__3D_RVM_VIEWER__);
+    const activeViewer = viewer || globalThis.__3D_RVM_VIEWER__;
+    const action = control.dataset.nodeMarkerDetailsAction;
+    if (action === 'clear') clear(activeViewer, 'user-clear');
+    if (action === 'copy-json') void copyJson(activeViewer);
+    if (action === 'download-json') downloadJson(activeViewer);
+    if (action === 'save-override') saveOverrideFromPanel(panel, activeViewer);
+    if (action === 'clear-override') clearOverrideFromPanel(panel, activeViewer);
   });
+}
+
+export function readOverrideFromPanel(panel) {
+  const read = (name) => panel.querySelector(`[data-node-marker-override-field="${name}"]`);
+  const stateRoot = panel.querySelector('[data-node-marker-details-selected="true"]');
+  return {
+    markerId: stateRoot?.dataset?.nodeMarkerId || '',
+    sourcePath: stateRoot?.dataset?.nodeMarkerSourcePath || '',
+    nodeNumber: read('nodeNumber')?.value || '',
+    branchName: read('branchName')?.value || '',
+    componentRefNo: read('componentRefNo')?.value || '',
+    componentType: read('componentType')?.value || '',
+    positionSource: read('positionSource')?.value || '',
+    reason: read('reason')?.value || '',
+    suppressExport: Boolean(read('suppressExport')?.checked),
+    locked: Boolean(read('locked')?.checked),
+  };
+}
+
+function saveOverrideFromPanel(panel, viewer) {
+  const override = readOverrideFromPanel(panel);
+  const result = globalThis.__PCF_GLB_RVM_NON_PRIMITIVE_NODE_MARKERS__?.saveOverride?.(viewer, override) || { status: 'skipped', reason: 'node-marker-api-missing' };
+  renderAll(viewer);
+  return result;
+}
+
+function clearOverrideFromPanel(panel, viewer) {
+  const override = readOverrideFromPanel(panel);
+  const result = globalThis.__PCF_GLB_RVM_NON_PRIMITIVE_NODE_MARKERS__?.clearOverride?.(viewer, override) || { status: 'skipped', reason: 'node-marker-api-missing' };
+  renderAll(viewer);
+  return result;
 }
 
 export async function copyJson(viewer = globalThis.__3D_RVM_VIEWER__) {
