@@ -62,6 +62,14 @@ function renderMode(root) {
   if (secondaryWrap) secondaryWrap.style.display = 'none';
   if (xmlWorkflow) { xmlWorkflow.hidden = true; xmlWorkflow.open = false; }
   if (supportMapper) { supportMapper.hidden = true; supportMapper.open = false; }
+  // The scope manager's sync() cannot fire because we call stopImmediatePropagation().
+  // Clean up scope-owned elements manually so they don't bleed into this converter.
+  const _wfCard = root.querySelector('[data-xml-cii-workflow-card]');
+  if (_wfCard) { _wfCard.hidden = true; _wfCard.style.display = 'none'; if (_wfCard.isConnected) _wfCard.remove(); }
+  const _runBtn = root.querySelector('#model-converters-run');
+  if (_runBtn) { _runBtn.removeAttribute('data-xml-cii-direct-run-hidden'); _runBtn.hidden = false; _runBtn.style.display = ''; _runBtn.style.visibility = ''; }
+  const _advDetails = root.querySelector('details.model-converters-advanced:not(#model-converters-support-mapper)');
+  if (_advDetails) { delete _advDetails.dataset.xmlCiiLeftPanelOptionsHidden; _advDetails.hidden = false; _advDetails.style.display = ''; }
   if (fields) fields.innerHTML = `<div style="border:1px solid #2e4057;border-radius:6px;padding:8px 10px;background:#132033;color:#d7e6ff;font-size:12px;line-height:1.45;">
     <div style="font-weight:700;color:#9cc5ff;margin-bottom:4px;">Direct InputXML → stagedJSON</div>
     <div>Creates managed-stage JSON without building GLB first.</div>

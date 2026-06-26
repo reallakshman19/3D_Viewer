@@ -1,7 +1,5 @@
-import { installRvmUiEventRegistry, registerRvmUiEvent, routeRvmUiEvent } from './RvmUiEventRegistry.js?v=20260626-rvm-ui-event-registry-1';
-
-const INSTALL_FLAG = Symbol.for('pcf-glb-rvm-ui-event-safety-bridge-v2');
-const VERSION = '20260626-rvm-ui-event-safety-registry-1';
+const INSTALL_FLAG = Symbol.for('pcf-glb-rvm-ui-event-safety-bridge-v1');
+const VERSION = '20260622-rvm-ui-event-safety-1';
 const STYLE_ID = 'rvm-ui-event-safety-style';
 const MENU_ID = 'rvm-navis-context-menu';
 const MODE_ACTIONS = new Set(['NAV_SELECT', 'NAV_ORBIT', 'NAV_PAN', 'MARQUEE_SELECT', 'MEASURE_TOOL', 'VIEW_MARQUEE_ZOOM']);
@@ -10,16 +8,13 @@ export function installRvmUiEventSafetyBridge() {
   if (typeof document === 'undefined') return null;
   if (globalThis[INSTALL_FLAG]) return globalThis[INSTALL_FLAG];
   injectStyles();
-  installRvmUiEventRegistry();
-  const state = { version: VERSION, rootsBound: 0, overlaysPurged: 0, treeEventsHandled: 0, toolbarEventsHandled: 0, registryEventsHandled: 0 };
-  registerCoreEventHandlers(state);
+  const state = { version: VERSION, rootsBound: 0, overlaysPurged: 0, treeEventsHandled: 0, toolbarEventsHandled: 0 };
   globalThis[INSTALL_FLAG] = state;
   globalThis.__PCF_GLB_RVM_UI_EVENT_SAFETY__ = {
     version: VERSION,
     state,
     repair: () => repairAll(state),
     purgeOverlays: () => purgeStaleInteractionOverlays(state, true),
-    getEventRegistryDiagnostics: () => globalThis.__PCF_GLB_RVM_UI_EVENT_REGISTRY__?.getDiagnostics?.() || null,
   };
 
   const tick = () => repairAll(state);
@@ -29,49 +24,6 @@ export function installRvmUiEventSafetyBridge() {
   });
   globalThis.addEventListener?.('app:tool-changed', () => setTimeout(() => repairViewerControls(globalThis.__3D_RVM_VIEWER__), 0));
   return state;
-}
-
-function registerCoreEventHandlers(state) {
-  registerRvmUiEvent('toolbar-action', ({ root, viewer, detail }) => {
-    const handled = handleToolbarAction(root, viewer, detail.action);
-    state.toolbarEventsHandled += 1;
-    state.registryEventsHandled += 1;
-    return handled;
-  }, { id: 'rvm-ui-safety-toolbar', priority: 10 });
-  registerRvmUiEvent('tree-click', ({ root, detail }) => {
-    const handled = handleTreeClick(root, detail.sourceEvent);
-    if (handled) state.treeEventsHandled += 1;
-    state.registryEventsHandled += 1;
-    return handled;
-  }, { id: 'rvm-ui-safety-tree-click', priority: 10 });
-  registerRvmUiEvent('tree-visibility-change', ({ root, detail }) => {
-    const checkbox = detail.sourceEvent?.target?.closest?.('[data-rvm-navis-visible-checkbox]');
-    if (!checkbox || !root?.contains?.(checkbox)) return false;
-    detail.sourceEvent.preventDefault?.();
-    detail.sourceEvent.stopPropagation?.();
-    detail.sourceEvent.stopImmediatePropagation?.();
-    const nodeId = checkbox.closest('li[data-node-id]')?.dataset.nodeId || checkbox.dataset.rvmNavisVisibleCheckbox;
-    setBranchVisible(root, nodeId, checkbox.checked);
-    state.treeEventsHandled += 1;
-    state.registryEventsHandled += 1;
-    return true;
-  }, { id: 'rvm-ui-safety-tree-visibility', priority: 10 });
-  registerRvmUiEvent('tree-context-menu', ({ root, detail }) => {
-    const row = detail.sourceEvent?.target?.closest?.('#rvm-tree li[data-node-id]');
-    if (!row || !root?.contains?.(row)) return false;
-    detail.sourceEvent.preventDefault?.();
-    detail.sourceEvent.stopPropagation?.();
-    detail.sourceEvent.stopImmediatePropagation?.();
-    showContextMenu(root, row.dataset.nodeId, detail.sourceEvent.clientX, detail.sourceEvent.clientY);
-    state.treeEventsHandled += 1;
-    state.registryEventsHandled += 1;
-    return true;
-  }, { id: 'rvm-ui-safety-tree-menu', priority: 10 });
-  registerRvmUiEvent('document-pointerdown', ({ detail }) => {
-    const menu = document.getElementById(MENU_ID);
-    if (menu && !menu.contains(detail.sourceEvent?.target)) menu.remove();
-    return true;
-  }, { id: 'rvm-ui-safety-document-pointerdown', priority: 10 });
 }
 
 function repairAll(state) {
@@ -86,7 +38,6 @@ function repairAll(state) {
 function bindRoot(root, state) {
   if (!root || root.dataset.rvmUiEventSafetyBound === VERSION) return;
   root.dataset.rvmUiEventSafetyBound = VERSION;
-  root.dataset.rvmUiEventRegistry = VERSION;
   state.rootsBound += 1;
 
   root.addEventListener('click', (event) => {
@@ -97,28 +48,39 @@ function bindRoot(root, state) {
     event.preventDefault();
     event.stopPropagation();
     event.stopImmediatePropagation?.();
-    routeRvmUiEvent(root, 'toolbar-action', { viewer: globalThis.__3D_RVM_VIEWER__, action, sourceEvent: event });
+    handleToolbarAction(root, globalThis.__3D_RVM_VIEWER__, action);
+    state.toolbarEventsHandled += 1;
   }, true);
 
   root.addEventListener('click', (event) => {
     if (!event.target?.closest?.('#rvm-tree')) return;
-    routeRvmUiEvent(root, 'tree-click', { sourceEvent: event });
+    if (handleTreeClick(root, event)) state.treeEventsHandled += 1;
   }, true);
 
   root.addEventListener('change', (event) => {
     const checkbox = event.target?.closest?.('[data-rvm-navis-visible-checkbox]');
     if (!checkbox || !root.contains(checkbox)) return;
-    routeRvmUiEvent(root, 'tree-visibility-change', { sourceEvent: event });
+    event.preventDefault();
+    event.stopPropagation();
+    event.stopImmediatePropagation?.();
+    const nodeId = checkbox.closest('li[data-node-id]')?.dataset.nodeId || checkbox.dataset.rvmNavisVisibleCheckbox;
+    setBranchVisible(root, nodeId, checkbox.checked);
+    state.treeEventsHandled += 1;
   }, true);
 
   root.addEventListener('contextmenu', (event) => {
     const row = event.target?.closest?.('#rvm-tree li[data-node-id]');
     if (!row || !root.contains(row)) return;
-    routeRvmUiEvent(root, 'tree-context-menu', { sourceEvent: event });
+    event.preventDefault();
+    event.stopPropagation();
+    event.stopImmediatePropagation?.();
+    showContextMenu(root, row.dataset.nodeId, event.clientX, event.clientY);
+    state.treeEventsHandled += 1;
   }, true);
 
   document.addEventListener('pointerdown', (event) => {
-    routeRvmUiEvent(root, 'document-pointerdown', { sourceEvent: event });
+    const menu = document.getElementById(MENU_ID);
+    if (menu && !menu.contains(event.target)) menu.remove();
   }, true);
 }
 
@@ -497,10 +459,10 @@ function injectStyles() {
 }
 
 function esc(value) {
-  return String(value ?? '').replace(/[&<>"]/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch]));
+  return String(value ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
 function cssEscape(value) {
-  if (globalThis.CSS?.escape) return globalThis.CSS.escape(String(value ?? ''));
-  return String(value ?? '').replace(/[^A-Za-z0-9_-]/g, (ch) => `\\${ch}`);
+  if (globalThis.CSS?.escape) return globalThis.CSS.escape(String(value));
+  return String(value).replace(/[^a-zA-Z0-9_-]/g, (ch) => `\\${ch}`);
 }

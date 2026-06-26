@@ -67,6 +67,7 @@ function shouldAddFlangeFallback(issue) {
   const best = Array.isArray(issue?.candidates) ? issue.candidates[0] : null;
   if (!best) return true;
   if (best.zeroFallback) return true;
+  if (best.specialFactorRule) return false;
   if (best.fallbackSuggestion && !best.flangeWeightFallback && !best.preferred) return true;
   return !Number.isFinite(selectedWeight(best)) || selectedWeight(best) <= 0;
 }

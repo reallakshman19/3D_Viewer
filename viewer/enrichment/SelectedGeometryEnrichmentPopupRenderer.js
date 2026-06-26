@@ -11,11 +11,11 @@ import { tokenAtPosition, tokenizeBranchName } from '../converters/xml-cii2019-c
 export const SELECTED_GEOMETRY_WORKFLOW_PHASES = Object.freeze([
   { id: 'regex', label: '1 Regex', summary: 'Derive branch line key, piping class, size, and rating from selected-geometry branch names.', state: 'Current' },
   { id: 'import-masters', label: '2 Import Masters', summary: 'Load process line list, piping class, material map, and weight masters.', state: 'Current' },
-  { id: 'preview', label: '3 Preview', summary: 'Preview branch-level mapped fields before writing an enrichment package.', state: 'Current' },
-  { id: 'diagnostics', label: '4 Diagnostics', summary: 'Review unresolved branch, line-list, class, material, and weight mappings.', state: 'Current' },
-  { id: 'weight-match', label: '4A Weight Match', summary: 'Inspect weight candidates produced from selected geometry size, length, and rating.', state: 'Current' },
-  { id: 'run', label: '5 Run', summary: 'Apply immutable selected-geometry enrichment, export JSON, or send to Simplified Analysis.', state: 'Current' },
-  { id: 'config', label: '7 Config', summary: 'Edit XML->CII-compatible enrichment config used by this selected-geometry workflow.', state: 'Current' },
+  { id: 'preview', label: '4 Preview', summary: 'Preview branch-level mapped fields before writing an enrichment package.', state: 'Current' },
+  { id: 'diagnostics', label: '5 Diagnostics', summary: 'Review unresolved branch, line-list, class, material, and weight mappings.', state: 'Current' },
+  { id: 'weight-match', label: '5A Weight Match', summary: 'Inspect weight candidates produced from selected geometry size, length, and rating.', state: 'Current' },
+  { id: 'run', label: '6 Run', summary: 'Apply immutable selected-geometry enrichment, export JSON, or send to Simplified Analysis.', state: 'Current' },
+  { id: 'config', label: '8 Config', summary: 'Edit XML->CII-compatible enrichment config used by this selected-geometry workflow.', state: 'Current' },
 ]);
 
 const MASTER_LABELS = Object.freeze({

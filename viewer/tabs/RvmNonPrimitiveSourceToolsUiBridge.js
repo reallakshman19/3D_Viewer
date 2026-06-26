@@ -7,14 +7,13 @@ import {
   sourceToolsDiagnosticsFileName,
 } from '../overlays/source-tools/NonPrimitiveSourceToolsDiagnostics.js';
 
-export const RVM_NON_PRIMITIVE_SOURCE_TOOLS_UI_SCHEMA = 'rvm-non-primitive-source-tools-ui/v8';
+export const RVM_NON_PRIMITIVE_SOURCE_TOOLS_UI_SCHEMA = 'rvm-non-primitive-source-tools-ui/v7';
 
-const PATCH_FLAG = Symbol.for('pcf-glb-rvm-non-primitive-source-tools-ui-v8');
-const VIEWER_PATCH_FLAG = Symbol.for('pcf-glb-rvm-non-primitive-source-tools-ui-viewer-v8');
-const STYLE_FLAG = Symbol.for('pcf-glb-rvm-non-primitive-source-tools-ui-style-v8');
+const PATCH_FLAG = Symbol.for('pcf-glb-rvm-non-primitive-source-tools-ui-v7');
+const VIEWER_PATCH_FLAG = Symbol.for('pcf-glb-rvm-non-primitive-source-tools-ui-viewer-v7');
+const STYLE_FLAG = Symbol.for('pcf-glb-rvm-non-primitive-source-tools-ui-style-v7');
 const ROOT_SELECTOR = '[data-rvm-viewer]';
 const PANEL_ID = 'rvm-nonprimitive-source-tools-panel';
-const SOURCE_TOOLS_SLOT_SELECTOR = '[data-rvm-panel-slot="source-tools"]';
 const SOURCE_KIND_RE = /^(json|jscon|inputxml|txt|source-preview)$/i;
 const PRIMITIVE_KIND_RE = /^(rvm|glb|gltf|rev)$/i;
 const SUPPORT_FILTER_FAMILIES = Object.freeze(['REST', 'GUIDE', 'LINESTOP', 'LIMIT', 'LIM', 'HOLDDOWN', 'SPRING_CAN', 'UNKNOWN']);
@@ -51,10 +50,9 @@ function installSourceToolsStyles() {
   const doc = globalThis.document;
   if (!doc?.createElement) return;
   const style = doc.createElement('style');
-  style.dataset.rvmNonPrimitiveSourceToolsStyle = 'v8';
+  style.dataset.rvmNonPrimitiveSourceToolsStyle = 'v7';
   style.textContent = `
     .rvm-source-tools-panel{flex:0 0 auto;max-height:min(52vh,620px);padding:7px;border-bottom:1px solid var(--geo-border,#333);background:rgba(16,22,31,.86);overflow:auto;}
-    [data-rvm-panel-slot="source-tools"] .rvm-source-tools-panel{max-height:none;border-bottom:0;background:transparent;}
     .rvm-source-tools-grid--grouped{display:grid;grid-template-columns:1fr;gap:8px;min-width:0;}
     .rvm-source-tools-group{display:grid;grid-template-columns:minmax(0,1fr);gap:5px;padding:7px;border:1px solid rgba(116,139,171,.26);border-radius:8px;background:rgba(27,34,45,.72);min-width:0;}
     .rvm-source-tools-group-title,.rvm-source-tools-row,.rvm-source-tools-actions,.rvm-source-tools-filters{display:flex;align-items:center;gap:6px;min-width:0;}
@@ -137,7 +135,6 @@ export function renderSourceToolsUi(root, viewer = globalThis.__3D_RVM_VIEWER__)
   const panel = ensurePanel(root);
   if (!panel) return null;
   if (!shouldShow) return clearSourceToolsUi(panel, viewer, 'primitive-or-unsupported-source');
-  globalThis.__PCF_GLB_RVM_UI_SHELL__?.setRightPanelTab?.(root, 'source-tools', 'source-tools-active');
   panel.hidden = false;
   panel.dataset.sourceToolsActive = 'true';
   delete panel.dataset.sourceToolsCleared;
@@ -148,14 +145,9 @@ export function renderSourceToolsUi(root, viewer = globalThis.__3D_RVM_VIEWER__)
 
 function ensurePanel(root) {
   let panel = root.querySelector(`#${PANEL_ID}`);
-  if (panel) {
-    moveExistingPanelToShellSlot(root, panel);
-    return panel;
-  }
-  const shellSlot = getSourceToolsShellSlot(root);
+  if (panel) return panel;
   const rightPanel = root.querySelector('.rvm-right-panel');
-  const target = shellSlot || rightPanel;
-  if (!target) return null;
+  if (!rightPanel) return null;
   const header = globalThis.document?.createElement?.('div');
   panel = globalThis.document?.createElement?.('div');
   if (!header || !panel) return null;
@@ -165,50 +157,14 @@ function ensurePanel(root) {
   panel.id = PANEL_ID;
   panel.className = 'rvm-source-tools-panel rvm-tag-list';
   panel.dataset.rvmNonPrimitiveSourceTools = 'true';
-  if (shellSlot) {
-    registerSourceToolsPanel(root);
-    header.dataset.rvmPanelSlotHost = 'source-tools';
-    panel.dataset.rvmPanelSlotHost = 'source-tools';
-    target.append(header, panel);
+  const diagnosticsHeader = rightPanel.querySelector('[data-rvm-browser-diagnostics-header="true"]');
+  if (diagnosticsHeader) {
+    rightPanel.insertBefore(header, diagnosticsHeader);
+    rightPanel.insertBefore(panel, diagnosticsHeader);
   } else {
-    const diagnosticsHeader = rightPanel.querySelector('[data-rvm-browser-diagnostics-header="true"]');
-    if (diagnosticsHeader) {
-      rightPanel.insertBefore(header, diagnosticsHeader);
-      rightPanel.insertBefore(panel, diagnosticsHeader);
-    } else {
-      rightPanel.append(header, panel);
-    }
+    rightPanel.append(header, panel);
   }
   return panel;
-}
-
-function getSourceToolsShellSlot(root) {
-  const shell = globalThis.__PCF_GLB_RVM_UI_SHELL__;
-  shell?.install?.(root, { reason: 'source-tools-ui' });
-  shell?.sync?.(root, { reason: 'source-tools-ui' });
-  return root.querySelector?.(SOURCE_TOOLS_SLOT_SELECTOR) || null;
-}
-
-function registerSourceToolsPanel(root) {
-  globalThis.__PCF_GLB_RVM_UI_SHELL__?.registerPanel?.(root, {
-    id: 'nonprimitive-source-tools-ui',
-    title: 'Source Tools',
-    slot: 'source-tools',
-    priority: 10,
-  });
-}
-
-function moveExistingPanelToShellSlot(root, panel) {
-  const shellSlot = getSourceToolsShellSlot(root);
-  if (!shellSlot || shellSlot.contains(panel)) return;
-  const header = root.querySelector('[data-rvm-non-primitive-source-tools-header="true"]') || panel.previousElementSibling;
-  registerSourceToolsPanel(root);
-  if (header?.dataset?.rvmNonPrimitiveSourceToolsHeader === 'true') {
-    header.dataset.rvmPanelSlotHost = 'source-tools';
-    shellSlot.appendChild(header);
-  }
-  panel.dataset.rvmPanelSlotHost = 'source-tools';
-  shellSlot.appendChild(panel);
 }
 
 export function clearSourceToolsUi(panel, viewer = globalThis.__3D_RVM_VIEWER__, reason = 'clear') {

@@ -4,24 +4,14 @@ import fs from 'node:fs/promises';
 import { buildNodeMarkerHoverPreview, emptyNodeMarkerHoverState, renderNodeMarkerHoverHtml } from '../overlays/nodes/NodeMarkerHover.js';
 
 const hoverBridge = await fs.readFile(new URL('../tabs/RvmNonPrimitiveNodeMarkerHoverBridge.js', import.meta.url), 'utf8');
-const markerBridge = await fs.readFile(new URL('../tabs/RvmNonPrimitiveNodeMarkerBridge.js', import.meta.url), 'utf8');
 const renderer = await fs.readFile(new URL('../tabs/viewer3d-rvm-tab-renderer.js', import.meta.url), 'utf8');
-const deferredLoader = await fs.readFile(new URL('../tabs/RvmDeferredBridgeLoader.js', import.meta.url), 'utf8');
 
-assert.match(hoverBridge, /rvm-non-primitive-node-marker-hover-bridge\/v2/, 'hover bridge exposes registry-routed schema');
-assert.match(hoverBridge, /RvmUiEventRegistry\.js\?v=20260626-rvm-ui-event-registry-1/);
-assert.match(hoverBridge, /installRvmUiEventRegistry/);
-assert.match(hoverBridge, /registerRvmUiEvent\('canvas-source-preview-node-marker-hover'/);
-assert.match(hoverBridge, /routeRvmUiEvent[\s\S]*canvas-source-preview-node-marker-hover/);
-assert.match(hoverBridge, /getEventRegistryDiagnostics/);
+assert.match(hoverBridge, /rvm-non-primitive-node-marker-hover-bridge\/v1/, 'hover bridge exposes schema');
 assert.match(hoverBridge, /collectNodeMarkerRoots/, 'hover bridge raycasts only node marker roots');
 assert.match(hoverBridge, /rvmNodeMarkerDetails/, 'hover bridge reads marker details from glyph metadata');
 assert.match(hoverBridge, /pointerEvents\s*=\s*'none'|pointer-events:none/, 'hover tooltip must not block canvas navigation');
 assert.doesNotMatch(hoverBridge, /RvmSelectionAdapter|objectSearch|selectObject|pickObject/, 'hover bridge does not use primitive selection/search');
 assert.doesNotMatch(renderer, /RvmNonPrimitiveNodeMarkerHoverBridge\.js|NodeMarkerHover\.js/, 'renderer must not eagerly import node marker hover code');
-assert.match(markerBridge, /RvmNonPrimitiveNodeMarkerHoverBridge\.js\?v=20260626-node-marker-hover-events-1/);
-assert.match(deferredLoader, /RvmNonPrimitiveNodeMarkerBridge\.js\?v=20260626-node-marker-events-1/);
-assert.match(renderer, /RvmDeferredBridgeLoader\.js\?v=20260626-rvm-deferred-node-marker-events-1/);
 
 const marker = {
   markerId: 'NODE-00009',

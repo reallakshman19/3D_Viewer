@@ -1,5 +1,5 @@
 import { decodeTextUtf8, encodeTextUtf8, baseNameWithoutExtension } from '../core/output-utils.js';
-import { collectXmlCiiZeroRigidWeightIssues, applyXmlCiiRigidWeightOverrides } from '../../../converters/xml-cii2019-core/weight-match-model.js?v=20260625-length-auto-weight-1';
+import { collectXmlCiiZeroRigidWeightIssues, applyXmlCiiRigidWeightOverrides } from '../../../converters/xml-cii2019-core/weight-match-model.js?v=20260626-weight-review-2';
 import { applyXmlCiiFlangeWeightFallbackToIssues } from '../../../converters/xml-cii2019-core/flange-weight-fallback.js?v=20260620-flange-fallback-1';
 import { applyXmlCiiAutoRigidWeightsFromIssues } from '../../../converters/xml-cii2019-core/rigid-weight-auto-apply.js?v=20260625-length-auto-weight-1';
 import { applyXmlCiiStagedGeometryAuthority } from '../../../converters/xml-cii2019-core/staged-geometry-authority.js?v=20260625-length-auto-weight-1';
@@ -152,19 +152,19 @@ export async function run(context) {
     enriched.stats.weightAnnotations = (enriched.stats.weightAnnotations || 0) + autoWeights.appliedCount;
     enriched.diagnostics.push(...autoWeights.appliedRows);
     rigidWeightIssues = autoWeights.remainingIssues;
-    rigidReviewLogLines.push(`Rigid zero-weight auto-applied: ${autoWeights.appliedCount} resolved rigid weight(s).`);
+    rigidReviewLogLines.push(`Component zero-weight auto-applied: ${autoWeights.appliedCount} resolved component weight(s).`);
   }
 
   if (rigidWeightIssues.length > 0 && typeof runValues.openXmlCiiZeroRigidWeightPopup === 'function') {
-    context.setStatus(`Review needed: ${rigidWeightIssues.length} rigid weight(s) are zero.`, 'running');
+    context.setStatus(`Review needed: ${rigidWeightIssues.length} component weight(s) are zero.`, 'running');
     let review = null;
     try { review = await withTimeout(runValues.openXmlCiiZeroRigidWeightPopup(rigidWeightIssues), 'rigid zero-weight review', 300000); } catch (error) { review = { cancelled: true, error }; }
     if (review?.cancelled) {
-      rigidReviewLogLines.push(`Rigid zero-weight review dismissed: ${rigidWeightIssues.length} unresolved rigid(s) left unchanged.`);
-      enriched.diagnostics.push({ type: 'rigid-zero-weight-review-dismissed', count: rigidWeightIssues.length, message: 'Review popup was dismissed; CII generation continued with zero weights unchanged.' });
+      rigidReviewLogLines.push(`Component zero-weight review dismissed: ${rigidWeightIssues.length} unresolved component(s) left unchanged.`);
+      enriched.diagnostics.push({ type: 'component-zero-weight-review-dismissed', count: rigidWeightIssues.length, message: 'Review popup was dismissed; CII generation continued with zero weights unchanged.' });
     } else if (review?.skipped) {
-      rigidReviewLogLines.push(`Rigid zero-weight review skipped: ${rigidWeightIssues.length} unresolved rigid(s) left unchanged.`);
-      enriched.diagnostics.push({ type: 'rigid-zero-weight-review-skipped', count: rigidWeightIssues.length, message: 'User skipped rigid zero-weight review; CII generation continued with zero weights unchanged.' });
+      rigidReviewLogLines.push(`Component zero-weight review skipped: ${rigidWeightIssues.length} unresolved component(s) left unchanged.`);
+      enriched.diagnostics.push({ type: 'component-zero-weight-review-skipped', count: rigidWeightIssues.length, message: 'User skipped component zero-weight review; CII generation continued with zero weights unchanged.' });
     } else {
       const applied = applyXmlCiiRigidWeightOverrides(enriched.xmlText, review?.weightsByKey || {});
       enriched.xmlText = applied.xmlText;
@@ -172,7 +172,7 @@ export async function run(context) {
       enriched.stats.weightAnnotations = (enriched.stats.weightAnnotations || 0) + applied.appliedCount;
       enriched.diagnostics.push(...applied.appliedRows);
       if (typeof runValues.saveXmlCiiRigidWeightOverrides === 'function') runValues.saveXmlCiiRigidWeightOverrides(review?.weightsByKey || {});
-      rigidReviewLogLines.push(`Rigid zero-weight review applied: ${applied.appliedCount} manual rigid weight(s).`);
+      rigidReviewLogLines.push(`Component zero-weight review applied: ${applied.appliedCount} manual component weight(s).`);
     }
   }
 

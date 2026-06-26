@@ -85,6 +85,19 @@ export function getXmlCiiPreviewRuntimeConfig() {
   return store && typeof store === 'object' && !Array.isArray(store) ? store : { overrides: {} };
 }
 
+// Clear one or more override buckets from the in-memory and persisted runtime store.
+// Caller is responsible for also clearing the companion buckets (e.g. __dtxrWallKeys).
+export function clearXmlCiiRuntimeBuckets(...bucketNames) {
+  const store = runtimeRoot() || readRuntimeOverrideStore();
+  if (!store) return;
+  const overrides = ensureRuntimeOverrides(store);
+  for (const name of bucketNames) {
+    delete overrides[name];
+  }
+  writeRuntimeOverrideStore(store);
+  if (typeof window !== 'undefined') window.__xmlCiiPreviewRuntimeOverrides = store;
+}
+
 function ensureFillMeta(overrides) {
   if (!overrides[FILL_META_KEY] || typeof overrides[FILL_META_KEY] !== 'object') {
     overrides[FILL_META_KEY] = { processData: {} };
@@ -286,5 +299,69 @@ export function applyPreviewProcessFillDown({ host, config, ensureOverrides, fie
     input.dataset.mcFillState = 'auto';
     filled += 1;
   }
+  return filled;
+}
+
+// Smart fill: apply a value to ALL override cells with the same piping class key.
+// Used when the source cell has data-mc-pc-key — fills across all rows in the same PC,
+// not just downward. Marks all filled cells as 'manual' (user intent, not auto).
+export function applyPreviewSmartFillByClass({ host, config, ensureOverrides, field, pipingClassKey, currentValue }) {
+  const sourceValue = text(currentValue);
+  if (!sourceValue || sourceValue === '—') return 0;
+  if (!pipingClassKey) return 0;
+  const overrides = ensureOverrides(config);
+  const meta = ensureFillMeta(overrides);
+  const category = overrideCategoryForField(field);
+  let filled = 0;
+  host.querySelectorAll(`[data-mc-edit-type="${field}"]`).forEach((cell) => {
+    const cellPcKey = text(cell.getAttribute('data-mc-pc-key'));
+    if (!cellPcKey || cellPcKey !== pipingClassKey) return;
+    const key = keyForOverrideCell(field, cell);
+    if (!key) return;
+    if (!overrides[category]) overrides[category] = {};
+    overrides[category][key] = sourceValue;
+    setOverrideState(meta, category, key, 'manual', null);
+    setRuntimeBucketValue(category, key, sourceValue);
+    if (category === 'rating') setRuntimeProcessValue(key, 'rating', sourceValue);
+    const valSpan = cell.querySelector('.mc-preview-editable-val');
+    if (valSpan) valSpan.textContent = sourceValue;
+    const badge = cell.querySelector('.mc-preview-badge');
+    if (badge) { badge.textContent = '✓ class-fill'; badge.className = 'mc-preview-badge exact'; }
+    cell.dataset.mcFillState = 'class-fill';
+    filled += 1;
+  });
+  return filled;
+}
+
+// Smart fill for process inputs: fill all inputs with same field and either the same
+// piping class key (for hydroPressure) or the same line key (for p1/t1/t2/t3/density).
+export function applyPreviewSmartProcessFillByClass({ host, config, ensureOverrides, field, pipingClassKey, lineKey, currentValue }) {
+  const sourceValue = text(currentValue);
+  if (!sourceValue) return 0;
+  const overrides = ensureOverrides(config);
+  if (!overrides.processData || typeof overrides.processData !== 'object') overrides.processData = {};
+  const meta = ensureFillMeta(overrides);
+  let filled = 0;
+  host.querySelectorAll(`[data-mc-pd-field="${field}"]`).forEach((input) => {
+    if (pipingClassKey) {
+      const pcKey = text(input.getAttribute('data-mc-pd-pckey'));
+      if (!pcKey || pcKey !== pipingClassKey) return;
+    } else {
+      const lk = text(input.getAttribute('data-mc-pd-linekey'));
+      if (!lk || lk !== lineKey) return;
+    }
+    const lk = text(input.getAttribute('data-mc-pd-linekey'));
+    if (!lk) return;
+    if (!overrides.processData[lk]) overrides.processData[lk] = {};
+    overrides.processData[lk][field] = sourceValue;
+    setProcessState(meta, field, lk, 'manual', null);
+    setRuntimeProcessValue(lk, field, sourceValue);
+    if (field === 'rating') setRuntimeBucketValue('rating', lk, sourceValue);
+    input.value = sourceValue;
+    input.dataset.mcFillState = 'class-fill';
+    const cell = input.closest('.mc-preview-pd-cell');
+    if (cell) cell.className = 'mc-preview-pd-cell mc-preview-pd-override';
+    filled += 1;
+  });
   return filled;
 }

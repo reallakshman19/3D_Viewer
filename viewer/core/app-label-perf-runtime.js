@@ -5,8 +5,7 @@ import { hideLoading } from './loading.js';
 import { initDevDebugWindow } from '../debug/dev-debug-window.js';
 
 // Active RVM renderer cache chain:
-// viewer3d-rvm-tab-renderer.js?v=20260626-rvm-grouped-menu-click-fix-1
-// Previous RVM renderer cache chain: viewer3d-rvm-tab-renderer.js?v=20260625-rvm-renderer-cache-chain-1
+// viewer3d-rvm-tab-renderer.js?v=20260625-rvm-renderer-cache-chain-1
 const TAB_VISIBILITY_URL = new URL('../config/tab-visibility.json', import.meta.url).href;
 const APP_ICON_URL = new URL('../assets/app-icon.svg?v=20260621-app-brand-icon-1', import.meta.url).href;
 const RVM_RENDERER_PREFLIGHT_MODULES = [
@@ -81,7 +80,7 @@ async function loadRvmViewerRenderer() {
   results.forEach((result, index) => {
     if (result.status === 'rejected') console.warn(`[3D Viewer] optional RVM preflight module failed: ${RVM_RENDERER_PREFLIGHT_MODULES[index]}`, result.reason);
   });
-  return import('../tabs/viewer3d-rvm-tab-renderer.js?v=20260626-rvm-grouped-menu-click-fix-1').then((module) => pickRenderer(module, 'renderViewer3DRvm', 'viewer3d-rvm'));
+  return import('../tabs/viewer3d-rvm-tab-renderer.js?v=20260625-rvm-renderer-cache-chain-1').then((module) => pickRenderer(module, 'renderViewer3DRvm', 'viewer3d-rvm'));
 }
 
 async function loadBasicGlbPcfRenderer() {
