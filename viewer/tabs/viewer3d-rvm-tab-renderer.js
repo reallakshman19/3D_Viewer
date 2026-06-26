@@ -16,7 +16,7 @@ import { installRvmNavigationModeArbiterBridge } from './RvmNavigationModeArbite
 import { installRvmUiInteractionPanelPatch, installRvmUiPanelBridge } from './RvmUiInteractionPanelPatch.js?v=20260621-rvm-ui-interaction-panels-1';
 import { installRvmPropertyPanelCollapseAuditBridge } from './RvmPropertyPanelCollapseAuditBridge.js?v=20260621-rvm-property-collapse-1';
 import { installRvmLabelPerformanceBridge } from './RvmLabelPerformanceBridge.js?v=20260622-rvm-label-perf-no-support-runtime-1';
-import { installRvmToolbarCompactBridge } from './RvmToolbarCompactBridge.js?v=20260624-rvm-toolbar-compact-policy-1';
+import { installRvmToolbarCompactBridge } from './RvmToolbarCompactBridge.js?v=20260626-rvm-toolbar-compact-policy-2';
 import { installRvmZoneLodLabelBridge } from './RvmZoneLodLabelBridge.js?v=20260621-rvm-preload-hierarchy-selector-1';
 import { installRvmDeepSourcePathRecoveryBridge } from './RvmDeepSourcePathRecoveryBridge.js?v=20260622-rvm-deep-source-path-recovery-1';
 import { installRvmZoneDensitySelectorBridge } from './RvmZoneDensitySelectorBridgeV5.js?v=20260622-rvm-zone-density-selector-5';
