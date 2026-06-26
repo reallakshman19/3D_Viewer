@@ -3,7 +3,7 @@ import { buildNodeMarkerDiagnostics, markerWarning, stableHash } from './NodeMar
 export const NODE_MARKER_SCHEMA = 'non-primitive-node-marker/v1';
 export const NODE_MARKER_RESOLVER_VERSION = 'node-marker-resolver/v1';
 
-const SUPPORT_RE = /SUPPORT|REST|GUIDE|LINE.?STOP|ANCHOR|HOLD|PS\b/i;
+const SUPPORT_RE = /SUPPORT|REST|GUIDE|LINE.?STOP|ANCHOR|HOLD|PS\b|ATTA|ANCI/i;
 const POINT_KEYS = ['APOS', 'LPOS', 'POS', 'START', 'END'];
 
 export function detectNodeMarkerSourceKind(source, options = {}) {
@@ -32,7 +32,7 @@ export function collectElementRecords(source) {
   if (Array.isArray(source?.branches)) return collectStructuredBranches(source);
   const roots = Array.isArray(source) ? source : [source];
   const out = [];
-  roots.forEach((root, index) => walkSourceNode(root, { path: String(root?.name || `root-${index}`), branchName: branchNameOf(root), order: out.length }, out));
+  roots.forEach((root, index) => walkSourceNode(root, { path: String(root?.name || root?.schema || `root-${index}`), branchName: branchNameOf(root), order: out.length }, out));
   return out;
 }
 
@@ -51,20 +51,20 @@ function walkSourceNode(node, ctx, out) {
   if (!node || typeof node !== 'object') return;
   const attrs = { ...(node.attributes || node.attrs || node) };
   const type = normalizeType(node.type || node.kind || attrs.TYPE || attrs.ComponentType || attrs.componentType || node.name);
-  const branchName = branchNameOf(node) || ctx.branchName || attrs.BranchName || attrs.branchName || '';
+  const branchName = branchNameOf(node) || ctx.branchName || attrs.BranchName || attrs.branchName || attrs.BRANCH_ID || attrs.BRANCH || '';
   const points = extractPoints(attrs);
   if (points.length) out.push({
     order: out.length,
     path: ctx.path,
-    name: node.name || attrs.NAME || attrs.Name || attrs.supportNo || attrs.SupportNo || attrs.ComponentRefNo || ctx.path,
+    name: node.name || attrs.NAME || attrs.Name || attrs.supportNo || attrs.SupportNo || attrs.ComponentRefNo || attrs.COMPONENT_REF_NO || ctx.path,
     type,
     sourceType: String(node.type || node.kind || type),
     branchName,
     attributes: attrs,
     points,
-    isSupport: SUPPORT_RE.test(`${type} ${node.name || attrs.supportNo || ''}`),
+    isSupport: SUPPORT_RE.test(`${type} ${node.name || attrs.supportNo || attrs.SUPPORT_KIND || ''}`),
   });
-  const kids = node.children || node.items || node.components || [];
+  const kids = node.children || node.items || node.components || node.hierarchy || [];
   kids.forEach((child, i) => walkSourceNode(child, { path: `${ctx.path}/${child?.name || child?.id || i}`, branchName, order: out.length }, out));
 }
 
@@ -114,8 +114,8 @@ function buildMarker(group, index, options) {
     nodeNumber,
     nodeNumberSource: 'generated',
     componentType: markerKind.includes('SUPPORT') ? 'SUPPORT' : preferredComponentType(upstream.record, downstream.record),
-    componentRefNo: firstValue(upstream.record.attributes.ComponentRefNo, upstream.record.attributes.componentRefNo, downstream.record.attributes.ComponentRefNo),
-    componentRefNoSource: firstValue(upstream.record.attributes.ComponentRefNo, upstream.record.attributes.componentRefNo) ? 'upstream' : 'downstream',
+    componentRefNo: firstValue(upstream.record.attributes.ComponentRefNo, upstream.record.attributes.componentRefNo, upstream.record.attributes.COMPONENT_REF_NO, upstream.record.attributes.COMPONENT_ID, downstream.record.attributes.ComponentRefNo, downstream.record.attributes.COMPONENT_REF_NO),
+    componentRefNoSource: firstValue(upstream.record.attributes.ComponentRefNo, upstream.record.attributes.componentRefNo, upstream.record.attributes.COMPONENT_REF_NO, upstream.record.attributes.COMPONENT_ID) ? 'upstream' : 'downstream',
     positionSource: upstream.point.key,
     sourceKind: options.sourceKind,
     sourceSubKind: options.sourceSubKind,
@@ -160,11 +160,19 @@ function elementRef(record) {
 }
 
 function branchNameOf(node) {
-  return node?.branchName || node?.BranchName || node?.attributes?.BranchName || node?.attributes?.branchName || node?.attributes?.NAME || '';
+  return node?.branchName || node?.BranchName || node?.attributes?.BranchName || node?.attributes?.branchName || node?.attributes?.BRANCH_ID || node?.attributes?.NAME || '';
 }
 
 function firstValue(...values) { return values.find((v) => v !== undefined && v !== null && String(v) !== '') || ''; }
-function normalizeType(value) { return String(value || 'ELEMENT').trim().toUpperCase().replace(/[^A-Z0-9]+/g, '_'); }
+function normalizeType(value) {
+  const raw = String(value || 'ELEMENT').trim().toUpperCase().replace(/[^A-Z0-9]+/g, '_');
+  if (raw === 'TUBI') return 'PIPE';
+  if (raw === 'FLAN') return 'FLANGE';
+  if (raw === 'VALV') return 'VALVE';
+  if (raw === 'ELBO' || raw === 'ELBOW') return 'BEND';
+  if (raw === 'ATTA' || raw === 'ANCI') return 'SUPPORT';
+  return raw;
+}
 function toPoint(value) {
   if (Array.isArray(value) && value.length >= 3) return { x: Number(value[0]), y: Number(value[1]), z: Number(value[2]) };
   if (value && typeof value === 'object') return { x: Number(value.x ?? value.X), y: Number(value.y ?? value.Y), z: Number(value.z ?? value.Z) };
