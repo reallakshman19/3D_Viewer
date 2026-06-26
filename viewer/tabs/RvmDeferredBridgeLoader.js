@@ -1,4 +1,5 @@
 const VERSION = '20260626-rvm-deferred-node-marker-events-1';
+const PREVIOUS_SOURCE_PREVIEW_LOADER_VERSION = '20260626-rvm-deferred-source-preview-hover-events-1';
 const API_KEY = '__PCF_GLB_RVM_BRIDGE_LOADER__';
 const ACTION_DIAGNOSTICS_KEY = '__PCF_GLB_RVM_ACTION_DIAGNOSTICS__';
 
