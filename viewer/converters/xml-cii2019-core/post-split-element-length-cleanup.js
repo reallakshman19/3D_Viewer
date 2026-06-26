@@ -1,4 +1,8 @@
 import { cleanXmlCiiNodeBlocks } from './xml-cii-node-block-cleanup.js';
+import {
+  applyXmlCiiTopologyElementLengths,
+  collectXmlCiiTopologyElementLengthAssignments,
+} from './topology/xml-cii-topology-element-length.js';
 
 const LENGTH_COMPONENT_TYPES = new Set(['FLAN', 'VALV', 'RIGID', 'INST']);
 function text(value) { return value === undefined || value === null ? '' : String(value).trim(); }
@@ -45,16 +49,60 @@ function regexRecalculate(xmlText) {
   let out = text(xmlText); for (const [from, to] of replacements) out = out.replace(from, to);
   return { xmlText: out, recalculated: changed };
 }
-function cleanupSerializedXml(xmlText, options = {}, recalculated = 0, existingDiagnostics = []) {
-  const cleanup = cleanXmlCiiNodeBlocks(xmlText, { ...(options || {}), stage: options.stage || 'post-split-element-length-cleanup' });
-  return { xmlText: cleanup.xmlText, stats: { postSplitElementLengthsRecalculated: recalculated, shortElementLengthNodesDropped: cleanup.stats.shortElementLengthNodesDropped || 0, shortElementLengthNodesDroppedByType: cleanup.stats.shortElementLengthNodesDroppedByType || {}, gasketNodesDropped: cleanup.stats.gasketNodesDropped || 0 }, diagnostics: [...existingDiagnostics, ...(cleanup.diagnostics || [])] };
+function resolveTopologyMode(options = {}) {
+  const config = options.config || {};
+  const nested = config.xmlCiiTopologyMode && typeof config.xmlCiiTopologyMode === 'object' ? config.xmlCiiTopologyMode.elementLength : '';
+  const raw = text(options.topologyElementLengthMode ?? config.topologyElementLengthMode ?? config.xmlCiiTopologyElementLengthMode ?? nested ?? 'apply').toLowerCase();
+  if (['off', 'false', '0', 'legacy'].includes(raw)) return 'off';
+  if (['shadow', 'audit', 'report'].includes(raw)) return 'shadow';
+  return 'apply';
 }
-function finish(xmlText, options, recalculated, diagnostics) { if (recalculated > 0) diagnostics.push({ type: 'post-split-element-length-recalculated', count: recalculated, message: 'ElementLengthMm recalculated after gasket drop and split: Endpoint 1 uses incoming adjacent gap; Endpoint 2 and other inline endpoints use matching ComponentRefNo span.' }); return cleanupSerializedXml(xmlText, options, recalculated, diagnostics); }
-export function applyXmlCiiPostSplitElementLengthCleanup(xmlText, options = {}) {
-  const diagnostics = [];
-  if (typeof DOMParser === 'undefined' || typeof XMLSerializer === 'undefined') { const regex = regexRecalculate(xmlText); return finish(regex.xmlText, options, regex.recalculated, diagnostics); }
+function cleanupSerializedXml(xmlText, options = {}, recalculated = 0, existingDiagnostics = [], extraStats = {}) {
+  const cleanup = cleanXmlCiiNodeBlocks(xmlText, { ...(options || {}), stage: options.stage || 'post-split-element-length-cleanup' });
+  return {
+    xmlText: cleanup.xmlText,
+    stats: {
+      ...extraStats,
+      postSplitElementLengthsRecalculated: recalculated,
+      shortElementLengthNodesDropped: cleanup.stats.shortElementLengthNodesDropped || 0,
+      shortElementLengthNodesDroppedByType: cleanup.stats.shortElementLengthNodesDroppedByType || {},
+      gasketNodesDropped: cleanup.stats.gasketNodesDropped || 0,
+    },
+    diagnostics: [...existingDiagnostics, ...(cleanup.diagnostics || [])],
+  };
+}
+function finish(xmlText, options, recalculated, diagnostics, extraStats = {}) {
+  if (recalculated > 0) diagnostics.push({ type: 'post-split-element-length-recalculated', count: recalculated, message: 'ElementLengthMm recalculated after gasket drop and split.' });
+  return cleanupSerializedXml(xmlText, options, recalculated, diagnostics, extraStats);
+}
+function legacyRecalculate(xmlText, options = {}, diagnostics = []) {
+  if (typeof DOMParser === 'undefined' || typeof XMLSerializer === 'undefined') { const regex = regexRecalculate(xmlText); return finish(regex.xmlText, options, regex.recalculated, diagnostics, { topologyElementLengthMode: 'off' }); }
   let document = null;
-  try { document = new DOMParser().parseFromString(text(xmlText), 'application/xml'); if (document.getElementsByTagName('parsererror').length) { const regex = regexRecalculate(xmlText); return finish(regex.xmlText, options, regex.recalculated, diagnostics); } } catch { const regex = regexRecalculate(xmlText); return finish(regex.xmlText, options, regex.recalculated, diagnostics); }
+  try { document = new DOMParser().parseFromString(text(xmlText), 'application/xml'); if (document.getElementsByTagName('parsererror').length) { const regex = regexRecalculate(xmlText); return finish(regex.xmlText, options, regex.recalculated, diagnostics, { topologyElementLengthMode: 'off' }); } } catch { const regex = regexRecalculate(xmlText); return finish(regex.xmlText, options, regex.recalculated, diagnostics, { topologyElementLengthMode: 'off' }); }
   let recalculated = 0; for (const branch of [...document.getElementsByTagName('Branch')]) recalculated += recalcBranchElementLengths(document, branch);
-  return finish(new XMLSerializer().serializeToString(document), options, recalculated, diagnostics);
+  return finish(new XMLSerializer().serializeToString(document), options, recalculated, diagnostics, { topologyElementLengthMode: 'off' });
+}
+export function applyXmlCiiPostSplitElementLengthCleanup(xmlText, options = {}) {
+  const mode = resolveTopologyMode(options);
+  if (mode === 'off') return legacyRecalculate(xmlText, options, []);
+
+  const topologyOptions = { ...(options || {}), mode };
+  if (mode === 'shadow') {
+    const shadow = collectXmlCiiTopologyElementLengthAssignments(xmlText, topologyOptions);
+    return legacyRecalculate(xmlText, options, [
+      ...shadow.diagnostics,
+      { type: 'xml-cii-topology-element-length-shadow', assignmentCount: shadow.assignments.length, skippedCount: shadow.skipped.length, message: 'Topology ElementLengthMm assignments calculated in shadow mode; legacy post-split length output retained.' },
+    ]);
+  }
+
+  const topology = applyXmlCiiTopologyElementLengths(xmlText, topologyOptions);
+  return finish(topology.xmlText, options, topology.changed, [
+    ...topology.diagnostics,
+    { type: 'xml-cii-topology-element-length-applied', assignmentCount: topology.assignments.length, changed: topology.changed, skippedCount: topology.skipped.length, message: 'Topology-derived ElementLengthMm assignments applied before short-node cleanup.' },
+  ], {
+    topologyElementLengthMode: 'apply',
+    topologyElementLengthAssignments: topology.assignments.length,
+    topologyElementLengthApplied: topology.changed,
+    topologyElementLengthSkipped: topology.skipped.length,
+  });
 }
