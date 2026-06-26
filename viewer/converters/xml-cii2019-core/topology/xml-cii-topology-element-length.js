@@ -173,6 +173,17 @@ function shouldUseRouteAnchor(node) {
   return node?.point && ['support-restraint', 'real-geometry-node', 'inline-component-endpoint'].includes(node.role);
 }
 
+function isExplicitEndpoint(endpoint) {
+  return ['1', '2', '3'].includes(text(endpoint));
+}
+
+function shouldPreserveExistingUnsplitInlineLength(node, options = {}) {
+  if (options.preserveExistingUnsplitInlineLengths === false) return false;
+  if (!INLINE_COMPONENT_TYPES.has(node.componentType)) return false;
+  if (isExplicitEndpoint(node.endpoint)) return false;
+  return Number.isFinite(node.existingLengthMm) && node.existingLengthMm > 0;
+}
+
 function calculateBranchAssignments(branchName, nodes, options = {}) {
   const byRef = buildRefGroups(nodes);
   const pairLengthByRef = new Map();
@@ -296,6 +307,7 @@ export function applyXmlCiiTopologyElementLengths(xmlText, options = {}) {
   }
 
   let changed = 0;
+  let preserved = 0;
   let out = text(xmlText).replace(/<Branch\b[\s\S]*?<\/Branch>/gi, (branchBlock) => {
     const branchName = tagValue(branchBlock, 'Branchname') || options.branchName || '';
     let index = 0;
@@ -303,6 +315,10 @@ export function applyXmlCiiTopologyElementLengths(xmlText, options = {}) {
       const node = parseNode(block, index++, branchName);
       const assignment = byBlockKey.get(assignmentKey(node));
       if (!assignment) return block;
+      if (shouldPreserveExistingUnsplitInlineLength(node, options)) {
+        preserved += 1;
+        return block;
+      }
       changed += 1;
       return setTag(block, 'ElementLengthMm', assignment.lengthMm.toFixed(3));
     });
@@ -314,6 +330,10 @@ export function applyXmlCiiTopologyElementLengths(xmlText, options = {}) {
       const node = parseNode(block, index++, options.branchName || '');
       const assignment = byBlockKey.get(assignmentKey(node));
       if (!assignment) return block;
+      if (shouldPreserveExistingUnsplitInlineLength(node, options)) {
+        preserved += 1;
+        return block;
+      }
       changed += 1;
       return setTag(block, 'ElementLengthMm', assignment.lengthMm.toFixed(3));
     });
@@ -323,6 +343,7 @@ export function applyXmlCiiTopologyElementLengths(xmlText, options = {}) {
     ...result,
     xmlText: out,
     changed,
+    preservedExistingUnsplitInlineLengths: preserved,
     assignmentCount: result.assignments.length,
   };
 }
