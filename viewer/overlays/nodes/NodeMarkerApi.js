@@ -1,4 +1,5 @@
 import { resolveNodeMarkersFromSource } from './NodeMarkerResolver.js';
+import { applyNodeMarkerOverrides, normalizeNodeMarkerOverrides } from './NodeMarkerOverrides.js';
 import {
   buildNodeMarkerBranchRows,
   buildNodeMarkerCoordinateRows,
@@ -10,7 +11,7 @@ import {
 } from './NodeMarkerXmlCiiTableMapper.js';
 import { stableHash } from './NodeMarkerDiagnostics.js';
 
-export const NODE_MARKER_API_SCHEMA = 'non-primitive-node-marker-api/v2';
+export const NODE_MARKER_API_SCHEMA = 'non-primitive-node-marker-api/v3';
 const GLOBAL_KEY = 'rvmNodeMarkers';
 let lastBuild = null;
 
@@ -28,7 +29,8 @@ export function buildNodeMarkerXmlCiiTablesFromSource(source, options = {}) {
 }
 
 export function buildNodeMarkerXmlCiiTablesFromMarkers(markers, options = {}) {
-  return buildNodeMarkerXmlCiiTables(markers, options);
+  const overrideResult = applyNodeMarkerOverrides(markers, options.markerOverrides || options.overrides || []);
+  return buildNodeMarkerXmlCiiTables(overrideResult.markers, options);
 }
 
 export function evaluateNodeMarkerStaleness(source, options = {}, previousBuild = lastBuild) {
@@ -36,13 +38,17 @@ export function evaluateNodeMarkerStaleness(source, options = {}, previousBuild 
   const next = resolveNodeMarkersFromSource(source, options);
   const currentRevision = next.diagnostics?.sourceRevision || '';
   const previousRevision = previousBuild.diagnostics.sourceRevision;
-  const stale = currentRevision !== previousRevision;
+  const overrideHash = stableHash(normalizeNodeMarkerOverrides(options.markerOverrides || options.overrides || []));
+  const previousOverrideHash = previousBuild.overrideDiagnostics?.overrideHash || stableHash([]);
+  const stale = currentRevision !== previousRevision || overrideHash !== previousOverrideHash;
   return {
     schema: 'non-primitive-node-marker-stale/v1',
     status: stale ? 'stale' : 'fresh',
-    staleReason: stale ? 'source-revision-changed' : '',
+    staleReason: currentRevision !== previousRevision ? 'source-revision-changed' : overrideHash !== previousOverrideHash ? 'override-revision-changed' : '',
     previousSourceRevision: previousRevision,
     currentSourceRevision: currentRevision,
+    previousOverrideHash,
+    currentOverrideHash: overrideHash,
     previousMarkerCount: previousBuild.markers?.length || 0,
     currentMarkerCount: next.markers?.length || 0,
   };
@@ -77,6 +83,8 @@ export function installNodeMarkerApi(target = globalThis) {
     buildNodeMarkerDtxrRows,
     buildNodeMarkerCsvForXmlCii,
     buildNodeMarkerJson,
+    applyNodeMarkerOverrides,
+    normalizeNodeMarkerOverrides,
     getDiagnostics,
     getLastBuild,
     installNodeMarkerApi,
@@ -86,6 +94,17 @@ export function installNodeMarkerApi(target = globalThis) {
 }
 
 function completeBuild(build, options = {}) {
+  const overrideResult = applyNodeMarkerOverrides(build.markers, options.markerOverrides || options.overrides || []);
+  build.rawMarkers = build.markers;
+  build.markers = overrideResult.markers;
+  build.overrideDiagnostics = overrideResult.diagnostics;
+  build.diagnostics = {
+    ...(build.diagnostics || {}),
+    markerCount: build.markers.length,
+    overrideCount: overrideResult.diagnostics.overrideCount,
+    suppressedOverrideCount: overrideResult.diagnostics.suppressedCount,
+    overrideHash: overrideResult.diagnostics.overrideHash,
+  };
   build.tables = buildNodeMarkerXmlCiiTables(build.markers, { ...options, ...build.diagnostics });
   build.tableHash = build.tables?.tableHash || '';
   build.exportStatus = build.markers.some((marker) => marker.status === 'stale' || marker.status === 'unresolved') ? 'blocked' : 'fresh';
@@ -94,4 +113,4 @@ function completeBuild(build, options = {}) {
 
 installNodeMarkerApi(typeof window !== 'undefined' ? window : globalThis);
 
-export { buildNodeMarkerCsvForXmlCii };
+export { buildNodeMarkerCsvForXmlCii, applyNodeMarkerOverrides, normalizeNodeMarkerOverrides };
