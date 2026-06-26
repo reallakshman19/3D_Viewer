@@ -7,17 +7,19 @@ import {
 import { attachNodeMarkerGlyphs, clearNodeMarkerGlyphRoot } from '../overlays/nodes/NodeMarkerGlyphGeometry.js';
 import * as NodeMarkerSourceTools from './RvmNonPrimitiveNodeMarkerSourceToolsBridge.js';
 import { ensureNodeMarkerHover, installRvmNonPrimitiveNodeMarkerHoverBridge } from './RvmNonPrimitiveNodeMarkerHoverBridge.js';
+import { clear as clearNodeMarkerDetailsPanel, ensure as ensureNodeMarkerDetailsPanel, installRvmNonPrimitiveNodeMarkerDetailsPanelBridge } from './RvmNonPrimitiveNodeMarkerDetailsPanelBridge.js';
 
-export const RVM_NON_PRIMITIVE_NODE_MARKER_BRIDGE_SCHEMA = 'rvm-non-primitive-node-marker-bridge/v2';
+export const RVM_NON_PRIMITIVE_NODE_MARKER_BRIDGE_SCHEMA = 'rvm-non-primitive-node-marker-bridge/v3';
 
 const GLOBAL_KEY = '__PCF_GLB_RVM_NON_PRIMITIVE_NODE_MARKERS__';
-const INSTALL_FLAG = Symbol.for('pcf-glb-rvm-non-primitive-node-marker-bridge-v2');
+const INSTALL_FLAG = Symbol.for('pcf-glb-rvm-non-primitive-node-marker-bridge-v3');
 
 export function installRvmNonPrimitiveNodeMarkerBridge() {
   if (globalThis[INSTALL_FLAG] && globalThis[GLOBAL_KEY]) return globalThis[GLOBAL_KEY];
   globalThis[INSTALL_FLAG] = true;
   NodeMarkerSourceTools.installRvmNonPrimitiveNodeMarkerSourceToolsBridge();
   installRvmNonPrimitiveNodeMarkerHoverBridge();
+  installRvmNonPrimitiveNodeMarkerDetailsPanelBridge();
   const api = {
     schema: RVM_NON_PRIMITIVE_NODE_MARKER_BRIDGE_SCHEMA,
     applyFromSource,
@@ -44,6 +46,7 @@ export function applyFromSource({ viewer = globalThis.__3D_RVM_VIEWER__, source,
   viewer.nonPrimitiveNodeMarkerExportStatus = build.exportStatus || 'fresh';
   attachNodeMarkerGlyphs(viewer, build.markers || [], { sourceKind, sourceFile: fileName, radius: options.glyphRadius });
   ensureNodeMarkerHover(viewer);
+  ensureNodeMarkerDetailsPanel(viewer);
   scheduleSourceToolsSync(viewer);
   return build;
 }
@@ -66,6 +69,7 @@ export function clear(viewer = globalThis.__3D_RVM_VIEWER__, reason = 'clear-nod
   }
   clearNodeMarkerGlyphRoot(viewer, reason);
   globalThis.__PCF_GLB_RVM_NON_PRIMITIVE_NODE_MARKER_HOVER__?.clear?.(viewer, reason);
+  clearNodeMarkerDetailsPanel(viewer, reason);
   NodeMarkerSourceTools.clear(viewer, reason);
   return { schema: 'non-primitive-node-marker-clear/v1', status: 'cleared', reason };
 }
