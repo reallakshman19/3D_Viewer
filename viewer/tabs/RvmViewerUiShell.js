@@ -1,5 +1,7 @@
 const VERSION = '20260626-rvm-ui-shell-slots-1';
 const API_KEY = '__PCF_GLB_RVM_UI_SHELL__';
+const ROOT_SELECTOR = '[data-rvm-viewer]';
+let bootstrapScheduled = false;
 
 export const RVM_UI_SHELL_SLOTS = Object.freeze({
   hierarchy: 'hierarchy',
@@ -22,8 +24,13 @@ const DEFAULT_RIGHT_PANEL_TABS = Object.freeze([
 const stateByRoot = new WeakMap();
 
 export function installRvmViewerUiShell(root, options = {}) {
+  if (typeof document === 'undefined') return null;
   const resolvedRoot = resolveRoot(root);
-  if (!resolvedRoot || typeof document === 'undefined') return null;
+  publishApi();
+  if (!resolvedRoot) {
+    scheduleShellBootstrap(options.reason || 'waiting-for-rvm-root');
+    return globalThis[API_KEY];
+  }
   const existing = stateByRoot.get(resolvedRoot);
   if (existing) {
     existing.installCount += 1;
@@ -47,7 +54,6 @@ export function installRvmViewerUiShell(root, options = {}) {
   };
   resolvedRoot.addEventListener?.('click', state.onClick, true);
   stateByRoot.set(resolvedRoot, state);
-  publishApi();
   recordTrace(state, 'install', { reason: options.reason || 'install' });
   return syncRvmViewerUiShell(resolvedRoot, { ...options, reason: options.reason || 'install' });
 }
@@ -115,18 +121,14 @@ export function setRvmRightPanelTab(root, tabId, reason = 'api') {
 export function auditRvmViewerUiShell(root) {
   const resolvedRoot = resolveRoot(root);
   if (!resolvedRoot) return { version: VERSION, ok: false, reason: 'missing-root' };
-  const rightPanel = resolvedRoot.querySelector?.('.rvm-right-panel') || null;
-  const leftPanel = resolvedRoot.querySelector?.('.rvm-left-panel') || null;
-  const viewport = resolvedRoot.querySelector?.('.rvm-viewport') || null;
   const slots = Object.values(RVM_UI_SHELL_SLOTS).reduce((acc, slotId) => {
     acc[slotId] = resolvedRoot.querySelectorAll?.(`[data-rvm-panel-slot="${slotId}"]`)?.length || 0;
     return acc;
   }, {});
-  const tabCount = resolvedRoot.querySelectorAll?.('[data-rvm-right-panel-tab]')?.length || 0;
   const missingRequired = [];
-  if (!leftPanel) missingRequired.push('left-panel');
-  if (!rightPanel) missingRequired.push('right-panel');
-  if (!viewport) missingRequired.push('viewport');
+  if (!resolvedRoot.querySelector?.('.rvm-left-panel')) missingRequired.push('left-panel');
+  if (!resolvedRoot.querySelector?.('.rvm-right-panel')) missingRequired.push('right-panel');
+  if (!resolvedRoot.querySelector?.('.rvm-viewport')) missingRequired.push('viewport');
   if (slots.hierarchy !== 1) missingRequired.push('hierarchy-slot');
   if (slots.selection !== 1) missingRequired.push('selection-slot');
   if (slots.diagnostics !== 1) missingRequired.push('diagnostics-slot');
@@ -135,7 +137,7 @@ export function auditRvmViewerUiShell(root) {
     ok: missingRequired.length === 0,
     reason: missingRequired.length ? 'missing-shell-contract' : 'shell-contract-ok',
     missingRequired,
-    tabCount,
+    tabCount: resolvedRoot.querySelectorAll?.('[data-rvm-right-panel-tab]')?.length || 0,
     slots,
   };
 }
@@ -144,6 +146,19 @@ export function getRvmViewerUiShellDiagnostics(root) {
   const resolvedRoot = resolveRoot(root);
   const state = resolvedRoot ? stateByRoot.get(resolvedRoot) : null;
   return state?.diagnostics || syncRvmViewerUiShell(resolvedRoot, { reason: 'diagnostics' });
+}
+
+function scheduleShellBootstrap(reason) {
+  if (bootstrapScheduled || typeof document === 'undefined') return;
+  bootstrapScheduled = true;
+  const delays = [0, 80, 250, 750, 1500, 3000];
+  for (const delay of delays) {
+    setTimeout(() => {
+      const root = document.querySelector?.(ROOT_SELECTOR);
+      if (root && !stateByRoot.get(root)) installRvmViewerUiShell(root, { reason: `bootstrap:${reason}` });
+      if (root) bootstrapScheduled = false;
+    }, delay);
+  }
 }
 
 function ensureBaseSlots(root) {
@@ -181,8 +196,7 @@ function ensureRightPanelTabs(root, activeTab) {
   }
   tabs.innerHTML = DEFAULT_RIGHT_PANEL_TABS.map((tab) => `<button type="button" class="rvm-right-panel-tab ${tab.id === activeTab ? 'is-active' : ''}" data-rvm-right-panel-tab="${escapeAttr(tab.id)}" aria-selected="${tab.id === activeTab ? 'true' : 'false'}">${escapeHtml(tab.label)}</button>`).join('');
   for (const slot of [...rightPanel.querySelectorAll('[data-rvm-panel-slot]')]) {
-    const slotId = slot.dataset.rvmPanelSlot || '';
-    const active = slotId === activeTab;
+    const active = slot.dataset.rvmPanelSlot === activeTab;
     slot.hidden = !active;
     slot.dataset.rvmPanelSlotActive = String(active);
   }
@@ -257,8 +271,8 @@ function getSlot(root, slotId) {
 
 function normalizeSlotId(value) {
   const raw = String(value || '').trim().toLowerCase();
-  if (raw === 'sourceTools'.toLowerCase()) return RVM_UI_SHELL_SLOTS.sourceTools;
-  if (raw === 'nodeMarkers'.toLowerCase()) return RVM_UI_SHELL_SLOTS.nodeMarkers;
+  if (raw === 'sourcetools') return RVM_UI_SHELL_SLOTS.sourceTools;
+  if (raw === 'nodemarkers') return RVM_UI_SHELL_SLOTS.nodeMarkers;
   return Object.values(RVM_UI_SHELL_SLOTS).includes(raw) ? raw : RVM_UI_SHELL_SLOTS.diagnostics;
 }
 
@@ -305,7 +319,7 @@ function getRvmViewerUiShellApi() {
 
 function resolveRoot(root) {
   if (root && typeof root.querySelector === 'function') return root;
-  if (typeof document !== 'undefined') return document.querySelector?.('[data-rvm-viewer]') || null;
+  if (typeof document !== 'undefined') return document.querySelector?.(ROOT_SELECTOR) || null;
   return null;
 }
 
