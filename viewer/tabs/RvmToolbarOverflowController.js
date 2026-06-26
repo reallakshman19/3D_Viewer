@@ -1,5 +1,5 @@
-const VERSION = '20260626-rvm-toolbar-overflow-controller-3';
-const PREVIOUS_VERSION = '20260626-rvm-toolbar-overflow-controller-2';
+const VERSION = '20260626-rvm-toolbar-overflow-controller-4';
+const PREVIOUS_VERSION = '20260626-rvm-toolbar-overflow-controller-3';
 const CONTROLLER_KEY = '__PCF_GLB_RVM_TOOLBAR_OVERFLOW__';
 const MENU_PREFIX = 'rvm-tools-menu';
 const TRACE_LIMIT = 30;
@@ -38,6 +38,7 @@ export function installRvmToolbarOverflow(root, options = {}) {
     clickCount: 0,
     closeCount: 0,
     syncCount: 0,
+    positionedCount: 0,
     traces: [],
     lastReason: options.reason || 'install',
     onClick: null,
@@ -52,6 +53,7 @@ export function installRvmToolbarOverflow(root, options = {}) {
     if (!entry) return;
     event.preventDefault?.();
     event.stopPropagation?.();
+    event.stopImmediatePropagation?.();
     state.clickCount += 1;
     const nextOpen = state.openMenuId !== entry.id || !state.open;
     recordTrace(state, 'button-click', { menuId: entry.id, nextOpen });
@@ -62,6 +64,7 @@ export function installRvmToolbarOverflow(root, options = {}) {
     if (event?.key !== 'Escape' || !state.open) return;
     event.preventDefault?.();
     event.stopPropagation?.();
+    event.stopImmediatePropagation?.();
     const active = getEntryById(resolvedRoot, state.openMenuId);
     recordTrace(state, 'escape-close', { key: event.key, menuId: state.openMenuId });
     setRvmToolbarOverflowOpen(resolvedRoot, false, 'escape', state.openMenuId);
@@ -97,6 +100,7 @@ export function disposeRvmToolbarOverflow(root) {
   resolvedRoot.removeEventListener?.('click', state.onClick, true);
   document.removeEventListener?.('keydown', state.onKeyDown, true);
   document.removeEventListener?.('pointerdown', state.onPointerDown, true);
+  for (const entry of getMenuEntries(resolvedRoot)) resetMenuPosition(entry.menu);
   states.delete(resolvedRoot);
   installedRoots.delete(resolvedRoot);
   delete resolvedRoot.dataset.rvmToolbarOverflowController;
@@ -124,7 +128,15 @@ export function syncRvmToolbarOverflow(root, options = {}) {
     entry.menu.setAttribute?.('aria-hidden', String(!open));
     entry.menu.setAttribute?.('role', 'menu');
     entry.rootNode?.classList?.toggle?.('is-open', open);
+    entry.rootNode?.classList?.toggle?.('is-closed', !open);
     if (entry.rootNode?.dataset) entry.rootNode.dataset.rvmToolbarOverflowOpen = String(open);
+    updateButtonCaret(entry.button, open);
+    if (open) {
+      positionMenu(entry);
+      if (state) state.positionedCount += 1;
+    } else {
+      resetMenuPosition(entry.menu);
+    }
   }
 
   resolvedRoot.dataset.rvmToolbarOverflowOpen = String(activeOpen);
@@ -179,6 +191,7 @@ export function validateRvmToolbarOverflowDom(root) {
     overflowRootCount,
     legacyPanelCount,
     groupedMenus: true,
+    fixedPositionedMenus: true,
   };
 }
 
@@ -211,6 +224,7 @@ function buildDiagnostics(root, state, open, reason) {
     clickCount: state?.clickCount || 0,
     closeCount: state?.closeCount || 0,
     syncCount: state?.syncCount || 0,
+    positionedCount: state?.positionedCount || 0,
     hasButton: entries.length > 0,
     hasMenu: entries.length > 0,
     buttonExpanded: active?.button?.getAttribute?.('aria-expanded') || '',
@@ -221,6 +235,40 @@ function buildDiagnostics(root, state, open, reason) {
     domAudit: validateRvmToolbarOverflowDom(root),
     trace: [...(state?.traces || [])],
   };
+}
+
+function positionMenu(entry) {
+  const menu = entry?.menu;
+  const button = entry?.button;
+  if (!menu || !button || typeof button.getBoundingClientRect !== 'function') return false;
+  const rect = button.getBoundingClientRect();
+  const viewportWidth = Math.max(document.documentElement?.clientWidth || 0, globalThis.innerWidth || 0, 320);
+  const viewportHeight = Math.max(document.documentElement?.clientHeight || 0, globalThis.innerHeight || 0, 240);
+  const maxWidth = Math.min(360, Math.max(220, viewportWidth - 20));
+  const left = clamp(rect.left, 8, Math.max(8, viewportWidth - maxWidth - 8));
+  const top = clamp(rect.bottom + 6, 8, Math.max(8, viewportHeight - 120));
+  menu.style.position = 'fixed';
+  menu.style.left = `${Math.round(left)}px`;
+  menu.style.top = `${Math.round(top)}px`;
+  menu.style.right = 'auto';
+  menu.style.bottom = 'auto';
+  menu.style.zIndex = '9999';
+  menu.style.maxWidth = `${Math.round(maxWidth)}px`;
+  menu.style.maxHeight = `${Math.max(160, Math.round(viewportHeight - top - 12))}px`;
+  menu.dataset.rvmToolbarMenuPositioned = 'fixed';
+  return true;
+}
+
+function resetMenuPosition(menu) {
+  if (!menu?.style) return;
+  for (const prop of ['position', 'left', 'top', 'right', 'bottom', 'zIndex', 'maxWidth', 'maxHeight']) menu.style[prop] = '';
+  delete menu.dataset.rvmToolbarMenuPositioned;
+}
+
+function updateButtonCaret(button, open) {
+  const caret = button?.querySelector?.('.rvm-toolbar-caret');
+  if (caret) caret.textContent = open ? '▲' : '▼';
+  if (button?.dataset) button.dataset.rvmToolbarMenuOpen = String(open);
 }
 
 function recordTrace(state, event, detail = {}) {
@@ -240,32 +288,9 @@ function getMenuEntries(root) {
   }).filter((entry) => entry.button && entry.menu);
 }
 
-function getEntryById(root, id) {
-  return getMenuEntries(root).find((entry) => entry.id === id) || null;
-}
-
-function getEntryForButton(root, button) {
-  return getMenuEntries(root).find((entry) => entry.button === button || contains(entry.button, button)) || null;
-}
-
-function resolveRoot(root) {
-  if (root && typeof root.querySelector === 'function') return root;
-  if (typeof document !== 'undefined') return document.querySelector?.(RVM_TOOLBAR_OVERFLOW_SELECTORS.root) || null;
-  return null;
-}
-
-function closest(target, selector) {
-  return target?.closest?.(selector) || null;
-}
-
-function contains(parent, child) {
-  if (!parent || !child) return false;
-  if (parent === child) return true;
-  if (typeof parent.contains === 'function') return parent.contains(child);
-  let cursor = child;
-  while (cursor) {
-    if (cursor === parent) return true;
-    cursor = cursor.parentElement || cursor.parentNode || null;
-  }
-  return false;
-}
+function getEntryById(root, id) { return getMenuEntries(root).find((entry) => entry.id === id) || null; }
+function getEntryForButton(root, button) { return getMenuEntries(root).find((entry) => entry.button === button || contains(entry.button, button)) || null; }
+function resolveRoot(root) { if (root && typeof root.querySelector === 'function') return root; if (typeof document !== 'undefined') return document.querySelector?.(RVM_TOOLBAR_OVERFLOW_SELECTORS.root) || null; return null; }
+function closest(target, selector) { return target?.closest?.(selector) || null; }
+function contains(parent, child) { if (!parent || !child) return false; if (parent === child) return true; if (typeof parent.contains === 'function') return parent.contains(child); let cursor = child; while (cursor) { if (cursor === parent) return true; cursor = cursor.parentElement || cursor.parentNode || null; } return false; }
+function clamp(value, min, max) { return Math.min(Math.max(Number.isFinite(value) ? value : min, min), max); }
