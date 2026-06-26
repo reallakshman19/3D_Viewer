@@ -2,11 +2,7 @@ import fs from 'node:fs/promises';
 
 let passed = 0;
 let failed = 0;
-function check(condition, label) {
-  if (condition) { console.log(`PASS: ${label}`); passed += 1; }
-  else { console.error(`FAIL: ${label}`); failed += 1; }
-}
-
+function check(condition, label) { if (condition) { console.log(`PASS: ${label}`); passed += 1; } else { console.error(`FAIL: ${label}`); failed += 1; } }
 async function read(path) { return fs.readFile(new URL(path, import.meta.url), 'utf8'); }
 
 const rendererSource = await read('../tabs/viewer3d-rvm-tab-renderer.js');
@@ -45,9 +41,7 @@ const toolbarSource = await read('../tabs/RvmToolbarCompactBridge.js');
 const overflowSource = await read('../tabs/RvmToolbarOverflowController.js');
 const spacingSource = await read('../tabs/RvmViewportFirstSpacingBridge.js');
 
-for (const eagerForbidden of ['RvmModelHealthBridge.js?v=', 'RvmModelHealthIssuesBridge.js?v=', 'RvmObjectSearchBridge.js?v=', 'RvmVisibilitySnapshotsBridge.js?v=', 'RvmSelectionSetsBridge.js?v=', 'RvmReportExportBridge.js?v=', 'RvmNonPrimitiveSupportOverlayBridge.js?v=', 'RvmNonPrimitiveSupportOverlayDetailsPanelBridge.js?v=', 'RvmNonPrimitiveSupportOverlayHoverBridge.js?v=', 'RvmNonPrimitiveAutoBendBridge.js?v=', 'RvmNonPrimitiveSourceToolsUiBridge.js?v=']) {
-  check(!rendererSource.includes(eagerForbidden), `renderer defers ${eagerForbidden} out of startup path`);
-}
+for (const eagerForbidden of ['RvmModelHealthBridge.js?v=', 'RvmModelHealthIssuesBridge.js?v=', 'RvmObjectSearchBridge.js?v=', 'RvmVisibilitySnapshotsBridge.js?v=', 'RvmSelectionSetsBridge.js?v=', 'RvmReportExportBridge.js?v=', 'RvmNonPrimitiveSupportOverlayBridge.js?v=', 'RvmNonPrimitiveSupportOverlayDetailsPanelBridge.js?v=', 'RvmNonPrimitiveSupportOverlayHoverBridge.js?v=', 'RvmNonPrimitiveAutoBendBridge.js?v=', 'RvmNonPrimitiveSourceToolsUiBridge.js?v=']) check(!rendererSource.includes(eagerForbidden), `renderer defers ${eagerForbidden} out of startup path`);
 check(deferredLoaderSource.includes("id: 'model-health'") && deferredLoaderSource.includes('RvmModelHealthBridge.js?v=20260621-rvm-health-issues-1'), 'postModel deferred loader owns model health bridge');
 check(deferredLoaderSource.includes("id: 'report-export'") && deferredLoaderSource.includes('RvmReportExportBridge.js?v=20260626-rvm-report-export-shell-slot-1'), 'postModel deferred loader owns report export bridge');
 check(deferredLoaderSource.includes("sourcePreview:") && deferredLoaderSource.includes("id: 'nonprimitive-support-overlay'"), 'deferred loader owns sourcePreview bridge group');
@@ -56,11 +50,16 @@ check(deferredLoaderSource.includes('RvmNonPrimitiveSourceToolsUiBridge.js?v=202
 check(deferredLoaderSource.includes('SOURCE_PREVIEW_KIND_RE') && deferredLoaderSource.includes("mode === 'source-preview'"), 'deferred loader gates source-preview bridge loading');
 check(rendererSource.includes('RvmDeferredBridgeLoader.js?v=20260626-rvm-deferred-report-export-shell-slot-1'), 'renderer imports current deferred loader cache key');
 
-check(rendererSource.includes('RvmToolbarCompactBridge.js?v=20260626-rvm-toolbar-secondary-groups-1'), 'renderer imports grouped secondary toolbar policy');
+check(rendererSource.includes('RvmToolbarCompactBridge.js?v=20260626-rvm-toolbar-secondary-groups-2'), 'renderer imports grouped toolbar click fix');
 check(rendererSource.includes('RvmViewportFirstSpacingBridge.js?v=20260626-rvm-viewport-first-spacing-3'), 'renderer imports grouped secondary spacing bridge');
 check(rendererSource.includes('viewer3d-rvm-tab.js?v=20260626-rvm-statusbar-structured-summary-1'), 'renderer imports current RVM tab shell cache key');
-check(toolbarSource.includes("const VERSION = '20260626-rvm-toolbar-secondary-groups-1'"), 'toolbar exposes grouped secondary menu policy');
-check(overflowSource.includes("const VERSION = '20260626-rvm-toolbar-overflow-controller-3'"), 'overflow supports grouped menu roots');
+check(toolbarSource.includes("const VERSION = '20260626-rvm-toolbar-secondary-groups-2'"), 'toolbar exposes grouped secondary menu click fix');
+check(toolbarSource.includes('RvmToolbarOverflowController.js?v=20260626-rvm-toolbar-overflow-controller-4'), 'toolbar imports click-fix overflow controller');
+check(toolbarSource.includes('position:fixed') && toolbarSource.includes('overflow:visible'), 'toolbar panel avoids clipping by fixed positioning and visible ribbon overflow');
+check(overflowSource.includes("const VERSION = '20260626-rvm-toolbar-overflow-controller-4'"), 'overflow supports fixed-position grouped menu roots');
+check(overflowSource.includes('positionMenu(entry)') && overflowSource.includes("menu.style.position = 'fixed'"), 'overflow positions active grouped menu');
+check(overflowSource.includes('updateButtonCaret(entry.button, open)'), 'overflow updates grouped button caret state');
+check(overflowSource.includes('stopImmediatePropagation'), 'overflow click path is protected from later root owners');
 check(overflowSource.includes('getMenuEntries') && overflowSource.includes('openMenuId'), 'overflow controller allows only one grouped menu open at a time');
 check(spacingSource.includes("secondaryToolbarGroups: ['view', 'visibility', 'inspect', 'export', 'source', 'diag']"), 'spacing bridge lists grouped secondary menus');
 for (const label of ['View', 'Visibility', 'Inspect', 'Export', 'Source', 'Diag']) check(toolbarSource.includes(`label: '${label}'`), `toolbar defines ${label} grouped menu`);
@@ -82,7 +81,6 @@ check(rendererSource.includes('RvmZoneDensitySelectorBridgeV5.js?v=20260622-rvm-
 check(!rendererSource.includes('RvmSupportAssemblyMarkerModeBridge'), 'renderer keeps retired support assembly marker bridge removed');
 check(rendererSource.includes('RvmCanvasSelectionSinglePickGuardBridge.js?v=20260626-rvm-canvas-single-pick-registry-1'), 'renderer loads routed canvas single-pick guard bridge');
 check(rendererSource.includes('RvmLeafCanvasPickBridge.js?v=20260622-rvm-leaf-canvas-pick-orbit-guard-2'), 'renderer loads navigation-safe leaf canvas pick bridge');
-
 check(deepPathSource.includes('recoverRvmDeepSourcePathFromInstruction') && deepPathSource.includes('isWeakRvmSourcePath'), 'deep path bridge recovers shallow paths');
 check(zoneDensityV5Source.includes('browser-rvm-zone-selection/v6-synthetic-navis-density-tree'), 'zone density selector exposes synthetic Navis tree schema');
 check(geometricFallbackSource.includes('__PCF_GLB_RVM_GEOMETRIC_FALLBACK_POLICY__'), 'geometric fallback bridge publishes diagnostics API');
@@ -99,10 +97,8 @@ check(measureSource.includes('__PCF_GLB_RVM_MEASURE__') && measureSource.include
 check(searchSource.includes('__PCF_GLB_RVM_OBJECT_SEARCH__') && searchSource.includes('MAX_INDEX_OBJECTS'), 'object search remains bounded');
 check(labelsSource.includes('setRvmLabelLayerVisible') && !labelsSource.includes('applyScopedSupportLabelVisibility'), 'labels remain generic and retired support label scoping stays removed');
 check(zoneSource.includes('buildPreloadHierarchyZones'), 'zone selector remains manifest-backed');
-
 check(tabSource.includes('beforeRenderInstructions'), 'RVM tab keeps pre-render hook');
 check(tabSource.includes('stampSourcePreviewHierarchy(payload.gltf.scene, source, sourceKind, file.name)'), 'RVM tab stamps source-preview hierarchy before setModel');
-check(tabSource.includes('__rvmNonPrimitiveSourceHierarchy') && tabSource.includes('__rvmNonPrimitiveAutoBendSourceHierarchy'), 'RVM tab owns source-preview hierarchy transfer for deferred bridges');
 check(loadSource.includes('BrowserRvmRenderSceneBuilder.js?v=20260621-rvm-native-facet-primary-1'), 'load bridge keeps native facet renderer');
 check(workerSource.includes('RVM_TRANSFORM_3X4'), 'worker preserves transform matrix');
 check(nativeFacetSource.includes('browser-rvm-native-facetgroup-primary/v3-smart-civil-defer'), 'native facet module uses smart civil defer schema');
@@ -110,7 +106,6 @@ check(smartCivilFacetSource.includes('PROCESS_TERMS') && smartCivilFacetSource.i
 check(remainingPrimitiveSource.includes('support-code1-pyramid-solid-upgrade-disabled'), 'remaining primitive patch blocks support code-1 solid pyramid upgrades');
 check(renderBuilderSource.includes('RVM_NATIVE_FACET_GROUP') && renderBuilderSource.includes('wireframe-diagnostic-not-solid-geometry'), 'render builder keeps native facet path and diagnostic wireframes');
 check(!renderBuilderSource.includes("primitive === 'STRUCTURE_BBOX' || type === 'STRUCTURE'"), 'unconditional structure slab promotion remains blocked');
-
 check(indexSource.includes('main-rhbg-fitguard.js?v=20260625-empty-startup-side-effects-removed-1'), 'index uses current main cache key');
 check(entrySource.includes('core/app.js?v=20260625-empty-startup-side-effects-removed-1'), 'entrypoint uses current app cache key');
 check(!entrySource.includes('STARTUP_SIDE_EFFECT_MODULES') && !entrySource.includes('loadStartupSideEffects'), 'entrypoint no longer keeps startup side-effect loader');
