@@ -14,6 +14,8 @@ const scripts = [
   'scripts/test-xml-cii-preview-run-parity.mjs',
   'scripts/test-xml-cii-ps-tag-exact-restraints.mjs',
   'scripts/test-xml-cii-staged-geometry-authority.mjs',
+  'scripts/test-xml-cii-short-node-invariant-cleanup.mjs',
+  'scripts/test-xml-cii-topology-element-length.mjs',
   'scripts/test-xml-cii-weight-match-component-ref-column.mjs',
   'scripts/test-xml-cii-custom-input-source.mjs',
   'scripts/test-xml-cii-master-autoload-single-session.mjs',
