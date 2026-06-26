@@ -177,17 +177,17 @@ function ownerBranchSimilarity(left, right) {
   return common / Math.max(aTokens.length, bTokens.size);
 }
 
-function walkStagedComponents(value, branchName = '', out = []) {
+function walkStagedComponents(value, branchName = '', out = [], _path = '$') {
   if (Array.isArray(value)) {
-    value.forEach((item) => walkStagedComponents(item, branchName, out));
+    value.forEach((item, idx) => walkStagedComponents(item, branchName, out, `${_path}[${idx}]`));
     return out;
   }
   if (!value || typeof value !== 'object') return out;
   const attrs = value.attributes && typeof value.attributes === 'object' ? value.attributes : {};
   const type = toText(value.type || attrs.TYPE).toUpperCase();
   const currentBranch = (type === 'BRANCH' || Array.isArray(value.children)) ? toText(value.name || attrs.NAME || attrs.OWNER || branchName) : branchName;
-  out.push({ component: value, attrs, branchName: currentBranch, type });
-  if (Array.isArray(value.children)) value.children.forEach((child) => walkStagedComponents(child, currentBranch, out));
+  out.push({ component: value, attrs, branchName: currentBranch, type, _path });
+  if (Array.isArray(value.children)) value.children.forEach((child, idx) => walkStagedComponents(child, currentBranch, out, `${_path}.children[${idx}]`));
   return out;
 }
 
@@ -283,6 +283,8 @@ export function buildStagedDtxrIndex(stagedJson, config = {}) {
       coord: null,
       type: stagedTypeOf(item),
       component: item.component,
+      _path: item._path || '',
+      _jsonSeq: items.length,
     };
     items.push(indexedItem);
 
@@ -379,7 +381,7 @@ function resultFromStagedItem(indexed, { source, matchedBy, matchedKey, purpose,
   const cmpSupGap = toText(indexed?.cmpSupGap || stagedAttr(indexed?.raw || indexed, ['CMPSUPGAP']) || '').trim();
   const stagedType = stagedTypeOf(indexed);
   const canonicalText = purpose === 'support-restraint' ? (dtxrPs || dtxrPos) : (dtxrPos || dtxrPs);
-  return { ...emptyDtxrResult(source || 'staged'), canonicalText, value: canonicalText, dtxrPos, dtxrPs, teeDesc: purpose === 'tee-description' ? dtxrPos : '', cmpSupGap, supportTags: [], source: source || 'staged', matchedBy: matchedBy || '', matchedKey: String(matchedKey || ''), stagedType, componentRefNo: toText(indexed?.attrs?.ComponentRefNo || indexed?.attrs?.COMPONENTREFNO || '').trim(), confidence };
+  return { ...emptyDtxrResult(source || 'staged'), canonicalText, value: canonicalText, dtxrPos, dtxrPs, teeDesc: purpose === 'tee-description' ? dtxrPos : '', cmpSupGap, supportTags: [], source: source || 'staged', matchedBy: matchedBy || '', matchedKey: String(matchedKey || ''), stagedType, componentRefNo: toText(indexed?.attrs?.ComponentRefNo || indexed?.attrs?.COMPONENTREFNO || '').trim(), confidence, _sourcePath: indexed?._path || '' };
 }
 
 function resultFromExistingXml(xmlNode, { purpose, source, matchedBy, confidence = 0.75 } = {}) {
@@ -583,7 +585,7 @@ export function applyDtxrAnnotations(document, node, resolved, purpose = 'compon
 
 export function resolveXmlCiiNodeDtxr(xmlNode, stagedIndex, config = {}) {
   const result = resolveDtxrForXmlNode({ xmlNode, context: stagedIndex, purpose: 'component-description', config, trustExistingXmlDtxr: config.trustExistingXmlDtxr !== false });
-  return { value: result.canonicalText || result.value || '', source: result.source, confidence: result.confidence, matchedKey: result.matchedKey, matchedBy: result.matchedBy, stagedType: result.stagedType, suppressed: result.suppressed, suppressionReason: result.suppressionReason };
+  return { value: result.canonicalText || result.value || '', source: result.source, confidence: result.confidence, matchedKey: result.matchedKey, matchedBy: result.matchedBy, stagedType: result.stagedType, suppressed: result.suppressed, suppressionReason: result.suppressionReason, sourcePath: result._sourcePath || '' };
 }
 
 function componentDescPrefix(node) {
@@ -674,7 +676,7 @@ export function buildStagedDtxrPositionIndex(stagedJsonText, config) {
     const supportTags = supportTagsFromAttrs(attrs, entry.component?.name || '');
     if (!dtxr && !cmpSupGap) continue;
     if (!point) continue;
-    const indexed = { ...entry, dtxr, dtxrPos, dtxrPs, cmpSupGap, point, rawPoint, supportTags };
+    const indexed = { ...entry, dtxr, dtxrPos, dtxrPs, cmpSupGap, point, rawPoint, supportTags, _path: entry._path || '' };
     entries.push(indexed);
     for (const tag of supportTags) {
       if (!byTag.has(tag)) byTag.set(tag, []);
@@ -769,14 +771,16 @@ export function xmlCiiDtxrPosForNode(node, dtxrPositionIndex, config) {
   const tolerance = xmlCiiDtxrPositionOffset(config).tolerance;
   const values = [];
   const gapValues = [];
+  let matchedPath = '';
   for (const entry of dtxrPositionIndex.entries) {
     if (!xmlCiiPositionsMatch(entry.point, target, tolerance)) continue;
+    if (!matchedPath && entry._path) matchedPath = entry._path;
     if (entry.dtxr && !values.includes(entry.dtxr)) values.push(entry.dtxr);
     if (entry.cmpSupGap && !gapValues.includes(entry.cmpSupGap)) gapValues.push(entry.cmpSupGap);
   }
   if (values[0]) annotateComponentDtxr(node, 'POS', values[0]);
   if (gapValues[0]) annotateCmpSupGap(node, 'POS', gapValues[0]);
-  return { text: values.join('|'), values, cmpSupGap: gapValues[0] || '' };
+  return { text: values.join('|'), values, cmpSupGap: gapValues[0] || '', matchedPath };
 }
 
 export function annotateXmlCiiNodeFromStagedDtxr(node, stagedIndex) {

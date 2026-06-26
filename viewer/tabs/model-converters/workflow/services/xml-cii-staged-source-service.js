@@ -153,9 +153,9 @@ function customInputStagedSource() {
 }
 
 export function xmlCiiWorkflowParsedStagedSource(config) {
-  if (!sourceEnabled(config || {})) return null;
   const jsonTrace = xmlCiiJsonTraceSnapshot();
-  if (text(jsonTrace?.stagedJsonText)) {
+  const useJsonTrace = sourceEnabled(config || {}) || jsonTrace?.useAsSource === true;
+  if (useJsonTrace && text(jsonTrace?.stagedJsonText)) {
     const traceRows = Array.isArray(jsonTrace.trace) ? jsonTrace.trace.length : 0;
     const sourceName = text(jsonTrace.sourceFileName) || 'imported JSON';
     return {
@@ -163,9 +163,11 @@ export function xmlCiiWorkflowParsedStagedSource(config) {
       label: `JSON Trace staged source (${sourceName}, ${traceRows} trace row(s))`,
     };
   }
+  if (!sourceEnabled(config || {})) return null;
   return customInputStagedSource();
 }
 
 export function xmlCiiUseWorkflowParsedStagedSource(config) {
-  return sourceEnabled(config || {});
+  const jsonTrace = xmlCiiJsonTraceSnapshot();
+  return sourceEnabled(config || {}) || (jsonTrace?.useAsSource === true && text(jsonTrace?.stagedJsonText));
 }

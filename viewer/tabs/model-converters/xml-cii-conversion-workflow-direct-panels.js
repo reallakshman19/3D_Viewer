@@ -15,13 +15,14 @@ const MODEL_SUBTABS = Object.freeze([
 export const OLD_XML_CII_WORKFLOW_PHASES = Object.freeze([
   { id: 'regex', label: '1 Regex', summary: 'Derive line key, piping class, and size from XML Branchname tokens or regex.', state: 'Current' },
   { id: 'import-masters', label: '2 Import Masters', summary: 'Load line list, piping class, material map, and valve weight sources.', state: 'Current' },
-  { id: 'preview', label: '3 Preview', summary: 'Dry-run enrichment preview per branch — inspect and override approximate matches.', state: 'Current' },
-  { id: 'diagnostics', label: '4 Diagnostics', summary: 'Run Dry Run to inspect enrichment data before committing to the full run.', state: 'Current' },
-  { id: 'weight-match', label: '4A Weight Match', summary: 'Review approximate component weights matched by bore, rating, and length, then Finalize and Run.', state: 'Current' },
-  { id: 'support-mapper', label: '6 Support Types', summary: 'Map ATT/RVM fields to CII support kinds for enrichment and 3D symbol rendering.', state: 'Current' },
-  { id: 'config', label: '7 Config', summary: 'Edit all enrichment configuration fields and export/import the JSON config.', state: 'Current' },
-  { id: 'run', label: '5 Run', summary: 'Run the conversion — generates enriched XML and final CII output.', state: 'Current' },
+  { id: 'preview', label: '4 Preview', summary: 'Dry-run enrichment preview per branch — inspect and override approximate matches.', state: 'Current' },
+  { id: 'diagnostics', label: '5 Diagnostics', summary: 'Run Dry Run to inspect enrichment data before committing to the full run.', state: 'Current' },
+  { id: 'weight-match', label: '5A Weight Match', summary: 'Review approximate component weights matched by bore, rating, and length, then Finalize and Run.', state: 'Current' },
+  { id: 'support-mapper', label: '7 Support Types', summary: 'Map ATT/RVM fields to CII support kinds for enrichment and 3D symbol rendering.', state: 'Current' },
+  { id: 'config', label: '8 Config', summary: 'Edit all enrichment configuration fields and export/import the JSON config.', state: 'Current' },
+  { id: 'run', label: '6 Run', summary: 'Run the conversion — generates enriched XML and final CII output.', state: 'Current' },
 ]);
+
 
 const OLD_MASTER_DEFS = Object.freeze([
   ['Line List', 'Line key, class, rating, material, process, bore, pressure, temperature, density and phase.'],

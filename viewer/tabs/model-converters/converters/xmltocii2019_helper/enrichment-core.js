@@ -412,6 +412,11 @@ export function xmlCiiApplyLineListProcessData(document, branch, row, config, br
   if (hydro) {
     xmlSetText(document, pressure, 'HydroPressure', hydro);
     count += 1;
+  } else {
+    const _existingHydroEl = xmlFirstChild(pressure, 'HydroPressure');
+    if (!_existingHydroEl || !String(_existingHydroEl.textContent).trim()) {
+      xmlSetText(document, pressure, 'HydroPressure', '0');
+    }
   }
   
   const temperature = xmlEnsureChild(document, branch, 'Temperature');
@@ -510,6 +515,7 @@ export async function enrichXmlForCii2019(xmlTextVal, stagedJsonText, options = 
   const stagedComponentIndex = buildStagedComponentIndex(stagedJsonText, config);
   let stagedDtxrPositionIndex = buildStagedDtxrPositionIndex(stagedJsonText, config);
   stagedDtxrPositionIndex = xmlCiiCalibrateDtxrPositionIndex(stagedDtxrPositionIndex, document, config);
+  const stagedDtxrRefIndex = buildStagedDtxrIndex(stagedJsonText, config);
   if (stagedDtxrPositionIndex?.inferredOffset) {
     stagedSupportIndex = calibrateStagedSupportIndexCoordinates(stagedSupportIndex, stagedDtxrPositionIndex.inferredOffset, config);
     diagnostics.push({
@@ -686,7 +692,18 @@ export async function enrichXmlForCii2019(xmlTextVal, stagedJsonText, options = 
     if (dtxrPos.text) {
       xmlSetText(document, node, 'DTXR_POS', dtxrPos.text);
       stats.dtxrPosAnnotations += 1;
-      diagnostics.push({ type: 'dtxr-pos', nodeNumber: xmlText(node, 'NodeNumber'), nodeName: xmlText(node, 'NodeName'), componentType, position: xmlText(node, 'Position'), count: dtxrPos.values.length, matchedBy: 'DTXR_POS', matchedKey: xmlText(node, 'Position'), finalValue: dtxrPos.text, status: 'applied' });
+      diagnostics.push({ type: 'dtxr-pos', nodeNumber: xmlText(node, 'NodeNumber'), nodeName: xmlText(node, 'NodeName'), componentType, position: xmlText(node, 'Position'), count: dtxrPos.values.length, matchedBy: 'DTXR_POS', matchedKey: xmlText(node, 'Position'), sourcePath: dtxrPos.matchedPath || '', method: 'DTXR_POS exact or within +/-6mm trace tolerance', finalValue: dtxrPos.text, status: 'applied' });
+    } else {
+      // Fallback: component-refno based DTXR when position match misses (e.g. INST/VALV with POSI ≠ XML node endpoint positions)
+      const _existingDtxrPos = xmlText(node, 'DTXR_POS');
+      if (!_existingDtxrPos) {
+        const _dtxrRef = resolveXmlCiiNodeDtxr(node, stagedDtxrRefIndex, config);
+        if (_dtxrRef?.value && _dtxrRef.matchedBy === 'component-refno') {
+          xmlSetText(document, node, 'DTXR_POS', _dtxrRef.value);
+          stats.dtxrPosAnnotations += 1;
+          diagnostics.push({ type: 'dtxr-pos', nodeNumber: xmlText(node, 'NodeNumber'), nodeName: xmlText(node, 'NodeName'), componentType, matchedBy: 'component-refno', matchedKey: _dtxrRef.matchedKey || '', sourcePath: _dtxrRef.sourcePath || _dtxrRef.matchedKey || '', jsonNodeNo: '', method: `component-refno: ${_dtxrRef.matchedKey || ''}`, finalValue: _dtxrRef.value, status: 'applied' });
+        }
+      }
     }
     if (staged) {
       const allKinds = Array.from(new Set(stagedMatches.map(m => m.kind).filter(Boolean)));

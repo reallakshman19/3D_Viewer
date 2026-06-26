@@ -1,6 +1,6 @@
 import { parseXmlCiiEnrichmentConfig } from '../../../../converters/xml-cii2019-core/config.js';
 import { enrichXmlForCii2019 as enrichXmlForCii2019Base } from './enrichment-core.js?v=20260620-rating-override-1';
-import { xmlCiiDryRunPreview } from './preview-renderer.js?v=20260624-source-parity-1';
+import { xmlCiiDryRunPreview } from './preview-renderer.js?v=20260626-process-xml-fallback-1';
 
 const RENUMBERABLE_NEGATIVE_TYPES = new Set(['FLAN', 'VALV', 'RIGID', 'INST']);
 const INLINE_LENGTH_COMPONENT_TYPES = new Set(['FLAN', 'VALV', 'RIGID', 'INST']);
@@ -195,7 +195,9 @@ function setProcessBlock(document, branch, row) {
   const temperature = ensureChild(document, branch, 'Temperature');
 
   if (setText(document, pressure, 'Pressure1', rowValue(row, 'p1', 'P1', 'pressure1', 'Pressure1'))) count += 1;
-  if (setText(document, pressure, 'HydroPressure', rowValue(row, 'hydroPressure', 'hydro_pressure', 'HydroPressure', 'Hydro Test Pressure', 'Test Pressure'))) count += 1;
+  const _hydroVal = rowValue(row, 'hydroPressure', 'hydro_pressure', 'HydroPressure', 'Hydro Test Pressure', 'Test Pressure');
+  if (_hydroVal) { if (setText(document, pressure, 'HydroPressure', _hydroVal)) count += 1; }
+  else if (!childText(pressure, 'HydroPressure')) setText(document, pressure, 'HydroPressure', '0');
   if (setText(document, temperature, 'Temperature1', rowValue(row, 't1', 'T1', 'temperature1', 'Temperature1'))) count += 1;
   if (setText(document, temperature, 'Temperature2', rowValue(row, 't2', 'T2', 'temperature2', 'Temperature2'))) count += 1;
   if (setText(document, temperature, 'Temperature3', rowValue(row, 't3', 'T3', 'temperature3', 'Temperature3'))) count += 1;

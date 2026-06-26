@@ -1,3 +1,5 @@
+import { xmlCiiSetupPostRunValidation } from './xml-cii-workflow-runner.js?v=20260626-fix-1';
+
 const FLAG = '__xmlCiiFinaliseRunButton_v3_tabOwned';
 const DIRECT_RUN_FLAG = '__xmlCiiConversionWorkflowAllowDirectRun';
 const BUTTON_TEXT = 'Finalise and Run';
@@ -49,6 +51,7 @@ function directRun(root = document) {
   const runButton = root.querySelector?.('#model-converters-run') || doc.querySelector('#model-converters-run');
   if (!runButton) return false;
 
+  xmlCiiSetupPostRunValidation();
   window[DIRECT_RUN_FLAG] = true;
   try {
     runButton.click();

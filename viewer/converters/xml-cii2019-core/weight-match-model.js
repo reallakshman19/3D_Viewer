@@ -247,7 +247,15 @@ export function isXmlCiiRigidNode(node) {
 
 export function isXmlCiiWeightReviewNode(node, dtxr = '') {
   const searchText = `${xmlText(node, 'ComponentType')} ${xmlText(node, 'NodeName')} ${dtxr}`.toUpperCase();
-  return isXmlCiiRigidNode(node) || /FLAN/.test(searchText) || /VALV|\bVLV\b/.test(searchText);
+  return isXmlCiiRigidNode(node) || /FLAN/.test(searchText) || /VALV|\bVLV\b/.test(searchText) || /\bINST\b|INSTRUMENT/.test(searchText);
+}
+
+export function isXmlCiiWeightReviewEndpoint(node) {
+  const endpointText = toText(xmlText(node, 'Endpoint')).trim().toUpperCase();
+  if (!endpointText || endpointText === '0') return true;
+  const numeric = Number(endpointText);
+  if (Number.isFinite(numeric)) return numeric === 2;
+  return endpointText === '2' || endpointText === 'END2' || endpointText === 'ENDPOINT2';
 }
 
 export function xmlCiiNumberText(value) {
@@ -435,7 +443,10 @@ function collectWeightRows(xmlTextVal, stagedJsonText, config, mode = 'zero-rigi
       if (Number(nodeNumber) <= 0) return;
       const dtxrResult = resolveWeightDtxr(node, dtxrContext, config);
       const dtxrText = dtxrResult?.suppressed ? '' : toText(dtxrResult?.canonicalText);
+      const dtxrSourcePath = dtxrResult?._sourcePath || '';
       const componentType = xmlText(node, 'ComponentType');
+      const connectionType = xmlText(node, 'ConnectionType');
+      if (connectionType) return;
       const reviewNode = isXmlCiiWeightReviewNode(node, dtxrText);
       const explicitLength = xmlText(node, 'ElementLengthMm') ? xmlCiiNumberText(xmlText(node, 'ElementLengthMm')) : null;
       const lengthMm = explicitLength !== null ? explicitLength : forwardLengths[nodeIdx];
@@ -445,7 +456,7 @@ function collectWeightRows(xmlTextVal, stagedJsonText, config, mode = 'zero-rigi
       const isMapped = mappedWeight !== null && mappedWeight > 0;
       if (mode === 'all-review-nodes') {
         if (!reviewNode || lengthMm === null || lengthMm <= 6) return;
-      } else if (!isXmlCiiRigidNode(node) || lengthMm === null || (weight !== null && Math.abs(weight) > 1e-12)) return;
+      } else if (!reviewNode || lengthMm === null || (weight !== null && Math.abs(weight) > 1e-12)) return;
       let boreMm = xmlCiiNumberText(xmlText(node, 'BoreMm'));
       if (boreMm === null) {
         const od = xmlCiiNumberText(xmlText(node, 'OutsideDiameter'));
@@ -454,7 +465,7 @@ function collectWeightRows(xmlTextVal, stagedJsonText, config, mode = 'zero-rigi
       if (boreMm === null) boreMm = branchContext.boreMm;
       const rating = ratingForRigidWeightIssue(node, branchContext, config);
       const ranking = rankXmlCiiWeightCandidates({ boreMm, rating, lengthMm, nodeName: xmlText(node, 'NodeName'), componentType, componentRefNo: xmlText(node, 'ComponentRefNo'), dtxr: dtxrText }, config, { includeRejected: true });
-      rows.push({ key: xmlCiiRigidWeightOverrideKey(branchName, nodeNumber), branchName, lineKey: branchContext.lineKey, nodeNumber, nodeName: xmlText(node, 'NodeName'), componentType, componentRefNo: xmlText(node, 'ComponentRefNo'), boreMm, rating, requestedPipingClass: branchContext.requestedPipingClass, resolvedPipingClass: branchContext.resolvedPipingClass, pipingClassMatchMethod: branchContext.pipingClassMatchMethod, pipingClassNeedsReview: branchContext.pipingClassNeedsReview, pipingClassCandidates: branchContext.pipingClassCandidates, lengthMm, elementLengthSource: explicitLength !== null ? 'ElementLengthMm' : 'computed-forward', weight: mappedWeight, originalWeight: weight, overrideWeight, weightSource: overrideWeight !== null ? 'override' : (weight !== null && weight > 0 ? 'xml-weight' : 'unresolved'), mapped: isMapped, status: isMapped ? 'mapped' : 'unresolved', dtxr: dtxrText, dtxrSource: dtxrResult?.source || '', dtxrMatchedBy: dtxrResult?.matchedBy || '', dtxrMatchedKey: dtxrResult?.matchedKey || '', dtxrStagedType: dtxrResult?.stagedType || '', dtxrSuppressed: Boolean(dtxrResult?.suppressed), dtxrSuppressionReason: dtxrResult?.suppressionReason || '', ranking, nodeHint: ranking.nodeHint, candidates: ranking.candidates.slice(0, 5), rejectedCandidates: ranking.rejectedCandidates.slice(0, 3) });
+      rows.push({ key: xmlCiiRigidWeightOverrideKey(branchName, nodeNumber), branchName, lineKey: branchContext.lineKey, nodeNumber, nodeName: xmlText(node, 'NodeName'), endpoint: xmlText(node, 'Endpoint'), componentType, componentRefNo: xmlText(node, 'ComponentRefNo'), boreMm, rating, requestedPipingClass: branchContext.requestedPipingClass, resolvedPipingClass: branchContext.resolvedPipingClass, pipingClassMatchMethod: branchContext.pipingClassMatchMethod, pipingClassNeedsReview: branchContext.pipingClassNeedsReview, pipingClassCandidates: branchContext.pipingClassCandidates, lengthMm, elementLengthSource: explicitLength !== null ? 'ElementLengthMm' : 'computed-forward', weight: mappedWeight, originalWeight: weight, overrideWeight, weightSource: overrideWeight !== null ? 'override' : (weight !== null && weight > 0 ? 'xml-weight' : 'unresolved'), mapped: isMapped, status: isMapped ? 'mapped' : 'unresolved', dtxr: dtxrText, dtxrSource: dtxrResult?.source || '', dtxrMatchedBy: dtxrResult?.matchedBy || '', dtxrMatchedKey: dtxrResult?.matchedKey || '', dtxrSourcePath, dtxrStagedType: dtxrResult?.stagedType || '', dtxrSuppressed: Boolean(dtxrResult?.suppressed), dtxrSuppressionReason: dtxrResult?.suppressionReason || '', ranking, nodeHint: ranking.nodeHint, candidates: ranking.candidates.slice(0, 5), rejectedCandidates: ranking.rejectedCandidates.slice(0, 3) });
     });
   }
   return rows;

@@ -96,7 +96,7 @@ assert(workflowPopup.includes('data-xml-cii-unified-workflow-launcher'), 'delega
 assert(workflowPopup.includes('XML_CII_WORKFLOW_DELEGATED_DATASET_KEY'), 'delegated popup launcher binding must be guarded once per model-converters root');
 assert(workflowPopup.includes('WorkflowModal.js?v=20260624-workflow-tabs-fix-1'), 'popup module must cache-bust the modal delegated-tab binding');
 assert(workflowPopup.includes('xml-cii-popup-native-panels.js?v=20260625-service-1'), 'popup module must cache-bust the service native fallback renderer');
-assert(workflowPopup.includes('json-trace/json-trace-panel.js?v=20260625-json-trace-1'), 'popup module must cache-bust the JSON Trace panel');
+assert(workflowPopup.includes('json-trace/json-trace-panel.js?v=20260626-json-trace-source-1'), 'popup module must cache-bust the JSON Trace panel');
 assert(workflowPopup.includes('stopImmediatePropagation'), 'popup click handler must block stale duplicate popup listeners');
 assert(workflowPopup.includes('{ capture: true }'), 'popup click handler must bind in capture phase');
 assert(!workflowPopup.includes("document.querySelector('#model-converters-run')"), 'popup module must not directly click legacy Run Conversion');

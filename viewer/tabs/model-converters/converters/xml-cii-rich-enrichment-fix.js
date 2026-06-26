@@ -1,6 +1,6 @@
 import { parseXmlCiiEnrichmentConfig } from '../../../converters/xml-cii2019-core/config.js';
 import { computeLineNoKey, normalizeLineListRow } from '../../../converters/xml-cii2019-core/linelist-mapping.js';
-import { xmlCiiDryRunPreview } from './xmltocii2019_helper/preview-renderer.js?v=20260624-mapped-process-1';
+import { xmlCiiDryRunPreview } from './xmltocii2019_helper/preview-renderer.js?v=20260626-process-xml-fallback-1';
 
 const NEGATIVE_BLOCK_TYPES = new Set(['FLAN', 'GASK', 'VALV', 'RIGID', 'INST']);
 const RIGID_MARKER = Object.freeze({ FLAN: '2', VALV: '2', RIGID: '2', INST: '2', GASK: '1' });
@@ -84,7 +84,9 @@ function writeProcess(document, branch, row) {
   const p = ensure(document, branch, 'Pressure');
   const t = ensure(document, branch, 'Temperature');
   if (setText(document, p, 'Pressure1', rowVal(row, 'p1', 'P1', 'pressure1', 'Pressure1'))) count += 1;
-  if (setText(document, p, 'HydroPressure', rowVal(row, 'hydroPressure', 'hydro_pressure', 'HydroPressure', 'Hydro Test Pressure', 'Test Pressure'))) count += 1;
+  const _hydroVal = rowVal(row, 'hydroPressure', 'hydro_pressure', 'HydroPressure', 'Hydro Test Pressure', 'Test Pressure');
+  if (_hydroVal) { if (setText(document, p, 'HydroPressure', _hydroVal)) count += 1; }
+  else if (!value(p, 'HydroPressure')) setText(document, p, 'HydroPressure', '0');
   if (setText(document, t, 'Temperature1', rowVal(row, 't1', 'T1', 'temperature1', 'Temperature1'))) count += 1;
   if (setText(document, t, 'Temperature2', rowVal(row, 't2', 'T2', 'temperature2', 'Temperature2'))) count += 1;
   if (setText(document, t, 'Temperature3', rowVal(row, 't3', 'T3', 'temperature3', 'Temperature3'))) count += 1;
