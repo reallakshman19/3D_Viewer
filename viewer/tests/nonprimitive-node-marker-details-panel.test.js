@@ -11,8 +11,14 @@ import {
 const bridge = await fs.readFile(new URL('../tabs/RvmNonPrimitiveNodeMarkerDetailsPanelBridge.js', import.meta.url), 'utf8');
 const markerBridge = await fs.readFile(new URL('../tabs/RvmNonPrimitiveNodeMarkerBridge.js', import.meta.url), 'utf8');
 const renderer = await fs.readFile(new URL('../tabs/viewer3d-rvm-tab-renderer.js', import.meta.url), 'utf8');
+const deferredLoader = await fs.readFile(new URL('../tabs/RvmDeferredBridgeLoader.js', import.meta.url), 'utf8');
 
-assert.match(bridge, /rvm-non-primitive-node-marker-details-panel-bridge\/v3/, 'details bridge exposes shell-slot-aware schema');
+assert.match(bridge, /rvm-non-primitive-node-marker-details-panel-bridge\/v4/, 'details bridge exposes registry-routed shell-slot-aware schema');
+assert.match(bridge, /RvmUiEventRegistry\.js\?v=20260626-rvm-ui-event-registry-1/);
+assert.match(bridge, /installRvmUiEventRegistry/);
+assert.match(bridge, /registerRvmUiEvent\('canvas-source-preview-node-marker-select'/);
+assert.match(bridge, /routeRvmUiEvent[\s\S]*canvas-source-preview-node-marker-select/);
+assert.match(bridge, /getEventRegistryDiagnostics/);
 assert.match(bridge, /NODE_MARKERS_SLOT_SELECTOR/, 'details bridge resolves node-markers shell slot');
 assert.match(bridge, /__PCF_GLB_RVM_UI_SHELL__\?\.setRightPanelTab/, 'details bridge activates node-markers tab only after marker selection');
 assert.match(bridge, /__PCF_GLB_RVM_UI_SHELL__\?\.registerPanel/, 'details bridge registers with shell panel registry');
@@ -25,8 +31,12 @@ assert.match(bridge, /saveOverrideFromPanel/, 'details bridge can save override 
 assert.match(bridge, /clearOverrideFromPanel/, 'details bridge can clear override controls');
 assert.doesNotMatch(bridge, /RvmSelectionAdapter|objectSearch|selectObject|pickObject/, 'details bridge does not use primitive RVM selection/search');
 assert.doesNotMatch(renderer, /RvmNonPrimitiveNodeMarkerDetailsPanelBridge|NodeMarkerDetailsPanel/, 'renderer must not eagerly import node marker details panel');
-assert.match(markerBridge, /rvm-non-primitive-node-marker-bridge\/v4|rvm-non-primitive-node-marker-bridge\/v5/, 'node marker bridge schema is override-persistence-aware');
+assert.match(markerBridge, /rvm-non-primitive-node-marker-bridge\/v5/, 'node marker bridge schema is event-routed and override-persistence-aware');
+assert.match(markerBridge, /RvmNonPrimitiveNodeMarkerDetailsPanelBridge\.js\?v=20260626-node-marker-details-events-1/);
+assert.match(markerBridge, /RvmNonPrimitiveNodeMarkerHoverBridge\.js\?v=20260626-node-marker-hover-events-1/);
 assert.match(markerBridge, /saveOverride|clearOverride|persistOverrides/, 'node marker bridge exposes override persistence actions');
+assert.match(deferredLoader, /RvmNonPrimitiveNodeMarkerBridge\.js\?v=20260626-node-marker-events-1/);
+assert.match(renderer, /RvmDeferredBridgeLoader\.js\?v=20260626-rvm-deferred-node-marker-events-1/);
 
 const marker = {
   markerId: 'NM-001',

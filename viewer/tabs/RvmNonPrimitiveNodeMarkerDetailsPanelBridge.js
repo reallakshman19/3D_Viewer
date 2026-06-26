@@ -1,19 +1,30 @@
 import * as THREE from 'three';
 import { collectNodeMarkerRoots } from '../overlays/nodes/NodeMarkerGlyphGeometry.js';
 import { buildNodeMarkerDetailsJson, buildNodeMarkerDetailsPanelState, emptyNodeMarkerDetailsPanelState, renderNodeMarkerDetailsPanelHtml } from '../overlays/nodes/NodeMarkerDetailsPanel.js';
+import { installRvmUiEventRegistry, registerRvmUiEvent, routeRvmUiEvent } from './RvmUiEventRegistry.js?v=20260626-rvm-ui-event-registry-1';
 
-export const RVM_NON_PRIMITIVE_NODE_MARKER_DETAILS_PANEL_SCHEMA = 'rvm-non-primitive-node-marker-details-panel-bridge/v3';
+export const RVM_NON_PRIMITIVE_NODE_MARKER_DETAILS_PANEL_SCHEMA = 'rvm-non-primitive-node-marker-details-panel-bridge/v4';
 const GLOBAL_KEY = '__PCF_GLB_RVM_NON_PRIMITIVE_NODE_MARKER_DETAILS_PANEL__';
-const INSTALL_FLAG = Symbol.for('pcf-glb-rvm-non-primitive-node-marker-details-panel-v3');
-const PICKING_FLAG = Symbol.for('pcf-glb-rvm-non-primitive-node-marker-details-picking-v3');
+const INSTALL_FLAG = Symbol.for('pcf-glb-rvm-non-primitive-node-marker-details-panel-v4');
+const PICKING_FLAG = Symbol.for('pcf-glb-rvm-non-primitive-node-marker-details-picking-v4');
 const PANEL_ID = 'rvm-nonprimitive-node-marker-details-panel';
 const ROOT_SELECTOR = '[data-rvm-viewer]';
 const NODE_MARKERS_SLOT_SELECTOR = '[data-rvm-panel-slot="node-markers"]';
 
 export function installRvmNonPrimitiveNodeMarkerDetailsPanelBridge() {
   if (globalThis[INSTALL_FLAG] && globalThis[GLOBAL_KEY]) return globalThis[GLOBAL_KEY];
+  installRvmUiEventRegistry();
   globalThis[INSTALL_FLAG] = true;
-  const api = { schema: RVM_NON_PRIMITIVE_NODE_MARKER_DETAILS_PANEL_SCHEMA, ensure, render, clear, selectFromPointer, copyJson, downloadJson };
+  const api = {
+    schema: RVM_NON_PRIMITIVE_NODE_MARKER_DETAILS_PANEL_SCHEMA,
+    ensure,
+    render,
+    clear,
+    selectFromPointer,
+    copyJson,
+    downloadJson,
+    getEventRegistryDiagnostics: () => globalThis.__PCF_GLB_RVM_UI_EVENT_REGISTRY__?.getDiagnostics?.() || null,
+  };
   globalThis[GLOBAL_KEY] = api;
   return api;
 }
@@ -70,9 +81,14 @@ export function selectFromPointer(viewer = globalThis.__3D_RVM_VIEWER__, event =
 
 function bindCanvasClick(viewer) {
   if (!viewer || viewer[PICKING_FLAG]) return;
+  installRvmUiEventRegistry();
+  registerRvmUiEvent('canvas-source-preview-node-marker-select', ({ detail }) => {
+    const localViewer = detail.viewer || globalThis.__3D_RVM_VIEWER__;
+    return selectFromPointer(localViewer, detail.sourceEvent || {});
+  }, { id: 'rvm-source-preview-node-marker-details-select', priority: 31 });
   const dom = viewer.renderer?.domElement || viewer.container;
   if (!dom?.addEventListener) return;
-  const onClick = (event) => selectFromPointer(viewer, event);
+  const onClick = (event) => routeRvmUiEvent(findViewerRoot(event), 'canvas-source-preview-node-marker-select', { viewer, sourceEvent: event });
   dom.addEventListener('click', onClick, false);
   viewer[PICKING_FLAG] = { dom, onClick };
 }
@@ -87,6 +103,13 @@ function pickNodeMarker(viewer, roots, event) {
   const targets = [];
   for (const root of roots) root.traverse?.((object) => { if (object?.userData?.rvmNodeMarker) targets.push(object); });
   return raycaster.intersectObjects(targets, false)[0]?.object || null;
+}
+
+function findViewerRoot(event = {}) {
+  return event?.currentTarget?.closest?.(ROOT_SELECTOR)
+    || event?.target?.closest?.(ROOT_SELECTOR)
+    || globalThis.document?.querySelector?.(ROOT_SELECTOR)
+    || null;
 }
 
 function ensurePanel(root) {
