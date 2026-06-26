@@ -1,11 +1,19 @@
-import { installRvmToolbarOverflow, syncRvmToolbarOverflow } from './RvmToolbarOverflowController.js?v=20260626-rvm-toolbar-overflow-controller-1';
+import { installRvmToolbarOverflow, syncRvmToolbarOverflow } from './RvmToolbarOverflowController.js?v=20260626-rvm-toolbar-overflow-controller-3';
 
-const VERSION = '20260626-rvm-toolbar-compact-policy-3';
-const PREVIOUS_VERSION = '20260626-rvm-toolbar-compact-policy-2';
-const INSTALL_FLAG = Symbol.for('pcf-glb-rvm-toolbar-compact-policy-3');
+const VERSION = '20260626-rvm-toolbar-secondary-groups-1';
+const PREVIOUS_VERSION = '20260626-rvm-toolbar-compact-policy-3';
+const INSTALL_FLAG = Symbol.for('pcf-glb-rvm-toolbar-secondary-groups-1');
 const GLOBAL_KEY = '__PCF_GLB_RVM_TOOLBAR_POLICY__';
 const ROOT_SELECTOR = '[data-rvm-viewer]';
 const CORE_LABELS = new Set(['Navigate', 'View', 'Navigate / View', 'Review']);
+const SECONDARY_MENU_DEFS = Object.freeze([
+  { id: 'view', label: 'View', title: 'View / Orient', order: 1, terms: ['orient', 'top', 'front', 'right', 'iso', 'camera', 'view'] },
+  { id: 'visibility', label: 'Visibility', title: 'Visibility / Selection', order: 2, terms: ['visibility', 'visible', 'hide', 'show', 'isolate', 'snapshot'] },
+  { id: 'inspect', label: 'Inspect', title: 'Inspect / Analysis', order: 3, terms: ['search', 'health', 'issues', 'selection sets', 'material', 'inspect', 'analysis'] },
+  { id: 'export', label: 'Export', title: 'Export / Report', order: 4, terms: ['export', 'report', 'pcf', 'mapping', 'validation', 'staged', 'acceptance'] },
+  { id: 'source', label: 'Source', title: 'Source Preview', order: 5, terms: ['source', 'support', 'supports', 'node marker', 'marker', 'auto bend', 'bend', 'nonprimitive', 'non-primitive'] },
+  { id: 'diag', label: 'Diag', title: 'Diagnostics', order: 6, terms: ['diagnostic', 'diagnostics', 'runtime', 'parser', 'fallback', 'policy', 'perf', 'performance'] },
+]);
 let scheduledReconcile = 0;
 let scheduledReason = '';
 
@@ -16,6 +24,7 @@ export function installRvmToolbarCompactBridge() {
   const state = {
     version: VERSION,
     previousVersion: PREVIOUS_VERSION,
+    groupedSecondaryMenus: SECONDARY_MENU_DEFS.map((def) => def.id),
     runs: 0,
     movedCount: 0,
     duplicateCount: 0,
@@ -51,15 +60,14 @@ function reconcileToolbar(reason = 'manual') {
   const root = document.querySelector(ROOT_SELECTOR);
   const ribbon = root?.querySelector?.('.geo-top-ribbon');
   if (!state || !root || !ribbon) return null;
-  const more = ensureMoreTools(ribbon);
+  const menus = ensureSecondaryToolMenus(ribbon);
   installRvmToolbarOverflow(root, { reason: `toolbar-${reason}` });
-  const panel = more.querySelector('[data-rvm-tools-menu]');
   let moved = 0;
   let duplicates = 0;
   const seen = new Set();
 
   for (const section of [...ribbon.querySelectorAll(':scope > .rvm-ribbon-section')]) {
-    if (section === more || section.closest('[data-rvm-tools-menu], [data-rvm-toolbar-more-panel]')) continue;
+    if (isSecondaryMenuRoot(section) || section.closest('[data-rvm-tools-menu], [data-rvm-toolbar-more-panel]')) continue;
     const label = sectionLabel(section);
     const core = isCoreTopLevelSection(section, label);
     section.dataset.rvmToolbarGroupLabel = label;
@@ -78,20 +86,27 @@ function reconcileToolbar(reason = 'manual') {
     }
     seen.add(key);
     section.hidden = false;
-    section.dataset.rvmToolbarPolicy = 'advanced';
+    section.dataset.rvmToolbarPolicy = 'secondary-grouped';
+    const targetMenuId = classifySecondaryMenu(section, label);
+    section.dataset.rvmSecondaryToolGroup = targetMenuId;
     section.dataset.rvmToolsMenuItem = label;
-    panel.appendChild(section);
+    const panel = menus.get(targetMenuId)?.querySelector('[data-rvm-tools-menu]') || menus.get('inspect')?.querySelector('[data-rvm-tools-menu]');
+    panel?.appendChild(section);
     moved += 1;
   }
 
-  for (const section of [...panel.querySelectorAll('.rvm-ribbon-section')]) {
-    const label = sectionLabel(section);
-    const key = groupKey(section, label);
-    section.dataset.rvmToolsMenuItem = section.dataset.rvmToolsMenuItem || label;
-    if (!section.dataset.rvmToolbarGroupLabel) section.dataset.rvmToolbarGroupLabel = label;
-    if (!section.dataset.rvmToolbarPolicy) section.dataset.rvmToolbarPolicy = 'advanced';
-    if (seen.has(key) && section.dataset.rvmToolbarPolicy !== 'advanced') continue;
-    seen.add(key);
+  for (const [menuId, menuRoot] of menus) {
+    const panel = menuRoot.querySelector('[data-rvm-tools-menu]');
+    const sections = [...(panel?.querySelectorAll?.('.rvm-ribbon-section') || [])].filter((el) => !el.hidden);
+    const empty = panel?.querySelector?.('[data-rvm-tools-empty]');
+    if (empty) empty.hidden = sections.length > 0;
+    for (const section of sections) {
+      const label = sectionLabel(section);
+      section.dataset.rvmToolsMenuItem = section.dataset.rvmToolsMenuItem || label;
+      section.dataset.rvmToolbarGroupLabel = section.dataset.rvmToolbarGroupLabel || label;
+      section.dataset.rvmToolbarPolicy = section.dataset.rvmToolbarPolicy || 'secondary-grouped';
+      section.dataset.rvmSecondaryToolGroup = section.dataset.rvmSecondaryToolGroup || menuId;
+    }
   }
 
   const overflowDiagnostics = syncRvmToolbarOverflow(root, { reason: `toolbar-${reason}` });
@@ -104,8 +119,9 @@ function reconcileToolbar(reason = 'manual') {
     previousVersion: PREVIOUS_VERSION,
     reason,
     runs: state.runs,
-    topLevelGroups: [...ribbon.querySelectorAll(':scope > .rvm-ribbon-section')].filter((el) => el !== more && !el.hidden).map(sectionLabel),
-    advancedGroups: [...panel.querySelectorAll('.rvm-ribbon-section')].filter((el) => !el.hidden).map(sectionLabel),
+    groupedSecondaryMenus: SECONDARY_MENU_DEFS.map((def) => def.id),
+    topLevelGroups: [...ribbon.querySelectorAll(':scope > .rvm-ribbon-section')].filter((el) => !isSecondaryMenuRoot(el) && !el.hidden).map(sectionLabel),
+    secondaryGroups: Object.fromEntries([...menus].map(([id, menuRoot]) => [id, [...menuRoot.querySelectorAll('.rvm-ribbon-section')].filter((el) => !el.hidden).map(sectionLabel)])),
     movedThisRun: moved,
     duplicatesThisRun: duplicates,
     totalMoved: state.movedCount,
@@ -115,36 +131,65 @@ function reconcileToolbar(reason = 'manual') {
   state.diagnostics = diagnostics;
   root.dataset.rvmToolbarPolicyVersion = VERSION;
   root.dataset.rvmToolbarPolicyPreviousVersion = PREVIOUS_VERSION;
-  root.dataset.rvmToolbarAdvancedGroups = String(diagnostics.advancedGroups.length);
+  root.dataset.rvmToolbarSecondaryGroups = String(SECONDARY_MENU_DEFS.length);
+  root.dataset.rvmToolbarAdvancedGroups = String(Object.values(diagnostics.secondaryGroups).flat().length);
   root.dataset.rvmToolbarTopLevelGroups = String(diagnostics.topLevelGroups.length);
   return diagnostics;
 }
 
-function ensureMoreTools(ribbon) {
-  let more = ribbon.querySelector(':scope > [data-rvm-toolbar-more-root]');
-  const legacyDetails = ribbon.querySelector(':scope > details[data-rvm-toolbar-more]');
-  if (!more) {
-    more = document.createElement('div');
-    more.className = 'rvm-toolbar-more rvm-ribbon-section';
-    more.dataset.rvmToolbarMoreRoot = VERSION;
-    more.dataset.rvmToolbarMorePrevious = PREVIOUS_VERSION;
-    more.innerHTML = '<button type="button" class="rvm-tool-btn rvm-toolbar-more-summary" data-rvm-toolbar-more aria-expanded="false"><span aria-hidden="true">⋯</span><span>More tools</span></button><div class="rvm-toolbar-more-panel" data-rvm-tools-menu data-rvm-toolbar-more-panel hidden></div>';
+function ensureSecondaryToolMenus(ribbon) {
+  const menus = new Map();
+  const modeChip = ribbon.querySelector('.mode-chip') || null;
+  const validIds = new Set(SECONDARY_MENU_DEFS.map((def) => def.id));
+  const salvage = [];
+  for (const legacy of [...ribbon.querySelectorAll(':scope > [data-rvm-toolbar-more-root], :scope > details[data-rvm-toolbar-more]')]) {
+    const id = legacy.dataset?.rvmToolbarMoreGroup || '';
+    if (validIds.has(id) && legacy.dataset.rvmToolbarMoreRoot === VERSION) continue;
+    const legacyPanel = legacy.querySelector?.('[data-rvm-tools-menu], [data-rvm-toolbar-more-panel]');
+    salvage.push(...[...(legacyPanel?.querySelectorAll?.('.rvm-ribbon-section') || [])]);
+    legacy.remove();
   }
-  const panel = more.querySelector('[data-rvm-tools-menu]');
-  if (legacyDetails && legacyDetails !== more) {
-    const legacyPanel = legacyDetails.querySelector('[data-rvm-toolbar-more-panel]');
-    for (const section of [...(legacyPanel?.querySelectorAll?.('.rvm-ribbon-section') || [])]) panel.appendChild(section);
-    legacyDetails.remove();
+  for (const def of SECONDARY_MENU_DEFS) {
+    let menuRoot = ribbon.querySelector(`:scope > [data-rvm-toolbar-more-root][data-rvm-toolbar-more-group="${def.id}"]`);
+    if (!menuRoot) {
+      menuRoot = document.createElement('div');
+      menuRoot.className = `rvm-toolbar-more rvm-toolbar-secondary-group rvm-ribbon-section rvm-toolbar-secondary-${def.id}`;
+      menuRoot.dataset.rvmToolbarMoreRoot = VERSION;
+      menuRoot.dataset.rvmToolbarMorePrevious = PREVIOUS_VERSION;
+      menuRoot.dataset.rvmToolbarMoreGroup = def.id;
+      menuRoot.dataset.rvmToolbarOrder = String(def.order);
+      menuRoot.innerHTML = `<button type="button" class="rvm-tool-btn rvm-toolbar-more-summary" data-rvm-toolbar-more data-rvm-toolbar-more-group="${escapeAttr(def.id)}" aria-expanded="false"><span>${escapeHtml(def.label)}</span><span aria-hidden="true" class="rvm-toolbar-caret">▼</span></button><div class="rvm-toolbar-more-panel rvm-toolbar-secondary-panel" data-rvm-tools-menu data-rvm-tools-menu-group="${escapeAttr(def.id)}" data-rvm-toolbar-more-panel hidden><div class="rvm-toolbar-secondary-title">${escapeHtml(def.title)}</div><div class="rvm-toolbar-secondary-empty" data-rvm-tools-empty>No ${escapeHtml(def.label)} tools loaded yet.</div></div>`;
+    }
+    menus.set(def.id, menuRoot);
+    if (!menuRoot.parentElement) ribbon.insertBefore(menuRoot, modeChip);
   }
-  for (const duplicate of [...ribbon.querySelectorAll(':scope > [data-rvm-toolbar-more-root]')].filter((el) => el !== more)) {
-    const duplicatePanel = duplicate.querySelector('[data-rvm-tools-menu], [data-rvm-toolbar-more-panel]');
-    for (const section of [...(duplicatePanel?.querySelectorAll?.('.rvm-ribbon-section') || [])]) panel.appendChild(section);
-    duplicate.remove();
+  for (const def of [...SECONDARY_MENU_DEFS].sort((a, b) => a.order - b.order)) {
+    const root = menus.get(def.id);
+    if (root && root.nextSibling !== modeChip) ribbon.insertBefore(root, modeChip);
   }
-  if (!more.parentElement) {
-    ribbon.insertBefore(more, ribbon.querySelector('.mode-chip') || null);
+  for (const section of salvage) {
+    const label = sectionLabel(section);
+    const target = classifySecondaryMenu(section, label);
+    section.dataset.rvmToolbarPolicy = 'secondary-grouped';
+    section.dataset.rvmSecondaryToolGroup = target;
+    menus.get(target)?.querySelector('[data-rvm-tools-menu]')?.appendChild(section);
   }
-  return more;
+  return menus;
+}
+
+function isSecondaryMenuRoot(section) {
+  return section?.matches?.('[data-rvm-toolbar-more-root]') || section?.dataset?.rvmToolbarMoreRoot;
+}
+
+function classifySecondaryMenu(section, label) {
+  const haystack = `${label} ${section?.className || ''} ${Object.values(section?.dataset || {}).join(' ')}`.toLowerCase();
+  if (/\borient\b|\btop\b|\bfront\b|\bright\b|\biso\b|camera|view/.test(haystack)) return 'view';
+  if (/visibility|visible|hide|show|isolate|snapshot/.test(haystack)) return 'visibility';
+  if (/source|support|node.?marker|auto.?bend|non.?primitive/.test(haystack)) return 'source';
+  if (/export|report|pcf|mapping|validation|staged|acceptance/.test(haystack)) return 'export';
+  if (/diag|runtime|parser|fallback|policy|perf|performance/.test(haystack)) return 'diag';
+  if (/search|health|issue|selection.?set|material|inspect|analysis/.test(haystack)) return 'inspect';
+  return 'inspect';
 }
 
 function isCoreTopLevelSection(section, label) {
@@ -164,20 +209,32 @@ function groupKey(section, label) {
   return `${label.toLowerCase()}::${String(datasetKey || section?.className || '').replace(/\s+/g, '.')}`;
 }
 
+function escapeHtml(value) {
+  return String(value ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;');
+}
+
+function escapeAttr(value) { return escapeHtml(value); }
+
 function injectStyles() {
-  if (document.getElementById('rvm-toolbar-compact-policy-style')) return;
-  const style = document.createElement('style');
-  style.id = 'rvm-toolbar-compact-policy-style';
+  let style = document.getElementById('rvm-toolbar-compact-policy-style');
+  if (!style) {
+    style = document.createElement('style');
+    style.id = 'rvm-toolbar-compact-policy-style';
+    document.head.appendChild(style);
+  }
+  style.dataset.rvmToolbarCompactPolicy = VERSION;
   style.textContent = `
-    .geo-top-ribbon{position:relative;align-items:flex-start;}
-    .rvm-toolbar-more{position:relative;display:inline-flex;align-items:flex-start;z-index:60;}
-    .rvm-toolbar-more > .rvm-toolbar-more-summary{list-style:none;user-select:none;}
-    .rvm-toolbar-more.is-open > .rvm-toolbar-more-summary{background:var(--geo-accent,#4a9eff);color:#fff;border-color:var(--geo-accent,#4a9eff);}
-    .rvm-toolbar-more-panel{position:absolute;left:0;top:calc(100% + 6px);display:grid;grid-template-columns:repeat(2,minmax(180px,max-content));gap:7px;max-width:min(760px,calc(100vw - 40px));max-height:min(60vh,520px);overflow:auto;padding:8px;border:1px solid rgba(126,190,255,.30);border-radius:10px;background:rgba(10,18,32,.98);box-shadow:0 18px 60px rgba(0,0,0,.45);}
-    .rvm-toolbar-more-panel[hidden],.rvm-toolbar-more:not(.is-open) .rvm-toolbar-more-panel{display:none!important;}
-    .rvm-toolbar-more-panel .rvm-ribbon-section{display:grid;grid-template-columns:auto 1fr;align-items:center;gap:6px;padding:6px;border:1px solid rgba(148,163,184,.18);border-radius:8px;background:rgba(15,23,42,.62);}
-    .rvm-toolbar-more-panel .rvm-ribbon-label{min-width:68px;color:#9ec5ff;font-size:10px;text-transform:uppercase;letter-spacing:.05em;}
-    .rvm-toolbar-more-panel .rvm-ribbon-button-row,.rvm-toolbar-more-panel .rvm-stagedjson-buttons,.rvm-toolbar-more-panel .rvm-stagedjson-validation-buttons{display:flex;flex-wrap:wrap;gap:4px;}
+    [data-rvm-viewer] .geo-top-ribbon{position:relative;align-items:flex-start;}
+    [data-rvm-viewer] .rvm-toolbar-secondary-group{position:relative;display:inline-flex;align-items:flex-start;z-index:60;}
+    [data-rvm-viewer] .rvm-toolbar-secondary-group > .rvm-toolbar-more-summary{list-style:none;user-select:none;gap:4px;}
+    [data-rvm-viewer] .rvm-toolbar-secondary-group.is-open > .rvm-toolbar-more-summary{background:var(--geo-accent,#4a9eff);color:#fff;border-color:var(--geo-accent,#4a9eff);}
+    [data-rvm-viewer] .rvm-toolbar-caret{font-size:9px;line-height:1;opacity:.9;}
+    [data-rvm-viewer] .rvm-toolbar-secondary-panel{position:absolute;left:0;top:calc(100% + 6px);display:grid;grid-template-columns:1fr;gap:6px;min-width:190px;max-width:min(340px,calc(100vw - 40px));max-height:min(60vh,520px);overflow:auto;padding:8px;border:1px solid rgba(126,190,255,.30);border-radius:10px;background:rgba(10,18,32,.98);box-shadow:0 18px 60px rgba(0,0,0,.45);}
+    [data-rvm-viewer] .rvm-toolbar-secondary-panel[hidden], [data-rvm-viewer] .rvm-toolbar-secondary-group:not(.is-open) .rvm-toolbar-secondary-panel{display:none!important;}
+    [data-rvm-viewer] .rvm-toolbar-secondary-title{font-size:10px;color:#9ec5ff;text-transform:uppercase;letter-spacing:.06em;border-bottom:1px solid rgba(148,163,184,.18);padding:0 0 5px;}
+    [data-rvm-viewer] .rvm-toolbar-secondary-empty{font-size:10px;color:var(--geo-text-muted,#8fa3bd);padding:4px 2px;}
+    [data-rvm-viewer] .rvm-toolbar-secondary-panel .rvm-ribbon-section{display:grid;grid-template-columns:auto 1fr;align-items:center;gap:6px;padding:6px;border:1px solid rgba(148,163,184,.18);border-radius:8px;background:rgba(15,23,42,.62);}
+    [data-rvm-viewer] .rvm-toolbar-secondary-panel .rvm-ribbon-label{min-width:68px;color:#9ec5ff;font-size:10px;text-transform:uppercase;letter-spacing:.05em;}
+    [data-rvm-viewer] .rvm-toolbar-secondary-panel .rvm-ribbon-button-row,[data-rvm-viewer] .rvm-toolbar-secondary-panel .rvm-stagedjson-buttons,[data-rvm-viewer] .rvm-toolbar-secondary-panel .rvm-stagedjson-validation-buttons{display:flex;flex-wrap:wrap;gap:4px;}
   `;
-  document.head.appendChild(style);
 }
