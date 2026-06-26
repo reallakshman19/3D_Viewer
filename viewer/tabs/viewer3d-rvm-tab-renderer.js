@@ -5,6 +5,7 @@
 // Previous shell cache key: RvmViewerUiShell.js?v=20260626-rvm-ui-shell-slots-1
 // Previous diagnostics drawer cache key: RvmBottomDiagnosticsDrawerBridge.js?v=20260624-rvm-diagnostics-docked-drawer-1
 // Previous RVM tab shell cache key: viewer3d-rvm-tab.js?v=20260626-rvm-object-browser-quick-filters-1
+// Previous RVM viewport spacing cache key: RvmViewportFirstSpacingBridge.js?v=20260626-rvm-viewport-first-spacing-1
 import {
   RVM_VIEWER3D_MODULE_SPECIFIER,
   RVM_VIEWER_MODULE_CONTRACT_VERSION,
@@ -22,7 +23,7 @@ import { installRvmUiInteractionPanelPatch, installRvmUiPanelBridge } from './Rv
 import { installRvmPropertyPanelCollapseAuditBridge } from './RvmPropertyPanelCollapseAuditBridge.js?v=20260621-rvm-property-collapse-1';
 import { installRvmLabelPerformanceBridge } from './RvmLabelPerformanceBridge.js?v=20260622-rvm-label-perf-no-support-runtime-1';
 import { installRvmToolbarCompactBridge } from './RvmToolbarCompactBridge.js?v=20260626-rvm-toolbar-compact-policy-3';
-import { installRvmViewportFirstSpacingBridge } from './RvmViewportFirstSpacingBridge.js?v=20260626-rvm-viewport-first-spacing-1';
+import { installRvmViewportFirstSpacingBridge } from './RvmViewportFirstSpacingBridge.js?v=20260626-rvm-viewport-first-spacing-2';
 import { installRvmViewerUiShell } from './RvmViewerUiShell.js?v=20260626-rvm-ui-shell-slots-2';
 import { installRvmZoneLodLabelBridge } from './RvmZoneLodLabelBridge.js?v=20260621-rvm-preload-hierarchy-selector-1';
 import { installRvmDeepSourcePathRecoveryBridge } from './RvmDeepSourcePathRecoveryBridge.js?v=20260622-rvm-deep-source-path-recovery-1';
