@@ -16,7 +16,7 @@ import {
 installRvmProgressiveModelRootPatch(RvmViewer3D);
 installSelectedGeometryEnrichmentPanel();
 
-const RVM_TAB_JS_VERSION = '20260622-rvm-support-runtime-retired-2';
+const RVM_TAB_JS_VERSION = '20260626-rvm-internal-toolbar-object-browser-1';
 const JSON_TREE_RENDER_LIMIT = 2600;
 const RVM_TREE_RENDER_LIMIT = 320;
 const STATUS_TRAVERSE_LIMIT = 4000;
@@ -31,7 +31,7 @@ const ACTION_LABELS = {
   VIEW_FIT_ALL: 'Fit All',
   VIEW_FIT_SELECTION: 'Fit Sel',
   VIEW_TOGGLE_PROJECTION: 'Ortho',
-  SECTION_BOX: 'Sec Box',
+  SECTION_BOX: 'Section',
   SECTION_PLANE_UP: 'Sec Up',
   SECTION_DISABLE: 'Sec Off',
   NAV_PLAN_X: 'Top',
@@ -66,10 +66,9 @@ const ACTION_ICONS = {
 };
 
 const TOOL_GROUPS = [
-  { label: 'Navigate', actions: ['NAV_SELECT', 'NAV_ORBIT', 'NAV_PAN', 'MARQUEE_SELECT', 'MEASURE_TOOL'] },
-  { label: 'View', actions: ['VIEW_FIT_ALL', 'VIEW_FIT_SELECTION', 'VIEW_TOGGLE_PROJECTION', 'VIEW_MARQUEE_ZOOM'] },
-  { label: 'Section', actions: ['SECTION_BOX', 'SECTION_PLANE_UP', 'SECTION_DISABLE'] },
-  { label: 'Orient', actions: ['NAV_PLAN_X', 'NAV_ROTATE_Y', 'NAV_ROTATE_Z', 'SNAP_ISO_NW', 'SNAP_ISO_NE', 'SNAP_ISO_SW', 'SNAP_ISO_SE'] },
+  { key: 'navigate-view', label: 'Navigate / View', actions: ['NAV_SELECT', 'NAV_ORBIT', 'NAV_PAN', 'MARQUEE_SELECT', 'VIEW_FIT_ALL', 'VIEW_FIT_SELECTION', 'VIEW_TOGGLE_PROJECTION', 'VIEW_MARQUEE_ZOOM'] },
+  { key: 'review', label: 'Review', actions: ['MEASURE_TOOL', 'SECTION_BOX', 'SECTION_DISABLE'] },
+  { key: 'orient', label: 'Orient', actions: ['NAV_PLAN_X', 'NAV_ROTATE_Y', 'NAV_ROTATE_Z', 'SNAP_ISO_NW', 'SNAP_ISO_NE', 'SNAP_ISO_SW', 'SNAP_ISO_SE'] },
 ];
 
 const MODE_ACTIONS = new Set(['NAV_SELECT', 'NAV_ORBIT', 'NAV_PAN', 'MARQUEE_SELECT', 'MEASURE_TOOL', 'VIEW_MARQUEE_ZOOM']);
@@ -147,7 +146,7 @@ function renderToolButton(action) {
 }
 
 function renderToolGroup(group) {
-  return `<div class="rvm-ribbon-section rvm-tool-group" aria-label="${escapeHtml(group.label)} tools"><span class="rvm-ribbon-label">${escapeHtml(group.label)}</span><div class="rvm-ribbon-button-row">${group.actions.map(renderToolButton).join('')}</div></div>`;
+  return `<div class="rvm-ribbon-section rvm-tool-group rvm-ribbon-${escapeHtml(group.key || 'tools')}" data-rvm-toolbar-key="${escapeHtml(group.key || group.label)}" aria-label="${escapeHtml(group.label)} tools"><span class="rvm-ribbon-label">${escapeHtml(group.label)}</span><div class="rvm-ribbon-button-row">${group.actions.map(renderToolButton).join('')}</div></div>`;
 }
 
 function renderShell(container) {
@@ -155,7 +154,7 @@ function renderShell(container) {
     const modeChip = container.querySelector('#rvm-mode-chip');
     if (modeChip) modeChip.textContent = 'Select';
   });
-  container.innerHTML = `<div class="rvm-tab-root geo-theme-navisdark" data-rvm-viewer data-rvm-tab-version="${escapeHtml(RVM_TAB_JS_VERSION)}"><div class="rvm-capability-banner" id="rvm-capability-banner" data-mode="worker-first">RVM / REV / ATT / JSON / UXML viewer ready — direct RVM worker path</div><div class="geo-top-ribbon">${TOOL_GROUPS.map(renderToolGroup).join('')}<div class="rvm-ribbon-section rvm-ribbon-load"><label class="rvm-btn rvm-btn-file" title="Load RVM / REV / ATT / JSON / UXML"><span>Load</span><input id="rvm-file-input" type="file" accept=".json,.jscon,.uxml,.uxml.json,.rvm,.rev,.att" multiple data-browser-rvm-fallback="true" data-browser-rvm-att-sidecar="true" data-rvm-direct-worker-load="true" style="display:none" /></label></div><div class="rvm-ribbon-search"><input id="rvm-search-input" placeholder="Search hierarchy / object…" /></div><span class="mode-chip" id="rvm-mode-chip">Orbit</span></div><div id="rvm-status-strip" class="rvm-status-strip" aria-live="polite"><span class="rvm-status-chip" data-rvm-status-chip="objects">Objects: 0</span><span class="rvm-status-chip" data-rvm-status-chip="visible">Visible: 0</span><span class="rvm-status-chip" data-rvm-status-chip="selected">Selected: 0</span><span class="rvm-status-chip" data-rvm-status-chip="kind">Kinds: -</span></div><div class="rvm-body"><aside class="rvm-left-panel"><div class="rvm-panel-header">Hierarchy</div><div class="rvm-panel-filter-row"><input id="rvm-tree-filter" class="rvm-panel-filter" placeholder="Filter tree…"></div><ul id="rvm-tree" class="rvm-tree"><li class="rvm-empty-state">Load RVM / REV / ATT / JSON / UXML to view hierarchy.</li></ul></aside><section class="rvm-viewport"><div id="rvm-canvas" class="rvm-canvas"></div><div class="rvm-placeholder" id="rvm-placeholder">Load RVM / REV / ATT / JSON / UXML to begin.</div></section><aside class="rvm-right-panel"><div class="rvm-panel-header">Properties</div><div id="rvm-attributes-panel" class="rvm-attributes-panel"><div class="rvm-empty-state">No object selected.</div></div><div class="rvm-panel-header" data-rvm-browser-diagnostics-header="true">Browser RVM Performance</div><div id="rvm-browser-parse-diagnostics" class="rvm-tag-list rvm-browser-parse-diagnostics" aria-live="polite" data-browser-rvm-diagnostics-panel="true"><div class="rvm-empty-state">No browser RVM load yet.</div></div></aside></div><div class="viewer-statusbar"><span id="rvm-sb-msg">Ready</span><span>Selection <b id="rvm-sel-count">0</b></span></div></div>`;
+  container.innerHTML = `<div class="rvm-tab-root geo-theme-navisdark" data-rvm-viewer data-rvm-tab-version="${escapeHtml(RVM_TAB_JS_VERSION)}"><div class="rvm-capability-banner" id="rvm-capability-banner" data-mode="worker-first">RVM / REV / ATT / JSON / UXML viewer ready — direct RVM worker path</div><div class="geo-top-ribbon" data-rvm-internal-toolbar="object-browser-1"><div class="rvm-ribbon-section rvm-ribbon-load" data-rvm-toolbar-always-top="true"><label class="rvm-btn rvm-btn-file" title="Load RVM / REV / ATT / JSON / UXML"><span>Load</span><input id="rvm-file-input" type="file" accept=".json,.jscon,.uxml,.uxml.json,.rvm,.rev,.att" multiple data-browser-rvm-fallback="true" data-browser-rvm-att-sidecar="true" data-rvm-direct-worker-load="true" style="display:none" /></label></div>${TOOL_GROUPS.map(renderToolGroup).join('')}<span class="mode-chip" id="rvm-mode-chip">Orbit</span></div><div id="rvm-status-strip" class="rvm-status-strip" aria-live="polite"><span class="rvm-status-chip" data-rvm-status-chip="objects">Objects: 0</span><span class="rvm-status-chip" data-rvm-status-chip="visible">Visible: 0</span><span class="rvm-status-chip" data-rvm-status-chip="selected">Selected: 0</span><span class="rvm-status-chip" data-rvm-status-chip="kind">Kinds: -</span></div><div class="rvm-body"><aside class="rvm-left-panel" data-rvm-object-browser="true"><div class="rvm-panel-header">Object Browser</div><div class="rvm-panel-filter-row rvm-object-browser-search" data-rvm-object-browser-search="true"><input id="rvm-search-input" class="rvm-panel-filter" placeholder="Search hierarchy / object…"></div><div class="rvm-panel-filter-row rvm-object-browser-filter" data-rvm-object-browser-filter="true"><input id="rvm-tree-filter" class="rvm-panel-filter" placeholder="Filter visible tree…"></div><ul id="rvm-tree" class="rvm-tree"><li class="rvm-empty-state">Load RVM / REV / ATT / JSON / UXML to view hierarchy.</li></ul></aside><section class="rvm-viewport"><div id="rvm-canvas" class="rvm-canvas"></div><div class="rvm-placeholder" id="rvm-placeholder">Load RVM / REV / ATT / JSON / UXML to begin.</div></section><aside class="rvm-right-panel"><div class="rvm-panel-header">Properties</div><div id="rvm-attributes-panel" class="rvm-attributes-panel"><div class="rvm-empty-state">No object selected.</div></div><div class="rvm-panel-header" data-rvm-browser-diagnostics-header="true">Browser RVM Performance</div><div id="rvm-browser-parse-diagnostics" class="rvm-tag-list rvm-browser-parse-diagnostics" aria-live="polite" data-browser-rvm-diagnostics-panel="true"><div class="rvm-empty-state">No browser RVM load yet.</div></div></aside></div><div class="viewer-statusbar"><span id="rvm-sb-msg">Ready</span><span>Selection <b id="rvm-sel-count">0</b></span></div></div>`;
 }
 
 function nodeDisplayName(node) {
