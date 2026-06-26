@@ -49,7 +49,8 @@ for (const eagerForbidden of ['RvmModelHealthBridge.js?v=', 'RvmModelHealthIssue
 }
 
 check(indexSource.includes('main-rhbg-fitguard.js?v=20260626-rvm-hierarchy-ui-selection-sync-1'), 'index imports hierarchy-sync startup cache key');
-check(entrySource.includes('core/app-label-perf-runtime.js?v=20260626-rvm-hierarchy-ui-selection-sync-1'), 'entrypoint imports hierarchy-sync runtime cache key');
+check(entrySource.includes('core/app.js?v=20260626-rvm-hierarchy-ui-selection-sync-1'), 'entrypoint imports hierarchy-sync app delegate cache key');
+check(appSource.includes('app-label-perf-runtime.js?v=20260626-rvm-hierarchy-ui-selection-sync-1'), 'app delegate imports hierarchy-sync runtime cache key');
 check(runtimeSource.includes('viewer3d-rvm-tab-renderer.js?v=20260626-rvm-hierarchy-ui-selection-sync-1'), 'runtime imports hierarchy-sync RVM renderer cache key');
 check(rendererSource.includes('RvmHierarchySelectionBridge.js?v=20260626-rvm-hierarchy-text-hit-target-sync-1'), 'renderer imports hierarchy text hit-target bridge');
 check(rendererSource.includes('RvmSelectionTreeSyncBridge.js?v=20260626-rvm-hierarchy-selection-sync-2'), 'renderer imports canvas-to-tree sync bridge');
