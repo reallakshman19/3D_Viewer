@@ -48,6 +48,7 @@ assert.doesNotMatch(arbiterSource, /shouldForceOrbit/);
 
 assert.match(rendererSource, /installRvmNavigationModeArbiterBridge/);
 assert.match(rendererSource, /RvmViewerInteractionPatch\.js\?v=20260624-rvm-interaction-state-contract-1/);
+assert.match(rendererSource, /RvmCanvasSelectionSinglePickGuardBridge\.js\?v=20260626-rvm-canvas-single-pick-registry-1/);
 assert.match(rendererSource, /RvmNavigationModeArbiterBridge\.js\?v=20260624-rvm-navigation-interaction-contract-1/);
 assert.match(rendererSource, /RvmUiEventSafetyBridge\.js\?v=20260626-rvm-ui-event-registry-1/);
 assert.match(rendererSource, /installRvmUiEventSafetyBridge\(\);[\s\S]*installRvmNavigationModeArbiterBridge\(\);/, 'UI event safety must install before navigation mode arbiter');
