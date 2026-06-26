@@ -47,7 +47,7 @@ assert.match(arbiterSource, /__PCF_GLB_RVM_NAVIGATION_ARBITER__/);
 assert.doesNotMatch(arbiterSource, /shouldForceOrbit/);
 
 assert.match(rendererSource, /installRvmNavigationModeArbiterBridge/);
-assert.match(rendererSource, /RvmViewerInteractionPatch\.js\?v=20260624-rvm-interaction-state-contract-1/);
+assert.match(rendererSource, /RvmViewerInteractionPatch\.js\?v=20260626-rvm-canvas-selection-registry-1/);
 assert.match(rendererSource, /RvmCanvasSelectionSinglePickGuardBridge\.js\?v=20260626-rvm-canvas-single-pick-registry-1/);
 assert.match(rendererSource, /RvmNavigationModeArbiterBridge\.js\?v=20260624-rvm-navigation-interaction-contract-1/);
 assert.match(rendererSource, /RvmUiEventSafetyBridge\.js\?v=20260626-rvm-ui-event-registry-1/);
@@ -69,7 +69,11 @@ assert.match(uiSafetySource, /routeRvmUiEvent\(root, 'toolbar-action'/);
 assert.match(uiSafetySource, /routeRvmUiEvent\(root, 'tree-click'/);
 assert.match(uiSafetySource, /getEventRegistryDiagnostics/);
 
-assert.match(interactionSource, /20260624-rvm-interaction-state-contract-1/, 'interaction patch must publish a state-contract version');
+assert.match(interactionSource, /20260626-rvm-canvas-selection-registry-1/, 'interaction patch must publish the registry-backed version');
+assert.match(interactionSource, /RvmUiEventRegistry\.js\?v=20260626-rvm-ui-event-registry-1/);
+assert.match(interactionSource, /registerRvmUiEvent\('canvas-primitive-select'/);
+assert.match(interactionSource, /routeRvmUiEvent\(root, 'canvas-primitive-select'/);
+assert.match(interactionSource, /selectGeometryAtClientPoint/, 'existing primitive raycast selection path must remain present');
 assert.match(interactionSource, /prepareModeTransition/, 'mode changes must clear incompatible transient measure\/marquee state');
 assert.match(interactionSource, /publishInteractionState/, 'mode changes must publish one canonical interaction state');
 assert.match(interactionSource, /__PCF_GLB_RVM_INTERACTION_STATE__/, 'global diagnostics must expose current interaction state');
