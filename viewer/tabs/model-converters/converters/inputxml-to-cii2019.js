@@ -55,6 +55,16 @@ const INPUTXML2019_POPUP_HEADER_KEYS = Object.freeze([
   'headerMdbName',
 ]);
 
+const INPUTXML2019_HEADER_LABELS = Object.freeze({
+  headerDateTime: 'Header DateTime',
+  headerSource: 'Header Source',
+  headerVersion: 'Header Version',
+  headerUserName: 'Header UserName',
+  headerPurpose: 'Header Purpose',
+  headerProjectName: 'Header ProjectName',
+  headerMdbName: 'Header MDBName',
+});
+
 function defaultInputxml2019LayoutConfigJson() {
   return JSON.stringify({
     elements: {
@@ -105,10 +115,52 @@ function defaultInputxml2019LayoutConfigJson() {
   }, null, 2);
 }
 
-function parseInputxml2019Requirements(xmlText) {
-  if (typeof DOMParser === 'undefined') {
-    throw new Error('XML requirements parsing requires browser DOMParser support.');
+function stripXmlTags(value) {
+  return String(value || '').replace(/<[^>]+>/g, '').trim();
+}
+
+export function detectInputxml2019SourceKind(xmlText) {
+  const source = String(xmlText || '').trim();
+  if (!source) return 'EMPTY';
+  if (/<PIPINGELEMENT\b/i.test(source)) return 'CAESARII_INPUTXML';
+  if (/<Branch\b[\s\S]*?<Node\b/i.test(source)) return 'XML_CII_BRANCH_NODE';
+  if (/<EnrichedInputXml\b|<UXML\b/i.test(source)) return 'UXML_OR_ENRICHED_INPUTXML';
+  if (/<CAESARII\b/i.test(source)) return 'CAESARII_WITHOUT_PIPINGELEMENT';
+  return 'UNKNOWN_XML';
+}
+
+function inputKindError(kind) {
+  if (kind === 'XML_CII_BRANCH_NODE') {
+    return 'Selected XML is PSI/XML-CII Branch/Node XML, not CAESARII InputXML. Use converter "XML->CII(2019)" for this file, or select a CAESARII InputXML file that contains PIPINGELEMENT rows.';
   }
+  if (kind === 'UXML_OR_ENRICHED_INPUTXML') {
+    return 'Selected XML is UXML/enriched InputXML, not CAESARII InputXML. This route is not a direct InputXML->CII(2019) worker input yet; use the UXML import/projection workflow when enabled.';
+  }
+  if (kind === 'CAESARII_WITHOUT_PIPINGELEMENT') {
+    return 'Selected CAESARII XML has no PIPINGELEMENT rows. Cannot derive InputXML->CII(2019) file-based requirements.';
+  }
+  if (kind === 'EMPTY') return 'Selected XML file is empty.';
+  return 'Selected XML is not recognised as CAESARII InputXML. InputXML->CII(2019) requires PIPINGELEMENT rows.';
+}
+
+function parseInputxml2019Requirements(xmlText) {
+  const sourceKind = detectInputxml2019SourceKind(xmlText);
+  if (sourceKind !== 'CAESARII_INPUTXML') throw new Error(inputKindError(sourceKind));
+  if (typeof DOMParser === 'undefined') {
+    const elementCount = (String(xmlText || '').match(/<PIPINGELEMENT\b/gi) || []).length;
+    if (!elementCount) throw new Error(inputKindError(sourceKind));
+    const bendCount = (String(xmlText || '').match(/<BEND\b/gi) || []).length;
+    const rigidCount = (String(xmlText || '').match(/<RIGID\b/gi) || []).length;
+    const restraintCount = (String(xmlText || '').match(/<RESTRAINT\b/gi) || []).length;
+    const sifCount = (String(xmlText || '').match(/<SIF\b/gi) || []).length;
+    const nodeIds = new Set();
+    for (const match of String(xmlText || '').matchAll(/\b(?:FROM_NODE|TO_NODE)\s*=\s*"([^"]*)"/gi)) {
+      const value = Number(stripXmlTags(match[1]));
+      if (Number.isFinite(value)) nodeIds.add(value);
+    }
+    return { elementCount, bendCount, rigidCount, restraintCount, sifCount, nodeCount: nodeIds.size };
+  }
+
   const parser = new DOMParser();
   const doc = parser.parseFromString(String(xmlText || ''), 'application/xml');
   const parserError = doc.querySelector('parsererror');
@@ -118,7 +170,7 @@ function parseInputxml2019Requirements(xmlText) {
 
   const elements = Array.from(doc.getElementsByTagName('PIPINGELEMENT'));
   if (!elements.length) {
-    throw new Error('Input XML has no PIPINGELEMENT rows. Cannot derive file-specific config requirements.');
+    throw new Error(inputKindError(detectInputxml2019SourceKind(xmlText)));
   }
 
   let bendCount = 0;
@@ -301,52 +353,66 @@ export function prepareInputxml2019ConfigForRequirements(layoutConfigJsonText, r
   };
 }
 
-export async function openInputxml2019PreRunPopup(def, values, primaryFileName, primaryBytes, openJsonPopupAsync) {
-  const xmlText = decodeTextUtf8(primaryBytes);
-  const requirements = parseInputxml2019Requirements(xmlText);
-  const prepared = prepareInputxml2019ConfigForRequirements(values.layoutConfigJson, requirements);
-
-  const popupHeaderFields = (def.options || def.fields || [])
-    .filter((entry) => INPUTXML2019_POPUP_HEADER_KEYS.includes(entry.key))
+export function inputxml2019PopupHeaderFields(def, values = {}) {
+  const fields = Array.isArray(def?.options)
+    ? def.options
+    : (Array.isArray(def?.fields) ? def.fields : []);
+  const sourceFields = fields.length
+    ? fields
+    : INPUTXML2019_POPUP_HEADER_KEYS.map((key) => ({ key, label: INPUTXML2019_HEADER_LABELS[key] || key, type: 'text' }));
+  return sourceFields
+    .filter((entry) => entry && INPUTXML2019_POPUP_HEADER_KEYS.includes(entry.key))
     .map((entry) => ({
       ...entry,
       value: values[entry.key],
     }));
+}
+
+export async function openInputxml2019PreRunPopup(def, values, primaryFileName, primaryBytes, openJsonPopupAsync) {
+  if (typeof openJsonPopupAsync !== 'function') throw new Error('InputXML->CII(2019) config popup callback is not available.');
+  const safeDef = def && typeof def === 'object' && !Array.isArray(def) ? def : {};
+  const safeValues = values && typeof values === 'object' && !Array.isArray(values) ? values : {};
+  const xmlText = decodeTextUtf8(primaryBytes);
+  const requirements = parseInputxml2019Requirements(xmlText);
+  const prepared = prepareInputxml2019ConfigForRequirements(safeValues.layoutConfigJson, requirements);
+  const popupHeaderFields = inputxml2019PopupHeaderFields(safeDef, safeValues);
 
   const popupResult = await openJsonPopupAsync({
-    title: `${def.label}: File-based Config Review (${String(primaryFileName || '')})`,
+    title: `${safeDef.label || 'InputXML->CII(2019)'}: File-based Config Review (${String(primaryFileName || '')})`,
     value: prepared.jsonText,
     headerFields: popupHeaderFields,
     requirementLines: prepared.requirementLines,
   });
 
-  if (!popupResult.saved || !popupResult.payload) return false;
+  if (!popupResult?.saved || !popupResult.payload) return false;
   const { jsonText, headerValues } = popupResult.payload;
-  values.layoutConfigJson = prepareInputxml2019ConfigForRequirements(jsonText, requirements).jsonText;
+  safeValues.layoutConfigJson = prepareInputxml2019ConfigForRequirements(jsonText, requirements).jsonText;
   for (const [headerKey, headerValue] of Object.entries(headerValues || {})) {
-    values[headerKey] = headerValue;
+    safeValues[headerKey] = headerValue;
   }
   return true;
 }
 
-export async function run(context) {
+export async function run(context = {}) {
   if (!context.workerRunner) {
     throw new Error('Python worker runtime is not available.');
   }
-  const primary = context.inputFiles.find(f => f.role === 'primary');
+  const inputFiles = Array.isArray(context.inputFiles) ? context.inputFiles : [];
+  const primary = inputFiles.find((f) => f?.role === 'primary') || inputFiles[0] || null;
   if (!primary || !primary.bytes) {
     throw new Error('Primary input file is required for InputXML->CII(2019).');
   }
 
-  const runValues = context.options || {};
+  const runValues = context.options && typeof context.options === 'object' && !Array.isArray(context.options) ? context.options : {};
 
   if (typeof runValues.openInputxml2019PreRunPopup === 'function' && typeof runValues.openJsonPopupAsync === 'function') {
+    const converterDef = context.converterDefinition || context.converterDef || context.converter || { id: context.converterId, label: 'InputXML->CII(2019)' };
     const proceed = await runValues.openInputxml2019PreRunPopup(
-      context, // def
+      converterDef,
       runValues,
       primary.name,
       primary.bytes,
-      runValues.openJsonPopupAsync
+      runValues.openJsonPopupAsync,
     );
     if (!proceed) {
       throw new Error('Cancelled: conversion aborted in file-based config popup.');
@@ -355,7 +421,7 @@ export async function run(context) {
 
   return await context.workerRunner.runJob({
     converterId: context.converterId,
-    inputFiles: context.inputFiles,
+    inputFiles,
     options: runValues,
   });
 }
