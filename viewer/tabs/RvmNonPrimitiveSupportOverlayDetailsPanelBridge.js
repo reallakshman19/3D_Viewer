@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { RvmViewer3D } from '../rvm-viewer/RvmViewer3D.js?v=20260622-rvm-leaf-picking-2';
+import { installRvmUiEventRegistry, registerRvmUiEvent, routeRvmUiEvent } from './RvmUiEventRegistry.js?v=20260626-rvm-ui-event-registry-1';
 import {
   buildSupportOverlayDetailsPanelState,
   emptySupportOverlayDetailsPanelState,
@@ -18,22 +19,23 @@ import {
   SUPPORT_OVERLAY_HIGHLIGHT_SCHEMA,
 } from '../overlays/support/SupportOverlayHighlight.js';
 
-export const RVM_NON_PRIMITIVE_SUPPORT_DETAILS_PANEL_SCHEMA = 'rvm-non-primitive-support-overlay-details-panel/v5';
+export const RVM_NON_PRIMITIVE_SUPPORT_DETAILS_PANEL_SCHEMA = 'rvm-non-primitive-support-overlay-details-panel/v6';
 
 const ROOT_SELECTOR = '[data-rvm-viewer]';
 const PANEL_ID = 'rvm-nonprimitive-support-details-panel';
 const SUPPORTS_SLOT_SELECTOR = '[data-rvm-panel-slot="supports"]';
 const SUPPORT_OVERLAY_ROOT_NAME = '__RVM_NON_PRIMITIVE_SUPPORT_OVERLAY__';
 const GLOBAL_KEY = '__PCF_GLB_RVM_NON_PRIMITIVE_SUPPORT_DETAILS_PANEL__';
-const PATCH_FLAG = Symbol.for('pcf-glb-rvm-non-primitive-support-details-panel-v5');
-const VIEWER_PATCH_FLAG = Symbol.for('pcf-glb-rvm-non-primitive-support-details-panel-viewer-v5');
-const PICKING_FLAG = Symbol.for('pcf-glb-rvm-non-primitive-support-details-picking-v5');
+const PATCH_FLAG = Symbol.for('pcf-glb-rvm-non-primitive-support-details-panel-v6');
+const VIEWER_PATCH_FLAG = Symbol.for('pcf-glb-rvm-non-primitive-support-details-panel-viewer-v6');
+const PICKING_FLAG = Symbol.for('pcf-glb-rvm-non-primitive-support-details-picking-v6');
 const STYLE_FLAG = Symbol.for('pcf-glb-rvm-non-primitive-support-details-panel-style-v3');
 const SOURCE_KIND_RE = /^(json|jscon|inputxml|txt|source-preview)$/i;
 const PRIMITIVE_KIND_RE = /^(rvm|glb|gltf|rev)$/i;
 
 export function installRvmNonPrimitiveSupportOverlayDetailsPanelBridge() {
   if (globalThis[PATCH_FLAG]) return;
+  installRvmUiEventRegistry();
   globalThis[PATCH_FLAG] = true;
   globalThis[GLOBAL_KEY] = {
     schema: RVM_NON_PRIMITIVE_SUPPORT_DETAILS_PANEL_SCHEMA,
@@ -48,6 +50,7 @@ export function installRvmNonPrimitiveSupportOverlayDetailsPanelBridge() {
     downloadJson: downloadSupportOverlayDetailsJson,
     clearHighlight: clearSupportOverlayHighlights,
     clearOnEscape: handleSupportDetailsKeyboardShortcut,
+    getEventRegistryDiagnostics: () => globalThis.__PCF_GLB_RVM_UI_EVENT_REGISTRY__?.getDiagnostics?.() || null,
   };
   installSupportDetailsStyles();
   patchRvmViewerSetModelForSupportDetailsPanel();
@@ -317,9 +320,15 @@ function clearViewerSupportHighlights(viewer, reason = 'clear') {
 
 function ensureSupportDetailsPicking(viewer) {
   if (!viewer || viewer[PICKING_FLAG]) return;
+  installRvmUiEventRegistry();
+  registerRvmUiEvent('canvas-source-preview-support-select', ({ detail }) => {
+    const localViewer = detail.viewer || globalThis.__3D_RVM_VIEWER__;
+    const sourceEvent = detail.sourceEvent || {};
+    return selectSupportOverlayDetailsFromPointer(localViewer, sourceEvent);
+  }, { id: 'rvm-source-preview-support-details-select', priority: 30 });
   const dom = viewer.renderer?.domElement || viewer.container;
   if (!dom?.addEventListener) return;
-  const onClick = (event) => selectSupportOverlayDetailsFromPointer(viewer, event);
+  const onClick = (event) => routeRvmUiEvent(globalThis.document?.querySelector?.(ROOT_SELECTOR), 'canvas-source-preview-support-select', { viewer, sourceEvent: event });
   dom.addEventListener('click', onClick, false);
   viewer[PICKING_FLAG] = { dom, onClick };
 }

@@ -70,13 +70,13 @@ for (const bridgeName of [
 check(deferredLoaderSource.includes("sourcePreview:") && deferredLoaderSource.includes("id: 'nonprimitive-support-overlay'"), 'deferred loader owns sourcePreview bridge group');
 check(deferredLoaderSource.includes('RvmNonPrimitiveSupportOverlayBridge.js?v=20260623-nonprimitive-support-overlay-9'), 'sourcePreview group owns support overlay bridge');
 check(deferredLoaderSource.includes('RvmNonPrimitiveSupportOverlayHardDisableBridge.js?v=20260623-nonprimitive-support-hard-disable-1'), 'sourcePreview group owns support hard-disable bridge');
-check(deferredLoaderSource.includes('RvmNonPrimitiveSupportOverlayDetailsPanelBridge.js?v=20260623-nonprimitive-support-details-panel-4'), 'sourcePreview group owns support details bridge');
+check(deferredLoaderSource.includes('RvmNonPrimitiveSupportOverlayDetailsPanelBridge.js?v=20260626-source-preview-support-events-1'), 'sourcePreview group owns event-routed support details bridge');
 check(deferredLoaderSource.includes('RvmNonPrimitiveSupportOverlayHoverBridge.js?v=20260623-nonprimitive-support-hover-2'), 'sourcePreview group owns support hover bridge');
 check(deferredLoaderSource.includes('RvmNonPrimitiveAutoBendBridge.js?v=20260623-nonprimitive-auto-bend-preview-2'), 'sourcePreview group owns auto-bend bridge');
 check(deferredLoaderSource.includes('RvmNonPrimitiveSourceToolsUiBridge.js?v=20260624-source-tools-grouped-1'), 'sourcePreview group owns source tools UI bridge');
 check(deferredLoaderSource.includes('ensureSourcePreview') && deferredLoaderSource.includes('SOURCE_PREVIEW_KIND_RE'), 'deferred loader gates source-preview bridge loading by source kind');
 check(deferredLoaderSource.includes("mode === 'source-preview'") && deferredLoaderSource.includes('refreshSourcePreviewRuntime'), 'deferred loader refreshes source-preview runtime only for source-preview mode');
-check(rendererSource.includes('RvmDeferredBridgeLoader.js?v=20260625-rvm-deferred-source-preview-tools-1'), 'renderer imports current deferred source-preview loader cache key');
+check(rendererSource.includes('RvmDeferredBridgeLoader.js?v=20260626-rvm-deferred-source-preview-events-1'), 'renderer imports current deferred source-preview loader cache key');
 
 check(rendererSource.includes('BrowserRvmNativeFacetGhostPanelPatch.js?v=20260622-rvm-facet-ghost-panels-1'), 'renderer loads native facet ghost panel patch');
 check(rendererSource.includes('RvmJsonPcfTriggerBridge.js?v=20260621-rvm-pcf-visible-scope-1'), 'renderer keeps visible-scope PCF bridge');
