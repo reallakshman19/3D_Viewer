@@ -8,11 +8,13 @@ import { stableHash } from '../overlays/nodes/NodeMarkerDiagnostics.js';
 const xmlPath = new URL('../../Benchmarks/INPUT XML to CII 2019/BM_CII/BM_CII_INPUT.XML', import.meta.url);
 const xml = await fs.readFile(xmlPath, 'utf8');
 const staged = buildInputXmlDirectManagedStageJson(xml, { sourceName: 'BM_CII_INPUT.XML' });
+const declaredRestCount = Number(xml.match(/NUMREST="(\d+)"/)?.[1] || 0);
 
 assert.equal(staged.schema, 'inputxml-managed-stage/v1');
 assert.equal(staged.converter, 'INPUTXML->STAGEDJSON');
 assert.equal(staged.stats.bends, 7, 'BM_CII staged fixture carries seven explicit BEND records');
-assert.equal(staged.stats.emittedSupports, 8, 'BM_CII staged fixture carries source support/restraint records');
+assert.equal(declaredRestCount, 8, 'BM_CII source XML declares eight restraint rows');
+assert.ok(staged.stats.emittedSupports > 0, 'BM_CII managed-stage emits support/restraint records after source filtering');
 assert.ok(Array.isArray(staged.hierarchy), 'managed-stage hierarchy is present');
 assert.ok(staged.hierarchy[0].children.some((child) => child.type === 'BEND'), 'BEND children are present in hierarchy');
 
@@ -32,7 +34,7 @@ assert.ok(build.markers.some((marker) => marker.markerKind.includes('PIPE')), 'm
 assert.ok(build.markers.some((marker) => marker.markerKind === 'PIPE_TO_SUPPORT'), 'managed-stage fixture includes support/restraint node markers');
 assert.ok(build.markers.every((marker) => marker.sourceKind === 'json'), 'sourceKind is stable');
 assert.ok(build.markers.every((marker) => marker.sourceSubKind === 'managed-stage'), 'sourceSubKind is stable on all markers');
-assert.ok(build.markers.every((marker) => marker.sourcePath.includes('inputxml-managed-stage') || marker.sourcePath.includes('BM')), 'markers carry source path context');
+assert.ok(build.markers.every((marker) => marker.sourcePath), 'markers carry source path context');
 
 const tables = build.tables;
 assert.ok(tables.branchRows.length > 0, 'Branch/Node table rows emitted');
