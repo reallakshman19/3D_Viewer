@@ -39,6 +39,7 @@ on:
       - 'viewer/tabs/RvmNonPrimitiveSupportOverlayHardDisableBridge.js'
       - 'viewer/tabs/RvmNonPrimitiveAutoBendBridge.js'
       - 'viewer/tabs/RvmNonPrimitiveNodeMarkerBridge.js'
+      - 'viewer/tabs/RvmNonPrimitiveNodeMarkerDetailsPanelBridge.js'
       - 'viewer/tabs/RvmNonPrimitiveNodeMarkerHoverBridge.js'
       - 'viewer/tabs/RvmNonPrimitiveNodeMarkerSourceToolsBridge.js'
       - 'viewer/tabs/RvmNonPrimitiveSourceToolsUiBridge.js'
@@ -200,6 +201,9 @@ jobs:
 
       - name: Verify non-primitive node marker hover
         run: node viewer/tests/nonprimitive-node-marker-hover.test.js
+
+      - name: Verify non-primitive node marker details panel
+        run: node viewer/tests/nonprimitive-node-marker-details-panel.test.js
 
       - name: Verify RHBG RVM fit guard
         run: |
