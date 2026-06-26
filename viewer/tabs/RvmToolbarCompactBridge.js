@@ -1,8 +1,8 @@
-import { installRvmToolbarOverflow, syncRvmToolbarOverflow } from './RvmToolbarOverflowController.js?v=20260626-rvm-toolbar-overflow-controller-3';
+import { installRvmToolbarOverflow, syncRvmToolbarOverflow } from './RvmToolbarOverflowController.js?v=20260626-rvm-toolbar-overflow-controller-4';
 
-const VERSION = '20260626-rvm-toolbar-secondary-groups-1';
-const PREVIOUS_VERSION = '20260626-rvm-toolbar-compact-policy-3';
-const INSTALL_FLAG = Symbol.for('pcf-glb-rvm-toolbar-secondary-groups-1');
+const VERSION = '20260626-rvm-toolbar-secondary-groups-2';
+const PREVIOUS_VERSION = '20260626-rvm-toolbar-secondary-groups-1';
+const INSTALL_FLAG = Symbol.for('pcf-glb-rvm-toolbar-secondary-groups-2');
 const GLOBAL_KEY = '__PCF_GLB_RVM_TOOLBAR_POLICY__';
 const ROOT_SELECTOR = '[data-rvm-viewer]';
 const CORE_LABELS = new Set(['Navigate', 'View', 'Navigate / View', 'Review']);
@@ -69,9 +69,8 @@ function reconcileToolbar(reason = 'manual') {
   for (const section of [...ribbon.querySelectorAll(':scope > .rvm-ribbon-section')]) {
     if (isSecondaryMenuRoot(section) || section.closest('[data-rvm-tools-menu], [data-rvm-toolbar-more-panel]')) continue;
     const label = sectionLabel(section);
-    const core = isCoreTopLevelSection(section, label);
     section.dataset.rvmToolbarGroupLabel = label;
-    if (core) {
+    if (isCoreTopLevelSection(section, label)) {
       section.dataset.rvmToolbarPolicy = 'core';
       seen.add(groupKey(section, label));
       continue;
@@ -85,9 +84,9 @@ function reconcileToolbar(reason = 'manual') {
       continue;
     }
     seen.add(key);
+    const targetMenuId = classifySecondaryMenu(section, label);
     section.hidden = false;
     section.dataset.rvmToolbarPolicy = 'secondary-grouped';
-    const targetMenuId = classifySecondaryMenu(section, label);
     section.dataset.rvmSecondaryToolGroup = targetMenuId;
     section.dataset.rvmToolsMenuItem = label;
     const panel = menus.get(targetMenuId)?.querySelector('[data-rvm-tools-menu]') || menus.get('inspect')?.querySelector('[data-rvm-tools-menu]');
@@ -177,9 +176,7 @@ function ensureSecondaryToolMenus(ribbon) {
   return menus;
 }
 
-function isSecondaryMenuRoot(section) {
-  return section?.matches?.('[data-rvm-toolbar-more-root]') || section?.dataset?.rvmToolbarMoreRoot;
-}
+function isSecondaryMenuRoot(section) { return section?.matches?.('[data-rvm-toolbar-more-root]') || section?.dataset?.rvmToolbarMoreRoot; }
 
 function classifySecondaryMenu(section, label) {
   const haystack = `${label} ${section?.className || ''} ${Object.values(section?.dataset || {}).join(' ')}`.toLowerCase();
@@ -209,10 +206,7 @@ function groupKey(section, label) {
   return `${label.toLowerCase()}::${String(datasetKey || section?.className || '').replace(/\s+/g, '.')}`;
 }
 
-function escapeHtml(value) {
-  return String(value ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;');
-}
-
+function escapeHtml(value) { return String(value ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;'); }
 function escapeAttr(value) { return escapeHtml(value); }
 
 function injectStyles() {
@@ -224,12 +218,12 @@ function injectStyles() {
   }
   style.dataset.rvmToolbarCompactPolicy = VERSION;
   style.textContent = `
-    [data-rvm-viewer] .geo-top-ribbon{position:relative;align-items:flex-start;}
+    [data-rvm-viewer] .geo-top-ribbon{position:relative;align-items:flex-start;overflow:visible;}
     [data-rvm-viewer] .rvm-toolbar-secondary-group{position:relative;display:inline-flex;align-items:flex-start;z-index:60;}
     [data-rvm-viewer] .rvm-toolbar-secondary-group > .rvm-toolbar-more-summary{list-style:none;user-select:none;gap:4px;}
     [data-rvm-viewer] .rvm-toolbar-secondary-group.is-open > .rvm-toolbar-more-summary{background:var(--geo-accent,#4a9eff);color:#fff;border-color:var(--geo-accent,#4a9eff);}
     [data-rvm-viewer] .rvm-toolbar-caret{font-size:9px;line-height:1;opacity:.9;}
-    [data-rvm-viewer] .rvm-toolbar-secondary-panel{position:absolute;left:0;top:calc(100% + 6px);display:grid;grid-template-columns:1fr;gap:6px;min-width:190px;max-width:min(340px,calc(100vw - 40px));max-height:min(60vh,520px);overflow:auto;padding:8px;border:1px solid rgba(126,190,255,.30);border-radius:10px;background:rgba(10,18,32,.98);box-shadow:0 18px 60px rgba(0,0,0,.45);}
+    [data-rvm-viewer] .rvm-toolbar-secondary-panel{position:fixed;left:0;top:0;display:grid;grid-template-columns:1fr;gap:6px;min-width:190px;max-width:min(360px,calc(100vw - 40px));max-height:min(60vh,520px);overflow:auto;padding:8px;border:1px solid rgba(126,190,255,.30);border-radius:10px;background:rgba(10,18,32,.98);box-shadow:0 18px 60px rgba(0,0,0,.45);z-index:9999;}
     [data-rvm-viewer] .rvm-toolbar-secondary-panel[hidden], [data-rvm-viewer] .rvm-toolbar-secondary-group:not(.is-open) .rvm-toolbar-secondary-panel{display:none!important;}
     [data-rvm-viewer] .rvm-toolbar-secondary-title{font-size:10px;color:#9ec5ff;text-transform:uppercase;letter-spacing:.06em;border-bottom:1px solid rgba(148,163,184,.18);padding:0 0 5px;}
     [data-rvm-viewer] .rvm-toolbar-secondary-empty{font-size:10px;color:var(--geo-text-muted,#8fa3bd);padding:4px 2px;}
