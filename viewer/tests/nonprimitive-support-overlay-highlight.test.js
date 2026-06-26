@@ -99,13 +99,16 @@ assert.match(helper, /support-overlay-highlight\/v1/);
 assert.match(helper, /__supportOverlayOriginalMaterial/);
 assert.match(helper, /material\.clone/);
 assert.match(helper, /clearSupportOverlayHighlights/);
-assert.match(bridge, /rvm-non-primitive-support-overlay-details-panel\/v4/);
+assert.match(bridge, /rvm-non-primitive-support-overlay-details-panel\/v5/);
+assert.match(bridge, /SUPPORTS_SLOT_SELECTOR/);
 assert.match(bridge, /highlightSupportOverlayGlyph/);
 assert.match(bridge, /clearSupportOverlayHighlights/);
 assert.match(bridge, /nonPrimitiveSupportOverlayHighlightState/);
 assert.match(bridge, /__RVM_NON_PRIMITIVE_SUPPORT_OVERLAY__/);
 assert.doesNotMatch(bridge, /selection\.select|selection\.pick|RvmSelectionAdapter|objectSearch|searchIndex/);
 assert.match(geometry, /pickable:\s*false[\s\S]*selectable:\s*false/);
-assert.match(deferredLoader, /RvmNonPrimitiveSupportOverlayDetailsPanelBridge\.js\?v=20260623-nonprimitive-support-details-panel-4/);
+assert.match(deferredLoader, /SUPPORT_DETAILS_PANEL_PREVIOUS_CACHE_KEY/);
+assert.match(deferredLoader, /SUPPORT_DETAILS_PANEL_CACHE_KEY/);
+assert.match(deferredLoader, /20260626-supports-shell-slot-1/);
 
 console.log('non-primitive support overlay highlight tests passed');

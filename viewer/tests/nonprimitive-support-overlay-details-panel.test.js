@@ -80,7 +80,12 @@ const bridge = await fs.readFile(new URL('../tabs/RvmNonPrimitiveSupportOverlayD
 const deferredLoader = await fs.readFile(new URL('../tabs/RvmDeferredBridgeLoader.js', import.meta.url), 'utf8');
 const sourceTools = await fs.readFile(new URL('../tabs/RvmNonPrimitiveSourceToolsUiBridge.js', import.meta.url), 'utf8');
 
-assert.match(bridge, /rvm-non-primitive-support-overlay-details-panel\/v4/);
+assert.match(bridge, /rvm-non-primitive-support-overlay-details-panel\/v5/);
+assert.match(bridge, /SUPPORTS_SLOT_SELECTOR/);
+assert.match(bridge, /__PCF_GLB_RVM_UI_SHELL__\?\.setRightPanelTab/);
+assert.match(bridge, /__PCF_GLB_RVM_UI_SHELL__\?\.registerPanel/);
+assert.match(bridge, /dataset\.rvmPanelSlotHost = 'supports'/);
+assert.match(bridge, /moveExistingPanelToShellSlot/);
 assert.match(bridge, /__RVM_NON_PRIMITIVE_SUPPORT_OVERLAY__/);
 assert.match(bridge, /raycaster\.intersectObjects/);
 assert.match(bridge, /nonPrimitiveSupportOverlaySelectedDetails/);
@@ -92,7 +97,9 @@ assert.match(bridge, /PRIMITIVE_KIND_RE[\s\S]*rvm\|glb\|gltf\|rev/);
 assert.doesNotMatch(bridge, /RvmSupportSymbols|RvmSupportGeometryBridge|RvmRawSupportCylinderGuardBridge|Support Summary|SupportATT|SupportEngine/);
 assert.doesNotMatch(bridge, /selection\.select|selection\.pick|RvmSelectionAdapter/);
 
-assert.match(deferredLoader, /RvmNonPrimitiveSupportOverlayDetailsPanelBridge\.js\?v=20260623-nonprimitive-support-details-panel-4/);
+assert.match(deferredLoader, /SUPPORT_DETAILS_PANEL_PREVIOUS_CACHE_KEY/);
+assert.match(deferredLoader, /SUPPORT_DETAILS_PANEL_CACHE_KEY/);
+assert.match(deferredLoader, /20260626-supports-shell-slot-1/);
 assert.match(deferredLoader, /installRvmNonPrimitiveSupportOverlayBridge[\s\S]*installRvmNonPrimitiveSupportOverlayDetailsPanelBridge[\s\S]*installRvmNonPrimitiveAutoBendBridge/);
 assert.match(sourceTools, /rvm-nonprimitive-source-tools-panel/);
 

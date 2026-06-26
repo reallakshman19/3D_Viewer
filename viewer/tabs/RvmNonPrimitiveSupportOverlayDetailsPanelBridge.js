@@ -18,16 +18,17 @@ import {
   SUPPORT_OVERLAY_HIGHLIGHT_SCHEMA,
 } from '../overlays/support/SupportOverlayHighlight.js';
 
-export const RVM_NON_PRIMITIVE_SUPPORT_DETAILS_PANEL_SCHEMA = 'rvm-non-primitive-support-overlay-details-panel/v4';
+export const RVM_NON_PRIMITIVE_SUPPORT_DETAILS_PANEL_SCHEMA = 'rvm-non-primitive-support-overlay-details-panel/v5';
 
 const ROOT_SELECTOR = '[data-rvm-viewer]';
 const PANEL_ID = 'rvm-nonprimitive-support-details-panel';
+const SUPPORTS_SLOT_SELECTOR = '[data-rvm-panel-slot="supports"]';
 const SUPPORT_OVERLAY_ROOT_NAME = '__RVM_NON_PRIMITIVE_SUPPORT_OVERLAY__';
 const GLOBAL_KEY = '__PCF_GLB_RVM_NON_PRIMITIVE_SUPPORT_DETAILS_PANEL__';
-const PATCH_FLAG = Symbol.for('pcf-glb-rvm-non-primitive-support-details-panel-v4');
-const VIEWER_PATCH_FLAG = Symbol.for('pcf-glb-rvm-non-primitive-support-details-panel-viewer-v4');
-const PICKING_FLAG = Symbol.for('pcf-glb-rvm-non-primitive-support-details-picking-v4');
-const STYLE_FLAG = Symbol.for('pcf-glb-rvm-non-primitive-support-details-panel-style-v2');
+const PATCH_FLAG = Symbol.for('pcf-glb-rvm-non-primitive-support-details-panel-v5');
+const VIEWER_PATCH_FLAG = Symbol.for('pcf-glb-rvm-non-primitive-support-details-panel-viewer-v5');
+const PICKING_FLAG = Symbol.for('pcf-glb-rvm-non-primitive-support-details-picking-v5');
+const STYLE_FLAG = Symbol.for('pcf-glb-rvm-non-primitive-support-details-panel-style-v3');
 const SOURCE_KIND_RE = /^(json|jscon|inputxml|txt|source-preview)$/i;
 const PRIMITIVE_KIND_RE = /^(rvm|glb|gltf|rev)$/i;
 
@@ -62,13 +63,18 @@ function installSupportDetailsStyles() {
   const doc = globalThis.document;
   if (!doc?.createElement) return;
   const style = doc.createElement('style');
-  style.dataset.rvmNonPrimitiveSupportDetailsStyle = 'v2';
+  style.dataset.rvmNonPrimitiveSupportDetailsStyle = 'v3';
   style.textContent = `
     .rvm-support-details-panel {
       flex: 0 0 auto;
       padding: 7px;
       border-bottom: 1px solid var(--geo-border, #333);
       background: rgba(12, 17, 24, 0.82);
+    }
+
+    [data-rvm-panel-slot="supports"] .rvm-support-details-panel {
+      border-bottom: 0;
+      background: transparent;
     }
 
     .rvm-source-tools-detail {
@@ -150,6 +156,7 @@ export function renderSupportOverlayDetailsPanel(root, viewer = globalThis.__3D_
     sourceFile: diagnostics.sourceFile || '',
     highlighted: isSupportDetailsHighlighted(viewer, rawDetails),
   });
+  if (state.status === 'selected') globalThis.__PCF_GLB_RVM_UI_SHELL__?.setRightPanelTab?.(root, 'supports', 'support-details-selected');
   panel.innerHTML = renderSupportOverlayDetailsPanelHtml(state, { escapeHtml });
   bindDetailsPanel(panel, viewer);
   return panel;
@@ -157,9 +164,14 @@ export function renderSupportOverlayDetailsPanel(root, viewer = globalThis.__3D_
 
 function ensureDetailsPanel(root) {
   let panel = root.querySelector(`#${PANEL_ID}`);
-  if (panel) return panel;
+  if (panel) {
+    moveExistingPanelToShellSlot(root, panel);
+    return panel;
+  }
+  const shellSlot = getSupportsShellSlot(root);
   const rightPanel = root.querySelector('.rvm-right-panel');
-  if (!rightPanel) return null;
+  const target = shellSlot || rightPanel;
+  if (!target) return null;
   const header = globalThis.document?.createElement?.('div');
   panel = globalThis.document?.createElement?.('div');
   if (!header || !panel) return null;
@@ -170,22 +182,64 @@ function ensureDetailsPanel(root) {
   panel.className = 'rvm-support-details-panel rvm-tag-list';
   panel.dataset.rvmNonPrimitiveSupportDetails = 'true';
 
-  const sourceToolsPanel = rightPanel.querySelector('#rvm-nonprimitive-source-tools-panel');
-  if (sourceToolsPanel?.nextSibling) {
-    rightPanel.insertBefore(header, sourceToolsPanel.nextSibling);
-    rightPanel.insertBefore(panel, header.nextSibling);
-  } else if (sourceToolsPanel) {
-    rightPanel.append(header, panel);
+  if (shellSlot) {
+    registerSupportDetailsPanel(root);
+    header.dataset.rvmPanelSlotHost = 'supports';
+    panel.dataset.rvmPanelSlotHost = 'supports';
+    removeSlotEmpty(shellSlot);
+    shellSlot.append(header, panel);
   } else {
-    const diagnosticsHeader = rightPanel.querySelector('[data-rvm-browser-diagnostics-header="true"]');
-    if (diagnosticsHeader) {
-      rightPanel.insertBefore(header, diagnosticsHeader);
-      rightPanel.insertBefore(panel, diagnosticsHeader);
-    } else {
+    const sourceToolsPanel = rightPanel.querySelector('#rvm-nonprimitive-source-tools-panel');
+    if (sourceToolsPanel?.nextSibling) {
+      rightPanel.insertBefore(header, sourceToolsPanel.nextSibling);
+      rightPanel.insertBefore(panel, header.nextSibling);
+    } else if (sourceToolsPanel) {
       rightPanel.append(header, panel);
+    } else {
+      const diagnosticsHeader = rightPanel.querySelector('[data-rvm-browser-diagnostics-header="true"]');
+      if (diagnosticsHeader) {
+        rightPanel.insertBefore(header, diagnosticsHeader);
+        rightPanel.insertBefore(panel, diagnosticsHeader);
+      } else {
+        rightPanel.append(header, panel);
+      }
     }
   }
   return panel;
+}
+
+function getSupportsShellSlot(root) {
+  const shell = globalThis.__PCF_GLB_RVM_UI_SHELL__;
+  shell?.install?.(root, { reason: 'support-details' });
+  shell?.sync?.(root, { reason: 'support-details' });
+  return root.querySelector?.(SUPPORTS_SLOT_SELECTOR) || null;
+}
+
+function registerSupportDetailsPanel(root) {
+  globalThis.__PCF_GLB_RVM_UI_SHELL__?.registerPanel?.(root, {
+    id: 'nonprimitive-support-details-panel',
+    title: 'Support Details',
+    slot: 'supports',
+    priority: 10,
+  });
+}
+
+function moveExistingPanelToShellSlot(root, panel) {
+  const shellSlot = getSupportsShellSlot(root);
+  if (!shellSlot || shellSlot.contains(panel)) return;
+  const header = root.querySelector('[data-rvm-non-primitive-support-details-header="true"]') || panel.previousElementSibling;
+  registerSupportDetailsPanel(root);
+  removeSlotEmpty(shellSlot);
+  if (header?.dataset?.rvmNonPrimitiveSupportDetailsHeader === 'true') {
+    header.dataset.rvmPanelSlotHost = 'supports';
+    shellSlot.appendChild(header);
+  }
+  panel.dataset.rvmPanelSlotHost = 'supports';
+  shellSlot.appendChild(panel);
+}
+
+function removeSlotEmpty(slot) {
+  for (const empty of [...slot?.querySelectorAll?.('.rvm-panel-slot-empty') || []]) empty.remove?.();
 }
 
 export function clearSupportOverlayDetailsPanel(panel, viewer = globalThis.__3D_RVM_VIEWER__, reason = 'clear') {
