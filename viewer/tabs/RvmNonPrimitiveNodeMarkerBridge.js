@@ -5,14 +5,15 @@ import {
   evaluateNodeMarkerStaleness,
 } from '../overlays/nodes/NodeMarkerApi.js';
 import { attachNodeMarkerGlyphs, clearNodeMarkerGlyphRoot } from '../overlays/nodes/NodeMarkerGlyphGeometry.js';
+import { buildNodeMarkerOverrideStoreContext, loadNodeMarkerOverrideSet, removeNodeMarkerOverride, saveNodeMarkerOverrideSet, upsertNodeMarkerOverride } from '../overlays/nodes/NodeMarkerOverrideStore.js';
 import * as NodeMarkerSourceTools from './RvmNonPrimitiveNodeMarkerSourceToolsBridge.js';
 import { ensureNodeMarkerHover, installRvmNonPrimitiveNodeMarkerHoverBridge } from './RvmNonPrimitiveNodeMarkerHoverBridge.js';
 import { clear as clearNodeMarkerDetailsPanel, ensure as ensureNodeMarkerDetailsPanel, installRvmNonPrimitiveNodeMarkerDetailsPanelBridge } from './RvmNonPrimitiveNodeMarkerDetailsPanelBridge.js';
 
-export const RVM_NON_PRIMITIVE_NODE_MARKER_BRIDGE_SCHEMA = 'rvm-non-primitive-node-marker-bridge/v3';
+export const RVM_NON_PRIMITIVE_NODE_MARKER_BRIDGE_SCHEMA = 'rvm-non-primitive-node-marker-bridge/v4';
 
 const GLOBAL_KEY = '__PCF_GLB_RVM_NON_PRIMITIVE_NODE_MARKERS__';
-const INSTALL_FLAG = Symbol.for('pcf-glb-rvm-non-primitive-node-marker-bridge-v3');
+const INSTALL_FLAG = Symbol.for('pcf-glb-rvm-non-primitive-node-marker-bridge-v4');
 
 export function installRvmNonPrimitiveNodeMarkerBridge() {
   if (globalThis[INSTALL_FLAG] && globalThis[GLOBAL_KEY]) return globalThis[GLOBAL_KEY];
@@ -31,6 +32,10 @@ export function installRvmNonPrimitiveNodeMarkerBridge() {
     getJson,
     getDiagnostics,
     getStaleStatus,
+    getOverrides,
+    saveOverride,
+    clearOverride,
+    persistOverrides,
   };
   globalThis[GLOBAL_KEY] = api;
   return api;
@@ -38,7 +43,18 @@ export function installRvmNonPrimitiveNodeMarkerBridge() {
 
 export function applyFromSource({ viewer = globalThis.__3D_RVM_VIEWER__, source, sourceKind = 'json', fileName = '', options = {} } = {}) {
   if (!viewer || !source) return clear(viewer, 'missing-viewer-or-source');
-  const build = buildNodeMarkersFromSource(source, { sourceKind, sourceFile: fileName, ...options });
+  const baseOptions = { sourceKind, sourceFile: fileName, ...options };
+  const discovery = buildNodeMarkersFromSource(source, { ...baseOptions, markerOverrides: [] });
+  const context = buildNodeMarkerOverrideStoreContext(discovery);
+  const persisted = loadNodeMarkerOverrideSet(context);
+  const markerOverrides = options.markerOverrides || options.overrides || viewer.nonPrimitiveNodeMarkerOverrides || persisted.overrides || [];
+  const build = buildNodeMarkersFromSource(source, { ...baseOptions, markerOverrides });
+  viewer.nonPrimitiveNodeMarkerSource = source;
+  viewer.nonPrimitiveNodeMarkerSourceKind = sourceKind;
+  viewer.nonPrimitiveNodeMarkerSourceFile = fileName;
+  viewer.nonPrimitiveNodeMarkerOverrideContext = buildNodeMarkerOverrideStoreContext(build);
+  viewer.nonPrimitiveNodeMarkerOverrides = markerOverrides;
+  viewer.nonPrimitiveNodeMarkerOverrideStore = persisted;
   viewer.nonPrimitiveNodeMarkerBuild = build;
   viewer.nonPrimitiveNodeMarkers = build.markers || [];
   viewer.nonPrimitiveNodeMarkerTables = build.tables || null;
@@ -54,9 +70,35 @@ export function applyFromSource({ viewer = globalThis.__3D_RVM_VIEWER__, source,
 export function rebuild(viewer = globalThis.__3D_RVM_VIEWER__, reason = 'manual-rebuild') {
   const model = viewer?.modelGroup || viewer?.scene || null;
   const userData = model?.userData || {};
-  const source = userData.__rvmNonPrimitiveSourceHierarchy || userData.__rvmNonPrimitiveAutoBendSourceHierarchy || null;
-  const sourceKind = userData.__rvmNonPrimitiveSourceKind || userData.__rvmNonPrimitiveAutoBendSourceKind || viewer?.sourceKind || 'json';
-  return applyFromSource({ viewer, source, sourceKind, fileName: userData.fileName || '', options: { reason } });
+  const source = viewer?.nonPrimitiveNodeMarkerSource || userData.__rvmNonPrimitiveSourceHierarchy || userData.__rvmNonPrimitiveAutoBendSourceHierarchy || null;
+  const sourceKind = viewer?.nonPrimitiveNodeMarkerSourceKind || userData.__rvmNonPrimitiveSourceKind || userData.__rvmNonPrimitiveAutoBendSourceKind || viewer?.sourceKind || 'json';
+  return applyFromSource({ viewer, source, sourceKind, fileName: viewer?.nonPrimitiveNodeMarkerSourceFile || userData.fileName || '', options: { reason, markerOverrides: viewer?.nonPrimitiveNodeMarkerOverrides || [] } });
+}
+
+export function getOverrides(viewer = globalThis.__3D_RVM_VIEWER__) {
+  return viewer?.nonPrimitiveNodeMarkerOverrides || [];
+}
+
+export function saveOverride(viewer = globalThis.__3D_RVM_VIEWER__, override = {}) {
+  if (!viewer) return { status: 'skipped', reason: 'viewer-missing' };
+  viewer.nonPrimitiveNodeMarkerOverrides = upsertNodeMarkerOverride(viewer.nonPrimitiveNodeMarkerOverrides || [], override);
+  const persisted = persistOverrides(viewer);
+  rebuild(viewer, 'node-marker-override-save');
+  return { status: 'saved', overrideCount: viewer.nonPrimitiveNodeMarkerOverrides.length, persisted };
+}
+
+export function clearOverride(viewer = globalThis.__3D_RVM_VIEWER__, target = {}) {
+  if (!viewer) return { status: 'skipped', reason: 'viewer-missing' };
+  viewer.nonPrimitiveNodeMarkerOverrides = removeNodeMarkerOverride(viewer.nonPrimitiveNodeMarkerOverrides || [], target);
+  const persisted = persistOverrides(viewer);
+  rebuild(viewer, 'node-marker-override-clear');
+  return { status: 'cleared', overrideCount: viewer.nonPrimitiveNodeMarkerOverrides.length, persisted };
+}
+
+export function persistOverrides(viewer = globalThis.__3D_RVM_VIEWER__) {
+  if (!viewer?.nonPrimitiveNodeMarkerOverrideContext) return { status: 'skipped', reason: 'missing-context' };
+  viewer.nonPrimitiveNodeMarkerOverrideStore = saveNodeMarkerOverrideSet(viewer.nonPrimitiveNodeMarkerOverrideContext, viewer.nonPrimitiveNodeMarkerOverrides || []);
+  return viewer.nonPrimitiveNodeMarkerOverrideStore;
 }
 
 export function clear(viewer = globalThis.__3D_RVM_VIEWER__, reason = 'clear-node-marker-runtime') {
@@ -74,35 +116,21 @@ export function clear(viewer = globalThis.__3D_RVM_VIEWER__, reason = 'clear-nod
   return { schema: 'non-primitive-node-marker-clear/v1', status: 'cleared', reason };
 }
 
-export function getMarkers(viewer = globalThis.__3D_RVM_VIEWER__) {
-  return viewer?.nonPrimitiveNodeMarkers || [];
-}
-
-export function getXmlCiiTables(viewer = globalThis.__3D_RVM_VIEWER__) {
-  return viewer?.nonPrimitiveNodeMarkerTables || null;
-}
-
-export function getCsv(viewer = globalThis.__3D_RVM_VIEWER__) {
-  const tables = getXmlCiiTables(viewer);
-  return tables ? buildNodeMarkerCsvForXmlCii(tables) : '';
-}
-
-export function getJson(viewer = globalThis.__3D_RVM_VIEWER__) {
-  return buildNodeMarkerJson(viewer?.nonPrimitiveNodeMarkers || [], { generatedAt: new Date(0).toISOString() });
-}
-
-export function getDiagnostics(viewer = globalThis.__3D_RVM_VIEWER__) {
-  return viewer?.nonPrimitiveNodeMarkerDiagnostics || null;
-}
+export function getMarkers(viewer = globalThis.__3D_RVM_VIEWER__) { return viewer?.nonPrimitiveNodeMarkers || []; }
+export function getXmlCiiTables(viewer = globalThis.__3D_RVM_VIEWER__) { return viewer?.nonPrimitiveNodeMarkerTables || null; }
+export function getCsv(viewer = globalThis.__3D_RVM_VIEWER__) { const tables = getXmlCiiTables(viewer); return tables ? buildNodeMarkerCsvForXmlCii(tables) : ''; }
+export function getJson(viewer = globalThis.__3D_RVM_VIEWER__) { return buildNodeMarkerJson(viewer?.nonPrimitiveNodeMarkers || [], { generatedAt: new Date(0).toISOString() }); }
+export function getDiagnostics(viewer = globalThis.__3D_RVM_VIEWER__) { return viewer?.nonPrimitiveNodeMarkerDiagnostics || null; }
 
 export function getStaleStatus(viewer = globalThis.__3D_RVM_VIEWER__) {
   const model = viewer?.modelGroup || viewer?.scene || null;
   const userData = model?.userData || {};
-  const source = userData.__rvmNonPrimitiveSourceHierarchy || userData.__rvmNonPrimitiveAutoBendSourceHierarchy || null;
+  const source = viewer?.nonPrimitiveNodeMarkerSource || userData.__rvmNonPrimitiveSourceHierarchy || userData.__rvmNonPrimitiveAutoBendSourceHierarchy || null;
   if (!source) return { schema: 'non-primitive-node-marker-stale/v1', status: 'blocked', staleReason: 'missing-source' };
   return evaluateNodeMarkerStaleness(source, {
-    sourceKind: userData.__rvmNonPrimitiveSourceKind || userData.__rvmNonPrimitiveAutoBendSourceKind || viewer?.sourceKind || 'json',
-    sourceFile: userData.fileName || '',
+    sourceKind: viewer?.nonPrimitiveNodeMarkerSourceKind || userData.__rvmNonPrimitiveSourceKind || userData.__rvmNonPrimitiveAutoBendSourceKind || viewer?.sourceKind || 'json',
+    sourceFile: viewer?.nonPrimitiveNodeMarkerSourceFile || userData.fileName || '',
+    markerOverrides: viewer?.nonPrimitiveNodeMarkerOverrides || [],
   }, viewer?.nonPrimitiveNodeMarkerBuild || null);
 }
 
