@@ -205,6 +205,9 @@ jobs:
       - name: Verify non-primitive node marker details panel
         run: node viewer/tests/nonprimitive-node-marker-details-panel.test.js
 
+      - name: Verify non-primitive node marker managed-stage fixture
+        run: node viewer/tests/nonprimitive-node-marker-managed-stage-fixture.test.js
+
       - name: Verify RHBG RVM fit guard
         run: |
           set -o pipefail
