@@ -1,4 +1,5 @@
-const VERSION = '20260626-rvm-ui-shell-slots-1';
+const VERSION = '20260626-rvm-ui-shell-slots-2';
+const PREVIOUS_VERSION = '20260626-rvm-ui-shell-slots-1';
 const API_KEY = '__PCF_GLB_RVM_UI_SHELL__';
 const ROOT_SELECTOR = '[data-rvm-viewer]';
 const STYLE_ID = 'rvm-ui-shell-slots-style';
@@ -20,6 +21,7 @@ const DEFAULT_RIGHT_PANEL_TABS = Object.freeze([
   { id: RVM_UI_SHELL_SLOTS.nodeMarkers, label: 'Node Markers' },
   { id: RVM_UI_SHELL_SLOTS.supports, label: 'Supports' },
   { id: RVM_UI_SHELL_SLOTS.diagnostics, label: 'Diagnostics' },
+  { id: RVM_UI_SHELL_SLOTS.exports, label: 'Exports' },
 ]);
 
 const stateByRoot = new WeakMap();
@@ -82,6 +84,7 @@ export function syncRvmViewerUiShell(root, options = {}) {
     recordTrace(state, 'sync', { reason: options.reason || 'sync' });
     state.diagnostics = buildDiagnostics(resolvedRoot, state, options.reason || 'sync', auditBefore);
     resolvedRoot.dataset.rvmUiShellVersion = VERSION;
+    resolvedRoot.dataset.rvmUiShellPreviousVersion = PREVIOUS_VERSION;
     resolvedRoot.dataset.rvmUiShellAudit = state.diagnostics.audit.ok ? 'ok' : 'invalid';
     return state.diagnostics;
   }
@@ -134,8 +137,10 @@ export function auditRvmViewerUiShell(root) {
   if (slots.hierarchy !== 1) missingRequired.push('hierarchy-slot');
   if (slots.selection !== 1) missingRequired.push('selection-slot');
   if (slots.diagnostics !== 1) missingRequired.push('diagnostics-slot');
+  if (slots.exports !== 1) missingRequired.push('exports-slot');
   return {
     version: VERSION,
+    previousVersion: PREVIOUS_VERSION,
     ok: missingRequired.length === 0,
     reason: missingRequired.length ? 'missing-shell-contract' : 'shell-contract-ok',
     missingRequired,
@@ -182,6 +187,7 @@ function ensureBaseSlots(root) {
     ensureRightPanelSlot(rightPanel, RVM_UI_SHELL_SLOTS.nodeMarkers, 'Node Markers');
     ensureRightPanelSlot(rightPanel, RVM_UI_SHELL_SLOTS.supports, 'Supports');
     ensureRightPanelSlot(rightPanel, RVM_UI_SHELL_SLOTS.diagnostics, 'Diagnostics');
+    ensureRightPanelSlot(rightPanel, RVM_UI_SHELL_SLOTS.exports, 'Exports');
     moveKnownRightPanelContent(rightPanel);
   }
 }
@@ -282,6 +288,7 @@ function buildDiagnostics(root, state, reason, auditBefore) {
   const audit = auditRvmViewerUiShell(root);
   return {
     version: VERSION,
+    previousVersion: PREVIOUS_VERSION,
     reason,
     installed: Boolean(state),
     installCount: state?.installCount || 0,
@@ -308,6 +315,7 @@ function publishApi() {
 function getRvmViewerUiShellApi() {
   return {
     version: VERSION,
+    previousVersion: PREVIOUS_VERSION,
     slots: RVM_UI_SHELL_SLOTS,
     install: installRvmViewerUiShell,
     dispose: disposeRvmViewerUiShell,
