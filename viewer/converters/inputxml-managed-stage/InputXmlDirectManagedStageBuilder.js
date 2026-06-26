@@ -21,6 +21,12 @@ function finiteOrNull(value) {
   const n = Number(text(value).replace(/,/g, ''));
   return Number.isFinite(n) ? n : null;
 }
+function bendElementLengthInMm(radiusValue, angleDegValue) {
+  const radius = finiteOrNull(radiusValue);
+  const angleDeg = finiteOrNull(angleDegValue);
+  if (!(radius > 0) || !(angleDeg > 0)) return null;
+  return Number((radius * angleDeg * Math.PI / 180).toFixed(6));
+}
 function cleanTagName(tag) { return text(tag).replace(/^\//, '').split(/\s+/)[0].replace(/[^A-Za-z0-9_-]/g, '').toUpperCase(); }
 function attrsFrom(raw = '') {
   const out = {};
@@ -207,10 +213,21 @@ export function buildInputXmlDirectManagedStageJson(xmlText, options = {}) {
       attrs.BEND_NODE1 = isUnset(bend.NODE1) ? '' : normNode(bend.NODE1);
       attrs.BEND_ANGLE2 = isUnset(bend.ANGLE2) ? '' : bend.ANGLE2;
       attrs.BEND_NODE2 = isUnset(bend.NODE2) ? '' : normNode(bend.NODE2);
+      const bendLengthMm = bendElementLengthInMm(bend.RADIUS, bend.ANGLE1);
+      attrs.BEND_ELEMENT_LENGTH_MM = bendLengthMm ?? '';
+      attrs.ELEMENT_LENGTH_IN_MM = bendLengthMm ?? '';
+      attrs.ElementLengthInMm = bendLengthMm ?? '';
+      attrs.ELBOW_ARC_LENGTH_MM = bendLengthMm ?? '';
+      attrs.BEND_ELEMENT_LENGTH_SOURCE = bendLengthMm == null ? 'missing-radius-or-angle' : 'bend-radius-times-angle-radians';
       attrs.SOURCE_BEND_ATTRS = bend;
     } else {
       attrs.BEND_RADIUS = '';
       attrs.BEND_ANGLE = '';
+      attrs.BEND_ELEMENT_LENGTH_MM = '';
+      attrs.ELEMENT_LENGTH_IN_MM = '';
+      attrs.ElementLengthInMm = '';
+      attrs.ELBOW_ARC_LENGTH_MM = '';
+      attrs.BEND_ELEMENT_LENGTH_SOURCE = 'not-bend';
     }
     if (sifs.length) {
       attrs.SIF_COUNT = sifs.length;
@@ -263,13 +280,13 @@ export function buildInputXmlDirectManagedStageJson(xmlText, options = {}) {
     sourceHeader: { JOBNAME: modelAttrs.JOBNAME || '', TIME: modelAttrs.TIME || '', VERSION: (attrsFrom(xml.match(/<CAESARII\b([^>]*)>/i)?.[1] || '').VERSION || '') },
     stats: {
       components: elements.length, componentRows: piping.length, restraintRows: allRestraints.length, validRestraints: validRestraints.length, blankRestraintRows: blankRestraints.length, emittedSupports: supports.length,
-      bends: elements.filter((e) => e.type === 'BEND').length, rigids: elements.filter((e) => e.attrs.RIGID_TYPE).length, sifElements: elements.filter((e) => e.attrs.SIF_COUNT).length,
+      bends: elements.filter((e) => e.type === 'BEND').length, bendElementLengthRows: elements.filter((e) => e.attrs.BEND_ELEMENT_LENGTH_MM !== '').length, rigids: elements.filter((e) => e.attrs.RIGID_TYPE).length, sifElements: elements.filter((e) => e.attrs.SIF_COUNT).length,
       branches: 1, children: children.length,
     },
     audit: {
       sourceCounts: { NUMELT: modelAttrs.NUMELT || '', NUMBEND: modelAttrs.NUMBEND || '', NUMRIGID: modelAttrs.NUMRIGID || '', NUMREST: modelAttrs.NUMREST || '', NUMISECT: modelAttrs.NUMISECT || '' },
       conversionPolicy: 'direct InputXML parse; no GLB scene side effects; invalid restraint placeholder rows are counted but not emitted',
-      retainedFields: ['rigid weight/type', 'bend angle/radius/nodes', 'SIF entries', 'hydro/pressure/temp/material/density fields', 'source restraint tag and cosines'],
+      retainedFields: ['rigid weight/type', 'bend angle/radius/nodes/element length', 'SIF entries', 'hydro/pressure/temp/material/density fields', 'source restraint tag and cosines'],
     },
     hierarchy: [{
       name: owner,
