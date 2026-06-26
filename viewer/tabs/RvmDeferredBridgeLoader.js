@@ -12,7 +12,7 @@ const BRIDGE_GROUPS = Object.freeze({
     { id: 'nonprimitive-support-hover', specifier: './RvmNonPrimitiveSupportOverlayHoverBridge.js?v=20260623-nonprimitive-support-hover-2', install: 'installRvmNonPrimitiveSupportOverlayHoverBridge' },
     { id: 'nonprimitive-auto-bend', specifier: './RvmNonPrimitiveAutoBendBridge.js?v=20260623-nonprimitive-auto-bend-preview-2', install: 'installRvmNonPrimitiveAutoBendBridge' },
     { id: 'nonprimitive-node-markers', specifier: './RvmNonPrimitiveNodeMarkerBridge.js?v=20260625-node-marker-deferred-1', install: 'installRvmNonPrimitiveNodeMarkerBridge' },
-    { id: 'nonprimitive-source-tools-ui', specifier: './RvmNonPrimitiveSourceToolsUiBridge.js?v=20260624-source-tools-grouped-1', install: 'installRvmNonPrimitiveSourceToolsUiBridge' },
+    { id: 'nonprimitive-source-tools-ui', specifier: './RvmNonPrimitiveSourceToolsUiBridge.js?v=20260626-source-tools-shell-slot-1', install: 'installRvmNonPrimitiveSourceToolsUiBridge' },
   ],
   postModel: [
     { id: 'stagedjson-export', specifier: './RvmStagedJsonExportBridge.js?v=20260624-rvm-stagedjson-support-policy-1', install: 'installRvmStagedJsonExportBridge' },
@@ -129,137 +129,60 @@ function startModelReadyPolling(api) {
   const tick = () => {
     attempts += 1;
     const root = document.querySelector('[data-rvm-viewer]');
-    const viewer = globalThis.__3D_RVM_VIEWER__;
-    const modelReady = Boolean(root && viewer?.modelGroup?.children?.length);
-    if (modelReady) {
-      root.dataset.rvmModelLoaded = 'true';
-      afterFirstPaint(() => {
-        api.ensurePostModel('detected-model-group');
-        api.ensureSourcePreview('detected-model-group');
-      });
+    if (root?.dataset?.rvmModelLoaded === 'true') {
+      api.ensurePostModel('model-ready-poll');
+      api.ensureSourcePreview('model-ready-poll');
       return;
     }
-    if (attempts < 240) setTimeout(tick, 500);
+    if (attempts < 18) setTimeout(tick, 500);
   };
-  afterFirstPaint(tick);
+  setTimeout(tick, 500);
 }
 
 function ensureSourcePreviewGroupIfNeeded(reason = 'source-preview-check') {
-  const context = getSourcePreviewContext();
-  if (!context.active) {
-    clearSourcePreviewRuntime(context.viewer, context.reason || 'not-source-preview');
-    return Promise.resolve({ group: 'sourcePreview', reason, skipped: true, status: 'not-source-preview' });
-  }
-  return ensureRvmBridgeGroup('sourcePreview', reason);
+  refreshRootInstallEpoch();
+  const root = activeRoot || document.querySelector('[data-rvm-viewer]');
+  if (!root) return Promise.resolve({ group: 'sourcePreview', reason, skipped: 'missing-root' });
+  const mode = String(root.dataset?.rvmModelPrimitiveMode || '').toLowerCase();
+  const kind = String(root.dataset?.rvmLoadedSourceKind || '').toLowerCase();
+  const sourceHierarchy = globalThis.__3D_RVM_VIEWER__?.modelGroup?.userData?.__rvmNonPrimitiveSourceHierarchy;
+  if (mode === 'source-preview' && SOURCE_PREVIEW_KIND_RE.test(kind) && sourceHierarchy) return ensureRvmBridgeGroup('sourcePreview', reason);
+  return Promise.resolve({ group: 'sourcePreview', reason, skipped: 'not-source-preview', mode, kind });
 }
 
-function getSourcePreviewContext() {
-  const root = document.querySelector('[data-rvm-viewer]');
+function refreshSourcePreviewRuntime(reason) {
+  const root = activeRoot || document.querySelector('[data-rvm-viewer]');
   const viewer = globalThis.__3D_RVM_VIEWER__;
-  const model = viewer?.modelGroup || viewer?.scene || null;
-  const userData = model?.userData || {};
-  const mode = String(root?.dataset?.rvmModelPrimitiveMode || viewer?.modelPrimitiveMode || '').toLowerCase();
-  const sourceKind = normalizeSourceKind(root?.dataset?.rvmLoadedSourceKind || userData.__rvmNonPrimitiveSourceKind || userData.__rvmNonPrimitiveAutoBendSourceKind || viewer?.sourceKind || '');
-  const source = userData.__rvmNonPrimitiveAutoBendSourceHierarchy || userData.__rvmNonPrimitiveSourceHierarchy || null;
-  const supportSource = userData.__rvmNonPrimitiveSourceHierarchy || source;
-  const active = mode === 'source-preview' && SOURCE_PREVIEW_KIND_RE.test(sourceKind) && Boolean(source);
-  return { root, viewer, model, source, supportSource, sourceKind, fileName: userData.fileName || '', active, reason: active ? '' : `mode:${mode || '-'} kind:${sourceKind || '-'}` };
+  globalThis.__PCF_GLB_RVM_NON_PRIMITIVE_AUTO_BEND__?.refresh?.(viewer, reason);
+  globalThis.__PCF_GLB_RVM_NON_PRIMITIVE_SUPPORT_OVERLAY__?.refresh?.(viewer, reason);
+  globalThis.__PCF_GLB_RVM_NON_PRIMITIVE_SOURCE_TOOLS_UI__?.sync?.(root, viewer);
+  globalThis.__PCF_GLB_RVM_NON_PRIMITIVE_NODE_MARKERS__?.refresh?.(viewer, reason);
 }
 
-function normalizeSourceKind(value) {
-  return String(value || '').trim().toLowerCase();
-}
-
-function refreshSourcePreviewRuntime(reason = 'source-preview-loaded') {
-  const context = getSourcePreviewContext();
-  if (!context.active) return clearSourcePreviewRuntime(context.viewer, context.reason || reason);
-  const { root, viewer, source, supportSource, sourceKind, fileName } = context;
-  try { globalThis.__PCF_GLB_RVM_NON_PRIMITIVE_AUTO_BEND__?.applyFromSource?.({ viewer, source, sourceKind, fileName }); } catch (error) { reportRvmActionError(error, { action: 'source-preview-auto-bend', reason }); }
-  try { globalThis.__PCF_GLB_RVM_NON_PRIMITIVE_SUPPORT_OVERLAY__?.applyFromSource?.({ viewer, root, source: supportSource, sourceKind, fileName }); } catch (error) { reportRvmActionError(error, { action: 'source-preview-support-overlay', reason }); }
-  try { globalThis.__PCF_GLB_RVM_NON_PRIMITIVE_NODE_MARKERS__?.applyFromSource?.({ viewer, root, source, sourceKind, fileName }); } catch (error) { reportRvmActionError(error, { action: 'source-preview-node-markers', reason }); }
-  try { globalThis.__PCF_GLB_RVM_NON_PRIMITIVE_SOURCE_TOOLS_UI__?.sync?.(); } catch (error) { reportRvmActionError(error, { action: 'source-preview-tools-sync', reason }); }
-  return { status: 'refreshed', sourceKind, reason };
-}
-
-function clearSourcePreviewRuntime(viewer, reason = 'clear-source-preview-runtime') {
-  try { globalThis.__PCF_GLB_RVM_NON_PRIMITIVE_AUTO_BEND__?.clear?.(viewer, reason); } catch (_) {}
-  try { globalThis.__PCF_GLB_RVM_NON_PRIMITIVE_SUPPORT_OVERLAY__?.clear?.(viewer, reason); } catch (_) {}
-  try { globalThis.__PCF_GLB_RVM_NON_PRIMITIVE_NODE_MARKERS__?.clear?.(viewer, reason); } catch (_) {}
-  try { globalThis.__PCF_GLB_RVM_NON_PRIMITIVE_SOURCE_TOOLS_UI__?.sync?.(); } catch (_) {}
-  return { status: 'cleared', reason };
+function refreshDiagnosticsDrawer() {
+  globalThis.__PCF_GLB_RVM_BOTTOM_DIAGNOSTICS__?.sync?.('bridge-loader');
 }
 
 function installRvmBridgeActionDiagnostics() {
   if (actionDiagnosticsInstalled) return;
   actionDiagnosticsInstalled = true;
-  globalThis.__PCF_GLB_RVM_REPORT_ACTION_ERROR__ = reportRvmActionError;
-  globalThis.addEventListener?.('unhandledrejection', (event) => {
-    if (!document.querySelector('[data-rvm-viewer]')) return;
-    reportRvmActionError(event.reason || event, { action: 'unhandled-promise' });
-  });
-  globalThis.addEventListener?.('error', (event) => {
-    if (!document.querySelector('[data-rvm-viewer]')) return;
-    reportRvmActionError(event.error || event.message || event, { action: 'window-error' });
-  });
+  globalThis.addEventListener?.('error', (event) => reportRvmActionError(event.error || event.message, { action: 'window-error' }));
+  globalThis.addEventListener?.('unhandledrejection', (event) => reportRvmActionError(event.reason, { action: 'unhandled-rejection' }));
 }
 
 function reportRvmActionError(error, context = {}) {
-  const root = document.querySelector('[data-rvm-viewer]');
-  const message = String(error?.message || error || 'Unknown RVM action error');
-  const entry = {
-    at: new Date().toISOString(),
-    message,
-    stack: String(error?.stack || ''),
-    ...context,
-  };
-  const current = globalThis[ACTION_DIAGNOSTICS_KEY] || { schema: 'rvm-action-diagnostics/v1', version: VERSION, failures: [] };
-  current.version = VERSION;
-  current.failures = [entry, ...(current.failures || [])].slice(0, 20);
-  current.failureCount = current.failures.length;
-  globalThis[ACTION_DIAGNOSTICS_KEY] = current;
-  if (root) {
-    root.dataset.rvmButtonActionFailures = String(current.failureCount);
-    const status = root.querySelector('#rvm-sb-msg');
-    if (status) status.textContent = `RVM action failed: ${message}`;
-    updateActionDiagnosticsPanel(root, current);
-  }
-  try { globalThis.dispatchEvent?.(new CustomEvent('rvm-action-diagnostics', { detail: current })); } catch (_) {}
-  refreshDiagnosticsDrawer();
-  console.warn('[RVM action diagnostics]', context, error);
-  return current;
+  const message = error?.message || String(error || 'Unknown error');
+  const stack = error?.stack || '';
+  const diagnostics = globalThis[ACTION_DIAGNOSTICS_KEY] || { version: VERSION, errors: [] };
+  diagnostics.version = VERSION;
+  diagnostics.errors.push({ message, stack, context, at: new Date().toISOString() });
+  diagnostics.errors = diagnostics.errors.slice(-20);
+  globalThis[ACTION_DIAGNOSTICS_KEY] = diagnostics;
+  try { console.warn('[RVM Bridge Loader]', message, context); } catch (_) {}
 }
 
-function updateActionDiagnosticsPanel(root, diagnostics) {
-  if (!root) return;
-  let panel = root.querySelector('[data-rvm-action-diagnostics-panel]');
-  if (!panel) {
-    panel = document.createElement('div');
-    panel.dataset.rvmActionDiagnosticsPanel = VERSION;
-    panel.className = 'rvm-action-diagnostics-panel rvm-browser-parse-diagnostics';
-    panel.innerHTML = '<h3>RVM Action Errors</h3><div data-rvm-action-diagnostics-body></div>';
-    const right = root.querySelector('.rvm-right-panel') || root;
-    right.appendChild(panel);
-  }
-  const body = panel.querySelector('[data-rvm-action-diagnostics-body]') || panel;
-  const failures = diagnostics?.failures || [];
-  body.innerHTML = failures.length
-    ? failures.slice(0, 6).map((failure) => `<div class="rvm-browser-diag-warning"><b>${escapeHtml(failure.action || failure.bridge || 'action')}</b>: ${escapeHtml(failure.message)}</div>`).join('')
-    : '<div class="rvm-empty-state">No action errors.</div>';
-}
-
-function refreshDiagnosticsDrawer() {
-  try { globalThis.__PCF_GLB_RVM_BOTTOM_DIAGNOSTICS_DRAWER__?.refresh?.(); } catch (_) {}
-}
-
-function afterFirstPaint(fn) {
-  const run = () => {
-    if (typeof globalThis.requestIdleCallback === 'function') globalThis.requestIdleCallback(fn, { timeout: 1200 });
-    else setTimeout(fn, 0);
-  };
-  if (typeof globalThis.requestAnimationFrame === 'function') globalThis.requestAnimationFrame(run);
-  else setTimeout(run, 0);
-}
-
-function escapeHtml(value) {
-  return String(value ?? '').replace(/[&<>"]/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch]));
+function afterFirstPaint(callback) {
+  const raf = globalThis.requestAnimationFrame;
+  if (typeof raf === 'function') raf(() => setTimeout(callback, 0));
+  else setTimeout(callback, 0);
 }
