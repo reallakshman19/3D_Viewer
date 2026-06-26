@@ -75,6 +75,11 @@ assert.match(interactionSource, /__PCF_GLB_RVM_INTERACTION_STATE__/, 'global dia
 assert.match(interactionSource, /modeAtUp !== 'select'\) return/, 'canvas selection must not run during Orbit\/Pan\/transient modes');
 assert.match(interactionSource, /Esc: selection cleared, Select mode/, 'Esc must clear selection and return to Select in one action');
 assert.match(leafPickSource, /currentMode/);
+assert.match(singlePickSource, /20260626-rvm-canvas-single-pick-registry-1/);
+assert.match(singlePickSource, /RvmUiEventRegistry\.js\?v=20260626-rvm-ui-event-registry-1/);
+assert.match(singlePickSource, /registerRvmUiEvent\('canvas-single-pick'/);
+assert.match(singlePickSource, /routeRvmUiEvent\(document\.querySelector\('\[data-rvm-viewer\]'\), 'canvas-single-pick'/);
+assert.match(singlePickSource, /routedPointerUps/);
 assert.match(singlePickSource, /_rvmInteractionMode \|\| viewer\?\._navMode \|\| 'select'/, 'single-pick guard still only runs in select and is covered by Select defaulting');
 
 assert.doesNotMatch(arbiterSource, /SupportSummary|SupportATT|SupportEngine|RvmSupportSummaryBridge|RvmSupportGeometryBridge/);
