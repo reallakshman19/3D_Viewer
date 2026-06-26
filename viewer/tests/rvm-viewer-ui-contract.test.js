@@ -59,19 +59,28 @@ assert.equal(activeImport(renderer, 'RvmViewerUiShell'), './RvmViewerUiShell.js?
 assert.equal(activeImport(renderer, 'RvmBottomDiagnosticsDrawerBridge'), './RvmBottomDiagnosticsDrawerBridge.js?v=20260626-rvm-diagnostics-shell-slot-1', 'renderer must actively import shell-slot diagnostics drawer cache key');
 assert.equal(activeImport(renderer, 'RvmDeferredBridgeLoader'), './RvmDeferredBridgeLoader.js?v=20260626-rvm-deferred-report-export-shell-slot-1', 'renderer must actively import current deferred-loader cache key');
 assert.equal(activeImport(renderer, 'RvmToolbarCompactBridge'), './RvmToolbarCompactBridge.js?v=20260626-rvm-toolbar-compact-policy-3', 'renderer must actively import internal-toolbar compact policy v3');
-assert.equal(activeImport(renderer, 'RvmViewportFirstSpacingBridge'), './RvmViewportFirstSpacingBridge.js?v=20260626-rvm-viewport-first-spacing-1', 'renderer must actively import viewport-first spacing bridge');
+assert.equal(activeImport(renderer, 'RvmViewportFirstSpacingBridge'), './RvmViewportFirstSpacingBridge.js?v=20260626-rvm-viewport-first-spacing-2', 'renderer must actively import ASCII-layout viewport spacing bridge');
 assert.equal(activeImport(renderer, 'RvmCanvasSelectionSinglePickGuardBridge'), './RvmCanvasSelectionSinglePickGuardBridge.js?v=20260626-rvm-canvas-single-pick-registry-1', 'renderer must actively import routed canvas single-pick bridge');
 assert.equal(activeImport(renderer, 'RvmViewerInteractionPatch'), './RvmViewerInteractionPatch.js?v=20260626-rvm-canvas-selection-registry-1', 'renderer must actively import routed canvas selection bridge');
+assert.ok(renderer.includes('Previous RVM viewport spacing cache key: RvmViewportFirstSpacingBridge.js?v=20260626-rvm-viewport-first-spacing-1'), 'renderer must preserve previous viewport spacing cache key evidence');
 assert.ok(renderer.includes('installRvmViewportFirstSpacingBridge();'), 'renderer must install viewport-first spacing bridge before UI shell');
 assert.ok(renderer.indexOf('installRvmToolbarCompactBridge();') < renderer.indexOf('installRvmViewportFirstSpacingBridge();'), 'viewport spacing must apply after compact toolbar policy');
 assert.ok(renderer.indexOf('installRvmViewportFirstSpacingBridge();') < renderer.indexOf('installRvmViewerUiShell();'), 'viewport spacing must apply before shell slot moves');
 assert.ok(renderer.includes("viewer3d-rvm-tab.js?v=20260626-rvm-statusbar-structured-summary-1"), 'renderer must dynamically import current RVM tab shell cache key');
 
-assert.ok(viewportSpacing.includes("const VERSION = '20260626-rvm-viewport-first-spacing-1'"), 'viewport spacing bridge must expose current version');
+assert.ok(viewportSpacing.includes("const VERSION = '20260626-rvm-viewport-first-spacing-2'"), 'viewport spacing bridge must expose current ASCII layout version');
+assert.ok(viewportSpacing.includes("const PREVIOUS_VERSION = '20260626-rvm-viewport-first-spacing-1'"), 'viewport spacing bridge must preserve previous version');
 assert.ok(viewportSpacing.includes("scopedRootSelector: '[data-rvm-viewer]'"), 'viewport spacing bridge must be scoped to RVM viewer root');
+assert.ok(viewportSpacing.includes('rootCause') && viewportSpacing.includes('justify-content:space-between'), 'viewport spacing bridge must document audited root cause');
+assert.ok(viewportSpacing.includes('toolbarPackedLeft: true'), 'viewport spacing bridge must certify packed-left toolbar ownership');
+assert.ok(viewportSpacing.includes('let style = document.getElementById(STYLE_ID)'), 'viewport spacing bridge must replace any stale v1 style node');
 assert.ok(viewportSpacing.includes('landingPageTouched: false') && viewportSpacing.includes('mainRibbonTouched: false'), 'viewport spacing diagnostics must state no landing/main ribbon ownership');
 for (const marker of ['.geo-top-ribbon', '.rvm-status-strip', '.rvm-left-panel', '.rvm-right-panel', '.viewer-statusbar', '.rvm-object-browser-quick-filters']) {
   assert.ok(viewportSpacing.includes(`[data-rvm-viewer] ${marker}`), `viewport spacing must scope ${marker} to RVM viewer root`);
+}
+assert.ok(viewportSpacing.includes('[data-rvm-viewer] .geo-top-ribbon{display:flex;justify-content:flex-start!important;'), 'RVM toolbar must override inherited generic space-between layout');
+for (const marker of ['.rvm-ribbon-load{order:1', '.rvm-ribbon-navigate-view{order:2', '.rvm-ribbon-review{order:3', '.rvm-toolbar-more{order:4', '.mode-chip{order:5']) {
+  assert.ok(viewportSpacing.includes(marker), `RVM toolbar ASCII order must include ${marker}`);
 }
 assert.ok(!viewportSpacing.includes('.app-shell') && !viewportSpacing.includes('.app-nav') && !viewportSpacing.includes('#tab-bar'), 'viewport spacing bridge must not style landing/app shell selectors');
 
@@ -181,4 +190,4 @@ assert.ok(!uiShell.includes('convertXmlToCii'), 'UI shell must not include XML->
 assert.ok(!uiShell.includes('xml-cii2019'), 'UI shell must not import XML CII worker logic');
 assert.ok(!renderer.includes('installRvmViewerUiShell(RvmViewer3D'), 'UI shell install must not patch RvmViewer3D prototype');
 
-console.log('Verified active RVM viewer runtime cache ownership, viewport-first spacing, Object Browser quick filters, structured statusbar, internal toolbar layout, shell slots, deferred bridge ownership, toolbar overflow, diagnostics/export ownership, and XML-CII isolation.');
+console.log('Verified active RVM viewer runtime cache ownership, ASCII-packed toolbar, viewport-first spacing, Object Browser quick filters, structured statusbar, internal toolbar layout, shell slots, deferred bridge ownership, toolbar overflow, diagnostics/export ownership, and XML-CII isolation.');
