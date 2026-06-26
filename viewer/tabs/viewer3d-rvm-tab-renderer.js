@@ -17,6 +17,7 @@ import { installRvmUiInteractionPanelPatch, installRvmUiPanelBridge } from './Rv
 import { installRvmPropertyPanelCollapseAuditBridge } from './RvmPropertyPanelCollapseAuditBridge.js?v=20260621-rvm-property-collapse-1';
 import { installRvmLabelPerformanceBridge } from './RvmLabelPerformanceBridge.js?v=20260622-rvm-label-perf-no-support-runtime-1';
 import { installRvmToolbarCompactBridge } from './RvmToolbarCompactBridge.js?v=20260626-rvm-toolbar-compact-policy-2';
+import { installRvmViewerUiShell } from './RvmViewerUiShell.js?v=20260626-rvm-ui-shell-slots-1';
 import { installRvmZoneLodLabelBridge } from './RvmZoneLodLabelBridge.js?v=20260621-rvm-preload-hierarchy-selector-1';
 import { installRvmDeepSourcePathRecoveryBridge } from './RvmDeepSourcePathRecoveryBridge.js?v=20260622-rvm-deep-source-path-recovery-1';
 import { installRvmZoneDensitySelectorBridge } from './RvmZoneDensitySelectorBridgeV5.js?v=20260622-rvm-zone-density-selector-5';
@@ -82,6 +83,7 @@ installToolbarActionCompatibility(RvmViewer3D);
 installRvmUiInteractionPanelPatch(RvmViewer3D);
 installRvmLabelPerformanceBridge(RvmViewer3D);
 installRvmToolbarCompactBridge();
+installRvmViewerUiShell();
 installSelectedGeometryEnrichmentPanel();
 installRvmZoneLodLabelBridge();
 installRvmDeepSourcePathRecoveryBridge(RvmViewer3D);

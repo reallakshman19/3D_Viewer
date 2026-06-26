@@ -17,6 +17,8 @@ const files = {
   deferredLoader: path.join(viewerRoot, 'tabs/RvmDeferredBridgeLoader.js'),
   toolbarCompact: path.join(viewerRoot, 'tabs/RvmToolbarCompactBridge.js'),
   toolbarOverflow: path.join(viewerRoot, 'tabs/RvmToolbarOverflowController.js'),
+  uiShell: path.join(viewerRoot, 'tabs/RvmViewerUiShell.js'),
+  uiShellContract: path.join(viewerRoot, 'tests/rvm-ui-shell-contract.test.js'),
   bottomDiagnostics: path.join(viewerRoot, 'tabs/RvmBottomDiagnosticsDrawerBridge.js'),
 };
 
@@ -111,6 +113,24 @@ function verifyToolbarCompactPolicy() {
   assert.ok(!overflow.includes('MutationObserver'), 'overflow controller must not use MutationObserver as the More Tools behavior fix');
 }
 
+function verifyUiShellContract() {
+  const renderer = read(files.renderer);
+  const shell = read(files.uiShell);
+  const shellTest = read(files.uiShellContract);
+  assert.ok(renderer.includes('RvmViewerUiShell.js?v=20260626-rvm-ui-shell-slots-1'), 'renderer must import RVM UI shell with current cache key');
+  assert.ok(renderer.includes('installRvmViewerUiShell()'), 'renderer must install RVM UI shell');
+  assert.ok(shell.includes('RVM_UI_SHELL_SLOTS'), 'UI shell must expose stable slot identifiers');
+  assert.ok(shell.includes('registerRvmToolPanel'), 'UI shell must provide a registration API for feature panels');
+  assert.ok(shell.includes('auditRvmViewerUiShell'), 'UI shell must expose auditable DOM contract checks');
+  assert.ok(shell.includes('scheduleShellBootstrap'), 'UI shell must support renderer-before-root bootstrap ordering');
+  assert.ok(shell.includes('data-rvm-panel-slot'), 'UI shell must stamp stable panel slot selectors');
+  assert.ok(shell.includes('data-rvm-right-panel-tab'), 'UI shell must own right-panel tab state');
+  assert.ok(shell.includes('rvmUiShellAudit'), 'UI shell must stamp root audit status');
+  assert.ok(shell.includes('#rvm-attributes-panel'), 'UI shell must preserve existing attributes panel');
+  assert.ok(shell.includes('#rvm-browser-parse-diagnostics'), 'UI shell must preserve existing diagnostics panel');
+  assert.ok(shellTest.includes('XML-CII isolation'), 'standalone UI shell contract test must document XML-CII isolation');
+}
+
 function verifyDockedDiagnosticsDrawer() {
   const renderer = read(files.renderer);
   const drawer = read(files.bottomDiagnostics);
@@ -176,9 +196,10 @@ verifyResizablePanels();
 verifySupportPolicyOptionA();
 verifyDeferredSupportPolicyCacheKeys();
 verifyToolbarCompactPolicy();
+verifyUiShellContract();
 verifyDockedDiagnosticsDrawer();
 verifyPostModelHealthDeferral();
 verifyPostModelAdvancedToolDeferral();
 verifySourcePreviewToolDeferral();
 
-console.log('Verified RVM viewer module identity, side-panel resize UI contract, Option A staged support policy, deferred stagedJSON cache keys, controlled toolbar overflow policy, docked diagnostics drawer, post-model Health deferral, post-model advanced tool deferral, and source-preview tool deferral.');
+console.log('Verified RVM viewer module identity, side-panel resize UI contract, Option A staged support policy, deferred stagedJSON cache keys, controlled toolbar overflow policy, UI shell slot contract, docked diagnostics drawer, post-model Health deferral, post-model advanced tool deferral, and source-preview tool deferral.');
