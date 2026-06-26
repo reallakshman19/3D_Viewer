@@ -1,5 +1,5 @@
 const CAESAR_UNSET = -1.0101;
-const DIRECT_SCHEMA = 'inputxml-direct-managed-stage/v1';
+const DIRECT_SCHEMA = 'inputxml-direct-managed-stage/v2-rich-topology';
 
 function text(value) { return String(value ?? '').trim(); }
 function normNode(value) {
@@ -20,6 +20,9 @@ function finiteOrNull(value) {
   if (isUnset(value)) return null;
   const n = Number(text(value).replace(/,/g, ''));
   return Number.isFinite(n) ? n : null;
+}
+function roundMm(value) {
+  return Number.isFinite(value) ? Number(value.toFixed(6)) : null;
 }
 function bendElementLengthInMm(radiusValue, angleDegValue) {
   const radius = finiteOrNull(radiusValue);
@@ -72,6 +75,22 @@ function childAttrs(body, tag) { return collectBlocks(body || '', tag).map((item
 function stem(name = '') { return text(name).replace(/\.[^.]+$/, '') || 'InputXML'; }
 function branchName(sourceName) { return `/INPUTXML/${stem(sourceName)}/BRANCH-001`; }
 function point(x = 0, y = 0, z = 0) { return { x: Number(x) || 0, y: Number(y) || 0, z: Number(z) || 0 }; }
+function midpoint(a, b) { return a && b ? point((a.x + b.x) / 2, (a.y + b.y) / 2, (a.z + b.z) / 2) : null; }
+function lengthBetween(a, b) {
+  if (!a || !b) return null;
+  const length = Math.hypot((b.x - a.x), (b.y - a.y), (b.z - a.z));
+  return Number.isFinite(length) ? roundMm(length) : null;
+}
+function vectorBetween(a, b) {
+  const length = lengthBetween(a, b);
+  if (!(length > 1e-9)) return { x: 0, y: 1, z: 0, lengthMm: 0 };
+  return {
+    x: Number(((b.x - a.x) / length).toFixed(9)),
+    y: Number(((b.y - a.y) / length).toFixed(9)),
+    z: Number(((b.z - a.z) / length).toFixed(9)),
+    lengthMm: length,
+  };
+}
 function formatMm(value, fallback = 100) {
   const n = finiteOrNull(value);
   const v = n && n > 0 ? n : fallback;
@@ -92,6 +111,22 @@ function viewerTypeFor(rawType) {
   if (/TEE/.test(textValue)) return 'TEE';
   if (/REDU/.test(textValue)) return 'REDU';
   return 'PIPE';
+}
+function canonicalTypeFor(viewerType, rawType) {
+  const raw = normalizeRawType(rawType);
+  const view = normalizeRawType(viewerType);
+  if (/BEND|ELBO/.test(raw) || view === 'BEND') return 'ELBOW';
+  if (/VALVE|VALV/.test(raw) || view === 'VALV') return 'VALVE';
+  if (/FLANGE|FLAN/.test(raw) || view === 'FLAN') return 'FLANGE';
+  if (/GASK/.test(raw)) return 'GASKET';
+  if (/TEE/.test(raw) || view === 'TEE') return 'TEE';
+  if (/OLET/.test(raw)) return 'OLET';
+  if (/REDU/.test(raw) || view === 'REDU') return 'REDUCER';
+  if (/RIGID|FLANGE_PAIR|FLANGE/.test(raw)) return view === 'FLAN' ? 'FLANGE' : 'RIGID';
+  return 'PIPE';
+}
+function sourceNodeRefs(fromNode, toNode, extra = []) {
+  return [fromNode, toNode, ...extra].map(text).filter(Boolean).filter((value, index, arr) => arr.indexOf(value) === index);
 }
 function resolveField(attrs, key, ctx) {
   const raw = attrs[key];
@@ -135,6 +170,16 @@ function attachResolved(attrs, key, resolved) {
   attrs[key] = resolved.value;
   attrs[`${key}_SOURCE`] = resolved.source;
 }
+function attachNumericEvidence(attrs) {
+  attrs.OUTSIDE_DIAMETER_MM = finiteOrNull(attrs.DIAMETER) ?? '';
+  attrs.DIAMETER_MM = attrs.OUTSIDE_DIAMETER_MM;
+  attrs.WALL_THICKNESS_MM = finiteOrNull(attrs.WALL_THICK) ?? '';
+  attrs.INSULATION_THICKNESS_MM = finiteOrNull(attrs.INSUL_THICK) ?? '';
+  attrs.CORROSION_ALLOWANCE_MM = finiteOrNull(attrs.CORR_ALLOW) ?? '';
+  attrs.PIPE_DENSITY_SOURCE_VALUE = finiteOrNull(attrs.PIPE_DENSITY) ?? '';
+  attrs.INSULATION_DENSITY_SOURCE_VALUE = finiteOrNull(attrs.INSUL_DENSITY) ?? '';
+  attrs.FLUID_DENSITY_SOURCE_VALUE = finiteOrNull(attrs.FLUID_DENSITY) ?? '';
+}
 
 export function buildInputXmlDirectManagedStageJson(xmlText, options = {}) {
   const xml = String(xmlText || '');
@@ -168,36 +213,65 @@ export function buildInputXmlDirectManagedStageJson(xmlText, options = {}) {
     const from = nodes.get(fromNode) || ensureNode(fromNode, cursor) || cursor;
     const to = ensureNode(toNode, point(from.x + dx, from.y + dy, from.z + dz));
     cursor = point(to.x, to.y, to.z);
+    const axis = vectorBetween(from, to);
+    const chordLengthMm = axis.lengthMm;
+    const componentMidpoint = midpoint(from, to);
     const rigid = firstChildAttrs(block.body, 'RIGID');
     const bend = firstChildAttrs(block.body, 'BEND');
     const sifs = childAttrs(block.body, 'SIF');
     const rawType = rigid?.TYPE || (bend ? 'BEND' : 'PIPE');
     const cleanType = normalizeRawType(rawType);
     const type = viewerTypeFor(rawType);
+    const canonicalType = canonicalTypeFor(type, rawType);
     const id = `PE_${String(index + 1).padStart(3, '0')}_${cleanType}_${fromNode}_TO_${toNode}`;
     const attrs = {
       TYPE: type,
       RAW_TYPE: text(rawType || type),
+      CANONICAL_TYPE: canonicalType,
       NAME: id,
       REF: id,
       OWNER: owner,
       SOURCE_FORMAT: 'INPUTXML_DIRECT_MANAGED_STAGE',
+      SOURCE_KIND: 'CONVENTIONAL_XML',
+      SOURCE_AUTHORITY: 'conventional-xml-topology-inferred',
       SOURCE_CONVERTER: 'INPUTXML->STAGEDJSON',
       SOURCE_ELEMENT_ID: id,
       SOURCE_XML_INDEX: index + 1,
       SOURCE_XML_NAME: text(a.NAME || ''),
+      SOURCE_NODE_NUMBERS: sourceNodeRefs(fromNode, toNode),
       FROM_NODE: fromNode,
       TO_NODE: toNode,
+      START_NODE: fromNode,
+      END_NODE: toNode,
+      NODE_ROLE: 'route-segment',
+      COMPONENT_ROLE: bend ? 'bend-component' : (rigid ? 'inline-rigid-component' : 'pipe-run-segment'),
+      COMPONENT_CLASS: canonicalType,
+      TOPOLOGY_METHOD: 'inputxml-cumulative-delta-route-segment',
+      TOPOLOGY_CONFIDENCE: 'SOURCE_NODE_DELTA_INFERRED',
       APOS: point(from.x, from.y, from.z),
       LPOS: point(to.x, to.y, to.z),
+      POS: componentMidpoint,
+      CENTER: componentMidpoint,
       DELTA_X: dx,
       DELTA_Y: dy,
       DELTA_Z: dz,
+      ROUTE_LENGTH_MM: chordLengthMm,
+      LENGTH_MM: chordLengthMm,
+      ELEMENT_LENGTH_MM: chordLengthMm,
+      ElementLengthMm: chordLengthMm,
+      AXIS_VECTOR: { x: axis.x, y: axis.y, z: axis.z },
+      ROUTE_AXIS_VECTOR: { x: axis.x, y: axis.y, z: axis.z },
+      AXIS_X: axis.x,
+      AXIS_Y: axis.y,
+      AXIS_Z: axis.z,
+      AXIS_LENGTH_MM: chordLengthMm,
+      ROUTE_AXIS: axisText(axis),
       DTXR: cleanType,
     };
     for (const key of ['DIAMETER', 'WALL_THICK', 'INSUL_THICK', 'CORR_ALLOW', 'TEMP_EXP_C1', 'TEMP_EXP_C2', 'TEMP_EXP_C3', 'PRESSURE1', 'PRESSURE2', 'PRESSURE3', 'HYDRO_PRESSURE', 'MODULUS', 'HOT_MOD1', 'HOT_MOD2', 'POISSONS', 'PIPE_DENSITY', 'INSUL_DENSITY', 'FLUID_DENSITY', 'MATERIAL_NUM', 'MATERIAL_NAME']) {
       attachResolved(attrs, key, resolveField(a, key, ctx));
     }
+    attachNumericEvidence(attrs);
     attrs.BORE = formatMm(attrs.DIAMETER, 100);
     attrs.ABORE = attrs.BORE;
     attrs.LBORE = attrs.BORE;
@@ -205,11 +279,15 @@ export function buildInputXmlDirectManagedStageJson(xmlText, options = {}) {
     if (rigid) {
       attrs.RIGID_TYPE = text(rigid.TYPE || 'Rigid');
       attrs.RIGID_WEIGHT = isUnset(rigid.WEIGHT) ? '' : rigid.WEIGHT;
+      attrs.RIGID_WEIGHT_KG = finiteOrNull(rigid.WEIGHT) ?? '';
       attrs.SOURCE_RIGID_ATTRS = rigid;
+      attrs.TOPOLOGY_METHOD = 'inputxml-rigid-inline-component-from-pipingelement';
     }
     if (bend) {
       attrs.BEND_RADIUS = isUnset(bend.RADIUS) ? '' : bend.RADIUS;
+      attrs.BEND_RADIUS_MM = finiteOrNull(bend.RADIUS) ?? '';
       attrs.BEND_ANGLE = isUnset(bend.ANGLE1) ? '' : bend.ANGLE1;
+      attrs.BEND_ANGLE_DEG = finiteOrNull(bend.ANGLE1) ?? '';
       attrs.BEND_NODE1 = isUnset(bend.NODE1) ? '' : normNode(bend.NODE1);
       attrs.BEND_ANGLE2 = isUnset(bend.ANGLE2) ? '' : bend.ANGLE2;
       attrs.BEND_NODE2 = isUnset(bend.NODE2) ? '' : normNode(bend.NODE2);
@@ -218,22 +296,32 @@ export function buildInputXmlDirectManagedStageJson(xmlText, options = {}) {
       attrs.ELEMENT_LENGTH_IN_MM = bendLengthMm ?? '';
       attrs.ElementLengthInMm = bendLengthMm ?? '';
       attrs.ELBOW_ARC_LENGTH_MM = bendLengthMm ?? '';
+      attrs.BEND_CHORD_LENGTH_MM = chordLengthMm;
+      attrs.CPOS = componentMidpoint;
+      attrs.BEND_CENTER_ESTIMATE = componentMidpoint;
+      attrs.BEND_CENTER_ESTIMATE_SOURCE = 'inputxml-chord-midpoint-not-arc-center';
       attrs.BEND_ELEMENT_LENGTH_SOURCE = bendLengthMm == null ? 'missing-radius-or-angle' : 'bend-radius-times-angle-radians';
       attrs.SOURCE_BEND_ATTRS = bend;
+      attrs.SOURCE_NODE_NUMBERS = sourceNodeRefs(fromNode, toNode, [attrs.BEND_NODE1, attrs.BEND_NODE2]);
+      attrs.TOPOLOGY_METHOD = 'inputxml-bend-from-pipingelement-bend-child';
+      attrs.COMPONENT_ROLE = 'bend-component';
     } else {
       attrs.BEND_RADIUS = '';
+      attrs.BEND_RADIUS_MM = '';
       attrs.BEND_ANGLE = '';
+      attrs.BEND_ANGLE_DEG = '';
       attrs.BEND_ELEMENT_LENGTH_MM = '';
       attrs.ELEMENT_LENGTH_IN_MM = '';
       attrs.ElementLengthInMm = '';
       attrs.ELBOW_ARC_LENGTH_MM = '';
+      attrs.BEND_CHORD_LENGTH_MM = '';
       attrs.BEND_ELEMENT_LENGTH_SOURCE = 'not-bend';
     }
     if (sifs.length) {
       attrs.SIF_COUNT = sifs.length;
       attrs.SIF_ENTRIES = sifs;
     }
-    elements.push({ id, fromNode, toNode, dx, dy, dz, attrs, from, to, rawType, type });
+    elements.push({ id, fromNode, toNode, dx, dy, dz, attrs, from, to, rawType, type, canonicalType, routeLengthMm: chordLengthMm });
   }
 
   const elementAtNode = (nodeId) => elements.find((el) => el.fromNode === nodeId || el.toNode === nodeId) || elements[0];
@@ -254,13 +342,14 @@ export function buildInputXmlDirectManagedStageJson(xmlText, options = {}) {
       name: `SUPPORT ${tag}`,
       type: 'ATTA',
       attributes: {
-        TYPE: 'ATTA', RAW_TYPE: 'ATTA', NAME: tag, REF: `INPUTXML_RESTRAINT_${r._rowIndex}`,
-        OWNER: owner, SOURCE_FORMAT: 'INPUTXML_DIRECT_MANAGED_STAGE', SOURCE_CONVERTER: 'INPUTXML->STAGEDJSON',
+        TYPE: 'ATTA', RAW_TYPE: 'ATTA', CANONICAL_TYPE: 'SUPPORT', NAME: tag, REF: `INPUTXML_RESTRAINT_${r._rowIndex}`,
+        OWNER: owner, SOURCE_FORMAT: 'INPUTXML_DIRECT_MANAGED_STAGE', SOURCE_KIND: 'CONVENTIONAL_XML', SOURCE_AUTHORITY: 'conventional-xml-topology-inferred', SOURCE_CONVERTER: 'INPUTXML->STAGEDJSON',
         SOURCE_RESTRAINT_ID: `INPUTXML_RESTRAINT_${r._rowIndex}`, SOURCE_RESTRAINT_ROW_INDEX: r._rowIndex, SOURCE_RESTRAINT_NUM: text(r.NUM || ''), SOURCE_RESTRAINT_TYPE: text(r.TYPE || ''), SOURCE_TAG: sourceTag,
+        SOURCE_NODE_NUMBERS: sourceNodeRefs(nodeId, ''), NODE_ROLE: 'support-restraint', COMPONENT_ROLE: 'support-association', TOPOLOGY_METHOD: 'inputxml-restraint-associated-to-nearest-route-node',
         SUPPORT_TAG: tag, SUPPORT_KIND: kindInfo.kind, SUPPORT_KIND_SOURCE: kindInfo.source, SUPPORT_MAPPER_KIND: kindInfo.kind, SUPPORT_TYPE: kindInfo.kind, CMPSUPTYPE: kindInfo.kind, MDSSUPPTYPE: kindInfo.kind,
         NODE: nodeId, POS: point(node.x, node.y, node.z), SUPPORTCOORD: point(node.x, node.y, node.z), SUPPORT_COORD: point(node.x, node.y, node.z), LBOP: directionalPoint(node),
-        PIPE_AXIS: axisText(pipeAxis), ROUTE_AXIS: axisText(pipeAxis), SUPPORT_DIRECTION: supportDirection(kindInfo.kind, pipeAxis),
-        ATTACHED_PIPE_BORE: formatMm(host?.attrs?.DIAMETER, 100), ATTACHED_PIPE_OD: formatMm(host?.attrs?.DIAMETER, 100),
+        PIPE_AXIS: axisText(pipeAxis), ROUTE_AXIS: axisText(pipeAxis), SUPPORT_DIRECTION: supportDirection(kindInfo.kind, pipeAxis), HOST_COMPONENT_ID: host?.id || '', HOST_FROM_NODE: host?.fromNode || '', HOST_TO_NODE: host?.toNode || '',
+        ATTACHED_PIPE_BORE: formatMm(host?.attrs?.DIAMETER, 100), ATTACHED_PIPE_OD: formatMm(host?.attrs?.DIAMETER, 100), ATTACHED_PIPE_OD_MM: finiteOrNull(host?.attrs?.DIAMETER) ?? '',
         SUPPORT_GAP_MM: finiteOrNull(r.GAP) ?? '', GAP: finiteOrNull(r.GAP) ?? '', X_COSINE: num(r.XCOSINE, 0), Y_COSINE: num(r.YCOSINE, 0), Z_COSINE: num(r.ZCOSINE, 0), SOURCE_RESTRAINT_ATTRS: r,
       },
     };
@@ -281,20 +370,24 @@ export function buildInputXmlDirectManagedStageJson(xmlText, options = {}) {
     stats: {
       components: elements.length, componentRows: piping.length, restraintRows: allRestraints.length, validRestraints: validRestraints.length, blankRestraintRows: blankRestraints.length, emittedSupports: supports.length,
       bends: elements.filter((e) => e.type === 'BEND').length, bendElementLengthRows: elements.filter((e) => e.attrs.BEND_ELEMENT_LENGTH_MM !== '').length, rigids: elements.filter((e) => e.attrs.RIGID_TYPE).length, sifElements: elements.filter((e) => e.attrs.SIF_COUNT).length,
+      routeLengthRows: elements.filter((e) => Number.isFinite(e.routeLengthMm)).length,
+      richGeometryComponents: elements.filter((e) => e.attrs.APOS && e.attrs.LPOS && Number.isFinite(e.attrs.ROUTE_LENGTH_MM)).length,
+      uxmlReadyComponents: children.filter((child) => child?.attributes?.APOS || child?.attributes?.LPOS || child?.attributes?.POS).length,
       branches: 1, children: children.length,
     },
     audit: {
       sourceCounts: { NUMELT: modelAttrs.NUMELT || '', NUMBEND: modelAttrs.NUMBEND || '', NUMRIGID: modelAttrs.NUMRIGID || '', NUMREST: modelAttrs.NUMREST || '', NUMISECT: modelAttrs.NUMISECT || '' },
-      conversionPolicy: 'direct InputXML parse; no GLB scene side effects; invalid restraint placeholder rows are counted but not emitted',
-      retainedFields: ['rigid weight/type', 'bend angle/radius/nodes/element length', 'SIF entries', 'hydro/pressure/temp/material/density fields', 'source restraint tag and cosines'],
+      conversionPolicy: 'direct InputXML parse with topology-rich staged evidence; no GLB scene side effects; invalid restraint placeholder rows are counted but not emitted',
+      retainedFields: ['APOS/LPOS/POS route geometry', 'route length and axis vector', 'OD/wall/insulation numeric evidence', 'rigid weight/type', 'bend angle/radius/nodes/element length', 'SIF entries', 'hydro/pressure/temp/material/density fields', 'source restraint tag and cosines'],
+      topologyPolicy: 'InputXML PIPINGELEMENT rows are converted to route components with source node trace; supports remain support associations and do not become route continuity components.',
     },
     hierarchy: [{
       name: owner,
       type: 'BRANCH',
       attributes: {
-        TYPE: 'BRAN', NAME: owner, OWNER: '/INPUTXML', SOURCE_FORMAT: 'INPUTXML_DIRECT_MANAGED_STAGE', SOURCE_CONVERTER: 'INPUTXML->STAGEDJSON', SOURCE_FILE: sourceName,
+        TYPE: 'BRAN', NAME: owner, OWNER: '/INPUTXML', SOURCE_FORMAT: 'INPUTXML_DIRECT_MANAGED_STAGE', SOURCE_KIND: 'CONVENTIONAL_XML', SOURCE_AUTHORITY: 'conventional-xml-topology-inferred', SOURCE_CONVERTER: 'INPUTXML->STAGEDJSON', SOURCE_FILE: sourceName,
         HPOS: first ? point(first.from.x, first.from.y, first.from.z) : null, TPOS: last ? point(last.to.x, last.to.y, last.to.z) : null,
-        HBORE: first ? formatMm(first.attrs.DIAMETER, 100) : '', TBORE: last ? formatMm(last.attrs.DIAMETER, 100) : '',
+        HBORE: first ? formatMm(first.attrs.DIAMETER, 100) : '', TBORE: last ? formatMm(last.attrs.DIAMETER, 100) : '', BORE: first ? formatMm(first.attrs.DIAMETER, 100) : '',
       },
       children,
     }],

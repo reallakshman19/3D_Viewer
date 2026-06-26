@@ -1,4 +1,5 @@
 import { buildInputXmlDirectManagedStageJson } from './InputXmlDirectManagedStageBuilder.js';
+import { buildInputXmlManagedStageUxmlText } from './InputXmlDirectManagedStageUxmlSidecar.js';
 
 function text(value) { return String(value ?? '').trim(); }
 async function readFileText(file) {
@@ -27,10 +28,22 @@ export async function run(ctx = {}) {
     const staged = buildInputXmlDirectManagedStageJson(xmlText, { sourceName, ...(ctx.options || {}) });
     const outName = `${baseName(sourceName)}_managed_stage.json`;
     const outputs = [{ name: outName, text: JSON.stringify(staged, null, 2), mime: 'application/json' }];
+    if (ctx.options?.includeUxmlSidecar !== false) {
+      outputs.push({
+        name: `${baseName(sourceName)}_managed_stage.uxml.json`,
+        text: buildInputXmlManagedStageUxmlText(staged, {
+          stem: baseName(sourceName),
+          inputName: sourceName,
+          projectId: 'INPUTXML_DIRECT_MANAGED_STAGE',
+          scopeStats: staged.stats,
+        }),
+        mime: 'application/json',
+      });
+    }
     if (ctx.options?.includeAuditJson !== false) {
       outputs.push({ name: `${baseName(sourceName)}_managed_stage.audit.json`, text: JSON.stringify({ schema: 'inputxml-direct-managed-stage-audit/v1', source: sourceName, stats: staged.stats, audit: staged.audit }, null, 2), mime: 'application/json' });
     }
-    stdout.push(`Direct stagedJSON: components=${staged.stats.components}, restraintRows=${staged.stats.restraintRows}, validRestraints=${staged.stats.validRestraints}, emittedSupports=${staged.stats.emittedSupports}, blankRestraintRows=${staged.stats.blankRestraintRows}, bends=${staged.stats.bends}, rigids=${staged.stats.rigids}, sifElements=${staged.stats.sifElements}`);
+    stdout.push(`Direct stagedJSON: components=${staged.stats.components}, restraintRows=${staged.stats.restraintRows}, validRestraints=${staged.stats.validRestraints}, emittedSupports=${staged.stats.emittedSupports}, blankRestraintRows=${staged.stats.blankRestraintRows}, bends=${staged.stats.bends}, rigids=${staged.stats.rigids}, sifElements=${staged.stats.sifElements}, richGeometryComponents=${staged.stats.richGeometryComponents}, uxmlReadyComponents=${staged.stats.uxmlReadyComponents}`);
     ctx.setStatus?.(`Completed: ${outName}`, 'ok');
     return { ok: true, outputs, logs: { stdout, stderr }, diagnostics: [{ severity: 'INFO', message: stdout[0] }] };
   } catch (error) {
