@@ -14,7 +14,7 @@ assert.doesNotMatch(renderer, /RvmNonPrimitiveNodeMarkerBridge\.js\?v=/, 'render
 assert.doesNotMatch(renderer, /installRvmNonPrimitiveNodeMarkerBridge\(\)/, 'renderer must not eagerly install node marker bridge');
 assert.match(bridge, /rvm-non-primitive-node-marker-bridge\/v3/, 'bridge exposes details-aware schema');
 assert.match(bridge, /attachNodeMarkerGlyphs|ensureNodeMarkerHover|ensureNodeMarkerDetailsPanel/, 'bridge attaches glyphs, hover, and details through deferred runtime');
-assert.match(bridge, /non-primitive-node-marker-api\/v2|evaluateNodeMarkerStaleness/, 'bridge uses stale-aware node marker API');
+assert.match(bridge, /non-primitive-node-marker-api\/v3|evaluateNodeMarkerStaleness/, 'bridge uses override-aware stale-aware node marker API');
 assert.doesNotMatch(bridge, /RvmSelectionAdapter|objectSearch|selectObject|pickObject/, 'bridge does not use primitive RVM selection or search');
 
 console.log('nonprimitive-node-marker-deferred-bridge passed');
