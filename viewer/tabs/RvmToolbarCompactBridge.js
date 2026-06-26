@@ -1,10 +1,11 @@
 import { installRvmToolbarOverflow, syncRvmToolbarOverflow } from './RvmToolbarOverflowController.js?v=20260626-rvm-toolbar-overflow-controller-1';
 
-const VERSION = '20260626-rvm-toolbar-compact-policy-2';
-const INSTALL_FLAG = Symbol.for('pcf-glb-rvm-toolbar-compact-policy-2');
+const VERSION = '20260626-rvm-toolbar-compact-policy-3';
+const PREVIOUS_VERSION = '20260626-rvm-toolbar-compact-policy-2';
+const INSTALL_FLAG = Symbol.for('pcf-glb-rvm-toolbar-compact-policy-3');
 const GLOBAL_KEY = '__PCF_GLB_RVM_TOOLBAR_POLICY__';
 const ROOT_SELECTOR = '[data-rvm-viewer]';
-const CORE_LABELS = new Set(['Navigate', 'View']);
+const CORE_LABELS = new Set(['Navigate', 'View', 'Navigate / View', 'Review']);
 let scheduledReconcile = 0;
 let scheduledReason = '';
 
@@ -14,6 +15,7 @@ export function installRvmToolbarCompactBridge() {
   injectStyles();
   const state = {
     version: VERSION,
+    previousVersion: PREVIOUS_VERSION,
     runs: 0,
     movedCount: 0,
     duplicateCount: 0,
@@ -99,6 +101,7 @@ function reconcileToolbar(reason = 'manual') {
   state.lastRunAt = new Date().toISOString();
   const diagnostics = {
     version: VERSION,
+    previousVersion: PREVIOUS_VERSION,
     reason,
     runs: state.runs,
     topLevelGroups: [...ribbon.querySelectorAll(':scope > .rvm-ribbon-section')].filter((el) => el !== more && !el.hidden).map(sectionLabel),
@@ -111,6 +114,7 @@ function reconcileToolbar(reason = 'manual') {
   };
   state.diagnostics = diagnostics;
   root.dataset.rvmToolbarPolicyVersion = VERSION;
+  root.dataset.rvmToolbarPolicyPreviousVersion = PREVIOUS_VERSION;
   root.dataset.rvmToolbarAdvancedGroups = String(diagnostics.advancedGroups.length);
   root.dataset.rvmToolbarTopLevelGroups = String(diagnostics.topLevelGroups.length);
   return diagnostics;
@@ -123,6 +127,7 @@ function ensureMoreTools(ribbon) {
     more = document.createElement('div');
     more.className = 'rvm-toolbar-more rvm-ribbon-section';
     more.dataset.rvmToolbarMoreRoot = VERSION;
+    more.dataset.rvmToolbarMorePrevious = PREVIOUS_VERSION;
     more.innerHTML = '<button type="button" class="rvm-tool-btn rvm-toolbar-more-summary" data-rvm-toolbar-more aria-expanded="false"><span aria-hidden="true">⋯</span><span>More tools</span></button><div class="rvm-toolbar-more-panel" data-rvm-tools-menu data-rvm-toolbar-more-panel hidden></div>';
   }
   const panel = more.querySelector('[data-rvm-tools-menu]');
@@ -137,8 +142,7 @@ function ensureMoreTools(ribbon) {
     duplicate.remove();
   }
   if (!more.parentElement) {
-    const search = ribbon.querySelector('.rvm-ribbon-search');
-    ribbon.insertBefore(more, search || ribbon.querySelector('.mode-chip') || null);
+    ribbon.insertBefore(more, ribbon.querySelector('.mode-chip') || null);
   }
   return more;
 }

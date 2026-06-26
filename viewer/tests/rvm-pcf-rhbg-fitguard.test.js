@@ -55,7 +55,7 @@ check(!rendererSource.includes('RvmReportExportBridge.js?v='), 'renderer defers 
 check(deferredLoaderSource.includes("id: 'object-search'") && deferredLoaderSource.includes('RvmObjectSearchBridge.js?v=20260621-rvm-object-search-1'), 'postModel deferred loader owns object search bridge');
 check(deferredLoaderSource.includes("id: 'visibility-snapshots'") && deferredLoaderSource.includes('RvmVisibilitySnapshotsBridge.js?v=20260621-rvm-visibility-snapshots-1'), 'postModel deferred loader owns visibility snapshots bridge');
 check(deferredLoaderSource.includes("id: 'selection-sets'") && deferredLoaderSource.includes('RvmSelectionSetsBridge.js?v=20260621-rvm-selection-sets-1'), 'postModel deferred loader owns selection sets bridge');
-check(deferredLoaderSource.includes("id: 'report-export'") && deferredLoaderSource.includes('RvmReportExportBridge.js?v=20260621-rvm-report-export-1'), 'postModel deferred loader owns report export bridge');
+check(deferredLoaderSource.includes("id: 'report-export'") && deferredLoaderSource.includes('RvmReportExportBridge.js?v=20260626-rvm-report-export-shell-slot-1'), 'postModel deferred loader owns report export bridge');
 
 for (const bridgeName of [
   'RvmNonPrimitiveSupportOverlayBridge.js?v=',
@@ -73,10 +73,18 @@ check(deferredLoaderSource.includes('RvmNonPrimitiveSupportOverlayHardDisableBri
 check(deferredLoaderSource.includes('RvmNonPrimitiveSupportOverlayDetailsPanelBridge.js?v=20260626-source-preview-support-events-1'), 'sourcePreview group owns event-routed support details bridge');
 check(deferredLoaderSource.includes('RvmNonPrimitiveSupportOverlayHoverBridge.js?v=20260626-source-preview-hover-events-1'), 'sourcePreview group owns event-routed support hover bridge');
 check(deferredLoaderSource.includes('RvmNonPrimitiveAutoBendBridge.js?v=20260623-nonprimitive-auto-bend-preview-2'), 'sourcePreview group owns auto-bend bridge');
-check(deferredLoaderSource.includes('RvmNonPrimitiveSourceToolsUiBridge.js?v=20260624-source-tools-grouped-1'), 'sourcePreview group owns source tools UI bridge');
+check(deferredLoaderSource.includes('RvmNonPrimitiveSourceToolsUiBridge.js?v=20260626-source-tools-shell-slot-1'), 'sourcePreview group owns source tools UI bridge');
 check(deferredLoaderSource.includes('ensureSourcePreview') && deferredLoaderSource.includes('SOURCE_PREVIEW_KIND_RE'), 'deferred loader gates source-preview bridge loading by source kind');
 check(deferredLoaderSource.includes("mode === 'source-preview'") && deferredLoaderSource.includes('refreshSourcePreviewRuntime'), 'deferred loader refreshes source-preview runtime only for source-preview mode');
-check(rendererSource.includes('RvmDeferredBridgeLoader.js?v=20260626-rvm-deferred-source-preview-hover-events-1'), 'renderer imports current deferred source-preview loader cache key');
+check(rendererSource.includes('RvmDeferredBridgeLoader.js?v=20260626-rvm-deferred-report-export-shell-slot-1'), 'renderer imports current deferred loader cache key');
+
+check(rendererSource.includes('RvmToolbarCompactBridge.js?v=20260626-rvm-toolbar-compact-policy-3'), 'renderer imports internal-toolbar compact policy v3');
+check(rendererSource.includes('viewer3d-rvm-tab.js?v=20260626-rvm-internal-toolbar-object-browser-1'), 'renderer imports current RVM tab shell cache key');
+check(tabSource.includes('data-rvm-internal-toolbar="object-browser-1"'), 'RVM tab owns internal toolbar only inside its domain');
+check(tabSource.includes('data-rvm-object-browser="true"') && tabSource.includes('data-rvm-object-browser-search="true"'), 'RVM tab moves hierarchy search into Object Browser');
+check(!tabSource.includes('class="rvm-ribbon-search"'), 'RVM tab no longer hosts search in top toolbar');
+check(tabSource.includes("label: 'Navigate / View'") && tabSource.includes("label: 'Review'"), 'RVM tab uses compact internal toolbar groups');
+check(!tabSource.includes('PCF GLB VIEWER'), 'RVM tab does not redefine landing or main ribbon chrome');
 
 check(rendererSource.includes('BrowserRvmNativeFacetGhostPanelPatch.js?v=20260622-rvm-facet-ghost-panels-1'), 'renderer loads native facet ghost panel patch');
 check(rendererSource.includes('RvmJsonPcfTriggerBridge.js?v=20260621-rvm-pcf-visible-scope-1'), 'renderer keeps visible-scope PCF bridge');
