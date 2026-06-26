@@ -80,6 +80,7 @@ const result = buildNodeMarkersFromSource(source, { sourceKind: 'json', sourceFi
 assert.equal(result.schema, 'non-primitive-node-marker-build/v1');
 assert.equal(result.markers.length, 2, 'pipe-to-flange and pipe-to-support markers are resolved');
 assert.equal(result.diagnostics.sourceSubKind, 'staged-json-export', 'staged JSON is detected by source schema/content');
+assert.equal(result.diagnostics.overrideCount, 0, 'default build has no marker overrides');
 
 const flangeMarker = result.markers.find((marker) => marker.markerKind === 'PIPE_TO_FLANGE');
 assert.ok(flangeMarker, 'pipe-to-flange marker exists');
@@ -130,7 +131,8 @@ const apiTarget = {};
 const apiA = installNodeMarkerApi(apiTarget);
 const apiB = installNodeMarkerApi(apiTarget);
 assert.equal(apiA, apiB, 'installNodeMarkerApi is idempotent');
-assert.equal(apiA.schema, 'non-primitive-node-marker-api/v2');
+assert.equal(apiA.schema, 'non-primitive-node-marker-api/v3');
+assert.equal(typeof apiA.applyNodeMarkerOverrides, 'function');
 assert.equal(getDiagnostics().markerCount, 2);
 assert.equal(getLastBuild().tables.branchRows.length, 2);
 
