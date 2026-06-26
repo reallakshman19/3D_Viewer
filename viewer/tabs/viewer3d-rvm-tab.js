@@ -16,10 +16,13 @@ import {
 installRvmProgressiveModelRootPatch(RvmViewer3D);
 installSelectedGeometryEnrichmentPanel();
 
-const RVM_TAB_JS_VERSION = '20260626-rvm-internal-toolbar-object-browser-1';
+const RVM_TAB_JS_VERSION = '20260626-rvm-object-browser-quick-filters-1';
+const PREVIOUS_RVM_TAB_JS_VERSION = '20260626-rvm-internal-toolbar-object-browser-1';
 const JSON_TREE_RENDER_LIMIT = 2600;
 const RVM_TREE_RENDER_LIMIT = 320;
 const STATUS_TRAVERSE_LIMIT = 4000;
+const OBJECT_BROWSER_LOD_STORAGE_KEY = 'rvm_zone_lod_detail_v1';
+const OBJECT_BROWSER_VISIBILITY_SCAN_LIMIT = 80000;
 
 const ACTION_LABELS = {
   NAV_SELECT: 'Select',
@@ -154,7 +157,7 @@ function renderShell(container) {
     const modeChip = container.querySelector('#rvm-mode-chip');
     if (modeChip) modeChip.textContent = 'Select';
   });
-  container.innerHTML = `<div class="rvm-tab-root geo-theme-navisdark" data-rvm-viewer data-rvm-tab-version="${escapeHtml(RVM_TAB_JS_VERSION)}"><div class="rvm-capability-banner" id="rvm-capability-banner" data-mode="worker-first">RVM / REV / ATT / JSON / UXML viewer ready — direct RVM worker path</div><div class="geo-top-ribbon" data-rvm-internal-toolbar="object-browser-1"><div class="rvm-ribbon-section rvm-ribbon-load" data-rvm-toolbar-always-top="true"><label class="rvm-btn rvm-btn-file" title="Load RVM / REV / ATT / JSON / UXML"><span>Load</span><input id="rvm-file-input" type="file" accept=".json,.jscon,.uxml,.uxml.json,.rvm,.rev,.att" multiple data-browser-rvm-fallback="true" data-browser-rvm-att-sidecar="true" data-rvm-direct-worker-load="true" style="display:none" /></label></div>${TOOL_GROUPS.map(renderToolGroup).join('')}<span class="mode-chip" id="rvm-mode-chip">Orbit</span></div><div id="rvm-status-strip" class="rvm-status-strip" aria-live="polite"><span class="rvm-status-chip" data-rvm-status-chip="objects">Objects: 0</span><span class="rvm-status-chip" data-rvm-status-chip="visible">Visible: 0</span><span class="rvm-status-chip" data-rvm-status-chip="selected">Selected: 0</span><span class="rvm-status-chip" data-rvm-status-chip="kind">Kinds: -</span></div><div class="rvm-body"><aside class="rvm-left-panel" data-rvm-object-browser="true"><div class="rvm-panel-header">Object Browser</div><div class="rvm-panel-filter-row rvm-object-browser-search" data-rvm-object-browser-search="true"><input id="rvm-search-input" class="rvm-panel-filter" placeholder="Search hierarchy / object…"></div><div class="rvm-panel-filter-row rvm-object-browser-filter" data-rvm-object-browser-filter="true"><input id="rvm-tree-filter" class="rvm-panel-filter" placeholder="Filter visible tree…"></div><ul id="rvm-tree" class="rvm-tree"><li class="rvm-empty-state">Load RVM / REV / ATT / JSON / UXML to view hierarchy.</li></ul></aside><section class="rvm-viewport"><div id="rvm-canvas" class="rvm-canvas"></div><div class="rvm-placeholder" id="rvm-placeholder">Load RVM / REV / ATT / JSON / UXML to begin.</div></section><aside class="rvm-right-panel"><div class="rvm-panel-header">Properties</div><div id="rvm-attributes-panel" class="rvm-attributes-panel"><div class="rvm-empty-state">No object selected.</div></div><div class="rvm-panel-header" data-rvm-browser-diagnostics-header="true">Browser RVM Performance</div><div id="rvm-browser-parse-diagnostics" class="rvm-tag-list rvm-browser-parse-diagnostics" aria-live="polite" data-browser-rvm-diagnostics-panel="true"><div class="rvm-empty-state">No browser RVM load yet.</div></div></aside></div><div class="viewer-statusbar"><span id="rvm-sb-msg">Ready</span><span>Selection <b id="rvm-sel-count">0</b></span></div></div>`;
+  container.innerHTML = `<div class="rvm-tab-root geo-theme-navisdark" data-rvm-viewer data-rvm-tab-version="${escapeHtml(RVM_TAB_JS_VERSION)}" data-rvm-tab-previous-version="${escapeHtml(PREVIOUS_RVM_TAB_JS_VERSION)}"><div class="rvm-capability-banner" id="rvm-capability-banner" data-mode="worker-first">RVM / REV / ATT / JSON / UXML viewer ready — direct RVM worker path</div><div class="geo-top-ribbon" data-rvm-internal-toolbar="object-browser-1"><div class="rvm-ribbon-section rvm-ribbon-load" data-rvm-toolbar-always-top="true"><label class="rvm-btn rvm-btn-file" title="Load RVM / REV / ATT / JSON / UXML"><span>Load</span><input id="rvm-file-input" type="file" accept=".json,.jscon,.uxml,.uxml.json,.rvm,.rev,.att" multiple data-browser-rvm-fallback="true" data-browser-rvm-att-sidecar="true" data-rvm-direct-worker-load="true" style="display:none" /></label></div>${TOOL_GROUPS.map(renderToolGroup).join('')}<span class="mode-chip" id="rvm-mode-chip">Orbit</span></div><div id="rvm-status-strip" class="rvm-status-strip" aria-live="polite"><span class="rvm-status-chip" data-rvm-status-chip="objects">Objects: 0</span><span class="rvm-status-chip" data-rvm-status-chip="visible">Visible: 0</span><span class="rvm-status-chip" data-rvm-status-chip="selected">Selected: 0</span><span class="rvm-status-chip" data-rvm-status-chip="kind">Kinds: -</span></div><div class="rvm-body"><aside class="rvm-left-panel" data-rvm-object-browser="true"><div class="rvm-panel-header">Object Browser</div><div class="rvm-panel-filter-row rvm-object-browser-search" data-rvm-object-browser-search="true"><input id="rvm-search-input" class="rvm-panel-filter" placeholder="Search hierarchy / object…"></div><div class="rvm-panel-filter-row rvm-object-browser-filter" data-rvm-object-browser-filter="true"><input id="rvm-tree-filter" class="rvm-panel-filter" placeholder="Filter visible tree…"></div><div class="rvm-panel-filter-row rvm-object-browser-quick-filters" data-rvm-object-browser-quick-filters="true"><select id="rvm-object-zone-filter" class="rvm-panel-filter" title="Filter Object Browser by zone"><option value="">All zones</option></select><select id="rvm-object-lod-filter" class="rvm-panel-filter" title="Default RVM render detail for next load"><option value="100">LOD 100%</option><option value="50">LOD 50%</option><option value="25">LOD 25%</option></select><select id="rvm-object-visible-filter" class="rvm-panel-filter" title="Filter Object Browser by current object visibility"><option value="all">All</option><option value="visible">Visible</option><option value="hidden">Hidden</option></select></div><div class="rvm-object-browser-summary" data-rvm-object-browser-summary>All zones · all visibility</div><ul id="rvm-tree" class="rvm-tree"><li class="rvm-empty-state">Load RVM / REV / ATT / JSON / UXML to view hierarchy.</li></ul></aside><section class="rvm-viewport"><div id="rvm-canvas" class="rvm-canvas"></div><div class="rvm-placeholder" id="rvm-placeholder">Load RVM / REV / ATT / JSON / UXML to begin.</div></section><aside class="rvm-right-panel"><div class="rvm-panel-header">Properties</div><div id="rvm-attributes-panel" class="rvm-attributes-panel"><div class="rvm-empty-state">No object selected.</div></div><div class="rvm-panel-header" data-rvm-browser-diagnostics-header="true">Browser RVM Performance</div><div id="rvm-browser-parse-diagnostics" class="rvm-tag-list rvm-browser-parse-diagnostics" aria-live="polite" data-browser-rvm-diagnostics-panel="true"><div class="rvm-empty-state">No browser RVM load yet.</div></div></aside></div><div class="viewer-statusbar"><span id="rvm-sb-msg">Ready</span><span>Selection <b id="rvm-sel-count">0</b></span></div></div>`;
 }
 
 function nodeDisplayName(node) {
@@ -163,6 +166,34 @@ function nodeDisplayName(node) {
 
 function nodeKind(node) {
   return String(node?.kind || node?.attributes?.TYPE || '').toUpperCase() || 'NODE';
+}
+
+function nodeZone(node = {}) {
+  const attrs = node.attributes || {};
+  const candidates = [
+    node.sourcePath,
+    node.path,
+    node.ownerPath,
+    node.parentPath,
+    node.parentCanonicalObjectId,
+    attrs.RVM_OWNER_PATH,
+    attrs.RVM_REVIEW_PATH,
+    attrs.RVM_OWNER_NAME,
+    attrs.RVM_REVIEW_NAME,
+    attrs.REVIEW_NAME,
+    node.name,
+  ];
+  for (const value of candidates) {
+    const zone = firstPathPart(value);
+    if (zone) return zone;
+  }
+  return 'Unzoned';
+}
+
+function firstPathPart(value = '') {
+  const text = String(value || '').replace(/\\/g, '/').replace(/[>]+/g, '/').trim().replace(/^\/+|\/+$/g, '');
+  if (!text) return '';
+  return text.split('/').map((part) => part.trim()).filter(Boolean)[0] || '';
 }
 
 function buildNodeTree(nodes = [], options = {}) {
@@ -180,7 +211,7 @@ function buildNodeTree(nodes = [], options = {}) {
   const renderNode = (node, depth = 0) => {
     const kids = children.get(node.canonicalObjectId) || [];
     const childHtml = recursive && kids.length && depth < 10 ? `<ul>${kids.slice(0, limit).map((kid) => renderNode(kid, depth + 1)).join('')}</ul>` : '';
-    return `<li data-node-id="${escapeHtml(node.canonicalObjectId || '')}" data-depth="${depth}"><button type="button" class="rvm-tree-node"><span class="rvm-kind">${escapeHtml(nodeKind(node))}</span><span>${escapeHtml(nodeDisplayName(node))}</span>${kids.length ? `<span class="rvm-tree-count">${kids.length}</span>` : ''}</button>${childHtml}</li>`;
+    return `<li data-node-id="${escapeHtml(node.canonicalObjectId || '')}" data-depth="${depth}" data-rvm-browser-zone="${escapeHtml(nodeZone(node))}"><button type="button" class="rvm-tree-node"><span class="rvm-kind">${escapeHtml(nodeKind(node))}</span><span>${escapeHtml(nodeDisplayName(node))}</span>${kids.length ? `<span class="rvm-tree-count">${kids.length}</span>` : ''}</button>${childHtml}</li>`;
   };
   const rows = roots.slice(0, limit).map((node) => renderNode(node));
   const suffix = nodes.length > limit ? `<li class="rvm-empty-state">Tree capped at ${limit} rows for responsive RVM loading.</li>` : '';
@@ -190,7 +221,7 @@ function buildNodeTree(nodes = [], options = {}) {
 function buildFlatNodeTree(nodes = [], options = {}) {
   const limit = options.limit || RVM_TREE_RENDER_LIMIT;
   const list = Array.isArray(nodes) ? nodes.filter((node) => node?.canonicalObjectId) : [];
-  const rows = list.slice(0, limit).map((node) => `<li data-node-id="${escapeHtml(node.canonicalObjectId || '')}"><button type="button" class="rvm-tree-node"><span class="rvm-kind">${escapeHtml(nodeKind(node))}</span><span>${escapeHtml(nodeDisplayName(node))}</span></button></li>`);
+  const rows = list.slice(0, limit).map((node) => `<li data-node-id="${escapeHtml(node.canonicalObjectId || '')}" data-rvm-browser-zone="${escapeHtml(nodeZone(node))}"><button type="button" class="rvm-tree-node"><span class="rvm-kind">${escapeHtml(nodeKind(node))}</span><span>${escapeHtml(nodeDisplayName(node))}</span></button></li>`);
   const suffix = list.length > limit ? `<li class="rvm-empty-state">Showing first ${limit} of ${list.length} hierarchy nodes. Use search/filter to narrow.</li>` : '';
   return rows.join('') + suffix || '<li class="rvm-empty-state">No hierarchy nodes.</li>';
 }
@@ -265,6 +296,7 @@ function makeDiagnosticsSeed(fileName = '') {
   return {
     fileName,
     loadedJsVersion: RVM_TAB_JS_VERSION,
+    browserRvmDirectTabPreviousVersion: PREVIOUS_RVM_TAB_JS_VERSION,
     browserRvmLoadState: 'pending',
     browserRvmDirectTabLoadPath: true,
     browserRvmLegacyJsonHandlerBypassed: true,
@@ -306,6 +338,121 @@ async function readBestAttSidecarText(files = [], rvmName = '') {
   try { return await best.text(); } catch (_) { return ''; }
 }
 
+function populateObjectBrowserZones(root, nodes = []) {
+  const select = root?.querySelector?.('#rvm-object-zone-filter');
+  if (!select) return;
+  const previous = select.value || '';
+  const zones = [...new Set((Array.isArray(nodes) ? nodes : []).map(nodeZone).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+  select.innerHTML = `<option value="">All zones</option>${zones.map((zone) => `<option value="${escapeHtml(zone)}">${escapeHtml(zone)}</option>`).join('')}`;
+  select.value = zones.includes(previous) ? previous : '';
+  root.dataset.rvmObjectBrowserZoneCount = String(zones.length);
+}
+
+function initObjectBrowserLod(root) {
+  const select = root?.querySelector?.('#rvm-object-lod-filter');
+  if (!select) return;
+  let value = '100';
+  try { value = localStorage.getItem(OBJECT_BROWSER_LOD_STORAGE_KEY) || '100'; } catch (_) {}
+  if (!['100', '50', '25'].includes(value)) value = '100';
+  select.value = value;
+  root.dataset.rvmObjectBrowserDefaultLod = value;
+}
+
+function objectAliases(obj) {
+  const data = obj?.userData || {};
+  const props = data.browserRvmProperties || {};
+  const attrs = data.browserRvmAttributes || data.attributes || props.attributes || {};
+  return [obj?.uuid, obj?.name, data.name, data.canonicalObjectId, data.sourceObjectId, data.sourcePath, data.sourceName, data.displayName, props.sourcePath, props.sourceName, props.displayName, attrs.NAME, attrs.RVM_OWNER_PATH, attrs.RVM_OWNER_NAME, attrs.RVM_REVIEW_NAME].filter(Boolean).map(normalizeAlias);
+}
+
+function normalizeAlias(value = '') { return String(value || '').trim().toLowerCase(); }
+
+function buildVisibilityMap(viewer) {
+  const map = new Map();
+  let scanned = 0;
+  viewer?.modelGroup?.traverse?.((obj) => {
+    if (scanned > OBJECT_BROWSER_VISIBILITY_SCAN_LIMIT) return;
+    if (!(obj?.isMesh || obj?.isLine || obj?.isPoints)) return;
+    scanned += 1;
+    for (const alias of objectAliases(obj)) {
+      if (alias && !map.has(alias)) map.set(alias, obj.visible !== false);
+    }
+  });
+  return map;
+}
+
+function nodeVisibilityFromMap(map, id = '') {
+  if (!map) return true;
+  const key = normalizeAlias(id);
+  if (!key) return true;
+  if (map.has(key)) return map.get(key) !== false;
+  for (const [alias, visible] of map) {
+    if (alias && (alias.includes(key) || key.includes(alias))) return visible !== false;
+  }
+  return true;
+}
+
+function filterObjectBrowserTree(root, viewer) {
+  const tree = root?.querySelector?.('#rvm-tree');
+  if (!tree) return { shown: 0, total: 0 };
+  const queries = ['#rvm-search-input', '#rvm-tree-filter']
+    .map((selector) => root.querySelector(selector)?.value?.trim?.().toLowerCase?.() || '')
+    .filter(Boolean);
+  const zone = root.querySelector('#rvm-object-zone-filter')?.value || '';
+  const visibility = root.querySelector('#rvm-object-visible-filter')?.value || 'all';
+  const visibilityMap = visibility === 'all' ? null : buildVisibilityMap(viewer);
+  let shown = 0;
+  let total = 0;
+  for (const li of [...tree.querySelectorAll('li[data-node-id]')]) {
+    total += 1;
+    const text = li.textContent.toLowerCase();
+    const queryOk = queries.every((query) => text.includes(query));
+    const zoneOk = !zone || li.dataset.rvmBrowserZone === zone;
+    const rowVisible = nodeVisibilityFromMap(visibilityMap, li.dataset.nodeId);
+    const visibilityOk = visibility === 'all' || (visibility === 'visible' ? rowVisible : !rowVisible);
+    const show = queryOk && zoneOk && visibilityOk;
+    li.style.display = show ? '' : 'none';
+    if (show) shown += 1;
+  }
+  const summary = root.querySelector('[data-rvm-object-browser-summary]');
+  if (summary) summary.textContent = `${shown}/${total} rows · ${zone || 'all zones'} · ${visibility}`;
+  root.dataset.rvmObjectBrowserFilteredRows = String(shown);
+  root.dataset.rvmObjectBrowserTotalRows = String(total);
+  return { shown, total, zone, visibility };
+}
+
+function bindObjectBrowserFilters(root, viewer) {
+  initObjectBrowserLod(root);
+  const refresh = () => filterObjectBrowserTree(root, viewer);
+  for (const selector of ['#rvm-search-input', '#rvm-tree-filter', '#rvm-object-zone-filter', '#rvm-object-visible-filter']) {
+    const el = root.querySelector(selector);
+    if (!el) continue;
+    el.addEventListener('input', refresh);
+    el.addEventListener('change', refresh);
+  }
+  root.querySelector('#rvm-object-lod-filter')?.addEventListener('change', (event) => {
+    const value = String(event.target.value || '100');
+    try { localStorage.setItem(OBJECT_BROWSER_LOD_STORAGE_KEY, value); } catch (_) {}
+    root.dataset.rvmObjectBrowserDefaultLod = value;
+    const status = root.querySelector('#rvm-sb-msg');
+    if (status) status.textContent = `Object Browser: default RVM render detail set to ${value}% for next load.`;
+  });
+  globalThis.__PCF_GLB_RVM_OBJECT_BROWSER__ = {
+    version: RVM_TAB_JS_VERSION,
+    previousVersion: PREVIOUS_RVM_TAB_JS_VERSION,
+    refresh,
+    populateZones: (nodes = []) => { populateObjectBrowserZones(root, nodes); return refresh(); },
+    getDiagnostics: () => ({
+      version: RVM_TAB_JS_VERSION,
+      filteredRows: Number(root.dataset.rvmObjectBrowserFilteredRows || 0),
+      totalRows: Number(root.dataset.rvmObjectBrowserTotalRows || 0),
+      zoneCount: Number(root.dataset.rvmObjectBrowserZoneCount || 0),
+      defaultLod: root.dataset.rvmObjectBrowserDefaultLod || '100',
+    }),
+  };
+  return refresh;
+}
+
 async function loadDirectBrowserRvm({ root, viewer, files, rvmFile, stateBag }) {
   const status = root.querySelector('#rvm-sb-msg');
   const startedAt = performance.now();
@@ -345,6 +492,7 @@ async function loadDirectBrowserRvm({ root, viewer, files, rvmFile, stateBag }) 
         ...latestDiagnostics,
         ...diagnostics,
         loadedJsVersion: RVM_TAB_JS_VERSION,
+        browserRvmDirectTabPreviousVersion: PREVIOUS_RVM_TAB_JS_VERSION,
         browserRvmDirectTabLoadPath: true,
         browserRvmLegacyJsonHandlerBypassed: true,
         browserRvmWorkerLoaded: diagnostics.browserRvmWorkerEnabled ?? latestDiagnostics.browserRvmWorkerLoaded,
@@ -358,6 +506,8 @@ async function loadDirectBrowserRvm({ root, viewer, files, rvmFile, stateBag }) 
   const tree = root.querySelector('#rvm-tree');
   if (tree) {
     tree.innerHTML = buildNodeTree(nodes, { limit: RVM_TREE_RENDER_LIMIT, flat: true });
+    populateObjectBrowserZones(root, nodes);
+    filterObjectBrowserTree(root, viewer);
     latestDiagnostics.browserRvmTreeNodesRendered = Math.min(nodes.length, RVM_TREE_RENDER_LIMIT);
   }
   root.querySelector('#rvm-placeholder')?.remove();
@@ -368,6 +518,7 @@ async function loadDirectBrowserRvm({ root, viewer, files, rvmFile, stateBag }) 
     ...(payload.browserRvmParser || {}),
     ...(payload.browserRvmRender?.diagnostics || {}),
     loadedJsVersion: RVM_TAB_JS_VERSION,
+    browserRvmDirectTabPreviousVersion: PREVIOUS_RVM_TAB_JS_VERSION,
     browserRvmDirectTabLoadPath: true,
     browserRvmLegacyJsonHandlerBypassed: true,
     browserRvmWorkerLoaded: true,
@@ -441,6 +592,7 @@ export function mountViewer3DRvmTab(container) {
 
   bindToolbar(viewer, root);
   setInitialSelectMode(root, viewer);
+  bindObjectBrowserFilters(root, viewer);
 
   root.querySelector('#rvm-file-input')?.addEventListener('change', async (event) => {
     const files = Array.from(event.target.files || []);
@@ -481,6 +633,8 @@ export function mountViewer3DRvmTab(container) {
       const payload = await loadJsonOrUxmlFile(jsonFile, viewer, status, sourceKind);
       const nodes = payload.manifest?.nodes || payload.manifest?.items || payload.manifest?.runtime?.nodes || [];
       tree.innerHTML = buildNodeTree(nodes, { limit: JSON_TREE_RENDER_LIMIT, recursive: true });
+      populateObjectBrowserZones(root, nodes);
+      filterObjectBrowserTree(root, viewer);
       status.textContent = `Loaded ${jsonFile.name}`;
       root.querySelector('#rvm-placeholder')?.remove();
       clearRvmSelectionState(root, viewer, 'json-uxml-load');
@@ -501,19 +655,11 @@ export function mountViewer3DRvmTab(container) {
       viewer.selection?.selectByCanonicalId?.(id);
       viewer.fitSelection?.();
       updateStatus(root, viewer);
+      filterObjectBrowserTree(root, viewer);
     } catch (err) {
       reportRvmActionError(err, { action: 'tree-selection', nodeId: id });
     }
   });
-
-  const bindFilter = (selector) => root.querySelector(selector)?.addEventListener('input', (event) => {
-    const q = event.target.value.trim().toLowerCase();
-    tree.querySelectorAll('li[data-node-id]').forEach((li) => {
-      li.style.display = !q || li.textContent.toLowerCase().includes(q) ? '' : 'none';
-    });
-  });
-  bindFilter('#rvm-search-input');
-  bindFilter('#rvm-tree-filter');
 
   window.__3D_RVM_VIEWER__ = viewer;
   requestAnimationFrame(() => updateStatus(root, viewer));
