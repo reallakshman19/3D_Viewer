@@ -19,12 +19,21 @@ async function run() {
   );
   assert.match(
     tabSource,
-    /RVM_TAB_JS_VERSION\s*=\s*['"]20260626-rvm-internal-toolbar-object-browser-1['"]/, 
-    'The RVM tab diagnostics version must identify the internal-toolbar/object-browser worker-first path.'
+    /RVM_TAB_JS_VERSION\s*=\s*['"]20260626-rvm-object-browser-quick-filters-1['"]/, 
+    'The RVM tab diagnostics version must identify the Object Browser quick-filter worker-first path.'
   );
+  assert.match(tabSource, /PREVIOUS_RVM_TAB_JS_VERSION\s*=\s*['"]20260626-rvm-internal-toolbar-object-browser-1['"]/, 'The RVM tab must retain previous cache evidence.');
   assert.match(tabSource, /data-rvm-internal-toolbar="object-browser-1"/, 'RVM tab must scope the toolbar redesign inside the RVM viewer domain.');
   assert.match(tabSource, /data-rvm-object-browser="true"/, 'RVM tab must promote the left hierarchy panel to Object Browser.');
   assert.match(tabSource, /data-rvm-object-browser-search="true"[\s\S]*id="rvm-search-input"/, 'RVM hierarchy search must be hosted by the Object Browser.');
+  assert.match(tabSource, /data-rvm-object-browser-quick-filters="true"/, 'RVM Object Browser must own compact quick filters.');
+  assert.match(tabSource, /id="rvm-object-zone-filter"/, 'RVM Object Browser must expose a zone filter.');
+  assert.match(tabSource, /id="rvm-object-lod-filter"/, 'RVM Object Browser must expose an LOD preference filter.');
+  assert.match(tabSource, /id="rvm-object-visible-filter"/, 'RVM Object Browser must expose a visibility filter.');
+  assert.match(tabSource, /OBJECT_BROWSER_LOD_STORAGE_KEY[\s\S]*rvm_zone_lod_detail_v1/, 'Object Browser LOD control must persist to the existing zone-density storage key.');
+  assert.match(tabSource, /populateObjectBrowserZones\(root, nodes\)/, 'Loaded hierarchy nodes must populate the zone filter.');
+  assert.match(tabSource, /filterObjectBrowserTree\(root, viewer\)/, 'Loaded hierarchy nodes must be filtered by Object Browser controls.');
+  assert.match(tabSource, /__PCF_GLB_RVM_OBJECT_BROWSER__/, 'Object Browser must expose a scoped diagnostics and refresh API.');
   assert.doesNotMatch(tabSource, /class="rvm-ribbon-search"/, 'RVM hierarchy search must not remain in the top toolbar.');
   assert.match(tabSource, /label: 'Navigate \/ View'/, 'RVM toolbar must keep primary navigation and view actions together.');
   assert.match(tabSource, /label: 'Review'/, 'RVM toolbar must keep review tools visible.');
@@ -50,7 +59,7 @@ async function run() {
   const rvmBranch = tabSource.slice(rvmBranchStart, jsonBranchStart);
   assert.doesNotMatch(rvmBranch, /loadJsonOrUxmlFile|JSON\.parse|\.text\(\)/, 'The .rvm/.rev path must never call the JSON/UXML text loader.');
 
-  console.log('Browser RVM direct tab internal-toolbar/object-browser contract test passed');
+  console.log('Browser RVM direct tab Object Browser quick-filter contract test passed');
 }
 
 run();
