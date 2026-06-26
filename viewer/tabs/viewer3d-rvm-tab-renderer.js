@@ -1,6 +1,8 @@
 // Stable app-shell export adapter for the 3D RVM Viewer tab.
 // Source-preview/non-primitive tools are owned by RvmDeferredBridgeLoader.js?v=20260626-rvm-deferred-node-marker-events-1
 // Previous source-preview loader cache key: RvmDeferredBridgeLoader.js?v=20260626-rvm-deferred-source-preview-hover-events-1
+// Previous shell cache key: RvmViewerUiShell.js?v=20260626-rvm-ui-shell-slots-1
+// Previous diagnostics drawer cache key: RvmBottomDiagnosticsDrawerBridge.js?v=20260624-rvm-diagnostics-docked-drawer-1
 import {
   RVM_VIEWER3D_MODULE_SPECIFIER,
   RVM_VIEWER_MODULE_CONTRACT_VERSION,
@@ -18,7 +20,7 @@ import { installRvmUiInteractionPanelPatch, installRvmUiPanelBridge } from './Rv
 import { installRvmPropertyPanelCollapseAuditBridge } from './RvmPropertyPanelCollapseAuditBridge.js?v=20260621-rvm-property-collapse-1';
 import { installRvmLabelPerformanceBridge } from './RvmLabelPerformanceBridge.js?v=20260622-rvm-label-perf-no-support-runtime-1';
 import { installRvmToolbarCompactBridge } from './RvmToolbarCompactBridge.js?v=20260626-rvm-toolbar-compact-policy-2';
-import { installRvmViewerUiShell } from './RvmViewerUiShell.js?v=20260626-rvm-ui-shell-slots-1';
+import { installRvmViewerUiShell } from './RvmViewerUiShell.js?v=20260626-rvm-ui-shell-slots-2';
 import { installRvmZoneLodLabelBridge } from './RvmZoneLodLabelBridge.js?v=20260621-rvm-preload-hierarchy-selector-1';
 import { installRvmDeepSourcePathRecoveryBridge } from './RvmDeepSourcePathRecoveryBridge.js?v=20260622-rvm-deep-source-path-recovery-1';
 import { installRvmZoneDensitySelectorBridge } from './RvmZoneDensitySelectorBridgeV5.js?v=20260622-rvm-zone-density-selector-5';
@@ -35,7 +37,7 @@ import { installGeometryExportWorkspaceBridge } from '../geometry-workspace/Geom
 import { installGeometryMappingProfileBridge } from '../geometry-workspace/GeometryMappingProfileBridge.js?v=20260622-geometry-profile-ui-1';
 import { installRvmSelectionTreeSyncBridge } from './RvmSelectionTreeSyncBridge.js?v=20260620-rvm-large-box-support-sync-1';
 import { installRvmMaterialModeBridge } from './RvmMaterialModeBridge.js?v=20260620-rvm-remaining-material-modes-1';
-import { installRvmBottomDiagnosticsDrawerBridge } from './RvmBottomDiagnosticsDrawerBridge.js?v=20260624-rvm-diagnostics-docked-drawer-1';
+import { installRvmBottomDiagnosticsDrawerBridge } from './RvmBottomDiagnosticsDrawerBridge.js?v=20260626-rvm-diagnostics-shell-slot-1';
 import { installRvmDeferredBridgeLoader } from './RvmDeferredBridgeLoader.js?v=20260626-rvm-deferred-node-marker-events-1';
 import { installRvmLeftPanelResizeCollapseBridge } from './RvmLeftPanelResizeCollapseBridge.js?v=20260624-rvm-panel-resize-1';
 import { installRvmLeafSelectionIdentityBridge } from './RvmLeafSelectionIdentityBridge.js?v=20260622-rvm-leaf-selection-identity-1';
