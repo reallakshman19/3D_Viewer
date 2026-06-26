@@ -1,4 +1,4 @@
-const VERSION = '20260626-rvm-deferred-source-preview-events-1';
+const VERSION = '20260626-rvm-deferred-source-preview-hover-events-1';
 const API_KEY = '__PCF_GLB_RVM_BRIDGE_LOADER__';
 const ACTION_DIAGNOSTICS_KEY = '__PCF_GLB_RVM_ACTION_DIAGNOSTICS__';
 
@@ -10,13 +10,15 @@ const NODE_MARKER_BRIDGE_CACHE_KEY = 'RvmNonPrimitiveNodeMarkerBridge.js?v=20260
 const SUPPORT_DETAILS_PANEL_PREVIOUS_CACHE_KEY = 'RvmNonPrimitiveSupportOverlayDetailsPanelBridge.js?v=20260626-supports-shell-slot-1';
 const SUPPORT_DETAILS_PANEL_LEGACY_CACHE_KEY = 'RvmNonPrimitiveSupportOverlayDetailsPanelBridge.js?v=20260623-nonprimitive-support-details-panel-4';
 const SUPPORT_DETAILS_PANEL_CACHE_KEY = 'RvmNonPrimitiveSupportOverlayDetailsPanelBridge.js?v=20260626-source-preview-support-events-1';
+const SUPPORT_HOVER_PREVIOUS_CACHE_KEY = 'RvmNonPrimitiveSupportOverlayHoverBridge.js?v=20260623-nonprimitive-support-hover-2';
+const SUPPORT_HOVER_CACHE_KEY = 'RvmNonPrimitiveSupportOverlayHoverBridge.js?v=20260626-source-preview-hover-events-1';
 
 const BRIDGE_GROUPS = Object.freeze({
   sourcePreview: [
     { id: 'nonprimitive-support-overlay', specifier: './RvmNonPrimitiveSupportOverlayBridge.js?v=20260623-nonprimitive-support-overlay-9', install: 'installRvmNonPrimitiveSupportOverlayBridge' },
     { id: 'nonprimitive-support-hard-disable', specifier: './RvmNonPrimitiveSupportOverlayHardDisableBridge.js?v=20260623-nonprimitive-support-hard-disable-1', install: 'installRvmNonPrimitiveSupportOverlayHardDisableBridge' },
     { id: 'nonprimitive-support-details-panel', specifier: `./${SUPPORT_DETAILS_PANEL_CACHE_KEY}`, install: 'installRvmNonPrimitiveSupportOverlayDetailsPanelBridge' },
-    { id: 'nonprimitive-support-hover', specifier: './RvmNonPrimitiveSupportOverlayHoverBridge.js?v=20260623-nonprimitive-support-hover-2', install: 'installRvmNonPrimitiveSupportOverlayHoverBridge' },
+    { id: 'nonprimitive-support-hover', specifier: `./${SUPPORT_HOVER_CACHE_KEY}`, install: 'installRvmNonPrimitiveSupportOverlayHoverBridge' },
     { id: 'nonprimitive-auto-bend', specifier: './RvmNonPrimitiveAutoBendBridge.js?v=20260623-nonprimitive-auto-bend-preview-2', install: 'installRvmNonPrimitiveAutoBendBridge' },
     { id: 'nonprimitive-node-markers', specifier: `./${NODE_MARKER_BRIDGE_CACHE_KEY}`, install: 'installRvmNonPrimitiveNodeMarkerBridge' },
     { id: 'nonprimitive-source-tools-ui', specifier: `./${SOURCE_TOOLS_UI_CACHE_KEY}`, install: 'installRvmNonPrimitiveSourceToolsUiBridge' },
