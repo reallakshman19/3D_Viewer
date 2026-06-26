@@ -11,6 +11,7 @@ const files = {
   contract: path.join(viewerRoot, 'tabs/rvm-viewer-module-contract.js'),
   renderer: path.join(viewerRoot, 'tabs/viewer3d-rvm-tab-renderer.js'),
   tab: path.join(viewerRoot, 'tabs/viewer3d-rvm-tab.js'),
+  viewportSpacing: path.join(viewerRoot, 'tabs/RvmViewportFirstSpacingBridge.js'),
   deferredLoader: path.join(viewerRoot, 'tabs/RvmDeferredBridgeLoader.js'),
   toolbarCompact: path.join(viewerRoot, 'tabs/RvmToolbarCompactBridge.js'),
   toolbarOverflow: path.join(viewerRoot, 'tabs/RvmToolbarOverflowController.js'),
@@ -38,6 +39,7 @@ function rvmViewerImports(source) {
 const contract = read(files.contract);
 const renderer = read(files.renderer);
 const tab = read(files.tab);
+const viewportSpacing = read(files.viewportSpacing);
 const deferredLoader = read(files.deferredLoader);
 const toolbar = read(files.toolbarCompact);
 const overflow = read(files.toolbarOverflow);
@@ -57,9 +59,21 @@ assert.equal(activeImport(renderer, 'RvmViewerUiShell'), './RvmViewerUiShell.js?
 assert.equal(activeImport(renderer, 'RvmBottomDiagnosticsDrawerBridge'), './RvmBottomDiagnosticsDrawerBridge.js?v=20260626-rvm-diagnostics-shell-slot-1', 'renderer must actively import shell-slot diagnostics drawer cache key');
 assert.equal(activeImport(renderer, 'RvmDeferredBridgeLoader'), './RvmDeferredBridgeLoader.js?v=20260626-rvm-deferred-report-export-shell-slot-1', 'renderer must actively import current deferred-loader cache key');
 assert.equal(activeImport(renderer, 'RvmToolbarCompactBridge'), './RvmToolbarCompactBridge.js?v=20260626-rvm-toolbar-compact-policy-3', 'renderer must actively import internal-toolbar compact policy v3');
+assert.equal(activeImport(renderer, 'RvmViewportFirstSpacingBridge'), './RvmViewportFirstSpacingBridge.js?v=20260626-rvm-viewport-first-spacing-1', 'renderer must actively import viewport-first spacing bridge');
 assert.equal(activeImport(renderer, 'RvmCanvasSelectionSinglePickGuardBridge'), './RvmCanvasSelectionSinglePickGuardBridge.js?v=20260626-rvm-canvas-single-pick-registry-1', 'renderer must actively import routed canvas single-pick bridge');
 assert.equal(activeImport(renderer, 'RvmViewerInteractionPatch'), './RvmViewerInteractionPatch.js?v=20260626-rvm-canvas-selection-registry-1', 'renderer must actively import routed canvas selection bridge');
+assert.ok(renderer.includes('installRvmViewportFirstSpacingBridge();'), 'renderer must install viewport-first spacing bridge before UI shell');
+assert.ok(renderer.indexOf('installRvmToolbarCompactBridge();') < renderer.indexOf('installRvmViewportFirstSpacingBridge();'), 'viewport spacing must apply after compact toolbar policy');
+assert.ok(renderer.indexOf('installRvmViewportFirstSpacingBridge();') < renderer.indexOf('installRvmViewerUiShell();'), 'viewport spacing must apply before shell slot moves');
 assert.ok(renderer.includes("viewer3d-rvm-tab.js?v=20260626-rvm-statusbar-structured-summary-1"), 'renderer must dynamically import current RVM tab shell cache key');
+
+assert.ok(viewportSpacing.includes("const VERSION = '20260626-rvm-viewport-first-spacing-1'"), 'viewport spacing bridge must expose current version');
+assert.ok(viewportSpacing.includes("scopedRootSelector: '[data-rvm-viewer]'"), 'viewport spacing bridge must be scoped to RVM viewer root');
+assert.ok(viewportSpacing.includes('landingPageTouched: false') && viewportSpacing.includes('mainRibbonTouched: false'), 'viewport spacing diagnostics must state no landing/main ribbon ownership');
+for (const marker of ['.geo-top-ribbon', '.rvm-status-strip', '.rvm-left-panel', '.rvm-right-panel', '.viewer-statusbar', '.rvm-object-browser-quick-filters']) {
+  assert.ok(viewportSpacing.includes(`[data-rvm-viewer] ${marker}`), `viewport spacing must scope ${marker} to RVM viewer root`);
+}
+assert.ok(!viewportSpacing.includes('.app-shell') && !viewportSpacing.includes('.app-nav') && !viewportSpacing.includes('#tab-bar'), 'viewport spacing bridge must not style landing/app shell selectors');
 
 for (const eagerForbidden of [
   'RvmModelHealthBridge.js?v=',
@@ -167,4 +181,4 @@ assert.ok(!uiShell.includes('convertXmlToCii'), 'UI shell must not include XML->
 assert.ok(!uiShell.includes('xml-cii2019'), 'UI shell must not import XML CII worker logic');
 assert.ok(!renderer.includes('installRvmViewerUiShell(RvmViewer3D'), 'UI shell install must not patch RvmViewer3D prototype');
 
-console.log('Verified active RVM viewer runtime cache ownership, Object Browser quick filters, structured statusbar, internal toolbar layout, shell slots, deferred bridge ownership, toolbar overflow, diagnostics/export ownership, and XML-CII isolation.');
+console.log('Verified active RVM viewer runtime cache ownership, viewport-first spacing, Object Browser quick filters, structured statusbar, internal toolbar layout, shell slots, deferred bridge ownership, toolbar overflow, diagnostics/export ownership, and XML-CII isolation.');
