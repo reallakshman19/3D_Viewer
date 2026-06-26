@@ -1,6 +1,6 @@
-const VERSION = '20260626-rvm-viewport-first-spacing-2';
-const PREVIOUS_VERSION = '20260626-rvm-viewport-first-spacing-1';
-const INSTALL_FLAG = Symbol.for('pcf-glb-rvm-viewport-first-spacing-2');
+const VERSION = '20260626-rvm-viewport-first-spacing-3';
+const PREVIOUS_VERSION = '20260626-rvm-viewport-first-spacing-2';
+const INSTALL_FLAG = Symbol.for('pcf-glb-rvm-viewport-first-spacing-3');
 const STYLE_ID = 'rvm-viewport-first-spacing-style';
 const GLOBAL_KEY = '__PCF_GLB_RVM_VIEWPORT_FIRST_SPACING__';
 
@@ -13,13 +13,14 @@ export function installRvmViewportFirstSpacingBridge() {
     previousVersion: PREVIOUS_VERSION,
     styleId: STYLE_ID,
     scopedRootSelector: '[data-rvm-viewer]',
-    rootCause: 'viewer3d.css .geo-top-ribbon justify-content:space-between inherited by RVM tab',
+    rootCause: 'viewer3d.css .geo-top-ribbon justify-content:space-between inherited by RVM tab; secondary tools now use named groups',
     getDiagnostics: () => ({
       version: VERSION,
       previousVersion: PREVIOUS_VERSION,
       stylePresent: Boolean(document.getElementById(STYLE_ID)),
       scopedRootSelector: '[data-rvm-viewer]',
       toolbarPackedLeft: true,
+      secondaryToolbarGroups: ['view', 'visibility', 'inspect', 'export', 'source', 'diag'],
       landingPageTouched: false,
       mainRibbonTouched: false,
     }),
@@ -46,12 +47,20 @@ function injectStyles() {
     [data-rvm-viewer] .rvm-ribbon-load{order:1;}
     [data-rvm-viewer] .rvm-ribbon-navigate-view{order:2;}
     [data-rvm-viewer] .rvm-ribbon-review{order:3;}
-    [data-rvm-viewer] .rvm-toolbar-more{order:4;margin-left:4px!important;flex:0 0 auto;}
+    [data-rvm-viewer] .rvm-toolbar-secondary-group{order:4;margin-left:2px!important;flex:0 0 auto;}
+    [data-rvm-viewer] .rvm-toolbar-secondary-view{order:41;}
+    [data-rvm-viewer] .rvm-toolbar-secondary-visibility{order:42;}
+    [data-rvm-viewer] .rvm-toolbar-secondary-inspect{order:43;}
+    [data-rvm-viewer] .rvm-toolbar-secondary-export{order:44;}
+    [data-rvm-viewer] .rvm-toolbar-secondary-source{order:45;}
+    [data-rvm-viewer] .rvm-toolbar-secondary-diag{order:46;}
     [data-rvm-viewer] .mode-chip{order:5;margin-left:8px;min-height:22px;padding:2px 7px;font-size:10px;line-height:1.2;flex:0 0 auto;}
     [data-rvm-viewer] .rvm-ribbon-label{font-size:9.5px;line-height:1.1;}
     [data-rvm-viewer] .rvm-ribbon-button-row{gap:3px;}
     [data-rvm-viewer] .rvm-btn,[data-rvm-viewer] .rvm-tool-btn{min-height:24px;padding:3px 6px;font-size:10.5px;line-height:1.1;border-radius:4px;}
     [data-rvm-viewer] .rvm-tool-btn.is-icon-only{width:27px;min-width:27px;height:24px;padding:2px 4px;}
+    [data-rvm-viewer] .rvm-toolbar-secondary-group > .rvm-tool-btn{min-width:54px;justify-content:center;}
+    [data-rvm-viewer] .rvm-toolbar-secondary-panel{min-width:190px;max-width:min(340px,calc(100vw - 40px));}
     [data-rvm-viewer] .rvm-status-strip{display:flex;justify-content:flex-start;flex-wrap:wrap;gap:3px;padding:2px 6px;min-height:24px;align-items:center;border-bottom:1px solid rgba(148,163,184,.16);}
     [data-rvm-viewer] .rvm-status-chip{padding:2px 6px;font-size:10px;line-height:1.2;border-radius:999px;white-space:nowrap;}
     [data-rvm-viewer] .rvm-body{min-height:0;gap:0;}
