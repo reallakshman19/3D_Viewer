@@ -27,7 +27,6 @@ on:
       - 'viewer/tabs/RvmDeferredBridgeLoader.js'
       - 'viewer/tabs/RvmToolbarCompactBridge.js'
       - 'viewer/tabs/RvmToolbarOverflowController.js'
-      - 'viewer/tabs/RvmViewerUiShell.js'
       - 'viewer/tabs/RvmBottomDiagnosticsDrawerBridge.js'
       - 'viewer/tabs/RvmModelHealthBridge.js'
       - 'viewer/tabs/RvmModelHealthIssuesBridge.js'
@@ -60,7 +59,6 @@ on:
       - 'viewer/core/state.js'
       - 'viewer/tests/rvm-pcf-*.test.js'
       - 'viewer/tests/rvm-viewer-ui-contract.test.js'
-      - 'viewer/tests/rvm-ui-shell-contract.test.js'
       - 'viewer/tests/rvm-toolbar-more-tools.test.js'
       - 'viewer/tests/rvm-toolbar-overflow-audit.test.js'
       - 'viewer/tests/inputxml-direct-managed-stage.test.js'
@@ -111,9 +109,6 @@ jobs:
 
       - name: Verify RVM viewer UI contracts
         run: node viewer/tests/rvm-viewer-ui-contract.test.js
-
-      - name: Verify RVM UI shell contracts
-        run: node viewer/tests/rvm-ui-shell-contract.test.js
 
       - name: Verify RVM More Tools overflow
         run: node viewer/tests/rvm-toolbar-more-tools.test.js
@@ -271,7 +266,7 @@ jobs:
         run: node viewer/tests/rvm-geometry-workspace-support-load-access-fixture-coverage.test.js
 
       - name: Verify support-load Access fixture intake completion
-        run: node viewer/tests/rvm-geometry-workspace-support-load-fixture-intake-completion.test.js
+        run: node viewer/tests/rvm-geometry-workspace-support-load-access-fixture-intake-completion.test.js
 
       - name: Verify support-load real model validation
         run: node viewer/tests/rvm-geometry-workspace-support-load-real-model-validation.test.js
