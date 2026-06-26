@@ -1,10 +1,21 @@
-const VERSION = '20260626-rvm-toolbar-overflow-controller-1';
+const VERSION = '20260626-rvm-toolbar-overflow-controller-2';
 const CONTROLLER_KEY = '__PCF_GLB_RVM_TOOLBAR_OVERFLOW__';
 const MENU_PREFIX = 'rvm-tools-menu';
+const TRACE_LIMIT = 30;
+
+export const RVM_TOOLBAR_OVERFLOW_SELECTORS = Object.freeze({
+  root: '[data-rvm-viewer]',
+  overflowRoot: '[data-rvm-toolbar-more-root]',
+  button: '[data-rvm-toolbar-more]',
+  menu: '[data-rvm-tools-menu]',
+  legacyMenu: '[data-rvm-toolbar-more-panel]',
+  menuItem: '[data-rvm-tools-menu-item], .rvm-ribbon-section',
+});
 
 const states = new WeakMap();
 const installedRoots = new Set();
 let nextMenuId = 1;
+let nextTraceSeq = 1;
 
 export function installRvmToolbarOverflow(root, options = {}) {
   const resolvedRoot = resolveRoot(root);
@@ -12,6 +23,7 @@ export function installRvmToolbarOverflow(root, options = {}) {
   const existing = states.get(resolvedRoot);
   if (existing) {
     existing.installCount += 1;
+    recordTrace(existing, 'repeat-install', { reason: options.reason || 'repeat-install' });
     return syncRvmToolbarOverflow(resolvedRoot, { ...options, reason: options.reason || 'repeat-install' });
   }
 
@@ -22,6 +34,8 @@ export function installRvmToolbarOverflow(root, options = {}) {
     installCount: 1,
     clickCount: 0,
     closeCount: 0,
+    syncCount: 0,
+    traces: [],
     lastReason: options.reason || 'install',
     onClick: null,
     onKeyDown: null,
@@ -29,11 +43,12 @@ export function installRvmToolbarOverflow(root, options = {}) {
   };
 
   state.onClick = (event) => {
-    const button = closest(event?.target, '[data-rvm-toolbar-more]');
+    const button = closest(event?.target, RVM_TOOLBAR_OVERFLOW_SELECTORS.button);
     if (!button || !contains(resolvedRoot, button)) return;
     event.preventDefault?.();
     event.stopPropagation?.();
     state.clickCount += 1;
+    recordTrace(state, 'button-click', { nextOpen: !state.open });
     setRvmToolbarOverflowOpen(resolvedRoot, !state.open, 'button-click');
   };
 
@@ -41,6 +56,7 @@ export function installRvmToolbarOverflow(root, options = {}) {
     if (event?.key !== 'Escape' || !state.open) return;
     event.preventDefault?.();
     event.stopPropagation?.();
+    recordTrace(state, 'escape-close', { key: event.key });
     setRvmToolbarOverflowOpen(resolvedRoot, false, 'escape');
     getElements(resolvedRoot).button?.focus?.();
   };
@@ -50,6 +66,7 @@ export function installRvmToolbarOverflow(root, options = {}) {
     const { button, menu } = getElements(resolvedRoot);
     const target = event?.target;
     if ((button && contains(button, target)) || (menu && contains(menu, target))) return;
+    recordTrace(state, 'outside-close', { targetTag: String(target?.tagName || '') });
     setRvmToolbarOverflowOpen(resolvedRoot, false, 'outside-pointerdown');
   };
 
@@ -59,6 +76,7 @@ export function installRvmToolbarOverflow(root, options = {}) {
   states.set(resolvedRoot, state);
   installedRoots.add(resolvedRoot);
   resolvedRoot.dataset.rvmToolbarOverflowController = VERSION;
+  recordTrace(state, 'install', { reason: options.reason || 'install' });
   publishApi();
   return syncRvmToolbarOverflow(resolvedRoot, { ...options, reason: options.reason || 'install' });
 }
@@ -67,6 +85,7 @@ export function disposeRvmToolbarOverflow(root) {
   const resolvedRoot = resolveRoot(root);
   const state = resolvedRoot ? states.get(resolvedRoot) : null;
   if (!resolvedRoot || !state) return false;
+  recordTrace(state, 'dispose', { reason: 'dispose' });
   resolvedRoot.removeEventListener?.('click', state.onClick, true);
   document.removeEventListener?.('keydown', state.onKeyDown, true);
   document.removeEventListener?.('pointerdown', state.onPointerDown, true);
@@ -95,8 +114,11 @@ export function syncRvmToolbarOverflow(root, options = {}) {
   rootNode?.classList?.toggle?.('is-open', open);
   if (rootNode?.dataset) rootNode.dataset.rvmToolbarOverflowOpen = String(open);
   resolvedRoot.dataset.rvmToolbarOverflowOpen = String(open);
+  resolvedRoot.dataset.rvmToolbarOverflowAudit = validateRvmToolbarOverflowDom(resolvedRoot).ok ? 'ok' : 'invalid';
   if (state) {
+    state.syncCount += 1;
     state.lastReason = options.reason || state.lastReason || 'sync';
+    recordTrace(state, 'sync', { reason: options.reason || 'sync', open });
     state.diagnostics = buildDiagnostics(resolvedRoot, state, open, options.reason || 'sync');
     return state.diagnostics;
   }
@@ -111,6 +133,7 @@ export function setRvmToolbarOverflowOpen(root, open, reason = 'api') {
   if (state.open !== nextOpen && !nextOpen) state.closeCount += 1;
   state.open = nextOpen;
   state.lastReason = reason;
+  recordTrace(state, 'set-open', { reason, open: nextOpen });
   return syncRvmToolbarOverflow(resolvedRoot, { reason });
 }
 
@@ -121,13 +144,31 @@ export function getRvmToolbarOverflowDiagnostics(root) {
   return state?.diagnostics || syncRvmToolbarOverflow(resolvedRoot, { reason: 'diagnostics' });
 }
 
+export function validateRvmToolbarOverflowDom(root) {
+  const resolvedRoot = resolveRoot(root);
+  const buttonCount = resolvedRoot?.querySelectorAll?.(RVM_TOOLBAR_OVERFLOW_SELECTORS.button)?.length || 0;
+  const menuCount = resolvedRoot?.querySelectorAll?.(RVM_TOOLBAR_OVERFLOW_SELECTORS.menu)?.length || 0;
+  const overflowRootCount = resolvedRoot?.querySelectorAll?.(RVM_TOOLBAR_OVERFLOW_SELECTORS.overflowRoot)?.length || 0;
+  const legacyPanelCount = resolvedRoot?.querySelectorAll?.(RVM_TOOLBAR_OVERFLOW_SELECTORS.legacyMenu)?.length || 0;
+  return {
+    version: VERSION,
+    ok: buttonCount === 1 && menuCount === 1 && overflowRootCount <= 1,
+    buttonCount,
+    menuCount,
+    overflowRootCount,
+    legacyPanelCount,
+  };
+}
+
 function publishApi() {
   globalThis[CONTROLLER_KEY] = {
     version: VERSION,
+    selectors: RVM_TOOLBAR_OVERFLOW_SELECTORS,
     install: installRvmToolbarOverflow,
     dispose: disposeRvmToolbarOverflow,
     sync: syncRvmToolbarOverflow,
     setOpen: setRvmToolbarOverflowOpen,
+    validateDom: validateRvmToolbarOverflowDom,
     getDiagnostics: getRvmToolbarOverflowDiagnostics,
     getInstalledRootCount: () => installedRoots.size,
   };
@@ -143,27 +184,37 @@ function buildDiagnostics(root, state, open, reason) {
     installCount: state?.installCount || 0,
     clickCount: state?.clickCount || 0,
     closeCount: state?.closeCount || 0,
+    syncCount: state?.syncCount || 0,
     hasButton: Boolean(button),
     hasMenu: Boolean(menu),
     buttonExpanded: button?.getAttribute?.('aria-expanded') || '',
     menuHidden: Boolean(menu?.hidden),
-    menuItemCount: menu?.querySelectorAll?.('[data-rvm-tools-menu-item], .rvm-ribbon-section')?.length || 0,
+    menuItemCount: menu?.querySelectorAll?.(RVM_TOOLBAR_OVERFLOW_SELECTORS.menuItem)?.length || 0,
+    domAudit: validateRvmToolbarOverflowDom(root),
+    trace: [...(state?.traces || [])],
   };
 }
 
+function recordTrace(state, event, detail = {}) {
+  const entry = { seq: nextTraceSeq++, event, reason: detail.reason || state?.lastReason || '', open: Boolean(state?.open), detail };
+  state.traces.push(entry);
+  if (state.traces.length > TRACE_LIMIT) state.traces.splice(0, state.traces.length - TRACE_LIMIT);
+  return entry;
+}
+
 function getElements(root) {
-  const rootNode = root?.querySelector?.('[data-rvm-toolbar-more-root]') || root?.querySelector?.('.rvm-toolbar-more') || null;
+  const rootNode = root?.querySelector?.(RVM_TOOLBAR_OVERFLOW_SELECTORS.overflowRoot) || root?.querySelector?.('.rvm-toolbar-more') || null;
   const scope = rootNode || root;
   return {
     rootNode,
-    button: scope?.querySelector?.('[data-rvm-toolbar-more]') || null,
-    menu: scope?.querySelector?.('[data-rvm-tools-menu]') || scope?.querySelector?.('[data-rvm-toolbar-more-panel]') || null,
+    button: scope?.querySelector?.(RVM_TOOLBAR_OVERFLOW_SELECTORS.button) || null,
+    menu: scope?.querySelector?.(RVM_TOOLBAR_OVERFLOW_SELECTORS.menu) || scope?.querySelector?.(RVM_TOOLBAR_OVERFLOW_SELECTORS.legacyMenu) || null,
   };
 }
 
 function resolveRoot(root) {
   if (root && typeof root.querySelector === 'function') return root;
-  if (typeof document !== 'undefined') return document.querySelector?.('[data-rvm-viewer]') || null;
+  if (typeof document !== 'undefined') return document.querySelector?.(RVM_TOOLBAR_OVERFLOW_SELECTORS.root) || null;
   return null;
 }
 
