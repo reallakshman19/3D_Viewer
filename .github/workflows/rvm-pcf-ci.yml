@@ -17,6 +17,7 @@ on:
       - 'viewer/tabs/RvmIntelligentSupportEngineBridge.js'
       - 'viewer/tabs/model-converters/ModelConvertersTab.js'
       - 'viewer/tabs/model-converters/inputxml-managed-stage-bridge.js'
+      - 'viewer/tabs/model-converters/converters/inputxml-to-cii2019.js'
       - 'viewer/tabs/model-converters/converters/inputxml-to-stagedjson.js'
       - 'viewer/tabs/model-converters/workflow/**'
       - 'viewer/tabs/rvm-json-pcf-*.js'
@@ -61,6 +62,7 @@ on:
       - 'viewer/tests/rvm-viewer-ui-contract.test.js'
       - 'viewer/tests/rvm-toolbar-more-tools.test.js'
       - 'viewer/tests/rvm-toolbar-overflow-audit.test.js'
+      - 'viewer/tests/inputxml-cii2019-pre-run-guard.test.js'
       - 'viewer/tests/inputxml-direct-managed-stage.test.js'
       - 'viewer/tests/inputxml-bend-element-length.test.js'
       - 'viewer/tests/rvm-geometry-workspace-*.test.js'
@@ -115,6 +117,9 @@ jobs:
 
       - name: Verify RVM toolbar overflow audit
         run: node viewer/tests/rvm-toolbar-overflow-audit.test.js
+
+      - name: Verify InputXML CII2019 pre-run guard
+        run: node viewer/tests/inputxml-cii2019-pre-run-guard.test.js
 
       - name: Verify direct InputXML stagedJSON conversion
         run: node viewer/tests/inputxml-direct-managed-stage.test.js
@@ -180,7 +185,7 @@ jobs:
         run: node viewer/tests/nonprimitive-auto-bend-resolver.test.js
 
       - name: Verify explicit InputXML auto-bend records
-        run: node viewer/tests/nonprimitive-auto-bend-explicit-bend.test.js
+        run: node viewer/tests/nonprimitive-auto-bend-explicit-inputxml-records.test.js
 
       - name: Verify non-primitive auto-bend preview integration
         run: node viewer/tests/nonprimitive-auto-bend-preview-integration.test.js
@@ -210,7 +215,7 @@ jobs:
         run: node viewer/tests/nonprimitive-node-marker-source-tools.test.js
 
       - name: Verify non-primitive node marker overlay glyphs
-        run: node viewer/tests/nonprimitive-node-marker-overlay.test.js
+        run: node viewer/tests/nonprimitive-node-marker-overlay-glyphs.test.js
 
       - name: Verify non-primitive node marker hover
         run: node viewer/tests/nonprimitive-node-marker-hover.test.js
@@ -225,48 +230,46 @@ jobs:
         run: node viewer/tests/nonprimitive-node-marker-overrides.test.js
 
       - name: Verify RHBG RVM fit guard
-        run: |
-          set -o pipefail
-          node viewer/tests/rvm-pcf-rhbg-fitguard.test.js 2>&1 | grep -E 'FAIL|passed|failed'
+        run: node viewer/tests/rhbg-rvm-fit-guard.test.js
 
       - name: Verify geometry workspace import tree
         run: node viewer/tests/rvm-geometry-workspace-import-tree.test.js
 
       - name: Verify support-load input overrides
-        run: node viewer/tests/rvm-geometry-workspace-support-load-input-overrides.test.js
+        run: node viewer/tests/support-load-input-overrides.test.js
 
       - name: Verify support-load master data
-        run: node viewer/tests/rvm-geometry-workspace-support-load-master-data.test.js
+        run: node viewer/tests/support-load-master-data.test.js
 
       - name: Verify support-load master hydration
-        run: node viewer/tests/rvm-geometry-workspace-support-load-master-hydration.test.js
+        run: node viewer/tests/support-load-master-hydration.test.js
 
       - name: Verify support-load enrichment conflict resolver
-        run: node viewer/tests/rvm-geometry-workspace-support-load-conflicts.test.js
+        run: node viewer/tests/support-load-enrichment-conflict-resolver.test.js
 
       - name: Verify support-load QA dashboard
-        run: node viewer/tests/rvm-geometry-workspace-support-load-qa-dashboard.test.js
+        run: node viewer/tests/support-load-qa-dashboard.test.js
 
       - name: Verify support-load formula engine
-        run: node viewer/tests/rvm-geometry-workspace-support-load-formulas.test.js
+        run: node viewer/tests/support-load-formula-engine.test.js
 
       - name: Verify support-load advanced profiles
-        run: node viewer/tests/rvm-geometry-workspace-support-load-advanced-profiles.test.js
+        run: node viewer/tests/support-load-advanced-profiles.test.js
 
       - name: Verify support-load track certification
-        run: node viewer/tests/rvm-geometry-workspace-support-load-track-certification.test.js
+        run: node viewer/tests/support-load-track-certification.test.js
 
       - name: Verify support-load Access benchmark
-        run: node viewer/tests/rvm-geometry-workspace-support-load-access-benchmark.test.js
+        run: node viewer/tests/support-load-access-benchmark.test.js
 
       - name: Verify support-load Access fixture pack
-        run: node viewer/tests/rvm-geometry-workspace-support-load-access-fixture-pack.test.js
+        run: node viewer/tests/support-load-access-fixture-pack.test.js
 
       - name: Verify support-load Access fixture coverage
-        run: node viewer/tests/rvm-geometry-workspace-support-load-access-fixture-coverage.test.js
+        run: node viewer/tests/support-load-access-fixture-coverage.test.js
 
       - name: Verify support-load Access fixture intake completion
-        run: node viewer/tests/rvm-geometry-workspace-support-load-access-fixture-intake-completion.test.js
+        run: node viewer/tests/support-load-access-fixture-intake-completion.test.js
 
       - name: Verify support-load real model validation
-        run: node viewer/tests/rvm-geometry-workspace-support-load-real-model-validation.test.js
+        run: node viewer/tests/support-load-real-model-validation.test.js
