@@ -8,6 +8,14 @@ import {
   evaluateNodeMarkerStaleness,
   normalizeNodeMarkerOverrides,
 } from '../overlays/nodes/NodeMarkerApi.js';
+import {
+  buildNodeMarkerOverrideStoreContext,
+  loadNodeMarkerOverrideSet,
+  nodeMarkerOverrideStorageKey,
+  removeNodeMarkerOverride,
+  saveNodeMarkerOverrideSet,
+  upsertNodeMarkerOverride,
+} from '../overlays/nodes/NodeMarkerOverrideStore.js';
 
 const source = {
   schema: 'managed-stage/staged-json-export/v1',
@@ -70,5 +78,27 @@ assert.equal(evaluateNodeMarkerStaleness(source, { sourceKind: 'json', sourceFil
 const stale = evaluateNodeMarkerStaleness(source, { sourceKind: 'json', sourceFile: 'override-stage.json', markerOverrides: [{ markerId: flangeMarker.markerId, nodeNumber: 778 }] }, build);
 assert.equal(stale.status, 'stale');
 assert.equal(stale.staleReason, 'override-revision-changed');
+
+const memory = new Map();
+const storage = { getItem: (key) => memory.has(key) ? memory.get(key) : null, setItem: (key, value) => memory.set(key, value) };
+const context = buildNodeMarkerOverrideStoreContext(build);
+assert.equal(context.sourceKind, 'json');
+assert.equal(context.sourceSubKind, 'staged-json-export');
+assert.ok(context.sourceRevision, 'override store context includes sourceRevision');
+assert.match(nodeMarkerOverrideStorageKey(context), /^rvm\.nodeMarkers\.overrides\.v1:/);
+const persisted = saveNodeMarkerOverrideSet(context, overrides, storage);
+assert.equal(persisted.schema, 'non-primitive-node-marker-override-store/v1');
+assert.equal(persisted.overrides.length, 2);
+assert.equal(persisted.context.sourceRevision, context.sourceRevision);
+assert.ok(persisted.overrideHash, 'persisted override payload has hash');
+const loaded = loadNodeMarkerOverrideSet(context, storage);
+assert.equal(loaded.overrides.length, 2);
+assert.equal(loaded.overrideHash, persisted.overrideHash);
+const replaced = upsertNodeMarkerOverride(loaded.overrides, { markerId: flangeMarker.markerId, nodeNumber: 778, suppressExport: true });
+assert.equal(replaced.length, 2);
+assert.equal(replaced.find((item) => item.markerId === flangeMarker.markerId).nodeNumber, 778);
+const removed = removeNodeMarkerOverride(replaced, { markerId: flangeMarker.markerId });
+assert.equal(removed.length, 1);
+assert.notEqual(nodeMarkerOverrideStorageKey(context), nodeMarkerOverrideStorageKey({ ...context, sourceRevision: `${context.sourceRevision}-changed` }), 'sourceRevision scopes override persistence');
 
 console.log('nonprimitive-node-marker-overrides passed');
