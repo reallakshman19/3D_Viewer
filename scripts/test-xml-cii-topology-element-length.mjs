@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import assert from 'node:assert/strict';
+import { applyXmlCiiPostSplitElementLengthCleanup } from '../viewer/converters/xml-cii2019-core/post-split-element-length-cleanup.js';
 import {
   applyXmlCiiTopologyElementLengths,
   collectXmlCiiTopologyElementLengthAssignments,
@@ -15,6 +16,8 @@ function node(fields, extra = '') {
 function doc(nodes) {
   return '<?xml version="1.0"?><Root><Branch><Branchname>/TEST/B1</Branchname>' + nodes.join('\n') + '</Branch></Root>';
 }
+function nodeBlocks(xmlText) { return String(xmlText || '').match(/<Node\b[\s\S]*?<\/Node>/gi) || []; }
+function nodeBlock(xmlText, nodeNumber) { return nodeBlocks(xmlText).find((item) => item.includes(tag('NodeNumber', nodeNumber))) || ''; }
 function byNode(assignments, nodeNumber) {
   return assignments.find((assignment) => String(assignment.nodeNumber) === String(nodeNumber));
 }
@@ -22,9 +25,12 @@ function skippedByNode(skipped, nodeNumber) {
   return skipped.find((item) => String(item.nodeNumber) === String(nodeNumber));
 }
 function lengthFromXml(xmlText, nodeNumber) {
-  const block = (String(xmlText || '').match(/<Node\b[\s\S]*?<\/Node>/gi) || []).find((item) => item.includes(tag('NodeNumber', nodeNumber))) || '';
+  const block = nodeBlock(xmlText, nodeNumber);
   const value = block.match(/<ElementLengthMm>([\s\S]*?)<\/ElementLengthMm>/i)?.[1];
   return Number(value);
+}
+function assertLength(xmlText, nodeNumber, expected, message) {
+  assert.equal(lengthFromXml(xmlText, nodeNumber), expected, message || `node ${nodeNumber} length`);
 }
 
 const supportElbowOletFixture = doc([
@@ -54,10 +60,18 @@ assert.equal(skippedByNode(supportElbowOlet.skipped, 450).reason, 'support-refer
 assert.equal(skippedByNode(supportElbowOlet.skipped, 440).reason, 'support-restraint-no-element-length', 'support restraint must not receive ElementLengthMm');
 
 const appliedSupportElbowOlet = applyXmlCiiTopologyElementLengths(supportElbowOletFixture);
-assert.equal(lengthFromXml(appliedSupportElbowOlet.xmlText, 470), 753.000);
-assert.equal(lengthFromXml(appliedSupportElbowOlet.xmlText, 480), 1200.000);
-assert.equal(lengthFromXml(appliedSupportElbowOlet.xmlText, 490), 1500.000);
-assert.equal(lengthFromXml(appliedSupportElbowOlet.xmlText, 500), 855.000);
+assertLength(appliedSupportElbowOlet.xmlText, 470, 753.000);
+assertLength(appliedSupportElbowOlet.xmlText, 480, 1200.000);
+assertLength(appliedSupportElbowOlet.xmlText, 490, 1500.000);
+assertLength(appliedSupportElbowOlet.xmlText, 500, 855.000);
+
+const postSplitSupportElbowOlet = applyXmlCiiPostSplitElementLengthCleanup(supportElbowOletFixture, { config: { shortElementLengthDropThresholdMm: 0 } });
+assert.equal(postSplitSupportElbowOlet.stats.topologyElementLengthMode, 'apply', 'post-split cleanup must use topology mode by default');
+assertLength(postSplitSupportElbowOlet.xmlText, 470, 753.000, 'post-split path must write topology length at 470');
+assertLength(postSplitSupportElbowOlet.xmlText, 480, 1200.000, 'post-split path must write topology length at 480');
+assertLength(postSplitSupportElbowOlet.xmlText, 490, 1500.000, 'post-split path must write topology length at 490');
+assertLength(postSplitSupportElbowOlet.xmlText, 500, 855.000, 'post-split path must write topology length at 500');
+assert.ok(postSplitSupportElbowOlet.diagnostics.some((d) => d.type === 'xml-cii-topology-element-length-applied'), 'post-split path must emit topology apply diagnostic');
 
 const rigidBeforeSplitFixture = doc([
   node({ NodeNumber: 100, Endpoint: 0, ComponentType: 'PIPE', ComponentRefNo: '=P1', Position: '0 0 0' }),
@@ -67,6 +81,9 @@ const rigidBeforeSplitFixture = doc([
 const rigidBeforeSplit = collectXmlCiiTopologyElementLengthAssignments(rigidBeforeSplitFixture);
 assert.equal(byNode(rigidBeforeSplit.assignments, 110).lengthMm, 600.000, 'single pre-split RIGID node must store incoming route span');
 assert.equal(byNode(rigidBeforeSplit.assignments, 120).lengthMm, 300.000, 'downstream pipe must continue from corrected RIGID route point');
+const rigidBeforePostSplit = applyXmlCiiPostSplitElementLengthCleanup(rigidBeforeSplitFixture, { config: { shortElementLengthDropThresholdMm: 0 } });
+assertLength(rigidBeforePostSplit.xmlText, 110, 600.000, 'post-split path must correct pre-split RIGID length');
+assertLength(rigidBeforePostSplit.xmlText, 120, 300.000, 'post-split path must correct downstream after pre-split RIGID');
 
 const rigidAfterSplitFixture = doc([
   node({ NodeNumber: 100, Endpoint: 0, ComponentType: 'PIPE', ComponentRefNo: '=P1', Position: '0 0 0' }),
@@ -78,6 +95,13 @@ const rigidAfterSplit = collectXmlCiiTopologyElementLengthAssignments(rigidAfter
 assert.equal(byNode(rigidAfterSplit.assignments, 105).lengthMm, 3.200, 'post-split RIGID endpoint 1 must store incoming short gap');
 assert.equal(byNode(rigidAfterSplit.assignments, 110).lengthMm, 600.000, 'post-split RIGID endpoint 2 must store RIGID component span');
 assert.equal(byNode(rigidAfterSplit.assignments, 120).lengthMm, 296.800, 'downstream pipe must continue after RIGID endpoint 2');
+const rigidAfterPostSplitNoDrop = applyXmlCiiPostSplitElementLengthCleanup(rigidAfterSplitFixture, { config: { shortElementLengthDropThresholdMm: 0 } });
+assertLength(rigidAfterPostSplitNoDrop.xmlText, 105, 3.200, 'post-split cleanup must first assign endpoint 1 gap');
+assertLength(rigidAfterPostSplitNoDrop.xmlText, 110, 600.000, 'post-split cleanup must assign endpoint 2 span');
+assertLength(rigidAfterPostSplitNoDrop.xmlText, 120, 296.800, 'post-split cleanup must keep downstream route length after endpoint 2');
+const rigidAfterPostSplitDrop = applyXmlCiiPostSplitElementLengthCleanup(rigidAfterSplitFixture, {});
+assert.equal(nodeBlock(rigidAfterPostSplitDrop.xmlText, 105), '', 'default short cleanup must remove 3.2 mm RIGID endpoint 1 after topology assignment');
+assert.notEqual(nodeBlock(rigidAfterPostSplitDrop.xmlText, 110), '', 'default short cleanup must retain 600 mm RIGID endpoint 2 after topology assignment');
 
 const valveSplitFixture = doc([
   node({ NodeNumber: 1466, Endpoint: 2, ComponentType: 'FLAN', ComponentRefNo: '=F1', ElementLengthMm: '147.000', Position: '189617.99 -1103125.00 101184.15' }),
@@ -87,6 +111,12 @@ const valveSplitFixture = doc([
 const valveSplit = collectXmlCiiTopologyElementLengthAssignments(valveSplitFixture);
 assert.equal(byNode(valveSplit.assignments, 1467).lengthMm, 3.200, 'VALV endpoint 1 must store incoming gap from previous FLAN endpoint');
 assert.equal(byNode(valveSplit.assignments, 1468).lengthMm, 610.000, 'VALV endpoint 2 must store valve pair span');
+const valvePostSplitNoDrop = applyXmlCiiPostSplitElementLengthCleanup(valveSplitFixture, { config: { shortElementLengthDropThresholdMm: 0 } });
+assertLength(valvePostSplitNoDrop.xmlText, 1467, 3.200, 'post-split path must write VALV endpoint 1 incoming gap');
+assertLength(valvePostSplitNoDrop.xmlText, 1468, 610.000, 'post-split path must write VALV endpoint 2 component span');
+const valvePostSplitDrop = applyXmlCiiPostSplitElementLengthCleanup(valveSplitFixture, {});
+assert.equal(nodeBlock(valvePostSplitDrop.xmlText, 1467), '', 'default short cleanup must remove 3.2 mm VALV endpoint 1 after topology assignment');
+assert.notEqual(nodeBlock(valvePostSplitDrop.xmlText, 1468), '', 'default short cleanup must retain 610 mm VALV endpoint 2 after topology assignment');
 
 console.log('XML CII topology element length test passed', {
   supportElbowOletAssignments: supportElbowOlet.assignments.length,
