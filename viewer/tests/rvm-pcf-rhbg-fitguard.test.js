@@ -79,9 +79,12 @@ check(deferredLoaderSource.includes("mode === 'source-preview'") && deferredLoad
 check(rendererSource.includes('RvmDeferredBridgeLoader.js?v=20260626-rvm-deferred-report-export-shell-slot-1'), 'renderer imports current deferred loader cache key');
 
 check(rendererSource.includes('RvmToolbarCompactBridge.js?v=20260626-rvm-toolbar-compact-policy-3'), 'renderer imports internal-toolbar compact policy v3');
-check(rendererSource.includes('viewer3d-rvm-tab.js?v=20260626-rvm-internal-toolbar-object-browser-1'), 'renderer imports current RVM tab shell cache key');
+check(rendererSource.includes('viewer3d-rvm-tab.js?v=20260626-rvm-object-browser-quick-filters-1'), 'renderer imports current RVM tab shell cache key');
 check(tabSource.includes('data-rvm-internal-toolbar="object-browser-1"'), 'RVM tab owns internal toolbar only inside its domain');
 check(tabSource.includes('data-rvm-object-browser="true"') && tabSource.includes('data-rvm-object-browser-search="true"'), 'RVM tab moves hierarchy search into Object Browser');
+check(tabSource.includes('data-rvm-object-browser-quick-filters="true"'), 'RVM tab owns compact Object Browser quick filters');
+check(tabSource.includes('id="rvm-object-zone-filter"') && tabSource.includes('id="rvm-object-lod-filter"') && tabSource.includes('id="rvm-object-visible-filter"'), 'RVM tab exposes Zone / LOD / Visible Object Browser controls');
+check(tabSource.includes('__PCF_GLB_RVM_OBJECT_BROWSER__') && tabSource.includes('filterObjectBrowserTree(root, viewer)'), 'RVM tab exposes and applies scoped Object Browser filter API');
 check(!tabSource.includes('class="rvm-ribbon-search"'), 'RVM tab no longer hosts search in top toolbar');
 check(tabSource.includes("label: 'Navigate / View'") && tabSource.includes("label: 'Review'"), 'RVM tab uses compact internal toolbar groups');
 check(!tabSource.includes('PCF GLB VIEWER'), 'RVM tab does not redefine landing or main ribbon chrome');
