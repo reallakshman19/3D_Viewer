@@ -1,7 +1,11 @@
 import * as THREE from 'three';
 
-const BRIDGE_VERSION = 'rvm-hierarchy-selection-bridge/v2-fit-hide-css';
+const BRIDGE_VERSION = 'rvm-hierarchy-selection-bridge/v3-text-hit-target-sync';
+const PREVIOUS_BRIDGE_VERSION = 'rvm-hierarchy-selection-bridge/v2-fit-hide-css';
 const ATTACH_FLAG = 'rvmHierarchySelectionBridge';
+const TREE_ROW_SELECTOR = '#rvm-tree li[data-node-id]';
+const TREE_CLICK_SELECTOR = 'li[data-node-id], .rvm-tree-node, .rvm-tree-label, [data-rvm-tree-label]';
+const TREE_MATCH_SCAN_LIMIT = 20000;
 
 export function installRvmHierarchySelectionBridge() {
   injectStyles();
@@ -19,17 +23,32 @@ export function installRvmHierarchySelectionBridge() {
 function bindRoot(root) {
   if (!root || root.dataset[ATTACH_FLAG] === BRIDGE_VERSION) return;
   root.dataset[ATTACH_FLAG] = BRIDGE_VERSION;
+  root.dataset.rvmHierarchySelectionPreviousBridge = PREVIOUS_BRIDGE_VERSION;
   const tree = root.querySelector('#rvm-tree');
   const props = root.querySelector('#rvm-attributes-panel');
   if (!tree || !props) return;
 
+  upgradeTreeRows(root, 'bind-root');
+  root.addEventListener('rvm-tree-rendered', () => upgradeTreeRows(root, 'tree-rendered'));
+  root.addEventListener('rvm-selection-synced-to-tree', () => upgradeTreeRows(root, 'selection-sync'));
+
   tree.addEventListener('click', (event) => {
-    const li = event.target?.closest?.('li[data-node-id]');
+    const target = event.target?.closest?.(TREE_CLICK_SELECTOR);
+    const li = target?.closest?.('li[data-node-id]') || event.target?.closest?.('li[data-node-id]');
     if (!li || !tree.contains(li)) return;
     event.preventDefault();
     event.stopPropagation();
     event.stopImmediatePropagation?.();
-    handleTreeSelection(root, li);
+    handleTreeSelection(root, li, { reason: 'tree-click', originalTarget: event.target });
+  }, true);
+
+  tree.addEventListener('keydown', (event) => {
+    if (event.key !== 'Enter' && event.key !== ' ') return;
+    const li = event.target?.closest?.('li[data-node-id]');
+    if (!li || !tree.contains(li)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    handleTreeSelection(root, li, { reason: 'tree-keyboard' });
   }, true);
 
   props.addEventListener('click', (event) => {
@@ -52,55 +71,119 @@ function bindRoot(root) {
       api?.clearSelection?.();
       viewer.selection?.clearSelection?.();
       viewer._rvmCanvasSelectedMeshes = [];
-      root.querySelectorAll('#rvm-tree li.is-selected').forEach((row) => row.classList.remove('is-selected'));
+      root.querySelectorAll('#rvm-tree li.is-selected').forEach((row) => row.classList.remove('is-selected', 'is-canvas-selected'));
       props.innerHTML = '<div class="rvm-empty-state">No object selected.</div>';
       updateSelectionChip(root, 0);
     }
   });
 }
 
-function handleTreeSelection(root, li) {
+function upgradeTreeRows(root, reason = 'manual') {
+  const tree = root?.querySelector?.('#rvm-tree');
+  if (!tree) return 0;
+  let count = 0;
+  for (const li of tree.querySelectorAll('li[data-node-id]')) {
+    const button = li.querySelector(':scope > .rvm-tree-node') || li.querySelector('.rvm-tree-node');
+    if (!button) continue;
+    button.type = 'button';
+    button.dataset.rvmHierarchyHitTarget = 'true';
+    button.setAttribute('tabindex', '0');
+    button.setAttribute('title', cleanLabel(labelForRow(li)) || li.dataset.nodeId || 'Hierarchy node');
+    let label = button.querySelector('[data-rvm-tree-label]') || button.querySelector('.rvm-tree-label');
+    if (!label) {
+      const spans = [...button.querySelectorAll('span')].filter((span) => !span.classList.contains('rvm-kind') && !span.classList.contains('rvm-tree-count'));
+      label = spans[0] || null;
+    }
+    if (label) {
+      label.classList.add('rvm-tree-label');
+      label.dataset.rvmTreeLabel = 'true';
+      label.setAttribute('title', cleanLabel(label.textContent || li.dataset.nodeId || ''));
+    }
+    const kind = button.querySelector('.rvm-kind');
+    if (kind) kind.dataset.rvmTreeKind = 'true';
+    li.dataset.rvmHierarchyRowReady = BRIDGE_VERSION;
+    count += 1;
+  }
+  if (root.dataset) {
+    root.dataset.rvmHierarchyRowsReady = String(count);
+    root.dataset.rvmHierarchyRowsReadyReason = reason;
+  }
+  return count;
+}
+
+function handleTreeSelection(root, li, options = {}) {
   const viewer = globalThis.__3D_RVM_VIEWER__;
   const id = li.dataset.nodeId || '';
-  const label = li.textContent || id;
-  root.querySelectorAll('#rvm-tree li.is-selected').forEach((row) => row.classList.remove('is-selected'));
-  li.classList.add('is-selected');
+  const label = labelForRow(li) || id;
+  markTreeRowSelected(root, li, { source: 'tree', scroll: false });
   if (!viewer) {
     renderDetails(root, { id, label, matches: [], message: 'Viewer is not ready yet.' });
     return;
   }
   const matches = collectMatches(viewer, id, label);
   const api = globalThis.__PCF_GLB_RVM_INTERACTION__;
+  let selected = false;
   if (matches.length && api?.setSelectionFromObjects) {
-    api.setSelectionFromObjects(matches, { sourceObject: matches[0] });
-  } else {
+    selected = api.setSelectionFromObjects(matches, { sourceObject: matches[0], source: 'hierarchy-tree', hierarchyNodeId: id }) !== false;
+  } else if (matches.length) {
     const renderIds = unique(matches.map((obj) => renderIdFor(obj)).filter(Boolean));
     try {
       viewer.selection?.clearSelection?.();
       viewer._rvmCanvasSelectedMeshes = matches;
       if (renderIds.length) viewer.selection?.selectCanonicalIds?.(renderIds);
+      selected = true;
     } catch (error) {
       console.warn('[RVM hierarchy bridge] selection failed', error);
     }
   }
-  fitObjects(viewer, matches);
-  renderDetails(root, { id, label, matches });
+  if (matches.length) fitObjects(viewer, matches);
+  renderDetails(root, { id, label, matches, message: matches.length ? '' : 'No visible render object matched this hierarchy row.' });
   updateSelectionChip(root, matches.length);
+  setStatusMessage(root, matches.length ? `Selected ${cleanLabel(label)} (${matches.length} mesh${matches.length === 1 ? '' : 'es'})` : `Hierarchy row selected: ${cleanLabel(label)} — no visible mesh match`);
+  publishHierarchySelection(root, { id, label, matches, selected, reason: options.reason || 'tree-selection' });
+}
+
+function markTreeRowSelected(root, li, options = {}) {
+  root.querySelectorAll('#rvm-tree li.is-selected').forEach((row) => row.classList.remove('is-selected', 'is-canvas-selected'));
+  li.classList.add('is-selected');
+  if (options.source === 'canvas') li.classList.add('is-canvas-selected');
+  if (options.scroll !== false) li.scrollIntoView?.({ block: 'nearest', inline: 'nearest' });
 }
 
 function collectMatches(viewer, id, label) {
-  const normalizedId = normalize(id);
-  const last = normalize(lastSegment(id) || label || id);
+  const tokens = selectionTokens(id, label);
   const matches = [];
+  let scanned = 0;
   viewer?.modelGroup?.traverse?.((obj) => {
+    scanned += 1;
+    if (scanned > TREE_MATCH_SCAN_LIMIT) return;
     if (!obj?.isMesh || obj.visible === false) return;
     const aliases = aliasesFor(obj).map(normalize).filter(Boolean);
-    const exact = aliases.some((alias) => alias === normalizedId || alias.endsWith(`/${normalizedId}`));
-    const prefix = aliases.some((alias) => alias.startsWith(`${normalizedId}/`) || alias.includes(`/${normalizedId}/`));
-    const loose = last.length >= 4 && aliases.some((alias) => alias.includes(last));
-    if (exact || prefix || loose) matches.push(obj);
+    if (aliases.some((alias) => aliasesMatch(alias, tokens))) matches.push(obj);
   });
-  return matches;
+  return uniqueObjects(matches);
+}
+
+function selectionTokens(id, label) {
+  const values = unique([
+    id,
+    label,
+    cleanLabel(label),
+    lastSegment(id),
+    lastSegment(label),
+    String(id || '').replace(/^\/+/, ''),
+  ].map(normalize).filter((value) => value.length >= 2));
+  return values.filter((value) => !['on', 'off', 'node', 'kind', 'count', 'act'].includes(value));
+}
+
+function aliasesMatch(alias, tokens) {
+  return tokens.some((token) => {
+    if (!token || token.length < 2) return false;
+    if (alias === token) return true;
+    if (alias.endsWith(`/${token}`) || alias.includes(`/${token}/`)) return true;
+    if (token.length >= 4 && (alias.includes(token) || token.includes(alias))) return true;
+    return false;
+  });
 }
 
 function aliasesFor(obj) {
@@ -111,8 +194,10 @@ function aliasesFor(obj) {
     data.sourcePath,
     data.sourceName,
     data.displayName,
+    data.name,
     props.sourcePath,
     props.displayName,
+    props.name,
     data.type,
     data.kind,
     obj.name,
@@ -120,6 +205,7 @@ function aliasesFor(obj) {
     attrs.RVM_OWNER_NAME,
     attrs.RVM_OWNER_PATH,
     attrs.NAME,
+    attrs.TAG,
     attrs.TYPE,
     attrs.RVM_PRIMITIVE_KIND,
     attrs.RVM_BROWSER_RENDER_PRIMITIVE,
@@ -225,6 +311,10 @@ function renderDetails(root, { id, label, matches, message = '' }) {
     </div>`;
 }
 
+function publishHierarchySelection(root, detail = {}) {
+  try { root.dispatchEvent(new CustomEvent('rvm-hierarchy-selection', { bubbles: true, detail: { ...detail, version: BRIDGE_VERSION } })); } catch (_) {}
+}
+
 function updateSelectionChip(root, count) {
   const chip = root.querySelector('[data-rvm-status-chip="selected"]');
   const footer = root.querySelector('#rvm-sel-count');
@@ -232,11 +322,27 @@ function updateSelectionChip(root, count) {
   if (footer) footer.textContent = String(count || 0);
 }
 
+function setStatusMessage(root, message) {
+  const status = root?.querySelector?.('#rvm-sb-msg');
+  if (status) status.textContent = message;
+}
+
+function labelForRow(li) {
+  const direct = li?.querySelector?.(':scope > .rvm-tree-node [data-rvm-tree-label], :scope > .rvm-tree-node .rvm-tree-label');
+  if (direct?.textContent) return direct.textContent;
+  const button = li?.querySelector?.(':scope > .rvm-tree-node');
+  if (!button) return li?.dataset?.nodeId || '';
+  const clone = button.cloneNode?.(true);
+  clone?.querySelectorAll?.('.rvm-kind,.rvm-tree-count,[data-rvm-row-toggle],[data-rvm-visibility-toggle],button,select,input').forEach((node) => node.remove?.());
+  return clone?.textContent || button.textContent || li?.dataset?.nodeId || '';
+}
+
 function renderIdFor(obj) { return obj?.userData?.name || obj?.name || obj?.uuid || ''; }
 function unique(values) { return Array.from(new Set(values)); }
+function uniqueObjects(values = []) { return Array.from(new Set(values.filter(Boolean))); }
 function normalize(value) { return String(value || '').replace(/\s+/g, ' ').trim().toLowerCase(); }
 function lastSegment(value) { const parts = String(value || '').split('/').map((part) => part.trim()).filter(Boolean); return parts[parts.length - 1] || String(value || ''); }
-function cleanLabel(value) { return String(value || '').replace(/\s+/g, ' ').trim(); }
+function cleanLabel(value) { return String(value || '').replace(/\b(On|Off)\b/g, ' ').replace(/\s+/g, ' ').trim(); }
 function fmt(value) { const n = Number(value); return Number.isFinite(n) ? n.toFixed(3) : '-'; }
 function row(key, value) { return `<div class="rvm-browser-diag-row"><span>${escapeHtml(key)}</span><b>${escapeHtml(value === undefined || value === null || value === '' ? '-' : String(value))}</b></div>`; }
 function escapeHtml(value) { return String(value ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;'); }
@@ -248,13 +354,23 @@ function injectStyles() {
     style.id = 'rvm-hierarchy-selection-bridge-style';
     document.head.appendChild(style);
   }
+  style.dataset.rvmHierarchySelectionBridge = BRIDGE_VERSION;
   style.textContent = `
-    #rvm-tree li.is-selected > .rvm-tree-node { outline: 1px solid rgba(96,165,250,.95); background: rgba(37,99,235,.28); }
-    .rvm-tree-selection-card { display: grid; gap: 8px; }
-    .rvm-tree-selection-title { color: #93c5fd; font-weight: 700; font-size: 12px; letter-spacing: .04em; text-transform: uppercase; }
-    .rvm-tree-action-row { display: flex; flex-wrap: wrap; gap: 6px; }
-    .rvm-tree-action-row .rvm-btn { padding: 4px 8px; font-size: 12px; }
-    .rvm-tree { padding: 4px 2px; }
-    .rvm-tree-node { text-align: left; }
+    [data-rvm-viewer] .rvm-left-panel { width: clamp(300px, 24vw, 430px); min-width: 260px; max-width: 520px; resize: horizontal; }
+    [data-rvm-viewer] #rvm-tree { padding: 3px 4px 8px; overflow: auto; }
+    [data-rvm-viewer] #rvm-tree li[data-node-id] { padding: 1px 2px; white-space: normal; overflow: visible; text-overflow: clip; }
+    [data-rvm-viewer] #rvm-tree li[data-node-id] > ul { margin: 2px 0 0 12px; padding-left: 9px; border-left: 1px solid rgba(96,165,250,.18); }
+    [data-rvm-viewer] #rvm-tree .rvm-tree-node { width: 100%; min-height: 24px; display: grid; grid-template-columns: auto minmax(0,1fr) auto; align-items: center; gap: 6px; text-align: left; border: 1px solid rgba(90,120,160,.35); border-radius: 5px; background: rgba(7,14,25,.55); color: inherit; padding: 2px 5px; cursor: pointer; }
+    [data-rvm-viewer] #rvm-tree .rvm-tree-node:hover { border-color: rgba(96,165,250,.85); background: rgba(37,99,235,.16); }
+    [data-rvm-viewer] #rvm-tree .rvm-tree-node:focus { outline: 1px solid rgba(96,165,250,.95); outline-offset: 1px; }
+    [data-rvm-viewer] #rvm-tree .rvm-tree-label, [data-rvm-viewer] #rvm-tree [data-rvm-tree-label] { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #dbeafe; }
+    [data-rvm-viewer] #rvm-tree .rvm-kind { flex: 0 0 auto; max-width: 64px; overflow: hidden; text-overflow: ellipsis; border: 1px solid rgba(96,165,250,.28); border-radius: 999px; padding: 1px 5px; color: #93c5fd; font-size: 9px; }
+    [data-rvm-viewer] #rvm-tree .rvm-tree-count { color: #bfdbfe; font-size: 10px; opacity: .9; }
+    [data-rvm-viewer] #rvm-tree li.is-selected > .rvm-tree-node { outline: 1px solid rgba(96,165,250,.95); border-color: rgba(96,165,250,.95); background: rgba(37,99,235,.30); box-shadow: inset 3px 0 0 rgba(96,165,250,.95); }
+    [data-rvm-viewer] #rvm-tree li.is-canvas-selected > .rvm-tree-node { border-color: rgba(52,211,153,.9); box-shadow: inset 3px 0 0 rgba(52,211,153,.9); }
+    [data-rvm-viewer] .rvm-tree-selection-card { display: grid; gap: 8px; }
+    [data-rvm-viewer] .rvm-tree-selection-title { color: #93c5fd; font-weight: 700; font-size: 12px; letter-spacing: .04em; text-transform: uppercase; }
+    [data-rvm-viewer] .rvm-tree-action-row { display: flex; flex-wrap: wrap; gap: 6px; }
+    [data-rvm-viewer] .rvm-tree-action-row .rvm-btn { padding: 4px 8px; font-size: 12px; }
   `;
 }
