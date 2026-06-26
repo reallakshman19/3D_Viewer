@@ -107,7 +107,7 @@ assert.match(deferredLoader, /SUPPORT_DETAILS_PANEL_PREVIOUS_CACHE_KEY/);
 assert.match(deferredLoader, /SUPPORT_DETAILS_PANEL_LEGACY_CACHE_KEY/);
 assert.match(deferredLoader, /SUPPORT_DETAILS_PANEL_CACHE_KEY/);
 assert.match(deferredLoader, /20260626-source-preview-support-events-1/);
-assert.match(renderer, /RvmDeferredBridgeLoader\.js\?v=20260626-rvm-deferred-source-preview-events-1/);
+assert.match(renderer, /RvmDeferredBridgeLoader\.js\?v=20260626-rvm-deferred-source-preview-hover-events-1/);
 assert.match(deferredLoader, /installRvmNonPrimitiveSupportOverlayBridge[\s\S]*installRvmNonPrimitiveSupportOverlayDetailsPanelBridge[\s\S]*installRvmNonPrimitiveAutoBendBridge/);
 assert.match(sourceTools, /rvm-nonprimitive-source-tools-panel/);
 

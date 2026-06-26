@@ -1,5 +1,5 @@
 // Stable app-shell export adapter for the 3D RVM Viewer tab.
-// Source-preview/non-primitive tools are owned by RvmDeferredBridgeLoader.js?v=20260626-rvm-deferred-source-preview-events-1
+// Source-preview/non-primitive tools are owned by RvmDeferredBridgeLoader.js?v=20260626-rvm-deferred-source-preview-hover-events-1
 import {
   RVM_VIEWER3D_MODULE_SPECIFIER,
   RVM_VIEWER_MODULE_CONTRACT_VERSION,
@@ -35,7 +35,7 @@ import { installGeometryMappingProfileBridge } from '../geometry-workspace/Geome
 import { installRvmSelectionTreeSyncBridge } from './RvmSelectionTreeSyncBridge.js?v=20260620-rvm-large-box-support-sync-1';
 import { installRvmMaterialModeBridge } from './RvmMaterialModeBridge.js?v=20260620-rvm-remaining-material-modes-1';
 import { installRvmBottomDiagnosticsDrawerBridge } from './RvmBottomDiagnosticsDrawerBridge.js?v=20260624-rvm-diagnostics-docked-drawer-1';
-import { installRvmDeferredBridgeLoader } from './RvmDeferredBridgeLoader.js?v=20260626-rvm-deferred-source-preview-events-1';
+import { installRvmDeferredBridgeLoader } from './RvmDeferredBridgeLoader.js?v=20260626-rvm-deferred-source-preview-hover-events-1';
 import { installRvmLeftPanelResizeCollapseBridge } from './RvmLeftPanelResizeCollapseBridge.js?v=20260624-rvm-panel-resize-1';
 import { installRvmLeafSelectionIdentityBridge } from './RvmLeafSelectionIdentityBridge.js?v=20260622-rvm-leaf-selection-identity-1';
 import { installRvmLeafCanvasPickBridge } from './RvmLeafCanvasPickBridge.js?v=20260622-rvm-leaf-canvas-pick-orbit-guard-2';

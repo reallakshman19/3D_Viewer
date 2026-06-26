@@ -137,12 +137,18 @@ assert.equal(empty.selectable, false);
 const helper = await fs.readFile(new URL('../overlays/support/SupportOverlayHover.js', import.meta.url), 'utf8');
 const bridge = await fs.readFile(new URL('../tabs/RvmNonPrimitiveSupportOverlayHoverBridge.js', import.meta.url), 'utf8');
 const deferredLoader = await fs.readFile(new URL('../tabs/RvmDeferredBridgeLoader.js', import.meta.url), 'utf8');
+const renderer = await fs.readFile(new URL('../tabs/viewer3d-rvm-tab-renderer.js', import.meta.url), 'utf8');
 
 assert.match(helper, /support-overlay-hover\/v1/, 'hover helper exposes schema');
 assert.match(helper, /__supportOverlayHoverOriginalMaterial/, 'hover helper stores original material for restore');
 assert.match(helper, /material\.clone/, 'hover helper clones materials before applying hover color');
 assert.match(helper, /selected-glyph-already-highlighted/, 'hover helper does not override selected glyph highlight');
-assert.match(bridge, /rvm-non-primitive-support-overlay-hover\/v2/, 'hover bridge exposes navigation-safe schema');
+assert.match(bridge, /rvm-non-primitive-support-overlay-hover\/v3/, 'hover bridge exposes event-routed schema');
+assert.match(bridge, /RvmUiEventRegistry\.js\?v=20260626-rvm-ui-event-registry-1/);
+assert.match(bridge, /installRvmUiEventRegistry/);
+assert.match(bridge, /registerRvmUiEvent\('canvas-source-preview-support-hover'/);
+assert.match(bridge, /routeRvmUiEvent[\s\S]*canvas-source-preview-support-hover/);
+assert.match(bridge, /getEventRegistryDiagnostics/);
 assert.match(bridge, /HOVER_THROTTLE_MS/, 'hover bridge has a pointermove throttle budget');
 assert.match(bridge, /event\.buttons/, 'hover bridge detects drag navigation by pointer buttons');
 assert.match(bridge, /navigation-drag/, 'hover bridge clears/skips while orbit or pan dragging');
@@ -157,6 +163,9 @@ assert.match(bridge, /__RVM_NON_PRIMITIVE_SUPPORT_OVERLAY__/, 'hover bridge scop
 assert.match(bridge, /nonPrimitiveSupportOverlayHoverState/, 'hover state is stored outside RVM primitive selection state');
 assert.match(bridge, /rvm-support-hover-preview/, 'hover bridge renders a lightweight preview tooltip');
 assert.doesNotMatch(bridge, /selection\.select|selection\.pick|RvmSelectionAdapter|objectSearch/, 'hover bridge does not call RVM primitive selection or search code');
-assert.match(deferredLoader, /RvmNonPrimitiveSupportOverlayHoverBridge\.js\?v=20260623-nonprimitive-support-hover-2/, 'sourcePreview deferred loader owns navigation-safe hover bridge cache key');
+assert.match(deferredLoader, /SUPPORT_HOVER_PREVIOUS_CACHE_KEY/);
+assert.match(deferredLoader, /SUPPORT_HOVER_CACHE_KEY/);
+assert.match(deferredLoader, /RvmNonPrimitiveSupportOverlayHoverBridge\.js\?v=20260626-source-preview-hover-events-1/, 'sourcePreview deferred loader owns event-routed hover bridge cache key');
+assert.match(renderer, /RvmDeferredBridgeLoader\.js\?v=20260626-rvm-deferred-source-preview-hover-events-1/);
 
 console.log('non-primitive support overlay hover tests passed');
