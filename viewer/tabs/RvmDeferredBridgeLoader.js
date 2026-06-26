@@ -5,6 +5,8 @@ const ACTION_DIAGNOSTICS_KEY = '__PCF_GLB_RVM_ACTION_DIAGNOSTICS__';
 const SOURCE_PREVIEW_KIND_RE = /^(json|jscon|inputxml|uxml|txt|source-preview|stagedjson)$/i;
 const SOURCE_TOOLS_UI_PREVIOUS_CACHE_KEY = 'RvmNonPrimitiveSourceToolsUiBridge.js?v=20260624-source-tools-grouped-1';
 const SOURCE_TOOLS_UI_CACHE_KEY = 'RvmNonPrimitiveSourceToolsUiBridge.js?v=20260626-source-tools-shell-slot-1';
+const NODE_MARKER_BRIDGE_PREVIOUS_CACHE_KEY = 'RvmNonPrimitiveNodeMarkerBridge.js?v=20260625-node-marker-deferred-1';
+const NODE_MARKER_BRIDGE_CACHE_KEY = 'RvmNonPrimitiveNodeMarkerBridge.js?v=20260626-node-marker-shell-slot-1';
 
 const BRIDGE_GROUPS = Object.freeze({
   sourcePreview: [
@@ -13,7 +15,7 @@ const BRIDGE_GROUPS = Object.freeze({
     { id: 'nonprimitive-support-details-panel', specifier: './RvmNonPrimitiveSupportOverlayDetailsPanelBridge.js?v=20260623-nonprimitive-support-details-panel-4', install: 'installRvmNonPrimitiveSupportOverlayDetailsPanelBridge' },
     { id: 'nonprimitive-support-hover', specifier: './RvmNonPrimitiveSupportOverlayHoverBridge.js?v=20260623-nonprimitive-support-hover-2', install: 'installRvmNonPrimitiveSupportOverlayHoverBridge' },
     { id: 'nonprimitive-auto-bend', specifier: './RvmNonPrimitiveAutoBendBridge.js?v=20260623-nonprimitive-auto-bend-preview-2', install: 'installRvmNonPrimitiveAutoBendBridge' },
-    { id: 'nonprimitive-node-markers', specifier: './RvmNonPrimitiveNodeMarkerBridge.js?v=20260625-node-marker-deferred-1', install: 'installRvmNonPrimitiveNodeMarkerBridge' },
+    { id: 'nonprimitive-node-markers', specifier: `./${NODE_MARKER_BRIDGE_CACHE_KEY}`, install: 'installRvmNonPrimitiveNodeMarkerBridge' },
     { id: 'nonprimitive-source-tools-ui', specifier: `./${SOURCE_TOOLS_UI_CACHE_KEY}`, install: 'installRvmNonPrimitiveSourceToolsUiBridge' },
   ],
   postModel: [
