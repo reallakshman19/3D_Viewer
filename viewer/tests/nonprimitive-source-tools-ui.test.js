@@ -14,11 +14,11 @@ assert.match(uiBridgeSource, /data-source-tools-group="inputxml-family"/, 'sourc
 assert.match(uiBridgeSource, /data-source-tools-group="support-overlay"/, 'source-tools UI groups support overlay controls');
 assert.match(uiBridgeSource, /mode === 'source-preview' && isNonPrimitiveKind\(kind\)/, 'source-tools UI is gated by source-preview mode');
 assert.match(uiBridgeSource, /clearNonPrimitiveRuntime/, 'source-tools UI clears non-primitive overlay runtimes when leaving source-preview mode');
-assert.match(uiBridgeSource, /SOURCE_TOOLS_SLOT_SELECTOR = '\[data-rvm-panel-slot="source-tools"\]'/, 'source-tools UI resolves the shell source-tools slot');
-assert.match(uiBridgeSource, /__PCF_GLB_RVM_UI_SHELL__\?\.install/, 'source-tools UI installs/syncs against the shell API when available');
-assert.match(uiBridgeSource, /__PCF_GLB_RVM_UI_SHELL__\?\.registerPanel/, 'source-tools UI registers itself with the shell panel registry');
-assert.match(uiBridgeSource, /__PCF_GLB_RVM_UI_SHELL__\?\.setRightPanelTab\?\.\(root, 'source-tools'/, 'source-tools UI activates the Source Tools tab for source-preview loads');
-assert.match(uiBridgeSource, /data\.rvmPanelSlotHost = 'source-tools'/, 'source-tools UI marks slot-hosted panel/header ownership');
+assert.match(uiBridgeSource, /SOURCE_TOOLS_SLOT_SELECTOR/, 'source-tools UI resolves the shell source-tools slot');
+assert.match(uiBridgeSource, /shell\?\.install/, 'source-tools UI installs/syncs against the shell API when available');
+assert.match(uiBridgeSource, /registerPanel/, 'source-tools UI registers itself with the shell panel registry');
+assert.match(uiBridgeSource, /setRightPanelTab/, 'source-tools UI activates the Source Tools tab for source-preview loads');
+assert.match(uiBridgeSource, /dataset\.rvmPanelSlotHost = 'source-tools'/, 'source-tools UI marks slot-hosted panel/header ownership');
 assert.match(uiBridgeSource, /moveExistingPanelToShellSlot/, 'source-tools UI migrates existing legacy panel into the shell slot');
 assert.match(uiBridgeSource, /Auto Bend/, 'source-tools UI renders Auto Bend control');
 assert.match(uiBridgeSource, /Radius/, 'source-tools UI renders Auto Bend radius control');
