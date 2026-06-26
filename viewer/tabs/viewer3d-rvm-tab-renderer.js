@@ -1,5 +1,6 @@
 // Stable app-shell export adapter for the 3D RVM Viewer tab.
 // Source-preview/non-primitive tools are owned by RvmDeferredBridgeLoader.js?v=20260626-rvm-deferred-node-marker-events-1
+// Previous source-preview loader cache key: RvmDeferredBridgeLoader.js?v=20260626-rvm-deferred-source-preview-hover-events-1
 import {
   RVM_VIEWER3D_MODULE_SPECIFIER,
   RVM_VIEWER_MODULE_CONTRACT_VERSION,
