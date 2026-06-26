@@ -175,10 +175,12 @@ function verifyStaticContracts() {
   assert.ok(!controller.includes('MutationObserver'), 'overflow open/close behavior must not rely on MutationObserver');
   assert.ok(compact.includes('RvmToolbarOverflowController.js?v=20260626-rvm-toolbar-overflow-controller-1'), 'compact toolbar must import the overflow owner');
   assert.ok(compact.includes('installRvmToolbarOverflow(root'), 'compact toolbar must install the overflow owner against the RVM root');
+  assert.ok(compact.includes('rvm-toolbar-compact-policy-3'), 'compact toolbar must expose v3 internal toolbar policy');
+  assert.ok(compact.includes("'Navigate / View'") && compact.includes("'Review'"), 'compact toolbar must keep primary and review groups top-level');
   assert.ok(compact.includes('data-rvm-toolbar-more'), 'compact toolbar must render a stable More button selector');
   assert.ok(compact.includes('data-rvm-tools-menu'), 'compact toolbar must render a stable More menu selector');
   assert.ok(!compact.includes('<details'), 'compact toolbar must not rely on native details toggle for More Tools');
-  assert.ok(renderer.includes('RvmToolbarCompactBridge.js?v=20260626-rvm-toolbar-compact-policy-2'), 'renderer must load compact toolbar policy v2');
+  assert.ok(renderer.includes('RvmToolbarCompactBridge.js?v=20260626-rvm-toolbar-compact-policy-3'), 'renderer must load compact toolbar policy v3');
 }
 
 async function verifyRuntimeBehavior() {
