@@ -17,15 +17,8 @@ function read(file) {
 
 class ListenerTarget {
   constructor() { this.listeners = new Map(); }
-  addEventListener(type, handler) {
-    const list = this.listeners.get(type) || [];
-    list.push(handler);
-    this.listeners.set(type, list);
-  }
-  removeEventListener(type, handler) {
-    const list = this.listeners.get(type) || [];
-    this.listeners.set(type, list.filter((item) => item !== handler));
-  }
+  addEventListener(type, handler) { const list = this.listeners.get(type) || []; list.push(handler); this.listeners.set(type, list); }
+  removeEventListener(type, handler) { const list = this.listeners.get(type) || []; this.listeners.set(type, list.filter((item) => item !== handler)); }
   dispatch(type, event) { for (const handler of [...(this.listeners.get(type) || [])]) handler(event); }
   listenerCount(type) { return (this.listeners.get(type) || []).length; }
 }
@@ -35,11 +28,7 @@ class FakeClassList {
   add(value) { this.values.add(value); this.owner.className = [...this.values].join(' '); }
   remove(value) { this.values.delete(value); this.owner.className = [...this.values].join(' '); }
   contains(value) { return this.values.has(value); }
-  toggle(value, force) {
-    const enabled = force === undefined ? !this.values.has(value) : Boolean(force);
-    if (enabled) this.add(value); else this.remove(value);
-    return enabled;
-  }
+  toggle(value, force) { const enabled = force === undefined ? !this.values.has(value) : Boolean(force); if (enabled) this.add(value); else this.remove(value); return enabled; }
 }
 
 class FakeElement extends ListenerTarget {
@@ -73,22 +62,8 @@ class FakeElement extends ListenerTarget {
     walk(this);
     return found;
   }
-  closest(selector) {
-    let cursor = this;
-    while (cursor) {
-      if (matches(cursor, selector)) return cursor;
-      cursor = cursor.parentElement;
-    }
-    return null;
-  }
-  contains(node) {
-    let cursor = node;
-    while (cursor) {
-      if (cursor === this) return true;
-      cursor = cursor.parentElement || cursor.parentNode;
-    }
-    return false;
-  }
+  closest(selector) { let cursor = this; while (cursor) { if (matches(cursor, selector)) return cursor; cursor = cursor.parentElement; } return null; }
+  contains(node) { let cursor = node; while (cursor) { if (cursor === this) return true; cursor = cursor.parentElement || cursor.parentNode; } return false; }
   focus() { this.focused = true; }
 }
 
@@ -148,16 +123,12 @@ function verifyStaticContracts() {
   assert.ok(compact.includes("const VERSION = '20260626-rvm-toolbar-secondary-groups-1'"), 'compact toolbar must expose grouped secondary menu policy');
   assert.ok(compact.includes("const PREVIOUS_VERSION = '20260626-rvm-toolbar-compact-policy-3'"), 'compact toolbar must preserve previous compact policy');
   assert.ok(compact.includes("'Navigate / View'") && compact.includes("'Review'"), 'compact toolbar must keep primary and review groups top-level');
-  for (const label of ['View', 'Visibility', 'Inspect', 'Export', 'Source', 'Diag']) {
-    assert.ok(compact.includes(`label: '${label}'`), `compact toolbar must define ${label} secondary menu`);
-  }
-  for (const group of ['view', 'visibility', 'inspect', 'export', 'source', 'diag']) {
-    assert.ok(compact.includes(`data-rvm-toolbar-more-group=\"${group}\"`) || compact.includes(`data-rvm-toolbar-more-group="${group}"`) || compact.includes(`id: '${group}'`), `compact toolbar must render ${group} grouped dropdown`);
-  }
+  for (const label of ['View', 'Visibility', 'Inspect', 'Export', 'Source', 'Diag']) assert.ok(compact.includes(`label: '${label}'`), `compact toolbar must define ${label} secondary menu`);
+  for (const group of ['view', 'visibility', 'inspect', 'export', 'source', 'diag']) assert.ok(compact.includes(`id: '${group}'`), `compact toolbar must define ${group} grouped dropdown`);
   assert.ok(compact.includes('classifySecondaryMenu'), 'compact toolbar must classify advanced sections into named groups');
   assert.ok(compact.includes('secondary-grouped'), 'advanced sections must be marked as secondary-grouped');
   assert.ok(!compact.includes('More tools</span>'), 'generic More tools dumping-ground label must be removed');
-  assert.ok(!compact.includes('<details'), 'grouped menus must not rely on native details toggle');
+  assert.ok(!compact.includes('<details'), 'compact toolbar must not rely on native details toggle for grouped menus');
   assert.ok(renderer.includes('RvmToolbarCompactBridge.js?v=20260626-rvm-toolbar-secondary-groups-1'), 'renderer must load grouped secondary toolbar policy');
 }
 
@@ -198,7 +169,7 @@ async function verifyRuntimeBehavior() {
   root.dispatch('click', makeEvent(view.button));
   document.dispatch('keydown', makeEvent(view.button, { key: 'Escape' }));
   assert.equal(view.button.getAttribute('aria-expanded'), 'false', 'Escape closes active grouped menu');
-  assert.equal(view.focused, true, 'Escape returns focus to active grouped button');
+  assert.equal(view.button.focused, true, 'Escape returns focus to active grouped button');
 
   root.dispatch('click', makeEvent(view.button));
   document.dispatch('pointerdown', makeEvent(new FakeElement('main')));
