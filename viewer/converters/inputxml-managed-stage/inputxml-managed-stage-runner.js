@@ -1,5 +1,5 @@
 import { buildInputXmlDirectManagedStageJson } from './InputXmlDirectManagedStageBuilder.js';
-import { buildUxmlTextFromStagedHierarchy } from '../../tabs/model-converters/converters/rvmattr-stagedjson-to-uxml.js';
+import { buildInputXmlManagedStageUxmlText } from './InputXmlDirectManagedStageUxmlSidecar.js';
 
 function text(value) { return String(value ?? '').trim(); }
 async function readFileText(file) {
@@ -31,7 +31,7 @@ export async function run(ctx = {}) {
     if (ctx.options?.includeUxmlSidecar !== false) {
       outputs.push({
         name: `${baseName(sourceName)}_managed_stage.uxml.json`,
-        text: buildUxmlTextFromStagedHierarchy(staged.hierarchy, {
+        text: buildInputXmlManagedStageUxmlText(staged, {
           stem: baseName(sourceName),
           inputName: sourceName,
           projectId: 'INPUTXML_DIRECT_MANAGED_STAGE',
