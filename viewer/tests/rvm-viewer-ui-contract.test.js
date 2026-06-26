@@ -33,7 +33,7 @@ const SOURCE_PREVIEW_TOOLS = [
   ['nonprimitive-support-overlay', 'RvmNonPrimitiveSupportOverlayBridge.js?v=20260623-nonprimitive-support-overlay-9', 'installRvmNonPrimitiveSupportOverlayBridge'],
   ['nonprimitive-support-hard-disable', 'RvmNonPrimitiveSupportOverlayHardDisableBridge.js?v=20260623-nonprimitive-support-hard-disable-1', 'installRvmNonPrimitiveSupportOverlayHardDisableBridge'],
   ['nonprimitive-support-details-panel', 'RvmNonPrimitiveSupportOverlayDetailsPanelBridge.js?v=20260626-source-preview-support-events-1', 'installRvmNonPrimitiveSupportOverlayDetailsPanelBridge'],
-  ['nonprimitive-support-hover', 'RvmNonPrimitiveSupportOverlayHoverBridge.js?v=20260623-nonprimitive-support-hover-2', 'installRvmNonPrimitiveSupportOverlayHoverBridge'],
+  ['nonprimitive-support-hover', 'RvmNonPrimitiveSupportOverlayHoverBridge.js?v=20260626-source-preview-hover-events-1', 'installRvmNonPrimitiveSupportOverlayHoverBridge'],
   ['nonprimitive-auto-bend', 'RvmNonPrimitiveAutoBendBridge.js?v=20260623-nonprimitive-auto-bend-preview-2', 'installRvmNonPrimitiveAutoBendBridge'],
   ['nonprimitive-node-markers', 'RvmNonPrimitiveNodeMarkerBridge.js?v=20260625-node-marker-deferred-1', 'installRvmNonPrimitiveNodeMarkerBridge'],
   ['nonprimitive-source-tools-ui', 'RvmNonPrimitiveSourceToolsUiBridge.js?v=20260626-source-tools-shell-slot-1', 'installRvmNonPrimitiveSourceToolsUiBridge'],
@@ -81,10 +81,10 @@ function verifySupportPolicyOptionA() {
 function verifyDeferredSupportPolicyCacheKeys() {
   const deferredLoader = read(files.deferredLoader);
   const renderer = read(files.renderer);
-  assert.ok(deferredLoader.includes('20260626-rvm-deferred-source-preview-events-1'), 'deferred bridge loader must expose source-preview event-routing cache contract');
+  assert.ok(deferredLoader.includes('20260626-rvm-deferred-source-preview-hover-events-1'), 'deferred bridge loader must expose source-preview hover event-routing cache contract');
   assert.ok(deferredLoader.includes('RvmStagedJsonExportBridge.js?v=20260624-rvm-stagedjson-support-policy-1'), 'post-model deferred loader must import current Option A staged export bridge');
   assert.ok(deferredLoader.includes('RvmStagedJsonValidationBridge.js?v=20260624-rvm-stagedjson-support-policy-1'), 'post-model deferred loader must import current Option A staged validation bridge');
-  assert.ok(renderer.includes('RvmDeferredBridgeLoader.js?v=20260626-rvm-deferred-source-preview-events-1'), 'renderer must import the current deferred loader cache key');
+  assert.ok(renderer.includes('RvmDeferredBridgeLoader.js?v=20260626-rvm-deferred-source-preview-hover-events-1'), 'renderer must import the current deferred loader cache key');
   assert.ok(!deferredLoader.includes('RvmStagedJsonExportBridge.js?v=20260621-rvm-button-hardening-1'), 'deferred loader must not keep stale staged export cache key');
   assert.ok(!deferredLoader.includes('RvmStagedJsonValidationBridge.js?v=20260620-rvm-stagedjson-validation-1'), 'deferred loader must not keep stale staged validation cache key');
 }
