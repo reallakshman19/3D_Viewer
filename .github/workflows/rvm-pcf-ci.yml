@@ -60,6 +60,7 @@ on:
       - 'viewer/tests/rvm-pcf-*.test.js'
       - 'viewer/tests/rvm-viewer-ui-contract.test.js'
       - 'viewer/tests/rvm-toolbar-more-tools.test.js'
+      - 'viewer/tests/rvm-toolbar-overflow-audit.test.js'
       - 'viewer/tests/inputxml-direct-managed-stage.test.js'
       - 'viewer/tests/inputxml-bend-element-length.test.js'
       - 'viewer/tests/rvm-geometry-workspace-*.test.js'
@@ -111,6 +112,9 @@ jobs:
 
       - name: Verify RVM More Tools overflow
         run: node viewer/tests/rvm-toolbar-more-tools.test.js
+
+      - name: Verify RVM toolbar overflow audit
+        run: node viewer/tests/rvm-toolbar-overflow-audit.test.js
 
       - name: Verify direct InputXML stagedJSON conversion
         run: node viewer/tests/inputxml-direct-managed-stage.test.js
