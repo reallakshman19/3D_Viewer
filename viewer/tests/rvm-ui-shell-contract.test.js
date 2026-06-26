@@ -27,6 +27,11 @@ function assertContains(source, pattern, message) {
   assert.ok(source.includes(pattern), message);
 }
 
+function activeImport(source, moduleName) {
+  const match = source.match(new RegExp(`import\\s+\\{[^}]+\\}\\s+from\\s+['\"]([^'\"]*${moduleName}\\.js\\?v=[^'\"]+)['\"]`));
+  return match?.[1] || '';
+}
+
 assertContains(shell, "const VERSION = '20260626-rvm-ui-shell-slots-2'", 'shell must expose current auditable version');
 assertContains(shell, "const PREVIOUS_VERSION = '20260626-rvm-ui-shell-slots-1'", 'shell must retain previous cache evidence');
 assertContains(shell, 'RVM_UI_SHELL_SLOTS', 'shell must define canonical slot IDs');
@@ -62,8 +67,9 @@ assertContains(shell, "slots.exports !== 1", 'audit must enforce a single export
 assertContains(shell, 'injectStyles', 'shell must include compact visual styling');
 assertContains(shell, '.rvm-right-panel-tabs', 'shell styling must cover tab row');
 assertContains(shell, '.rvm-panel-slot[hidden]', 'shell styling must hide inactive panel slots');
-assertContains(renderer, 'RvmViewerUiShell.js?v=20260626-rvm-ui-shell-slots-2', 'renderer must import current shell cache key');
-assertContains(renderer, 'RvmBottomDiagnosticsDrawerBridge.js?v=20260626-rvm-diagnostics-shell-slot-1', 'renderer must import shell-slot diagnostics drawer cache key');
+assert.equal(activeImport(renderer, 'RvmViewerUiShell'), './RvmViewerUiShell.js?v=20260626-rvm-ui-shell-slots-2', 'renderer must actively import current shell cache key');
+assert.equal(activeImport(renderer, 'RvmBottomDiagnosticsDrawerBridge'), './RvmBottomDiagnosticsDrawerBridge.js?v=20260626-rvm-diagnostics-shell-slot-1', 'renderer must actively import shell-slot diagnostics drawer cache key');
+assert.equal(activeImport(renderer, 'RvmDeferredBridgeLoader'), './RvmDeferredBridgeLoader.js?v=20260626-rvm-deferred-report-export-shell-slot-1', 'renderer must actively import current deferred-loader cache key');
 assertContains(renderer, 'installRvmViewerUiShell()', 'renderer must install the shell owner');
 assertContains(drawer, "DIAGNOSTICS_SLOT_SELECTOR = '[data-rvm-panel-slot=\"diagnostics\"]'", 'diagnostics drawer must target diagnostics shell slot');
 assertContains(drawer, 'registerDiagnosticsPanel', 'diagnostics drawer must register with shell panel registry');
@@ -74,9 +80,10 @@ assertContains(report, 'registerExportsPanel', 'report export must register with
 assertContains(report, "slot: 'exports'", 'report export must register in exports slot');
 assertContains(report, "setRightPanelTab?.(root, 'exports'", 'report export must activate Exports tab when opened');
 assertContains(report, 'PREVIOUS_BRIDGE_VERSION', 'report export must retain previous bridge evidence');
+assertContains(deferred, "const VERSION = '20260626-rvm-deferred-report-export-shell-slot-1'", 'deferred loader must expose current cache key');
 assertContains(deferred, 'RvmReportExportBridge.js?v=20260626-rvm-report-export-shell-slot-1', 'deferred loader must import shell-slot report export bridge');
 assert.ok(!shell.includes('convertXmlToCii'), 'shell must not include XML->CII conversion logic');
 assert.ok(!shell.includes('xml-cii2019'), 'shell must not import XML CII worker logic');
 assert.ok(!renderer.includes('installRvmViewerUiShell(RvmViewer3D'), 'shell install must not patch RvmViewer3D prototype');
 
-console.log('Verified RVM UI shell source contract: slots, exports tab, lifecycle, diagnostics/export shell ownership, registration, renderer wiring, and XML-CII isolation.');
+console.log('Verified RVM UI shell source contract: active cache chain, slots, exports tab, lifecycle, diagnostics/export shell ownership, registration, renderer wiring, and XML-CII isolation.');

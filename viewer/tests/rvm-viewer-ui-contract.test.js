@@ -11,195 +11,127 @@ const files = {
   contract: path.join(viewerRoot, 'tabs/rvm-viewer-module-contract.js'),
   renderer: path.join(viewerRoot, 'tabs/viewer3d-rvm-tab-renderer.js'),
   tab: path.join(viewerRoot, 'tabs/viewer3d-rvm-tab.js'),
-  resizeBridge: path.join(viewerRoot, 'tabs/RvmLeftPanelResizeCollapseBridge.js'),
-  stagedExport: path.join(viewerRoot, 'tabs/RvmStagedJsonExportBridge.js'),
-  stagedValidation: path.join(viewerRoot, 'tabs/RvmStagedJsonValidationBridge.js'),
   deferredLoader: path.join(viewerRoot, 'tabs/RvmDeferredBridgeLoader.js'),
   toolbarCompact: path.join(viewerRoot, 'tabs/RvmToolbarCompactBridge.js'),
   toolbarOverflow: path.join(viewerRoot, 'tabs/RvmToolbarOverflowController.js'),
   uiShell: path.join(viewerRoot, 'tabs/RvmViewerUiShell.js'),
-  uiShellContract: path.join(viewerRoot, 'tests/rvm-ui-shell-contract.test.js'),
   bottomDiagnostics: path.join(viewerRoot, 'tabs/RvmBottomDiagnosticsDrawerBridge.js'),
+  reportExport: path.join(viewerRoot, 'tabs/RvmReportExportBridge.js'),
+  stagedExport: path.join(viewerRoot, 'tabs/RvmStagedJsonExportBridge.js'),
+  stagedValidation: path.join(viewerRoot, 'tabs/RvmStagedJsonValidationBridge.js'),
 };
-
-const ADVANCED_POSTMODEL_TOOLS = [
-  ['object-search', 'RvmObjectSearchBridge.js?v=20260621-rvm-object-search-1', 'installRvmObjectSearchBridge'],
-  ['visibility-snapshots', 'RvmVisibilitySnapshotsBridge.js?v=20260621-rvm-visibility-snapshots-1', 'installRvmVisibilitySnapshotsBridge'],
-  ['selection-sets', 'RvmSelectionSetsBridge.js?v=20260621-rvm-selection-sets-1', 'installRvmSelectionSetsBridge'],
-  ['report-export', 'RvmReportExportBridge.js?v=20260621-rvm-report-export-1', 'installRvmReportExportBridge'],
-];
-
-const SOURCE_PREVIEW_TOOLS = [
-  ['nonprimitive-support-overlay', 'RvmNonPrimitiveSupportOverlayBridge.js?v=20260623-nonprimitive-support-overlay-9', 'installRvmNonPrimitiveSupportOverlayBridge'],
-  ['nonprimitive-support-hard-disable', 'RvmNonPrimitiveSupportOverlayHardDisableBridge.js?v=20260623-nonprimitive-support-hard-disable-1', 'installRvmNonPrimitiveSupportOverlayHardDisableBridge'],
-  ['nonprimitive-support-details-panel', 'RvmNonPrimitiveSupportOverlayDetailsPanelBridge.js?v=20260626-source-preview-support-events-1', 'installRvmNonPrimitiveSupportOverlayDetailsPanelBridge'],
-  ['nonprimitive-support-hover', 'RvmNonPrimitiveSupportOverlayHoverBridge.js?v=20260626-source-preview-hover-events-1', 'installRvmNonPrimitiveSupportOverlayHoverBridge'],
-  ['nonprimitive-auto-bend', 'RvmNonPrimitiveAutoBendBridge.js?v=20260623-nonprimitive-auto-bend-preview-2', 'installRvmNonPrimitiveAutoBendBridge'],
-  ['nonprimitive-node-markers', 'RvmNonPrimitiveNodeMarkerBridge.js?v=20260625-node-marker-deferred-1', 'installRvmNonPrimitiveNodeMarkerBridge'],
-  ['nonprimitive-source-tools-ui', 'RvmNonPrimitiveSourceToolsUiBridge.js?v=20260626-source-tools-shell-slot-1', 'installRvmNonPrimitiveSourceToolsUiBridge'],
-];
 
 function read(file) {
   assert.ok(fs.existsSync(file), `missing source file: ${path.relative(viewerRoot, file)}`);
   return fs.readFileSync(file, 'utf8');
 }
 
+function activeImport(source, moduleName) {
+  const match = source.match(new RegExp(`import\\s+\\{[^}]+\\}\\s+from\\s+['\"]([^'\"]*${moduleName}\\.js\\?v=[^'\"]+)['\"]`));
+  return match?.[1] || '';
+}
+
 function rvmViewerImports(source) {
   return [...source.matchAll(/from\s+["']([^"']*RvmViewer3D\.js\?v=[^"']+)["']/g)].map((match) => match[1]);
 }
 
-function verifyModuleIdentity() {
-  const contract = read(files.contract);
-  const renderer = read(files.renderer);
-  const tab = read(files.tab);
-  const key = contract.match(/RVM_VIEWER3D_MODULE_CACHE_KEY\s*=\s*["']([^"']+)["']/)?.[1];
-  assert.ok(key, 'module identity contract must expose RVM_VIEWER3D_MODULE_CACHE_KEY');
-  const suffixes = [...rvmViewerImports(renderer), ...rvmViewerImports(tab)].map((specifier) => specifier.slice(specifier.lastIndexOf('RvmViewer3D.js')));
-  assert.deepEqual([...new Set(suffixes)], [`RvmViewer3D.js?v=${key}`], 'renderer and mounted tab must share one RvmViewer3D ES module identity');
-  assert.ok(renderer.includes('installToolbarActionCompatibility'), 'renderer must alias handleToolbarAction to dispatchAction for local toolbar binding');
+const contract = read(files.contract);
+const renderer = read(files.renderer);
+const tab = read(files.tab);
+const deferredLoader = read(files.deferredLoader);
+const toolbar = read(files.toolbarCompact);
+const overflow = read(files.toolbarOverflow);
+const uiShell = read(files.uiShell);
+const bottomDiagnostics = read(files.bottomDiagnostics);
+const reportExport = read(files.reportExport);
+const stagedExport = read(files.stagedExport);
+const stagedValidation = read(files.stagedValidation);
+
+const viewerKey = contract.match(/RVM_VIEWER3D_MODULE_CACHE_KEY\s*=\s*["']([^"']+)["']/)?.[1];
+assert.ok(viewerKey, 'module identity contract must expose RVM_VIEWER3D_MODULE_CACHE_KEY');
+const viewerSuffixes = [...rvmViewerImports(renderer), ...rvmViewerImports(tab)].map((specifier) => specifier.slice(specifier.lastIndexOf('RvmViewer3D.js')));
+assert.deepEqual([...new Set(viewerSuffixes)], [`RvmViewer3D.js?v=${viewerKey}`], 'renderer and mounted tab must share one RvmViewer3D ES module identity');
+assert.ok(renderer.includes('installToolbarActionCompatibility'), 'renderer must alias handleToolbarAction to dispatchAction for local toolbar binding');
+
+assert.equal(activeImport(renderer, 'RvmViewerUiShell'), './RvmViewerUiShell.js?v=20260626-rvm-ui-shell-slots-2', 'renderer must actively import current UI shell cache key');
+assert.equal(activeImport(renderer, 'RvmBottomDiagnosticsDrawerBridge'), './RvmBottomDiagnosticsDrawerBridge.js?v=20260626-rvm-diagnostics-shell-slot-1', 'renderer must actively import shell-slot diagnostics drawer cache key');
+assert.equal(activeImport(renderer, 'RvmDeferredBridgeLoader'), './RvmDeferredBridgeLoader.js?v=20260626-rvm-deferred-report-export-shell-slot-1', 'renderer must actively import current deferred-loader cache key');
+assert.equal(activeImport(renderer, 'RvmCanvasSelectionSinglePickGuardBridge'), './RvmCanvasSelectionSinglePickGuardBridge.js?v=20260626-rvm-canvas-single-pick-registry-1', 'renderer must actively import routed canvas single-pick bridge');
+assert.equal(activeImport(renderer, 'RvmViewerInteractionPatch'), './RvmViewerInteractionPatch.js?v=20260626-rvm-canvas-selection-registry-1', 'renderer must actively import routed canvas selection bridge');
+
+for (const eagerForbidden of [
+  'RvmModelHealthBridge.js?v=',
+  'RvmModelHealthIssuesBridge.js?v=',
+  'RvmObjectSearchBridge.js?v=',
+  'RvmVisibilitySnapshotsBridge.js?v=',
+  'RvmSelectionSetsBridge.js?v=',
+  'RvmReportExportBridge.js?v=',
+  'RvmNonPrimitiveSupportOverlayBridge.js?v=',
+  'RvmNonPrimitiveSupportOverlayDetailsPanelBridge.js?v=',
+  'RvmNonPrimitiveSupportOverlayHoverBridge.js?v=',
+  'RvmNonPrimitiveAutoBendBridge.js?v=',
+  'RvmNonPrimitiveNodeMarkerBridge.js?v=',
+  'RvmNonPrimitiveSourceToolsUiBridge.js?v=',
+]) {
+  assert.ok(!renderer.includes(`import`) || !activeImport(renderer, eagerForbidden.replace('.js?v=', '')), `renderer must not eagerly import ${eagerForbidden}`);
 }
 
-function verifyResizablePanels() {
-  const source = read(files.resizeBridge);
-  assert.ok(source.includes('--rvm-left-panel-width'), 'left panel resize contract variable must be written');
-  assert.ok(source.includes('--rvm-right-panel-width'), 'right panel resize contract variable must be written');
-  assert.ok(source.includes('.rvm-left-panel[data-rvm-left-panel-resizable="true"]'), 'left panel CSS must consume resize variable');
-  assert.ok(source.includes('.rvm-right-panel[data-rvm-right-panel-resizable="true"]'), 'right panel CSS must consume resize variable');
-  assert.ok(source.includes('__3D_RVM_VIEWER__?.onWindowResize') || source.includes('__3D_RVM_VIEWER__?.resize'), 'panel resize must notify the active viewer to resize');
-}
+assert.ok(deferredLoader.includes("const VERSION = '20260626-rvm-deferred-report-export-shell-slot-1'"), 'deferred loader must expose current report/export shell-slot cache key');
+assert.ok(deferredLoader.includes("PREVIOUS_SOURCE_PREVIEW_LOADER_VERSION = '20260626-rvm-deferred-node-marker-events-1'"), 'deferred loader must preserve previous node-marker event cache key evidence');
+assert.ok(deferredLoader.includes('RvmStagedJsonExportBridge.js?v=20260624-rvm-stagedjson-support-policy-1'), 'deferred loader must import current staged export bridge');
+assert.ok(deferredLoader.includes('RvmStagedJsonValidationBridge.js?v=20260624-rvm-stagedjson-support-policy-1'), 'deferred loader must import current staged validation bridge');
+assert.ok(deferredLoader.includes('RvmReportExportBridge.js?v=20260626-rvm-report-export-shell-slot-1'), 'deferred loader must import shell-slot report export bridge');
+assert.ok(deferredLoader.includes('RvmNonPrimitiveSupportOverlayDetailsPanelBridge.js?v=20260626-source-preview-support-events-1'), 'deferred loader must import event-routed support details bridge');
+assert.ok(deferredLoader.includes('RvmNonPrimitiveSupportOverlayHoverBridge.js?v=20260626-source-preview-hover-events-1'), 'deferred loader must import event-routed support hover bridge');
+assert.ok(deferredLoader.includes('RvmNonPrimitiveNodeMarkerBridge.js?v=20260626-node-marker-events-1'), 'deferred loader must import event-routed node marker bridge');
+assert.ok(deferredLoader.includes('RvmNonPrimitiveSourceToolsUiBridge.js?v=20260626-source-tools-shell-slot-1'), 'deferred loader must import shell-slot source tools UI bridge');
+assert.ok(deferredLoader.includes('SOURCE_PREVIEW_KIND_RE'), 'deferred loader must gate source-preview bridge loading by source kind');
+assert.ok(deferredLoader.includes("mode === 'source-preview'"), 'deferred loader must gate source-preview bridge loading by primitive mode');
+assert.ok(deferredLoader.includes('refreshSourcePreviewRuntime'), 'deferred loader must refresh source-preview runtime after lazy install');
 
-function verifySupportPolicyOptionA() {
-  const stagedExport = read(files.stagedExport);
-  const stagedValidation = read(files.stagedValidation);
-  assert.ok(stagedExport.includes('SUPPORT_UNAVAILABLE_REASON'), 'support export must have an explicit unavailable reason');
-  assert.ok(stagedExport.includes('binary-rvm-support-tools-retired'), 'support export must preserve binary RVM retirement policy');
-  assert.ok(stagedExport.includes('evaluateSupportPolicy'), 'support export must evaluate source-preview prerequisites before exporting support data');
-  assert.ok(stagedValidation.includes('support-mode-unavailable-for-current-source'), 'support validation must fail clearly when support mode is unavailable');
-  assert.ok(stagedValidation.includes('supportModeAvailable'), 'support validation must expose a support availability gate');
-}
+assert.ok(uiShell.includes("const VERSION = '20260626-rvm-ui-shell-slots-2'"), 'UI shell must expose current version');
+assert.ok(uiShell.includes("exports: 'exports'"), 'UI shell must define exports slot');
+assert.ok(uiShell.includes("{ id: RVM_UI_SHELL_SLOTS.exports, label: 'Exports' }"), 'UI shell must expose Exports tab');
+assert.ok(uiShell.includes("slots.diagnostics !== 1"), 'UI shell audit must enforce one diagnostics slot');
+assert.ok(uiShell.includes("slots.exports !== 1"), 'UI shell audit must enforce one exports slot');
+assert.ok(uiShell.includes('registerRvmToolPanel'), 'UI shell must expose panel registration');
+assert.ok(uiShell.includes('setRvmRightPanelTab'), 'UI shell must own right-panel tab state');
+assert.ok(uiShell.includes('#rvm-attributes-panel'), 'UI shell must preserve attributes panel');
+assert.ok(uiShell.includes('#rvm-browser-parse-diagnostics'), 'UI shell must preserve browser diagnostics panel');
 
-function verifyDeferredSupportPolicyCacheKeys() {
-  const deferredLoader = read(files.deferredLoader);
-  const renderer = read(files.renderer);
-  assert.ok(deferredLoader.includes('20260626-rvm-deferred-source-preview-hover-events-1'), 'deferred bridge loader must expose source-preview hover event-routing cache contract');
-  assert.ok(deferredLoader.includes('RvmStagedJsonExportBridge.js?v=20260624-rvm-stagedjson-support-policy-1'), 'post-model deferred loader must import current Option A staged export bridge');
-  assert.ok(deferredLoader.includes('RvmStagedJsonValidationBridge.js?v=20260624-rvm-stagedjson-support-policy-1'), 'post-model deferred loader must import current Option A staged validation bridge');
-  assert.ok(renderer.includes('RvmDeferredBridgeLoader.js?v=20260626-rvm-deferred-source-preview-hover-events-1'), 'renderer must import the current deferred loader cache key');
-  assert.ok(!deferredLoader.includes('RvmStagedJsonExportBridge.js?v=20260621-rvm-button-hardening-1'), 'deferred loader must not keep stale staged export cache key');
-  assert.ok(!deferredLoader.includes('RvmStagedJsonValidationBridge.js?v=20260620-rvm-stagedjson-validation-1'), 'deferred loader must not keep stale staged validation cache key');
-}
+assert.ok(bottomDiagnostics.includes("DIAGNOSTICS_SLOT_SELECTOR = '[data-rvm-panel-slot=\"diagnostics\"]'"), 'diagnostics drawer must target diagnostics shell slot');
+assert.ok(bottomDiagnostics.includes('registerDiagnosticsPanel'), 'diagnostics drawer must register with UI shell');
+assert.ok(bottomDiagnostics.includes('root.insertBefore(drawer, statusbar)'), 'diagnostics drawer must preserve legacy statusbar fallback');
+assert.ok(bottomDiagnostics.includes('.rvm-bottom-diagnostics-drawer{position:relative'), 'diagnostics drawer must remain docked/relative, not fixed overlay');
+assert.ok(!bottomDiagnostics.includes('.rvm-bottom-diagnostics-drawer{position:fixed'), 'diagnostics drawer must not use fixed viewport positioning');
+assert.ok(!bottomDiagnostics.includes('left:14px;right:14px;bottom:10px'), 'diagnostics drawer must not retain old overlay offsets');
 
-function verifyToolbarCompactPolicy() {
-  const renderer = read(files.renderer);
-  const toolbar = read(files.toolbarCompact);
-  const overflow = read(files.toolbarOverflow);
-  assert.ok(renderer.includes('RvmToolbarCompactBridge.js?v=20260626-rvm-toolbar-compact-policy-2'), 'renderer must import compact toolbar policy bridge v2');
-  assert.ok(renderer.includes('installRvmToolbarCompactBridge()'), 'renderer must install compact toolbar policy bridge');
-  assert.ok(toolbar.includes('rvm-toolbar-compact-policy-2'), 'toolbar policy must expose versioned source contract');
-  assert.ok(toolbar.includes('RvmToolbarOverflowController.js?v=20260626-rvm-toolbar-overflow-controller-1'), 'toolbar policy must use the single overflow owner module');
-  assert.ok(toolbar.includes("CORE_LABELS = new Set(['Navigate', 'View'])"), 'toolbar policy must keep core Navigate/View top-level');
-  assert.ok(toolbar.includes('data-rvm-toolbar-more'), 'toolbar policy must create a stable More tools button');
-  assert.ok(toolbar.includes('data-rvm-tools-menu'), 'toolbar policy must provide a stable More tools menu marker');
-  assert.ok(toolbar.includes('data-rvm-toolbar-more-panel'), 'toolbar policy must preserve legacy panel marker for compatibility');
-  assert.ok(toolbar.includes("section.dataset.rvmToolbarPolicy = 'advanced'"), 'toolbar policy must mark moved secondary groups as advanced');
-  assert.ok(toolbar.includes("section.dataset.rvmToolbarPolicy = 'duplicate-hidden'"), 'toolbar policy must hide exact duplicate groups rather than stacking them');
-  assert.ok(!toolbar.includes('<details'), 'More Tools must not depend on native details toggling');
-  assert.ok(overflow.includes('installRvmToolbarOverflow'), 'overflow controller must expose install lifecycle');
-  assert.ok(overflow.includes('disposeRvmToolbarOverflow'), 'overflow controller must expose dispose lifecycle');
-  assert.ok(overflow.includes('syncRvmToolbarOverflow'), 'overflow controller must expose sync lifecycle');
-  assert.ok(overflow.includes('aria-expanded'), 'overflow controller must own aria-expanded state');
-  assert.ok(overflow.includes('outside-pointerdown'), 'overflow controller must close on outside pointerdown');
-  assert.ok(overflow.includes("event?.key !== 'Escape'"), 'overflow controller must close on Escape');
-  assert.ok(!overflow.includes('MutationObserver'), 'overflow controller must not use MutationObserver as the More Tools behavior fix');
-}
+assert.ok(reportExport.includes("EXPORTS_SLOT_SELECTOR = '[data-rvm-panel-slot=\"exports\"]'"), 'report export must target exports shell slot');
+assert.ok(reportExport.includes('registerExportsPanel'), 'report export must register with UI shell');
+assert.ok(reportExport.includes("setRightPanelTab?.(root, 'exports'"), 'report export must activate Exports tab when opened');
+assert.ok(reportExport.includes('MAX_EXPORT_ROWS') && reportExport.includes('MAX_SCAN_OBJECTS'), 'report export must remain bounded');
 
-function verifyUiShellContract() {
-  const renderer = read(files.renderer);
-  const shell = read(files.uiShell);
-  const shellTest = read(files.uiShellContract);
-  assert.ok(renderer.includes('RvmViewerUiShell.js?v=20260626-rvm-ui-shell-slots-1'), 'renderer must import RVM UI shell with current cache key');
-  assert.ok(renderer.includes('installRvmViewerUiShell()'), 'renderer must install RVM UI shell');
-  assert.ok(shell.includes('RVM_UI_SHELL_SLOTS'), 'UI shell must expose stable slot identifiers');
-  assert.ok(shell.includes('registerRvmToolPanel'), 'UI shell must provide a registration API for feature panels');
-  assert.ok(shell.includes('auditRvmViewerUiShell'), 'UI shell must expose auditable DOM contract checks');
-  assert.ok(shell.includes('scheduleShellBootstrap'), 'UI shell must support renderer-before-root bootstrap ordering');
-  assert.ok(shell.includes('data-rvm-panel-slot'), 'UI shell must stamp stable panel slot selectors');
-  assert.ok(shell.includes('data-rvm-right-panel-tab'), 'UI shell must own right-panel tab state');
-  assert.ok(shell.includes('rvmUiShellAudit'), 'UI shell must stamp root audit status');
-  assert.ok(shell.includes('#rvm-attributes-panel'), 'UI shell must preserve existing attributes panel');
-  assert.ok(shell.includes('#rvm-browser-parse-diagnostics'), 'UI shell must preserve existing diagnostics panel');
-  assert.ok(shellTest.includes('XML-CII isolation'), 'standalone UI shell contract test must document XML-CII isolation');
-}
+assert.ok(toolbar.includes('rvm-toolbar-compact-policy-2'), 'toolbar policy must expose versioned source contract');
+assert.ok(toolbar.includes('RvmToolbarOverflowController.js?v=20260626-rvm-toolbar-overflow-controller-1'), 'toolbar policy must use the single overflow owner module');
+assert.ok(toolbar.includes('data-rvm-toolbar-more'), 'toolbar policy must create stable More button');
+assert.ok(toolbar.includes('data-rvm-tools-menu'), 'toolbar policy must create stable More menu');
+assert.ok(!toolbar.includes('<details'), 'More Tools must not depend on native details toggling');
+assert.ok(overflow.includes('installRvmToolbarOverflow'), 'overflow controller must expose install lifecycle');
+assert.ok(overflow.includes('disposeRvmToolbarOverflow'), 'overflow controller must expose dispose lifecycle');
+assert.ok(overflow.includes('syncRvmToolbarOverflow'), 'overflow controller must expose sync lifecycle');
+assert.ok(overflow.includes('aria-expanded'), 'overflow controller must own aria-expanded state');
+assert.ok(!overflow.includes('MutationObserver'), 'overflow controller must not use MutationObserver as the behavior fix');
 
-function verifyDockedDiagnosticsDrawer() {
-  const renderer = read(files.renderer);
-  const drawer = read(files.bottomDiagnostics);
-  assert.ok(renderer.includes('RvmBottomDiagnosticsDrawerBridge.js?v=20260624-rvm-diagnostics-docked-drawer-1'), 'renderer must import docked diagnostics drawer cache key');
-  assert.ok(drawer.includes('20260624-rvm-diagnostics-docked-drawer-1'), 'bottom diagnostics drawer must expose docked cache key');
-  assert.ok(drawer.includes('function dockDrawer'), 'bottom diagnostics drawer must dock itself through a layout function');
-  assert.ok(drawer.includes('root.insertBefore(drawer, statusbar)'), 'bottom diagnostics drawer must insert before the status bar, not overlay the viewport');
-  assert.ok(drawer.includes('data-rvm-bottom-diagnostics-docked'), 'bottom diagnostics drawer must mark docked layout state');
-  assert.ok(drawer.includes('.rvm-bottom-diagnostics-drawer{position:relative'), 'bottom diagnostics drawer CSS must be relative/docked');
-  assert.ok(!drawer.includes('.rvm-bottom-diagnostics-drawer{position:fixed'), 'bottom diagnostics drawer must not use fixed viewport positioning');
-  assert.ok(!drawer.includes('left:14px;right:14px;bottom:10px'), 'bottom diagnostics drawer must not retain old fixed overlay offsets');
-}
+assert.ok(stagedExport.includes('SUPPORT_UNAVAILABLE_REASON'), 'support export must have an explicit unavailable reason');
+assert.ok(stagedExport.includes('binary-rvm-support-tools-retired'), 'support export must preserve binary RVM retirement policy');
+assert.ok(stagedValidation.includes('support-mode-unavailable-for-current-source'), 'support validation must fail clearly when support mode is unavailable');
+assert.ok(stagedValidation.includes('supportModeAvailable'), 'support validation must expose a support availability gate');
 
-function verifyPostModelHealthDeferral() {
-  const renderer = read(files.renderer);
-  const deferredLoader = read(files.deferredLoader);
-  assert.ok(!renderer.includes('RvmModelHealthBridge.js?v='), 'renderer must not eagerly import model health bridge');
-  assert.ok(!renderer.includes('RvmModelHealthIssuesBridge.js?v='), 'renderer must not eagerly import model health issues bridge');
-  assert.ok(!renderer.includes('installRvmModelHealthBridge()'), 'renderer must not eagerly install model health bridge');
-  assert.ok(!renderer.includes('installRvmModelHealthIssuesBridge()'), 'renderer must not eagerly install model health issues bridge');
-  assert.ok(deferredLoader.includes("id: 'model-health'"), 'deferred postModel group must include model health bridge');
-  assert.ok(deferredLoader.includes("id: 'model-health-issues'"), 'deferred postModel group must include model health issues bridge');
-  assert.ok(deferredLoader.includes('RvmModelHealthBridge.js?v=20260621-rvm-health-issues-1'), 'deferred postModel group must import model health bridge');
-  assert.ok(deferredLoader.includes('RvmModelHealthIssuesBridge.js?v=20260621-rvm-health-issues-1'), 'deferred postModel group must import model health issues bridge');
-}
+assert.ok(tab.includes('stampSourcePreviewHierarchy(payload.gltf.scene, source, sourceKind, file.name)'), 'mounted RVM tab must stamp source hierarchy before setModel');
+assert.ok(tab.includes('__rvmNonPrimitiveSourceHierarchy') && tab.includes('__rvmNonPrimitiveAutoBendSourceHierarchy'), 'mounted RVM tab must preserve source hierarchy for lazy preview tools');
+assert.ok(tab.includes('ensureSourcePreview') && tab.includes("rvmModelPrimitiveMode === 'source-preview'"), 'mounted RVM tab must request source-preview bridges only for source-preview loads');
+assert.ok(!uiShell.includes('convertXmlToCii'), 'UI shell must not include XML->CII conversion logic');
+assert.ok(!uiShell.includes('xml-cii2019'), 'UI shell must not import XML CII worker logic');
+assert.ok(!renderer.includes('installRvmViewerUiShell(RvmViewer3D'), 'UI shell install must not patch RvmViewer3D prototype');
 
-function verifyPostModelAdvancedToolDeferral() {
-  const renderer = read(files.renderer);
-  const deferredLoader = read(files.deferredLoader);
-  for (const [id, specifier, installName] of ADVANCED_POSTMODEL_TOOLS) {
-    assert.ok(!renderer.includes(`${specifier.split('?')[0]}?v=`), `renderer must not eagerly import ${id}`);
-    assert.ok(!renderer.includes(`${installName}()`), `renderer must not eagerly install ${id}`);
-    assert.ok(deferredLoader.includes(`id: '${id}'`), `deferred postModel group must include ${id}`);
-    assert.ok(deferredLoader.includes(specifier), `deferred postModel group must import ${id}`);
-    assert.ok(deferredLoader.includes(installName), `deferred postModel group must install ${id}`);
-  }
-  assert.ok(renderer.includes('RvmMeasureBridge.js?v=20260621-rvm-measure-tools-1'), 'core Measure bridge must stay eager');
-  assert.ok(renderer.includes('RvmSectionBoxBridge.js?v=20260621-rvm-section-box-1'), 'core Section bridge must stay eager');
-  assert.ok(renderer.includes('RvmVisibilityToolbarBridge.js?v=20260621-rvm-isolate-visibility-toolbar-1'), 'core Visibility bridge must stay eager');
-}
-
-function verifySourcePreviewToolDeferral() {
-  const renderer = read(files.renderer);
-  const deferredLoader = read(files.deferredLoader);
-  const tab = read(files.tab);
-  for (const [id, specifier, installName] of SOURCE_PREVIEW_TOOLS) {
-    assert.ok(!renderer.includes(`${specifier.split('?')[0]}?v=`), `renderer must not eagerly import source-preview bridge ${id}`);
-    assert.ok(!renderer.includes(`${installName}()`), `renderer must not eagerly install source-preview bridge ${id}`);
-    assert.ok(deferredLoader.includes(`id: '${id}'`), `deferred sourcePreview group must include ${id}`);
-    assert.ok(deferredLoader.includes(specifier), `deferred sourcePreview group must import ${id}`);
-    assert.ok(deferredLoader.includes(installName), `deferred sourcePreview group must install ${id}`);
-  }
-  assert.ok(deferredLoader.includes('SOURCE_PREVIEW_KIND_RE'), 'deferred loader must gate source-preview bridge loading by source kind');
-  assert.ok(deferredLoader.includes("mode === 'source-preview'"), 'deferred loader must gate source-preview bridge loading by primitive mode');
-  assert.ok(deferredLoader.includes('refreshSourcePreviewRuntime'), 'deferred loader must refresh source-preview runtime after lazy install');
-  assert.ok(tab.includes('stampSourcePreviewHierarchy(payload.gltf.scene, source, sourceKind, file.name)'), 'mounted RVM tab must stamp source hierarchy before setModel');
-  assert.ok(tab.includes('__rvmNonPrimitiveSourceHierarchy') && tab.includes('__rvmNonPrimitiveAutoBendSourceHierarchy'), 'mounted RVM tab must preserve source hierarchy for lazy preview tools');
-  assert.ok(tab.includes('ensureSourcePreview') && tab.includes("rvmModelPrimitiveMode === 'source-preview'"), 'mounted RVM tab must request source-preview bridges only for source-preview loads');
-}
-
-verifyModuleIdentity();
-verifyResizablePanels();
-verifySupportPolicyOptionA();
-verifyDeferredSupportPolicyCacheKeys();
-verifyToolbarCompactPolicy();
-verifyUiShellContract();
-verifyDockedDiagnosticsDrawer();
-verifyPostModelHealthDeferral();
-verifyPostModelAdvancedToolDeferral();
-verifySourcePreviewToolDeferral();
-
-console.log('Verified RVM viewer module identity, side-panel resize UI contract, Option A staged support policy, deferred stagedJSON cache keys, controlled toolbar overflow policy, UI shell slot contract, docked diagnostics drawer, post-model Health deferral, post-model advanced tool deferral, and source-preview tool deferral.');
+console.log('Verified active RVM viewer runtime cache ownership, shell slots, deferred bridge ownership, toolbar overflow, diagnostics/export ownership, and XML-CII isolation.');

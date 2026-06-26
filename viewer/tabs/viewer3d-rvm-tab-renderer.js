@@ -1,5 +1,6 @@
 // Stable app-shell export adapter for the 3D RVM Viewer tab.
-// Source-preview/non-primitive tools are owned by RvmDeferredBridgeLoader.js?v=20260626-rvm-deferred-node-marker-events-1
+// Source-preview/post-model tools are owned by RvmDeferredBridgeLoader.js?v=20260626-rvm-deferred-report-export-shell-slot-1
+// Previous deferred loader cache key: RvmDeferredBridgeLoader.js?v=20260626-rvm-deferred-node-marker-events-1
 // Previous source-preview loader cache key: RvmDeferredBridgeLoader.js?v=20260626-rvm-deferred-source-preview-hover-events-1
 // Previous shell cache key: RvmViewerUiShell.js?v=20260626-rvm-ui-shell-slots-1
 // Previous diagnostics drawer cache key: RvmBottomDiagnosticsDrawerBridge.js?v=20260624-rvm-diagnostics-docked-drawer-1
@@ -38,7 +39,7 @@ import { installGeometryMappingProfileBridge } from '../geometry-workspace/Geome
 import { installRvmSelectionTreeSyncBridge } from './RvmSelectionTreeSyncBridge.js?v=20260620-rvm-large-box-support-sync-1';
 import { installRvmMaterialModeBridge } from './RvmMaterialModeBridge.js?v=20260620-rvm-remaining-material-modes-1';
 import { installRvmBottomDiagnosticsDrawerBridge } from './RvmBottomDiagnosticsDrawerBridge.js?v=20260626-rvm-diagnostics-shell-slot-1';
-import { installRvmDeferredBridgeLoader } from './RvmDeferredBridgeLoader.js?v=20260626-rvm-deferred-node-marker-events-1';
+import { installRvmDeferredBridgeLoader } from './RvmDeferredBridgeLoader.js?v=20260626-rvm-deferred-report-export-shell-slot-1';
 import { installRvmLeftPanelResizeCollapseBridge } from './RvmLeftPanelResizeCollapseBridge.js?v=20260624-rvm-panel-resize-1';
 import { installRvmLeafSelectionIdentityBridge } from './RvmLeafSelectionIdentityBridge.js?v=20260622-rvm-leaf-selection-identity-1';
 import { installRvmLeafCanvasPickBridge } from './RvmLeafCanvasPickBridge.js?v=20260622-rvm-leaf-canvas-pick-orbit-guard-2';
