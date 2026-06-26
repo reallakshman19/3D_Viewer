@@ -59,6 +59,7 @@ on:
       - 'viewer/tests/rvm-pcf-*.test.js'
       - 'viewer/tests/rvm-viewer-ui-contract.test.js'
       - 'viewer/tests/inputxml-direct-managed-stage.test.js'
+      - 'viewer/tests/inputxml-bend-element-length.test.js'
       - 'viewer/tests/rvm-geometry-workspace-*.test.js'
       - 'viewer/tests/nonprimitive-auto-bend-*.test.js'
       - 'viewer/tests/nonprimitive-support-overlay-*.test.js'
@@ -108,6 +109,9 @@ jobs:
 
       - name: Verify direct InputXML stagedJSON conversion
         run: node viewer/tests/inputxml-direct-managed-stage.test.js
+
+      - name: Verify InputXML bend element length
+        run: node viewer/tests/inputxml-bend-element-length.test.js
 
       - name: Verify raw support cylinders stay raw
         run: node viewer/tests/rvm-pcf-raw-support-cylinder.test.js
