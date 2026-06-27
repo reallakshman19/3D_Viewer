@@ -6,12 +6,7 @@ import { fileURLToPath } from 'node:url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const viewerRoot = path.resolve(__dirname, '..');
-
-function read(relativePath) {
-  const file = path.join(viewerRoot, relativePath);
-  assert.ok(fs.existsSync(file), `missing source file: ${relativePath}`);
-  return fs.readFileSync(file, 'utf8');
-}
+function read(relativePath) { const file = path.join(viewerRoot, relativePath); assert.ok(fs.existsSync(file), `missing source file: ${relativePath}`); return fs.readFileSync(file, 'utf8'); }
 
 const index = read('index.html');
 const entry = read('main-rhbg-fitguard.js');
@@ -26,13 +21,15 @@ const issues = read('tabs/RvmModelHealthIssuesBridge.js');
 const overflow = read('tabs/RvmToolbarOverflowController.js');
 const pointer = read('tabs/RvmGroupedToolbarPointerBridge.js');
 const hierarchy = read('tabs/RvmHierarchySelectionBridge.js');
+const navisHierarchy = read('tabs/RvmNavisHierarchyBridge.js');
 const treeSync = read('tabs/RvmSelectionTreeSyncBridge.js');
 const smartGrid = read('tabs/RvmHierarchySmartGridBridge.js');
+const formatNeutral = read('tabs/RvmFormatNeutralHierarchy.js');
 
-assert.ok(index.includes('main-rhbg-fitguard.js?v=20260627-rvm-toolbar-scroll-misc-1'), 'index must use toolbar scroll/misc startup key');
-assert.ok(entry.includes('core/app.js?v=20260627-rvm-toolbar-scroll-misc-1'), 'entrypoint must use toolbar scroll/misc app delegate key');
-assert.ok(app.includes('app-label-perf-runtime.js?v=20260627-rvm-toolbar-scroll-misc-1'), 'app delegate must use toolbar scroll/misc runtime key');
-assert.ok(runtime.includes('viewer3d-rvm-tab-renderer.js?v=20260627-rvm-toolbar-scroll-misc-1'), 'runtime must use toolbar scroll/misc renderer key');
+assert.ok(index.includes('main-rhbg-fitguard.js?v=20260627-rvm-format-neutral-hierarchy-1'), 'index must use format-neutral hierarchy startup key');
+assert.ok(entry.includes('core/app.js?v=20260627-rvm-format-neutral-hierarchy-1'), 'entrypoint must use format-neutral hierarchy app delegate key');
+assert.ok(app.includes('app-label-perf-runtime.js?v=20260627-rvm-format-neutral-hierarchy-1'), 'app delegate must use format-neutral hierarchy runtime key');
+assert.ok(runtime.includes('viewer3d-rvm-tab-renderer.js?v=20260627-rvm-format-neutral-hierarchy-1'), 'runtime must use format-neutral hierarchy renderer key');
 assert.ok(renderer.includes('RvmToolbarCompactBridge.js?v=20260627-rvm-toolbar-scroll-misc-1'), 'renderer must import scroll/misc toolbar owner');
 assert.ok(renderer.includes('RvmDeferredBridgeLoader.js?v=20260627-rvm-deferred-toolbar-misc-1'), 'renderer must import misc-aware deferred loader');
 assert.ok(renderer.includes('RvmGroupedToolbarPointerBridge.js?v=20260627-rvm-grouped-toolbar-pointer-1'), 'renderer must import deterministic grouped toolbar pointer bridge');
@@ -70,13 +67,17 @@ assert.ok(pointer.includes('pointerdown-deterministic') && pointer.includes('sup
 assert.ok(pointer.includes('[data-rvm-toolbar-more] *{pointer-events:none;}'), 'pointer bridge must make nested label/caret clicks deterministic');
 assert.ok(toolbar.includes('rvm-toolbar-secondary-orient') && toolbar.includes('content:attr(aria-label)'), 'Orient menu must show text labels for icon-only orientation buttons when populated');
 assert.ok(!toolbar.includes('More tools</span>'), 'single generic More tools label must not return');
-assert.ok(renderer.includes('RvmHierarchySelectionBridge.js?v=20260626-rvm-hierarchy-text-hit-target-sync-1'), 'renderer must preserve hierarchy text-hit-target bridge');
-assert.ok(renderer.includes('RvmSelectionTreeSyncBridge.js?v=20260626-rvm-hierarchy-selection-sync-2'), 'renderer must preserve hierarchy canvas sync bridge');
-assert.ok(hierarchy.includes("const BRIDGE_VERSION = 'rvm-hierarchy-selection-bridge/v3-text-hit-target-sync'"), 'hierarchy bridge version must remain active');
-assert.ok(treeSync.includes("const BRIDGE_VERSION = '20260626-rvm-hierarchy-selection-sync-2'"), 'tree sync bridge version must remain active');
+assert.ok(renderer.includes('RvmHierarchySelectionBridge.js?v=20260627-rvm-hierarchy-navis-safe-1'), 'renderer must preserve Navis-safe hierarchy text-hit-target bridge');
+assert.ok(renderer.includes('RvmNavisHierarchyBridge.js?v=20260627-rvm-navis-format-neutral-aware-1'), 'renderer must import format-neutral-aware Navis hierarchy bridge');
+assert.ok(renderer.includes('RvmSelectionTreeSyncBridge.js?v=20260627-rvm-hierarchy-selection-sync-dispose-1'), 'renderer must preserve disposable hierarchy canvas sync bridge');
+assert.ok(hierarchy.includes("const BRIDGE_VERSION = 'rvm-hierarchy-selection-bridge/v4-format-neutral-navis-safe'"), 'hierarchy bridge version must remain active');
+assert.ok(hierarchy.includes('NAVIS_CONTROL_SELECTOR'), 'hierarchy bridge must not intercept Navis controls');
+assert.ok(navisHierarchy.includes('shouldPreserveFormatNeutralTree'), 'Navis hierarchy must not overwrite source-owned trees');
+assert.ok(treeSync.includes("const BRIDGE_VERSION = '20260627-rvm-hierarchy-selection-sync-dispose-1'"), 'tree sync bridge version must remain active');
+assert.ok(treeSync.includes('rvm-tab-dispose'), 'tree sync must dispose on tab teardown');
+assert.ok(formatNeutral.includes('isManagedStageDocument') && formatNeutral.includes('isUxmlLikeDocument'), 'format-neutral helper must detect stagedjson and UXML');
 assert.ok(smartGrid.includes("const VERSION = '20260627-rvm-hierarchy-smart-grid-1'"), 'smart grid bridge must expose current version');
 assert.ok(smartGrid.includes('grid-template-columns:22px minmax(0,1fr) 34px 34px'), 'smart grid must define Navis row columns for expander/select/off/on');
 assert.ok(smartGrid.includes('.rvm-navis-select{grid-column:2;min-width:0;width:100%;'), 'smart grid must allocate a flexible select/label column');
 assert.ok(smartGrid.includes('overflow-x:hidden'), 'smart grid must suppress horizontal row overflow');
-
-console.log('Verified scrollable expanded View toolbar, Misc group routing, removed Report/Health/Health+ toolbar status labels, button wiring, deterministic pointer toggles, and hierarchy sync.');
+console.log('Verified scrollable expanded View toolbar, Misc group routing, format-neutral hierarchy cache chain, deterministic pointer toggles, hierarchy smart grid, and disposable hierarchy sync.');
