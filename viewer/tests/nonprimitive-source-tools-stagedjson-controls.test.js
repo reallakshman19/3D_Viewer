@@ -4,6 +4,8 @@ import { readFileSync } from 'node:fs';
 const settings = readFileSync('viewer/overlays/support/SupportOverlaySettings.js', 'utf8');
 const supportBridge = readFileSync('viewer/tabs/RvmNonPrimitiveSupportOverlayBridge.js', 'utf8');
 const sourceToolsBridge = readFileSync('viewer/tabs/RvmNonPrimitiveSourceToolsUiBridge.js', 'utf8');
+const sourceToolsGateBridge = readFileSync('viewer/tabs/RvmSourceToolsStagedJsonKindGateBridge.js', 'utf8');
+const stagedJsonValidationBridge = readFileSync('viewer/tabs/RvmStagedJsonValidationBridge.js', 'utf8');
 const inputXmlBridge = readFileSync('viewer/rvm-viewer/RvmInputXmlSupportGraphicsUiBridge.js', 'utf8');
 const inputXmlSetModelBridge = readFileSync('viewer/rvm-viewer/RvmInputXmlSupportGraphicsSetModelBridge.js', 'utf8');
 const leftBridge = readFileSync('viewer/tabs/RvmLeftPanelResizeCollapseBridge.js', 'utf8');
@@ -38,6 +40,14 @@ assert.match(sourceToolsBridge, /rvm-inputxml-apply-transform/, 'axis transform 
 assert.match(sourceToolsBridge, /AUTO_TOOLS[\s\S]*reapplyAutoBendFromControls/, 'Auto Bend controls must route to Auto Bend only');
 assert.match(sourceToolsBridge, /SUPPORT_TOOLS[\s\S]*reapplySupportOverlayFromControls/, 'Support Symbol/Label controls must route to support overlay only');
 assert.match(sourceToolsBridge, /apply-axis[\s\S]*reapplyFromControls/, 'axis Apply must reapply both systems');
+
+assert.match(sourceToolsGateBridge, /rvm-source-tools-stagedjson-kind-gate\/v1/, 'stagedJSON source tools gate bridge must expose a schema');
+assert.match(sourceToolsGateBridge, /new Set\(\['stagedjson', 'staged\.json'\]\)/, 'stagedJSON source tools gate must target stagedJSON source kinds');
+assert.match(sourceToolsGateBridge, /root\.dataset\.rvmLoadedSourceKind = 'json'/, 'stagedJSON source tools gate must coerce only the Source Tools kind gate to JSON');
+assert.match(sourceToolsGateBridge, /root\.dataset\.rvmSourceToolsOriginalKind = kind/, 'stagedJSON source tools gate must preserve the original source kind on the root');
+assert.match(sourceToolsGateBridge, /api\.render[\s\S]*api\.sync[\s\S]*api\.reapplyAutoBendOnly[\s\S]*api\.reapplySupportOverlayOnly/, 'stagedJSON source tools gate must wrap render, sync, and reapply paths');
+assert.match(stagedJsonValidationBridge, /RvmSourceToolsStagedJsonKindGateBridge\.js\?v=20260627-rvm-source-tools-stagedjson-kind-gate-1/, 'stagedJSON validation bridge must import the Source Tools kind gate');
+assert.match(stagedJsonValidationBridge, /installRvmSourceToolsStagedJsonKindGateBridge\(\)/, 'stagedJSON validation bridge must install the Source Tools kind gate');
 
 assert.match(leftBridge, /data-rvm-hierarchy-width-controls/, 'hierarchy panel must expose width controls');
 assert.match(leftBridge, /resize:both/, 'hierarchy tree must be horizontally and vertically resizable');
