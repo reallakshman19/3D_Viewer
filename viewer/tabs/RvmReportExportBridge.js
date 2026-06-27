@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 
-const INSTALL_FLAG = Symbol.for('pcf-glb-rvm-report-export-bridge-v1');
-const BRIDGE_VERSION = '20260621-rvm-report-export-1';
+const INSTALL_FLAG = Symbol.for('pcf-glb-rvm-report-export-bridge-misc-compact-1');
+const BRIDGE_VERSION = '20260627-rvm-report-misc-compact-1';
 const MAX_EXPORT_ROWS = 50000;
 const MAX_SCAN_OBJECTS = 120000;
 const REPORT_SCOPES = ['selected', 'visible', 'hidden', 'all'];
@@ -280,8 +280,7 @@ function injectToolbar(root) {
     <div class="rvm-ribbon-button-row">
       <button type="button" class="rvm-tool-btn" data-rvm-report-open="true" title="Export RVM rendered-object report"><span aria-hidden="true">▤</span><span>Objects</span></button>
       <button type="button" class="rvm-tool-btn" data-rvm-report-quick-csv="true" title="Export visible objects as CSV"><span aria-hidden="true">CSV</span><span>Visible</span></button>
-    </div>
-    <div class="rvm-report-export-summary" data-rvm-report-toolbar-summary>Report: selected / visible / hidden / full</div>`;
+    </div>`;
 }
 
 function ensureDialog() {
@@ -372,7 +371,7 @@ function injectStyles() {
   const style = document.createElement('style');
   style.id = 'rvm-report-export-bridge-style';
   style.textContent = `
-    .rvm-report-export-tool-group .rvm-tool-btn span:first-child{font-size:10px}.rvm-report-export-summary{margin-top:3px;color:#94a3b8;font-size:9.5px;white-space:nowrap}
+    .rvm-report-export-tool-group .rvm-tool-btn span:first-child{font-size:10px}
     .rvm-report-export-dialog{position:fixed;inset:0;display:none;align-items:flex-start;justify-content:center;padding-top:92px;background:rgba(2,6,23,.42);z-index:12010}.rvm-report-export-dialog.is-open{display:flex}
     .rvm-report-export-card{width:min(520px,calc(100vw - 44px));display:grid;gap:10px;border:1px solid rgba(126,190,255,.28);border-radius:12px;background:#0b1424;box-shadow:0 22px 70px rgba(0,0,0,.48);padding:12px;color:#dbeafe}
     .rvm-report-export-head{display:flex;align-items:center;justify-content:space-between;gap:12px}.rvm-report-export-head b{font-size:14px;color:#bfdbfe}.rvm-report-export-head small{display:block;color:#7f94b7;font-size:9px}.rvm-report-export-head button{border:1px solid rgba(148,163,184,.28);background:#111827;color:#e5e7eb;border-radius:7px;width:28px;height:26px}
@@ -396,11 +395,7 @@ export function installRvmReportExportBridge() {
   };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', waitAttach, { once: true });
   else waitAttach();
-  globalThis.addEventListener?.('rvm-model-loaded', () => setTimeout(() => {
-    attach();
-    const toolbarSummary = rootEl()?.querySelector?.('[data-rvm-report-toolbar-summary]');
-    if (toolbarSummary) toolbarSummary.textContent = 'Report: ready for selected / visible / hidden / full';
-  }, 320));
+  globalThis.addEventListener?.('rvm-model-loaded', () => setTimeout(() => attach(), 320));
   globalThis.__PCF_GLB_RVM_REPORT_EXPORT__ = {
     version: BRIDGE_VERSION,
     collectReportRows,
