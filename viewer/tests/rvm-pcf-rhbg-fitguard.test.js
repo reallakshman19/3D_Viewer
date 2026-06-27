@@ -52,25 +52,40 @@ for (const eagerForbidden of ['RvmModelHealthBridge.js?v=', 'RvmModelHealthIssue
   check(!rendererSource.includes(eagerForbidden), `renderer defers ${eagerForbidden} out of startup path`);
 }
 
-check(indexSource.includes('main-rhbg-fitguard.js?v=20260627-rvm-view-expanded-nonempty-menus-1'), 'index imports expanded View startup cache key');
-check(entrySource.includes('core/app.js?v=20260627-rvm-view-expanded-nonempty-menus-1'), 'entrypoint imports expanded View app delegate cache key');
-check(appSource.includes('app-label-perf-runtime.js?v=20260627-rvm-view-expanded-nonempty-menus-1'), 'app delegate imports expanded View runtime cache key');
-check(runtimeSource.includes('viewer3d-rvm-tab-renderer.js?v=20260627-rvm-view-expanded-nonempty-menus-1'), 'runtime imports expanded View RVM renderer cache key');
-check(rendererSource.includes('RvmToolbarCompactBridge.js?v=20260627-rvm-toolbar-view-expanded-nonempty-1'), 'renderer imports expanded View toolbar owner');
+check(indexSource.includes('main-rhbg-fitguard.js?v=20260627-rvm-toolbar-scroll-misc-1'), 'index imports toolbar scroll/misc startup cache key');
+check(entrySource.includes('core/app.js?v=20260627-rvm-toolbar-scroll-misc-1'), 'entrypoint imports toolbar scroll/misc app delegate cache key');
+check(appSource.includes('app-label-perf-runtime.js?v=20260627-rvm-toolbar-scroll-misc-1'), 'app delegate imports toolbar scroll/misc runtime cache key');
+check(runtimeSource.includes('viewer3d-rvm-tab-renderer.js?v=20260627-rvm-toolbar-scroll-misc-1'), 'runtime imports toolbar scroll/misc renderer cache key');
+check(rendererSource.includes('RvmToolbarCompactBridge.js?v=20260627-rvm-toolbar-scroll-misc-1'), 'renderer imports toolbar scroll/misc owner');
+check(rendererSource.includes('RvmDeferredBridgeLoader.js?v=20260627-rvm-deferred-toolbar-misc-1'), 'renderer imports toolbar misc deferred loader');
 check(rendererSource.includes('RvmGroupedToolbarPointerBridge.js?v=20260627-rvm-grouped-toolbar-pointer-1'), 'renderer imports deterministic grouped toolbar pointer bridge');
 check(toolbarPointerSource.includes("const VERSION = '20260627-rvm-grouped-toolbar-pointer-1'"), 'toolbar pointer bridge exposes version');
 check(toolbarPointerSource.includes('pointerdown-deterministic') && toolbarPointerSource.includes('suppressClickButton'), 'toolbar pointer bridge opens on pointerdown and suppresses follow-up click');
-check(toolbarSource.includes("const VERSION = '20260627-rvm-toolbar-view-expanded-nonempty-1'"), 'toolbar exposes expanded View/nonempty menu version');
-check(toolbarSource.includes("const PREVIOUS_VERSION = '20260627-rvm-toolbar-view-orient-split-1'"), 'toolbar retains previous View/Orient split marker');
+check(toolbarSource.includes("const VERSION = '20260627-rvm-toolbar-scroll-misc-1'"), 'toolbar exposes scroll/misc version');
+check(toolbarSource.includes("const PREVIOUS_VERSION = '20260627-rvm-toolbar-view-expanded-nonempty-1'"), 'toolbar retains previous expanded View marker');
 check(toolbarSource.includes('RvmToolbarOverflowController.js?v=20260627-rvm-toolbar-overflow-controller-grouped-restore-1'), 'toolbar imports restored grouped overflow controller');
-for (const label of ['Orient', 'Visibility', 'Inspect', 'Export', 'Source', 'Diag']) check(toolbarSource.includes(`label: '${label}'`), `toolbar defines ${label} secondary menu`);
+for (const label of ['Orient', 'Visibility', 'Misc', 'Inspect', 'Export', 'Source', 'Diag']) check(toolbarSource.includes(`label: '${label}'`), `toolbar defines ${label} secondary menu`);
 check(!toolbarSource.includes("{ id: 'view', label: 'View'"), 'toolbar does not define a View dropdown');
 check(toolbarSource.includes("const CORE_LABELS = new Set(['navigate', 'view', 'navigate / view', 'review'])"), 'toolbar keeps View expanded as a top-level core section');
+check(toolbarSource.includes('overflow-x:auto') && toolbarSource.includes('flex-wrap:nowrap'), 'toolbar provides horizontal scroll for expanded controls');
+check(toolbarSource.includes("return 'misc'"), 'toolbar routes Report/Health/Health+ to Misc');
+check(toolbarSource.indexOf("return 'misc'") < toolbarSource.indexOf("return 'export'"), 'Misc classification occurs before Export');
+check(toolbarSource.indexOf("return 'misc'") < toolbarSource.indexOf("return 'inspect'"), 'Misc classification occurs before Inspect');
 check(toolbarSource.includes('menuRoot.hidden = !hasSections'), 'toolbar hides empty secondary menus');
 check(toolbarSource.includes('hiddenEmptyMenus') && toolbarSource.includes('visibleSecondaryMenus'), 'toolbar exposes empty/visible menu diagnostics');
 check(toolbarSource.includes('clearSecondaryDataset(section)'), 'toolbar restores salvaged View sections as core');
 check(toolbarSource.includes('content:attr(aria-label)'), 'Orient menu shows labels for icon-only orientation buttons when populated');
 check(!toolbarSource.includes('More tools</span>'), 'generic More Tools dumping ground is not recreated');
+check(deferredLoaderSource.includes("const VERSION = '20260627-rvm-deferred-toolbar-misc-1'"), 'deferred loader exposes toolbar misc version');
+check(deferredLoaderSource.includes('RvmReportExportBridge.js?v=20260627-rvm-report-misc-compact-1'), 'deferred loader owns compact Report bridge');
+check(deferredLoaderSource.includes('RvmModelHealthBridge.js?v=20260627-rvm-health-misc-compact-1'), 'deferred loader owns compact Health bridge');
+check(deferredLoaderSource.includes('RvmModelHealthIssuesBridge.js?v=20260627-rvm-health-issues-misc-compact-1'), 'deferred loader owns compact Health+ bridge');
+check(!reportSource.includes('data-rvm-report-toolbar-summary') && !reportSource.includes('ready for selected / visible / hidden / full'), 'Report toolbar status label removed');
+check(!healthSource.includes('data-rvm-health-toolbar-summary') && !healthSource.includes('Health: load model to inspect'), 'Health toolbar status label removed');
+check(!healthIssuesSource.includes('data-rvm-health-issues-summary') && !healthIssuesSource.includes('Issues: load model to inspect'), 'Health+ toolbar status label removed');
+check(reportSource.includes('data-rvm-report-open') && reportSource.includes('data-rvm-report-quick-csv'), 'Report buttons remain wired');
+check(healthSource.includes('data-rvm-health-open') && healthSource.includes('data-rvm-health-refresh-toolbar'), 'Health buttons remain wired');
+check(healthIssuesSource.includes('data-rvm-health-issues-open') && healthIssuesSource.includes('data-rvm-health-issues-refresh-toolbar'), 'Health+ buttons remain wired');
 check(overflowSource.includes("const VERSION = '20260627-rvm-toolbar-overflow-controller-grouped-restore-1'"), 'overflow controller exposes grouped restore version');
 check(overflowSource.includes('getMenuEntries') && overflowSource.includes('openMenuId'), 'overflow controller supports multiple grouped menu roots');
 check(overflowSource.includes('positionMenu(entry)') && overflowSource.includes("menu.style.position = 'fixed'"), 'overflow controller positions grouped menu panels as fixed overlays');
@@ -93,7 +108,7 @@ check(treeSyncSource.includes('rvm-selection-synced-to-tree'), 'tree sync publis
 check(interactionSource.includes("const BRIDGE_VERSION = '20260626-rvm-canvas-hierarchy-selection-sync-1'"), 'interaction bridge exposes canvas hierarchy sync version');
 check(interactionSource.includes('rvm-canvas-selection') && interactionSource.includes('publishCanvasSelection'), 'interaction bridge publishes canvas selection event for tree sync');
 
-check(deferredLoaderSource.includes("id: 'model-health'") && deferredLoaderSource.includes('RvmModelHealthBridge.js?v=20260621-rvm-health-issues-1'), 'postModel deferred loader owns model health bridge');
+check(deferredLoaderSource.includes("id: 'model-health'"), 'postModel deferred loader owns model health bridge');
 check(deferredLoaderSource.includes("sourcePreview:") && deferredLoaderSource.includes('ensureSourcePreview') && deferredLoaderSource.includes('SOURCE_PREVIEW_KIND_RE'), 'deferred loader owns gated sourcePreview bridge group');
 check(tabSource.includes('stampSourcePreviewHierarchy(payload.gltf.scene, source, sourceKind, file.name)'), 'RVM tab stamps source-preview hierarchy before setModel');
 check(loadSource.includes('BrowserRvmRenderSceneBuilder.js?v=20260621-rvm-native-facet-primary-1'), 'load bridge keeps native facet renderer');
