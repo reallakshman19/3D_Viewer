@@ -3,6 +3,8 @@
 // Previous hierarchy selection key: RvmHierarchySelectionBridge.js?v=20260620-rvm-large-box-support-sync-1
 // Previous canvas interaction key: RvmViewerInteractionPatch.js?v=20260624-rvm-interaction-state-contract-1
 // Previous tree sync key: RvmSelectionTreeSyncBridge.js?v=20260620-rvm-large-box-support-sync-1
+// Previous grouped toolbar restore key: RvmToolbarCompactBridge.js?v=20260626-rvm-toolbar-secondary-groups-2
+// Reverted single More tools key kept for audit only: RvmToolbarCompactBridge.js?v=20260626-rvm-toolbar-compact-policy-2
 import {
   RVM_VIEWER3D_MODULE_SPECIFIER,
   RVM_VIEWER_MODULE_CONTRACT_VERSION,
@@ -19,7 +21,7 @@ import { installRvmNavigationModeArbiterBridge } from './RvmNavigationModeArbite
 import { installRvmUiInteractionPanelPatch, installRvmUiPanelBridge } from './RvmUiInteractionPanelPatch.js?v=20260621-rvm-ui-interaction-panels-1';
 import { installRvmPropertyPanelCollapseAuditBridge } from './RvmPropertyPanelCollapseAuditBridge.js?v=20260621-rvm-property-collapse-1';
 import { installRvmLabelPerformanceBridge } from './RvmLabelPerformanceBridge.js?v=20260622-rvm-label-perf-no-support-runtime-1';
-import { installRvmToolbarCompactBridge } from './RvmToolbarCompactBridge.js?v=20260626-rvm-toolbar-compact-policy-2';
+import { installRvmToolbarCompactBridge } from './RvmToolbarCompactBridge.js?v=20260627-rvm-toolbar-secondary-groups-restore-1';
 import { installRvmZoneLodLabelBridge } from './RvmZoneLodLabelBridge.js?v=20260621-rvm-preload-hierarchy-selector-1';
 import { installRvmDeepSourcePathRecoveryBridge } from './RvmDeepSourcePathRecoveryBridge.js?v=20260622-rvm-deep-source-path-recovery-1';
 import { installRvmZoneDensitySelectorBridge } from './RvmZoneDensitySelectorBridgeV5.js?v=20260622-rvm-zone-density-selector-5';
