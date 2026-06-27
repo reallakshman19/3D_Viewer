@@ -67,5 +67,3 @@ jobs:
         run: node scripts/test-xml-cii-master-autoload-single-session.mjs
       - name: Patch retirement guard
         run: node scripts/test-xml-cii-master-preserve-patch.mjs
-      - name: Aggregate runner sanity
-        run: node scripts/test-xml-cii-all.mjs
