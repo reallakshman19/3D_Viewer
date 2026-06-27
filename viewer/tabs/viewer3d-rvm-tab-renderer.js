@@ -12,7 +12,7 @@
 import {
   RVM_VIEWER3D_MODULE_SPECIFIER,
   RVM_VIEWER_MODULE_CONTRACT_VERSION,
-} from './rvm-viewer-module-contract.js?v=20260624-rvm-viewer-module-identity-1';
+ } from './rvm-viewer-module-contract.js?v=20260624-rvm-viewer-module-identity-1';
 import { RvmViewer3D } from '../rvm-viewer/RvmViewer3D.js?v=20260620-rvm-direct-tab-1';
 import { installRvmProgressiveModelRootPatch } from '../rvm-viewer/RvmProgressiveModelRootPatchV5.js?v=20260620-rvm-tree-select-nohide-1';
 import { installRvmHierarchySelectionBridge } from './RvmHierarchySelectionBridge.js?v=20260626-rvm-hierarchy-text-hit-target-sync-1';
@@ -49,6 +49,7 @@ import { installRvmDeferredBridgeLoader } from './RvmDeferredBridgeLoader.js?v=2
 import { installRvmLeftPanelResizeCollapseBridge } from './RvmLeftPanelResizeCollapseBridge.js?v=20260624-rvm-panel-resize-1';
 import { installRvmLeafSelectionIdentityBridge } from './RvmLeafSelectionIdentityBridge.js?v=20260622-rvm-leaf-selection-identity-1';
 import { installRvmLeafCanvasPickBridge } from './RvmLeafCanvasPickBridge.js?v=20260622-rvm-leaf-canvas-pick-orbit-guard-2';
+import { installRvmStagedJsonLoadAdapterBridge } from './RvmStagedJsonLoadAdapterBridge.js?v=20260627-rvm-stagedjson-load-adapter-1';
 import { installBrowserRvmCppMat3x4WorkerPatch } from '../rvm/BrowserRvmCppMat3x4WorkerPatch.js?v=20260620-rvm-facetgroup-1';
 import { installBrowserRvmNativeTessellationRuntimePatch } from '../rvm/BrowserRvmNativeTessellationRuntimePatch.js?v=20260620-rvm-native-diagnostics-1';
 import { installBrowserRvmNativeFacetGhostPanelPatch } from '../rvm/BrowserRvmNativeFacetGhostPanelPatch.js?v=20260622-rvm-facet-ghost-panels-1';
@@ -87,6 +88,7 @@ installBrowserRvmDishTessellationRuntimePatch();
 installBrowserRvmRemainingPrimitiveRuntimePatch();
 installBrowserRvmTorusParityRuntimePatch();
 installBrowserRvmSnoutParityRuntimePatch();
+installRvmStagedJsonLoadAdapterBridge();
 installRvmProgressiveModelRootPatch(RvmViewer3D);
 installRvmViewerInteractionPatch(RvmViewer3D);
 installToolbarActionCompatibility(RvmViewer3D);
