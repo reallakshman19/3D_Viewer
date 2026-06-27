@@ -17,6 +17,7 @@ const BRIDGE_GROUPS = Object.freeze({
   postModel: [
     { id: 'stagedjson-export', specifier: './RvmStagedJsonExportBridge.js?v=20260624-rvm-stagedjson-support-policy-1', install: 'installRvmStagedJsonExportBridge' },
     { id: 'stagedjson-validation', specifier: './RvmStagedJsonValidationBridge.js?v=20260624-rvm-stagedjson-support-policy-1', install: 'installRvmStagedJsonValidationBridge' },
+    { id: 'right-panel-format-policy', specifier: './RvmRightPanelFormatPolicyBridge.js?v=20260627-rvm-right-panel-multiformat-1', install: 'installRvmRightPanelFormatPolicyBridge' },
     { id: 'primitive-fallback', specifier: './RvmPrimitiveFallbackBridge.js?v=20260620-rvm-primitive-fallback-clickable-1', install: 'installRvmPrimitiveFallbackBridge' },
     { id: 'native-glb-export', specifier: './RvmNativeSceneGlbExportBridge.js?v=20260620-rvm-glb-component-hierarchy-v3-1', install: 'installRvmNativeSceneGlbExportBridge' },
     { id: 'glb-export-profile', specifier: './RvmGlbExportProfileBridge.js?v=20260620-rvm-glb-export-profile-units-1', install: 'installRvmGlbExportProfileBridge' },
@@ -178,6 +179,7 @@ function refreshSourcePreviewRuntime(reason = 'source-preview-loaded') {
   try { globalThis.__PCF_GLB_RVM_NON_PRIMITIVE_SUPPORT_OVERLAY__?.applyFromSource?.({ viewer, root, source: supportSource, sourceKind, fileName }); } catch (error) { reportRvmActionError(error, { action: 'source-preview-support-overlay', reason }); }
   try { globalThis.__PCF_GLB_RVM_NON_PRIMITIVE_NODE_MARKERS__?.applyFromSource?.({ viewer, root, source, sourceKind, fileName }); } catch (error) { reportRvmActionError(error, { action: 'source-preview-node-markers', reason }); }
   try { globalThis.__PCF_GLB_RVM_NON_PRIMITIVE_SOURCE_TOOLS_UI__?.sync?.(); } catch (error) { reportRvmActionError(error, { action: 'source-preview-tools-sync', reason }); }
+  try { globalThis.__PCF_GLB_RVM_RIGHT_PANEL_FORMAT_POLICY__?.render?.(root, viewer); } catch (error) { reportRvmActionError(error, { action: 'right-panel-policy-sync', reason }); }
   return { status: 'refreshed', sourceKind, reason };
 }
 
@@ -186,6 +188,7 @@ function clearSourcePreviewRuntime(viewer, reason = 'clear-source-preview-runtim
   try { globalThis.__PCF_GLB_RVM_NON_PRIMITIVE_SUPPORT_OVERLAY__?.clear?.(viewer, reason); } catch (_) {}
   try { globalThis.__PCF_GLB_RVM_NON_PRIMITIVE_NODE_MARKERS__?.clear?.(viewer, reason); } catch (_) {}
   try { globalThis.__PCF_GLB_RVM_NON_PRIMITIVE_SOURCE_TOOLS_UI__?.sync?.(); } catch (_) {}
+  try { globalThis.__PCF_GLB_RVM_RIGHT_PANEL_FORMAT_POLICY__?.render?.(document.querySelector('[data-rvm-viewer]'), viewer); } catch (_) {}
   return { status: 'cleared', reason };
 }
 
