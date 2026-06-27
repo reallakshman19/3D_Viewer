@@ -1,18 +1,19 @@
 import { installRvmToolbarOverflow, syncRvmToolbarOverflow } from './RvmToolbarOverflowController.js?v=20260627-rvm-toolbar-overflow-controller-grouped-restore-1';
 
-const VERSION = '20260627-rvm-toolbar-view-expanded-nonempty-1';
-const PREVIOUS_VERSION = '20260627-rvm-toolbar-view-orient-split-1';
-const INSTALL_FLAG = Symbol.for('pcf-glb-rvm-toolbar-view-expanded-nonempty-1');
+const VERSION = '20260627-rvm-toolbar-scroll-misc-1';
+const PREVIOUS_VERSION = '20260627-rvm-toolbar-view-expanded-nonempty-1';
+const INSTALL_FLAG = Symbol.for('pcf-glb-rvm-toolbar-scroll-misc-1');
 const GLOBAL_KEY = '__PCF_GLB_RVM_TOOLBAR_POLICY__';
 const ROOT_SELECTOR = '[data-rvm-viewer]';
 const CORE_LABELS = new Set(['navigate', 'view', 'navigate / view', 'review']);
 const SECONDARY_MENU_DEFS = Object.freeze([
   { id: 'orient', label: 'Orient', title: 'Orientation Views', order: 1, terms: ['orient', 'top', 'front', 'right', 'iso', 'north', 'east', 'south', 'west'] },
   { id: 'visibility', label: 'Visibility', title: 'Visibility / Selection', order: 2, terms: ['visibility', 'visible', 'hide', 'show', 'isolate', 'snapshot'] },
-  { id: 'inspect', label: 'Inspect', title: 'Inspect / Analysis', order: 3, terms: ['search', 'health', 'issues', 'selection sets', 'material', 'inspect', 'analysis'] },
-  { id: 'export', label: 'Export', title: 'Export / Report', order: 4, terms: ['export', 'report', 'pcf', 'mapping', 'validation', 'staged', 'acceptance'] },
-  { id: 'source', label: 'Source', title: 'Source Preview', order: 5, terms: ['source', 'support', 'supports', 'node marker', 'marker', 'auto bend', 'bend', 'nonprimitive', 'non-primitive'] },
-  { id: 'diag', label: 'Diag', title: 'Diagnostics', order: 6, terms: ['diagnostic', 'diagnostics', 'runtime', 'parser', 'fallback', 'policy', 'perf', 'performance'] },
+  { id: 'misc', label: 'Misc', title: 'Misc Tools', order: 3, terms: ['report', 'health', 'health+', 'issues', 'model health'] },
+  { id: 'inspect', label: 'Inspect', title: 'Inspect / Analysis', order: 4, terms: ['search', 'selection sets', 'material', 'inspect', 'analysis'] },
+  { id: 'export', label: 'Export', title: 'Export', order: 5, terms: ['export', 'pcf', 'mapping', 'validation', 'staged', 'acceptance'] },
+  { id: 'source', label: 'Source', title: 'Source Preview', order: 6, terms: ['source', 'support', 'supports', 'node marker', 'marker', 'auto bend', 'bend', 'nonprimitive', 'non-primitive'] },
+  { id: 'diag', label: 'Diag', title: 'Diagnostics', order: 7, terms: ['diagnostic', 'diagnostics', 'runtime', 'parser', 'fallback', 'policy', 'perf', 'performance'] },
 ]);
 const VIEW_TOP_LEVEL_RE = /\bview\b|fit|zoom|ortho|projection|camera|section|sec.?box|sec.?off|sec.?up/i;
 let scheduledReconcile = 0;
@@ -93,7 +94,7 @@ function reconcileToolbar(reason = 'manual') {
     section.dataset.rvmToolbarPolicy = 'secondary-grouped';
     section.dataset.rvmSecondaryToolGroup = targetMenuId;
     section.dataset.rvmToolsMenuItem = label;
-    const panel = menus.get(targetMenuId)?.querySelector('[data-rvm-tools-menu]') || menus.get('inspect')?.querySelector('[data-rvm-tools-menu]');
+    const panel = menus.get(targetMenuId)?.querySelector('[data-rvm-tools-menu]') || menus.get('misc')?.querySelector('[data-rvm-tools-menu]') || menus.get('inspect')?.querySelector('[data-rvm-tools-menu]');
     panel?.appendChild(section);
     moved += 1;
   }
@@ -209,11 +210,12 @@ function isSecondaryMenuRoot(section) { return section?.matches?.('[data-rvm-too
 function classifySecondaryMenu(section, label) {
   const haystack = `${label} ${section?.className || ''} ${Object.values(section?.dataset || {}).join(' ')}`.toLowerCase();
   if (/\borient\b|\btop\b|\bfront\b|\bright\b|\biso\b|\bnw\b|\bne\b|\bsw\b|\bse\b/.test(haystack)) return 'orient';
+  if (/\breport\b|\bhealth\+?\b|model.?health|health.?issues|\bissues\b/.test(haystack)) return 'misc';
   if (/visibility|visible|hide|show|isolate|snapshot/.test(haystack)) return 'visibility';
   if (/source|support|node.?marker|auto.?bend|non.?primitive/.test(haystack)) return 'source';
-  if (/export|report|pcf|mapping|validation|staged|acceptance/.test(haystack)) return 'export';
+  if (/export|pcf|mapping|validation|staged|acceptance/.test(haystack)) return 'export';
   if (/diag|runtime|parser|fallback|policy|perf|performance/.test(haystack)) return 'diag';
-  if (/search|health|issue|selection.?set|material|inspect|analysis/.test(haystack)) return 'inspect';
+  if (/search|selection.?set|material|inspect|analysis/.test(haystack)) return 'inspect';
   return 'inspect';
 }
 
@@ -256,7 +258,10 @@ function injectStyles() {
   }
   style.dataset.rvmToolbarCompactPolicy = VERSION;
   style.textContent = `
-    [data-rvm-viewer] .geo-top-ribbon{position:relative;align-items:flex-start;overflow:visible;}
+    [data-rvm-viewer] .geo-top-ribbon{position:relative;align-items:flex-start;flex-wrap:nowrap;overflow-x:auto;overflow-y:visible;max-width:100%;scrollbar-width:thin;padding-bottom:4px;}
+    [data-rvm-viewer] .geo-top-ribbon::-webkit-scrollbar{height:7px;}
+    [data-rvm-viewer] .geo-top-ribbon::-webkit-scrollbar-thumb{background:rgba(126,190,255,.35);border-radius:999px;}
+    [data-rvm-viewer] .geo-top-ribbon > .rvm-ribbon-section{flex:0 0 auto;}
     [data-rvm-viewer] .rvm-toolbar-secondary-group{position:relative;display:inline-flex;align-items:flex-start;z-index:60;}
     [data-rvm-viewer] .rvm-toolbar-secondary-group > .rvm-toolbar-more-summary{list-style:none;user-select:none;gap:4px;}
     [data-rvm-viewer] .rvm-toolbar-secondary-group.is-open > .rvm-toolbar-more-summary{background:var(--geo-accent,#4a9eff);color:#fff;border-color:var(--geo-accent,#4a9eff);}

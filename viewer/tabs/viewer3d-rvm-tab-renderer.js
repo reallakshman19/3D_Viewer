@@ -8,6 +8,7 @@
 // Previous grouped toolbar restore renderer key: viewer3d-rvm-tab-renderer.js?v=20260627-rvm-toolbar-restore-hierarchy-1
 // Previous grouped toolbar pointer/grid renderer key: viewer3d-rvm-tab-renderer.js?v=20260627-rvm-toolbar-pointer-hierarchy-grid-1
 // Previous view/orient split renderer key: viewer3d-rvm-tab-renderer.js?v=20260627-rvm-view-orient-menu-split-1
+// Previous expanded view renderer key: viewer3d-rvm-tab-renderer.js?v=20260627-rvm-view-expanded-nonempty-menus-1
 import {
   RVM_VIEWER3D_MODULE_SPECIFIER,
   RVM_VIEWER_MODULE_CONTRACT_VERSION,
@@ -25,7 +26,7 @@ import { installRvmNavigationModeArbiterBridge } from './RvmNavigationModeArbite
 import { installRvmUiInteractionPanelPatch, installRvmUiPanelBridge } from './RvmUiInteractionPanelPatch.js?v=20260621-rvm-ui-interaction-panels-1';
 import { installRvmPropertyPanelCollapseAuditBridge } from './RvmPropertyPanelCollapseAuditBridge.js?v=20260621-rvm-property-collapse-1';
 import { installRvmLabelPerformanceBridge } from './RvmLabelPerformanceBridge.js?v=20260622-rvm-label-perf-no-support-runtime-1';
-import { installRvmToolbarCompactBridge } from './RvmToolbarCompactBridge.js?v=20260627-rvm-toolbar-view-expanded-nonempty-1';
+import { installRvmToolbarCompactBridge } from './RvmToolbarCompactBridge.js?v=20260627-rvm-toolbar-scroll-misc-1';
 import { installRvmGroupedToolbarPointerBridge } from './RvmGroupedToolbarPointerBridge.js?v=20260627-rvm-grouped-toolbar-pointer-1';
 import { installRvmZoneLodLabelBridge } from './RvmZoneLodLabelBridge.js?v=20260621-rvm-preload-hierarchy-selector-1';
 import { installRvmDeepSourcePathRecoveryBridge } from './RvmDeepSourcePathRecoveryBridge.js?v=20260622-rvm-deep-source-path-recovery-1';
@@ -44,7 +45,7 @@ import { installGeometryMappingProfileBridge } from '../geometry-workspace/Geome
 import { installRvmSelectionTreeSyncBridge } from './RvmSelectionTreeSyncBridge.js?v=20260626-rvm-hierarchy-selection-sync-2';
 import { installRvmMaterialModeBridge } from './RvmMaterialModeBridge.js?v=20260620-rvm-remaining-material-modes-1';
 import { installRvmBottomDiagnosticsDrawerBridge } from './RvmBottomDiagnosticsDrawerBridge.js?v=20260624-rvm-diagnostics-docked-drawer-1';
-import { installRvmDeferredBridgeLoader } from './RvmDeferredBridgeLoader.js?v=20260625-rvm-deferred-source-preview-tools-1';
+import { installRvmDeferredBridgeLoader } from './RvmDeferredBridgeLoader.js?v=20260627-rvm-deferred-toolbar-misc-1';
 import { installRvmLeftPanelResizeCollapseBridge } from './RvmLeftPanelResizeCollapseBridge.js?v=20260624-rvm-panel-resize-1';
 import { installRvmLeafSelectionIdentityBridge } from './RvmLeafSelectionIdentityBridge.js?v=20260622-rvm-leaf-selection-identity-1';
 import { installRvmLeafCanvasPickBridge } from './RvmLeafCanvasPickBridge.js?v=20260622-rvm-leaf-canvas-pick-orbit-guard-2';
