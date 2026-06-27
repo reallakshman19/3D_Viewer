@@ -29,6 +29,7 @@ const stagedValidation = read('tabs/RvmStagedJsonValidationBridge.js');
 const rightPanelPolicy = read('tabs/RvmFormatPolicy.js');
 const rightPanelBridge = read('tabs/RvmRightPanelFormatPolicyBridge.js');
 const sourceInput = read('tabs/RvmSourceFormatInputBridge.js');
+const stagedJsonLoad = read('tabs/RvmStagedJsonLoadAdapterBridge.js');
 
 const key = contract.match(/RVM_VIEWER3D_MODULE_CACHE_KEY\s*=\s*["']([^"']+)["']/)?.[1];
 assert.ok(key, 'module identity contract must expose RVM_VIEWER3D_MODULE_CACHE_KEY');
@@ -41,8 +42,16 @@ assert.ok(renderer.includes('RvmToolbarCompactBridge.js?v=20260627-rvm-toolbar-s
 assert.ok(renderer.includes('RvmDeferredBridgeLoader.js?v=20260627-rvm-deferred-toolbar-misc-1'), 'renderer must import current deferred loader key');
 assert.ok(renderer.includes('RvmGroupedToolbarPointerBridge.js?v=20260627-rvm-grouped-toolbar-pointer-1'), 'renderer must import deterministic pointer bridge');
 assert.ok(renderer.includes('RvmHierarchySmartGridBridge.js?v=20260627-rvm-hierarchy-smart-grid-1'), 'renderer must import hierarchy smart grid bridge');
+assert.ok(renderer.includes('RvmStagedJsonLoadAdapterBridge.js?v=20260627-rvm-stagedjson-load-adapter-1'), 'renderer must eagerly import stagedJSON load adapter before file loads');
+assert.ok(renderer.includes('installRvmStagedJsonLoadAdapterBridge()'), 'renderer must install stagedJSON load adapter before RVM tab mount');
 assert.ok(!renderer.includes('RvmModelHealthBridge.js?v='), 'renderer must not eagerly import model health bridge');
 assert.ok(tab.includes('stampSourcePreviewHierarchy(payload.gltf.scene, source, sourceKind, file.name)'), 'mounted RVM tab must stamp source hierarchy');
+
+assert.ok(stagedJsonLoad.includes('AvevaJsonLoader') && stagedJsonLoad.includes('proto.load'), 'stagedJSON adapter must patch AvevaJsonLoader.load');
+assert.ok(stagedJsonLoad.includes('convertStagedJsonToAvevaHierarchy'), 'stagedJSON adapter must convert stagedJSON into AVEVA hierarchy');
+assert.ok(stagedJsonLoad.includes("SOURCE_FORMAT: 'REV_XML'"), 'stagedJSON adapter must preserve explicit PIPE records by bypassing auto-routing');
+assert.ok(stagedJsonLoad.includes('RVM_STAGEDJSON_SUPPORT_RECORD'), 'stagedJSON adapter must keep support records as non-rendering hierarchy entries');
+assert.ok(stagedJsonLoad.includes('delete attrs.APOS') && stagedJsonLoad.includes('delete attrs.POS'), 'stagedJSON support records must not become solid support boxes');
 
 assert.ok(toolbar.includes("const VERSION = '20260627-rvm-toolbar-scroll-misc-1'"), 'toolbar must expose scroll/misc version');
 assert.ok(toolbar.includes("const PREVIOUS_VERSION = '20260627-rvm-toolbar-view-expanded-nonempty-1'"), 'toolbar must retain previous expanded View marker');
@@ -100,4 +109,4 @@ assert.ok(smartGrid.includes("const VERSION = '20260627-rvm-hierarchy-smart-grid
 assert.ok(smartGrid.includes('grid-template-columns:22px minmax(0,1fr) 34px 34px'), 'smart grid must define row columns for expander/select/off/on');
 assert.ok(drawer.includes('root.insertBefore(drawer, statusbar)'), 'drawer must dock before status bar');
 
-console.log('Verified RVM viewer UI contract: scrollable toolbar, Misc grouping, compact Report/Health tools, current cache chain, multiformat right panel/input policy, and button wiring.');
+console.log('Verified RVM viewer UI contract: stagedJSON load adapter, scrollable toolbar, Misc grouping, compact Report/Health tools, current cache chain, multiformat right panel/input policy, and button wiring.');
