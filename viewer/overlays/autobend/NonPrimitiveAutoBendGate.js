@@ -1,9 +1,10 @@
-const NON_PRIMITIVE_SOURCE_KINDS = new Set(['json', 'jscon', 'inputxml', 'txt']);
+const NON_PRIMITIVE_SOURCE_KINDS = new Set(['json', 'jscon', 'inputxml', 'uxml', 'txt', 'stagedjson']);
 const PRIMITIVE_SOURCE_KINDS = new Set(['rvm', 'glb', 'gltf']);
 
 export function normalizeSourceKind(value) {
   const text = String(value || '').trim().toLowerCase().replace(/^\./, '');
-  if (text === 'xml') return 'inputxml';
+  if (text === 'xml' || text === 'uxml') return 'inputxml';
+  if (text === 'staged.json') return 'stagedjson';
   return text;
 }
 

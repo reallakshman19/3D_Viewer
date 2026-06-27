@@ -9,7 +9,9 @@ function check(condition, label) {
 }
 
 check(normalizeSourceKind('.xml') === 'inputxml', 'auto-bend xml aliases to inputxml');
-for (const sourceKind of ['json', 'jscon', 'inputxml', 'txt']) {
+check(normalizeSourceKind('.uxml') === 'inputxml', 'auto-bend uxml aliases to inputxml');
+check(normalizeSourceKind('.staged.json') === 'stagedjson', 'auto-bend staged.json aliases to stagedjson');
+for (const sourceKind of ['json', 'jscon', 'inputxml', 'uxml', 'txt', 'stagedjson']) {
   check(canUseAutoBend({ sourceKind }), `auto-bend accepts ${sourceKind}`);
 }
 for (const sourceKind of ['rvm', 'glb', 'gltf']) {
@@ -18,6 +20,7 @@ for (const sourceKind of ['rvm', 'glb', 'gltf']) {
 check(!canUseAutoBend({ sourceKind: 'inputxml', modelPrimitiveMode: 'rvm-native' }), 'auto-bend rejects rvm-native primitive mode');
 check(!canUseAutoBend({ sourceKind: 'json', modelPrimitiveMode: 'glb-native' }), 'auto-bend rejects glb-native primitive mode');
 check(canUseAutoBend({ fileName: 'line.inputxml' }), 'auto-bend accepts inputxml filename');
+check(canUseAutoBend({ fileName: 'model.stagedjson' }), 'auto-bend accepts stagedjson filename');
 check(!canUseAutoBend({ fileName: 'line.glb' }), 'auto-bend rejects glb filename');
 
 const storage = new Map();
