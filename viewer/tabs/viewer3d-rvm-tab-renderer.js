@@ -50,6 +50,7 @@ import { installRvmLeftPanelResizeCollapseBridge } from './RvmLeftPanelResizeCol
 import { installRvmLeafSelectionIdentityBridge } from './RvmLeafSelectionIdentityBridge.js?v=20260622-rvm-leaf-selection-identity-1';
 import { installRvmLeafCanvasPickBridge } from './RvmLeafCanvasPickBridge.js?v=20260622-rvm-leaf-canvas-pick-orbit-guard-2';
 import { installRvmStagedJsonLoadAdapterBridge } from './RvmStagedJsonLoadAdapterBridge.js?v=20260627-rvm-stagedjson-load-adapter-1';
+import { installRvmSourceFormatInputBridge } from './RvmSourceFormatInputBridge.js?v=20260627-rvm-source-format-input-1';
 import { installBrowserRvmCppMat3x4WorkerPatch } from '../rvm/BrowserRvmCppMat3x4WorkerPatch.js?v=20260620-rvm-facetgroup-1';
 import { installBrowserRvmNativeTessellationRuntimePatch } from '../rvm/BrowserRvmNativeTessellationRuntimePatch.js?v=20260620-rvm-native-diagnostics-1';
 import { installBrowserRvmNativeFacetGhostPanelPatch } from '../rvm/BrowserRvmNativeFacetGhostPanelPatch.js?v=20260622-rvm-facet-ghost-panels-1';
@@ -89,6 +90,7 @@ installBrowserRvmRemainingPrimitiveRuntimePatch();
 installBrowserRvmTorusParityRuntimePatch();
 installBrowserRvmSnoutParityRuntimePatch();
 installRvmStagedJsonLoadAdapterBridge();
+installRvmSourceFormatInputBridge();
 installRvmProgressiveModelRootPatch(RvmViewer3D);
 installRvmViewerInteractionPatch(RvmViewer3D);
 installToolbarActionCompatibility(RvmViewer3D);
