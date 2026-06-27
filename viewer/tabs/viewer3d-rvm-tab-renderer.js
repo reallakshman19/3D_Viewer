@@ -7,6 +7,7 @@
 // Reverted single More tools key kept for audit only: RvmToolbarCompactBridge.js?v=20260626-rvm-toolbar-compact-policy-2
 // Previous grouped toolbar restore renderer key: viewer3d-rvm-tab-renderer.js?v=20260627-rvm-toolbar-restore-hierarchy-1
 // Previous grouped toolbar pointer/grid renderer key: viewer3d-rvm-tab-renderer.js?v=20260627-rvm-toolbar-pointer-hierarchy-grid-1
+// Previous view/orient split renderer key: viewer3d-rvm-tab-renderer.js?v=20260627-rvm-view-orient-menu-split-1
 import {
   RVM_VIEWER3D_MODULE_SPECIFIER,
   RVM_VIEWER_MODULE_CONTRACT_VERSION,
@@ -24,7 +25,7 @@ import { installRvmNavigationModeArbiterBridge } from './RvmNavigationModeArbite
 import { installRvmUiInteractionPanelPatch, installRvmUiPanelBridge } from './RvmUiInteractionPanelPatch.js?v=20260621-rvm-ui-interaction-panels-1';
 import { installRvmPropertyPanelCollapseAuditBridge } from './RvmPropertyPanelCollapseAuditBridge.js?v=20260621-rvm-property-collapse-1';
 import { installRvmLabelPerformanceBridge } from './RvmLabelPerformanceBridge.js?v=20260622-rvm-label-perf-no-support-runtime-1';
-import { installRvmToolbarCompactBridge } from './RvmToolbarCompactBridge.js?v=20260627-rvm-toolbar-view-orient-split-1';
+import { installRvmToolbarCompactBridge } from './RvmToolbarCompactBridge.js?v=20260627-rvm-toolbar-view-expanded-nonempty-1';
 import { installRvmGroupedToolbarPointerBridge } from './RvmGroupedToolbarPointerBridge.js?v=20260627-rvm-grouped-toolbar-pointer-1';
 import { installRvmZoneLodLabelBridge } from './RvmZoneLodLabelBridge.js?v=20260621-rvm-preload-hierarchy-selector-1';
 import { installRvmDeepSourcePathRecoveryBridge } from './RvmDeepSourcePathRecoveryBridge.js?v=20260622-rvm-deep-source-path-recovery-1';
