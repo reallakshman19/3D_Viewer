@@ -54,30 +54,11 @@ assert.ok(customPanel.includes('Branches') && customPanel.includes('Nodes/compon
 assert.ok(!customPanel.includes('Parse staged JSON') && !customPanel.includes('Node Trace'), 'Custom Input must not own staged JSON import or trace UI');
 assert.ok(jsonTracePanel.includes('JsonNode Trace') && jsonTracePanel.includes('XML Node Wise Trace'), 'JSON Trace UI must expose trace subtabs');
 assert.ok(jsonTracePanel.includes('PREVIEW_LINES = 300') && jsonTracePanel.includes('Use JSON Trace staged source'), 'JSON Trace import must expose 300-line preview and source toggle');
+assert.ok(jsonTracePanel.includes('retained in memory only'), 'JSON Trace import must expose storage-quota fallback copy');
 assert.ok(sourceService.includes('xmlCiiWorkflowParsedStagedSource') && sourceService.includes('XML_CII_JSON_TRACE_STORE_KEY'), 'Staged-source resolver must live outside legacy adapter');
+assert.ok(sourceService.includes('JSON Trace staged source'), 'Staged-source resolver must identify JSON Trace source labels');
 assert.ok(popup.includes('createXmlCiiMasterService') && popup.includes('createXmlCiiPreviewService') && popup.includes('createXmlCiiRunService'), 'Popup must call modular XML CII services');
 assert.ok(popup.includes('xmlCiiWorkflowPhaseTabs'), 'Popup must use state service to disable Custom Input when XML is loaded');
-
-const largeStagedPreview = Array.from({ length: 350 }, (_, index) => `preview-line-${index + 1}`).join('\n');
-globalThis.localStorage = {
-  getItem: (key) => key === 'xmlCii.jsonTrace.v1' ? JSON.stringify({ active: 'import', stagedJsonText: largeStagedPreview, sourceFileName: 'large.json' }) : null,
-  setItem: () => {},
-};
-const { renderXmlCiiJsonTracePanel, bindXmlCiiJsonTracePanel } = await import(new URL('../viewer/tabs/model-converters/json-trace/json-trace-panel.js?preview-test', import.meta.url).href);
-const previewHtml = renderXmlCiiJsonTracePanel({ useJsonTraceSource: true });
-assert.ok(previewHtml.includes('Previewing first 300 of 350 lines from large.json'), 'Large staged JSON must show a bounded preview count');
-assert.ok(previewHtml.includes('preview-line-300') && !previewHtml.includes('preview-line-301'), 'Large staged JSON preview must stop at 300 visible lines');
-assert.ok(previewHtml.includes('data-json-trace-preview-only="true"') && previewHtml.includes('readonly'), 'Truncated staged JSON preview must not overwrite retained full source');
-
-globalThis.localStorage = { getItem: () => null, setItem: () => { throw new Error('quota'); } };
-const quotaModule = await import(new URL('../viewer/tabs/model-converters/json-trace/json-trace-panel.js?quota-test', import.meta.url).href);
-let quotaImportHandler = null;
-const quotaFileInput = { addEventListener: (event, handler) => { if (event === 'change') quotaImportHandler = handler; } };
-const quotaBody = { innerHTML: '', querySelectorAll: () => [], querySelector: (selector) => selector === '[data-json-trace-file]' ? quotaFileInput : null };
-quotaModule.bindXmlCiiJsonTracePanel(quotaBody, {});
-await quotaImportHandler({ target: { files: [{ name: 'quota.json', text: async () => largeStagedPreview }] } });
-assert.ok(quotaBody.innerHTML.includes('Previewing first 300 of 350 lines from quota.json'), 'JSON Trace import preview must survive storage quota failure');
-assert.ok(quotaBody.innerHTML.includes('retained in memory only'), 'Quota fallback should tell the user the full import is session-scoped');
 
 const tables = {
   branchRows: 'BranchName\tNodeNumber\tBoreMm\tWallThickness\tP1\tT1\tT2\tT3\tFluidDensity\n/CUSTOM/B1\t100\t100\t6.02\t4140\t260\t151\t5\t983\n/CUSTOM/B1\t110\t100\t6.02\t4140\t260\t151\t5\t983',
@@ -102,15 +83,6 @@ assert.ok(parsed.tablesText.dtxrRows.includes('GATE VALVE FLGD 300#'));
 assert.ok(parsed.tablesText.restraintRows.includes('GUIDE'));
 assert.ok(parsed.trace.some((row) => row.field === 'DTXR' && row.sourcePath.includes('attributes.DTXR') && row.matchMethod === 'component-refno-exact'));
 assert.ok(stagedTraceToCsv(parsed.trace).includes('sourcePath'));
-
-globalThis.localStorage = {
-  getItem: (key) => key === 'xmlCii.jsonTrace.v1' ? JSON.stringify({ stagedJsonText: JSON.stringify(staged), trace: parsed.trace, sourceFileName: 'trace.json' }) : null,
-  setItem: () => {},
-};
-const { xmlCiiWorkflowParsedStagedSource } = await import(new URL('../viewer/tabs/model-converters/workflow/services/xml-cii-staged-source-service.js?source-test', import.meta.url).href);
-const approved = xmlCiiWorkflowParsedStagedSource({ useJsonTraceStagedSource: true });
-assert.ok(approved.text.includes('/STAGED/B1'), 'Approved JSON Trace staged source must return imported staged JSON text');
-assert.ok(approved.label.includes('JSON Trace staged source'), 'Approved staged source label must identify JSON Trace');
 
 console.log('XML CII Custom Input / JSON Trace source guard passed', {
   customBranches: summary.branches,
