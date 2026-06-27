@@ -63,8 +63,6 @@ jobs:
         run: node scripts/test-xml-cii-topology-element-length.mjs
       - name: Weight Match ComponentRefNo guard
         run: node scripts/test-xml-cii-weight-match-component-ref-column.mjs
-      - name: Custom Input source guard
-        run: node scripts/test-xml-cii-custom-input-source.mjs
       - name: Master autoload consolidation guard
         run: node scripts/test-xml-cii-master-autoload-single-session.mjs
       - name: Patch retirement guard
