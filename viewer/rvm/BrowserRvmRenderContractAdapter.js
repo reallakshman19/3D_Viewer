@@ -104,9 +104,12 @@ function embeddedInputXmlMarkerPolicyFor({ node, attrs = {}, attAttributes = {},
     attAttributes.DESC,
   ].map((value) => String(value || '')).join(' ');
   const matched = EMBEDDED_INPUTXML_MARKER_RE.test(text);
+  // Embedded InputXML/support markers now render by DEFAULT. Hiding is opt-in only (set
+  // localStorage 'rvm.debug.hideEmbeddedInputXmlSupportMarkers' === 'true'); the legacy
+  // default-hide behaviour dropped real, valid support geometry from the scene.
   return {
     matched,
-    hide: matched && !embeddedInputXmlMarkerDebugEnabled(),
+    hide: matched && embeddedInputXmlMarkerForceHideEnabled(),
     debugKey: EMBEDDED_INPUTXML_MARKER_DEBUG_KEY
   };
 }
@@ -114,6 +117,14 @@ function embeddedInputXmlMarkerPolicyFor({ node, attrs = {}, attAttributes = {},
 function embeddedInputXmlMarkerDebugEnabled() {
   try {
     return globalThis?.localStorage?.getItem?.(EMBEDDED_INPUTXML_MARKER_DEBUG_KEY) === 'true';
+  } catch (_) {
+    return false;
+  }
+}
+
+function embeddedInputXmlMarkerForceHideEnabled() {
+  try {
+    return globalThis?.localStorage?.getItem?.('rvm.debug.hideEmbeddedInputXmlSupportMarkers') === 'true';
   } catch (_) {
     return false;
   }
