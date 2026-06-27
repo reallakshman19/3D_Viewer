@@ -47,24 +47,26 @@ assert.ok(deferredLoader.includes("id: 'model-health'"), 'deferred post-model gr
 assert.ok(deferredLoader.includes('SOURCE_PREVIEW_KIND_RE'), 'deferred loader must gate source-preview loading');
 assert.ok(tab.includes('stampSourcePreviewHierarchy(payload.gltf.scene, source, sourceKind, file.name)'), 'mounted RVM tab must stamp source hierarchy');
 
-assert.ok(renderer.includes('RvmToolbarCompactBridge.js?v=20260627-rvm-toolbar-view-orient-split-1'), 'renderer must import split View/Orient toolbar policy');
+assert.ok(renderer.includes('RvmToolbarCompactBridge.js?v=20260627-rvm-toolbar-view-expanded-nonempty-1'), 'renderer must import expanded View toolbar policy');
 assert.ok(renderer.includes('RvmGroupedToolbarPointerBridge.js?v=20260627-rvm-grouped-toolbar-pointer-1'), 'renderer must import deterministic pointer bridge');
 assert.ok(renderer.includes('installRvmGroupedToolbarPointerBridge()'), 'renderer must install deterministic pointer bridge');
 assert.ok(pointer.includes("const VERSION = '20260627-rvm-grouped-toolbar-pointer-1'"), 'pointer bridge must expose current version');
 assert.ok(pointer.includes('pointerdown-deterministic') && pointer.includes('suppressClickButton'), 'pointer bridge must open on pointerdown and suppress follow-up click');
 assert.ok(pointer.includes('[data-rvm-toolbar-more] *{pointer-events:none;}'), 'pointer bridge must make nested span/caret target deterministic');
 assert.ok(renderer.includes('installRvmToolbarCompactBridge()'), 'renderer must install toolbar policy bridge');
-assert.ok(toolbar.includes("const VERSION = '20260627-rvm-toolbar-view-orient-split-1'"), 'toolbar must expose split view/orient version');
+assert.ok(toolbar.includes("const VERSION = '20260627-rvm-toolbar-view-expanded-nonempty-1'"), 'toolbar must expose expanded View/nonempty menu version');
 assert.ok(toolbar.includes('RvmToolbarOverflowController.js?v=20260627-rvm-toolbar-overflow-controller-grouped-restore-1'), 'toolbar must import restored grouped overflow controller');
-assert.ok(toolbar.includes("{ id: 'orient', label: 'Orient'"), 'toolbar must define Orient as a dedicated menu');
-assert.ok(toolbar.includes("{ id: 'view', label: 'View', title: 'View Controls'"), 'toolbar must define View as a dedicated view-controls menu');
-for (const label of ['View', 'Orient', 'Visibility', 'Inspect', 'Export', 'Source', 'Diag']) assert.ok(toolbar.includes(`label: '${label}'`), `toolbar must define ${label} grouped menu`);
+assert.ok(toolbar.includes("const CORE_LABELS = new Set(['navigate', 'view', 'navigate / view', 'review'])"), 'toolbar must keep View expanded as a top-level/core section');
+assert.ok(!toolbar.includes("{ id: 'view', label: 'View'"), 'toolbar must not define a View dropdown');
+assert.ok(toolbar.includes("{ id: 'orient', label: 'Orient'"), 'toolbar may keep Orient as populated-only grouped menu');
+for (const label of ['Orient', 'Visibility', 'Inspect', 'Export', 'Source', 'Diag']) assert.ok(toolbar.includes(`label: '${label}'`), `toolbar must define ${label} grouped menu`);
 assert.ok(toolbar.includes('classifySecondaryMenu'), 'toolbar must classify sections into named groups');
-assert.ok(toolbar.includes('return \'orient\'') && toolbar.includes('return \'view\''), 'toolbar must route Orient and View separately');
-assert.ok(toolbar.indexOf('return \'orient\'') < toolbar.indexOf('return \'view\''), 'toolbar must classify Orient before generic View terms');
-assert.ok(toolbar.includes("CORE_LABELS = new Set(['Navigate', 'Navigate / View', 'Review'])"), 'toolbar must move View section into the View menu instead of leaving it top-level');
-assert.ok(toolbar.includes('content:attr(aria-label)'), 'Orient menu must show text labels for icon-only orientation buttons');
 assert.ok(toolbar.includes("section.dataset.rvmToolbarPolicy = 'secondary-grouped'"), 'toolbar must mark moved sections as secondary-grouped');
+assert.ok(toolbar.includes('menuRoot.hidden = !hasSections'), 'toolbar must hide empty grouped menus');
+assert.ok(toolbar.includes('hiddenEmptyMenus'), 'toolbar diagnostics must expose hidden empty menus');
+assert.ok(toolbar.includes('visibleSecondaryMenus'), 'toolbar diagnostics must expose visible nonempty menus');
+assert.ok(toolbar.includes('clearSecondaryDataset(section)'), 'salvaged View sections must be restored as core toolbar sections');
+assert.ok(toolbar.includes('content:attr(aria-label)'), 'Orient menu must show text labels for icon-only orientation buttons when populated');
 assert.ok(!toolbar.includes('More tools</span>'), 'single generic More tools label must not return');
 assert.ok(!toolbar.includes('<details'), 'grouped menus must not depend on native details toggling');
 assert.ok(overflow.includes('installRvmToolbarOverflow'), 'overflow controller must expose install lifecycle');
@@ -92,4 +94,4 @@ assert.ok(drawer.includes('20260624-rvm-diagnostics-docked-drawer-1'), 'drawer m
 assert.ok(drawer.includes('root.insertBefore(drawer, statusbar)'), 'drawer must dock before status bar');
 assert.ok(!drawer.includes('.rvm-bottom-diagnostics-drawer{position:fixed'), 'drawer must not use fixed viewport positioning');
 
-console.log('Verified RVM viewer UI contract: dedicated View and Orient menus, deterministic grouped toolbar pointer handling, smart hierarchy grid, hierarchy sync, deferred tools, and docked diagnostics intact.');
+console.log('Verified RVM viewer UI contract: expanded top-level View toolbar, hidden empty grouped menus, deterministic pointer handling, smart hierarchy grid, hierarchy sync, deferred tools, and docked diagnostics intact.');
