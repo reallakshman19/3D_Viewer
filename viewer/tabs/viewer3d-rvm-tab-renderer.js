@@ -5,6 +5,7 @@
 // Previous tree sync key: RvmSelectionTreeSyncBridge.js?v=20260620-rvm-large-box-support-sync-1
 // Previous grouped toolbar restore key: RvmToolbarCompactBridge.js?v=20260626-rvm-toolbar-secondary-groups-2
 // Reverted single More tools key kept for audit only: RvmToolbarCompactBridge.js?v=20260626-rvm-toolbar-compact-policy-2
+// Previous grouped toolbar restore renderer key: viewer3d-rvm-tab-renderer.js?v=20260627-rvm-toolbar-restore-hierarchy-1
 import {
   RVM_VIEWER3D_MODULE_SPECIFIER,
   RVM_VIEWER_MODULE_CONTRACT_VERSION,
@@ -12,6 +13,7 @@ import {
 import { RvmViewer3D } from '../rvm-viewer/RvmViewer3D.js?v=20260620-rvm-direct-tab-1';
 import { installRvmProgressiveModelRootPatch } from '../rvm-viewer/RvmProgressiveModelRootPatchV5.js?v=20260620-rvm-tree-select-nohide-1';
 import { installRvmHierarchySelectionBridge } from './RvmHierarchySelectionBridge.js?v=20260626-rvm-hierarchy-text-hit-target-sync-1';
+import { installRvmHierarchySmartGridBridge } from './RvmHierarchySmartGridBridge.js?v=20260627-rvm-hierarchy-smart-grid-1';
 import { installRvmViewerInteractionPatch, installRvmCanvasSelectionBridge } from './RvmViewerInteractionPatch.js?v=20260626-rvm-canvas-hierarchy-selection-sync-1';
 import { installRvmCanvasSelectionSinglePickGuardBridge } from './RvmCanvasSelectionSinglePickGuardBridge.js?v=20260622-rvm-canvas-single-pick-guard-1';
 import { installRvmRetiredSupportToolsPurgeBridge } from './RvmRetiredSupportToolsPurgeBridge.js?v=20260622-rvm-retired-support-tools-purge-2';
@@ -22,6 +24,7 @@ import { installRvmUiInteractionPanelPatch, installRvmUiPanelBridge } from './Rv
 import { installRvmPropertyPanelCollapseAuditBridge } from './RvmPropertyPanelCollapseAuditBridge.js?v=20260621-rvm-property-collapse-1';
 import { installRvmLabelPerformanceBridge } from './RvmLabelPerformanceBridge.js?v=20260622-rvm-label-perf-no-support-runtime-1';
 import { installRvmToolbarCompactBridge } from './RvmToolbarCompactBridge.js?v=20260627-rvm-toolbar-secondary-groups-restore-1';
+import { installRvmGroupedToolbarPointerBridge } from './RvmGroupedToolbarPointerBridge.js?v=20260627-rvm-grouped-toolbar-pointer-1';
 import { installRvmZoneLodLabelBridge } from './RvmZoneLodLabelBridge.js?v=20260621-rvm-preload-hierarchy-selector-1';
 import { installRvmDeepSourcePathRecoveryBridge } from './RvmDeepSourcePathRecoveryBridge.js?v=20260622-rvm-deep-source-path-recovery-1';
 import { installRvmZoneDensitySelectorBridge } from './RvmZoneDensitySelectorBridgeV5.js?v=20260622-rvm-zone-density-selector-5';
@@ -87,11 +90,13 @@ installToolbarActionCompatibility(RvmViewer3D);
 installRvmUiInteractionPanelPatch(RvmViewer3D);
 installRvmLabelPerformanceBridge(RvmViewer3D);
 installRvmToolbarCompactBridge();
+installRvmGroupedToolbarPointerBridge();
 installSelectedGeometryEnrichmentPanel();
 installRvmZoneLodLabelBridge();
 installRvmDeepSourcePathRecoveryBridge(RvmViewer3D);
 installRvmZoneDensitySelectorBridge();
 installRvmHierarchySelectionBridge(RvmViewer3D);
+installRvmHierarchySmartGridBridge();
 installRvmCanvasSelectionSinglePickGuardBridge(RvmViewer3D);
 installRvmCanvasSelectionBridge(RvmViewer3D);
 installRvmUiEventSafetyBridge();
