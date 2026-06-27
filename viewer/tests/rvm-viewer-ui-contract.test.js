@@ -28,6 +28,7 @@ const stagedExport = read('tabs/RvmStagedJsonExportBridge.js');
 const stagedValidation = read('tabs/RvmStagedJsonValidationBridge.js');
 const rightPanelPolicy = read('tabs/RvmFormatPolicy.js');
 const rightPanelBridge = read('tabs/RvmRightPanelFormatPolicyBridge.js');
+const sourceInput = read('tabs/RvmSourceFormatInputBridge.js');
 
 const key = contract.match(/RVM_VIEWER3D_MODULE_CACHE_KEY\s*=\s*["']([^"']+)["']/)?.[1];
 assert.ok(key, 'module identity contract must expose RVM_VIEWER3D_MODULE_CACHE_KEY');
@@ -68,15 +69,20 @@ assert.ok(deferredLoader.includes("id: 'model-health'"), 'deferred post-model gr
 assert.ok(deferredLoader.includes('SOURCE_PREVIEW_KIND_RE'), 'deferred loader must gate source-preview loading');
 assert.ok(deferredLoader.includes("id: 'right-panel-format-policy'"), 'deferred post-model group must include right panel format policy bridge');
 assert.ok(deferredLoader.includes('RvmRightPanelFormatPolicyBridge.js?v=20260627-rvm-right-panel-multiformat-1'), 'deferred loader must import right panel policy bridge with cache key');
+assert.ok(deferredLoader.includes("id: 'source-format-input'"), 'deferred post-model group must include source format input bridge');
+assert.ok(deferredLoader.includes('RvmSourceFormatInputBridge.js?v=20260627-rvm-source-format-input-1'), 'deferred loader must import source input bridge with cache key');
 assert.ok(deferredLoader.includes('right-panel-policy-sync'), 'source-preview refresh must resync the right panel policy');
 
 assert.ok(rightPanelPolicy.includes('showStagedJsonReview: true'), 'format policy must treat stagedJSON as a first-class right panel format');
 assert.ok(rightPanelPolicy.includes("rvm: Object.freeze({ ...BASE_SELECTION_POLICY, showNativeDiagnostics: true })"), 'format policy must preserve native diagnostics for binary RVM');
 assert.ok(rightPanelPolicy.includes('sourceKindFromFileName') && rightPanelPolicy.includes(".stagedjson"), 'format policy must classify .stagedjson files');
+assert.ok(rightPanelPolicy.includes("fileKind === 'stagedjson'"), 'format policy must prefer stagedJSON filename when loader stamped generic json');
 assert.ok(rightPanelBridge.includes('StagedJSON Review'), 'right panel bridge must render stagedJSON review section');
 assert.ok(rightPanelBridge.includes('hideObsoleteSourcePreviewPanels'), 'right panel bridge must hide source-preview panels for primitive formats');
 assert.ok(rightPanelBridge.includes('Selected Entity'), 'right panel bridge must rename RVM-only selection title to generic selected entity');
 assert.ok(rightPanelBridge.includes('copy-stagedjson') && rightPanelBridge.includes('download-stagedjson'), 'stagedJSON right panel must expose copy/download actions');
+assert.ok(sourceInput.includes("'.stagedjson'") && sourceInput.includes("'.staged.json'") && sourceInput.includes("'.txt'"), 'source file input bridge must accept stagedJSON and txt source formats');
+assert.ok(sourceInput.includes('widenRvmSourceFileInput'), 'source file input bridge must update the mounted file input');
 
 assert.ok(!report.includes('data-rvm-report-toolbar-summary') && !report.includes('ready for selected / visible / hidden / full'), 'Report toolbar status label must be removed');
 assert.ok(!health.includes('data-rvm-health-toolbar-summary') && !health.includes('Health: load model to inspect'), 'Health toolbar status label must be removed');
@@ -94,4 +100,4 @@ assert.ok(smartGrid.includes("const VERSION = '20260627-rvm-hierarchy-smart-grid
 assert.ok(smartGrid.includes('grid-template-columns:22px minmax(0,1fr) 34px 34px'), 'smart grid must define row columns for expander/select/off/on');
 assert.ok(drawer.includes('root.insertBefore(drawer, statusbar)'), 'drawer must dock before status bar');
 
-console.log('Verified RVM viewer UI contract: scrollable toolbar, Misc grouping, compact Report/Health tools, current cache chain, multiformat right panel policy, and button wiring.');
+console.log('Verified RVM viewer UI contract: scrollable toolbar, Misc grouping, compact Report/Health tools, current cache chain, multiformat right panel/input policy, and button wiring.');
