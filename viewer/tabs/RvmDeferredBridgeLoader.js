@@ -1,4 +1,5 @@
-const VERSION = '20260625-rvm-deferred-source-preview-tools-1';
+const VERSION = '20260627-rvm-deferred-toolbar-misc-1';
+const PREVIOUS_VERSION = '20260625-rvm-deferred-source-preview-tools-1';
 const API_KEY = '__PCF_GLB_RVM_BRIDGE_LOADER__';
 const ACTION_DIAGNOSTICS_KEY = '__PCF_GLB_RVM_ACTION_DIAGNOSTICS__';
 
@@ -28,9 +29,9 @@ const BRIDGE_GROUPS = Object.freeze({
     { id: 'object-search', specifier: './RvmObjectSearchBridge.js?v=20260621-rvm-object-search-1', install: 'installRvmObjectSearchBridge' },
     { id: 'visibility-snapshots', specifier: './RvmVisibilitySnapshotsBridge.js?v=20260621-rvm-visibility-snapshots-1', install: 'installRvmVisibilitySnapshotsBridge' },
     { id: 'selection-sets', specifier: './RvmSelectionSetsBridge.js?v=20260621-rvm-selection-sets-1', install: 'installRvmSelectionSetsBridge' },
-    { id: 'report-export', specifier: './RvmReportExportBridge.js?v=20260621-rvm-report-export-1', install: 'installRvmReportExportBridge' },
-    { id: 'model-health', specifier: './RvmModelHealthBridge.js?v=20260621-rvm-health-issues-1', install: 'installRvmModelHealthBridge' },
-    { id: 'model-health-issues', specifier: './RvmModelHealthIssuesBridge.js?v=20260621-rvm-health-issues-1', install: 'installRvmModelHealthIssuesBridge' },
+    { id: 'report-export', specifier: './RvmReportExportBridge.js?v=20260627-rvm-report-misc-compact-1', previousSpecifier: './RvmReportExportBridge.js?v=20260621-rvm-report-export-1', install: 'installRvmReportExportBridge' },
+    { id: 'model-health', specifier: './RvmModelHealthBridge.js?v=20260627-rvm-health-misc-compact-1', previousSpecifier: './RvmModelHealthBridge.js?v=20260621-rvm-health-issues-1', install: 'installRvmModelHealthBridge' },
+    { id: 'model-health-issues', specifier: './RvmModelHealthIssuesBridge.js?v=20260627-rvm-health-issues-misc-compact-1', previousSpecifier: './RvmModelHealthIssuesBridge.js?v=20260621-rvm-health-issues-1', install: 'installRvmModelHealthIssuesBridge' },
   ],
 });
 
@@ -45,6 +46,7 @@ export function installRvmDeferredBridgeLoader() {
   refreshRootInstallEpoch();
   const api = globalThis[API_KEY] || {
     version: VERSION,
+    previousVersion: PREVIOUS_VERSION,
     groups: Object.keys(BRIDGE_GROUPS),
     ensureGroup: (groupName, reason = 'api') => ensureRvmBridgeGroup(groupName, reason),
     ensurePostModel: (reason = 'api') => ensureRvmBridgeGroup('postModel', reason),
@@ -53,6 +55,7 @@ export function installRvmDeferredBridgeLoader() {
     getDiagnostics: () => globalThis[ACTION_DIAGNOSTICS_KEY] || null,
   };
   api.version = VERSION;
+  api.previousVersion = PREVIOUS_VERSION;
   api.groups = Object.keys(BRIDGE_GROUPS);
   api.ensureSourcePreview = (reason = 'api') => ensureSourcePreviewGroupIfNeeded(reason);
   globalThis[API_KEY] = api;
@@ -261,5 +264,5 @@ function afterFirstPaint(fn) {
 }
 
 function escapeHtml(value) {
-  return String(value ?? '').replace(/[&<>"]/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch]));
+  return String(value ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
