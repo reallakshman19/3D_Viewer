@@ -6,11 +6,7 @@ import { fileURLToPath } from 'node:url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const viewerRoot = path.resolve(__dirname, '..');
-function read(relativePath) {
-  const file = path.join(viewerRoot, relativePath);
-  assert.ok(fs.existsSync(file), `missing source file: ${relativePath}`);
-  return fs.readFileSync(file, 'utf8');
-}
+function read(relativePath) { const file = path.join(viewerRoot, relativePath); assert.ok(fs.existsSync(file), `missing source file: ${relativePath}`); return fs.readFileSync(file, 'utf8'); }
 
 const contract = read('tabs/rvm-viewer-module-contract.js');
 const renderer = read('tabs/viewer3d-rvm-tab-renderer.js');
@@ -26,6 +22,10 @@ const smartGrid = read('tabs/RvmHierarchySmartGridBridge.js');
 const drawer = read('tabs/RvmBottomDiagnosticsDrawerBridge.js');
 const stagedExport = read('tabs/RvmStagedJsonExportBridge.js');
 const stagedValidation = read('tabs/RvmStagedJsonValidationBridge.js');
+const formatNeutral = read('tabs/RvmFormatNeutralHierarchy.js');
+const navisHierarchy = read('tabs/RvmNavisHierarchyBridge.js');
+const hierarchySelection = read('tabs/RvmHierarchySelectionBridge.js');
+const selectionSync = read('tabs/RvmSelectionTreeSyncBridge.js');
 
 const key = contract.match(/RVM_VIEWER3D_MODULE_CACHE_KEY\s*=\s*["']([^"']+)["']/)?.[1];
 assert.ok(key, 'module identity contract must expose RVM_VIEWER3D_MODULE_CACHE_KEY');
@@ -39,7 +39,15 @@ assert.ok(renderer.includes('RvmDeferredBridgeLoader.js?v=20260627-rvm-deferred-
 assert.ok(renderer.includes('RvmGroupedToolbarPointerBridge.js?v=20260627-rvm-grouped-toolbar-pointer-1'), 'renderer must import deterministic pointer bridge');
 assert.ok(renderer.includes('RvmHierarchySmartGridBridge.js?v=20260627-rvm-hierarchy-smart-grid-1'), 'renderer must import hierarchy smart grid bridge');
 assert.ok(!renderer.includes('RvmModelHealthBridge.js?v='), 'renderer must not eagerly import model health bridge');
-assert.ok(tab.includes('stampSourcePreviewHierarchy(payload.gltf.scene, source, sourceKind, file.name)'), 'mounted RVM tab must stamp source hierarchy');
+
+assert.ok(formatNeutral.includes('FORMAT_NEUTRAL_HIERARCHY_VERSION'), 'format-neutral hierarchy helper must expose version');
+assert.ok(formatNeutral.includes('isManagedStageDocument'), 'format-neutral helper must detect managed/staged JSON');
+assert.ok(formatNeutral.includes('isUxmlLikeDocument'), 'format-neutral helper must detect UXML');
+assert.ok(formatNeutral.includes('hierarchyNodesForPayload'), 'format-neutral helper must prefer payload/indexJson hierarchy nodes');
+assert.ok(tab.includes('normalizeRvmSourceDocument'), 'mounted RVM tab must normalize source documents before rendering');
+assert.ok(tab.includes('hierarchyNodesForPayload'), 'mounted RVM tab must render source-preview hierarchy from payload index nodes');
+assert.ok(tab.includes('renderLoadedHierarchyTree'), 'mounted RVM tab must route tree updates through one format-neutral entry point');
+assert.ok(tab.includes('.stagedjson'), 'mounted RVM tab must accept stagedjson files');
 
 assert.ok(toolbar.includes("const VERSION = '20260627-rvm-toolbar-scroll-misc-1'"), 'toolbar must expose scroll/misc version');
 assert.ok(toolbar.includes("const PREVIOUS_VERSION = '20260627-rvm-toolbar-view-expanded-nonempty-1'"), 'toolbar must retain previous expanded View marker');
@@ -56,7 +64,6 @@ assert.ok(toolbar.includes('menuRoot.hidden = !hasSections'), 'toolbar must hide
 assert.ok(toolbar.includes('hiddenEmptyMenus') && toolbar.includes('visibleSecondaryMenus'), 'toolbar diagnostics must expose hidden and visible grouped menus');
 assert.ok(!toolbar.includes('More tools</span>'), 'single generic More tools label must not return');
 assert.ok(!toolbar.includes('<details'), 'grouped menus must not depend on native details toggling');
-
 assert.ok(deferredLoader.includes('20260627-rvm-deferred-toolbar-misc-1'), 'deferred loader must expose toolbar misc key');
 assert.ok(deferredLoader.includes('20260625-rvm-deferred-source-preview-tools-1'), 'deferred loader must retain previous source-preview key');
 assert.ok(deferredLoader.includes('RvmReportExportBridge.js?v=20260627-rvm-report-misc-compact-1'), 'deferred loader must import compact Report bridge');
@@ -64,21 +71,24 @@ assert.ok(deferredLoader.includes('RvmModelHealthBridge.js?v=20260627-rvm-health
 assert.ok(deferredLoader.includes('RvmModelHealthIssuesBridge.js?v=20260627-rvm-health-issues-misc-compact-1'), 'deferred loader must import compact Health issues bridge');
 assert.ok(deferredLoader.includes("id: 'model-health'"), 'deferred post-model group must include model health bridge');
 assert.ok(deferredLoader.includes('SOURCE_PREVIEW_KIND_RE'), 'deferred loader must gate source-preview loading');
-
 assert.ok(!report.includes('data-rvm-report-toolbar-summary') && !report.includes('ready for selected / visible / hidden / full'), 'Report toolbar status label must be removed');
 assert.ok(!health.includes('data-rvm-health-toolbar-summary') && !health.includes('Health: load model to inspect'), 'Health toolbar status label must be removed');
 assert.ok(!issues.includes('data-rvm-health-issues-summary') && !issues.includes('Issues: load model to inspect'), 'Health issues toolbar status label must be removed');
 for (const selector of ['data-rvm-report-open', 'data-rvm-report-quick-csv']) assert.ok(report.includes(selector), `Report button selector ${selector} must remain wired`);
 for (const selector of ['data-rvm-health-open', 'data-rvm-health-refresh-toolbar']) assert.ok(health.includes(selector), `Health button selector ${selector} must remain wired`);
 for (const selector of ['data-rvm-health-issues-open', 'data-rvm-health-issues-refresh-toolbar']) assert.ok(issues.includes(selector), `Health issues button selector ${selector} must remain wired`);
-
 assert.ok(pointer.includes('pointerdown-deterministic') && pointer.includes('suppressClickButton'), 'pointer bridge must open on pointerdown and suppress follow-up click');
 assert.ok(pointer.includes('[data-rvm-toolbar-more] *{pointer-events:none;}'), 'pointer bridge must make nested targets deterministic');
 assert.ok(overflow.includes('getMenuEntries') && overflow.includes('openMenuId'), 'overflow controller must own multiple grouped menu roots');
 assert.ok(overflow.includes('positionMenu(entry)') && overflow.includes("menu.style.position = 'fixed'"), 'overflow controller must position grouped panels as fixed overlays');
 assert.ok(!overflow.includes('MutationObserver'), 'overflow controller must not use MutationObserver as the behavior fix');
+assert.ok(renderer.includes('RvmHierarchySelectionBridge.js?v=20260627-rvm-hierarchy-navis-safe-1'), 'renderer must import Navis-safe hierarchy selection bridge');
+assert.ok(hierarchySelection.includes('NAVIS_CONTROL_SELECTOR'), 'legacy hierarchy selection must not intercept Navis controls');
+assert.ok(renderer.includes('RvmNavisHierarchyBridge.js?v=20260627-rvm-navis-format-neutral-aware-1'), 'renderer must import format-neutral-aware Navis hierarchy bridge');
+assert.ok(navisHierarchy.includes('shouldPreserveFormatNeutralTree'), 'Navis bridge must not overwrite source-owned format-neutral tree');
+assert.ok(renderer.includes('RvmSelectionTreeSyncBridge.js?v=20260627-rvm-hierarchy-selection-sync-dispose-1'), 'renderer must import disposable hierarchy sync bridge');
+assert.ok(selectionSync.includes('rvm-tab-dispose'), 'hierarchy sync bridge must clean up on tab disposal');
 assert.ok(smartGrid.includes("const VERSION = '20260627-rvm-hierarchy-smart-grid-1'"), 'smart grid bridge must expose current version');
 assert.ok(smartGrid.includes('grid-template-columns:22px minmax(0,1fr) 34px 34px'), 'smart grid must define row columns for expander/select/off/on');
 assert.ok(drawer.includes('root.insertBefore(drawer, statusbar)'), 'drawer must dock before status bar');
-
-console.log('Verified RVM viewer UI contract: scrollable toolbar, Misc grouping, compact Report/Health tools, current cache chain, and button wiring.');
+console.log('Verified RVM viewer UI contract: format-neutral hierarchy, scrollable toolbar, Misc grouping, compact Report/Health tools, current cache chain, and button wiring.');
