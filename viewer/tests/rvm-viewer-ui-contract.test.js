@@ -24,6 +24,8 @@ const smartGrid = read('tabs/RvmHierarchySmartGridBridge.js');
 const drawer = read('tabs/RvmBottomDiagnosticsDrawerBridge.js');
 const stagedExport = read('tabs/RvmStagedJsonExportBridge.js');
 const stagedValidation = read('tabs/RvmStagedJsonValidationBridge.js');
+const rightPanelPolicy = read('tabs/RvmFormatPolicy.js');
+const rightPanelBridge = read('tabs/RvmRightPanelFormatPolicyBridge.js');
 
 const key = contract.match(/RVM_VIEWER3D_MODULE_CACHE_KEY\s*=\s*["']([^"']+)["']/)?.[1];
 assert.ok(key, 'module identity contract must expose RVM_VIEWER3D_MODULE_CACHE_KEY');
@@ -46,6 +48,15 @@ assert.ok(!renderer.includes('RvmModelHealthBridge.js?v='), 'renderer must not e
 assert.ok(deferredLoader.includes("id: 'model-health'"), 'deferred post-model group must include model health bridge');
 assert.ok(deferredLoader.includes('SOURCE_PREVIEW_KIND_RE'), 'deferred loader must gate source-preview loading');
 assert.ok(tab.includes('stampSourcePreviewHierarchy(payload.gltf.scene, source, sourceKind, file.name)'), 'mounted RVM tab must stamp source hierarchy');
+assert.ok(deferredLoader.includes("id: 'right-panel-format-policy'"), 'deferred post-model group must include right panel format policy bridge');
+assert.ok(deferredLoader.includes('RvmRightPanelFormatPolicyBridge.js?v=20260627-rvm-right-panel-multiformat-1'), 'right panel bridge must be deferred-loaded with cache key');
+assert.ok(rightPanelPolicy.includes('showStagedJsonReview: true'), 'format policy must treat stagedJSON as a first-class right panel format');
+assert.ok(rightPanelPolicy.includes("rvm: Object.freeze({ ...BASE_SELECTION_POLICY, showNativeDiagnostics: true })"), 'format policy must preserve native diagnostics for binary RVM');
+assert.ok(rightPanelPolicy.includes('sourceKindFromFileName') && rightPanelPolicy.includes(".stagedjson"), 'format policy must classify .stagedjson files');
+assert.ok(rightPanelBridge.includes('StagedJSON Review'), 'right panel bridge must render stagedJSON review section');
+assert.ok(rightPanelBridge.includes('hideObsoleteSourcePreviewPanels'), 'right panel bridge must hide source-preview panels for primitive formats');
+assert.ok(rightPanelBridge.includes('Selected Entity'), 'right panel bridge must rename RVM-only selection title to generic selected entity');
+assert.ok(rightPanelBridge.includes('copy-stagedjson') && rightPanelBridge.includes('download-stagedjson'), 'stagedJSON right panel must expose copy/download actions');
 
 assert.ok(renderer.includes('RvmToolbarCompactBridge.js?v=20260627-rvm-toolbar-view-expanded-nonempty-1'), 'renderer must import expanded View toolbar policy');
 assert.ok(renderer.includes('RvmGroupedToolbarPointerBridge.js?v=20260627-rvm-grouped-toolbar-pointer-1'), 'renderer must import deterministic pointer bridge');
@@ -94,4 +105,4 @@ assert.ok(drawer.includes('20260624-rvm-diagnostics-docked-drawer-1'), 'drawer m
 assert.ok(drawer.includes('root.insertBefore(drawer, statusbar)'), 'drawer must dock before status bar');
 assert.ok(!drawer.includes('.rvm-bottom-diagnostics-drawer{position:fixed'), 'drawer must not use fixed viewport positioning');
 
-console.log('Verified RVM viewer UI contract: expanded top-level View toolbar, hidden empty grouped menus, deterministic pointer handling, smart hierarchy grid, hierarchy sync, deferred tools, and docked diagnostics intact.');
+console.log('Verified RVM viewer UI contract: expanded top-level View toolbar, hidden empty grouped menus, deterministic pointer handling, smart hierarchy grid, hierarchy sync, deferred tools, multiformat right panel policy, and docked diagnostics intact.');
