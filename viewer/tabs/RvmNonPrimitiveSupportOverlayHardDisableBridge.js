@@ -12,7 +12,7 @@ const SOURCE_TOOLS_ROOT_SELECTOR = '[data-rvm-viewer]';
 const SUPPORT_DETAILS_PANEL_ID = 'rvm-nonprimitive-support-details-panel';
 const SUPPORT_LABEL_SELECTOR = '.non-primitive-support-overlay-label,[data-overlay-kind="support"][data-support-tag]';
 const SUPPORT_HOVER_SELECTOR = '[data-rvm-nonprimitive-support-hover-preview="true"]';
-const SOURCE_KIND_RE = /^(json|jscon|inputxml|txt|source-preview)$/i;
+const SOURCE_KIND_RE = /^(json|jscon|inputxml|txt|source-preview|stagedjson)$/i;
 const PRIMITIVE_KIND_RE = /^(rvm|glb|gltf|rev)$/i;
 
 export function installRvmNonPrimitiveSupportOverlayHardDisableBridge() {
@@ -172,5 +172,6 @@ function normalizeSourceKind(value) {
   const kind = String(value || '').trim().toLowerCase().replace(/^\./, '');
   if (!kind || kind === 'aveva-json' || kind === 'source-preview') return 'json';
   if (kind === 'xml' || kind === 'uxml') return 'inputxml';
+  if (kind === 'staged.json') return 'stagedjson';
   return kind;
 }

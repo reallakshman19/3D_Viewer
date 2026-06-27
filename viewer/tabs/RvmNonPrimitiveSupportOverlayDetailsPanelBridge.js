@@ -28,7 +28,7 @@ const PATCH_FLAG = Symbol.for('pcf-glb-rvm-non-primitive-support-details-panel-v
 const VIEWER_PATCH_FLAG = Symbol.for('pcf-glb-rvm-non-primitive-support-details-panel-viewer-v4');
 const PICKING_FLAG = Symbol.for('pcf-glb-rvm-non-primitive-support-details-picking-v4');
 const STYLE_FLAG = Symbol.for('pcf-glb-rvm-non-primitive-support-details-panel-style-v2');
-const SOURCE_KIND_RE = /^(json|jscon|inputxml|txt|source-preview)$/i;
+const SOURCE_KIND_RE = /^(json|jscon|inputxml|txt|source-preview|stagedjson)$/i;
 const PRIMITIVE_KIND_RE = /^(rvm|glb|gltf|rev)$/i;
 
 export function installRvmNonPrimitiveSupportOverlayDetailsPanelBridge() {
@@ -368,6 +368,7 @@ function normalizeSourceKind(value) {
   const kind = String(value || '').trim().toLowerCase().replace(/^\./, '');
   if (!kind || kind === 'aveva-json' || kind === 'source-preview') return 'json';
   if (kind === 'xml' || kind === 'uxml') return 'inputxml';
+  if (kind === 'staged.json') return 'stagedjson';
   return kind;
 }
 
