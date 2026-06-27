@@ -92,7 +92,9 @@ export function upgradeRvmRemainingPrimitives(root) {
       }
       return;
     }
-    if (code !== 1 && code !== 10 && code !== 11) return;
+    // code 2 = Box (this patch). Snout(7)/CircTorus(4)/Dish(5,6) are owned by their dedicated
+    // parity/tessellation patches (browser-rvm-snout-parity, browser-rvm-torus-parity, dish tessellation).
+    if (code !== 1 && code !== 2 && code !== 10 && code !== 11) return;
     diagnostics.candidateCount += 1;
     const native = buildNativeObject(code, params, matrix, materialForSource(object), diagnostics, object);
     if (!native) {
@@ -164,6 +166,9 @@ function buildNativeObject(code, params, matrix3x4, material, diagnostics, sourc
   if (code === 1) {
     geometry = pyramidGeometry(params);
     primitive = 'RVM_NATIVE_PYRAMID';
+  } else if (code === 2) {
+    geometry = boxGeometry(params);
+    primitive = 'RVM_NATIVE_BOX';
   } else if (code === 11) {
     geometry = facetGroupGeometry(params, diagnostics);
     primitive = 'RVM_NATIVE_FACET_GROUP';
@@ -294,6 +299,15 @@ function lineGeometry(values) {
 function lineMaterialForSource(material, policy = {}) {
   const color = material?.color?.getHex ? material.color.getHex() : (policy.gridLike ? 0x7dd3fc : 0x93c5fd);
   return new THREE.LineBasicMaterial({ color, transparent: true, opacity: policy.gridLike ? 0.32 : 0.62, depthWrite: false });
+}
+
+// Native code-2 Box: local lengthX/Y/Z (mm), centered; oriented + scaled by the cpp-mat3x4.
+// Renders the actual oriented plate/box instead of an axis-aligned bounding-box block.
+function boxGeometry(params) {
+  const dx = positive(Math.abs(params.lengthX), 0.001);
+  const dy = positive(Math.abs(params.lengthY), 0.001);
+  const dz = positive(Math.abs(params.lengthZ), 0.001);
+  return new THREE.BoxGeometry(dx, dy, dz);
 }
 
 function pyramidGeometry(params) {
