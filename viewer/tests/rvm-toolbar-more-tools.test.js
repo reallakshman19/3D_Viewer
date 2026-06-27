@@ -43,16 +43,18 @@ function verifyStaticContracts() {
   assert.ok(controller.includes('outside-pointerdown'), 'overflow controller must close on outside pointerdown');
   assert.ok(!controller.includes('MutationObserver'), 'overflow open/close behavior must not rely on MutationObserver');
   assert.ok(compact.includes('RvmToolbarOverflowController.js?v=20260627-rvm-toolbar-overflow-controller-grouped-restore-1'), 'compact toolbar must import restored grouped overflow owner');
-  assert.ok(compact.includes("const VERSION = '20260627-rvm-toolbar-view-orient-split-1'"), 'compact toolbar must expose split View/Orient policy');
-  assert.ok(compact.includes("{ id: 'orient', label: 'Orient'"), 'compact toolbar must define dedicated Orient menu');
-  assert.ok(compact.includes("{ id: 'view', label: 'View', title: 'View Controls'"), 'compact toolbar must define dedicated View controls menu');
-  for (const label of ['View', 'Orient', 'Visibility', 'Inspect', 'Export', 'Source', 'Diag']) assert.ok(compact.includes(`label: '${label}'`), `compact toolbar must define ${label} secondary menu`);
-  assert.ok(compact.indexOf("return 'orient'") < compact.indexOf("return 'view'"), 'compact toolbar must classify Orient before generic View');
-  assert.ok(compact.includes('content:attr(aria-label)'), 'Orient menu must label icon-only buttons');
+  assert.ok(compact.includes("const VERSION = '20260627-rvm-toolbar-view-expanded-nonempty-1'"), 'compact toolbar must expose expanded View/nonempty menu policy');
+  assert.ok(compact.includes("const CORE_LABELS = new Set(['navigate', 'view', 'navigate / view', 'review'])"), 'compact toolbar must keep View top-level');
+  assert.ok(!compact.includes("{ id: 'view', label: 'View'"), 'compact toolbar must not define a View dropdown');
+  assert.ok(compact.includes("{ id: 'orient', label: 'Orient'"), 'compact toolbar must define Orient as a populated-only menu');
+  for (const label of ['Orient', 'Visibility', 'Inspect', 'Export', 'Source', 'Diag']) assert.ok(compact.includes(`label: '${label}'`), `compact toolbar must define ${label} secondary menu`);
+  assert.ok(compact.includes('menuRoot.hidden = !hasSections'), 'compact toolbar must hide empty grouped menus');
+  assert.ok(compact.includes('hiddenEmptyMenus') && compact.includes('visibleSecondaryMenus'), 'compact toolbar must expose nonempty/empty menu diagnostics');
+  assert.ok(compact.includes('content:attr(aria-label)'), 'Orient menu must label icon-only buttons when populated');
   assert.ok(compact.includes('classifySecondaryMenu') && compact.includes('secondary-grouped'), 'compact toolbar must classify advanced sections into named groups');
   assert.ok(!compact.includes('More tools</span>'), 'generic More tools dumping-ground label must not return');
   assert.ok(!compact.includes('<details'), 'grouped menus must not rely on native details toggle');
-  assert.ok(renderer.includes('RvmToolbarCompactBridge.js?v=20260627-rvm-toolbar-view-orient-split-1'), 'renderer must load split View/Orient toolbar policy');
+  assert.ok(renderer.includes('RvmToolbarCompactBridge.js?v=20260627-rvm-toolbar-view-expanded-nonempty-1'), 'renderer must load expanded View toolbar policy');
 }
 
 async function verifyRuntimeBehavior() {
@@ -69,7 +71,7 @@ async function verifyRuntimeBehavior() {
   assert.equal(document.listenerCount('keydown'), 1, 'install must add exactly one document keydown listener');
   assert.equal(document.listenerCount('pointerdown'), 1, 'install must add exactly one document pointerdown listener');
   assert.equal(diagnostics.open, false, 'all grouped menus start closed');
-  assert.deepEqual(diagnostics.menuIds, ['view', 'orient', 'export'], 'diagnostics must expose split grouped menu ids');
+  assert.deepEqual(diagnostics.menuIds, ['view', 'orient', 'export'], 'diagnostics must expose grouped menu ids');
   root.dispatch('click', makeEvent(view.caret));
   assert.equal(view.button.getAttribute('aria-expanded'), 'true', 'click on nested caret opens View menu');
   assert.equal(view.menu.hidden, false, 'open View menu must be visible');
@@ -102,4 +104,4 @@ async function verifyRuntimeBehavior() {
 
 verifyStaticContracts();
 await verifyRuntimeBehavior();
-console.log('Verified dedicated View/Orient grouped toolbar menus, single-open behavior, fixed-position panels, Escape/outside close, aria-expanded state, idempotent install, and dispose lifecycle.');
+console.log('Verified expanded View toolbar policy plus grouped menu single-open behavior, fixed-position panels, Escape/outside close, aria-expanded state, idempotent install, and dispose lifecycle.');
