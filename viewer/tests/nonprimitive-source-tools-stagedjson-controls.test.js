@@ -3,6 +3,9 @@ import { readFileSync } from 'node:fs';
 
 const settings = readFileSync('viewer/overlays/support/SupportOverlaySettings.js', 'utf8');
 const supportBridge = readFileSync('viewer/tabs/RvmNonPrimitiveSupportOverlayBridge.js', 'utf8');
+const supportDetailsBridge = readFileSync('viewer/tabs/RvmNonPrimitiveSupportOverlayDetailsPanelBridge.js', 'utf8');
+const supportHoverBridge = readFileSync('viewer/tabs/RvmNonPrimitiveSupportOverlayHoverBridge.js', 'utf8');
+const supportHardDisableBridge = readFileSync('viewer/tabs/RvmNonPrimitiveSupportOverlayHardDisableBridge.js', 'utf8');
 const sourceToolsBridge = readFileSync('viewer/tabs/RvmNonPrimitiveSourceToolsUiBridge.js', 'utf8');
 const sourceToolsGateBridge = readFileSync('viewer/tabs/RvmSourceToolsStagedJsonKindGateBridge.js', 'utf8');
 const supportRuntimeGateBridge = readFileSync('viewer/tabs/RvmStagedJsonSupportRuntimeGateBridge.js', 'utf8');
@@ -28,6 +31,10 @@ assert.match(supportBridge, /labelsVisible:\s*Boolean\(settings\.labels\)/, 'sup
 assert.match(supportBridge, /STAGED_JSON_SOURCE_RE = \/\\\.staged\\\.json\$\/i/, 'support overlay source policy must detect .staged.json before generic JSON');
 assert.match(supportBridge, /kind === 'stagedjson'/, 'support overlay source policy must accept stagedJSON sourceKind directly');
 assert.match(supportBridge, /normalizeSupportSourceKind/, 'support overlay source policy must normalize source kinds before gate checks');
+for (const bridge of [supportDetailsBridge, supportHoverBridge, supportHardDisableBridge]) {
+  assert.match(bridge, /SOURCE_KIND_RE = \/\^\(json\|jscon\|inputxml\|txt\|source-preview\|stagedjson\)\$\/i/, 'support UI bridge source-kind gate must accept stagedJSON');
+  assert.match(bridge, /kind === 'staged\.json'\) return 'stagedjson'/, 'support UI bridge must normalize staged.json source kind');
+}
 
 assert.match(inputXmlBridge, /window\.__3D_RVM_VIEWER__/, 'InputXML source-tools bridge must fall back to current global RVM viewer');
 assert.match(inputXmlBridge, /document\.addEventListener\('change', handleLegacyControlEvent, true\)/, 'InputXML source-tools bridge must handle change events, not input only');
