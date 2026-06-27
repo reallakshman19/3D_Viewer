@@ -1,18 +1,19 @@
 import { installRvmToolbarOverflow, syncRvmToolbarOverflow } from './RvmToolbarOverflowController.js?v=20260627-rvm-toolbar-overflow-controller-grouped-restore-1';
 
-const VERSION = '20260627-rvm-toolbar-secondary-groups-restore-1';
-const PREVIOUS_VERSION = '20260626-rvm-toolbar-secondary-groups-2';
-const INSTALL_FLAG = Symbol.for('pcf-glb-rvm-toolbar-secondary-groups-restore-1');
+const VERSION = '20260627-rvm-toolbar-view-orient-split-1';
+const PREVIOUS_VERSION = '20260627-rvm-toolbar-secondary-groups-restore-1';
+const INSTALL_FLAG = Symbol.for('pcf-glb-rvm-toolbar-view-orient-split-1');
 const GLOBAL_KEY = '__PCF_GLB_RVM_TOOLBAR_POLICY__';
 const ROOT_SELECTOR = '[data-rvm-viewer]';
-const CORE_LABELS = new Set(['Navigate', 'View', 'Navigate / View', 'Review']);
+const CORE_LABELS = new Set(['Navigate', 'Navigate / View', 'Review']);
 const SECONDARY_MENU_DEFS = Object.freeze([
-  { id: 'view', label: 'View', title: 'View / Orient', order: 1, terms: ['orient', 'top', 'front', 'right', 'iso', 'camera', 'view'] },
-  { id: 'visibility', label: 'Visibility', title: 'Visibility / Selection', order: 2, terms: ['visibility', 'visible', 'hide', 'show', 'isolate', 'snapshot'] },
-  { id: 'inspect', label: 'Inspect', title: 'Inspect / Analysis', order: 3, terms: ['search', 'health', 'issues', 'selection sets', 'material', 'inspect', 'analysis'] },
-  { id: 'export', label: 'Export', title: 'Export / Report', order: 4, terms: ['export', 'report', 'pcf', 'mapping', 'validation', 'staged', 'acceptance'] },
-  { id: 'source', label: 'Source', title: 'Source Preview', order: 5, terms: ['source', 'support', 'supports', 'node marker', 'marker', 'auto bend', 'bend', 'nonprimitive', 'non-primitive'] },
-  { id: 'diag', label: 'Diag', title: 'Diagnostics', order: 6, terms: ['diagnostic', 'diagnostics', 'runtime', 'parser', 'fallback', 'policy', 'perf', 'performance'] },
+  { id: 'view', label: 'View', title: 'View Controls', order: 1, terms: ['fit', 'zoom', 'ortho', 'projection', 'camera', 'section', 'view'] },
+  { id: 'orient', label: 'Orient', title: 'Orientation Views', order: 2, terms: ['orient', 'top', 'front', 'right', 'iso', 'north', 'east', 'south', 'west'] },
+  { id: 'visibility', label: 'Visibility', title: 'Visibility / Selection', order: 3, terms: ['visibility', 'visible', 'hide', 'show', 'isolate', 'snapshot'] },
+  { id: 'inspect', label: 'Inspect', title: 'Inspect / Analysis', order: 4, terms: ['search', 'health', 'issues', 'selection sets', 'material', 'inspect', 'analysis'] },
+  { id: 'export', label: 'Export', title: 'Export / Report', order: 5, terms: ['export', 'report', 'pcf', 'mapping', 'validation', 'staged', 'acceptance'] },
+  { id: 'source', label: 'Source', title: 'Source Preview', order: 6, terms: ['source', 'support', 'supports', 'node marker', 'marker', 'auto bend', 'bend', 'nonprimitive', 'non-primitive'] },
+  { id: 'diag', label: 'Diag', title: 'Diagnostics', order: 7, terms: ['diagnostic', 'diagnostics', 'runtime', 'parser', 'fallback', 'policy', 'perf', 'performance'] },
 ]);
 let scheduledReconcile = 0;
 let scheduledReason = '';
@@ -180,7 +181,8 @@ function isSecondaryMenuRoot(section) { return section?.matches?.('[data-rvm-too
 
 function classifySecondaryMenu(section, label) {
   const haystack = `${label} ${section?.className || ''} ${Object.values(section?.dataset || {}).join(' ')}`.toLowerCase();
-  if (/\borient\b|\btop\b|\bfront\b|\bright\b|\biso\b|camera|view/.test(haystack)) return 'view';
+  if (/\borient\b|\btop\b|\bfront\b|\bright\b|\biso\b|\bnw\b|\bne\b|\bsw\b|\bse\b/.test(haystack)) return 'orient';
+  if (/\bview\b|fit|zoom|ortho|projection|camera|section|sec.?box|sec.?off|sec.?up/.test(haystack)) return 'view';
   if (/visibility|visible|hide|show|isolate|snapshot/.test(haystack)) return 'visibility';
   if (/source|support|node.?marker|auto.?bend|non.?primitive/.test(haystack)) return 'source';
   if (/export|report|pcf|mapping|validation|staged|acceptance/.test(haystack)) return 'export';
@@ -230,5 +232,7 @@ function injectStyles() {
     [data-rvm-viewer] .rvm-toolbar-secondary-panel .rvm-ribbon-section{display:grid;grid-template-columns:auto 1fr;align-items:center;gap:6px;padding:6px;border:1px solid rgba(148,163,184,.18);border-radius:8px;background:rgba(15,23,42,.62);}
     [data-rvm-viewer] .rvm-toolbar-secondary-panel .rvm-ribbon-label{min-width:68px;color:#9ec5ff;font-size:10px;text-transform:uppercase;letter-spacing:.05em;}
     [data-rvm-viewer] .rvm-toolbar-secondary-panel .rvm-ribbon-button-row,[data-rvm-viewer] .rvm-toolbar-secondary-panel .rvm-stagedjson-buttons,[data-rvm-viewer] .rvm-toolbar-secondary-panel .rvm-stagedjson-validation-buttons{display:flex;flex-wrap:wrap;gap:4px;}
+    [data-rvm-viewer] .rvm-toolbar-secondary-orient .rvm-toolbar-secondary-panel .rvm-tool-btn.is-icon-only::after{content:attr(aria-label);font-size:11px;margin-left:4px;}
+    [data-rvm-viewer] .rvm-toolbar-secondary-orient .rvm-toolbar-secondary-panel .rvm-tool-btn.is-icon-only{min-width:64px;justify-content:flex-start;}
   `;
 }
