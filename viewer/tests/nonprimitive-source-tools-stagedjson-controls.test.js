@@ -5,6 +5,7 @@ const settings = readFileSync('viewer/overlays/support/SupportOverlaySettings.js
 const supportBridge = readFileSync('viewer/tabs/RvmNonPrimitiveSupportOverlayBridge.js', 'utf8');
 const sourceToolsBridge = readFileSync('viewer/tabs/RvmNonPrimitiveSourceToolsUiBridge.js', 'utf8');
 const sourceToolsGateBridge = readFileSync('viewer/tabs/RvmSourceToolsStagedJsonKindGateBridge.js', 'utf8');
+const supportRuntimeGateBridge = readFileSync('viewer/tabs/RvmStagedJsonSupportRuntimeGateBridge.js', 'utf8');
 const stagedJsonValidationBridge = readFileSync('viewer/tabs/RvmStagedJsonValidationBridge.js', 'utf8');
 const inputXmlBridge = readFileSync('viewer/rvm-viewer/RvmInputXmlSupportGraphicsUiBridge.js', 'utf8');
 const inputXmlSetModelBridge = readFileSync('viewer/rvm-viewer/RvmInputXmlSupportGraphicsSetModelBridge.js', 'utf8');
@@ -46,8 +47,18 @@ assert.match(sourceToolsGateBridge, /new Set\(\['stagedjson', 'staged\.json'\]\)
 assert.match(sourceToolsGateBridge, /root\.dataset\.rvmLoadedSourceKind = 'json'/, 'stagedJSON source tools gate must coerce only the Source Tools kind gate to JSON');
 assert.match(sourceToolsGateBridge, /root\.dataset\.rvmSourceToolsOriginalKind = kind/, 'stagedJSON source tools gate must preserve the original source kind on the root');
 assert.match(sourceToolsGateBridge, /api\.render[\s\S]*api\.sync[\s\S]*api\.reapplyAutoBendOnly[\s\S]*api\.reapplySupportOverlayOnly/, 'stagedJSON source tools gate must wrap render, sync, and reapply paths');
+
+assert.match(supportRuntimeGateBridge, /rvm-stagedjson-support-runtime-gate\/v1/, 'stagedJSON support runtime gate bridge must expose a schema');
+assert.match(supportRuntimeGateBridge, /SUPPORT_OVERLAY_KEY = '__PCF_GLB_RVM_NON_PRIMITIVE_SUPPORT_OVERLAY__'/, 'stagedJSON support runtime gate must target support overlay API');
+assert.match(supportRuntimeGateBridge, /SUPPORT_DETAILS_KEY = '__PCF_GLB_RVM_NON_PRIMITIVE_SUPPORT_DETAILS_PANEL__'/, 'stagedJSON support runtime gate must target support details API');
+assert.match(supportRuntimeGateBridge, /coerceApplyArgs[\s\S]*sourceKind: 'json'/, 'stagedJSON support runtime gate must coerce support overlay apply sourceKind to JSON');
+assert.match(supportRuntimeGateBridge, /api\.applyFromSource = \(args = \{\}\) => applyFromSource\(coerceApplyArgs\(args\)\)/, 'stagedJSON support runtime gate must wrap support overlay applyFromSource');
+assert.match(supportRuntimeGateBridge, /api\.render[\s\S]*api\.sync/, 'stagedJSON support runtime gate must wrap support details render and sync');
+assert.match(supportRuntimeGateBridge, /setModelWithStagedJsonSupportRuntimeGate/, 'stagedJSON support runtime gate must patch future setModel calls for support overlay reapply');
 assert.match(stagedJsonValidationBridge, /RvmSourceToolsStagedJsonKindGateBridge\.js\?v=20260627-rvm-source-tools-stagedjson-kind-gate-1/, 'stagedJSON validation bridge must import the Source Tools kind gate');
+assert.match(stagedJsonValidationBridge, /RvmStagedJsonSupportRuntimeGateBridge\.js\?v=20260627-rvm-stagedjson-support-runtime-gate-1/, 'stagedJSON validation bridge must import the support runtime gate');
 assert.match(stagedJsonValidationBridge, /installRvmSourceToolsStagedJsonKindGateBridge\(\)/, 'stagedJSON validation bridge must install the Source Tools kind gate');
+assert.match(stagedJsonValidationBridge, /installRvmStagedJsonSupportRuntimeGateBridge\(\)/, 'stagedJSON validation bridge must install the support runtime gate');
 
 assert.match(leftBridge, /data-rvm-hierarchy-width-controls/, 'hierarchy panel must expose width controls');
 assert.match(leftBridge, /resize:both/, 'hierarchy tree must be horizontally and vertically resizable');

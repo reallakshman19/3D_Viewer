@@ -1,4 +1,5 @@
 import { installRvmSourceToolsStagedJsonKindGateBridge } from './RvmSourceToolsStagedJsonKindGateBridge.js?v=20260627-rvm-source-tools-stagedjson-kind-gate-1';
+import { installRvmStagedJsonSupportRuntimeGateBridge } from './RvmStagedJsonSupportRuntimeGateBridge.js?v=20260627-rvm-stagedjson-support-runtime-gate-1';
 
 const CACHE_KEY = '20260620-rvm-stagedjson-validation-1';
 const SCHEMA = 'rvm-stagedjson-validation/v1-gates';
@@ -8,6 +9,7 @@ const EXPORT_API = '__PCF_GLB_RVM_STAGEDJSON_EXPORT__';
 export function installRvmStagedJsonValidationBridge() {
   injectStyles();
   installRvmSourceToolsStagedJsonKindGateBridge();
+  installRvmStagedJsonSupportRuntimeGateBridge();
   const api = {
     version: SCHEMA,
     validateGeometry: () => validateMode('geometry'),
