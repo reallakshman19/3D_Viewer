@@ -1,0 +1,342 @@
+import {
+  RVM_FORMAT_POLICY_VERSION,
+  resolveRvmFormatContext,
+} from './RvmFormatPolicy.js?v=20260627-rvm-right-panel-format-policy-1';
+
+export const RVM_RIGHT_PANEL_FORMAT_POLICY_SCHEMA = 'rvm-right-panel-format-policy/v1';
+
+const INSTALL_FLAG = Symbol.for('pcf-glb-rvm-right-panel-format-policy-v1');
+const STYLE_FLAG = Symbol.for('pcf-glb-rvm-right-panel-format-policy-style-v1');
+const GLOBAL_KEY = '__PCF_GLB_RVM_RIGHT_PANEL_FORMAT_POLICY__';
+const VERSION = '20260627-rvm-right-panel-multiformat-1';
+const ROOT_SELECTOR = '[data-rvm-viewer]';
+const FORMAT_PANEL_ID = 'rvm-format-policy-panel';
+const STAGED_PANEL_ID = 'rvm-stagedjson-review-panel';
+
+const SOURCE_PANEL_SELECTORS = Object.freeze([
+  '#rvm-nonprimitive-source-tools-panel',
+  '[data-rvm-non-primitive-source-tools-header]',
+  '#rvm-nonprimitive-support-details-panel',
+  '[data-rvm-non-primitive-support-details-header]',
+  '#rvm-nonprimitive-node-marker-details-panel',
+  '[data-rvm-non-primitive-node-marker-details-header]',
+]);
+
+function esc(value) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
+function rootEl() {
+  return globalThis.document?.querySelector?.(ROOT_SELECTOR) || null;
+}
+
+function viewer() {
+  return globalThis.__3D_RVM_VIEWER__ || null;
+}
+
+function ensurePanelPair(root, id, title, beforeSelector = '[data-rvm-browser-diagnostics-header="true"]') {
+  const right = root?.querySelector?.('.rvm-right-panel');
+  if (!right || !globalThis.document?.createElement) return null;
+  let panel = right.querySelector(`#${id}`);
+  if (panel) return panel;
+  const header = globalThis.document.createElement('div');
+  panel = globalThis.document.createElement('div');
+  header.className = 'rvm-panel-header';
+  header.dataset.rvmRightPanelFormatHeader = id;
+  header.innerHTML = `<span class="rvm-panel-title">${esc(title)}</span>`;
+  panel.id = id;
+  panel.className = 'rvm-right-format-panel rvm-tag-list';
+  panel.dataset.rvmRightPanelFormatBody = id;
+  const before = beforeSelector ? right.querySelector(beforeSelector) : null;
+  if (before) {
+    right.insertBefore(header, before);
+    right.insertBefore(panel, before);
+  } else {
+    right.append(header, panel);
+  }
+  return panel;
+}
+
+function setPairHidden(root, id, hidden) {
+  const panel = root?.querySelector?.(`#${id}`);
+  const header = root?.querySelector?.(`[data-rvm-right-panel-format-header="${id}"]`);
+  if (panel) panel.hidden = hidden;
+  if (header) header.hidden = hidden;
+}
+
+function policyChip(label, enabled) {
+  return `<span class="rvm-format-policy-chip ${enabled ? 'is-on' : 'is-off'}">${esc(label)} ${enabled ? 'on' : 'off'}</span>`;
+}
+
+function row(key, value) {
+  return `<div class="rvm-format-row"><span>${esc(key)}</span><b title="${esc(value)}">${esc(value === undefined || value === null || value === '' ? '-' : value)}</b></div>`;
+}
+
+function updateSelectionTitle(root) {
+  const title = root?.querySelector?.('#rvm-attributes-panel [data-rvm-selection-details-inspector="true"] .rvm-selection-details-title span');
+  if (title && /RVM selection details/i.test(title.textContent || '')) title.textContent = 'Selected Entity';
+}
+
+function renderFormatPanel(root, context) {
+  const panel = ensurePanelPair(root, FORMAT_PANEL_ID, 'Format Policy');
+  if (!panel) return null;
+  panel.hidden = false;
+  const p = context.policy || {};
+  panel.dataset.rvmRightPanelPolicyVersion = VERSION;
+  panel.dataset.rvmRightPanelSourceKind = context.sourceKind || 'unknown';
+  panel.innerHTML = `
+    <div class="rvm-format-policy-card" data-rvm-format-policy-version="${esc(VERSION)}">
+      <div class="rvm-format-title"><span>${esc(context.sourceKind || 'unknown')}</span><small>${esc(context.primitiveMode || 'model')}</small></div>
+      <div class="rvm-format-grid">
+        ${row('File', context.fileName || 'current model')}
+        ${row('Primitive mode', context.primitiveMode || '-')}
+        ${row('Source preview', context.isSourcePreview ? 'yes' : 'no')}
+        ${row('Primitive/native', context.isPrimitive ? 'yes' : 'no')}
+      </div>
+      <div class="rvm-format-policy-chips">
+        ${policyChip('source tools', p.showSourceTools)}
+        ${policyChip('support details', p.showSupportDetails)}
+        ${policyChip('node markers', p.showNodeMarkers)}
+        ${policyChip('stagedJSON', p.showStagedJsonReview)}
+      </div>
+    </div>`;
+  return panel;
+}
+
+function hideObsoleteSourcePreviewPanels(root, context) {
+  const p = context.policy || {};
+  const shouldHideSourcePanels = !p.showSourceTools && !p.showSupportDetails && !p.showNodeMarkers;
+  if (!shouldHideSourcePanels) return;
+  for (const selector of SOURCE_PANEL_SELECTORS) {
+    root?.querySelectorAll?.(selector).forEach((el) => {
+      el.hidden = true;
+      el.dataset.rvmRightPanelPolicyHidden = VERSION;
+    });
+  }
+  try { globalThis.__PCF_GLB_RVM_NON_PRIMITIVE_SUPPORT_DETAILS_PANEL__?.clear?.(context.viewer, 'format-policy-primitive'); } catch (_) {}
+  try { globalThis.__PCF_GLB_RVM_NON_PRIMITIVE_NODE_MARKERS__?.clear?.(context.viewer, 'format-policy-primitive'); } catch (_) {}
+  try { globalThis.__PCF_GLB_RVM_NON_PRIMITIVE_SOURCE_TOOLS_UI__?.clear?.(root?.querySelector?.('#rvm-nonprimitive-source-tools-panel'), context.viewer, 'format-policy-primitive'); } catch (_) {}
+}
+
+function asArray(value) {
+  return Array.isArray(value) ? value : [];
+}
+
+function collectStagedSource(context) {
+  const source = context.source || context.supportSource || null;
+  if (source && typeof source === 'object') return source;
+  const exported = globalThis.__PCF_GLB_RVM_STAGEDJSON_EXPORT_DIAGNOSTICS__;
+  if (exported && typeof exported === 'object') return exported;
+  return null;
+}
+
+function isStagedJsonSource(source) {
+  if (!source || typeof source !== 'object') return false;
+  if (String(source.schema || '').toLowerCase().includes('stagedjson')) return true;
+  if (Array.isArray(source.branches) || Array.isArray(source.supportRecords)) return true;
+  if (source.model && (Array.isArray(source.model.branches) || Array.isArray(source.model.supportRecords))) return true;
+  return false;
+}
+
+function flattenChildren(node, out = []) {
+  if (!node || typeof node !== 'object') return out;
+  for (const child of asArray(node.children)) {
+    out.push(child);
+    flattenChildren(child, out);
+  }
+  return out;
+}
+
+function countBy(rows, keyPicker) {
+  const map = new Map();
+  for (const rowItem of rows || []) {
+    const key = String(keyPicker(rowItem) || 'UNKNOWN').toUpperCase();
+    map.set(key, (map.get(key) || 0) + 1);
+  }
+  return [...map.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+}
+
+function stagedStats(source) {
+  const branches = asArray(source?.branches || source?.model?.branches);
+  const supports = asArray(source?.supportRecords || source?.model?.supportRecords);
+  const components = branches.flatMap((branch) => flattenChildren(branch, []));
+  const componentTypes = countBy(components, (item) => item.TYPE || item.type || item.COMPONENT_TYPE || item.stagedJsonRole || 'COMPONENT');
+  const supportKinds = countBy(supports, (item) => item.SUPPORT_KIND || item.RVM_BROWSER_SUPPORT_KIND || item.supportKind || item.TYPE || 'SUPPORT');
+  const diagnostics = source?.diagnostics || {};
+  return {
+    schema: source?.schema || source?.schemaVersion || 'stagedjson/unknown',
+    modelName: source?.model?.name || source?.modelName || source?.name || 'StagedJSON model',
+    branches,
+    supports,
+    components,
+    componentTypes,
+    supportKinds,
+    diagnostics,
+    primitiveCount: Number(source?.model?.primitiveCount ?? source?.primitiveCount ?? 0) || 0,
+  };
+}
+
+function listRows(rows, emptyLabel) {
+  if (!rows.length) return `<li>${esc(emptyLabel)}</li>`;
+  return rows.slice(0, 8).map(([name, count]) => `<li><span>${esc(name)}</span><b>${esc(count)}</b></li>`).join('');
+}
+
+function renderStagedJsonPanel(root, context) {
+  const panel = ensurePanelPair(root, STAGED_PANEL_ID, 'StagedJSON Review');
+  if (!panel) return null;
+  const shouldShow = context.policy?.showStagedJsonReview === true;
+  setPairHidden(root, STAGED_PANEL_ID, !shouldShow);
+  if (!shouldShow) {
+    panel.innerHTML = '';
+    return panel;
+  }
+  const source = collectStagedSource(context);
+  if (!isStagedJsonSource(source)) {
+    panel.hidden = false;
+    panel.innerHTML = '<div class="rvm-empty-state">No stagedJSON source record is attached to the current model.</div>';
+    return panel;
+  }
+  const stats = stagedStats(source);
+  panel.hidden = false;
+  panel.dataset.rvmStagedJsonReview = VERSION;
+  panel.innerHTML = `
+    <div class="rvm-stagedjson-card" data-rvm-stagedjson-source="true">
+      <div class="rvm-format-title"><span>${esc(stats.modelName)}</span><small>${esc(stats.schema)}</small></div>
+      <div class="rvm-format-grid">
+        ${row('Branches', stats.branches.length)}
+        ${row('Components', stats.components.length)}
+        ${row('Support records', stats.supports.length)}
+        ${row('Primitive count', stats.primitiveCount || '-')}
+        ${row('Diagnostics', Object.keys(stats.diagnostics || {}).length ? 'available' : 'none')}
+      </div>
+      <div class="rvm-stagedjson-columns">
+        <section><h4>Component types</h4><ul>${listRows(stats.componentTypes, 'No components')}</ul></section>
+        <section><h4>Support kinds</h4><ul>${listRows(stats.supportKinds, 'No support records')}</ul></section>
+      </div>
+      <div class="rvm-format-actions">
+        <button type="button" data-rvm-right-panel-action="copy-stagedjson">Copy stagedJSON</button>
+        <button type="button" data-rvm-right-panel-action="download-stagedjson">Download stagedJSON</button>
+        <button type="button" data-rvm-right-panel-action="copy-stagedjson-diagnostics">Copy diagnostics</button>
+      </div>
+    </div>`;
+  return panel;
+}
+
+function fileStem(context, suffix) {
+  const base = String(context.fileName || context.sourceKind || 'rvm-model').replace(/\.[^.]+$/, '').replace(/[^A-Za-z0-9._-]+/g, '_') || 'rvm-model';
+  return `${base}-${suffix}`;
+}
+
+async function copyText(text) {
+  if (globalThis.navigator?.clipboard?.writeText) {
+    await globalThis.navigator.clipboard.writeText(text);
+    return { status: 'copied', bytes: text.length };
+  }
+  return { status: 'unavailable', reason: 'clipboard-api-missing', bytes: text.length };
+}
+
+function downloadText(text, fileName, mimeType = 'application/json') {
+  const doc = globalThis.document;
+  if (!doc?.createElement || !globalThis.Blob || !globalThis.URL?.createObjectURL) return { status: 'unavailable', reason: 'download-api-missing', bytes: text.length };
+  const url = globalThis.URL.createObjectURL(new globalThis.Blob([text], { type: mimeType }));
+  const link = doc.createElement('a');
+  link.href = url;
+  link.download = fileName;
+  link.style.display = 'none';
+  doc.body?.appendChild?.(link);
+  link.click?.();
+  link.remove?.();
+  setTimeout(() => globalThis.URL.revokeObjectURL?.(url), 0);
+  return { status: 'downloaded', fileName, bytes: text.length };
+}
+
+function currentStagedJsonPayload() {
+  const context = resolveRvmFormatContext({ root: rootEl(), viewer: viewer() });
+  const source = collectStagedSource(context);
+  return { context, source, stats: isStagedJsonSource(source) ? stagedStats(source) : null };
+}
+
+function setStatus(message, warning = false) {
+  const status = rootEl()?.querySelector?.('#rvm-sb-msg');
+  if (!status) return;
+  status.textContent = message;
+  status.style.color = warning ? '#ffcf70' : '';
+}
+
+function handleClick(event) {
+  const action = event.target?.closest?.('[data-rvm-right-panel-action]')?.dataset?.rvmRightPanelAction;
+  if (!action) return;
+  event.preventDefault();
+  const { context, source, stats } = currentStagedJsonPayload();
+  if (!source) {
+    setStatus('Right panel: no stagedJSON payload available.', true);
+    return;
+  }
+  if (action === 'copy-stagedjson') {
+    copyText(JSON.stringify(source, null, 2)).then((result) => setStatus(result.status === 'copied' ? 'Right panel: copied stagedJSON.' : 'Right panel: clipboard unavailable.', result.status !== 'copied'));
+  } else if (action === 'download-stagedjson') {
+    const result = downloadText(JSON.stringify(source, null, 2), fileStem(context, 'right-panel.stagedjson'));
+    setStatus(result.status === 'downloaded' ? `Right panel: downloaded ${result.fileName}.` : 'Right panel: download unavailable.', result.status !== 'downloaded');
+  } else if (action === 'copy-stagedjson-diagnostics') {
+    const payload = { schema: 'rvm-right-panel-stagedjson-diagnostics/v1', version: VERSION, stats, diagnostics: source?.diagnostics || null };
+    copyText(JSON.stringify(payload, null, 2)).then((result) => setStatus(result.status === 'copied' ? 'Right panel: copied stagedJSON diagnostics.' : 'Right panel: clipboard unavailable.', result.status !== 'copied'));
+  }
+}
+
+function render(root = rootEl(), activeViewer = viewer()) {
+  if (!root) return null;
+  const context = resolveRvmFormatContext({ root, viewer: activeViewer });
+  root.dataset.rvmRightPanelFormatPolicy = VERSION;
+  root.dataset.rvmRightPanelSourceKind = context.sourceKind;
+  root.dataset.rvmRightPanelPolicyVersion = RVM_FORMAT_POLICY_VERSION;
+  renderFormatPanel(root, context);
+  renderStagedJsonPanel(root, context);
+  hideObsoleteSourcePreviewPanels(root, context);
+  updateSelectionTitle(root);
+  return context;
+}
+
+function installStyles() {
+  if (globalThis[STYLE_FLAG]) return;
+  globalThis[STYLE_FLAG] = true;
+  const doc = globalThis.document;
+  if (!doc?.createElement) return;
+  const style = doc.createElement('style');
+  style.dataset.rvmRightPanelFormatPolicyStyle = VERSION;
+  style.textContent = `
+    .rvm-right-format-panel{padding:7px;border-bottom:1px solid var(--geo-border,#333);background:rgba(10,16,26,.74);}
+    .rvm-format-policy-card,.rvm-stagedjson-card{display:grid;gap:7px;min-width:0;}
+    .rvm-format-title{display:flex;align-items:center;justify-content:space-between;gap:8px;color:#bfdbfe;font-size:12px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;}
+    .rvm-format-title small{font-size:9px;color:#8fa5c7;font-weight:600;text-transform:none;letter-spacing:0;}
+    .rvm-format-grid{display:grid;gap:3px;}
+    .rvm-format-row{display:grid;grid-template-columns:minmax(86px,.7fr) minmax(0,1.3fr);gap:6px;padding:4px 6px;border:1px solid rgba(126,190,255,.12);border-radius:5px;background:rgba(255,255,255,.026);font-size:10px;}
+    .rvm-format-row span{color:#9eb7d8;}.rvm-format-row b{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#edf6ff;font-weight:650;}
+    .rvm-format-policy-chips,.rvm-format-actions{display:flex;flex-wrap:wrap;gap:5px;}
+    .rvm-format-policy-chip{display:inline-flex;border-radius:999px;border:1px solid rgba(148,163,184,.24);padding:2px 6px;font-size:9.5px;color:#cbd5e1;background:rgba(15,23,42,.62);}.rvm-format-policy-chip.is-on{color:#bbf7d0;border-color:rgba(34,197,94,.32);background:rgba(22,101,52,.18);}.rvm-format-policy-chip.is-off{color:#fca5a5;border-color:rgba(248,113,113,.25);background:rgba(127,29,29,.13);}
+    .rvm-stagedjson-columns{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px;}.rvm-stagedjson-columns section{border:1px solid rgba(126,190,255,.12);border-radius:7px;background:rgba(255,255,255,.025);padding:6px;}.rvm-stagedjson-columns h4{margin:0 0 5px;color:#bfdbfe;font-size:11px;}.rvm-stagedjson-columns ul{list-style:none;margin:0;padding:0;display:grid;gap:2px;}.rvm-stagedjson-columns li{display:flex;justify-content:space-between;gap:8px;color:#cbd5e1;font-size:10px;}.rvm-stagedjson-columns li span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+    .rvm-format-actions button{border:1px solid rgba(126,190,255,.26);border-radius:6px;background:#132238;color:#dbeafe;padding:5px 7px;font-size:10.5px;cursor:pointer;}
+    @media(max-width:1150px){.rvm-stagedjson-columns{grid-template-columns:1fr;}}
+  `;
+  doc.head?.appendChild?.(style);
+}
+
+export function installRvmRightPanelFormatPolicyBridge() {
+  if (typeof document === 'undefined') return null;
+  if (globalThis[INSTALL_FLAG] && globalThis[GLOBAL_KEY]) return globalThis[GLOBAL_KEY];
+  globalThis[INSTALL_FLAG] = true;
+  installStyles();
+  const api = { schema: RVM_RIGHT_PANEL_FORMAT_POLICY_SCHEMA, version: VERSION, render, resolve: resolveRvmFormatContext };
+  globalThis[GLOBAL_KEY] = api;
+  document.addEventListener('click', handleClick, true);
+  globalThis.addEventListener?.('rvm-model-loaded', () => setTimeout(() => render(), 120));
+  globalThis.addEventListener?.('rvm-node-selected', () => setTimeout(() => render(), 0));
+  globalThis.addEventListener?.('rvm-nonprimitive-support-details-selected', () => setTimeout(() => render(), 0));
+  setTimeout(() => render(), 0);
+  setTimeout(() => render(), 500);
+  return api;
+}
