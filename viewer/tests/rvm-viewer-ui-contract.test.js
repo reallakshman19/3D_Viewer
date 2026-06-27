@@ -18,7 +18,9 @@ const tab = read('tabs/viewer3d-rvm-tab.js');
 const resizeBridge = read('tabs/RvmLeftPanelResizeCollapseBridge.js');
 const deferredLoader = read('tabs/RvmDeferredBridgeLoader.js');
 const toolbar = read('tabs/RvmToolbarCompactBridge.js');
+const pointer = read('tabs/RvmGroupedToolbarPointerBridge.js');
 const overflow = read('tabs/RvmToolbarOverflowController.js');
+const smartGrid = read('tabs/RvmHierarchySmartGridBridge.js');
 const drawer = read('tabs/RvmBottomDiagnosticsDrawerBridge.js');
 const stagedExport = read('tabs/RvmStagedJsonExportBridge.js');
 const stagedValidation = read('tabs/RvmStagedJsonValidationBridge.js');
@@ -46,6 +48,11 @@ assert.ok(deferredLoader.includes('SOURCE_PREVIEW_KIND_RE'), 'deferred loader mu
 assert.ok(tab.includes('stampSourcePreviewHierarchy(payload.gltf.scene, source, sourceKind, file.name)'), 'mounted RVM tab must stamp source hierarchy');
 
 assert.ok(renderer.includes('RvmToolbarCompactBridge.js?v=20260627-rvm-toolbar-secondary-groups-restore-1'), 'renderer must import restored grouped toolbar policy');
+assert.ok(renderer.includes('RvmGroupedToolbarPointerBridge.js?v=20260627-rvm-grouped-toolbar-pointer-1'), 'renderer must import deterministic pointer bridge');
+assert.ok(renderer.includes('installRvmGroupedToolbarPointerBridge()'), 'renderer must install deterministic pointer bridge');
+assert.ok(pointer.includes("const VERSION = '20260627-rvm-grouped-toolbar-pointer-1'"), 'pointer bridge must expose current version');
+assert.ok(pointer.includes('pointerdown-deterministic') && pointer.includes('suppressClickButton'), 'pointer bridge must open on pointerdown and suppress follow-up click');
+assert.ok(pointer.includes('[data-rvm-toolbar-more] *{pointer-events:none;}'), 'pointer bridge must make nested span/caret target deterministic');
 assert.ok(renderer.includes('installRvmToolbarCompactBridge()'), 'renderer must install toolbar policy bridge');
 assert.ok(toolbar.includes("const VERSION = '20260627-rvm-toolbar-secondary-groups-restore-1'"), 'toolbar must expose restored grouped version');
 assert.ok(toolbar.includes('RvmToolbarOverflowController.js?v=20260627-rvm-toolbar-overflow-controller-grouped-restore-1'), 'toolbar must import restored grouped overflow controller');
@@ -65,6 +72,12 @@ assert.ok(overflow.includes("event?.key !== 'Escape'"), 'overflow controller mus
 assert.ok(!overflow.includes('MutationObserver'), 'overflow controller must not use MutationObserver as the behavior fix');
 
 assert.ok(renderer.includes('RvmHierarchySelectionBridge.js?v=20260626-rvm-hierarchy-text-hit-target-sync-1'), 'renderer must preserve hierarchy text-hit-target bridge');
+assert.ok(renderer.includes('RvmHierarchySmartGridBridge.js?v=20260627-rvm-hierarchy-smart-grid-1'), 'renderer must import hierarchy smart grid bridge');
+assert.ok(renderer.includes('installRvmHierarchySmartGridBridge()'), 'renderer must install hierarchy smart grid bridge');
+assert.ok(smartGrid.includes("const VERSION = '20260627-rvm-hierarchy-smart-grid-1'"), 'smart grid bridge must expose current version');
+assert.ok(smartGrid.includes('grid-template-columns:22px minmax(0,1fr) 34px 34px'), 'smart grid must define row columns for expander/select/off/on');
+assert.ok(smartGrid.includes('rvm-navis-label{min-width:0;overflow:hidden;text-overflow:ellipsis'), 'smart grid must protect hierarchy label width');
+assert.ok(smartGrid.includes('overflow-x:hidden'), 'smart grid must prevent horizontal row overflow');
 assert.ok(renderer.includes('RvmSelectionTreeSyncBridge.js?v=20260626-rvm-hierarchy-selection-sync-2'), 'renderer must preserve hierarchy sync bridge');
 assert.ok(renderer.includes('RvmViewerInteractionPatch.js?v=20260626-rvm-canvas-hierarchy-selection-sync-1'), 'renderer must preserve canvas selection event bridge');
 
@@ -73,4 +86,4 @@ assert.ok(drawer.includes('20260624-rvm-diagnostics-docked-drawer-1'), 'drawer m
 assert.ok(drawer.includes('root.insertBefore(drawer, statusbar)'), 'drawer must dock before status bar');
 assert.ok(!drawer.includes('.rvm-bottom-diagnostics-drawer{position:fixed'), 'drawer must not use fixed viewport positioning');
 
-console.log('Verified RVM viewer UI contract: grouped toolbar restored, hierarchy sync preserved, deferred tools retained, and docked diagnostics intact.');
+console.log('Verified RVM viewer UI contract: deterministic grouped toolbar pointer handling, smart hierarchy grid, hierarchy sync, deferred tools, and docked diagnostics intact.');
