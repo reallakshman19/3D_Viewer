@@ -1,0 +1,1 @@
+This branch fixes stagedJSON Source Tools panel activation through RvmSourceToolsStagedJsonKindGateBridge.js.
