@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 
-const INSTALL_FLAG = Symbol.for('pcf-glb-rvm-model-health-bridge-v1');
-const BRIDGE_VERSION = '20260621-rvm-model-health-1';
+const INSTALL_FLAG = Symbol.for('pcf-glb-rvm-model-health-bridge-misc-compact-1');
+const BRIDGE_VERSION = '20260627-rvm-health-misc-compact-1';
 const MAX_HEALTH_SCAN_OBJECTS = 150000;
 const MAX_KIND_ROWS = 14;
 const LABEL_SOFT_LIMIT = 1200;
@@ -234,8 +234,6 @@ function renderHealth(summary = collectRvmModelHealth()) {
         <section><h4>LOD / visibility state</h4><ul>${rowsHtml(summary.lodCounts)}</ul></section>
       </div>`;
   }
-  const toolbarSummary = rootEl()?.querySelector?.('[data-rvm-health-toolbar-summary]');
-  if (toolbarSummary) toolbarSummary.textContent = `Health: ${summary.visibleObjects.toLocaleString()} visible · ${summary.fallbackObjects.toLocaleString()} fallback · ${summary.pcfReadiness}`;
   setStatus(`Health: ${summary.severity?.label || 'ready'} · ${summary.renderedObjects.toLocaleString()} rendered object(s).`, summary.severity?.level === 'warn');
   return summary;
 }
@@ -316,8 +314,7 @@ function injectToolbar(root) {
     <div class="rvm-ribbon-button-row">
       <button type="button" class="rvm-tool-btn" data-rvm-health-open="true" title="Inspect RVM model health"><span aria-hidden="true">⚕</span><span>Model</span></button>
       <button type="button" class="rvm-tool-btn" data-rvm-health-refresh-toolbar="true" title="Refresh RVM model health"><span aria-hidden="true">↻</span><span>Refresh</span></button>
-    </div>
-    <div class="rvm-model-health-summary" data-rvm-health-toolbar-summary>Health: load model to inspect</div>`;
+    </div>`;
 }
 
 function onDocumentClick(event) {
@@ -346,7 +343,7 @@ function injectStyles() {
   const style = document.createElement('style');
   style.id = 'rvm-model-health-bridge-style';
   style.textContent = `
-    .rvm-model-health-tool-group .rvm-tool-btn span:first-child{font-size:12px}.rvm-model-health-summary{margin-top:3px;color:#94a3b8;font-size:9.5px;white-space:nowrap;max-width:230px;overflow:hidden;text-overflow:ellipsis}
+    .rvm-model-health-tool-group .rvm-tool-btn span:first-child{font-size:12px}
     .rvm-model-health-dialog{position:fixed;inset:0;display:none;align-items:flex-start;justify-content:center;padding-top:88px;background:rgba(2,6,23,.42);z-index:12020}.rvm-model-health-dialog.is-open{display:flex}
     .rvm-model-health-card{width:min(760px,calc(100vw - 44px));display:grid;gap:10px;border:1px solid rgba(126,190,255,.28);border-radius:12px;background:#0b1424;box-shadow:0 22px 70px rgba(0,0,0,.48);padding:12px;color:#dbeafe}.rvm-model-health-head{display:flex;align-items:center;justify-content:space-between;gap:12px}.rvm-model-health-head b{font-size:14px;color:#bfdbfe}.rvm-model-health-head small{display:block;color:#7f94b7;font-size:9px}.rvm-model-health-head button{border:1px solid rgba(148,163,184,.28);background:#111827;color:#e5e7eb;border-radius:7px;width:28px;height:26px}
     .rvm-model-health-status{display:flex;align-items:center;gap:8px;border:1px solid rgba(126,190,255,.16);border-radius:8px;background:rgba(255,255,255,.035);padding:8px;font-size:12px}.rvm-model-health-badge{display:inline-flex;border-radius:999px;padding:3px 8px;font-weight:700}.rvm-model-health-badge.is-ok{background:rgba(34,197,94,.15);color:#86efac}.rvm-model-health-badge.is-warn{background:rgba(245,158,11,.17);color:#fde68a}.rvm-model-health-badge.is-empty{background:rgba(148,163,184,.18);color:#cbd5e1}
