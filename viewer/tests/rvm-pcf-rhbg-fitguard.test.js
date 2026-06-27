@@ -52,17 +52,23 @@ for (const eagerForbidden of ['RvmModelHealthBridge.js?v=', 'RvmModelHealthIssue
   check(!rendererSource.includes(eagerForbidden), `renderer defers ${eagerForbidden} out of startup path`);
 }
 
-check(indexSource.includes('main-rhbg-fitguard.js?v=20260627-rvm-toolbar-pointer-hierarchy-grid-1'), 'index imports pointer/grid startup cache key');
-check(entrySource.includes('core/app.js?v=20260627-rvm-toolbar-pointer-hierarchy-grid-1'), 'entrypoint imports pointer/grid app delegate cache key');
-check(appSource.includes('app-label-perf-runtime.js?v=20260627-rvm-toolbar-pointer-hierarchy-grid-1'), 'app delegate imports pointer/grid runtime cache key');
-check(runtimeSource.includes('viewer3d-rvm-tab-renderer.js?v=20260627-rvm-toolbar-pointer-hierarchy-grid-1'), 'runtime imports pointer/grid RVM renderer cache key');
-check(rendererSource.includes('RvmToolbarCompactBridge.js?v=20260627-rvm-toolbar-secondary-groups-restore-1'), 'renderer imports restored grouped secondary toolbar owner');
+check(indexSource.includes('main-rhbg-fitguard.js?v=20260627-rvm-view-orient-menu-split-1'), 'index imports view/orient split startup cache key');
+check(entrySource.includes('core/app.js?v=20260627-rvm-view-orient-menu-split-1'), 'entrypoint imports view/orient split app delegate cache key');
+check(appSource.includes('app-label-perf-runtime.js?v=20260627-rvm-view-orient-menu-split-1'), 'app delegate imports view/orient split runtime cache key');
+check(runtimeSource.includes('viewer3d-rvm-tab-renderer.js?v=20260627-rvm-view-orient-menu-split-1'), 'runtime imports view/orient split RVM renderer cache key');
+check(rendererSource.includes('RvmToolbarCompactBridge.js?v=20260627-rvm-toolbar-view-orient-split-1'), 'renderer imports split View/Orient toolbar owner');
 check(rendererSource.includes('RvmGroupedToolbarPointerBridge.js?v=20260627-rvm-grouped-toolbar-pointer-1'), 'renderer imports deterministic grouped toolbar pointer bridge');
 check(toolbarPointerSource.includes("const VERSION = '20260627-rvm-grouped-toolbar-pointer-1'"), 'toolbar pointer bridge exposes version');
 check(toolbarPointerSource.includes('pointerdown-deterministic') && toolbarPointerSource.includes('suppressClickButton'), 'toolbar pointer bridge opens on pointerdown and suppresses follow-up click');
-check(toolbarSource.includes("const VERSION = '20260627-rvm-toolbar-secondary-groups-restore-1'"), 'toolbar exposes restored grouped secondary version');
+check(toolbarSource.includes("const VERSION = '20260627-rvm-toolbar-view-orient-split-1'"), 'toolbar exposes View/Orient split version');
+check(toolbarSource.includes("const PREVIOUS_VERSION = '20260627-rvm-toolbar-secondary-groups-restore-1'"), 'toolbar retains previous grouped version marker');
 check(toolbarSource.includes('RvmToolbarOverflowController.js?v=20260627-rvm-toolbar-overflow-controller-grouped-restore-1'), 'toolbar imports restored grouped overflow controller');
-for (const label of ['View', 'Visibility', 'Inspect', 'Export', 'Source', 'Diag']) check(toolbarSource.includes(`label: '${label}'`), `toolbar defines ${label} secondary menu`);
+for (const label of ['View', 'Orient', 'Visibility', 'Inspect', 'Export', 'Source', 'Diag']) check(toolbarSource.includes(`label: '${label}'`), `toolbar defines ${label} secondary menu`);
+check(toolbarSource.includes("{ id: 'orient', label: 'Orient'"), 'toolbar defines dedicated Orient menu');
+check(toolbarSource.includes("{ id: 'view', label: 'View', title: 'View Controls'"), 'toolbar defines dedicated View controls menu');
+check(toolbarSource.indexOf("return 'orient'") < toolbarSource.indexOf("return 'view'"), 'toolbar classifies Orient before generic View terms');
+check(toolbarSource.includes("CORE_LABELS = new Set(['Navigate', 'Navigate / View', 'Review'])"), 'toolbar moves View section into View menu');
+check(toolbarSource.includes('content:attr(aria-label)'), 'Orient menu shows labels for icon-only orientation buttons');
 check(!toolbarSource.includes('More tools</span>'), 'generic More Tools dumping ground is not recreated');
 check(overflowSource.includes("const VERSION = '20260627-rvm-toolbar-overflow-controller-grouped-restore-1'"), 'overflow controller exposes grouped restore version');
 check(overflowSource.includes('getMenuEntries') && overflowSource.includes('openMenuId'), 'overflow controller supports multiple grouped menu roots');
