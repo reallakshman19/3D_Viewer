@@ -25,6 +25,9 @@ assert.match(supportBridge, /SourceAxisTransform\.js/, 'support overlay must imp
 assert.match(supportBridge, /axisBasis:\s*sourceAxisBasis3\(axisTransform\)/, 'support coordinate mapper must use selected source axis transform');
 assert.match(supportBridge, /transformSourcePipeSegments\(sourcePipeSegments, axisTransform\)/, 'support resolver pipe segments must use selected source axis transform');
 assert.match(supportBridge, /labelsVisible:\s*Boolean\(settings\.labels\)/, 'support overlay diagnostics must expose final label visibility');
+assert.match(supportBridge, /STAGED_JSON_SOURCE_RE = \/\\\.staged\\\.json\$\/i/, 'support overlay source policy must detect .staged.json before generic JSON');
+assert.match(supportBridge, /kind === 'stagedjson'/, 'support overlay source policy must accept stagedJSON sourceKind directly');
+assert.match(supportBridge, /normalizeSupportSourceKind/, 'support overlay source policy must normalize source kinds before gate checks');
 
 assert.match(inputXmlBridge, /window\.__3D_RVM_VIEWER__/, 'InputXML source-tools bridge must fall back to current global RVM viewer');
 assert.match(inputXmlBridge, /document\.addEventListener\('change', handleLegacyControlEvent, true\)/, 'InputXML source-tools bridge must handle change events, not input only');
