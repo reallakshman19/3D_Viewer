@@ -23,12 +23,10 @@ export function sourceKindFromFileName(fileName = '') {
 }
 
 export function sourceKindFromContext(context = {}) {
-  return normalizeSourceKind(
-    context.sourceKind
-      || context.loadedSourceKind
-      || context.fileExtension
-      || sourceKindFromFileName(context.fileName)
-  );
+  const explicitKind = context.sourceKind || context.loadedSourceKind;
+  if (explicitKind) return normalizeSourceKind(explicitKind);
+  const fileNameKind = sourceKindFromFileName(context.fileName);
+  return normalizeSourceKind(fileNameKind || context.fileExtension);
 }
 
 export function canUseAutoBend(context = {}) {

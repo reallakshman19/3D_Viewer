@@ -1,4 +1,4 @@
-import { canUseAutoBend, normalizeSourceKind, sourceKindFromFileName } from '../overlays/autobend/NonPrimitiveAutoBendGate.js';
+import { canUseAutoBend, normalizeSourceKind, sourceKindFromContext, sourceKindFromFileName } from '../overlays/autobend/NonPrimitiveAutoBendGate.js';
 import { readNonPrimitiveAutoBendSettings } from '../overlays/autobend/NonPrimitiveAutoBendSettings.js';
 
 let passed = 0;
@@ -15,6 +15,9 @@ check(sourceKindFromFileName('model.stagedjson') === 'stagedjson', 'auto-bend de
 check(sourceKindFromFileName('model.staged.json') === 'stagedjson', 'auto-bend detects staged.json filename before generic json');
 check(sourceKindFromFileName('line.uxml.json') === 'inputxml', 'auto-bend detects uxml.json filename before generic json');
 check(sourceKindFromFileName('line.uxml') === 'inputxml', 'auto-bend detects uxml filename');
+check(sourceKindFromContext({ fileExtension: 'json', fileName: 'model.staged.json' }) === 'stagedjson', 'auto-bend prefers staged.json filename over generic json extension');
+check(sourceKindFromContext({ fileExtension: 'json', fileName: 'line.uxml.json' }) === 'inputxml', 'auto-bend prefers uxml.json filename over generic json extension');
+check(sourceKindFromContext({ sourceKind: 'json', fileName: 'model.staged.json' }) === 'json', 'auto-bend preserves explicit sourceKind over filename');
 for (const sourceKind of ['json', 'jscon', 'inputxml', 'uxml', 'txt', 'stagedjson']) {
   check(canUseAutoBend({ sourceKind }), `auto-bend accepts ${sourceKind}`);
 }
