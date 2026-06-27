@@ -8,12 +8,26 @@ export function normalizeSourceKind(value) {
   return text;
 }
 
+export function sourceKindFromFileName(fileName = '') {
+  const name = String(fileName || '').trim().toLowerCase();
+  if (!name) return '';
+  if (/\.stagedjson$/i.test(name) || /\.staged\.json$/i.test(name)) return 'stagedjson';
+  if (/\.uxml(\.json)?$/i.test(name) || /\.inputxml$/i.test(name)) return 'inputxml';
+  if (/\.jscon$/i.test(name)) return 'jscon';
+  if (/\.txt$/i.test(name)) return 'txt';
+  if (/\.json$/i.test(name)) return 'json';
+  if (/\.rvm$/i.test(name) || /\.rev$/i.test(name)) return 'rvm';
+  if (/\.glb$/i.test(name)) return 'glb';
+  if (/\.gltf$/i.test(name)) return 'gltf';
+  return '';
+}
+
 export function sourceKindFromContext(context = {}) {
   return normalizeSourceKind(
     context.sourceKind
       || context.loadedSourceKind
       || context.fileExtension
-      || context.fileName?.split('.').pop()
+      || sourceKindFromFileName(context.fileName)
   );
 }
 
