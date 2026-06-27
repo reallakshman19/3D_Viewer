@@ -77,15 +77,18 @@ export function resolveRvmFormatContext({ root = null, viewer = globalThis.__3D_
       || activeRoot?.dataset?.rvmFileName
       || ''
   );
-  const detectedKind = normalizeRvmSourceKind(
+  const fileKind = sourceKindFromFileName(fileName);
+  const stampedKind = normalizeRvmSourceKind(
     activeRoot?.dataset?.rvmLoadedSourceKind
       || userData.__rvmNonPrimitiveSourceKind
       || userData.__rvmNonPrimitiveAutoBendSourceKind
       || userData.sourceKind
       || viewer?.sourceKind
-      || sourceKindFromFileName(fileName)
-      || 'unknown'
+      || ''
   );
+  const detectedKind = fileKind === 'stagedjson' && (!stampedKind || stampedKind === 'json' || stampedKind === 'source-preview')
+    ? 'stagedjson'
+    : normalizeRvmSourceKind(stampedKind || fileKind || 'unknown');
   const primitiveMode = String(activeRoot?.dataset?.rvmModelPrimitiveMode || viewer?.modelPrimitiveMode || '').toLowerCase();
   const source = userData.__rvmNonPrimitiveAutoBendSourceHierarchy || userData.__rvmNonPrimitiveSourceHierarchy || null;
   const supportSource = userData.__rvmNonPrimitiveSourceHierarchy || source;
