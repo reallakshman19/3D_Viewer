@@ -5,11 +5,11 @@ async function run() {
   const tabSource = await readFile(new URL('../../../tabs/viewer3d-rvm-tab.js', import.meta.url), 'utf8');
   const labelsSource = await readFile(new URL('../../../tabs/RvmLabelPerformanceBridge.js', import.meta.url), 'utf8');
 
-  assert.match(tabSource, /title="Load RVM \/ REV \/ ATT \/ JSON \/ UXML"/, 'RVM tab static source must advertise RVM / REV / ATT / JSON / UXML.');
-  assert.match(tabSource, /id="rvm-file-input"[^>]+accept="\.json,\.jscon,\.uxml,\.uxml\.json,\.rvm,\.rev,\.att"[^>]+multiple/, 'RVM tab static file input must accept .rvm, .rev, .att sidecars, and non-primitive source files.');
+  assert.match(tabSource, /title="Load RVM \/ REV \/ ATT \/ JSON \/ UXML \/ StagedJSON \/ TXT"/, 'RVM tab static source must advertise all accepted primitive and source-preview formats.');
+  assert.match(tabSource, /id="rvm-file-input"[^>]+accept="\.json,\.jscon,\.stagedjson,\.staged\.json,\.uxml,\.uxml\.json,\.txt,\.rvm,\.rev,\.att"[^>]+multiple/, 'RVM tab static file input must accept .rvm, .rev, .att sidecars, and non-primitive source files.');
   assert.match(tabSource, /data-rvm-direct-worker-load="true"/, 'RVM tab input must expose the direct worker load marker.');
-  assert.match(tabSource, /Load RVM \/ REV \/ ATT \/ JSON \/ UXML to view hierarchy\./, 'RVM hierarchy empty-state text must be correct in static source.');
-  assert.match(tabSource, /Load RVM \/ REV \/ ATT \/ JSON \/ UXML to begin\./, 'RVM viewport placeholder text must be correct in static source.');
+  assert.match(tabSource, /Load RVM \/ REV \/ ATT \/ JSON \/ UXML \/ StagedJSON \/ TXT to view hierarchy\./, 'RVM hierarchy empty-state text must be correct in static source.');
+  assert.match(tabSource, /Load RVM \/ REV \/ ATT \/ JSON \/ UXML \/ StagedJSON \/ TXT to begin\./, 'RVM viewport placeholder text must be correct in static source.');
   assert.doesNotMatch(tabSource, /Load JSON\/UXML to view hierarchy|Load RVM JSON \/ UXML to begin/, 'RVM tab static source must not regress to old JSON/UXML-only wording.');
 
   assert.match(
