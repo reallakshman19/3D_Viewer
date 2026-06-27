@@ -27,7 +27,7 @@ check(renderer.includes('RvmSelectionTreeSyncBridge.js?v=20260627-rvm-hierarchy-
 check(renderer.includes('installRvmFormatNeutralExactSelectionBridge()'), 'exact selection bridge installs from renderer');
 check(hierarchy.includes("const BRIDGE_VERSION = 'rvm-hierarchy-selection-bridge/v4-format-neutral-navis-safe'"), 'hierarchy bridge exposes current version');
 check(treeSync.includes("const BRIDGE_VERSION = '20260627-rvm-hierarchy-selection-sync-dispose-1'"), 'tree sync exposes current version');
-check(exact.includes('GENERIC_KIND_LABELS'), 'exact selection bridge blocks generic kind labels');
+check(exact.includes('GENERIC_LABELS'), 'exact selection bridge blocks generic kind labels');
 check(tab.includes('sourceKindForJsonFileName') && tab.includes("return 'stagedjson'") && tab.includes("return 'txt'"), 'mounted tab directly classifies stagedJSON and TXT');
 check(tab.includes('renderLoadedHierarchyTree(root, payload'), 'mounted tab renders format-neutral hierarchy tree');
 check(deferred.includes('SOURCE_PREVIEW_KIND_RE') && deferred.includes('stagedjson'), 'deferred loader gates stagedJSON source-preview bridges');
