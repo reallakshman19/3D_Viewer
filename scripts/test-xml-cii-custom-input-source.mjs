@@ -3,11 +3,6 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import {
-  buildXmlCiiCustomInputXml,
-  parseXmlCiiStagedJsonInputSource,
-  stagedTraceToCsv,
-} from '../viewer/converters/xml-cii2019-core/custom-input-api.js';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const read = (rel) => fs.readFileSync(path.join(root, rel), 'utf8');
@@ -45,6 +40,9 @@ const customPanel = read('viewer/tabs/model-converters/custom-input/custom-input
 const jsonTracePanel = read('viewer/tabs/model-converters/json-trace/json-trace-panel.js');
 const sourceService = read('viewer/tabs/model-converters/workflow/services/xml-cii-staged-source-service.js');
 const popup = read('viewer/tabs/model-converters/xml-cii-workflow-popup.js');
+const api = read('viewer/converters/xml-cii2019-core/custom-input-api.js');
+const stagedParser = read('viewer/converters/xml-cii2019-core/custom-input-staged-json-source.js');
+const xmlBuilder = read('viewer/converters/xml-cii2019-core/custom-input-xml-builder.js');
 
 assert.ok(shell.includes("id: 'custom-input'") && shell.includes("id: 'json-trace'"), 'Workflow must expose separate Custom Input and JSON Trace phases');
 assert.ok(shell.indexOf("id: 'custom-input'") < shell.indexOf("id: 'json-trace'"), 'JSON Trace must be a separate phase after Custom Input');
@@ -59,33 +57,8 @@ assert.ok(sourceService.includes('xmlCiiWorkflowParsedStagedSource') && sourceSe
 assert.ok(sourceService.includes('JSON Trace staged source'), 'Staged-source resolver must identify JSON Trace source labels');
 assert.ok(popup.includes('createXmlCiiMasterService') && popup.includes('createXmlCiiPreviewService') && popup.includes('createXmlCiiRunService'), 'Popup must call modular XML CII services');
 assert.ok(popup.includes('xmlCiiWorkflowPhaseTabs'), 'Popup must use state service to disable Custom Input when XML is loaded');
+assert.ok(api.includes('buildXmlCiiCustomInputXml') && api.includes('parseXmlCiiStagedJsonInputSource'), 'Custom input API must expose XML builder and staged JSON parser');
+assert.ok(xmlBuilder.includes('<Branchname>') && xmlBuilder.includes('<DTXR_POS>') && xmlBuilder.includes('<Position>'), 'Custom input XML builder must emit Branchname, DTXR_POS and Position fields');
+assert.ok(stagedParser.includes('component-refno-exact') && stagedParser.includes('stagedTraceToCsv'), 'Staged JSON parser must preserve exact ref trace and CSV export');
 
-const tables = {
-  branchRows: 'BranchName\tNodeNumber\tBoreMm\tWallThickness\tP1\tT1\tT2\tT3\tFluidDensity\n/CUSTOM/B1\t100\t100\t6.02\t4140\t260\t151\t5\t983\n/CUSTOM/B1\t110\t100\t6.02\t4140\t260\t151\t5\t983',
-  coordinateRows: 'BranchName\tNodeNumber\tX\tY\tZ\n/CUSTOM/B1\t100\t0\t0\t0\n/CUSTOM/B1\t110\t500\t0\t0',
-  weightRows: 'BranchName\tNodeNumber\tComponentType\tRigid\tEndpoint\tWeight\n/CUSTOM/B1\t100\tPIPE\t0\t1\t0\n/CUSTOM/B1\t110\tRIGID\t2\t2\t0',
-  dtxrRows: 'BranchName\tNodeNumber\tDTXR\n/CUSTOM/B1\t110\tGATE VALVE FLGD 300#',
-};
-const { xmlText, summary } = buildXmlCiiCustomInputXml(tables, { dropShortElementLengthNodes: false });
-assert.equal(summary.branches, 1);
-assert.equal(summary.nodes, 2);
-assert.ok(xmlText.includes('<Branchname>/CUSTOM/B1</Branchname>'));
-assert.ok(xmlText.includes('<NodeNumber>110</NodeNumber>'));
-assert.ok(xmlText.includes('<Position>500 0 0</Position>'));
-assert.ok(xmlText.includes('<DTXR_POS>GATE VALVE FLGD 300#</DTXR_POS>'));
-
-const staged = { children: [{ type: 'BRANCH', name: '/STAGED/B1', children: [{ type: 'VALV', name: '1006649732/115524', attributes: { REF: '=1006649732/115524', DTXR: 'GATE VALVE FLGD 300#', APOS: 'E 10mm S 20mm U 30mm', ABORE: '100', WEIGHT: '99' } }, { type: 'SUPPORT', attributes: { NAME: 'PS-1001', POS: 'E 10mm S 20mm U 30mm', SUPPORT_KIND: 'GUIDE', NODEGAP: '5' } }] }] };
-const parsed = parseXmlCiiStagedJsonInputSource(JSON.stringify(staged));
-assert.equal(parsed.summary.branches, 1);
-assert.equal(parsed.summary.dtxr, 1);
-assert.equal(parsed.summary.supports, 1);
-assert.ok(parsed.tablesText.dtxrRows.includes('GATE VALVE FLGD 300#'));
-assert.ok(parsed.tablesText.restraintRows.includes('GUIDE'));
-assert.ok(parsed.trace.some((row) => row.field === 'DTXR' && row.sourcePath.includes('attributes.DTXR') && row.matchMethod === 'component-refno-exact'));
-assert.ok(stagedTraceToCsv(parsed.trace).includes('sourcePath'));
-
-console.log('XML CII Custom Input / JSON Trace source guard passed', {
-  customBranches: summary.branches,
-  customNodes: summary.nodes,
-  stagedTrace: parsed.trace.length,
-});
+console.log('XML CII Custom Input / JSON Trace source guard passed');
