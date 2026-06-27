@@ -9,6 +9,7 @@ on:
       - 'Benchmarks/XML-CII-2019/sideload/**'
       - 'scripts/test-xml-cii-*.mjs'
       - 'scripts/test-model-converters-tab-responsive.mjs'
+      - 'scripts/test-model-converters-inputxml-cii2019-live-guard.mjs'
       - '.github/workflows/xml-cii-sideload-tests.yml'
   push:
     branches:
@@ -20,6 +21,7 @@ on:
       - 'Benchmarks/XML-CII-2019/sideload/**'
       - 'scripts/test-xml-cii-*.mjs'
       - 'scripts/test-model-converters-tab-responsive.mjs'
+      - 'scripts/test-model-converters-inputxml-cii2019-live-guard.mjs'
       - '.github/workflows/xml-cii-sideload-tests.yml'
   workflow_dispatch:
 
@@ -37,6 +39,8 @@ jobs:
           node-version: '20'
       - name: JSON config aliases
         run: node scripts/test-xml-cii-json-config.mjs
+      - name: InputXML CII2019 live guard
+        run: node scripts/test-model-converters-inputxml-cii2019-live-guard.mjs
       - name: Sideload benchmark
         run: node scripts/test-xml-cii-sideload-benchmark.mjs
       - name: Matched preview publish contract
