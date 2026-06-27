@@ -16,9 +16,11 @@ const indexSource = await read('../index.html');
 const tabSource = await read('../tabs/viewer3d-rvm-tab.js');
 const deferredLoaderSource = await read('../tabs/RvmDeferredBridgeLoader.js');
 const hierarchySource = await read('../tabs/RvmHierarchySelectionBridge.js');
+const smartGridSource = await read('../tabs/RvmHierarchySmartGridBridge.js');
 const treeSyncSource = await read('../tabs/RvmSelectionTreeSyncBridge.js');
 const interactionSource = await read('../tabs/RvmViewerInteractionPatch.js');
 const toolbarSource = await read('../tabs/RvmToolbarCompactBridge.js');
+const toolbarPointerSource = await read('../tabs/RvmGroupedToolbarPointerBridge.js');
 const overflowSource = await read('../tabs/RvmToolbarOverflowController.js');
 const tabClickBridgeSource = await read('../core/app-tab-click-state-bridge.js');
 const modelConvertersSource = await read('../tabs/model-converters/ModelConvertersTab.js');
@@ -50,11 +52,14 @@ for (const eagerForbidden of ['RvmModelHealthBridge.js?v=', 'RvmModelHealthIssue
   check(!rendererSource.includes(eagerForbidden), `renderer defers ${eagerForbidden} out of startup path`);
 }
 
-check(indexSource.includes('main-rhbg-fitguard.js?v=20260627-rvm-toolbar-restore-hierarchy-1'), 'index imports grouped-toolbar restore startup cache key');
-check(entrySource.includes('core/app.js?v=20260627-rvm-toolbar-restore-hierarchy-1'), 'entrypoint imports grouped-toolbar restore app delegate cache key');
-check(appSource.includes('app-label-perf-runtime.js?v=20260627-rvm-toolbar-restore-hierarchy-1'), 'app delegate imports grouped-toolbar restore runtime cache key');
-check(runtimeSource.includes('viewer3d-rvm-tab-renderer.js?v=20260627-rvm-toolbar-restore-hierarchy-1'), 'runtime imports grouped-toolbar restore RVM renderer cache key');
+check(indexSource.includes('main-rhbg-fitguard.js?v=20260627-rvm-toolbar-pointer-hierarchy-grid-1'), 'index imports pointer/grid startup cache key');
+check(entrySource.includes('core/app.js?v=20260627-rvm-toolbar-pointer-hierarchy-grid-1'), 'entrypoint imports pointer/grid app delegate cache key');
+check(appSource.includes('app-label-perf-runtime.js?v=20260627-rvm-toolbar-pointer-hierarchy-grid-1'), 'app delegate imports pointer/grid runtime cache key');
+check(runtimeSource.includes('viewer3d-rvm-tab-renderer.js?v=20260627-rvm-toolbar-pointer-hierarchy-grid-1'), 'runtime imports pointer/grid RVM renderer cache key');
 check(rendererSource.includes('RvmToolbarCompactBridge.js?v=20260627-rvm-toolbar-secondary-groups-restore-1'), 'renderer imports restored grouped secondary toolbar owner');
+check(rendererSource.includes('RvmGroupedToolbarPointerBridge.js?v=20260627-rvm-grouped-toolbar-pointer-1'), 'renderer imports deterministic grouped toolbar pointer bridge');
+check(toolbarPointerSource.includes("const VERSION = '20260627-rvm-grouped-toolbar-pointer-1'"), 'toolbar pointer bridge exposes version');
+check(toolbarPointerSource.includes('pointerdown-deterministic') && toolbarPointerSource.includes('suppressClickButton'), 'toolbar pointer bridge opens on pointerdown and suppresses follow-up click');
 check(toolbarSource.includes("const VERSION = '20260627-rvm-toolbar-secondary-groups-restore-1'"), 'toolbar exposes restored grouped secondary version');
 check(toolbarSource.includes('RvmToolbarOverflowController.js?v=20260627-rvm-toolbar-overflow-controller-grouped-restore-1'), 'toolbar imports restored grouped overflow controller');
 for (const label of ['View', 'Visibility', 'Inspect', 'Export', 'Source', 'Diag']) check(toolbarSource.includes(`label: '${label}'`), `toolbar defines ${label} secondary menu`);
@@ -64,10 +69,13 @@ check(overflowSource.includes('getMenuEntries') && overflowSource.includes('open
 check(overflowSource.includes('positionMenu(entry)') && overflowSource.includes("menu.style.position = 'fixed'"), 'overflow controller positions grouped menu panels as fixed overlays');
 
 check(rendererSource.includes('RvmHierarchySelectionBridge.js?v=20260626-rvm-hierarchy-text-hit-target-sync-1'), 'renderer keeps hierarchy text hit-target bridge');
+check(rendererSource.includes('RvmHierarchySmartGridBridge.js?v=20260627-rvm-hierarchy-smart-grid-1'), 'renderer imports hierarchy smart grid bridge');
 check(rendererSource.includes('RvmSelectionTreeSyncBridge.js?v=20260626-rvm-hierarchy-selection-sync-2'), 'renderer keeps canvas-to-tree sync bridge');
 check(rendererSource.includes('RvmViewerInteractionPatch.js?v=20260626-rvm-canvas-hierarchy-selection-sync-1'), 'renderer keeps canvas selection event bridge');
 check(hierarchySource.includes("const BRIDGE_VERSION = 'rvm-hierarchy-selection-bridge/v3-text-hit-target-sync'"), 'hierarchy bridge exposes text-hit-target version');
-check(hierarchySource.includes('width: clamp(300px, 24vw, 430px)') && hierarchySource.includes('resize: horizontal'), 'hierarchy bridge widens and resizes left panel');
+check(smartGridSource.includes("const VERSION = '20260627-rvm-hierarchy-smart-grid-1'"), 'smart grid bridge exposes version');
+check(smartGridSource.includes('grid-template-columns:22px minmax(0,1fr) 34px 34px'), 'smart grid owns expander/select/off/on column contract');
+check(smartGridSource.includes('overflow-x:hidden'), 'smart grid prevents hierarchy horizontal overflow');
 check(hierarchySource.includes('data-rvm-tree-label') && hierarchySource.includes('rvm-tree-label'), 'hierarchy bridge promotes readable text label hit target');
 check(hierarchySource.includes('handleTreeSelection') && hierarchySource.includes('setSelectionFromObjects'), 'hierarchy bridge routes row text click to canvas selection API');
 check(hierarchySource.includes('collectMatches') && hierarchySource.includes('aliasesMatch'), 'hierarchy bridge uses robust alias matching for row-to-mesh selection');
