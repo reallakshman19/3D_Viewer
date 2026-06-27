@@ -64,6 +64,7 @@
 // app-label-perf-runtime.js?v=20260627-rvm-view-orient-menu-split-1
 // app-label-perf-runtime.js?v=20260627-rvm-view-expanded-nonempty-menus-1
 // app-label-perf-runtime.js?v=20260627-rvm-toolbar-scroll-misc-1
+// app-label-perf-runtime.js?v=20260627-rvm-format-neutral-hierarchy-1
 import { installAppTabClickStateBridge } from './app-tab-click-state-bridge.js?v=20260622-tab-click-state-1';
 
 const LEGACY_GEOMETRY_WORKFLOW_FLAG = 'rvm.enableLegacyGeometryWorkflowButtons';
@@ -83,35 +84,9 @@ const LEGACY_GEOMETRY_WORKFLOW_MODULES = Object.freeze([
   ['../geometry-workspace/GeometrySupportLoadBulkPackageBridge.js?v=20260623-support-load-bulk-package-1', 'installGeometrySupportLoadBulkPackageBridge'],
   ['../geometry-workspace/GeometrySupportLoadCanvasOverlayBridge.js?v=20260623-support-load-canvas-overlay-1', 'installGeometrySupportLoadCanvasOverlayBridge'],
 ]);
-
 installAppTabClickStateBridge();
 if (shouldInstallLegacyGeometryWorkflowButtons()) installLegacyGeometryWorkflowBridges();
-
-function shouldInstallLegacyGeometryWorkflowButtons() {
-  if (globalThis.__RVM_ENABLE_LEGACY_GEOMETRY_WORKFLOW_BUTTONS__ === true) return true;
-  try {
-    return globalThis.localStorage?.getItem?.(LEGACY_GEOMETRY_WORKFLOW_FLAG) === 'true';
-  } catch {
-    return false;
-  }
-}
-
-async function installLegacyGeometryWorkflowBridges() {
-  const results = await Promise.allSettled(
-    LEGACY_GEOMETRY_WORKFLOW_MODULES.map((entry) => importLegacyGeometryWorkflowBridge(entry)),
-  );
-  for (const result of results) {
-    if (result.status === 'rejected') console.warn('legacy geometry workflow bridge failed', result.reason);
-  }
-}
-
-async function importLegacyGeometryWorkflowBridge(entry) {
-  const specifier = entry[0];
-  const installerName = entry[1];
-  const module = await import(specifier);
-  const installer = module?.[installerName];
-  if (typeof installer !== 'function') throw new Error(`Missing ${installerName} from ${specifier}`);
-  installer();
-}
-
-export { init } from './app-label-perf-runtime.js?v=20260627-rvm-toolbar-scroll-misc-1';
+function shouldInstallLegacyGeometryWorkflowButtons() { if (globalThis.__RVM_ENABLE_LEGACY_GEOMETRY_WORKFLOW_BUTTONS__ === true) return true; try { return globalThis.localStorage?.getItem?.(LEGACY_GEOMETRY_WORKFLOW_FLAG) === 'true'; } catch { return false; } }
+async function installLegacyGeometryWorkflowBridges() { const results = await Promise.allSettled(LEGACY_GEOMETRY_WORKFLOW_MODULES.map((entry) => importLegacyGeometryWorkflowBridge(entry))); for (const result of results) { if (result.status === 'rejected') console.warn('legacy geometry workflow bridge failed', result.reason); } }
+async function importLegacyGeometryWorkflowBridge(entry) { const specifier = entry[0]; const installerName = entry[1]; const module = await import(specifier); const installer = module?.[installerName]; if (typeof installer !== 'function') throw new Error(`Missing ${installerName} from ${specifier}`); installer(); }
+export { init } from './app-label-perf-runtime.js?v=20260627-rvm-format-neutral-hierarchy-1';
