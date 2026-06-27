@@ -19,8 +19,8 @@ async function run() {
   );
   assert.match(
     tabSource,
-    /RVM_TAB_JS_VERSION\s*=\s*['"]20260622-rvm-support-runtime-retired-2['"]/, 
-    'The RVM tab diagnostics version must identify the support-runtime-retired worker-first path.'
+    /RVM_TAB_JS_VERSION\s*=\s*['"]20260627-rvm-format-neutral-hierarchy-1['"]/, 
+    'The RVM tab diagnostics version must identify the format-neutral hierarchy path.'
   );
   assert.match(tabSource, /beforeRenderInstructions[\s\S]*__PCF_GLB_RVM_ZONE_LOD_LABELS__/, 'The direct RVM branch must pass the pre-render zone/LOD instruction hook.');
   assert.match(tabSource, /buildFlatNodeTree[\s\S]*flat:\s*true/, 'The RVM tab must render manifest nodes as flat selectable rows before Navis hierarchy bridge upgrades it.');
