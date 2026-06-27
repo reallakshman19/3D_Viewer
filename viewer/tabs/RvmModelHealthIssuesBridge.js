@@ -1,7 +1,7 @@
-import { collectRvmModelHealth } from './RvmModelHealthBridge.js?v=20260621-rvm-health-issues-1';
+import { collectRvmModelHealth } from './RvmModelHealthBridge.js?v=20260627-rvm-health-misc-compact-1';
 
-const INSTALL_FLAG = Symbol.for('pcf-glb-rvm-model-health-issues-bridge-v1');
-const BRIDGE_VERSION = '20260621-rvm-health-issues-1';
+const INSTALL_FLAG = Symbol.for('pcf-glb-rvm-model-health-issues-bridge-misc-compact-1');
+const BRIDGE_VERSION = '20260627-rvm-health-issues-misc-compact-1';
 const FALLBACK_RATIO_WARN = 0.25;
 const FALLBACK_ABSOLUTE_WARN = 500;
 const WIREFRAME_WARN = 250;
@@ -146,8 +146,6 @@ function renderIssues(report = collectRvmHealthIssues()) {
       </div>
       <div class="rvm-health-issue-list">${renderIssueList(report)}</div>`;
   }
-  const toolbarSummary = rootEl()?.querySelector?.('[data-rvm-health-issues-summary]');
-  if (toolbarSummary) toolbarSummary.textContent = `Issues: ${Number(counts.warn || 0)} warn · ${Number(counts.info || 0)} info`;
   setStatus(`Health issues: ${Number(counts.warn || 0)} warning(s), ${Number(counts.info || 0)} info.`, Number(counts.warn || 0) > 0);
   return report;
 }
@@ -271,8 +269,7 @@ function injectToolbar(root) {
     <div class="rvm-ribbon-button-row">
       <button type="button" class="rvm-tool-btn" data-rvm-health-issues-open="true" title="Show actionable RVM health issues"><span aria-hidden="true">!</span><span>Issues</span></button>
       <button type="button" class="rvm-tool-btn" data-rvm-health-issues-refresh-toolbar="true" title="Refresh health issue classification"><span aria-hidden="true">↻</span><span>Check</span></button>
-    </div>
-    <div class="rvm-health-issues-summary" data-rvm-health-issues-summary>Issues: load model to inspect</div>`;
+    </div>`;
 }
 
 function onDocumentClick(event) {
@@ -294,7 +291,7 @@ function injectStyles() {
   const style = document.createElement('style');
   style.id = 'rvm-model-health-issues-style';
   style.textContent = `
-    .rvm-model-health-issues-tool-group .rvm-tool-btn span:first-child{font-size:12px;color:#fde68a}.rvm-health-issues-summary{margin-top:3px;color:#94a3b8;font-size:9.5px;white-space:nowrap;max-width:180px;overflow:hidden;text-overflow:ellipsis}
+    .rvm-model-health-issues-tool-group .rvm-tool-btn span:first-child{font-size:12px;color:#fde68a}
     .rvm-model-health-issues-dialog{position:fixed;inset:0;display:none;align-items:flex-start;justify-content:center;padding-top:88px;background:rgba(2,6,23,.46);z-index:12030}.rvm-model-health-issues-dialog.is-open{display:flex}
     .rvm-model-health-issues-card{width:min(760px,calc(100vw - 44px));max-height:calc(100vh - 120px);overflow:auto;display:grid;gap:10px;border:1px solid rgba(250,204,21,.28);border-radius:12px;background:#0b1424;box-shadow:0 22px 70px rgba(0,0,0,.50);padding:12px;color:#dbeafe}.rvm-model-health-issues-head{display:flex;align-items:center;justify-content:space-between;gap:12px}.rvm-model-health-issues-head b{font-size:14px;color:#fde68a}.rvm-model-health-issues-head small{display:block;color:#9ca3af;font-size:9px}.rvm-model-health-issues-head button{border:1px solid rgba(148,163,184,.28);background:#111827;color:#e5e7eb;border-radius:7px;width:28px;height:26px}
     .rvm-health-issue-summary{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}.rvm-health-issue-summary span{border:1px solid rgba(250,204,21,.16);border-radius:8px;background:rgba(255,255,255,.035);padding:8px;font-size:11px;color:#cbd5e1}.rvm-health-issue-summary b{display:block;color:#fef3c7;font-size:15px}.rvm-health-issue-list{display:grid;gap:8px}.rvm-health-issue-row{border:1px solid rgba(148,163,184,.16);border-radius:9px;background:rgba(255,255,255,.03);padding:9px}.rvm-health-issue-row.is-warn{border-color:rgba(245,158,11,.35);background:rgba(245,158,11,.07)}.rvm-health-issue-row.is-ok{border-color:rgba(34,197,94,.28)}.rvm-health-issue-row>div{display:flex;align-items:center;gap:8px}.rvm-health-issue-row b{color:#e0f2fe}.rvm-health-issue-row small{margin-left:auto;color:#94a3b8;font-size:9px}.rvm-health-issue-row p{margin:7px 0;color:#cbd5e1;font-size:12px}.rvm-health-issue-row button,.rvm-model-health-issues-actions button{border:1px solid rgba(126,190,255,.24);border-radius:7px;background:#132238;color:#dbeafe;padding:6px 9px}.rvm-health-issue-badge{display:inline-flex;border-radius:999px;padding:2px 7px;font-weight:700;font-size:10px;text-transform:uppercase}.rvm-health-issue-badge.is-warn{background:rgba(245,158,11,.17);color:#fde68a}.rvm-health-issue-badge.is-info{background:rgba(59,130,246,.16);color:#bfdbfe}.rvm-health-issue-badge.is-ok{background:rgba(34,197,94,.15);color:#86efac}.rvm-model-health-issues-actions{display:flex;gap:8px;flex-wrap:wrap}
