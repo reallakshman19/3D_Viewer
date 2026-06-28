@@ -7,6 +7,7 @@ import { RVM_HIERARCHY_PROVIDER_CONTRACT_VERSION, providerResultFromFormatNeutra
 
 export const FORMAT_NEUTRAL_HIERARCHY_VERSION = '20260628-format-neutral-shared-kind-policy-1';
 export const RVM_PROVIDER_TREE_READ_PATH_VERSION = '20260628-rvm-provider-tree-read-path-1';
+export const RVM_SOURCE_PROVIDER_TREE_PILOT_VERSION = '20260628-rvm-source-provider-tree-pilot-1';
 
 function text(value) { return String(value ?? '').trim(); }
 function lower(value) { return text(value).toLowerCase(); }
@@ -86,10 +87,6 @@ export function normalizeRvmSourceDocument(doc, fileName = '', adapters = {}) {
   };
 }
 
-function providerTreeReadPathEnabled(payload = {}, options = {}) {
-  return options.useProviderTreeReadPath === true || payload?.useProviderTreeReadPath === true || globalThis?.__PCF_GLB_RVM_PROVIDER_TREE_READ_PATH__ === true;
-}
-
 function providerResultForPayload(payload = {}) {
   return payload?.providerResult
     || payload?.hierarchyProviderResult
@@ -98,6 +95,28 @@ function providerResultForPayload(payload = {}) {
     || payload?.rvmSourceDocument?.hierarchyProviderResult
     || payload?.manifest?.providerResult
     || null;
+}
+
+function providerTreeSourceKind(payload = {}, options = {}) {
+  const provider = providerResultForPayload(payload);
+  return normalizeRvmSourceKind(
+    options.sourceKind
+    || payload?.sourceKind
+    || payload?.loadedSourceKind
+    || payload?.rvmSourceDocument?.sourceKind
+    || payload?.metadata?.sourceKind
+    || provider?.sourceKind
+    || sourceKindFromFileName(options.fileName || payload?.fileName || payload?.rvmSourceDocument?.fileName || '')
+  );
+}
+
+export function isSourceProviderTreePilotPayload(payload = {}, options = {}) {
+  return isRvmSourcePreviewKind(providerTreeSourceKind(payload, options));
+}
+
+function providerTreeReadPathEnabled(payload = {}, options = {}) {
+  const enabled = options.useProviderTreeReadPath === true || payload?.useProviderTreeReadPath === true || globalThis?.__PCF_GLB_RVM_PROVIDER_TREE_READ_PATH__ === true;
+  return enabled && isSourceProviderTreePilotPayload(payload, options);
 }
 
 function normalizeProviderNode(node = {}) {
