@@ -1,25 +1,47 @@
 import {
   RVM_FORMAT_POLICY_VERSION,
+  RVM_RIGHT_PANEL_SECTIONS,
+  hasRvmRightPanelSection,
   resolveRvmFormatContext,
-} from './RvmFormatPolicy.js?v=20260627-rvm-right-panel-format-policy-1';
+} from './RvmFormatPolicy.js?v=20260628-rvm-right-panel-core-policy-1';
 
-export const RVM_RIGHT_PANEL_FORMAT_POLICY_SCHEMA = 'rvm-right-panel-format-policy/v1';
+export const RVM_RIGHT_PANEL_FORMAT_POLICY_SCHEMA = 'rvm-right-panel-format-policy/v2';
 
-const INSTALL_FLAG = Symbol.for('pcf-glb-rvm-right-panel-format-policy-v1');
-const STYLE_FLAG = Symbol.for('pcf-glb-rvm-right-panel-format-policy-style-v1');
+const INSTALL_FLAG = Symbol.for('pcf-glb-rvm-right-panel-format-policy-v2');
+const STYLE_FLAG = Symbol.for('pcf-glb-rvm-right-panel-format-policy-style-v2');
 const GLOBAL_KEY = '__PCF_GLB_RVM_RIGHT_PANEL_FORMAT_POLICY__';
-const VERSION = '20260627-rvm-right-panel-multiformat-1';
+const VERSION = '20260628-rvm-right-panel-core-policy-1';
 const ROOT_SELECTOR = '[data-rvm-viewer]';
 const FORMAT_PANEL_ID = 'rvm-format-policy-panel';
 const STAGED_PANEL_ID = 'rvm-stagedjson-review-panel';
 
-const SOURCE_PANEL_SELECTORS = Object.freeze([
-  '#rvm-nonprimitive-source-tools-panel',
-  '[data-rvm-non-primitive-source-tools-header]',
-  '#rvm-nonprimitive-support-details-panel',
-  '[data-rvm-non-primitive-support-details-header]',
-  '#rvm-nonprimitive-node-marker-details-panel',
-  '[data-rvm-non-primitive-node-marker-details-header]',
+const SECTION_SELECTORS = Object.freeze({
+  [RVM_RIGHT_PANEL_SECTIONS.SOURCE_TOOLS]: Object.freeze([
+    '#rvm-nonprimitive-source-tools-panel',
+    '[data-rvm-non-primitive-source-tools-header]',
+  ]),
+  [RVM_RIGHT_PANEL_SECTIONS.SUPPORT_DETAILS]: Object.freeze([
+    '#rvm-nonprimitive-support-details-panel',
+    '[data-rvm-non-primitive-support-details-header]',
+  ]),
+  [RVM_RIGHT_PANEL_SECTIONS.NODE_MARKERS]: Object.freeze([
+    '#rvm-nonprimitive-node-marker-details-panel',
+    '[data-rvm-non-primitive-node-marker-details-header]',
+  ]),
+  [RVM_RIGHT_PANEL_SECTIONS.STAGEDJSON_REVIEW]: Object.freeze([
+    `#${STAGED_PANEL_ID}`,
+    `[data-rvm-right-panel-format-header="${STAGED_PANEL_ID}"]`,
+  ]),
+  [RVM_RIGHT_PANEL_SECTIONS.BROWSER_DIAGNOSTICS]: Object.freeze([
+    '[data-rvm-browser-diagnostics-header="true"]',
+    '#rvm-browser-parse-diagnostics',
+  ]),
+});
+
+const SOURCE_SECTION_IDS = Object.freeze([
+  RVM_RIGHT_PANEL_SECTIONS.SOURCE_TOOLS,
+  RVM_RIGHT_PANEL_SECTIONS.SUPPORT_DETAILS,
+  RVM_RIGHT_PANEL_SECTIONS.NODE_MARKERS,
 ]);
 
 function esc(value) {
@@ -69,8 +91,36 @@ function setPairHidden(root, id, hidden) {
   if (header) header.hidden = hidden;
 }
 
+function setSelectorHidden(root, selector, hidden, reason = '') {
+  root?.querySelectorAll?.(selector).forEach((el) => {
+    el.hidden = hidden;
+    if (hidden) el.dataset.rvmRightPanelPolicyHidden = reason || VERSION;
+    else delete el.dataset.rvmRightPanelPolicyHidden;
+  });
+}
+
+function setSectionHidden(root, section, hidden, reason = '') {
+  for (const selector of SECTION_SELECTORS[section] || []) setSelectorHidden(root, selector, hidden, reason);
+}
+
+function markActiveSections(root, context) {
+  if (!root?.dataset) return;
+  root.dataset.rvmRightPanelSections = (context.sections || []).join(',');
+  root.dataset.rvmRightPanelShowSourceTools = String(hasRvmRightPanelSection(context.policy, RVM_RIGHT_PANEL_SECTIONS.SOURCE_TOOLS));
+  root.dataset.rvmRightPanelShowSupportDetails = String(hasRvmRightPanelSection(context.policy, RVM_RIGHT_PANEL_SECTIONS.SUPPORT_DETAILS));
+  root.dataset.rvmRightPanelShowNodeMarkers = String(hasRvmRightPanelSection(context.policy, RVM_RIGHT_PANEL_SECTIONS.NODE_MARKERS));
+  root.dataset.rvmRightPanelShowStagedJsonReview = String(hasRvmRightPanelSection(context.policy, RVM_RIGHT_PANEL_SECTIONS.STAGEDJSON_REVIEW));
+  root.dataset.rvmRightPanelShowNativeDiagnostics = String(hasRvmRightPanelSection(context.policy, RVM_RIGHT_PANEL_SECTIONS.NATIVE_DIAGNOSTICS));
+  root.dataset.rvmRightPanelShowBrowserDiagnostics = String(hasRvmRightPanelSection(context.policy, RVM_RIGHT_PANEL_SECTIONS.BROWSER_DIAGNOSTICS));
+}
+
 function policyChip(label, enabled) {
   return `<span class="rvm-format-policy-chip ${enabled ? 'is-on' : 'is-off'}">${esc(label)} ${enabled ? 'on' : 'off'}</span>`;
+}
+
+function sectionChip(section, enabled) {
+  const label = String(section || '').replace(/-/g, ' ');
+  return `<span class="rvm-format-section-chip ${enabled ? 'is-on' : 'is-off'}" data-rvm-right-panel-section-chip="${esc(section)}">${esc(label)}</span>`;
 }
 
 function row(key, value) {
@@ -80,17 +130,47 @@ function row(key, value) {
 function updateSelectionTitle(root) {
   const title = root?.querySelector?.('#rvm-attributes-panel [data-rvm-selection-details-inspector="true"] .rvm-selection-details-title span');
   if (title && /RVM selection details/i.test(title.textContent || '')) title.textContent = 'Selected Entity';
+  const right = root?.querySelector?.('.rvm-right-panel');
+  const attributesPanel = root?.querySelector?.('#rvm-attributes-panel');
+  if (!right || !attributesPanel) return;
+  const headers = [...right.querySelectorAll('.rvm-panel-header')];
+  const index = headers.findIndex((header) => header.nextElementSibling === attributesPanel || header.nextSibling === attributesPanel);
+  const header = index >= 0 ? headers[index] : headers[0];
+  if (header && /^(Properties|RVM selection details)$/i.test(String(header.textContent || '').trim())) header.textContent = 'Selected Entity';
+}
+
+function applyRightPanelSectionPolicy(root, context) {
+  const policy = context.policy || {};
+  markActiveSections(root, context);
+  updateSelectionTitle(root);
+
+  for (const section of SOURCE_SECTION_IDS) {
+    const enabled = hasRvmRightPanelSection(policy, section);
+    setSectionHidden(root, section, !enabled, `section-disabled:${section}`);
+  }
+  setSectionHidden(root, RVM_RIGHT_PANEL_SECTIONS.BROWSER_DIAGNOSTICS, !hasRvmRightPanelSection(policy, RVM_RIGHT_PANEL_SECTIONS.BROWSER_DIAGNOSTICS), 'section-disabled:browser-diagnostics');
+
+  if (!hasRvmRightPanelSection(policy, RVM_RIGHT_PANEL_SECTIONS.SUPPORT_DETAILS)) {
+    try { globalThis.__PCF_GLB_RVM_NON_PRIMITIVE_SUPPORT_DETAILS_PANEL__?.clear?.(context.viewer, 'right-panel-section-disabled'); } catch (_) {}
+  }
+  if (!hasRvmRightPanelSection(policy, RVM_RIGHT_PANEL_SECTIONS.NODE_MARKERS)) {
+    try { globalThis.__PCF_GLB_RVM_NON_PRIMITIVE_NODE_MARKERS__?.clear?.(context.viewer, 'right-panel-section-disabled'); } catch (_) {}
+  }
+  if (!hasRvmRightPanelSection(policy, RVM_RIGHT_PANEL_SECTIONS.SOURCE_TOOLS)) {
+    try { globalThis.__PCF_GLB_RVM_NON_PRIMITIVE_SOURCE_TOOLS_UI__?.clear?.(root?.querySelector?.('#rvm-nonprimitive-source-tools-panel'), context.viewer, 'right-panel-section-disabled'); } catch (_) {}
+  }
 }
 
 function renderFormatPanel(root, context) {
-  const panel = ensurePanelPair(root, FORMAT_PANEL_ID, 'Format Policy');
+  const panel = ensurePanelPair(root, FORMAT_PANEL_ID, 'Right Panel Policy');
   if (!panel) return null;
   panel.hidden = false;
   const p = context.policy || {};
+  const sectionSet = new Set(context.sections || []);
   panel.dataset.rvmRightPanelPolicyVersion = VERSION;
   panel.dataset.rvmRightPanelSourceKind = context.sourceKind || 'unknown';
   panel.innerHTML = `
-    <div class="rvm-format-policy-card" data-rvm-format-policy-version="${esc(VERSION)}">
+    <div class="rvm-format-policy-card" data-rvm-format-policy-version="${esc(VERSION)}" data-rvm-right-panel-section-policy="true">
       <div class="rvm-format-title"><span>${esc(context.sourceKind || 'unknown')}</span><small>${esc(context.primitiveMode || 'model')}</small></div>
       <div class="rvm-format-grid">
         ${row('File', context.fileName || 'current model')}
@@ -103,24 +183,13 @@ function renderFormatPanel(root, context) {
         ${policyChip('support details', p.showSupportDetails)}
         ${policyChip('node markers', p.showNodeMarkers)}
         ${policyChip('stagedJSON', p.showStagedJsonReview)}
+        ${policyChip('native diagnostics', p.showNativeDiagnostics)}
+      </div>
+      <div class="rvm-format-section-list" data-rvm-right-panel-sections="true">
+        ${Object.values(RVM_RIGHT_PANEL_SECTIONS).map((section) => sectionChip(section, sectionSet.has(section))).join('')}
       </div>
     </div>`;
   return panel;
-}
-
-function hideObsoleteSourcePreviewPanels(root, context) {
-  const p = context.policy || {};
-  const shouldHideSourcePanels = !p.showSourceTools && !p.showSupportDetails && !p.showNodeMarkers;
-  if (!shouldHideSourcePanels) return;
-  for (const selector of SOURCE_PANEL_SELECTORS) {
-    root?.querySelectorAll?.(selector).forEach((el) => {
-      el.hidden = true;
-      el.dataset.rvmRightPanelPolicyHidden = VERSION;
-    });
-  }
-  try { globalThis.__PCF_GLB_RVM_NON_PRIMITIVE_SUPPORT_DETAILS_PANEL__?.clear?.(context.viewer, 'format-policy-primitive'); } catch (_) {}
-  try { globalThis.__PCF_GLB_RVM_NON_PRIMITIVE_NODE_MARKERS__?.clear?.(context.viewer, 'format-policy-primitive'); } catch (_) {}
-  try { globalThis.__PCF_GLB_RVM_NON_PRIMITIVE_SOURCE_TOOLS_UI__?.clear?.(root?.querySelector?.('#rvm-nonprimitive-source-tools-panel'), context.viewer, 'format-policy-primitive'); } catch (_) {}
 }
 
 function asArray(value) {
@@ -189,7 +258,7 @@ function listRows(rows, emptyLabel) {
 function renderStagedJsonPanel(root, context) {
   const panel = ensurePanelPair(root, STAGED_PANEL_ID, 'StagedJSON Review');
   if (!panel) return null;
-  const shouldShow = context.policy?.showStagedJsonReview === true;
+  const shouldShow = hasRvmRightPanelSection(context.policy, RVM_RIGHT_PANEL_SECTIONS.STAGEDJSON_REVIEW);
   setPairHidden(root, STAGED_PANEL_ID, !shouldShow);
   if (!shouldShow) {
     panel.innerHTML = '';
@@ -296,8 +365,7 @@ function render(root = rootEl(), activeViewer = viewer()) {
   root.dataset.rvmRightPanelPolicyVersion = RVM_FORMAT_POLICY_VERSION;
   renderFormatPanel(root, context);
   renderStagedJsonPanel(root, context);
-  hideObsoleteSourcePreviewPanels(root, context);
-  updateSelectionTitle(root);
+  applyRightPanelSectionPolicy(root, context);
   return context;
 }
 
@@ -316,8 +384,8 @@ function installStyles() {
     .rvm-format-grid{display:grid;gap:3px;}
     .rvm-format-row{display:grid;grid-template-columns:minmax(86px,.7fr) minmax(0,1.3fr);gap:6px;padding:4px 6px;border:1px solid rgba(126,190,255,.12);border-radius:5px;background:rgba(255,255,255,.026);font-size:10px;}
     .rvm-format-row span{color:#9eb7d8;}.rvm-format-row b{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#edf6ff;font-weight:650;}
-    .rvm-format-policy-chips,.rvm-format-actions{display:flex;flex-wrap:wrap;gap:5px;}
-    .rvm-format-policy-chip{display:inline-flex;border-radius:999px;border:1px solid rgba(148,163,184,.24);padding:2px 6px;font-size:9.5px;color:#cbd5e1;background:rgba(15,23,42,.62);}.rvm-format-policy-chip.is-on{color:#bbf7d0;border-color:rgba(34,197,94,.32);background:rgba(22,101,52,.18);}.rvm-format-policy-chip.is-off{color:#fca5a5;border-color:rgba(248,113,113,.25);background:rgba(127,29,29,.13);}
+    .rvm-format-policy-chips,.rvm-format-actions,.rvm-format-section-list{display:flex;flex-wrap:wrap;gap:5px;}
+    .rvm-format-policy-chip,.rvm-format-section-chip{display:inline-flex;border-radius:999px;border:1px solid rgba(148,163,184,.24);padding:2px 6px;font-size:9.5px;color:#cbd5e1;background:rgba(15,23,42,.62);}.rvm-format-policy-chip.is-on,.rvm-format-section-chip.is-on{color:#bbf7d0;border-color:rgba(34,197,94,.32);background:rgba(22,101,52,.18);}.rvm-format-policy-chip.is-off,.rvm-format-section-chip.is-off{color:#fca5a5;border-color:rgba(248,113,113,.25);background:rgba(127,29,29,.13);}
     .rvm-stagedjson-columns{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px;}.rvm-stagedjson-columns section{border:1px solid rgba(126,190,255,.12);border-radius:7px;background:rgba(255,255,255,.025);padding:6px;}.rvm-stagedjson-columns h4{margin:0 0 5px;color:#bfdbfe;font-size:11px;}.rvm-stagedjson-columns ul{list-style:none;margin:0;padding:0;display:grid;gap:2px;}.rvm-stagedjson-columns li{display:flex;justify-content:space-between;gap:8px;color:#cbd5e1;font-size:10px;}.rvm-stagedjson-columns li span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
     .rvm-format-actions button{border:1px solid rgba(126,190,255,.26);border-radius:6px;background:#132238;color:#dbeafe;padding:5px 7px;font-size:10.5px;cursor:pointer;}
     @media(max-width:1150px){.rvm-stagedjson-columns{grid-template-columns:1fr;}}
