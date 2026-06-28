@@ -23,6 +23,7 @@ assert.match(sourceKindPolicy, /sourceKindFromFileName/, 'shared RVM source-kind
 assert.match(autoBendGate, /RvmSourceKindPolicy\.js/, 'Auto Bend gate must use shared source-kind policy');
 assert.match(formatPolicy, /RvmSourceKindPolicy\.js/, 'right-panel format policy must use shared source-kind policy');
 assert.match(supportRuntimeGateBridge, /RvmSourceKindPolicy\.js/, 'stagedJSON support runtime gate must use shared source-kind policy');
+assert.match(sourceToolsBridge, /RvmSourceKindPolicy\.js/, 'Source Tools UI bridge must use shared source-kind policy');
 
 assert.match(settings, /labelsUserSet/, 'support overlay settings must distinguish stale label storage from explicit user label setting');
 assert.match(settings, /labels:\s*labelsUserSet \? readBool\(storage, SUPPORT_OVERLAY_STORAGE_KEYS\.labels, false\) : false/, 'support labels must be false unless explicitly user-set');
@@ -54,6 +55,8 @@ assert.doesNotMatch(inputXmlBridge, /ribbon\.insertBefore|geo-top-ribbon|rvm-rib
 assert.doesNotMatch(inputXmlBridge, /ensureResizeHandles|persistPanelWidths|panel\.style\.setProperty/, 'InputXML bridge must not own parent panel resizing');
 
 assert.match(inputXmlSetModelBridge, /__PCF_GLB_RVM_INPUTXML_SOURCE_TOOLS__/, 'setModel bridge reads InputXML options from source-tools API when available');
+assert.match(sourceToolsBridge, /rvm-non-primitive-source-tools-ui\/v8/, 'Source Tools UI schema must advance for shared source-kind policy');
+assert.match(sourceToolsBridge, /isRvmNonPrimitiveSourceKind\(normalizeSourceKind\(value\)\)/, 'Source Tools UI gate must use shared non-primitive policy');
 assert.match(sourceToolsBridge, /data-source-tools-group="inputxml-family"/, 'right Source Tools panel must contain InputXML family group');
 assert.match(sourceToolsBridge, /data-source-tools-group="support-overlay"/, 'right Source Tools panel must contain Support Overlay group');
 assert.match(sourceToolsBridge, /rvm-inputxml-apply-transform/, 'axis transform must have an explicit Apply action in right panel');
@@ -61,9 +64,11 @@ assert.match(sourceToolsBridge, /AUTO_TOOLS[\s\S]*reapplyAutoBendFromControls/, 
 assert.match(sourceToolsBridge, /SUPPORT_TOOLS[\s\S]*reapplySupportOverlayFromControls/, 'Support Symbol/Label controls must route to support overlay only');
 assert.match(sourceToolsBridge, /apply-axis[\s\S]*reapplyFromControls/, 'axis Apply must reapply both systems');
 
-assert.match(sourceToolsGateBridge, /rvm-source-tools-stagedjson-kind-gate\/v1/, 'stagedJSON source tools gate bridge must expose a schema');
+assert.match(sourceToolsGateBridge, /rvm-source-tools-stagedjson-kind-gate\/v2/, 'stagedJSON source tools gate bridge must expose native-kind schema');
+assert.match(sourceToolsGateBridge, /RvmSourceKindPolicy\.js/, 'stagedJSON source tools gate must use shared source-kind policy');
 assert.match(sourceToolsGateBridge, /new Set\(\['stagedjson', 'staged\.json'\]\)/, 'stagedJSON source tools gate must target stagedJSON source kinds');
-assert.match(sourceToolsGateBridge, /root\.dataset\.rvmLoadedSourceKind = 'json'/, 'stagedJSON source tools gate must coerce only the Source Tools kind gate to JSON');
+assert.match(sourceToolsGateBridge, /root\.dataset\.rvmLoadedSourceKind = kind/, 'stagedJSON source tools gate must preserve stagedJSON kind for Source Tools');
+assert.doesNotMatch(sourceToolsGateBridge, /root\.dataset\.rvmLoadedSourceKind = 'json'/, 'stagedJSON source tools gate must not coerce Source Tools kind to JSON');
 assert.match(sourceToolsGateBridge, /root\.dataset\.rvmSourceToolsOriginalKind = kind/, 'stagedJSON source tools gate must preserve the original source kind on the root');
 assert.match(sourceToolsGateBridge, /api\.render[\s\S]*api\.sync[\s\S]*api\.reapplyAutoBendOnly[\s\S]*api\.reapplySupportOverlayOnly/, 'stagedJSON source tools gate must wrap render, sync, and reapply paths');
 
@@ -76,7 +81,7 @@ assert.match(supportRuntimeGateBridge, /root\.dataset\.rvmLoadedSourceKind = con
 assert.match(supportRuntimeGateBridge, /api\.applyFromSource = \(args = \{\}\) => applyFromSource\(normalizeApplyArgs\(args\)\)/, 'stagedJSON support runtime gate must wrap support overlay applyFromSource without JSON coercion');
 assert.match(supportRuntimeGateBridge, /api\.render[\s\S]*api\.sync/, 'stagedJSON support runtime gate must wrap support details render and sync');
 assert.match(supportRuntimeGateBridge, /setModelWithStagedJsonSupportRuntimeGate/, 'stagedJSON support runtime gate must patch future setModel calls for support overlay reapply');
-assert.match(stagedJsonValidationBridge, /RvmSourceToolsStagedJsonKindGateBridge\.js\?v=20260627-rvm-source-tools-stagedjson-kind-gate-1/, 'stagedJSON validation bridge must import the Source Tools kind gate');
+assert.match(stagedJsonValidationBridge, /RvmSourceToolsStagedJsonKindGateBridge\.js\?v=20260628-rvm-source-tools-stagedjson-native-kind-1/, 'stagedJSON validation bridge must import the native-kind Source Tools gate');
 assert.match(stagedJsonValidationBridge, /RvmStagedJsonSupportRuntimeGateBridge\.js\?v=20260628-rvm-stagedjson-support-runtime-native-kind-1/, 'stagedJSON validation bridge must import the native-kind support runtime gate');
 assert.match(stagedJsonValidationBridge, /installRvmSourceToolsStagedJsonKindGateBridge\(\)/, 'stagedJSON validation bridge must install the Source Tools kind gate');
 assert.match(stagedJsonValidationBridge, /installRvmStagedJsonSupportRuntimeGateBridge\(\)/, 'stagedJSON validation bridge must install the support runtime gate');
