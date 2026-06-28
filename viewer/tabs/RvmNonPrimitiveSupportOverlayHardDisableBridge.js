@@ -1,3 +1,4 @@
+import { isRvmNonPrimitiveSourceKind, normalizeRvmSourceKind } from '../RvmSourceKindPolicy.js';
 import { RvmViewer3D } from '../rvm-viewer/RvmViewer3D.js?v=20260622-rvm-leaf-picking-2';
 import { readNonPrimitiveSupportOverlaySettings } from '../overlays/support/SupportOverlaySettings.js';
 
@@ -8,12 +9,9 @@ const PATCH_FLAG = Symbol.for('pcf-glb-rvm-non-primitive-support-hard-disable-v1
 const VIEWER_PATCH_FLAG = Symbol.for('pcf-glb-rvm-non-primitive-support-hard-disable-viewer-v1');
 const DOM_PATCH_FLAG = Symbol.for('pcf-glb-rvm-non-primitive-support-hard-disable-dom-v1');
 const SUPPORT_OVERLAY_ROOT_NAME = '__RVM_NON_PRIMITIVE_SUPPORT_OVERLAY__';
-const SOURCE_TOOLS_ROOT_SELECTOR = '[data-rvm-viewer]';
 const SUPPORT_DETAILS_PANEL_ID = 'rvm-nonprimitive-support-details-panel';
 const SUPPORT_LABEL_SELECTOR = '.non-primitive-support-overlay-label,[data-overlay-kind="support"][data-support-tag]';
 const SUPPORT_HOVER_SELECTOR = '[data-rvm-nonprimitive-support-hover-preview="true"]';
-const SOURCE_KIND_RE = /^(json|jscon|inputxml|txt|source-preview|stagedjson)$/i;
-const PRIMITIVE_KIND_RE = /^(rvm|glb|gltf|rev)$/i;
 
 export function installRvmNonPrimitiveSupportOverlayHardDisableBridge() {
   if (globalThis[PATCH_FLAG]) return;
@@ -164,14 +162,11 @@ function disposeObjectTree(root) {
 }
 
 function isNonPrimitiveKind(kind) {
-  const normalized = normalizeSourceKind(kind);
-  return SOURCE_KIND_RE.test(normalized) && !PRIMITIVE_KIND_RE.test(normalized);
+  return isRvmNonPrimitiveSourceKind(normalizeSourceKind(kind));
 }
 
 function normalizeSourceKind(value) {
-  const kind = String(value || '').trim().toLowerCase().replace(/^\./, '');
-  if (!kind || kind === 'aveva-json' || kind === 'source-preview') return 'json';
-  if (kind === 'xml' || kind === 'uxml') return 'inputxml';
-  if (kind === 'staged.json') return 'stagedjson';
+  const kind = normalizeRvmSourceKind(value);
+  if (!kind || kind === 'source-preview') return 'json';
   return kind;
 }
