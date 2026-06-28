@@ -58,6 +58,16 @@ export class RvmVisibilityController {
         this._applyVisibility();
     }
 
+    show(canonicalIds) {
+        const ids = Array.isArray(canonicalIds) ? canonicalIds : [];
+        if (!ids.length) return this.showAll();
+        for (const id of ids) {
+            this._hiddenCanonicalIds.delete(id);
+            this._isolatedCanonicalIds.delete(id);
+        }
+        this._applyVisibility();
+    }
+
     getHiddenCanonicalIds() {
         return Array.from(this._hiddenCanonicalIds);
     }
