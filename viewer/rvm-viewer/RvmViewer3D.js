@@ -686,6 +686,32 @@ export class RvmViewer3D {
         this.visibility.showAll();
     }
 
+    fitCanonicalIds(ids = []) {
+        const canonicalIds = Array.isArray(ids) ? ids.filter(Boolean) : [];
+        if (!canonicalIds.length) return this.fitAll();
+        this.selectCanonicalIds(canonicalIds, { additive: false });
+        this.fitSelection();
+    }
+
+    isolateCanonicalIds(ids = []) {
+        const canonicalIds = Array.isArray(ids) ? ids.filter(Boolean) : [];
+        if (!canonicalIds.length) return;
+        this.visibility.isolate(canonicalIds);
+    }
+
+    hideCanonicalIds(ids = []) {
+        const canonicalIds = Array.isArray(ids) ? ids.filter(Boolean) : [];
+        if (!canonicalIds.length) return;
+        this.visibility.hide(canonicalIds);
+    }
+
+    showCanonicalIds(ids = []) {
+        const canonicalIds = Array.isArray(ids) ? ids.filter(Boolean) : [];
+        if (!canonicalIds.length) return this.showAll();
+        if (typeof this.visibility.show === 'function') this.visibility.show(canonicalIds);
+        else this.showAll();
+    }
+
     selectByCanonicalId(id) {
         this.selection.selectByCanonicalId(id);
     }
@@ -882,98 +908,5 @@ export class RvmViewer3D {
         if (this.labelRenderer.domElement.parentNode) {
             this.labelRenderer.domElement.parentNode.removeChild(this.labelRenderer.domElement);
         }
-
-        this.sectioning.dispose();
-        this.visibility.dispose();
-        this.selection.dispose();
-
-
-        // Nullify internal refs
-        this.scene = null;
-        this.camera = null;
-        this.perspCamera = null;
-        this.orthoCamera = null;
-        this.renderer = null;
-        this.labelRenderer = null;
-        this.controls = null;
-        this.modelGroup = null;
-        this.container = null;
-
-        // Disposal contract explicitly requested these nullifications
-        this.searchIndex = null;
-        this.tagStore = null;
-        this.workerBridges = null;
-        this.pendingLoadTasks = null;
-    }
-
-    // ── STP Support Member Overlay ─────────────────────────────────────
-
-    appendStpMembers(members) {
-        if (!this.modelGroup) return;
-        if (!this._stpGroup) {
-            this._stpGroup = new THREE.Group();
-            this._stpGroup.name = 'stpOverlay';
-        }
-        if (!this._stpGroup.parent) {
-            this.modelGroup.add(this._stpGroup);
-        }
-
-        // STP parser outputs coords as (x=E, y=N, z=U) — PDMS Z-up convention.
-        // When upAxis='Z', modelGroup is rotated -90° on X, so local (E,N,U) → world Y-up correctly.
-        // When upAxis='Y', modelGroup has no rotation, so we must remap to (E,U,-N) in local space.
-        const needsRemap = (this._upAxis || 'Z') === 'Y';
-        const remap = (pt) => needsRemap ? { x: pt.x, y: pt.z, z: -pt.y } : { x: pt.x, y: pt.y, z: pt.z };
-
-        const positions = [];
-        for (const member of members) {
-            const s = remap(member.start);
-            const e = remap(member.end);
-            positions.push(s.x, s.y, s.z, e.x, e.y, e.z);
-        }
-        if (!positions.length) return;
-
-        const lineGeom = new THREE.BufferGeometry();
-        lineGeom.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-        const lineMat = new THREE.LineBasicMaterial({ color: 0x60c864, depthTest: false });
-        this._stpGroup.add(new THREE.LineSegments(lineGeom, lineMat));
-
-        // Use stored model diagonal (computed before STP added) to avoid inflated box.
-        const diag = this._modelDiag || 5000;
-        const radius = Math.max(diag * 0.002, 20);
-        const sphereGeom = new THREE.SphereGeometry(radius, 8, 6);
-        const sphereMat = new THREE.MeshBasicMaterial({ color: 0x60c864, depthTest: false });
-        for (const member of members) {
-            const s = remap(member.start);
-            const e = remap(member.end);
-            const sphere = new THREE.Mesh(sphereGeom, sphereMat);
-            sphere.position.set((s.x + e.x) / 2, (s.y + e.y) / 2, (s.z + e.z) / 2);
-            sphere.userData = {
-                isStp: true,
-                displayName: member.label || 'STP Member',
-                supportTag: member.label || '',
-                supportKind: member.kind || '',
-                attrs: {
-                    LABEL: member.label || '',
-                    KIND: member.kind || '',
-                    START: `E ${member.start.x.toFixed(1)} N ${member.start.y.toFixed(1)} U ${member.start.z.toFixed(1)}`,
-                    END: `E ${member.end.x.toFixed(1)} N ${member.end.y.toFixed(1)} U ${member.end.z.toFixed(1)}`,
-                    ...(member.attributes || {}),
-                },
-            };
-            this._stpGroup.add(sphere);
-        }
-    }
-
-    clearStpMembers() {
-        if (!this._stpGroup) return;
-        const sharedGeoms = new Set();
-        const sharedMats = new Set();
-        for (const child of [...this._stpGroup.children]) {
-            this._stpGroup.remove(child);
-            if (child.geometry) sharedGeoms.add(child.geometry);
-            if (child.material) sharedMats.add(child.material);
-        }
-        for (const g of sharedGeoms) { try { g.dispose(); } catch {} }
-        for (const m of sharedMats) { try { m.dispose(); } catch {} }
     }
 }
