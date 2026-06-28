@@ -6,6 +6,7 @@ import {
 } from '../RvmSourceKindPolicy.js';
 
 export const RVM_FORMAT_POLICY_VERSION = '20260627-rvm-right-panel-format-policy-1';
+export const RVM_FORMAT_POLICY_SOURCE_EXTENSIONS = Object.freeze(['.stagedjson', '.staged.json', '.uxml.json']);
 
 const BASE_SELECTION_POLICY = Object.freeze({
   showSelection: true,
