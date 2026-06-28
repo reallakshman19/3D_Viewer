@@ -2,6 +2,9 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 
 const settings = readFileSync('viewer/overlays/support/SupportOverlaySettings.js', 'utf8');
+const autoBendGate = readFileSync('viewer/overlays/autobend/NonPrimitiveAutoBendGate.js', 'utf8');
+const sourceKindPolicy = readFileSync('viewer/RvmSourceKindPolicy.js', 'utf8');
+const formatPolicy = readFileSync('viewer/tabs/RvmFormatPolicy.js', 'utf8');
 const supportBridge = readFileSync('viewer/tabs/RvmNonPrimitiveSupportOverlayBridge.js', 'utf8');
 const supportDetailsBridge = readFileSync('viewer/tabs/RvmNonPrimitiveSupportOverlayDetailsPanelBridge.js', 'utf8');
 const supportHoverBridge = readFileSync('viewer/tabs/RvmNonPrimitiveSupportOverlayHoverBridge.js', 'utf8');
@@ -14,6 +17,12 @@ const inputXmlBridge = readFileSync('viewer/rvm-viewer/RvmInputXmlSupportGraphic
 const inputXmlSetModelBridge = readFileSync('viewer/rvm-viewer/RvmInputXmlSupportGraphicsSetModelBridge.js', 'utf8');
 const leftBridge = readFileSync('viewer/tabs/RvmLeftPanelResizeCollapseBridge.js', 'utf8');
 const axisTransform = readFileSync('viewer/overlays/source-tools/SourceAxisTransform.js', 'utf8');
+
+assert.match(sourceKindPolicy, /RVM_SOURCE_KIND_POLICY_VERSION/, 'shared RVM source-kind policy must exist');
+assert.match(sourceKindPolicy, /sourceKindFromFileName/, 'shared RVM source-kind policy must expose filename detection');
+assert.match(autoBendGate, /RvmSourceKindPolicy\.js/, 'Auto Bend gate must use shared source-kind policy');
+assert.match(formatPolicy, /RvmSourceKindPolicy\.js/, 'right-panel format policy must use shared source-kind policy');
+assert.match(supportRuntimeGateBridge, /RvmSourceKindPolicy\.js/, 'stagedJSON support runtime gate must use shared source-kind policy');
 
 assert.match(settings, /labelsUserSet/, 'support overlay settings must distinguish stale label storage from explicit user label setting');
 assert.match(settings, /labels:\s*labelsUserSet \? readBool\(storage, SUPPORT_OVERLAY_STORAGE_KEYS\.labels, false\) : false/, 'support labels must be false unless explicitly user-set');

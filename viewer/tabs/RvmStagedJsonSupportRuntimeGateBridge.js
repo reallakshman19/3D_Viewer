@@ -1,3 +1,4 @@
+import { normalizeRvmSourceKind } from '../RvmSourceKindPolicy.js';
 import { RvmViewer3D } from '../rvm-viewer/RvmViewer3D.js?v=20260622-rvm-leaf-picking-2';
 
 export const RVM_STAGEDJSON_SUPPORT_RUNTIME_GATE_SCHEMA = 'rvm-stagedjson-support-runtime-gate/v2';
@@ -10,13 +11,11 @@ const SUPPORT_DETAILS_KEY = '__PCF_GLB_RVM_NON_PRIMITIVE_SUPPORT_DETAILS_PANEL__
 const SOURCE_KINDS = new Set(['stagedjson', 'staged.json']);
 
 function normalizeKind(value = '') {
-  const kind = String(value || '').trim().toLowerCase().replace(/^\./, '');
-  if (kind === 'staged.json') return 'stagedjson';
-  return kind;
+  return normalizeRvmSourceKind(value);
 }
 
 function isStagedKind(value) {
-  return SOURCE_KINDS.has(normalizeKind(value)) || normalizeKind(value) === 'stagedjson';
+  return SOURCE_KINDS.has(String(value || '').trim().toLowerCase().replace(/^\./, '')) || normalizeKind(value) === 'stagedjson';
 }
 
 function stagedContextFrom(root, viewer) {

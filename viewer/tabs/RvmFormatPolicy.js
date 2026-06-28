@@ -1,7 +1,12 @@
-export const RVM_FORMAT_POLICY_VERSION = '20260627-rvm-right-panel-format-policy-1';
+import {
+  isRvmPrimitiveSourceKind,
+  isRvmSourcePreviewKind,
+  normalizeRvmSourceKind,
+  sourceKindFromFileName,
+} from '../RvmSourceKindPolicy.js';
 
-const PRIMITIVE_SOURCE_KINDS = new Set(['rvm', 'rev', 'glb', 'gltf']);
-const SOURCE_PREVIEW_KINDS = new Set(['json', 'jscon', 'inputxml', 'uxml', 'txt', 'source-preview', 'stagedjson']);
+export const RVM_FORMAT_POLICY_VERSION = '20260627-rvm-right-panel-format-policy-1';
+export const RVM_FORMAT_POLICY_SOURCE_EXTENSIONS = Object.freeze(['.stagedjson', '.staged.json', '.uxml.json']);
 
 const BASE_SELECTION_POLICY = Object.freeze({
   showSelection: true,
@@ -20,43 +25,13 @@ const POLICY_BY_KIND = Object.freeze({
   json: Object.freeze({ ...BASE_SELECTION_POLICY, showSourceTools: true, showSupportDetails: true, showNodeMarkers: true }),
   jscon: Object.freeze({ ...BASE_SELECTION_POLICY, showSourceTools: true, showSupportDetails: true, showNodeMarkers: true }),
   inputxml: Object.freeze({ ...BASE_SELECTION_POLICY, showSourceTools: true, showSupportDetails: true, showNodeMarkers: true }),
-  uxml: Object.freeze({ ...BASE_SELECTION_POLICY, showSourceTools: true, showSupportDetails: true, showNodeMarkers: true }),
   txt: Object.freeze({ ...BASE_SELECTION_POLICY, showSourceTools: true, showSupportDetails: true, showNodeMarkers: true }),
   'source-preview': Object.freeze({ ...BASE_SELECTION_POLICY, showSourceTools: true, showSupportDetails: true, showNodeMarkers: true }),
   stagedjson: Object.freeze({ ...BASE_SELECTION_POLICY, showSourceTools: true, showSupportDetails: true, showNodeMarkers: true, showStagedJsonReview: true }),
   unknown: BASE_SELECTION_POLICY,
 });
 
-export function normalizeRvmSourceKind(value = '') {
-  const kind = String(value || '').trim().toLowerCase().replace(/^\./, '');
-  if (!kind || kind === 'aveva-json') return 'json';
-  if (kind === 'xml') return 'inputxml';
-  if (kind === 'staged-json' || kind === 'staged_json' || kind === 'staged.json') return 'stagedjson';
-  if (kind === 'rvm_binary' || kind === 'rvm-binary') return 'rvm';
-  return kind;
-}
-
-export function sourceKindFromFileName(fileName = '') {
-  const lower = String(fileName || '').toLowerCase();
-  if (lower.endsWith('.stagedjson') || lower.endsWith('.staged.json')) return 'stagedjson';
-  if (lower.endsWith('.jscon')) return 'jscon';
-  if (lower.endsWith('.uxml') || lower.endsWith('.uxml.json')) return 'inputxml';
-  if (lower.endsWith('.txt')) return 'txt';
-  if (lower.endsWith('.rev')) return 'rev';
-  if (lower.endsWith('.rvm')) return 'rvm';
-  if (lower.endsWith('.glb')) return 'glb';
-  if (lower.endsWith('.gltf')) return 'gltf';
-  if (lower.endsWith('.json')) return 'json';
-  return '';
-}
-
-export function isRvmPrimitiveSourceKind(kind) {
-  return PRIMITIVE_SOURCE_KINDS.has(normalizeRvmSourceKind(kind));
-}
-
-export function isRvmSourcePreviewKind(kind) {
-  return SOURCE_PREVIEW_KINDS.has(normalizeRvmSourceKind(kind));
-}
+export { normalizeRvmSourceKind, sourceKindFromFileName, isRvmPrimitiveSourceKind, isRvmSourcePreviewKind };
 
 export function getRvmRightPanelPolicy(kind, primitiveMode = '') {
   const sourceKind = normalizeRvmSourceKind(kind || 'unknown');
