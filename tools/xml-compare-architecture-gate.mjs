@@ -19,6 +19,7 @@ const BANNED_PATTERNS=Object.freeze([
   {label:'console-bypass-log-screen',pattern:/\bconsole\s*\./},
   {label:'shim-language',pattern:/\bshim\b/i},
   {label:'wrapper-language',pattern:/\bwrapper\b/i},
+  {label:'injection-language',pattern:/\binject(?:ion|ed|ing)?\b/i},
   {label:'monkey-patch-language',pattern:/\bmonkey\b/i},
   {label:'runtime-mutation-language',pattern:/runtime\s+mutation/i},
 ]);
