@@ -123,6 +123,9 @@ jobs:
       - name: Verify RVM writer decoder alignment
         run: node viewer/tests/rvm-pcf-writer-decoder-alignment.test.js
 
+      - name: Verify RVM primitive decoder capability
+        run: node viewer/tests/rvm-pcf-primitive-decoder-capability.test.js
+
       - name: Verify RVM More Tools overflow
         run: node viewer/tests/rvm-toolbar-more-tools.test.js
 
