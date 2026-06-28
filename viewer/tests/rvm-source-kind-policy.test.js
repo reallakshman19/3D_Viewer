@@ -16,6 +16,8 @@ const filenameCases = new Map([
   ['line.inputxml', 'inputxml'],
   ['model.stagedjson', 'stagedjson'],
   ['model.staged.json', 'stagedjson'],
+  ['BM_CII_INPUT_managed_stage.json', 'stagedjson'],
+  ['BM-CII-INPUT-managed-stage.json', 'stagedjson'],
   ['notes.txt', 'txt'],
   ['native.rvm', 'rvm'],
   ['native.rev', 'rev'],
@@ -45,6 +47,7 @@ for (const [value, expected] of normalizeCases) {
 
 assert.equal(sourceKindFromContext({ fileExtension: 'json', fileName: 'model.staged.json' }), 'stagedjson', 'precise staged filename wins over generic extension');
 assert.equal(sourceKindFromContext({ fileExtension: 'json', fileName: 'line.uxml.json' }), 'inputxml', 'precise UXML filename wins over generic extension');
+assert.equal(sourceKindFromContext({ fileExtension: 'json', fileName: 'BM_CII_INPUT_managed_stage.json' }), 'stagedjson', 'managed-stage filename wins over generic extension');
 assert.equal(sourceKindFromContext({ sourceKind: 'json', fileName: 'model.staged.json' }), 'json', 'explicit sourceKind wins over filename');
 assert.equal(sourceKindFromContext({ loadedSourceKind: 'staged.json' }), 'stagedjson', 'loaded staged.json normalizes');
 

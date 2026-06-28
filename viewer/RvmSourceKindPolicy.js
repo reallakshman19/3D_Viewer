@@ -1,4 +1,4 @@
-export const RVM_SOURCE_KIND_POLICY_VERSION = '20260628-rvm-source-kind-policy-1';
+export const RVM_SOURCE_KIND_POLICY_VERSION = '20260628-rvm-source-kind-policy-2';
 
 export const RVM_PRIMITIVE_SOURCE_KINDS = Object.freeze(['rvm', 'rev', 'glb', 'gltf']);
 export const RVM_SOURCE_PREVIEW_KINDS = Object.freeze(['json', 'jscon', 'inputxml', 'txt', 'source-preview', 'stagedjson']);
@@ -19,7 +19,7 @@ export function normalizeRvmSourceKind(value = '') {
 export function sourceKindFromFileName(fileName = '') {
   const lower = String(fileName || '').trim().toLowerCase();
   if (!lower) return '';
-  if (lower.endsWith('.stagedjson') || lower.endsWith('.staged.json')) return 'stagedjson';
+  if (lower.endsWith('.stagedjson') || lower.endsWith('.staged.json') || /managed[_-]stage\.json$/i.test(lower)) return 'stagedjson';
   if (lower.endsWith('.uxml') || lower.endsWith('.uxml.json') || lower.endsWith('.inputxml')) return 'inputxml';
   if (lower.endsWith('.jscon')) return 'jscon';
   if (lower.endsWith('.txt')) return 'txt';
