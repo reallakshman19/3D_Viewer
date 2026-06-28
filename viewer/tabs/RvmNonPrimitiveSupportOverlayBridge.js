@@ -1,5 +1,11 @@
 import * as THREE from 'three';
 import { CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
+import {
+  isRvmNonPrimitiveSourceKind,
+  isRvmPrimitiveSourceKind,
+  normalizeRvmSourceKind,
+  sourceKindFromFileName,
+} from '../RvmSourceKindPolicy.js';
 import { AvevaJsonLoader } from '../rvm/AvevaJsonLoader.js';
 import { RvmViewer3D } from '../rvm-viewer/RvmViewer3D.js?v=20260622-rvm-leaf-picking-2';
 import { readNonPrimitiveSupportOverlaySettings } from '../overlays/support/SupportOverlaySettings.js';
@@ -36,9 +42,6 @@ const PATCH_FLAG = Symbol.for('pcf-glb-rvm-non-primitive-support-overlay-v9');
 const LOADER_PATCH_FLAG = Symbol.for('pcf-glb-rvm-non-primitive-support-overlay-loader-v9');
 const VIEWER_PATCH_FLAG = Symbol.for('pcf-glb-rvm-non-primitive-support-overlay-viewer-v9');
 const MAX_SUPPORT_OVERLAYS = 500;
-const NON_PRIMITIVE_SOURCE_RE = /\.(json|jscon|uxml|inputxml|txt|stagedjson)$/i;
-const STAGED_JSON_SOURCE_RE = /\.staged\.json$/i;
-const RVM_SOURCE_RE = /\.(rvm|rev)$/i;
 
 export function installRvmNonPrimitiveSupportOverlayBridge() {
   if (globalThis[PATCH_FLAG]) return;
@@ -251,11 +254,9 @@ export function clear(viewer, reason = 'clear') {
 }
 
 export function isNonPrimitiveSource({ sourceKind = '', fileName = '' } = {}) {
-  const kind = normalizeSupportSourceKind(sourceKind);
-  const name = String(fileName || '');
-  if (kind === 'rvm' || kind === 'glb' || kind === 'gltf' || RVM_SOURCE_RE.test(name) || /\.(glb|gltf)$/i.test(name)) return false;
-  if (kind === 'json' || kind === 'jscon' || kind === 'inputxml' || kind === 'txt' || kind === 'source-preview' || kind === 'stagedjson') return true;
-  return NON_PRIMITIVE_SOURCE_RE.test(name) || STAGED_JSON_SOURCE_RE.test(name);
+  const kind = normalizeRvmSourceKind(sourceKind || sourceKindFromFileName(fileName));
+  if (isRvmPrimitiveSourceKind(kind)) return false;
+  return isRvmNonPrimitiveSourceKind(kind);
 }
 
 export function collectNonPrimitiveSupportRecords(source, out = []) {
@@ -338,24 +339,9 @@ function makeSupportGlyph(record, viewer, glyphSize, sourceKind, sourceFile, set
 function vec3(value) { return new THREE.Vector3(Number(value?.x) || 0, Number(value?.y) || 0, Number(value?.z) || 0); }
 
 function normalizeSourceKind(sourceKind, fileName, root) {
-  const kind = normalizeSupportSourceKind(sourceKind || root?.dataset?.rvmLoadedSourceKind || '');
-  if (kind) return kind;
-  const name = String(fileName || '').toLowerCase();
-  if (/\.stagedjson$/i.test(name) || STAGED_JSON_SOURCE_RE.test(name)) return 'stagedjson';
-  if (/\.jscon$/i.test(name)) return 'jscon';
-  if (/\.uxml(\.json)?$/i.test(name) || /\.inputxml$/i.test(name)) return 'inputxml';
-  if (/\.txt$/i.test(name)) return 'txt';
-  if (/\.json$/i.test(name)) return 'json';
-  if (RVM_SOURCE_RE.test(name)) return 'rvm';
-  if (/\.(glb|gltf)$/i.test(name)) return 'glb';
-  return '';
-}
-
-function normalizeSupportSourceKind(value) {
-  const kind = String(value || '').trim().toLowerCase().replace(/^\./, '');
-  if (kind === 'xml' || kind === 'uxml') return 'inputxml';
-  if (kind === 'staged.json') return 'stagedjson';
-  return kind;
+  const explicitKind = normalizeRvmSourceKind(sourceKind || root?.dataset?.rvmLoadedSourceKind || '');
+  if (explicitKind) return explicitKind;
+  return sourceKindFromFileName(fileName);
 }
 
 function disposeObjectTree(root) {
