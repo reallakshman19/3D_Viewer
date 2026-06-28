@@ -6,7 +6,7 @@ import { renderXmlCompareDebugPanelHtml } from './XmlCompareDebugPanel.js';
 import { renderXmlCompareLogScreenHtml } from './XmlCompareLogScreen.js';
 export const XML_COMPARE_WORKSPACE_SHELL_SCHEMA='xml-compare-workspace-shell/v1';
 let loadDiagnosticsPromise=null;
-function loadTabDiagnostics(){if(typeof document==='undefined')return;if(loadDiagnosticsPromise)return;loadDiagnosticsPromise=import('../tabs/xml-compare-load-diagnostics-runtime.js?v=20260628-xml-compare-load-diagnostics-2').catch(()=>null);}
+function loadTabDiagnostics(){if(typeof document==='undefined')return;if(loadDiagnosticsPromise)return;loadDiagnosticsPromise=import('../tabs/xml-compare-load-diagnostics-runtime.js?v=20260628-xml-compare-load-diagnostics-3').catch(()=>null);}
 const esc=(v)=>String(v??'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll("'",'&#039;');
 function summary(label,value){return `<div><b>${esc(label)}</b><span>${esc(value)}</span></div>`;}
 function sideCard(title,data={},navState=null){const side=(title||'source').toLowerCase();return `<section class="xml-compare-workspace-side"><header>${esc(title)}</header><div class="xml-compare-side-stage"><span>Profile</span><b>${esc(data.profile||data.type||'not indexed')}</b></div><div class="xml-compare-side-metrics">${summary('File',data.fileName||'—')}${summary('Records',data.summary?.nodeCount??data.componentCount??0)}${summary('Diagnostics',data.summary?.diagnosticCount??0)}</div>${renderXmlCompareCanvasHostHtml({side,title,data,navState})}</section>`;}

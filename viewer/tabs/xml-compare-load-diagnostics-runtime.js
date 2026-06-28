@@ -89,7 +89,7 @@ function renderPanel() {
   rows.innerHTML = html;
 }
 
-function log(event, detail = {}, level = 'log', options = {}) {
+function log(event, detail = {}, level = 'log') {
   const row = {
     id: ++state.seq,
     time: timeStamp(),
@@ -103,7 +103,7 @@ function log(event, detail = {}, level = 'log', options = {}) {
   if (state.rows.length > MAX_ROWS * 2) state.rows.splice(0, state.rows.length - MAX_ROWS);
   const consoleMethod = console[level] || console.log;
   consoleMethod.call(console, `${DIAG_PREFIX} ${event}`, row.detail);
-  if (options.render !== false) renderPanel();
+  renderPanel();
 }
 
 async function inspectSelectedFile(input, eventName) {
@@ -141,17 +141,6 @@ function install() {
   if (window.__xmlCompareLoadDiagnosticsInstalled) return;
   window.__xmlCompareLoadDiagnosticsInstalled = true;
   log('diagnostics-installed', { userAgent: navigator.userAgent });
-  document.addEventListener('click', (event) => {
-    const label = event.target?.closest?.('.xml-compare-file-btn');
-    const input = event.target?.closest?.('[data-xml-compare-load]') || label?.querySelector?.('[data-xml-compare-load]');
-    if (!input) return;
-    log('choose-click', {
-      side: inputSide(input),
-      labelText: label?.textContent?.trim() || '',
-      inputPresent: true,
-      filesLength: input.files?.length || 0,
-    }, 'log', { render: false });
-  }, true);
   document.addEventListener('change', (event) => {
     const input = event.target?.closest?.('[data-xml-compare-load]');
     if (!input) return;
