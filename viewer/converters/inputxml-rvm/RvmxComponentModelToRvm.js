@@ -17,6 +17,8 @@
 // NOTE: ASCII/REV output is NOT loaded by Navisworks -- the binary framing
 // (next_chunk_offset per chunk) is mandatory, so this writer emits binary.
 
+import { assertRvmPrimitiveCodeEmitAllowed } from '../../rvm/RvmPrimitiveCapabilityRegistry.js';
+
 // ---------- vec helpers ----------
 const sub = (a, b) => [a[0]-b[0], a[1]-b[1], a[2]-b[2]];
 const add = (a, b) => [a[0]+b[0], a[1]+b[1], a[2]+b[2]];
@@ -31,6 +33,19 @@ function frame(z) {
   const ref = Math.abs(z[1]) < 0.9 ? [0, 1, 0] : [1, 0, 0];
   const x = norm(cross(ref, z));
   return [x, cross(z, x), z];
+}
+
+function primitiveUnlockKey(kind) {
+  if (kind === 4) return 'legacy-inputxml-rvm-torus';
+  if (kind === 7) return 'legacy-inputxml-rvm-snout';
+  return '';
+}
+
+function assertWriterPrimitive(kind, group) {
+  return assertRvmPrimitiveCodeEmitAllowed(kind, {
+    context: `inputxml-rvm writer group ${group || 'UNKNOWN'}`,
+    unlockKey: primitiveUnlockKey(kind),
+  });
 }
 
 // ---------- binary writers (big-endian) ----------
@@ -60,6 +75,7 @@ function tagBytes(t) {
 function makeWriter() {
   const prims = [];
   function emit(group, kind, axes, center, params, bbox, attrs, rest) {
+    assertWriterPrimitive(kind, group);
     const [x, y, z] = axes;
     // column-major M_3x4 data: Xaxis, Yaxis, Zaxis, center
     const M = [x[0], x[1], x[2], y[0], y[1], y[2], z[0], z[1], z[2], center[0], center[1], center[2]];
