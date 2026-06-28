@@ -1,7 +1,7 @@
 import { isRvmSourcePreviewKind, normalizeRvmSourceKind } from '../RvmSourceKindPolicy.js';
 
-const VERSION = '20260628-rvm-deferred-right-panel-core-policy-1';
-const PREVIOUS_VERSION = '20260628-rvm-deferred-shared-kind-policy-1';
+const VERSION = '20260628-rvm-deferred-right-panel-layout-1';
+const PREVIOUS_VERSION = '20260628-rvm-deferred-right-panel-core-policy-1';
 const API_KEY = '__PCF_GLB_RVM_BRIDGE_LOADER__';
 const ACTION_DIAGNOSTICS_KEY = '__PCF_GLB_RVM_ACTION_DIAGNOSTICS__';
 
@@ -18,7 +18,7 @@ const BRIDGE_GROUPS = Object.freeze({
   postModel: [
     { id: 'stagedjson-export', specifier: './RvmStagedJsonExportBridge.js?v=20260624-rvm-stagedjson-support-policy-1', install: 'installRvmStagedJsonExportBridge' },
     { id: 'stagedjson-validation', specifier: './RvmStagedJsonValidationBridge.js?v=20260624-rvm-stagedjson-support-policy-1', install: 'installRvmStagedJsonValidationBridge' },
-    { id: 'right-panel-format-policy', specifier: './RvmRightPanelFormatPolicyBridge.js?v=20260628-rvm-right-panel-core-policy-1', previousSpecifier: './RvmRightPanelFormatPolicyBridge.js?v=20260627-rvm-right-panel-multiformat-1', install: 'installRvmRightPanelFormatPolicyBridge' },
+    { id: 'right-panel-format-policy', specifier: './RvmRightPanelFormatPolicyBridge.js?v=20260628-rvm-right-panel-layout-1', previousSpecifier: './RvmRightPanelFormatPolicyBridge.js?v=20260628-rvm-right-panel-core-policy-1', install: 'installRvmRightPanelFormatPolicyBridge' },
     { id: 'source-format-input', specifier: './RvmSourceFormatInputBridge.js?v=20260627-rvm-source-format-input-1', install: 'installRvmSourceFormatInputBridge' },
     { id: 'primitive-fallback', specifier: './RvmPrimitiveFallbackBridge.js?v=20260620-rvm-primitive-fallback-clickable-1', install: 'installRvmPrimitiveFallbackBridge' },
     { id: 'native-glb-export', specifier: './RvmNativeSceneGlbExportBridge.js?v=20260620-rvm-glb-component-hierarchy-v3-1', install: 'installRvmNativeSceneGlbExportBridge' },

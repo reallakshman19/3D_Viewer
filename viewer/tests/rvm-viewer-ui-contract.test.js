@@ -35,7 +35,7 @@ const rvmViewerImports = [
 assert.deepEqual([...new Set(rvmViewerImports)], [`RvmViewer3D.js?v=${key}`], 'renderer and mounted tab must share one RvmViewer3D ES module identity');
 
 assert.ok(renderer.includes('viewer3d-rvm-tab.js?v=20260628-rvm-format-neutral-shared-kind-policy-1'), 'renderer must import current mounted RVM tab key');
-assert.ok(renderer.includes('RvmDeferredBridgeLoader.js?v=20260628-rvm-deferred-right-panel-core-policy-1'), 'renderer must import right-panel-core deferred loader key');
+assert.ok(renderer.includes('RvmDeferredBridgeLoader.js?v=20260628-rvm-deferred-right-panel-layout-1'), 'renderer must import right-panel-layout deferred loader key');
 assert.ok(!renderer.includes('RvmModelHealthBridge.js?v='), 'renderer must not eagerly import model health bridge');
 assert.ok(tab.includes('RvmFormatNeutralHierarchy.js?v=20260628-format-neutral-shared-kind-policy-1'), 'mounted RVM tab must import current format-neutral helper key');
 assert.ok(formatNeutral.includes('RvmSourceKindPolicy.js'), 'format-neutral helper must use shared source-kind policy');
@@ -44,9 +44,9 @@ assert.ok(formatNeutral.includes('sourceKindFromFileName(fileName)'), 'format-ne
 assert.ok(toolbar.includes("const VERSION = '20260627-rvm-toolbar-scroll-misc-1'"), 'toolbar must expose scroll/misc version');
 assert.ok(toolbar.includes("{ id: 'misc', label: 'Misc'"), 'toolbar must define Misc group');
 assert.ok(toolbar.includes('overflow-x:auto'), 'toolbar must scroll horizontally when expanded buttons overflow');
-assert.ok(deferredLoader.includes('20260628-rvm-deferred-right-panel-core-policy-1'), 'deferred loader must expose right panel core policy key');
-assert.ok(deferredLoader.includes('20260628-rvm-deferred-shared-kind-policy-1'), 'deferred loader must retain previous shared source-kind key');
-assert.ok(deferredLoader.includes('RvmRightPanelFormatPolicyBridge.js?v=20260628-rvm-right-panel-core-policy-1'), 'deferred loader must import right panel core policy bridge with cache key');
+assert.ok(deferredLoader.includes('20260628-rvm-deferred-right-panel-layout-1'), 'deferred loader must expose right panel layout key');
+assert.ok(deferredLoader.includes('20260628-rvm-deferred-right-panel-core-policy-1'), 'deferred loader must retain previous right panel core key');
+assert.ok(deferredLoader.includes('RvmRightPanelFormatPolicyBridge.js?v=20260628-rvm-right-panel-layout-1'), 'deferred loader must import right panel layout bridge with cache key');
 assert.ok(deferredLoader.includes('right-panel-policy-sync'), 'source-preview refresh must resync the right panel policy');
 
 assert.ok(rightPanelPolicy.includes('RVM_RIGHT_PANEL_SECTIONS'), 'format policy must expose explicit right panel sections');
@@ -58,8 +58,13 @@ assert.ok(rightPanelPolicy.includes('fileKind === \'stagedjson\''), 'format poli
 
 assert.ok(rightPanelBridge.includes('Right Panel Policy'), 'right panel bridge must render section policy panel');
 assert.ok(rightPanelBridge.includes('applyRightPanelSectionPolicy'), 'right panel bridge must apply section policy');
-assert.ok(rightPanelBridge.includes('data-rvm-right-panel-section-policy'), 'right panel bridge must expose section policy marker');
-assert.ok(rightPanelBridge.includes('rvmRightPanelSections'), 'right panel bridge must stamp active sections on root dataset');
+assert.ok(rightPanelBridge.includes('orderRightPanelSections'), 'right panel bridge must order panel sections');
+assert.ok(rightPanelBridge.includes('hideEmptyRightPanelHeaders'), 'right panel bridge must hide empty headers');
+assert.ok(rightPanelBridge.includes('rvmRightPanelOrdered'), 'right panel bridge must stamp ordering diagnostics');
+assert.ok(rightPanelBridge.includes('rvmRightPanelEmptyHeadersHidden'), 'right panel bridge must stamp empty-header diagnostics');
+assert.ok(rightPanelBridge.includes('data-rvm-stagedjson-kpis'), 'stagedJSON review must expose KPI row');
+assert.ok(rightPanelBridge.includes('rvm-stagedjson-card--clear'), 'stagedJSON review must use clearer card style');
+assert.ok(rightPanelBridge.includes('rvm-source-tools-grid--grouped'), 'right panel layout must compact Source Tools groups');
 assert.ok(rightPanelBridge.includes('Selected Entity'), 'right panel bridge must rename RVM-only selection title to generic selected entity');
 assert.ok(rightPanelBridge.includes('copy-stagedjson') && rightPanelBridge.includes('download-stagedjson'), 'stagedJSON right panel must expose copy/download actions');
 
@@ -70,4 +75,4 @@ assert.ok(navisHierarchy.includes('shouldPreserveFormatNeutralTree'), 'Navis bri
 assert.ok(selectionSync.includes('rvm-tab-dispose'), 'hierarchy sync bridge must clean up on tab disposal');
 assert.ok(drawer.includes('root.insertBefore(drawer, statusbar)'), 'drawer must dock before status bar');
 
-console.log('Verified RVM viewer UI contract: current cache chain and right-panel section policy.');
+console.log('Verified RVM viewer UI contract: current cache chain and right-panel layout cleanup.');
