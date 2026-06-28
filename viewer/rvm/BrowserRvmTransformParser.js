@@ -1,6 +1,10 @@
 import { parseRvmArrayBuffer as parseLegacyRvmArrayBuffer } from './BrowserRvmParser.js';
+import {
+  RVM_PRIMITIVE_CAPABILITY_REGISTRY_VERSION,
+  getRvmPrimitiveCapability,
+} from './RvmPrimitiveCapabilityRegistry.js';
 
-export const BROWSER_RVM_TRANSFORM_PARSER_SCHEMA = 'browser-rvm-transform-parser/v4-cpp-mat3x4-facetgroup';
+export const BROWSER_RVM_TRANSFORM_PARSER_SCHEMA = 'browser-rvm-transform-parser/v5-primitive-capability';
 
 const MAX_FACET_GROUP_POLYGONS = 400;
 const MAX_FACET_GROUP_CONTOURS = 96;
@@ -27,6 +31,12 @@ export async function parseRvmArrayBuffer(arrayBuffer, options = {}) {
   const diagnostics = {
     ...(parsed.diagnostics || {}),
     transformParserSchemaVersion: BROWSER_RVM_TRANSFORM_PARSER_SCHEMA,
+    rvmPrimitiveCapabilityRegistryVersion: RVM_PRIMITIVE_CAPABILITY_REGISTRY_VERSION,
+    rvmPrimitiveCapabilityCounts: patch.capabilityCounts,
+    rvmPrimitiveCapabilityStatusCounts: patch.capabilityStatusCounts,
+    rvmPrimitiveBlockedCodeCount: patch.blockedCodeCount,
+    rvmPrimitiveLegacyUnlockCodeCount: patch.legacyUnlockCodeCount,
+    rvmPrimitiveStableWriterCodeCount: patch.stableWriterCodeCount,
     rvmPrimTransformAppliedCount: patch.applied,
     rvmPrimTransformSkippedCount: patch.skipped,
     rvmPrimWorldBounds: patch.worldBounds,
@@ -55,6 +65,8 @@ function patchHierarchyWithWorldTransforms(roots, arrayBuffer) {
   const world = makeBounds();
   const legacy = makeBounds();
   const kindCounts = {};
+  const capabilityCounts = {};
+  const capabilityStatusCounts = {};
   let applied = 0;
   let skipped = 0;
   let nativeParamDecoded = 0;
@@ -64,6 +76,9 @@ function patchHierarchyWithWorldTransforms(roots, arrayBuffer) {
   let facetGroupPolygonCount = 0;
   let facetGroupContourCount = 0;
   let facetGroupVertexCount = 0;
+  let blockedCodeCount = 0;
+  let legacyUnlockCodeCount = 0;
+  let stableWriterCodeCount = 0;
 
   const patchNode = (node) => {
     if (!node || typeof node !== 'object') return node;
@@ -86,7 +101,12 @@ function patchHierarchyWithWorldTransforms(roots, arrayBuffer) {
         } else if (geom.code === 11) {
           facetGroupDecodeSkipped += 1;
         }
+        if (geom.primitiveWriterStatus === 'blocked') blockedCodeCount += 1;
+        else if (geom.primitiveWriterStatus === 'explicit-legacy-unlock-required') legacyUnlockCodeCount += 1;
+        else if (geom.primitiveWriterStatus === 'stable-writer-ready') stableWriterCodeCount += 1;
         bump(kindCounts, geom.kindName || `Kind-${geom.code}`);
+        bump(capabilityCounts, `${geom.code}:${geom.primitiveCapabilityName}`);
+        bump(capabilityStatusCounts, geom.primitiveWriterStatus);
         expandBounds(world, geom.bbox);
         expandBounds(legacy, geom.legacyBbox);
         next = {
@@ -99,6 +119,10 @@ function patchHierarchyWithWorldTransforms(roots, arrayBuffer) {
             RVM_PRIM_TRANSFORM_SCHEMA: BROWSER_RVM_TRANSFORM_PARSER_SCHEMA,
             RVM_PRIMITIVE_CODE: String(geom.code),
             RVM_PRIMITIVE_KIND_NAME: geom.kindName,
+            RVM_PRIMITIVE_CAPABILITY_NAME: geom.primitiveCapabilityName,
+            RVM_PRIMITIVE_WRITER_STATUS: geom.primitiveWriterStatus,
+            RVM_PRIMITIVE_CAPABILITY_REGISTRY_VERSION: RVM_PRIMITIVE_CAPABILITY_REGISTRY_VERSION,
+            RVM_PRIMITIVE_OBSERVED_BODY_LENGTH: geom.primitiveObservedBodyLength == null ? '' : String(geom.primitiveObservedBodyLength),
             RVM_NATIVE_PARAMS_DECODED: String(Boolean(geom.paramsDecoded)),
             RVM_LOCAL_BBOX: JSON.stringify(roundArray(geom.localBbox)),
             RVM_LEGACY_UNTRANSFORMED_BBOX: JSON.stringify(roundArray(geom.legacyBbox)),
@@ -138,6 +162,12 @@ function patchHierarchyWithWorldTransforms(roots, arrayBuffer) {
       RVM_PRIM_TRANSFORM_APPLIED_COUNT: String(applied),
       RVM_PRIM_TRANSFORM_SKIPPED_COUNT: String(skipped),
       RVM_NATIVE_PARAM_DECODED_COUNT: String(nativeParamDecoded),
+      RVM_PRIMITIVE_CAPABILITY_REGISTRY_VERSION: RVM_PRIMITIVE_CAPABILITY_REGISTRY_VERSION,
+      RVM_PRIMITIVE_CAPABILITY_COUNTS: JSON.stringify(capabilityCounts),
+      RVM_PRIMITIVE_CAPABILITY_STATUS_COUNTS: JSON.stringify(capabilityStatusCounts),
+      RVM_PRIMITIVE_BLOCKED_CODE_COUNT: String(blockedCodeCount),
+      RVM_PRIMITIVE_LEGACY_UNLOCK_CODE_COUNT: String(legacyUnlockCodeCount),
+      RVM_PRIMITIVE_STABLE_WRITER_CODE_COUNT: String(stableWriterCodeCount),
       RVM_FACET_GROUP_DECODED_COUNT: String(facetGroupDecoded),
       RVM_FACET_GROUP_DECODE_SKIPPED_COUNT: String(facetGroupDecodeSkipped),
       RVM_FACET_GROUP_POLYGON_COUNT: String(facetGroupPolygonCount),
@@ -161,6 +191,11 @@ function patchHierarchyWithWorldTransforms(roots, arrayBuffer) {
     facetGroupContourCount,
     facetGroupVertexCount,
     kindCounts,
+    capabilityCounts,
+    capabilityStatusCounts,
+    blockedCodeCount,
+    legacyUnlockCodeCount,
+    stableWriterCodeCount,
     worldBounds: boundsToBbox(world),
     legacyBounds: boundsToBbox(legacy)
   };
@@ -176,6 +211,7 @@ function decodePrimGeometry(view, offset, legacyCode) {
   const codeFromRecord = view.getUint32(offset + 28, false);
   const code = Number.isFinite(codeFromRecord) && codeFromRecord > 0 ? codeFromRecord : legacyCode;
   const kindName = PRIMITIVE_KIND_NAMES[code] || `Unknown-${code}`;
+  const capability = getRvmPrimitiveCapability(code);
 
   const floats = [];
   for (let p = offset + 32; p + 4 <= end; p += 4) {
@@ -228,12 +264,15 @@ function decodePrimGeometry(view, offset, legacyCode) {
     code,
     version,
     kindName,
+    primitiveCapabilityName: capability.name,
+    primitiveWriterStatus: capability.writerStatus,
+    primitiveObservedBodyLength: capability.observedBodyLength,
     paramsDecoded: Boolean(params?.decoded),
     facetGroupDecoded: code === 11 && Boolean(params?.decoded && params?.facetGroup),
     facetGroupPolygonCount: code === 11 ? Number(params?.polygonCount || 0) : 0,
     facetGroupContourCount: code === 11 ? Number(params?.contourCount || 0) : 0,
     facetGroupVertexCount: code === 11 ? Number(params?.vertexCount || 0) : 0,
-    primitiveParams: { version, kind: code, kindName, ...(params || {}) }
+    primitiveParams: { version, kind: code, kindName, capabilityName: capability.name, writerStatus: capability.writerStatus, ...(params || {}) }
   };
 }
 
@@ -302,7 +341,7 @@ function decodeFacetGroupParams(view, offset, end) {
     let vertexCount = 0;
     for (let pi = 0; pi < polygonCount; pi += 1) {
       const contoursN = readUint();
-      if (!Number.isFinite(contoursN) || contoursN < 1 || contoursN > MAX_FACET_GROUP_CONTOURS) {
+      if (!Number.isFinite(contoursN) || contoursN < 1 || contoursN > MAX_FACET_CONTOURS) {
         return { decoded: false, facetGroup: true, reason: 'facet-contour-count-cap', polygonCount, contourCount };
       }
       contourCount += contoursN;
