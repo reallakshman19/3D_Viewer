@@ -1,4 +1,4 @@
-const VERSION = '20260628-rvm-hierarchy-multiselect-actions-1';
+const VERSION = '20260628-rvm-hierarchy-multiselect-actions-2';
 const INSTALL_KEY = '__PCF_GLB_RVM_HIERARCHY_MULTISELECT_ACTIONS__';
 const ROOT_SELECTOR = '[data-rvm-viewer]';
 const ACTIONS = new Set(['fit', 'isolate', 'hide', 'show']);
@@ -30,45 +30,70 @@ function currentViewer(root) {
   return root?.__rvmViewer3D || root?.__rvmViewer || root?.viewer || globalThis.__3D_RVM_VIEWER__ || null;
 }
 
+function visibilityState(viewer) {
+  const state = viewer?.visibility?.getVisibilityState?.();
+  if (state) return state;
+  const hiddenCanonicalIds = viewer?.visibility?.getHiddenCanonicalIds?.() || [];
+  const isolatedCanonicalIds = viewer?.visibility?.getIsolatedCanonicalIds?.() || [];
+  return {
+    hiddenCanonicalIds,
+    isolatedCanonicalIds,
+    hiddenCount: hiddenCanonicalIds.length,
+    isolatedCount: isolatedCanonicalIds.length,
+    isolatedMode: isolatedCanonicalIds.length > 0,
+  };
+}
+
 export function dispatchHierarchyMultiSelectAction(root, detail = {}) {
   const action = String(detail.action || '').toLowerCase();
   const selectedIds = Array.isArray(detail.selectedIds) ? detail.selectedIds.filter(Boolean) : [];
   const viewer = currentViewer(root);
   const result = { version: VERSION, action, selectedIds, selectedCount: selectedIds.length, handled: false, method: '', error: '' };
-  if (!ACTIONS.has(action)) return emitResult(root, result);
-  if (!viewer) return emitResult(root, { ...result, error: 'viewer-not-found' });
-  if (!selectedIds.length) return emitResult(root, { ...result, error: 'empty-selection' });
+  if (!ACTIONS.has(action)) return emitResult(root, result, viewer);
+  if (!viewer) return emitResult(root, { ...result, error: 'viewer-not-found' }, viewer);
+  if (!selectedIds.length) return emitResult(root, { ...result, error: 'empty-selection' }, viewer);
   try {
     if (action === 'fit') {
       viewer.selectCanonicalIds?.(selectedIds, { additive: false });
       viewer.fitSelection?.();
-      return emitResult(root, { ...result, handled: true, method: 'selectCanonicalIds+fitSelection' });
+      return emitResult(root, { ...result, handled: true, method: 'selectCanonicalIds+fitSelection' }, viewer);
     }
     if (action === 'isolate') {
       viewer.visibility?.isolate?.(selectedIds);
-      return emitResult(root, { ...result, handled: true, method: 'visibility.isolate' });
+      return emitResult(root, { ...result, handled: true, method: 'visibility.isolate' }, viewer);
     }
     if (action === 'hide') {
       viewer.visibility?.hide?.(selectedIds);
-      return emitResult(root, { ...result, handled: true, method: 'visibility.hide' });
+      return emitResult(root, { ...result, handled: true, method: 'visibility.hide' }, viewer);
     }
     if (action === 'show') {
       if (typeof viewer.visibility?.show === 'function') viewer.visibility.show(selectedIds);
       else viewer.showAll?.();
-      return emitResult(root, { ...result, handled: true, method: 'visibility.show' });
+      return emitResult(root, { ...result, handled: true, method: 'visibility.show' }, viewer);
     }
   } catch (error) {
-    return emitResult(root, { ...result, error: error?.message || String(error) });
+    return emitResult(root, { ...result, error: error?.message || String(error) }, viewer);
   }
-  return emitResult(root, result);
+  return emitResult(root, result, viewer);
 }
 
-function emitResult(root, result) {
+function emitResult(root, result, viewer = null) {
+  const visibility = visibilityState(viewer);
+  const enriched = {
+    ...result,
+    hiddenCount: visibility.hiddenCount,
+    isolatedCount: visibility.isolatedCount,
+    isolatedMode: visibility.isolatedMode,
+    hiddenCanonicalIds: visibility.hiddenCanonicalIds,
+    isolatedCanonicalIds: visibility.isolatedCanonicalIds,
+  };
   if (root?.dataset) {
     root.dataset.rvmHierarchyMultiselectActionVersion = VERSION;
-    root.dataset.rvmHierarchyMultiselectLastAction = result.action || '';
-    root.dataset.rvmHierarchyMultiselectLastActionHandled = result.handled ? 'true' : 'false';
+    root.dataset.rvmHierarchyMultiselectLastAction = enriched.action || '';
+    root.dataset.rvmHierarchyMultiselectLastActionHandled = enriched.handled ? 'true' : 'false';
+    root.dataset.rvmHierarchyMultiselectHiddenCount = String(enriched.hiddenCount || 0);
+    root.dataset.rvmHierarchyMultiselectIsolatedCount = String(enriched.isolatedCount || 0);
   }
-  try { root?.dispatchEvent?.(new CustomEvent('rvm-hierarchy-multiselect-action-applied', { bubbles: true, detail: result })); } catch (_) {}
-  return result;
+  try { root?.dispatchEvent?.(new CustomEvent('rvm-hierarchy-multiselect-action-applied', { bubbles: true, detail: enriched })); } catch (_) {}
+  return enriched;
 }
