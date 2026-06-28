@@ -1,3 +1,4 @@
+import { isRvmNonPrimitiveSourceKind, normalizeRvmSourceKind } from '../RvmSourceKindPolicy.js';
 import { RvmViewer3D } from '../rvm-viewer/RvmViewer3D.js?v=20260622-rvm-leaf-picking-2';
 import { readNonPrimitiveAutoBendSettings, writeNonPrimitiveAutoBendSettings } from '../overlays/autobend/NonPrimitiveAutoBendSettings.js';
 import { readNonPrimitiveSupportOverlaySettings, writeNonPrimitiveSupportOverlaySettings } from '../overlays/support/SupportOverlaySettings.js';
@@ -7,15 +8,13 @@ import {
   sourceToolsDiagnosticsFileName,
 } from '../overlays/source-tools/NonPrimitiveSourceToolsDiagnostics.js';
 
-export const RVM_NON_PRIMITIVE_SOURCE_TOOLS_UI_SCHEMA = 'rvm-non-primitive-source-tools-ui/v7';
+export const RVM_NON_PRIMITIVE_SOURCE_TOOLS_UI_SCHEMA = 'rvm-non-primitive-source-tools-ui/v8';
 
-const PATCH_FLAG = Symbol.for('pcf-glb-rvm-non-primitive-source-tools-ui-v7');
-const VIEWER_PATCH_FLAG = Symbol.for('pcf-glb-rvm-non-primitive-source-tools-ui-viewer-v7');
-const STYLE_FLAG = Symbol.for('pcf-glb-rvm-non-primitive-source-tools-ui-style-v7');
+const PATCH_FLAG = Symbol.for('pcf-glb-rvm-non-primitive-source-tools-ui-v8');
+const VIEWER_PATCH_FLAG = Symbol.for('pcf-glb-rvm-non-primitive-source-tools-ui-viewer-v8');
+const STYLE_FLAG = Symbol.for('pcf-glb-rvm-non-primitive-source-tools-ui-style-v8');
 const ROOT_SELECTOR = '[data-rvm-viewer]';
 const PANEL_ID = 'rvm-nonprimitive-source-tools-panel';
-const SOURCE_KIND_RE = /^(json|jscon|inputxml|txt|source-preview)$/i;
-const PRIMITIVE_KIND_RE = /^(rvm|glb|gltf|rev)$/i;
 const SUPPORT_FILTER_FAMILIES = Object.freeze(['REST', 'GUIDE', 'LINESTOP', 'LIMIT', 'LIM', 'HOLDDOWN', 'SPRING_CAN', 'UNKNOWN']);
 const AUTO_TOOLS = new Set(['auto-enabled', 'auto-radius-mode', 'auto-diagnostics']);
 const SUPPORT_TOOLS = new Set(['support-enabled', 'support-scale', 'support-labels', 'support-warnings', 'support-filter']);
@@ -50,7 +49,7 @@ function installSourceToolsStyles() {
   const doc = globalThis.document;
   if (!doc?.createElement) return;
   const style = doc.createElement('style');
-  style.dataset.rvmNonPrimitiveSourceToolsStyle = 'v7';
+  style.dataset.rvmNonPrimitiveSourceToolsStyle = 'v8';
   style.textContent = `
     .rvm-source-tools-panel{flex:0 0 auto;max-height:min(52vh,620px);padding:7px;border-bottom:1px solid var(--geo-border,#333);background:rgba(16,22,31,.86);overflow:auto;}
     .rvm-source-tools-grid--grouped{display:grid;grid-template-columns:1fr;gap:8px;min-width:0;}
@@ -433,14 +432,12 @@ export function downloadSourceToolsDiagnostics(viewer = globalThis.__3D_RVM_VIEW
 }
 
 function isNonPrimitiveKind(value) {
-  const normalized = normalizeSourceKind(value);
-  return SOURCE_KIND_RE.test(normalized) && !PRIMITIVE_KIND_RE.test(normalized);
+  return isRvmNonPrimitiveSourceKind(normalizeSourceKind(value));
 }
 
 function normalizeSourceKind(value) {
-  const kind = String(value || '').trim().toLowerCase().replace(/^\./, '');
-  if (!kind || kind === 'aveva-json' || kind === 'source-preview') return 'json';
-  if (kind === 'xml' || kind === 'uxml') return 'inputxml';
+  const kind = normalizeRvmSourceKind(value);
+  if (!kind || kind === 'source-preview') return 'json';
   return kind;
 }
 
