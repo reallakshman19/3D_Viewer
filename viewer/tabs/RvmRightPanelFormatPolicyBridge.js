@@ -5,12 +5,12 @@ import {
   resolveRvmFormatContext,
 } from './RvmFormatPolicy.js?v=20260628-rvm-right-panel-core-policy-1';
 
-export const RVM_RIGHT_PANEL_FORMAT_POLICY_SCHEMA = 'rvm-right-panel-format-policy/v2';
+export const RVM_RIGHT_PANEL_FORMAT_POLICY_SCHEMA = 'rvm-right-panel-format-policy/v3';
 
-const INSTALL_FLAG = Symbol.for('pcf-glb-rvm-right-panel-format-policy-v2');
-const STYLE_FLAG = Symbol.for('pcf-glb-rvm-right-panel-format-policy-style-v2');
+const INSTALL_FLAG = Symbol.for('pcf-glb-rvm-right-panel-format-policy-v3');
+const STYLE_FLAG = Symbol.for('pcf-glb-rvm-right-panel-format-policy-style-v3');
 const GLOBAL_KEY = '__PCF_GLB_RVM_RIGHT_PANEL_FORMAT_POLICY__';
-const VERSION = '20260628-rvm-right-panel-core-policy-1';
+const VERSION = '20260628-rvm-right-panel-layout-1';
 const ROOT_SELECTOR = '[data-rvm-viewer]';
 const FORMAT_PANEL_ID = 'rvm-format-policy-panel';
 const STAGED_PANEL_ID = 'rvm-stagedjson-review-panel';
@@ -106,6 +106,7 @@ function setSectionHidden(root, section, hidden, reason = '') {
 function markActiveSections(root, context) {
   if (!root?.dataset) return;
   root.dataset.rvmRightPanelSections = (context.sections || []).join(',');
+  root.dataset.rvmRightPanelLayout = VERSION;
   root.dataset.rvmRightPanelShowSourceTools = String(hasRvmRightPanelSection(context.policy, RVM_RIGHT_PANEL_SECTIONS.SOURCE_TOOLS));
   root.dataset.rvmRightPanelShowSupportDetails = String(hasRvmRightPanelSection(context.policy, RVM_RIGHT_PANEL_SECTIONS.SUPPORT_DETAILS));
   root.dataset.rvmRightPanelShowNodeMarkers = String(hasRvmRightPanelSection(context.policy, RVM_RIGHT_PANEL_SECTIONS.NODE_MARKERS));
@@ -127,15 +128,79 @@ function row(key, value) {
   return `<div class="rvm-format-row"><span>${esc(key)}</span><b title="${esc(value)}">${esc(value === undefined || value === null || value === '' ? '-' : value)}</b></div>`;
 }
 
+function headerForPanel(right, panel) {
+  if (!right || !panel) return null;
+  let current = panel.previousElementSibling;
+  while (current && current.parentElement === right) {
+    if (current.classList?.contains('rvm-panel-header')) return current;
+    current = current.previousElementSibling;
+  }
+  return null;
+}
+
+function pairFromPanel(root, panelSelector, headerSelector = '') {
+  const right = root?.querySelector?.('.rvm-right-panel');
+  if (!right) return null;
+  const panel = root.querySelector(panelSelector);
+  if (!panel || panel.parentElement !== right) return null;
+  const header = headerSelector ? root.querySelector(headerSelector) : headerForPanel(right, panel);
+  if (header && header.parentElement !== right) return { header: null, panel };
+  return { header, panel };
+}
+
+function orderedRightPanelPairs(root) {
+  return [
+    pairFromPanel(root, '#rvm-attributes-panel'),
+    pairFromPanel(root, '#rvm-nonprimitive-source-tools-panel', '[data-rvm-non-primitive-source-tools-header]'),
+    pairFromPanel(root, '#rvm-nonprimitive-support-details-panel', '[data-rvm-non-primitive-support-details-header]'),
+    pairFromPanel(root, '#rvm-nonprimitive-node-marker-details-panel', '[data-rvm-non-primitive-node-marker-details-header]'),
+    pairFromPanel(root, `#${STAGED_PANEL_ID}`, `[data-rvm-right-panel-format-header="${STAGED_PANEL_ID}"]`),
+    pairFromPanel(root, `#${FORMAT_PANEL_ID}`, `[data-rvm-right-panel-format-header="${FORMAT_PANEL_ID}"]`),
+    pairFromPanel(root, '#rvm-browser-parse-diagnostics', '[data-rvm-browser-diagnostics-header="true"]'),
+  ].filter(Boolean);
+}
+
+function orderRightPanelSections(root) {
+  const right = root?.querySelector?.('.rvm-right-panel');
+  if (!right) return 0;
+  let moved = 0;
+  for (const pair of orderedRightPanelPairs(root)) {
+    if (pair.header) { right.appendChild(pair.header); moved += 1; }
+    right.appendChild(pair.panel);
+    moved += 1;
+  }
+  root.dataset.rvmRightPanelOrdered = VERSION;
+  return moved;
+}
+
+function hideEmptyRightPanelHeaders(root) {
+  const right = root?.querySelector?.('.rvm-right-panel');
+  if (!right) return 0;
+  let hidden = 0;
+  for (const header of right.querySelectorAll('.rvm-panel-header')) {
+    const panel = header.nextElementSibling;
+    if (!panel || panel.classList?.contains('rvm-panel-header')) continue;
+    const emptyBody = !panel.hidden && !String(panel.textContent || '').trim() && !panel.querySelector?.('button,input,select,textarea,svg,canvas');
+    const shouldHide = Boolean(panel.hidden || emptyBody);
+    header.hidden = shouldHide;
+    if (shouldHide) {
+      header.dataset.rvmRightPanelEmptyHeaderHidden = VERSION;
+      hidden += 1;
+    } else {
+      delete header.dataset.rvmRightPanelEmptyHeaderHidden;
+    }
+  }
+  root.dataset.rvmRightPanelEmptyHeadersHidden = String(hidden);
+  return hidden;
+}
+
 function updateSelectionTitle(root) {
   const title = root?.querySelector?.('#rvm-attributes-panel [data-rvm-selection-details-inspector="true"] .rvm-selection-details-title span');
   if (title && /RVM selection details/i.test(title.textContent || '')) title.textContent = 'Selected Entity';
   const right = root?.querySelector?.('.rvm-right-panel');
   const attributesPanel = root?.querySelector?.('#rvm-attributes-panel');
   if (!right || !attributesPanel) return;
-  const headers = [...right.querySelectorAll('.rvm-panel-header')];
-  const index = headers.findIndex((header) => header.nextElementSibling === attributesPanel || header.nextSibling === attributesPanel);
-  const header = index >= 0 ? headers[index] : headers[0];
+  const header = headerForPanel(right, attributesPanel) || right.querySelector('.rvm-panel-header');
   if (header && /^(Properties|RVM selection details)$/i.test(String(header.textContent || '').trim())) header.textContent = 'Selected Entity';
 }
 
@@ -172,11 +237,10 @@ function renderFormatPanel(root, context) {
   panel.innerHTML = `
     <div class="rvm-format-policy-card" data-rvm-format-policy-version="${esc(VERSION)}" data-rvm-right-panel-section-policy="true">
       <div class="rvm-format-title"><span>${esc(context.sourceKind || 'unknown')}</span><small>${esc(context.primitiveMode || 'model')}</small></div>
-      <div class="rvm-format-grid">
+      <div class="rvm-format-grid rvm-format-grid--compact">
         ${row('File', context.fileName || 'current model')}
-        ${row('Primitive mode', context.primitiveMode || '-')}
+        ${row('Mode', context.primitiveMode || '-')}
         ${row('Source preview', context.isSourcePreview ? 'yes' : 'no')}
-        ${row('Primitive/native', context.isPrimitive ? 'yes' : 'no')}
       </div>
       <div class="rvm-format-policy-chips">
         ${policyChip('source tools', p.showSourceTools)}
@@ -274,23 +338,22 @@ function renderStagedJsonPanel(root, context) {
   panel.hidden = false;
   panel.dataset.rvmStagedJsonReview = VERSION;
   panel.innerHTML = `
-    <div class="rvm-stagedjson-card" data-rvm-stagedjson-source="true">
+    <div class="rvm-stagedjson-card rvm-stagedjson-card--clear" data-rvm-stagedjson-source="true">
       <div class="rvm-format-title"><span>${esc(stats.modelName)}</span><small>${esc(stats.schema)}</small></div>
-      <div class="rvm-format-grid">
-        ${row('Branches', stats.branches.length)}
-        ${row('Components', stats.components.length)}
-        ${row('Support records', stats.supports.length)}
-        ${row('Primitive count', stats.primitiveCount || '-')}
-        ${row('Diagnostics', Object.keys(stats.diagnostics || {}).length ? 'available' : 'none')}
+      <div class="rvm-stagedjson-kpis" data-rvm-stagedjson-kpis="true">
+        <span><b>${esc(stats.branches.length)}</b><small>Branches</small></span>
+        <span><b>${esc(stats.components.length)}</b><small>Components</small></span>
+        <span><b>${esc(stats.supports.length)}</b><small>Supports</small></span>
+        <span><b>${esc(stats.primitiveCount || 0)}</b><small>Primitives</small></span>
       </div>
       <div class="rvm-stagedjson-columns">
         <section><h4>Component types</h4><ul>${listRows(stats.componentTypes, 'No components')}</ul></section>
         <section><h4>Support kinds</h4><ul>${listRows(stats.supportKinds, 'No support records')}</ul></section>
       </div>
       <div class="rvm-format-actions">
-        <button type="button" data-rvm-right-panel-action="copy-stagedjson">Copy stagedJSON</button>
-        <button type="button" data-rvm-right-panel-action="download-stagedjson">Download stagedJSON</button>
-        <button type="button" data-rvm-right-panel-action="copy-stagedjson-diagnostics">Copy diagnostics</button>
+        <button type="button" data-rvm-right-panel-action="copy-stagedjson">Copy</button>
+        <button type="button" data-rvm-right-panel-action="download-stagedjson">Download</button>
+        <button type="button" data-rvm-right-panel-action="copy-stagedjson-diagnostics">Diagnostics</button>
       </div>
     </div>`;
   return panel;
@@ -366,6 +429,8 @@ function render(root = rootEl(), activeViewer = viewer()) {
   renderFormatPanel(root, context);
   renderStagedJsonPanel(root, context);
   applyRightPanelSectionPolicy(root, context);
+  orderRightPanelSections(root);
+  hideEmptyRightPanelHeaders(root);
   return context;
 }
 
@@ -377,18 +442,28 @@ function installStyles() {
   const style = doc.createElement('style');
   style.dataset.rvmRightPanelFormatPolicyStyle = VERSION;
   style.textContent = `
-    .rvm-right-format-panel{padding:7px;border-bottom:1px solid var(--geo-border,#333);background:rgba(10,16,26,.74);}
-    .rvm-format-policy-card,.rvm-stagedjson-card{display:grid;gap:7px;min-width:0;}
-    .rvm-format-title{display:flex;align-items:center;justify-content:space-between;gap:8px;color:#bfdbfe;font-size:12px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;}
+    .rvm-right-panel .rvm-panel-header{min-height:0;padding:5px 7px;border-bottom:1px solid rgba(116,139,171,.18);font-size:10px;letter-spacing:.055em;}
+    .rvm-right-format-panel{padding:5px 6px;border-bottom:1px solid var(--geo-border,#333);background:rgba(10,16,26,.72);}
+    .rvm-right-panel #rvm-nonprimitive-source-tools-panel,.rvm-right-panel #rvm-nonprimitive-support-details-panel,.rvm-right-panel #rvm-nonprimitive-node-marker-details-panel{padding:5px 6px;}
+    .rvm-right-panel .rvm-source-tools-grid--grouped{gap:5px;}
+    .rvm-right-panel .rvm-source-tools-group{padding:5px;gap:4px;border-radius:7px;}
+    .rvm-right-panel .rvm-source-tools-row{min-height:19px;font-size:10.5px;}
+    .rvm-right-panel .rvm-source-tools-actions{padding:5px;gap:4px;border-radius:7px;}
+    .rvm-right-panel .rvm-source-tools-actions button,.rvm-right-panel .rvm-source-tools-group button{min-height:21px;padding:2px 6px;font-size:10px;}
+    .rvm-source-tools-detail{padding:5px;gap:4px;border-radius:7px;}
+    .rvm-format-policy-card,.rvm-stagedjson-card{display:grid;gap:5px;min-width:0;}
+    .rvm-format-title{display:flex;align-items:center;justify-content:space-between;gap:8px;color:#bfdbfe;font-size:11px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;}
     .rvm-format-title small{font-size:9px;color:#8fa5c7;font-weight:600;text-transform:none;letter-spacing:0;}
-    .rvm-format-grid{display:grid;gap:3px;}
-    .rvm-format-row{display:grid;grid-template-columns:minmax(86px,.7fr) minmax(0,1.3fr);gap:6px;padding:4px 6px;border:1px solid rgba(126,190,255,.12);border-radius:5px;background:rgba(255,255,255,.026);font-size:10px;}
+    .rvm-format-grid{display:grid;gap:2px;}
+    .rvm-format-grid--compact{grid-template-columns:1fr;}
+    .rvm-format-row{display:grid;grid-template-columns:minmax(70px,.62fr) minmax(0,1.38fr);gap:5px;padding:3px 5px;border:1px solid rgba(126,190,255,.1);border-radius:5px;background:rgba(255,255,255,.022);font-size:9.8px;}
     .rvm-format-row span{color:#9eb7d8;}.rvm-format-row b{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#edf6ff;font-weight:650;}
-    .rvm-format-policy-chips,.rvm-format-actions,.rvm-format-section-list{display:flex;flex-wrap:wrap;gap:5px;}
-    .rvm-format-policy-chip,.rvm-format-section-chip{display:inline-flex;border-radius:999px;border:1px solid rgba(148,163,184,.24);padding:2px 6px;font-size:9.5px;color:#cbd5e1;background:rgba(15,23,42,.62);}.rvm-format-policy-chip.is-on,.rvm-format-section-chip.is-on{color:#bbf7d0;border-color:rgba(34,197,94,.32);background:rgba(22,101,52,.18);}.rvm-format-policy-chip.is-off,.rvm-format-section-chip.is-off{color:#fca5a5;border-color:rgba(248,113,113,.25);background:rgba(127,29,29,.13);}
-    .rvm-stagedjson-columns{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px;}.rvm-stagedjson-columns section{border:1px solid rgba(126,190,255,.12);border-radius:7px;background:rgba(255,255,255,.025);padding:6px;}.rvm-stagedjson-columns h4{margin:0 0 5px;color:#bfdbfe;font-size:11px;}.rvm-stagedjson-columns ul{list-style:none;margin:0;padding:0;display:grid;gap:2px;}.rvm-stagedjson-columns li{display:flex;justify-content:space-between;gap:8px;color:#cbd5e1;font-size:10px;}.rvm-stagedjson-columns li span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
-    .rvm-format-actions button{border:1px solid rgba(126,190,255,.26);border-radius:6px;background:#132238;color:#dbeafe;padding:5px 7px;font-size:10.5px;cursor:pointer;}
-    @media(max-width:1150px){.rvm-stagedjson-columns{grid-template-columns:1fr;}}
+    .rvm-format-policy-chips,.rvm-format-actions,.rvm-format-section-list{display:flex;flex-wrap:wrap;gap:4px;}
+    .rvm-format-policy-chip,.rvm-format-section-chip{display:inline-flex;border-radius:999px;border:1px solid rgba(148,163,184,.22);padding:1px 5px;font-size:9px;color:#cbd5e1;background:rgba(15,23,42,.62);}.rvm-format-policy-chip.is-on,.rvm-format-section-chip.is-on{color:#bbf7d0;border-color:rgba(34,197,94,.32);background:rgba(22,101,52,.18);}.rvm-format-policy-chip.is-off,.rvm-format-section-chip.is-off{color:#fca5a5;border-color:rgba(248,113,113,.25);background:rgba(127,29,29,.13);}
+    .rvm-stagedjson-kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:4px;}.rvm-stagedjson-kpis span{display:grid;gap:1px;padding:5px;border:1px solid rgba(126,190,255,.13);border-radius:7px;background:rgba(255,255,255,.025);text-align:center;}.rvm-stagedjson-kpis b{font-size:13px;color:#edf6ff;}.rvm-stagedjson-kpis small{font-size:8.5px;color:#8fa5c7;text-transform:uppercase;letter-spacing:.04em;}
+    .rvm-stagedjson-columns{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:5px;}.rvm-stagedjson-columns section{border:1px solid rgba(126,190,255,.12);border-radius:7px;background:rgba(255,255,255,.025);padding:5px;}.rvm-stagedjson-columns h4{margin:0 0 4px;color:#bfdbfe;font-size:10.5px;}.rvm-stagedjson-columns ul{list-style:none;margin:0;padding:0;display:grid;gap:2px;}.rvm-stagedjson-columns li{display:flex;justify-content:space-between;gap:8px;color:#cbd5e1;font-size:9.8px;}.rvm-stagedjson-columns li span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+    .rvm-format-actions button{border:1px solid rgba(126,190,255,.26);border-radius:6px;background:#132238;color:#dbeafe;padding:4px 6px;font-size:10px;cursor:pointer;}
+    @media(max-width:1150px){.rvm-stagedjson-columns,.rvm-stagedjson-kpis{grid-template-columns:1fr 1fr;}}
   `;
   doc.head?.appendChild?.(style);
 }
