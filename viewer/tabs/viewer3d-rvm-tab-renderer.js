@@ -52,7 +52,7 @@ import { installRvmLeafSelectionIdentityBridge } from './RvmLeafSelectionIdentit
 import { installRvmLeafCanvasPickBridge } from './RvmLeafCanvasPickBridge.js?v=20260622-rvm-leaf-canvas-pick-orbit-guard-2';
 import { installRvmStagedJsonLoadAdapterBridge } from './RvmStagedJsonLoadAdapterBridge.js?v=20260627-rvm-stagedjson-load-adapter-1';
 import { installRvmNativeHierarchyProviderRuntimeBridge } from './RvmNativeHierarchyProviderRuntimeBridge.js?v=20260628-rvm-native-provider-runtime-1';
-import { installRvmHierarchyProviderDebugBridge } from './RvmHierarchyProviderDebugBridge.js?v=20260628-rvm-provider-debug-reload-hook-1';
+import { installRvmHierarchyProviderDebugBridge } from './RvmHierarchyProviderDebugBridge.js?v=20260628-rvm-provider-debug-parity-guard-1';
 import { installRvmHierarchyProviderHealthBridge } from './RvmHierarchyProviderHealthBridge.js?v=20260628-rvm-provider-health-check-1';
 import { installRvmHierarchyProviderParityAuditBridge } from './RvmHierarchyProviderParityAuditBridge.js?v=20260628-rvm-provider-parity-audit-1';
 import { installRvmHierarchyProviderDiagnosticsExportBridge } from './RvmHierarchyProviderDiagnosticsExportBridge.js?v=20260628-rvm-provider-diagnostics-export-1';

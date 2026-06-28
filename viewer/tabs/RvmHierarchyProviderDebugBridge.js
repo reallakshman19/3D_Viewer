@@ -1,12 +1,15 @@
 const INSTALL_FLAG = Symbol.for('pcf-glb-rvm-hierarchy-provider-debug-1');
 const SESSION_OPT_IN_KEY = 'pcf-glb-rvm-provider-tree-read-path';
-export const RVM_HIERARCHY_PROVIDER_DEBUG_VERSION = '20260628-rvm-provider-debug-reload-hook-1';
+const SESSION_PARITY_OVERRIDE_KEY = 'pcf-glb-rvm-provider-tree-parity-override';
+export const RVM_HIERARCHY_PROVIDER_DEBUG_VERSION = '20260628-rvm-provider-debug-parity-guard-1';
 
 function text(value) { return String(value ?? '').trim(); }
 function escapeHtml(value) { return text(value).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;'); }
 function row(label, value) { return `<div class="rvm-browser-diag-row"><span>${escapeHtml(label)}</span><b>${escapeHtml(value || '-')}</b></div>`; }
-function sessionOptInEnabled() { try { return sessionStorage.getItem(SESSION_OPT_IN_KEY) === 'enabled'; } catch (_) { return false; } }
+function sessionFlag(key) { try { return sessionStorage.getItem(key) === 'enabled'; } catch (_) { return false; } }
+function sessionOptInEnabled() { return sessionFlag(SESSION_OPT_IN_KEY); }
 function providerTreeOptInEnabled(root) { return globalThis.__PCF_GLB_RVM_PROVIDER_TREE_READ_PATH__ === true || root?.dataset?.rvmProviderTreeReadPath === 'enabled' || sessionOptInEnabled(); }
+function parityOverrideEnabled(root) { return root?.dataset?.rvmProviderTreeParityOverride === 'enabled' || sessionFlag(SESSION_PARITY_OVERRIDE_KEY); }
 
 function applyProviderTreeOptIn(root, enabled) {
   globalThis.__PCF_GLB_RVM_PROVIDER_TREE_READ_PATH__ = !!enabled;
@@ -17,8 +20,31 @@ function applyProviderTreeOptIn(root, enabled) {
   }
 }
 
+function applyParityOverride(root, enabled) {
+  try { sessionStorage.setItem(SESSION_PARITY_OVERRIDE_KEY, enabled ? 'enabled' : 'disabled'); } catch (_) {}
+  if (root?.dataset) root.dataset.rvmProviderTreeParityOverride = enabled ? 'enabled' : 'disabled';
+}
+
 function providerFromRoot(root, detail = {}) {
   return detail?.provider || root?.__rvmNativeHierarchyProvider || root?.__rvmFormatNeutralHierarchy?.providerResult || root?.__rvmFormatNeutralHierarchy?.hierarchyProviderResult || root?.__rvmHierarchyProviderResult || null;
+}
+
+function parityHardFailures(root) {
+  const parity = root?.__rvmHierarchyProviderParityAudit;
+  if (!parity) return [];
+  const failures = [];
+  if (parity.countDelta) failures.push(`count delta ${parity.countDelta}`);
+  if (Array.isArray(parity.missingInProvider) && parity.missingInProvider.length) failures.push(`missing provider IDs ${parity.missingInProvider.length}`);
+  if (Array.isArray(parity.missingInLegacy) && parity.missingInLegacy.length) failures.push(`missing legacy IDs ${parity.missingInLegacy.length}`);
+  if (Array.isArray(parity.duplicateProviderIds) && parity.duplicateProviderIds.length) failures.push(`duplicate provider IDs ${parity.duplicateProviderIds.length}`);
+  if (Array.isArray(parity.duplicateLegacyIds) && parity.duplicateLegacyIds.length) failures.push(`duplicate legacy IDs ${parity.duplicateLegacyIds.length}`);
+  if (Array.isArray(parity.parentMismatches) && parity.parentMismatches.length) failures.push(`parent mismatches ${parity.parentMismatches.length}`);
+  return failures;
+}
+
+function providerTreeReloadAllowed(root) {
+  const failures = parityHardFailures(root);
+  return !failures.length || parityOverrideEnabled(root);
 }
 
 function ensurePanel(root) {
@@ -35,12 +61,20 @@ function ensurePanel(root) {
   return panel;
 }
 
+function parityGuardHtml(root) {
+  const failures = parityHardFailures(root);
+  if (!failures.length) return row('Provider tree parity guard', 'OK');
+  const override = parityOverrideEnabled(root) ? ' checked' : '';
+  return `<label class="rvm-browser-diag-row rvm-provider-tree-parity-override"><span><input type="checkbox" data-rvm-provider-tree-parity-override="true"${override}> Override parity guard</span><b>${escapeHtml(failures.join('; '))}</b></label>`;
+}
+
 function debugToggleHtml(root) {
   const enabled = providerTreeOptInEnabled(root);
+  const allowed = providerTreeReloadAllowed(root);
   const checked = enabled ? ' checked' : '';
   const status = enabled ? 'enabled for next explicit reload/render' : 'disabled';
-  const disabled = enabled ? '' : ' disabled';
-  return `<label class="rvm-browser-diag-row rvm-provider-tree-toggle"><span><input type="checkbox" data-rvm-provider-tree-toggle="true"${checked}> Provider tree read path</span><b>${escapeHtml(status)}</b></label><button type="button" class="rvm-mini-btn" data-rvm-provider-tree-apply-reload="true"${disabled}>Apply provider tree on reload</button>`;
+  const disabled = enabled && allowed ? '' : ' disabled';
+  return `<label class="rvm-browser-diag-row rvm-provider-tree-toggle"><span><input type="checkbox" data-rvm-provider-tree-toggle="true"${checked}> Provider tree read path</span><b>${escapeHtml(status)}</b></label>${parityGuardHtml(root)}<button type="button" class="rvm-mini-btn" data-rvm-provider-tree-apply-reload="true"${disabled}>Apply provider tree on reload</button>`;
 }
 
 function renderProviderDebug(root, detail = {}) {
@@ -72,18 +106,37 @@ function handleToggle(event) {
   renderProviderDebug(root, {});
 }
 
+function handleParityOverride(event) {
+  const toggle = event.target?.closest?.('[data-rvm-provider-tree-parity-override]');
+  if (!toggle) return;
+  const root = toggle.closest?.('[data-rvm-viewer]');
+  if (!root?.dataset) return;
+  const enabled = !!toggle.checked;
+  applyParityOverride(root, enabled);
+  try { root.dispatchEvent(new CustomEvent('rvm-provider-tree-parity-override-toggle', { bubbles: true, detail: { enabled, version: RVM_HIERARCHY_PROVIDER_DEBUG_VERSION } })); } catch (_) {}
+  renderProviderDebug(root, {});
+}
+
 function handleApplyReload(event) {
   const button = event.target?.closest?.('[data-rvm-provider-tree-apply-reload]');
   if (!button) return;
   const root = button.closest?.('[data-rvm-viewer]');
   if (!root?.dataset || !providerTreeOptInEnabled(root)) return;
+  const failures = parityHardFailures(root);
+  if (failures.length && !parityOverrideEnabled(root)) {
+    root.dataset.rvmProviderTreeReloadBlocked = RVM_HIERARCHY_PROVIDER_DEBUG_VERSION;
+    try { root.dispatchEvent(new CustomEvent('rvm-provider-tree-read-path-reload-blocked', { bubbles: true, detail: { failures, version: RVM_HIERARCHY_PROVIDER_DEBUG_VERSION } })); } catch (_) {}
+    renderProviderDebug(root, {});
+    return;
+  }
   root.dataset.rvmProviderTreeReloadRequested = RVM_HIERARCHY_PROVIDER_DEBUG_VERSION;
-  try { root.dispatchEvent(new CustomEvent('rvm-provider-tree-read-path-reload-request', { bubbles: true, detail: { enabled: true, version: RVM_HIERARCHY_PROVIDER_DEBUG_VERSION } })); } catch (_) {}
+  try { root.dispatchEvent(new CustomEvent('rvm-provider-tree-read-path-reload-request', { bubbles: true, detail: { enabled: true, parityOverride: parityOverrideEnabled(root), version: RVM_HIERARCHY_PROVIDER_DEBUG_VERSION } })); } catch (_) {}
   try { location.reload(); } catch (_) {}
 }
 
 function restoreSessionOptIn(root) {
   if (sessionOptInEnabled()) applyProviderTreeOptIn(root, true);
+  if (sessionFlag(SESSION_PARITY_OVERRIDE_KEY)) applyParityOverride(root, true);
 }
 
 export function installRvmHierarchyProviderDebugBridge() {
@@ -97,7 +150,9 @@ export function installRvmHierarchyProviderDebugBridge() {
     renderProviderDebug(root, event.detail || {});
   };
   document.addEventListener('change', handleToggle, true);
+  document.addEventListener('change', handleParityOverride, true);
   document.addEventListener('click', handleApplyReload, true);
   document.addEventListener('rvm-tree-rendered', update, true);
   document.addEventListener('rvm-hierarchy-provider-attached', update, true);
+  document.addEventListener('rvm-hierarchy-provider-parity-audit', update, true);
 }
