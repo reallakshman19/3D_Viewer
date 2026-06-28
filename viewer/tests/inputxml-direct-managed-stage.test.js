@@ -86,6 +86,6 @@ assert.match(response.logs.stdout.join('\n'), /richGeometryComponents=/);
 
 const xmlCompareGate = runXmlCompareArchitectureGate();
 assert.equal(xmlCompareGate.ok, true);
-assert.ok(xmlCompareGate.checkedModuleCount >= 21, 'XML Compare architecture gate covers sideload modules');
+assert.ok(xmlCompareGate.checkedModuleCount >= 21, 'XML Compare architecture gate covers sideload and empty workspace modules');
 
 console.log('inputxml-direct-managed-stage: all assertions passed');
