@@ -30,7 +30,7 @@ check(treeSync.includes("const BRIDGE_VERSION = '20260627-rvm-hierarchy-selectio
 check(exact.includes('GENERIC_LABELS'), 'exact selection bridge blocks generic kind labels');
 check(tab.includes('sourceKindForJsonFileName') && tab.includes("return 'stagedjson'") && tab.includes("return 'txt'"), 'mounted tab directly classifies stagedJSON and TXT');
 check(tab.includes('renderLoadedHierarchyTree(root, payload'), 'mounted tab renders format-neutral hierarchy tree');
-check(deferred.includes('SOURCE_PREVIEW_KIND_RE') && deferred.includes('stagedjson'), 'deferred loader gates stagedJSON source-preview bridges');
+check(deferred.includes('RvmSourceKindPolicy.js') && deferred.includes('isRvmSourcePreviewKind(sourceKind)') && !deferred.includes('SOURCE_PREVIEW_KIND_RE'), 'deferred loader gates stagedJSON source-preview bridges through shared source-kind policy');
 check(toolbar.includes("const VERSION = '20260627-rvm-toolbar-scroll-misc-1'"), 'toolbar scroll/misc version remains current');
 
 console.log(`\n${passed} passed, ${failed} failed`);
