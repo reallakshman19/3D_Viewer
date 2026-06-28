@@ -2,7 +2,7 @@
  * XML->CII(2019) Workflow bridge boundary.
  */
 
-import { getXmlCiiPhaseBridge } from './legacy-adapter.js?v=20260625-service-1';
+import { getXmlCiiPhaseBridge } from './legacy-adapter.js?v=20260627-inputxml-cii2019-live-guard-1';
 
 const XML_CII_OBSOLETE_PIPING_CLASS_MASTER = 'Piping_class_master.json';
 const XML_CII_WORKFLOW_SNAPSHOT_TTL_MS = 5000;
