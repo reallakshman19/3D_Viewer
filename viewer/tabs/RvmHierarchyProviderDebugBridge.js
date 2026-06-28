@@ -1,10 +1,21 @@
 const INSTALL_FLAG = Symbol.for('pcf-glb-rvm-hierarchy-provider-debug-1');
-export const RVM_HIERARCHY_PROVIDER_DEBUG_VERSION = '20260628-rvm-provider-debug-toggle-1';
+const SESSION_OPT_IN_KEY = 'pcf-glb-rvm-provider-tree-read-path';
+export const RVM_HIERARCHY_PROVIDER_DEBUG_VERSION = '20260628-rvm-provider-debug-reload-hook-1';
 
 function text(value) { return String(value ?? '').trim(); }
 function escapeHtml(value) { return text(value).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;'); }
 function row(label, value) { return `<div class="rvm-browser-diag-row"><span>${escapeHtml(label)}</span><b>${escapeHtml(value || '-')}</b></div>`; }
-function providerTreeOptInEnabled(root) { return globalThis.__PCF_GLB_RVM_PROVIDER_TREE_READ_PATH__ === true || root?.dataset?.rvmProviderTreeReadPath === 'enabled'; }
+function sessionOptInEnabled() { try { return sessionStorage.getItem(SESSION_OPT_IN_KEY) === 'enabled'; } catch (_) { return false; } }
+function providerTreeOptInEnabled(root) { return globalThis.__PCF_GLB_RVM_PROVIDER_TREE_READ_PATH__ === true || root?.dataset?.rvmProviderTreeReadPath === 'enabled' || sessionOptInEnabled(); }
+
+function applyProviderTreeOptIn(root, enabled) {
+  globalThis.__PCF_GLB_RVM_PROVIDER_TREE_READ_PATH__ = !!enabled;
+  try { sessionStorage.setItem(SESSION_OPT_IN_KEY, enabled ? 'enabled' : 'disabled'); } catch (_) {}
+  if (root?.dataset) {
+    root.dataset.rvmProviderTreeReadPath = enabled ? 'enabled' : 'disabled';
+    root.dataset.rvmProviderTreeReadPathDebugToggle = RVM_HIERARCHY_PROVIDER_DEBUG_VERSION;
+  }
+}
 
 function providerFromRoot(root, detail = {}) {
   return detail?.provider || root?.__rvmNativeHierarchyProvider || root?.__rvmFormatNeutralHierarchy?.providerResult || root?.__rvmFormatNeutralHierarchy?.hierarchyProviderResult || root?.__rvmHierarchyProviderResult || null;
@@ -25,9 +36,11 @@ function ensurePanel(root) {
 }
 
 function debugToggleHtml(root) {
-  const checked = providerTreeOptInEnabled(root) ? ' checked' : '';
-  const status = checked ? 'enabled for next explicit reload/render' : 'disabled';
-  return `<label class="rvm-browser-diag-row rvm-provider-tree-toggle"><span><input type="checkbox" data-rvm-provider-tree-toggle="true"${checked}> Provider tree read path</span><b>${escapeHtml(status)}</b></label>`;
+  const enabled = providerTreeOptInEnabled(root);
+  const checked = enabled ? ' checked' : '';
+  const status = enabled ? 'enabled for next explicit reload/render' : 'disabled';
+  const disabled = enabled ? '' : ' disabled';
+  return `<label class="rvm-browser-diag-row rvm-provider-tree-toggle"><span><input type="checkbox" data-rvm-provider-tree-toggle="true"${checked}> Provider tree read path</span><b>${escapeHtml(status)}</b></label><button type="button" class="rvm-mini-btn" data-rvm-provider-tree-apply-reload="true"${disabled}>Apply provider tree on reload</button>`;
 }
 
 function renderProviderDebug(root, detail = {}) {
@@ -54,11 +67,23 @@ function handleToggle(event) {
   const root = toggle.closest?.('[data-rvm-viewer]');
   if (!root?.dataset) return;
   const enabled = !!toggle.checked;
-  globalThis.__PCF_GLB_RVM_PROVIDER_TREE_READ_PATH__ = enabled;
-  root.dataset.rvmProviderTreeReadPath = enabled ? 'enabled' : 'disabled';
-  root.dataset.rvmProviderTreeReadPathDebugToggle = RVM_HIERARCHY_PROVIDER_DEBUG_VERSION;
+  applyProviderTreeOptIn(root, enabled);
   try { root.dispatchEvent(new CustomEvent('rvm-provider-tree-read-path-toggle', { bubbles: true, detail: { enabled, version: RVM_HIERARCHY_PROVIDER_DEBUG_VERSION } })); } catch (_) {}
   renderProviderDebug(root, {});
+}
+
+function handleApplyReload(event) {
+  const button = event.target?.closest?.('[data-rvm-provider-tree-apply-reload]');
+  if (!button) return;
+  const root = button.closest?.('[data-rvm-viewer]');
+  if (!root?.dataset || !providerTreeOptInEnabled(root)) return;
+  root.dataset.rvmProviderTreeReloadRequested = RVM_HIERARCHY_PROVIDER_DEBUG_VERSION;
+  try { root.dispatchEvent(new CustomEvent('rvm-provider-tree-read-path-reload-request', { bubbles: true, detail: { enabled: true, version: RVM_HIERARCHY_PROVIDER_DEBUG_VERSION } })); } catch (_) {}
+  try { location.reload(); } catch (_) {}
+}
+
+function restoreSessionOptIn(root) {
+  if (sessionOptInEnabled()) applyProviderTreeOptIn(root, true);
 }
 
 export function installRvmHierarchyProviderDebugBridge() {
@@ -68,9 +93,11 @@ export function installRvmHierarchyProviderDebugBridge() {
   const update = (event) => {
     const root = event.target?.closest?.('[data-rvm-viewer]') || event.target;
     if (!root?.querySelector) return;
+    restoreSessionOptIn(root);
     renderProviderDebug(root, event.detail || {});
   };
   document.addEventListener('change', handleToggle, true);
+  document.addEventListener('click', handleApplyReload, true);
   document.addEventListener('rvm-tree-rendered', update, true);
   document.addEventListener('rvm-hierarchy-provider-attached', update, true);
 }
