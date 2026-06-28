@@ -34,7 +34,7 @@ function fieldStats(text){
   const raw=String(text||'');
   const restraintTags=[...raw.matchAll(/<RESTRAINT\b[^>]*\sTAG\s*=\s*(?:"([^"]*)"|'([^']*)')[^>]*>/gi)].map((m)=>clean(m[1]||m[2]||''));
   const lines=[...raw.matchAll(/\sLINE_ID\s*=\s*(?:"([^"]*)"|'([^']*)')/gi)].map((m)=>clean(m[1]||m[2]||''));
-  return Object.freeze({lineIdCount:lines.filter(Boolean).length,fromNameCount:countMatches(raw,/\sFROM_NAME\s*=/gi),toNameCount:countMatches(raw,/\sTO_NAME\s*=/gi),restraintTagCount:restraintTags.filter(Boolean).length,blankRestraintTagCount:restraintTags.filter((v)=>!v).length,dtxrPsCount:countMatches(raw,/<DTXR_PS\b/i),dtxrPosCount:countMatches(raw,/<DTXR_POS\b/i)});
+  return Object.freeze({lineIdCount:lines.filter(Boolean).length,fromNameCount:countMatches(raw,/\sFROM_NAME\s*=/gi),toNameCount:countMatches(raw,/\sTO_NAME\s*=/gi),restraintTagCount:restraintTags.filter(Boolean).length,blankRestraintTagCount:restraintTags.filter((v)=>!v).length,dtxrPsCount:countMatches(raw,/<DTXR_PS\b/gi),dtxrPosCount:countMatches(raw,/<DTXR_POS\b/gi)});
 }
 export function createXmlCompareLoadIntake({name='',text='',profile='unknown'}={}){
   const source=String(text||'');const isJson=/^\s*[\[{]/.test(source);const records=isJson?jsonRecords(source):xmlElementRecords(source);const fields=fieldStats(source);
