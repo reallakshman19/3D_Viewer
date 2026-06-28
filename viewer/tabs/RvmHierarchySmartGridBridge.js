@@ -1,4 +1,4 @@
-const VERSION = '20260627-rvm-hierarchy-smart-grid-1';
+const VERSION = '20260628-rvm-hierarchy-adaptive-columns-1';
 const ROOT_SELECTOR = '[data-rvm-viewer]';
 const TREE_SELECTOR = '#rvm-tree';
 const INSTALL_KEY = '__PCF_GLB_RVM_HIERARCHY_SMART_GRID__';
@@ -39,6 +39,7 @@ function refreshAll(reason = 'manual') {
   for (const root of document.querySelectorAll?.(ROOT_SELECTOR) || []) {
     const tree = root.querySelector?.(TREE_SELECTOR);
     if (!tree) continue;
+    tree.dataset.rvmHierarchyAdaptiveColumns = VERSION;
     const result = normalizeTree(root, tree);
     total += result.rows;
     fallback += result.fallbacks;
@@ -130,24 +131,24 @@ function injectStyles() {
   }
   style.dataset.rvmHierarchySmartGrid = VERSION;
   style.textContent = `
-    [data-rvm-viewer] .rvm-left-panel{width:clamp(360px,30vw,560px);min-width:320px;max-width:min(620px,46vw);resize:horizontal;overflow:auto;scrollbar-gutter:stable;}
-    [data-rvm-viewer] #rvm-tree{box-sizing:border-box;max-width:100%;overflow-x:hidden;overflow-y:auto;padding:4px 6px 10px;}
+    [data-rvm-viewer] .rvm-left-panel{width:clamp(320px,30vw,620px);min-width:220px;max-width:min(620px,46vw);resize:horizontal;overflow:auto;scrollbar-gutter:stable;}
+    [data-rvm-viewer] #rvm-tree{box-sizing:border-box;width:100%;max-width:100%;overflow-x:hidden;overflow-y:auto;padding:4px 6px 10px;}
     [data-rvm-viewer] #rvm-tree, [data-rvm-viewer] #rvm-tree *{box-sizing:border-box;}
     [data-rvm-viewer] #rvm-tree li[data-node-id]{max-width:100%;min-width:0;overflow:visible;padding:1px 0;}
-    [data-rvm-viewer] #rvm-tree .rvm-navis-row{width:100%;min-width:0;display:grid;grid-template-columns:22px minmax(0,1fr) 34px 34px;gap:4px;align-items:center;padding-left:min(120px,calc(var(--rvm-navis-depth,0) * 12px));}
+    [data-rvm-viewer] #rvm-tree .rvm-navis-row{width:100%;min-width:0;display:grid;grid-template-columns:20px minmax(0,1fr) max-content max-content;gap:4px;align-items:center;padding-left:min(120px,calc(var(--rvm-navis-depth,0) * 12px));}
     [data-rvm-viewer] #rvm-tree .rvm-navis-expander{grid-column:1;width:20px;min-width:20px;height:20px;padding:0;display:grid;place-items:center;border-radius:4px;}
-    [data-rvm-viewer] #rvm-tree .rvm-navis-select{grid-column:2;min-width:0;width:100%;height:24px;display:grid;grid-template-columns:18px minmax(46px,max-content) minmax(0,1fr) minmax(24px,max-content);align-items:center;gap:5px;padding:2px 6px;border-radius:5px;text-align:left;overflow:hidden;}
+    [data-rvm-viewer] #rvm-tree .rvm-navis-select{grid-column:2;min-width:0;width:100%;height:24px;display:grid;grid-template-columns:16px minmax(38px,max-content) minmax(0,1fr) minmax(24px,max-content);align-items:center;gap:5px;padding:2px 6px;border-radius:5px;text-align:left;overflow:hidden;}
     [data-rvm-viewer] #rvm-tree .rvm-navis-icon{width:16px;min-width:16px;text-align:center;opacity:.9;}
-    [data-rvm-viewer] #rvm-tree .rvm-navis-select .rvm-kind{min-width:0;max-width:86px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:9px;color:#93c5fd;}
+    [data-rvm-viewer] #rvm-tree .rvm-navis-select .rvm-kind{min-width:0;max-width:clamp(36px,18%,90px);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:9px;color:#93c5fd;}
     [data-rvm-viewer] #rvm-tree .rvm-navis-label{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#dbeafe;}
-    [data-rvm-viewer] #rvm-tree .rvm-tree-count{justify-self:end;min-width:18px;max-width:56px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#bfdbfe;font-size:10px;text-align:right;}
-    [data-rvm-viewer] #rvm-tree .rvm-navis-branch-off,[data-rvm-viewer] #rvm-tree .rvm-navis-branch-on{width:32px;min-width:32px;height:22px;padding:0 3px;font-size:10px;border-radius:5px;}
+    [data-rvm-viewer] #rvm-tree .rvm-tree-count{justify-self:end;min-width:18px;max-width:52px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#bfdbfe;font-size:10px;text-align:right;}
+    [data-rvm-viewer] #rvm-tree .rvm-navis-branch-off,[data-rvm-viewer] #rvm-tree .rvm-navis-branch-on{width:auto;min-width:30px;max-width:42px;height:22px;padding:0 4px;font-size:10px;border-radius:5px;}
     [data-rvm-viewer] #rvm-tree .rvm-navis-branch-off{grid-column:3;}
     [data-rvm-viewer] #rvm-tree .rvm-navis-branch-on{grid-column:4;}
     [data-rvm-viewer] #rvm-tree .rvm-navis-children{width:100%;min-width:0;margin:2px 0 0 0;padding-left:0;border-left:0;}
-    [data-rvm-viewer] #rvm-tree .rvm-tree-node{width:100%;min-width:0;display:grid;grid-template-columns:minmax(46px,max-content) minmax(0,1fr) minmax(24px,max-content);gap:5px;align-items:center;overflow:hidden;}
+    [data-rvm-viewer] #rvm-tree .rvm-tree-node{width:100%;min-width:0;display:grid;grid-template-columns:minmax(38px,max-content) minmax(0,1fr) minmax(24px,max-content);gap:5px;align-items:center;overflow:hidden;}
     [data-rvm-viewer] #rvm-tree .rvm-tree-label,[data-rvm-viewer] #rvm-tree [data-rvm-tree-label]{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
     [data-rvm-viewer] #rvm-tree .rvm-navis-row.is-selected .rvm-navis-select,[data-rvm-viewer] #rvm-tree li.is-selected > .rvm-tree-node{outline:1px solid rgba(96,165,250,.95);border-color:rgba(96,165,250,.95);background:rgba(37,99,235,.30);box-shadow:inset 3px 0 0 rgba(96,165,250,.95);}
-    @media (max-width:1100px){[data-rvm-viewer] .rvm-left-panel{width:clamp(320px,36vw,500px);}[data-rvm-viewer] #rvm-tree .rvm-navis-row{grid-template-columns:20px minmax(0,1fr) 30px 30px;gap:3px;}[data-rvm-viewer] #rvm-tree .rvm-navis-select{grid-template-columns:16px minmax(36px,max-content) minmax(0,1fr) minmax(18px,max-content);gap:4px;padding:2px 4px;}[data-rvm-viewer] #rvm-tree .rvm-navis-branch-off,[data-rvm-viewer] #rvm-tree .rvm-navis-branch-on{width:29px;min-width:29px;font-size:9px;}}
+    @media (max-width:1100px){[data-rvm-viewer] .rvm-left-panel{width:clamp(280px,36vw,520px);}[data-rvm-viewer] #rvm-tree .rvm-navis-row{grid-template-columns:20px minmax(0,1fr) max-content max-content;gap:3px;}[data-rvm-viewer] #rvm-tree .rvm-navis-select{grid-template-columns:16px minmax(0,1fr) minmax(20px,max-content);gap:4px;padding:2px 4px;}[data-rvm-viewer] #rvm-tree .rvm-navis-select .rvm-kind{display:none;}[data-rvm-viewer] #rvm-tree .rvm-navis-branch-off,[data-rvm-viewer] #rvm-tree .rvm-navis-branch-on{min-width:29px;font-size:9px;}}
   `;
 }

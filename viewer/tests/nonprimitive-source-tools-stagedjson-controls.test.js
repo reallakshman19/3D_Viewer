@@ -91,10 +91,14 @@ assert.match(stagedJsonValidationBridge, /RvmStagedJsonSupportRuntimeGateBridge\
 assert.match(stagedJsonValidationBridge, /installRvmSourceToolsStagedJsonKindGateBridge\(\)/, 'stagedJSON validation bridge must install the Source Tools kind gate');
 assert.match(stagedJsonValidationBridge, /installRvmStagedJsonSupportRuntimeGateBridge\(\)/, 'stagedJSON validation bridge must install the support runtime gate');
 
-assert.match(leftBridge, /data-rvm-hierarchy-width-controls/, 'hierarchy panel must expose width controls');
-assert.match(leftBridge, /resize:both/, 'hierarchy tree must be horizontally and vertically resizable');
-assert.match(leftBridge, /setPanelWidth[\s\S]*root\?\.style\?\.setProperty\(variable, value\)[\s\S]*body\?\.style\?\.setProperty\(variable, value\)/, 'parent panel resize must write width variables to root and .rvm-body');
-assert.match(leftBridge, /--rvm-tree-kind-w/, 'hierarchy kind column width must be adjustable');
-assert.match(leftBridge, /--rvm-tree-count-w/, 'hierarchy count column width must be adjustable');
+assert.match(leftBridge, /20260628-rvm-adaptive-hierarchy-columns-1/, 'hierarchy panel must expose adaptive-column schema');
+assert.match(leftBridge, /removeHierarchyWidthControls/, 'hierarchy panel must remove stale width controls');
+assert.doesNotMatch(leftBridge, /<span>Tree W<\/span><input type="range"/, 'hierarchy panel must not expose Tree W range slider');
+assert.doesNotMatch(leftBridge, /data-rvm-hierarchy-width-field="kindWidth"/, 'hierarchy kind width must not be manually slider-adjusted');
+assert.doesNotMatch(leftBridge, /data-rvm-hierarchy-width-field="countWidth"/, 'hierarchy count width must not be manually slider-adjusted');
+assert.doesNotMatch(leftBridge, /resize:both/, 'hierarchy tree must not be horizontally width-resized by browser resize handle');
+assert.match(leftBridge, /width:100%!important/, 'hierarchy tree must fill the left panel adaptively');
+assert.match(leftBridge, /grid-template-columns:20px minmax\(0,1fr\) max-content max-content/, 'hierarchy columns must use adaptive CSS tracks');
+assert.match(leftBridge, /setPanelWidth[\s\S]*root\?\.style\?\.setProperty\(variable, value\)[\s\S]*body\?\.style\?\.setProperty\(variable, value\)/, 'parent panel resize must still write width variables to root and .rvm-body');
 
 console.log('nonprimitive source tools stagedJSON control regression passed');
