@@ -31,7 +31,7 @@ const STYLE_LINKS = Object.freeze([
   ['model-converters-tab-css', './tabs/model-converters-tab.css?v=20260624-button-scope-1'],
   ['model-converters-css-fix', './tabs/model-converters-css-fix.css?v=20260624-simple-rich-isolation-1'],
 ]);
-function ensureStylesheet(id, href) { const existing = document.getElementById(id); if (existing) { if (existing.getAttribute('href') !== href) existing.setAttribute('href'); return; } const link = document.createElement('link'); link.id = id; link.rel = 'stylesheet'; link.href = href; link.dataset.owner = 'model-converters-tab'; document.head.appendChild(link); }
+function ensureStylesheet(id, href) { const existing = document.getElementById(id); if (existing) { if (existing.getAttribute('href') !== href) existing.setAttribute('href', href); return; } const link = document.createElement('link'); link.id = id; link.rel = 'stylesheet'; link.href = href; link.dataset.owner = 'model-converters-tab'; document.head.appendChild(link); }
 function ensureModelConvertersStyles() { if (typeof document === 'undefined') return; for (const [id, href] of STYLE_LINKS) ensureStylesheet(id, href); }
 function markStylesReady(container) { if (!container) return; container.classList.add('model-converters-style-ready'); container.dataset.modelConvertersCss = '20260624-button-scope-1'; const root = container.querySelector?.('.model-converters-root'); if (root) root.dataset.modelConvertersCss = '20260624-button-scope-1'; }
 function installSafely(name, installer, container) { try { installer(container); } catch (error) { console.warn(`${TRACE_PREFIX} Optional installer failed: ${name}`, error); } }
