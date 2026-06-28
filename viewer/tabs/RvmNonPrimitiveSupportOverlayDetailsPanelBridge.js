@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { isRvmNonPrimitiveSourceKind, normalizeRvmSourceKind } from '../RvmSourceKindPolicy.js';
 import { RvmViewer3D } from '../rvm-viewer/RvmViewer3D.js?v=20260622-rvm-leaf-picking-2';
 import {
   buildSupportOverlayDetailsPanelState,
@@ -28,8 +29,6 @@ const PATCH_FLAG = Symbol.for('pcf-glb-rvm-non-primitive-support-details-panel-v
 const VIEWER_PATCH_FLAG = Symbol.for('pcf-glb-rvm-non-primitive-support-details-panel-viewer-v4');
 const PICKING_FLAG = Symbol.for('pcf-glb-rvm-non-primitive-support-details-picking-v4');
 const STYLE_FLAG = Symbol.for('pcf-glb-rvm-non-primitive-support-details-panel-style-v2');
-const SOURCE_KIND_RE = /^(json|jscon|inputxml|txt|source-preview|stagedjson)$/i;
-const PRIMITIVE_KIND_RE = /^(rvm|glb|gltf|rev)$/i;
 
 export function installRvmNonPrimitiveSupportOverlayDetailsPanelBridge() {
   if (globalThis[PATCH_FLAG]) return;
@@ -360,15 +359,12 @@ function emitDetailsSelection(viewer, state) {
 }
 
 function isNonPrimitiveKind(kind) {
-  const normalized = normalizeSourceKind(kind);
-  return SOURCE_KIND_RE.test(normalized) && !PRIMITIVE_KIND_RE.test(normalized);
+  return isRvmNonPrimitiveSourceKind(normalizeSourceKind(kind));
 }
 
 function normalizeSourceKind(value) {
-  const kind = String(value || '').trim().toLowerCase().replace(/^\./, '');
-  if (!kind || kind === 'aveva-json' || kind === 'source-preview') return 'json';
-  if (kind === 'xml' || kind === 'uxml') return 'inputxml';
-  if (kind === 'staged.json') return 'stagedjson';
+  const kind = normalizeRvmSourceKind(value);
+  if (!kind || kind === 'source-preview') return 'json';
   return kind;
 }
 

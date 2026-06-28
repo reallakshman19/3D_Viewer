@@ -88,7 +88,9 @@ assert.match(bridge, /supportOverlayDetails/);
 assert.match(bridge, /highlightSupportOverlayGlyph/);
 assert.match(bridge, /nonPrimitiveSupportOverlayHighlightState/);
 assert.match(bridge, /mode === 'source-preview' && isNonPrimitiveKind\(kind\)/);
-assert.match(bridge, /PRIMITIVE_KIND_RE[\s\S]*rvm\|glb\|gltf\|rev/);
+assert.match(bridge, /RvmSourceKindPolicy\.js/);
+assert.match(bridge, /isRvmNonPrimitiveSourceKind\(normalizeSourceKind\(kind\)\)/);
+assert.doesNotMatch(bridge, /SOURCE_KIND_RE|PRIMITIVE_KIND_RE/);
 assert.doesNotMatch(bridge, /RvmSupportSymbols|RvmSupportGeometryBridge|RvmRawSupportCylinderGuardBridge|Support Summary|SupportATT|SupportEngine/);
 assert.doesNotMatch(bridge, /selection\.select|selection\.pick|RvmSelectionAdapter/);
 

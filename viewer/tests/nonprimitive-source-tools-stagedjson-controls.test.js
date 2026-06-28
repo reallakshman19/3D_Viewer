@@ -46,8 +46,9 @@ assert.match(supportHardDisableBridge, /RvmSourceKindPolicy\.js/, 'support hard-
 assert.match(supportHardDisableBridge, /isRvmNonPrimitiveSourceKind\(normalizeSourceKind\(kind\)\)/, 'support hard-disable must use shared non-primitive gate');
 assert.doesNotMatch(supportHardDisableBridge, /SOURCE_KIND_RE|PRIMITIVE_KIND_RE/, 'support hard-disable must not keep local source-kind regex policy');
 for (const bridge of [supportDetailsBridge, supportHoverBridge]) {
-  assert.match(bridge, /SOURCE_KIND_RE = \/\^\(json\|jscon\|inputxml\|txt\|source-preview\|stagedjson\)\$\/i/, 'support UI bridge source-kind gate must accept stagedJSON');
-  assert.match(bridge, /kind === 'staged\.json'\) return 'stagedjson'/, 'support UI bridge must normalize staged.json source kind');
+  assert.match(bridge, /RvmSourceKindPolicy\.js/, 'support UI bridge source-kind gate must use shared source-kind helper');
+  assert.match(bridge, /isRvmNonPrimitiveSourceKind\(normalizeSourceKind\(kind\)\)/, 'support UI bridge must use shared non-primitive gate');
+  assert.doesNotMatch(bridge, /SOURCE_KIND_RE|PRIMITIVE_KIND_RE/, 'support UI bridge must not keep local source-kind regex policy');
 }
 
 assert.match(inputXmlBridge, /window\.__3D_RVM_VIEWER__/, 'InputXML source-tools bridge must fall back to current global RVM viewer');
