@@ -4,10 +4,26 @@
   align-items: center;
   justify-content: center;
   min-height: 28px;
+  max-width: 100%;
   box-sizing: border-box;
 }
 
 .v3d-xc-file small {
+  display: inline-block;
+  max-width: 118px;
+  margin-left: 6px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #cbd5e1;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0;
+  text-transform: none;
+  vertical-align: bottom;
+}
+
+.v3d-xc-file[data-v3d-xc-file-state="empty"] small {
   display: none;
 }
 
@@ -15,6 +31,10 @@
   border-color: rgba(74, 222, 128, 0.45);
   background: rgba(20, 83, 45, 0.22);
   color: #bbf7d0;
+}
+
+.v3d-xc-file.is-loaded small {
+  color: #dcfce7;
 }
 
 .v3d-xc-file.is-loaded::after {
@@ -67,6 +87,10 @@
 }
 
 @media (max-width: 760px) {
+  .v3d-xc-file small {
+    max-width: calc(100vw - 180px);
+  }
+
   .v3d-xc-status [data-v3d-xc-load-status] {
     width: 100%;
     text-align: left;
