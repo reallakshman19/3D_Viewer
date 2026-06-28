@@ -38,10 +38,14 @@ assert.match(supportBridge, /SourceAxisTransform\.js/, 'support overlay must imp
 assert.match(supportBridge, /axisBasis:\s*sourceAxisBasis3\(axisTransform\)/, 'support coordinate mapper must use selected source axis transform');
 assert.match(supportBridge, /transformSourcePipeSegments\(sourcePipeSegments, axisTransform\)/, 'support resolver pipe segments must use selected source axis transform');
 assert.match(supportBridge, /labelsVisible:\s*Boolean\(settings\.labels\)/, 'support overlay diagnostics must expose final label visibility');
-assert.match(supportBridge, /STAGED_JSON_SOURCE_RE = \/\\\.staged\\\.json\$\/i/, 'support overlay source policy must detect .staged.json before generic JSON');
-assert.match(supportBridge, /kind === 'stagedjson'/, 'support overlay source policy must accept stagedJSON sourceKind directly');
-assert.match(supportBridge, /normalizeSupportSourceKind/, 'support overlay source policy must normalize source kinds before gate checks');
-for (const bridge of [supportDetailsBridge, supportHoverBridge, supportHardDisableBridge]) {
+assert.match(supportBridge, /RvmSourceKindPolicy\.js/, 'support overlay source policy must use shared source-kind helper');
+assert.match(supportBridge, /sourceKindFromFileName\(fileName\)/, 'support overlay source policy must use shared filename detection');
+assert.match(supportBridge, /isRvmNonPrimitiveSourceKind\(kind\)/, 'support overlay source policy must use shared non-primitive gate');
+assert.doesNotMatch(supportBridge, /NON_PRIMITIVE_SOURCE_RE|STAGED_JSON_SOURCE_RE|normalizeSupportSourceKind/, 'support overlay must not keep local source-kind regex policy');
+assert.match(supportHardDisableBridge, /RvmSourceKindPolicy\.js/, 'support hard-disable source policy must use shared source-kind helper');
+assert.match(supportHardDisableBridge, /isRvmNonPrimitiveSourceKind\(normalizeSourceKind\(kind\)\)/, 'support hard-disable must use shared non-primitive gate');
+assert.doesNotMatch(supportHardDisableBridge, /SOURCE_KIND_RE|PRIMITIVE_KIND_RE/, 'support hard-disable must not keep local source-kind regex policy');
+for (const bridge of [supportDetailsBridge, supportHoverBridge]) {
   assert.match(bridge, /SOURCE_KIND_RE = \/\^\(json\|jscon\|inputxml\|txt\|source-preview\|stagedjson\)\$\/i/, 'support UI bridge source-kind gate must accept stagedJSON');
   assert.match(bridge, /kind === 'staged\.json'\) return 'stagedjson'/, 'support UI bridge must normalize staged.json source kind');
 }
