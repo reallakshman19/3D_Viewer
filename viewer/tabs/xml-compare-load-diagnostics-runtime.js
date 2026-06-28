@@ -3,6 +3,7 @@ const MAX_ROWS = 80;
 const state = {
   seq: 0,
   rows: [],
+  lastRenderedHtml: '',
 };
 
 function timeStamp() {
@@ -63,8 +64,18 @@ function ensurePanel() {
     const status = root.querySelector('.xml-compare-status');
     if (status?.parentElement) status.insertAdjacentElement('afterend', panel);
     else root.insertAdjacentElement('afterbegin', panel);
+    state.lastRenderedHtml = '';
   }
   return panel;
+}
+
+function diagnosticsRowsHtml() {
+  return state.rows.slice(-MAX_ROWS).map((row) => {
+    const detail = Object.entries(row.detail || {})
+      .map(([key, value]) => `${key}=${safeText(typeof value === 'object' ? JSON.stringify(value) : value)}`)
+      .join(' ');
+    return `<div class="xml-compare-load-diagnostics-row"><code>${safeText(row.time)}</code><b>${safeText(row.event)}</b><span>${detail}</span></div>`;
+  }).join('');
 }
 
 function renderPanel() {
@@ -72,12 +83,10 @@ function renderPanel() {
   if (!panel) return;
   const rows = panel.querySelector('[data-xml-compare-load-diagnostics-rows]');
   if (!rows) return;
-  rows.innerHTML = state.rows.slice(-MAX_ROWS).map((row) => {
-    const detail = Object.entries(row.detail || {})
-      .map(([key, value]) => `${key}=${safeText(typeof value === 'object' ? JSON.stringify(value) : value)}`)
-      .join(' ');
-    return `<div class="xml-compare-load-diagnostics-row"><code>${safeText(row.time)}</code><b>${safeText(row.event)}</b><span>${detail}</span></div>`;
-  }).join('');
+  const html = diagnosticsRowsHtml();
+  if (html === state.lastRenderedHtml) return;
+  state.lastRenderedHtml = html;
+  rows.innerHTML = html;
 }
 
 function log(event, detail = {}, level = 'log') {
@@ -153,10 +162,6 @@ function install() {
     if (!input) return;
     inspectSelectedFile(input, 'file-input-input');
   }, true);
-  const observer = new MutationObserver(() => {
-    if (document.querySelector('.xml-compare-tab')) renderPanel();
-  });
-  observer.observe(document.documentElement, { childList: true, subtree: true });
 }
 
 install();
