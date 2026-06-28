@@ -8,11 +8,11 @@ import {
   sourceToolsDiagnosticsFileName,
 } from '../overlays/source-tools/NonPrimitiveSourceToolsDiagnostics.js';
 
-export const RVM_NON_PRIMITIVE_SOURCE_TOOLS_UI_SCHEMA = 'rvm-non-primitive-source-tools-ui/v8';
+export const RVM_NON_PRIMITIVE_SOURCE_TOOLS_UI_SCHEMA = 'rvm-non-primitive-source-tools-ui/v9-dashboard';
 
-const PATCH_FLAG = Symbol.for('pcf-glb-rvm-non-primitive-source-tools-ui-v8');
-const VIEWER_PATCH_FLAG = Symbol.for('pcf-glb-rvm-non-primitive-source-tools-ui-viewer-v8');
-const STYLE_FLAG = Symbol.for('pcf-glb-rvm-non-primitive-source-tools-ui-style-v8');
+const PATCH_FLAG = Symbol.for('pcf-glb-rvm-non-primitive-source-tools-ui-v9-dashboard');
+const VIEWER_PATCH_FLAG = Symbol.for('pcf-glb-rvm-non-primitive-source-tools-ui-viewer-v9-dashboard');
+const STYLE_FLAG = Symbol.for('pcf-glb-rvm-non-primitive-source-tools-ui-style-v9-dashboard');
 const ROOT_SELECTOR = '[data-rvm-viewer]';
 const PANEL_ID = 'rvm-nonprimitive-source-tools-panel';
 const SUPPORT_FILTER_FAMILIES = Object.freeze(['REST', 'GUIDE', 'LINESTOP', 'LIMIT', 'LIM', 'HOLDDOWN', 'SPRING_CAN', 'UNKNOWN']);
@@ -49,28 +49,25 @@ function installSourceToolsStyles() {
   const doc = globalThis.document;
   if (!doc?.createElement) return;
   const style = doc.createElement('style');
-  style.dataset.rvmNonPrimitiveSourceToolsStyle = 'v8';
+  style.dataset.rvmNonPrimitiveSourceToolsStyle = 'v9-dashboard';
   style.textContent = `
-    .rvm-source-tools-panel{flex:0 0 auto;max-height:min(52vh,620px);padding:7px;border-bottom:1px solid var(--geo-border,#333);background:rgba(16,22,31,.86);overflow:auto;}
-    .rvm-source-tools-grid--grouped{display:grid;grid-template-columns:1fr;gap:8px;min-width:0;}
-    .rvm-source-tools-group{display:grid;grid-template-columns:minmax(0,1fr);gap:5px;padding:7px;border:1px solid rgba(116,139,171,.26);border-radius:8px;background:rgba(27,34,45,.72);min-width:0;}
-    .rvm-source-tools-group-title,.rvm-source-tools-row,.rvm-source-tools-actions,.rvm-source-tools-filters{display:flex;align-items:center;gap:6px;min-width:0;}
-    .rvm-source-tools-group-title{justify-content:space-between;color:#d9e7ff;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.055em;}
+    .rvm-source-tools-panel{flex:0 0 auto;max-height:min(54vh,640px);padding:7px;border-bottom:1px solid var(--geo-border,#333);background:rgba(16,22,31,.86);overflow:auto;}
+    .rvm-source-tools-grid--dashboard{display:grid;grid-template-columns:1fr;gap:8px;min-width:0;}
+    .rvm-source-tools-dashboard-strip{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;}
+    .rvm-source-tools-tile{display:grid;gap:2px;min-width:0;padding:7px 6px;border:1px solid rgba(126,190,255,.15);border-radius:9px;background:linear-gradient(180deg,rgba(59,130,246,.10),rgba(255,255,255,.024));text-align:left;}
+    .rvm-source-tools-tile b{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#edf6ff;font-size:13px;line-height:1.05;}.rvm-source-tools-tile small{color:#8fa5c7;font-size:8.5px;text-transform:uppercase;letter-spacing:.05em;}
+    .rvm-source-tools-group{display:grid;grid-template-columns:minmax(0,1fr);gap:6px;padding:7px;border:1px solid rgba(116,139,171,.26);border-radius:10px;background:rgba(27,34,45,.72);min-width:0;}
+    .rvm-source-tools-group[data-state="on"]{border-color:rgba(34,197,94,.34);background:linear-gradient(180deg,rgba(22,101,52,.18),rgba(27,34,45,.72));}.rvm-source-tools-group[data-state="warn"]{border-color:rgba(226,153,74,.48);background:linear-gradient(180deg,rgba(226,153,74,.12),rgba(27,34,45,.72));}
+    .rvm-source-tools-group-title,.rvm-source-tools-row,.rvm-source-tools-actions,.rvm-source-tools-filters,.rvm-source-tools-switch-row{display:flex;align-items:center;gap:6px;min-width:0;}
+    .rvm-source-tools-group-title{justify-content:space-between;color:#d9e7ff;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.055em;}.rvm-source-tools-group-title span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
     .rvm-source-tools-subtitle{color:#8fa5c7;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;}
-    .rvm-source-tools-row{justify-content:space-between;min-height:22px;color:#a9b9d4;font-size:11px;}
-    .rvm-source-tools-row select,.rvm-source-tools-row input[type=range]{min-width:92px;max-width:130px;}
-    .rvm-source-tools-axis-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:5px;}
-    .rvm-source-tools-axis-grid .rvm-source-tools-row{gap:4px;}
-    .rvm-source-tools-badge{min-width:44px;padding:2px 6px;border-radius:999px;border:1px solid rgba(126,182,246,.38);color:#d9e7ff;background:rgba(74,158,255,.14);font-size:10px;text-align:center;text-transform:none;letter-spacing:0;}
-    .rvm-source-tools-badge.is-warn{border-color:rgba(226,153,74,.66);color:#ffd59a;background:rgba(226,153,74,.16);}
-    .rvm-source-tools-diag{color:#91a1ba;font-size:10.5px;line-height:1.35;}
-    .rvm-source-tools-filters{align-items:flex-start;flex-wrap:wrap;padding-top:2px;}
-    .rvm-source-tools-filters>span{flex:0 0 100%;color:#8fa5c7;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;}
-    .rvm-source-tools-chip{display:inline-flex;align-items:center;gap:3px;padding:2px 5px;border:1px solid rgba(116,139,171,.28);border-radius:999px;background:rgba(22,29,39,.86);color:#b8c8e4;font-size:10px;white-space:nowrap;}
-    .rvm-source-tools-actions{align-items:flex-start;flex-wrap:wrap;padding:7px;border:1px solid rgba(116,139,171,.2);border-radius:8px;background:rgba(12,17,24,.7);}
-    .rvm-source-tools-actions button,.rvm-source-tools-group button{min-height:23px;padding:3px 7px;border:1px solid rgba(116,139,171,.34);border-radius:5px;background:rgba(35,44,58,.9);color:#d9e7ff;font-size:10.5px;cursor:pointer;}
-    .rvm-source-tools-actions [data-source-tool-diag=diagnostics-snapshot]{flex:1 1 100%;}
-    @media(max-width:1150px){.rvm-source-tools-panel{max-height:44vh}.rvm-source-tools-row,.rvm-source-tools-actions{align-items:flex-start;flex-direction:column}.rvm-source-tools-axis-grid{grid-template-columns:1fr;}}
+    .rvm-source-tools-row{justify-content:space-between;min-height:22px;color:#a9b9d4;font-size:11px;}.rvm-source-tools-switch-row{justify-content:space-between;padding:5px 6px;border:1px solid rgba(126,190,255,.12);border-radius:8px;background:rgba(15,23,42,.38);font-size:11px;color:#dbeafe;}
+    .rvm-source-tools-row select,.rvm-source-tools-row input[type=range]{min-width:92px;max-width:130px;}.rvm-source-tools-axis-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:5px;}.rvm-source-tools-axis-grid .rvm-source-tools-row{gap:4px;}
+    .rvm-source-tools-badge{min-width:44px;padding:2px 6px;border-radius:999px;border:1px solid rgba(126,182,246,.38);color:#d9e7ff;background:rgba(74,158,255,.14);font-size:10px;text-align:center;text-transform:none;letter-spacing:0;}.rvm-source-tools-badge.is-warn{border-color:rgba(226,153,74,.66);color:#ffd59a;background:rgba(226,153,74,.16);}.rvm-source-tools-badge.is-on{border-color:rgba(34,197,94,.48);color:#bbf7d0;background:rgba(22,101,52,.22);}
+    .rvm-source-tools-diag{color:#91a1ba;font-size:10.5px;line-height:1.35;}.rvm-source-tools-kpi-row{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:5px;}.rvm-source-tools-mini-kpi{display:flex;justify-content:space-between;gap:6px;padding:4px 6px;border:1px solid rgba(126,190,255,.1);border-radius:7px;background:rgba(255,255,255,.022);font-size:10px;color:#cbd5e1;}.rvm-source-tools-mini-kpi b{color:#edf6ff;}
+    .rvm-source-tools-filters{align-items:flex-start;flex-wrap:wrap;padding-top:2px;}.rvm-source-tools-filters>span{flex:0 0 100%;color:#8fa5c7;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;}.rvm-source-tools-chip{display:inline-flex;align-items:center;gap:3px;padding:2px 5px;border:1px solid rgba(116,139,171,.28);border-radius:999px;background:rgba(22,29,39,.86);color:#b8c8e4;font-size:10px;white-space:nowrap;}
+    .rvm-source-tools-actions{align-items:flex-start;flex-wrap:wrap;padding:7px;border:1px solid rgba(116,139,171,.2);border-radius:9px;background:rgba(12,17,24,.7);}.rvm-source-tools-actions button,.rvm-source-tools-group button{min-height:23px;padding:3px 7px;border:1px solid rgba(116,139,171,.34);border-radius:6px;background:rgba(35,44,58,.9);color:#d9e7ff;font-size:10.5px;cursor:pointer;}.rvm-source-tools-actions button.is-primary,.rvm-source-tools-group button.is-primary{border-color:rgba(147,197,253,.42);background:#15304f;}.rvm-source-tools-actions [data-source-tool-diag=diagnostics-snapshot]{flex:1 1 100%;}
+    @media(max-width:1150px){.rvm-source-tools-panel{max-height:44vh}.rvm-source-tools-dashboard-strip,.rvm-source-tools-kpi-row,.rvm-source-tools-axis-grid{grid-template-columns:1fr}.rvm-source-tools-row,.rvm-source-tools-actions{align-items:flex-start;flex-direction:column}}
   `;
   doc.head?.appendChild?.(style);
 }
@@ -136,6 +133,7 @@ export function renderSourceToolsUi(root, viewer = globalThis.__3D_RVM_VIEWER__)
   if (!shouldShow) return clearSourceToolsUi(panel, viewer, 'primitive-or-unsupported-source');
   panel.hidden = false;
   panel.dataset.sourceToolsActive = 'true';
+  panel.dataset.sourceToolsDashboard = 'v9';
   delete panel.dataset.sourceToolsCleared;
   panel.innerHTML = renderPanelHtml({ auto: readNonPrimitiveAutoBendSettings(), support: readNonPrimitiveSupportOverlaySettings(), viewer });
   bindPanel(root, panel, viewer);
@@ -192,6 +190,14 @@ function clearNonPrimitiveRuntime(viewer, reason = 'clear') {
   return { status: 'cleared', reason, auto, support };
 }
 
+function sourceTile(label, value, tone = '') {
+  return `<span class="rvm-source-tools-tile" data-source-tools-tile="${escapeHtml(label.toLowerCase())}" data-tone="${escapeHtml(tone)}"><b>${escapeHtml(value)}</b><small>${escapeHtml(label)}</small></span>`;
+}
+
+function miniKpi(label, value) {
+  return `<span class="rvm-source-tools-mini-kpi"><span>${escapeHtml(label)}</span><b>${escapeHtml(value)}</b></span>`;
+}
+
 function renderPanelHtml({ auto, support, viewer }) {
   const autoDiag = viewer?.nonPrimitiveAutoBendDiagnostics || {};
   const supportDiag = viewer?.nonPrimitiveSupportOverlayDiagnostics || {};
@@ -199,29 +205,43 @@ function renderPanelHtml({ auto, support, viewer }) {
   const supportWarningCount = Number(supportDiag.warningCount ?? supportDiag.warnings?.length ?? 0) || 0;
   const acceptedSupports = Number(supportDiag.acceptedSupports ?? supportDiag.sourceSupports ?? 0) || 0;
   const snapshot = buildSourceToolsDiagnosticsSnapshot(viewer);
+  const autoState = auto.enabled ? 'on' : 'off';
+  const supportState = supportWarningCount ? 'warn' : (support.enabled ? 'on' : 'off');
   return `
-    <div class="rvm-source-tools-grid rvm-source-tools-grid--grouped" data-source-tools-layout="grouped-v2" data-source-tools-schema="${escapeHtml(RVM_NON_PRIMITIVE_SOURCE_TOOLS_UI_SCHEMA)}">
-      <section class="rvm-source-tools-group" data-source-tools-group="inputxml-family">
-        <div class="rvm-source-tools-group-title"><span>InputXML Family</span><strong class="rvm-source-tools-badge" data-source-tool-badge="auto">${escapeHtml(autoDiag.status || 'idle')}</strong></div>
-        <label class="rvm-source-tools-row"><span>Auto Bend</span><input id="rvm-inputxml-auto-bend" type="checkbox" data-source-tool="auto-enabled" ${auto.enabled ? 'checked' : ''}></label>
-        <label class="rvm-source-tools-row"><span>Radius</span><select data-source-tool="auto-radius-mode"><option value="source-or-od" ${auto.radiusMode === 'source-or-od' ? 'selected' : ''}>Source / OD×${escapeHtml(auto.defaultRadiusFactor)}</option><option value="source-only" ${auto.radiusMode === 'source-only' ? 'selected' : ''}>Source only</option></select></label>
-        <label class="rvm-source-tools-row"><span>Bend diagnostics</span><input type="checkbox" data-source-tool="auto-diagnostics" ${auto.showDiagnostics ? 'checked' : ''}></label>
-        <div class="rvm-source-tools-diag" data-source-tool-diag="auto">Bends: ${escapeHtml(autoDiag.bendCount ?? 0)} · Trims: ${escapeHtml(autoDiag.trimCount ?? 0)}</div>
-        <div class="rvm-source-tools-subtitle">Axis</div>
+    <div class="rvm-source-tools-grid rvm-source-tools-grid--dashboard" data-source-tools-layout="dashboard-v3" data-source-tools-schema="${escapeHtml(RVM_NON_PRIMITIVE_SOURCE_TOOLS_UI_SCHEMA)}">
+      <div class="rvm-source-tools-dashboard-strip" data-source-tools-dashboard="true">
+        ${sourceTile('Auto Bend', auto.enabled ? 'On' : 'Off', autoState)}
+        ${sourceTile('Supports', support.enabled ? `${supportDiag.created ?? 0}/${acceptedSupports}` : 'Off', supportState)}
+        ${sourceTile('Warnings', supportWarningCount, supportWarningCount ? 'warn' : 'ok')}
+      </div>
+      <section class="rvm-source-tools-group" data-source-tools-group="auto-bend" data-state="${escapeHtml(autoState)}">
+        <div class="rvm-source-tools-group-title"><span>Auto Bend</span><strong class="rvm-source-tools-badge ${auto.enabled ? 'is-on' : ''}" data-source-tool-badge="auto">${escapeHtml(autoDiag.status || (auto.enabled ? 'enabled' : 'off'))}</strong></div>
+        <label class="rvm-source-tools-switch-row"><span>Enable bend preview</span><input id="rvm-inputxml-auto-bend" type="checkbox" data-source-tool="auto-enabled" ${auto.enabled ? 'checked' : ''}></label>
+        <label class="rvm-source-tools-row"><span>Radius mode</span><select data-source-tool="auto-radius-mode"><option value="source-or-od" ${auto.radiusMode === 'source-or-od' ? 'selected' : ''}>Source / OD×${escapeHtml(auto.defaultRadiusFactor)}</option><option value="source-only" ${auto.radiusMode === 'source-only' ? 'selected' : ''}>Source only</option></select></label>
+        <label class="rvm-source-tools-row"><span>Show bend diagnostics</span><input type="checkbox" data-source-tool="auto-diagnostics" ${auto.showDiagnostics ? 'checked' : ''}></label>
+        <div class="rvm-source-tools-kpi-row">
+          ${miniKpi('Bends', autoDiag.bendCount ?? 0)}
+          ${miniKpi('Trims', autoDiag.trimCount ?? 0)}
+        </div>
+        <div class="rvm-source-tools-subtitle">Axis transform</div>
         <div class="rvm-source-tools-axis-grid" data-source-tools-axis-grid="true">
           ${axisSelectHtml('rvm-inputxml-vertical-axis', axis.verticalAxis || 'Y', 'Vertical')}
           ${axisSelectHtml('rvm-inputxml-north-axis', axis.northAxis || 'X', 'North')}
         </div>
-        <div class="rvm-source-tools-row"><span data-rvm-inputxml-transform-status>Ready</span><button type="button" id="rvm-inputxml-apply-transform" data-source-tool-action="apply-axis">Apply</button></div>
+        <div class="rvm-source-tools-row"><span data-rvm-inputxml-transform-status>Ready</span><button class="is-primary" type="button" id="rvm-inputxml-apply-transform" data-source-tool-action="apply-axis">Apply axis</button></div>
       </section>
-      <section class="rvm-source-tools-group" data-source-tools-group="support-overlay">
-        <div class="rvm-source-tools-group-title"><span>Support Overlay</span><strong class="rvm-source-tools-badge ${supportWarningCount ? 'is-warn' : ''}" data-source-tool-badge="support">${escapeHtml(supportWarningCount)} warn</strong></div>
-        <label class="rvm-source-tools-row"><span>Symbol</span><input id="rvm-inputxml-support-symbols" type="checkbox" data-source-tool="support-enabled" ${support.enabled ? 'checked' : ''}></label>
-        <label class="rvm-source-tools-row"><span>Support scale</span><input id="rvm-inputxml-support-scale" type="range" min="0.2" max="10" step="0.1" value="${escapeHtml(support.scale)}" data-source-tool="support-scale"><strong data-source-tool-scale-value>${escapeHtml(formatScale(support.scale))}</strong></label>
-        <label class="rvm-source-tools-row"><span>Label</span><input id="rvm-inputxml-support-labels" type="checkbox" data-source-tool="support-labels" ${support.labels ? 'checked' : ''}></label>
+      <section class="rvm-source-tools-group" data-source-tools-group="support-overlay" data-state="${escapeHtml(supportState)}">
+        <div class="rvm-source-tools-group-title"><span>Support Overlay</span><strong class="rvm-source-tools-badge ${supportWarningCount ? 'is-warn' : (support.enabled ? 'is-on' : '')}" data-source-tool-badge="support">${escapeHtml(supportWarningCount)} warn</strong></div>
+        <label class="rvm-source-tools-switch-row"><span>Enable support symbols</span><input id="rvm-inputxml-support-symbols" type="checkbox" data-source-tool="support-enabled" ${support.enabled ? 'checked' : ''}></label>
+        <label class="rvm-source-tools-row"><span>Symbol scale</span><input id="rvm-inputxml-support-scale" type="range" min="0.2" max="10" step="0.1" value="${escapeHtml(support.scale)}" data-source-tool="support-scale"><strong data-source-tool-scale-value>${escapeHtml(formatScale(support.scale))}</strong></label>
+        <label class="rvm-source-tools-row"><span>Show labels</span><input id="rvm-inputxml-support-labels" type="checkbox" data-source-tool="support-labels" ${support.labels ? 'checked' : ''}></label>
         <label class="rvm-source-tools-row"><span>Warnings only</span><input type="checkbox" data-source-tool="support-warnings" ${support.warningsOnly ? 'checked' : ''}></label>
+        <div class="rvm-source-tools-kpi-row">
+          ${miniKpi('Created', supportDiag.created ?? 0)}
+          ${miniKpi('Filtered', supportDiag.filteredOut ?? 0)}
+        </div>
         <div class="rvm-source-tools-filters" data-source-tool-filters="support"><span>Family filters</span>${renderSupportFamilyFilters(support.filters)}</div>
-        <div class="rvm-source-tools-diag" data-source-tool-diag="support">Supports: ${escapeHtml(supportDiag.created ?? 0)}/${escapeHtml(acceptedSupports)} · Filtered: ${escapeHtml(supportDiag.filteredOut ?? 0)} · ${escapeHtml(supportDiag.status || 'idle')}</div>
+        <div class="rvm-source-tools-diag" data-source-tool-diag="support">Supports: ${escapeHtml(supportDiag.created ?? 0)}/${escapeHtml(acceptedSupports)} · ${escapeHtml(supportDiag.status || 'idle')}</div>
         ${renderSupportFilterSummary(supportDiag)}
         ${renderSupportWarnings(supportDiag.warnings)}
       </section>
