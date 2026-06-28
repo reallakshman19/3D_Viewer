@@ -5,8 +5,43 @@ import {
   sourceKindFromFileName,
 } from '../RvmSourceKindPolicy.js';
 
-export const RVM_FORMAT_POLICY_VERSION = '20260627-rvm-right-panel-format-policy-1';
-export const RVM_FORMAT_POLICY_SOURCE_EXTENSIONS = Object.freeze(['.stagedjson', '.staged.json', '.uxml.json']);
+export const RVM_FORMAT_POLICY_VERSION = '20260628-rvm-right-panel-core-policy-1';
+export const RVM_FORMAT_POLICY_SOURCE_EXTENSIONS = Object.freeze(['.stagedjson', '.staged.json', '.uxml.json', '.inputxml']);
+
+export const RVM_RIGHT_PANEL_SECTIONS = Object.freeze({
+  SELECTED_ENTITY: 'selected-entity',
+  SOURCE_TOOLS: 'source-tools',
+  SUPPORT_DETAILS: 'support-details',
+  NODE_MARKERS: 'node-markers',
+  STAGEDJSON_REVIEW: 'stagedjson-review',
+  NATIVE_DIAGNOSTICS: 'native-diagnostics',
+  BROWSER_DIAGNOSTICS: 'browser-diagnostics',
+});
+
+const SOURCE_PREVIEW_SECTIONS = Object.freeze([
+  RVM_RIGHT_PANEL_SECTIONS.SELECTED_ENTITY,
+  RVM_RIGHT_PANEL_SECTIONS.SOURCE_TOOLS,
+  RVM_RIGHT_PANEL_SECTIONS.SUPPORT_DETAILS,
+  RVM_RIGHT_PANEL_SECTIONS.NODE_MARKERS,
+  RVM_RIGHT_PANEL_SECTIONS.BROWSER_DIAGNOSTICS,
+]);
+
+const NATIVE_SECTIONS = Object.freeze([
+  RVM_RIGHT_PANEL_SECTIONS.SELECTED_ENTITY,
+  RVM_RIGHT_PANEL_SECTIONS.NATIVE_DIAGNOSTICS,
+  RVM_RIGHT_PANEL_SECTIONS.BROWSER_DIAGNOSTICS,
+]);
+
+const TXT_SECTIONS = Object.freeze([
+  RVM_RIGHT_PANEL_SECTIONS.SELECTED_ENTITY,
+  RVM_RIGHT_PANEL_SECTIONS.SOURCE_TOOLS,
+  RVM_RIGHT_PANEL_SECTIONS.BROWSER_DIAGNOSTICS,
+]);
+
+const UNKNOWN_SECTIONS = Object.freeze([
+  RVM_RIGHT_PANEL_SECTIONS.SELECTED_ENTITY,
+  RVM_RIGHT_PANEL_SECTIONS.BROWSER_DIAGNOSTICS,
+]);
 
 const BASE_SELECTION_POLICY = Object.freeze({
   showSelection: true,
@@ -15,30 +50,68 @@ const BASE_SELECTION_POLICY = Object.freeze({
   showSupportDetails: false,
   showNodeMarkers: false,
   showStagedJsonReview: false,
+  showBrowserDiagnostics: true,
+  sections: UNKNOWN_SECTIONS,
 });
 
+function buildPolicy(overrides = {}, sections = UNKNOWN_SECTIONS) {
+  const sectionSet = new Set(sections);
+  return Object.freeze({
+    ...BASE_SELECTION_POLICY,
+    ...overrides,
+    showSelection: sectionSet.has(RVM_RIGHT_PANEL_SECTIONS.SELECTED_ENTITY),
+    showNativeDiagnostics: sectionSet.has(RVM_RIGHT_PANEL_SECTIONS.NATIVE_DIAGNOSTICS),
+    showSourceTools: sectionSet.has(RVM_RIGHT_PANEL_SECTIONS.SOURCE_TOOLS),
+    showSupportDetails: sectionSet.has(RVM_RIGHT_PANEL_SECTIONS.SUPPORT_DETAILS),
+    showNodeMarkers: sectionSet.has(RVM_RIGHT_PANEL_SECTIONS.NODE_MARKERS),
+    showStagedJsonReview: sectionSet.has(RVM_RIGHT_PANEL_SECTIONS.STAGEDJSON_REVIEW),
+    showBrowserDiagnostics: sectionSet.has(RVM_RIGHT_PANEL_SECTIONS.BROWSER_DIAGNOSTICS),
+    sections: Object.freeze([...sections]),
+  });
+}
+
+const STAGEDJSON_SECTIONS = Object.freeze([
+  RVM_RIGHT_PANEL_SECTIONS.SELECTED_ENTITY,
+  RVM_RIGHT_PANEL_SECTIONS.SOURCE_TOOLS,
+  RVM_RIGHT_PANEL_SECTIONS.SUPPORT_DETAILS,
+  RVM_RIGHT_PANEL_SECTIONS.NODE_MARKERS,
+  RVM_RIGHT_PANEL_SECTIONS.STAGEDJSON_REVIEW,
+  RVM_RIGHT_PANEL_SECTIONS.BROWSER_DIAGNOSTICS,
+]);
+
 const POLICY_BY_KIND = Object.freeze({
-  rvm: Object.freeze({ ...BASE_SELECTION_POLICY, showNativeDiagnostics: true }),
-  rev: Object.freeze({ ...BASE_SELECTION_POLICY, showNativeDiagnostics: true }),
-  glb: Object.freeze({ ...BASE_SELECTION_POLICY, showNativeDiagnostics: true }),
-  gltf: Object.freeze({ ...BASE_SELECTION_POLICY, showNativeDiagnostics: true }),
-  json: Object.freeze({ ...BASE_SELECTION_POLICY, showSourceTools: true, showSupportDetails: true, showNodeMarkers: true }),
-  jscon: Object.freeze({ ...BASE_SELECTION_POLICY, showSourceTools: true, showSupportDetails: true, showNodeMarkers: true }),
-  inputxml: Object.freeze({ ...BASE_SELECTION_POLICY, showSourceTools: true, showSupportDetails: true, showNodeMarkers: true }),
-  txt: Object.freeze({ ...BASE_SELECTION_POLICY, showSourceTools: true, showSupportDetails: true, showNodeMarkers: true }),
-  'source-preview': Object.freeze({ ...BASE_SELECTION_POLICY, showSourceTools: true, showSupportDetails: true, showNodeMarkers: true }),
-  stagedjson: Object.freeze({ ...BASE_SELECTION_POLICY, showSourceTools: true, showSupportDetails: true, showNodeMarkers: true, showStagedJsonReview: true }),
-  unknown: BASE_SELECTION_POLICY,
+  rvm: buildPolicy({}, NATIVE_SECTIONS),
+  rev: buildPolicy({}, NATIVE_SECTIONS),
+  glb: buildPolicy({}, NATIVE_SECTIONS),
+  gltf: buildPolicy({}, NATIVE_SECTIONS),
+  json: buildPolicy({}, SOURCE_PREVIEW_SECTIONS),
+  jscon: buildPolicy({}, SOURCE_PREVIEW_SECTIONS),
+  inputxml: buildPolicy({}, SOURCE_PREVIEW_SECTIONS),
+  txt: buildPolicy({}, TXT_SECTIONS),
+  'source-preview': buildPolicy({}, SOURCE_PREVIEW_SECTIONS),
+  stagedjson: buildPolicy({}, STAGEDJSON_SECTIONS),
+  unknown: buildPolicy({}, UNKNOWN_SECTIONS),
 });
 
 export { normalizeRvmSourceKind, sourceKindFromFileName, isRvmPrimitiveSourceKind, isRvmSourcePreviewKind };
 
+export function getRvmRightPanelSections(policy = {}) {
+  return Array.isArray(policy.sections) ? policy.sections : [];
+}
+
+export function hasRvmRightPanelSection(policy = {}, section = '') {
+  return getRvmRightPanelSections(policy).includes(section);
+}
+
 export function getRvmRightPanelPolicy(kind, primitiveMode = '') {
   const sourceKind = normalizeRvmSourceKind(kind || 'unknown');
-  const base = POLICY_BY_KIND[sourceKind] || POLICY_BY_KIND.unknown;
-  if (String(primitiveMode || '').toLowerCase() === 'source-preview' && isRvmSourcePreviewKind(sourceKind)) return base;
+  const mode = String(primitiveMode || '').toLowerCase();
   if (isRvmPrimitiveSourceKind(sourceKind)) return POLICY_BY_KIND[sourceKind] || POLICY_BY_KIND.unknown;
-  return base;
+  if (isRvmSourcePreviewKind(sourceKind)) {
+    if (mode === 'source-preview') return POLICY_BY_KIND[sourceKind] || POLICY_BY_KIND.unknown;
+    return POLICY_BY_KIND.unknown;
+  }
+  return POLICY_BY_KIND[sourceKind] || POLICY_BY_KIND.unknown;
 }
 
 export function resolveRvmFormatContext({ root = null, viewer = globalThis.__3D_RVM_VIEWER__ } = {}) {
@@ -68,6 +141,7 @@ export function resolveRvmFormatContext({ root = null, viewer = globalThis.__3D_
   const source = userData.__rvmNonPrimitiveAutoBendSourceHierarchy || userData.__rvmNonPrimitiveSourceHierarchy || null;
   const supportSource = userData.__rvmNonPrimitiveSourceHierarchy || source;
   const policy = getRvmRightPanelPolicy(detectedKind, primitiveMode);
+  const sections = getRvmRightPanelSections(policy);
   return {
     root: activeRoot,
     viewer,
@@ -79,6 +153,7 @@ export function resolveRvmFormatContext({ root = null, viewer = globalThis.__3D_
     source,
     supportSource,
     policy,
+    sections,
     isPrimitive: isRvmPrimitiveSourceKind(detectedKind),
     isSourcePreview: primitiveMode === 'source-preview' && isRvmSourcePreviewKind(detectedKind),
     version: RVM_FORMAT_POLICY_VERSION,
