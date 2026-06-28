@@ -1,0 +1,10 @@
+import { renderXmlCompareCanvasToolbarHtml } from './XmlCompareCanvasToolbar.js';
+import { createXmlCompareFitCommand } from './XmlCompareFitController.js';
+import { renderXmlCompareHoverCardHtml } from './XmlCompareHoverInspector.js';
+export const XML_COMPARE_CANVAS_HOST_SCHEMA='xml-compare-canvas-host/v1';
+const esc=(v)=>String(v??'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll("'",'&#039;');
+function metric(label,value){return `<div><b>${esc(label)}</b><span>${esc(value)}</span></div>`;}
+function firstRecord(data={}){return data.selectedRecord||data.hoverRecord||data.records?.[0]||null;}
+export function createXmlCompareCanvasHostModel({side='source',title='',data={},navState=null}={}){const records=Array.isArray(data.records)?data.records:[];const fit=createXmlCompareFitCommand({side,records});return Object.freeze({schema:XML_COMPARE_CANVAS_HOST_SCHEMA,side,title:title||side,profile:data.profile||data.type||'',recordCount:Number(data.summary?.nodeCount??data.componentCount??records.length??0),activeMode:navState?.mode||'select',fitOk:fit.ok,fitCount:fit.bounds?.count||0,hoverRecord:firstRecord(data),bounds:fit.bounds});}
+export function renderXmlCompareCanvasHostHtml(input={}){const model=createXmlCompareCanvasHostModel(input);return `<section class="xml-compare-canvas-host" data-xml-compare-canvas-host="${esc(model.side)}"><header><b>${esc(model.title)}</b><span>${esc(model.profile||'not indexed')}</span></header>${renderXmlCompareCanvasToolbarHtml({side:model.side,activeMode:model.activeMode})}<div class="xml-compare-canvas-viewport" data-xml-compare-canvas-viewport="${esc(model.side)}"><div class="xml-compare-canvas-reticle">${esc(model.side.toUpperCase())}</div><div class="xml-compare-canvas-metrics">${metric('Records',model.recordCount)}${metric('Fit All',model.fitOk?'ready':'empty')}${metric('Fit points',model.fitCount)}</div></div>${renderXmlCompareHoverCardHtml(model.hoverRecord)}</section>`;}
+export const _test=Object.freeze({esc,firstRecord});
