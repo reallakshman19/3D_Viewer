@@ -8,9 +8,11 @@ on:
       - 'viewer/rvm-pcf-extract/**'
       - 'viewer/converters/xml-cii2019-core/**'
       - 'viewer/converters/inputxml-managed-stage/**'
+      - 'viewer/converters/inputxml-rvm/**'
       - 'viewer/rvm-viewer/RvmProgressiveModelRootPatch.js'
       - 'viewer/rvm/BrowserRvmRenderContractAdapter.js'
       - 'viewer/rvm/BrowserRvmRemainingPrimitiveRuntimePatch.js'
+      - 'viewer/rvm/RvmPrimitiveCapabilityRegistry.js'
       - 'viewer/tabs/RvmSupportSummaryBridge.js'
       - 'viewer/tabs/RvmSupportGeometryBridge.js'
       - 'viewer/tabs/RvmSupportAttMappingBridge.js'
@@ -60,6 +62,7 @@ on:
       - 'viewer/tests/rvm-pcf-*.test.js'
       - 'viewer/tests/rvm-viewer-ui-contract.test.js'
       - 'viewer/tests/rvm-right-panel-policy-matrix.test.js'
+      - 'viewer/tests/rvm-primitive-capability-registry.test.js'
       - 'viewer/tests/rvm-toolbar-more-tools.test.js'
       - 'viewer/tests/rvm-toolbar-overflow-audit.test.js'
       - 'viewer/tests/inputxml-direct-managed-stage.test.js'
@@ -113,6 +116,9 @@ jobs:
 
       - name: Verify RVM right panel policy matrix
         run: node viewer/tests/rvm-right-panel-policy-matrix.test.js
+
+      - name: Verify RVM primitive capability registry
+        run: node viewer/tests/rvm-primitive-capability-registry.test.js
 
       - name: Verify RVM More Tools overflow
         run: node viewer/tests/rvm-toolbar-more-tools.test.js
