@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 
-const VERSION = '20260627-rvm-format-neutral-fit-resize-1';
+const VERSION = '20260628-rvm-source-hierarchy-diagnostics-1';
 const INSTALL_FLAG = Symbol.for('pcf-glb-rvm-format-neutral-exact-selection-1');
 const NAVIS_CONTROL_SELECTOR = '[data-rvm-navis-toggle],[data-rvm-navis-off],[data-rvm-navis-on],[data-rvm-navis-select],.rvm-navis-row';
 const EXACT_SELECTION_SOURCE_KINDS = new Set(['stagedjson', 'uxml', 'json', 'jscon', 'txt', 'source-preview', 'inputxml']);
@@ -108,15 +108,20 @@ function fitObjects(viewer, objects) {
   try { if (box && !box.isEmpty()) viewer?._fitBox?.(box); else viewer?.fitSelection?.(); } catch (_) { try { viewer?.fitSelection?.(); } catch (__) {} }
   requestAnimationFrame(() => { forceViewerResize(viewer); try { if (box && !box.isEmpty()) viewer?._fitBox?.(box); } catch (_) {} });
 }
-function updatePanel(root, node, row, matches, scopeCount, note = '') {
+function renderObjectIdFor(obj) { return norm(obj?.userData?.renderObjectId || obj?.userData?.leafRenderObjectId || obj?.userData?.name || obj?.name || obj?.uuid); }
+function updatePanel(root, node, row, matches, scopeCount, note = '', ids = []) {
   const panel = root?.querySelector?.('#rvm-attributes-panel');
   if (!panel) return;
   const attrs = node?.attributes || {};
+  const matchedRenderIds = matches.map(renderObjectIdFor).filter(Boolean);
+  const diagnostic = { sourceKind: sourceKind(root), nodeId: rowId(row), scopeNodeCount: scopeCount || 1, candidateIdCount: ids.length, matchedRenderIds, matchCount: matchedRenderIds.length };
+  root.__rvmSourceHierarchySelectionDiagnostics = diagnostic;
   const rows = [['Node', rowId(row)], ['Label', rowLabel(row)], ['Kind', node?.kind || node?.type || attrs.TYPE || '-'], ['Hierarchy scope nodes', String(scopeCount || 1)], ['Exact render matches', String(matches.length)], ['Selection mode', note || 'exact source node ids']];
+  const diagnosticRows = [['Source kind', diagnostic.sourceKind || '-'], ['Candidate IDs', String(diagnostic.candidateIdCount)], ['Matched render IDs', matchedRenderIds.slice(0, 6).join(', ') || '-'], ['Mapping status', matchedRenderIds.length ? 'Render object match found' : 'No render object match for this source row']];
   const attrRows = Object.entries(attrs).slice(0, 18);
   const esc = (value) => String(value ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   const line = ([k, v]) => `<div class="rvm-browser-diag-row"><span>${esc(k)}</span><b>${esc(v === undefined || v === null || v === '' ? '-' : v)}</b></div>`;
-  panel.innerHTML = `<div class="rvm-tree-selection-card"><div class="rvm-tree-selection-title">Source hierarchy selection</div><div class="rvm-browser-diag-grid">${rows.map(line).join('')}</div><div class="rvm-tree-selection-title">Attributes</div><div class="rvm-browser-diag-grid">${attrRows.length ? attrRows.map(line).join('') : line(['Attributes', 'No source attributes'])}</div></div>`;
+  panel.innerHTML = `<div class="rvm-tree-selection-card" data-rvm-source-hierarchy-diagnostics="true"><div class="rvm-tree-selection-title">Source hierarchy selection</div><div class="rvm-browser-diag-grid">${rows.map(line).join('')}</div><div class="rvm-tree-selection-title">Source diagnostics</div><div class="rvm-browser-diag-grid">${diagnosticRows.map(line).join('')}</div><div class="rvm-tree-selection-title">Attributes</div><div class="rvm-browser-diag-grid">${attrRows.length ? attrRows.map(line).join('') : line(['Attributes', 'No source attributes'])}</div></div>`;
 }
 function setStatus(root, text) { const status = root?.querySelector?.('#rvm-sb-msg'); if (status) status.textContent = text; }
 function markSelected(root, row) { root?.querySelectorAll?.('#rvm-tree li.is-selected, #rvm-tree li.is-canvas-selected').forEach((entry) => entry.classList.remove('is-selected', 'is-canvas-selected')); row?.classList?.add('is-selected'); }
@@ -132,12 +137,12 @@ function selectRow(root, row, event) {
   markSelected(root, row);
   try { viewer?.selection?.clearSelection?.(); } catch (_) {}
   if (viewer) viewer._rvmCanvasSelectedMeshes = matches;
-  const renderIds = matches.map((obj) => norm(obj?.userData?.renderObjectId || obj?.userData?.leafRenderObjectId || obj?.userData?.name || obj?.name || obj?.uuid)).filter(Boolean);
+  const renderIds = matches.map(renderObjectIdFor).filter(Boolean);
   try { if (renderIds.length) viewer?.selection?.selectCanonicalIds?.(renderIds, { additive: false }); } catch (_) {}
   fitObjects(viewer, matches);
-  updatePanel(root, node, row, matches, scopedNodes.length || 1, note);
+  updatePanel(root, node, row, matches, scopedNodes.length || 1, note, ids);
   setStatus(root, matches.length ? `Selected ${matches.length} exact object(s) for ${rowLabel(row) || rowId(row)}` : `Selected source row ${rowLabel(row) || rowId(row)}; no exact render object match`);
-  try { root.dispatchEvent(new CustomEvent('rvm-hierarchy-selection', { bubbles: true, detail: { nodeId: rowId(row), label: rowLabel(row), matches, scopeNodeCount: scopedNodes.length || 1, version: VERSION, exactSourceSelection: true } })); } catch (_) {}
+  try { root.dispatchEvent(new CustomEvent('rvm-hierarchy-selection', { bubbles: true, detail: { nodeId: rowId(row), label: rowLabel(row), matches, diagnostics: root.__rvmSourceHierarchySelectionDiagnostics, scopeNodeCount: scopedNodes.length || 1, version: VERSION, exactSourceSelection: true } })); } catch (_) {}
 }
 function onPointer(event) { const root = event.target?.closest?.('[data-rvm-viewer]'); if (!isFormatNeutralSourceTree(root)) return; if (event.target?.closest?.(NAVIS_CONTROL_SELECTOR)) return; const row = event.target?.closest?.('#rvm-tree li[data-node-id]'); if (!row || !root.contains(row)) return; selectRow(root, row, event); }
 function onKey(event) { if (event.key !== 'Enter' && event.key !== ' ') return; onPointer(event); }
