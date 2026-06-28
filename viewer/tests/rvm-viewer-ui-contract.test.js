@@ -19,6 +19,7 @@ const deferredLoader = read('tabs/RvmDeferredBridgeLoader.js');
 const rightPanelPolicy = read('tabs/RvmFormatPolicy.js');
 const rightPanelBridge = read('tabs/RvmRightPanelFormatPolicyBridge.js');
 const sourceToolsUi = read('tabs/RvmNonPrimitiveSourceToolsUiBridge.js');
+const selectionDetails = read('tabs/RvmSelectionDetailsInspectorBridge.js');
 const formatNeutral = read('tabs/RvmFormatNeutralHierarchy.js');
 const toolbar = read('tabs/RvmToolbarCompactBridge.js');
 const sourceInput = read('tabs/RvmSourceFormatInputBridge.js');
@@ -37,6 +38,7 @@ assert.deepEqual([...new Set(rvmViewerImports)], [`RvmViewer3D.js?v=${key}`], 'r
 
 assert.ok(renderer.includes('viewer3d-rvm-tab.js?v=20260628-rvm-tab-startup-selection-fix-1'), 'renderer must import current mounted RVM tab key');
 assert.ok(renderer.includes('RvmDeferredBridgeLoader.js?v=20260628-rvm-deferred-source-tools-dashboard-1'), 'renderer must import Source Tools dashboard deferred loader key');
+assert.ok(renderer.includes('RvmSelectionDetailsInspectorBridge.js?v=20260628-rvm-selected-entity-ui-v2-1'), 'renderer must import selected entity UI v2 key');
 assert.ok(!renderer.includes('RvmModelHealthBridge.js?v='), 'renderer must not eagerly import model health bridge');
 assert.ok(tab.includes('RvmFormatNeutralHierarchy.js?v=20260628-format-neutral-shared-kind-policy-1'), 'mounted RVM tab must import current format-neutral helper key');
 assert.ok(formatNeutral.includes('RvmSourceKindPolicy.js'), 'format-neutral helper must use shared source-kind policy');
@@ -60,6 +62,16 @@ assert.ok(sourceToolsUi.includes('data-source-tools-group="support-overlay"'), '
 assert.ok(sourceToolsUi.includes('data-state="${escapeHtml(autoState)}"'), 'Source Tools UI must expose active/inactive auto state');
 assert.ok(sourceToolsUi.includes('data-state="${escapeHtml(supportState)}"'), 'Source Tools UI must expose support state');
 assert.ok(sourceToolsUi.includes('Apply axis'), 'Source Tools UI must keep compact axis apply control');
+
+assert.ok(selectionDetails.includes('20260628-rvm-selected-entity-ui-v2-1'), 'selection details bridge must expose selected entity UI v2 version');
+assert.ok(selectionDetails.includes('Selected Entity'), 'selection details bridge must render selected entity title');
+assert.ok(selectionDetails.includes('data-rvm-selection-details-ui'), 'selection details bridge must stamp UI version');
+assert.ok(selectionDetails.includes('data-rvm-selection-source'), 'selection details bridge must expose canvas/hierarchy source marker');
+assert.ok(selectionDetails.includes('selectionSource(objects)'), 'selection details bridge must compute selection source');
+assert.ok(selectionDetails.includes('rvm-selection-kpi-strip'), 'selection details bridge must render KPI strip');
+assert.ok(selectionDetails.includes('data-rvm-selection-kpis'), 'selection details bridge must expose KPI marker');
+assert.ok(selectionDetails.includes('rvm-selection-empty-state'), 'selection details bridge must render improved empty state');
+assert.ok(selectionDetails.includes('previousVersion: PREVIOUS_VERSION'), 'selection details API must expose previous version');
 
 assert.ok(rightPanelPolicy.includes('RVM_RIGHT_PANEL_SECTIONS'), 'format policy must expose explicit right panel sections');
 assert.ok(rightPanelPolicy.includes('STAGEDJSON_REVIEW'), 'format policy must expose stagedJSON review section');
@@ -95,4 +107,4 @@ assert.ok(navisHierarchy.includes('shouldPreserveFormatNeutralTree'), 'Navis bri
 assert.ok(selectionSync.includes('rvm-tab-dispose'), 'hierarchy sync bridge must clean up on tab disposal');
 assert.ok(drawer.includes('root.insertBefore(drawer, statusbar)'), 'drawer must dock before status bar');
 
-console.log('Verified RVM viewer UI contract: current cache chain and Source Tools dashboard UI.');
+console.log('Verified RVM viewer UI contract: Source Tools dashboard and Selected Entity UI.');
