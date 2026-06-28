@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { isRvmNonPrimitiveSourceKind, normalizeRvmSourceKind } from '../RvmSourceKindPolicy.js';
 import { RvmViewer3D } from '../rvm-viewer/RvmViewer3D.js?v=20260622-rvm-leaf-picking-2';
 import {
   buildSupportOverlayHoverPreviewState,
@@ -18,8 +19,6 @@ const PATCH_FLAG = Symbol.for('pcf-glb-rvm-non-primitive-support-hover-v2');
 const VIEWER_PATCH_FLAG = Symbol.for('pcf-glb-rvm-non-primitive-support-hover-viewer-v2');
 const POINTER_FLAG = Symbol.for('pcf-glb-rvm-non-primitive-support-hover-pointer-v2');
 const STYLE_FLAG = Symbol.for('pcf-glb-rvm-non-primitive-support-hover-style-v2');
-const SOURCE_KIND_RE = /^(json|jscon|inputxml|txt|source-preview|stagedjson)$/i;
-const PRIMITIVE_KIND_RE = /^(rvm|glb|gltf|rev)$/i;
 const HOVER_THROTTLE_MS = 80;
 
 export function installRvmNonPrimitiveSupportOverlayHoverBridge() {
@@ -332,15 +331,12 @@ function findDetailsOwner(object, roots) {
 }
 
 function isNonPrimitiveKind(kind) {
-  const normalized = normalizeSourceKind(kind);
-  return SOURCE_KIND_RE.test(normalized) && !PRIMITIVE_KIND_RE.test(normalized);
+  return isRvmNonPrimitiveSourceKind(normalizeSourceKind(kind));
 }
 
 function normalizeSourceKind(value) {
-  const kind = String(value || '').trim().toLowerCase().replace(/^\./, '');
-  if (!kind || kind === 'aveva-json' || kind === 'source-preview') return 'json';
-  if (kind === 'xml' || kind === 'uxml') return 'inputxml';
-  if (kind === 'staged.json') return 'stagedjson';
+  const kind = normalizeRvmSourceKind(value);
+  if (!kind || kind === 'source-preview') return 'json';
   return kind;
 }
 
