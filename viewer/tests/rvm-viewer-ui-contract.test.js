@@ -35,7 +35,7 @@ assert.deepEqual([...new Set(rvmViewerImports)], [`RvmViewer3D.js?v=${key}`], 'r
 assert.ok(stagedExport.includes('SUPPORT_UNAVAILABLE_REASON'), 'staged export must have an unavailable reason');
 assert.ok(stagedValidation.includes('support-mode-unavailable-for-current-source'), 'staged validation must fail clearly when unavailable');
 assert.ok(renderer.includes('RvmToolbarCompactBridge.js?v=20260627-rvm-toolbar-scroll-misc-1'), 'renderer must import toolbar scroll/misc policy');
-assert.ok(renderer.includes('RvmDeferredBridgeLoader.js?v=20260627-rvm-deferred-toolbar-misc-1'), 'renderer must import current deferred loader key');
+assert.ok(renderer.includes('RvmDeferredBridgeLoader.js?v=20260628-rvm-deferred-source-tools-shared-kind-1'), 'renderer must import current deferred loader key');
 assert.ok(renderer.includes('RvmGroupedToolbarPointerBridge.js?v=20260627-rvm-grouped-toolbar-pointer-1'), 'renderer must import deterministic pointer bridge');
 assert.ok(renderer.includes('RvmHierarchySmartGridBridge.js?v=20260627-rvm-hierarchy-smart-grid-1'), 'renderer must import hierarchy smart grid bridge');
 assert.ok(!renderer.includes('RvmModelHealthBridge.js?v='), 'renderer must not eagerly import model health bridge');
@@ -62,8 +62,8 @@ assert.ok(toolbar.includes('menuRoot.hidden = !hasSections'), 'toolbar must hide
 assert.ok(toolbar.includes('hiddenEmptyMenus') && toolbar.includes('visibleSecondaryMenus'), 'toolbar diagnostics must expose hidden and visible grouped menus');
 assert.ok(!toolbar.includes('More tools</span>'), 'single generic More tools label must not return');
 assert.ok(!toolbar.includes('<details'), 'grouped menus must not depend on native details toggling');
-assert.ok(deferredLoader.includes('20260627-rvm-deferred-toolbar-misc-1'), 'deferred loader must expose toolbar misc key');
-assert.ok(deferredLoader.includes('20260625-rvm-deferred-source-preview-tools-1'), 'deferred loader must retain previous source-preview key');
+assert.ok(deferredLoader.includes('20260628-rvm-deferred-source-tools-shared-kind-1'), 'deferred loader must expose Source Tools shared-kind key');
+assert.ok(deferredLoader.includes('20260627-rvm-deferred-toolbar-misc-1'), 'deferred loader must retain previous toolbar misc key');
 assert.ok(deferredLoader.includes('RvmReportExportBridge.js?v=20260627-rvm-report-misc-compact-1'), 'deferred loader must import compact Report bridge');
 assert.ok(deferredLoader.includes('RvmModelHealthBridge.js?v=20260627-rvm-health-misc-compact-1'), 'deferred loader must import compact Health bridge');
 assert.ok(deferredLoader.includes('RvmModelHealthIssuesBridge.js?v=20260627-rvm-health-issues-misc-compact-1'), 'deferred loader must import compact Health issues bridge');
