@@ -1,9 +1,9 @@
-const VERSION = '20260628-rvm-deferred-source-tools-shared-kind-1';
-const PREVIOUS_VERSION = '20260627-rvm-deferred-toolbar-misc-1';
+import { isRvmSourcePreviewKind, normalizeRvmSourceKind } from '../RvmSourceKindPolicy.js';
+
+const VERSION = '20260628-rvm-deferred-shared-kind-policy-1';
+const PREVIOUS_VERSION = '20260628-rvm-deferred-source-tools-shared-kind-1';
 const API_KEY = '__PCF_GLB_RVM_BRIDGE_LOADER__';
 const ACTION_DIAGNOSTICS_KEY = '__PCF_GLB_RVM_ACTION_DIAGNOSTICS__';
-
-const SOURCE_PREVIEW_KIND_RE = /^(json|jscon|inputxml|uxml|txt|source-preview|stagedjson)$/i;
 
 const BRIDGE_GROUPS = Object.freeze({
   sourcePreview: [
@@ -167,12 +167,12 @@ function getSourcePreviewContext() {
   const sourceKind = normalizeSourceKind(root?.dataset?.rvmLoadedSourceKind || userData.__rvmNonPrimitiveSourceKind || userData.__rvmNonPrimitiveAutoBendSourceKind || viewer?.sourceKind || '');
   const source = userData.__rvmNonPrimitiveAutoBendSourceHierarchy || userData.__rvmNonPrimitiveSourceHierarchy || null;
   const supportSource = userData.__rvmNonPrimitiveSourceHierarchy || source;
-  const active = mode === 'source-preview' && SOURCE_PREVIEW_KIND_RE.test(sourceKind) && Boolean(source);
+  const active = mode === 'source-preview' && isRvmSourcePreviewKind(sourceKind) && Boolean(source);
   return { root, viewer, model, source, supportSource, sourceKind, fileName: userData.fileName || '', active, reason: active ? '' : `mode:${mode || '-'} kind:${sourceKind || '-'}` };
 }
 
 function normalizeSourceKind(value) {
-  return String(value || '').trim().toLowerCase();
+  return normalizeRvmSourceKind(value);
 }
 
 function refreshSourcePreviewRuntime(reason = 'source-preview-loaded') {
