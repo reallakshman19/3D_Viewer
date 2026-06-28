@@ -61,7 +61,7 @@ import { installBrowserRvmCivilFallbackPolicyBridge } from '../rvm/BrowserRvmCiv
 import { installBrowserRvmGeometricFallbackPolicyBridge } from '../rvm/BrowserRvmGeometricFallbackPolicyBridge.js?v=20260622-rvm-geometric-fallback-policy-1';
 import { installBrowserRvmPickDiagnosticsBridge } from '../rvm/BrowserRvmPickDiagnosticsBridge.js?v=20260622-rvm-debug-pick-1';
 import { installBrowserRvmDishTessellationRuntimePatch } from '../rvm/BrowserRvmDishTessellationRuntimePatch.js?v=20260620-rvm-support-assembly-dish-1';
-import { installBrowserRvmRemainingPrimitiveRuntimePatch } from '../rvm/BrowserRvmRemainingPrimitiveRuntimePatch.js?v=20260620-rvm-facetgroup-1';
+import { installBrowserRvmRemainingPrimitiveRuntimePatch } from '../rvm/BrowserRvmRemainingPrimitiveRuntimePatch.js?v=20260628-rvm-native-box-orient-1';
 import { installBrowserRvmTorusParityRuntimePatch } from '../rvm/BrowserRvmTorusParityRuntimePatch.js?v=20260622-rvm-native-torus-line-elbows-1';
 import { installBrowserRvmSnoutParityRuntimePatch } from '../rvm/BrowserRvmSnoutParityRuntimePatch.js?v=20260620-rvm-snout-parity-1';
 function installToolbarActionCompatibility(RvmViewerClass) { const proto = RvmViewerClass?.prototype; if (!proto || typeof proto.dispatchAction !== 'function' || typeof proto.handleToolbarAction === 'function') return; proto.handleToolbarAction = function handleRvmToolbarAction(action) { return this.dispatchAction(action); }; }
