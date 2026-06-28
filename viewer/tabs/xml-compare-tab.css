@@ -242,8 +242,91 @@
   opacity: 0.4;
 }
 
+.xml-compare-workspace-shell {
+  padding: 12px;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.18);
+  background: rgba(2, 6, 23, 0.24);
+}
+
+.xml-compare-workspace-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 180px minmax(0, 1fr);
+  gap: 10px;
+}
+
+.xml-compare-workspace-side,
+.xml-compare-connector-lane,
+.xml-compare-bottom-panel,
+.xml-compare-log-screen {
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  border-radius: 12px;
+  background: rgba(15, 23, 42, 0.72);
+  overflow: hidden;
+}
+
+.xml-compare-workspace-side header,
+.xml-compare-connector-lane header,
+.xml-compare-bottom-panel header,
+.xml-compare-log-screen header {
+  padding: 9px 11px;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.14);
+  color: #bfdbfe;
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.xml-compare-side-stage,
+.xml-compare-connector-lane div,
+.xml-compare-connector-lane small,
+.xml-compare-debug-grid,
+.xml-compare-log-screen-rows {
+  padding: 10px 12px;
+  color: #cbd5e1;
+  font-size: 12px;
+}
+
+.xml-compare-side-metrics,
+.xml-compare-debug-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  padding: 10px 12px;
+}
+
+.xml-compare-canvas-placeholder {
+  margin: 0 12px 12px;
+  min-height: 130px;
+  display: grid;
+  place-items: center;
+  border: 1px dashed rgba(96, 165, 250, 0.34);
+  border-radius: 10px;
+  color: #93c5fd;
+  background: rgba(30, 41, 59, 0.35);
+  font-size: 12px;
+}
+
+.xml-compare-bottom-tabs {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.xml-compare-log-row,
+.xml-compare-mini-table td,
+.xml-compare-debug-grid div,
+.xml-compare-side-metrics div {
+  padding: 6px 8px;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.1);
+  color: #dbeafe;
+  font-size: 11px;
+}
+
 @media (max-width: 1280px) {
-  .xml-compare-layout {
+  .xml-compare-layout,
+  .xml-compare-workspace-grid,
+  .xml-compare-bottom-tabs {
     grid-template-columns: 1fr;
   }
 }
