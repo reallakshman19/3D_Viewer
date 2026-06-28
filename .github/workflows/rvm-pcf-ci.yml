@@ -120,6 +120,9 @@ jobs:
       - name: Verify RVM primitive capability registry
         run: node viewer/tests/rvm-primitive-capability-registry.test.js
 
+      - name: Verify RVM writer decoder alignment
+        run: node viewer/tests/rvm-pcf-writer-decoder-alignment.test.js
+
       - name: Verify RVM More Tools overflow
         run: node viewer/tests/rvm-toolbar-more-tools.test.js
 
