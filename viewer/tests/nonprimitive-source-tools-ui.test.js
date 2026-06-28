@@ -7,24 +7,29 @@ const autoBridgeSource = await fs.readFile(new URL('../tabs/RvmNonPrimitiveAutoB
 const supportSettingsSource = await fs.readFile(new URL('../overlays/support/SupportOverlaySettings.js', import.meta.url), 'utf8');
 const inputXmlUiBridgeSource = await fs.readFile(new URL('../rvm-viewer/RvmInputXmlSupportGraphicsUiBridge.js', import.meta.url), 'utf8');
 
-assert.match(uiBridgeSource, /rvm-non-primitive-source-tools-ui\/v8/, 'source-tools UI exposes v8 schema marker');
-assert.match(uiBridgeSource, /dataset\.rvmNonPrimitiveSourceToolsStyle = 'v8'/, 'source-tools UI style injection is versioned');
+assert.match(uiBridgeSource, /rvm-non-primitive-source-tools-ui\/v9-dashboard/, 'source-tools UI exposes v9 dashboard schema marker');
+assert.match(uiBridgeSource, /dataset\.rvmNonPrimitiveSourceToolsStyle = 'v9-dashboard'/, 'source-tools UI style injection is dashboard-versioned');
 assert.match(uiBridgeSource, /RvmSourceKindPolicy\.js/, 'source-tools UI uses shared source-kind policy');
 assert.match(uiBridgeSource, /isRvmNonPrimitiveSourceKind\(normalizeSourceKind\(value\)\)/, 'source-tools UI gates through shared source-kind policy');
-assert.match(uiBridgeSource, /data-source-tools-layout="grouped-v2"/, 'source-tools UI renders grouped layout marker');
-assert.match(uiBridgeSource, /data-source-tools-group="inputxml-family"/, 'source-tools UI groups InputXML-family controls');
+assert.match(uiBridgeSource, /data-source-tools-layout="dashboard-v3"/, 'source-tools UI renders dashboard layout marker');
+assert.match(uiBridgeSource, /rvm-source-tools-dashboard-strip/, 'source-tools UI renders compact dashboard strip');
+assert.match(uiBridgeSource, /rvm-source-tools-tile/, 'source-tools UI renders dashboard status tiles');
+assert.match(uiBridgeSource, /data-source-tools-group="auto-bend"/, 'source-tools UI groups Auto Bend controls');
 assert.match(uiBridgeSource, /data-source-tools-group="support-overlay"/, 'source-tools UI groups support overlay controls');
+assert.match(uiBridgeSource, /data-state="\$\{escapeHtml\(autoState\)\}"/, 'source-tools UI exposes Auto Bend active/inactive state');
+assert.match(uiBridgeSource, /data-state="\$\{escapeHtml\(supportState\)\}"/, 'source-tools UI exposes Support Overlay active/warn state');
 assert.match(uiBridgeSource, /mode === 'source-preview' && isNonPrimitiveKind\(kind\)/, 'source-tools UI is gated by source-preview mode');
 assert.match(uiBridgeSource, /clearNonPrimitiveRuntime/, 'source-tools UI clears non-primitive overlay runtimes when leaving source-preview mode');
-assert.match(uiBridgeSource, /Auto Bend/, 'source-tools UI renders Auto Bend control');
-assert.match(uiBridgeSource, /Radius/, 'source-tools UI renders Auto Bend radius control');
-assert.match(uiBridgeSource, /Bend diagnostics/, 'source-tools UI renders bend diagnostics control');
+assert.match(uiBridgeSource, /Auto Bend/, 'source-tools UI renders Auto Bend group');
+assert.match(uiBridgeSource, /Radius mode/, 'source-tools UI renders Auto Bend radius control');
+assert.match(uiBridgeSource, /Show bend diagnostics/, 'source-tools UI renders bend diagnostics control');
 assert.match(uiBridgeSource, /axisSelectHtml\('rvm-inputxml-vertical-axis'/, 'source-tools UI renders InputXML vertical-axis selector in right panel');
 assert.match(uiBridgeSource, /axisSelectHtml\('rvm-inputxml-north-axis'/, 'source-tools UI renders InputXML north-axis selector in right panel');
 assert.match(uiBridgeSource, /id="rvm-inputxml-apply-transform"/, 'source-tools UI renders axis Apply action in right panel');
+assert.match(uiBridgeSource, /Apply axis/, 'source-tools UI renders compact axis Apply label');
 assert.match(uiBridgeSource, /Support Overlay/, 'source-tools UI renders Support Overlay group');
-assert.match(uiBridgeSource, /<span>Symbol<\/span>/, 'source-tools UI renders support symbol toggle');
-assert.match(uiBridgeSource, /<span>Label<\/span>/, 'source-tools UI renders support label toggle');
+assert.match(uiBridgeSource, /<span>Enable support symbols<\/span>/, 'source-tools UI renders support symbol toggle');
+assert.match(uiBridgeSource, /<span>Show labels<\/span>/, 'source-tools UI renders support label toggle');
 assert.match(uiBridgeSource, /data-source-tool="support-scale"/, 'source-tools UI renders support overlay scale control');
 assert.match(uiBridgeSource, /data-source-tool="support-filter"/, 'source-tools UI renders support family filter chips');
 assert.match(uiBridgeSource, /Copy diagnostics JSON/, 'source-tools UI exposes diagnostics copy action');
@@ -41,7 +46,8 @@ assert.match(inputXmlUiBridgeSource, /rvm-inputxml-source-tools-bridge\/v2/, 'In
 assert.doesNotMatch(inputXmlUiBridgeSource, /rvm-inputxml-graphics-controls|geo-top-ribbon/, 'InputXML compatibility bridge does not own top-ribbon UI');
 assert.doesNotMatch(inputXmlUiBridgeSource, /ensureResizeHandles|persistPanelWidths|panel\.style\.setProperty/, 'InputXML compatibility bridge does not own parent panel resizing');
 
-assert.match(deferredLoaderSource, /RvmNonPrimitiveSourceToolsUiBridge\.js\?v=20260628-rvm-source-tools-shared-kind-policy-1/, 'sourcePreview deferred loader imports source-tools UI bridge with shared policy cache key');
+assert.match(deferredLoaderSource, /RvmNonPrimitiveSourceToolsUiBridge\.js\?v=20260628-rvm-source-tools-dashboard-1/, 'sourcePreview deferred loader imports source-tools dashboard UI bridge cache key');
+assert.match(deferredLoaderSource, /RvmNonPrimitiveSourceToolsUiBridge\.js\?v=20260628-rvm-source-tools-shared-kind-policy-1/, 'sourcePreview deferred loader retains previous source-tools shared-policy cache key');
 assert.match(deferredLoaderSource, /installRvmNonPrimitiveSourceToolsUiBridge/, 'sourcePreview deferred loader installs source-tools UI bridge');
 
 assert.match(autoBridgeSource, /restoreVisualTrimmedSegments/, 'auto-bend bridge can restore visual trims for live UI toggles');
@@ -51,4 +57,4 @@ assert.match(supportSettingsSource, /labels/, 'support settings include labels k
 assert.match(supportSettingsSource, /scale/, 'support settings include scale key');
 assert.match(supportSettingsSource, /filters/, 'support settings include filters key');
 
-console.log('nonprimitive-source-tools-ui passed');
+console.log('nonprimitive-source-tools-ui dashboard passed');

@@ -1,7 +1,7 @@
 import { isRvmSourcePreviewKind, normalizeRvmSourceKind } from '../RvmSourceKindPolicy.js';
 
-const VERSION = '20260628-rvm-deferred-right-panel-ui-v2-1';
-const PREVIOUS_VERSION = '20260628-rvm-deferred-right-panel-layout-1';
+const VERSION = '20260628-rvm-deferred-source-tools-dashboard-1';
+const PREVIOUS_VERSION = '20260628-rvm-deferred-right-panel-ui-v2-1';
 const API_KEY = '__PCF_GLB_RVM_BRIDGE_LOADER__';
 const ACTION_DIAGNOSTICS_KEY = '__PCF_GLB_RVM_ACTION_DIAGNOSTICS__';
 
@@ -13,7 +13,7 @@ const BRIDGE_GROUPS = Object.freeze({
     { id: 'nonprimitive-support-hover', specifier: './RvmNonPrimitiveSupportOverlayHoverBridge.js?v=20260623-nonprimitive-support-hover-2', install: 'installRvmNonPrimitiveSupportOverlayHoverBridge' },
     { id: 'nonprimitive-auto-bend', specifier: './RvmNonPrimitiveAutoBendBridge.js?v=20260623-nonprimitive-auto-bend-preview-2', install: 'installRvmNonPrimitiveAutoBendBridge' },
     { id: 'nonprimitive-node-markers', specifier: './RvmNonPrimitiveNodeMarkerBridge.js?v=20260625-node-marker-deferred-1', install: 'installRvmNonPrimitiveNodeMarkerBridge' },
-    { id: 'nonprimitive-source-tools-ui', specifier: './RvmNonPrimitiveSourceToolsUiBridge.js?v=20260628-rvm-source-tools-shared-kind-policy-1', install: 'installRvmNonPrimitiveSourceToolsUiBridge' },
+    { id: 'nonprimitive-source-tools-ui', specifier: './RvmNonPrimitiveSourceToolsUiBridge.js?v=20260628-rvm-source-tools-dashboard-1', previousSpecifier: './RvmNonPrimitiveSourceToolsUiBridge.js?v=20260628-rvm-source-tools-shared-kind-policy-1', install: 'installRvmNonPrimitiveSourceToolsUiBridge' },
   ],
   postModel: [
     { id: 'stagedjson-export', specifier: './RvmStagedJsonExportBridge.js?v=20260624-rvm-stagedjson-support-policy-1', install: 'installRvmStagedJsonExportBridge' },

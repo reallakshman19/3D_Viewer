@@ -60,9 +60,11 @@ assert.doesNotMatch(inputXmlBridge, /ribbon\.insertBefore|geo-top-ribbon|rvm-rib
 assert.doesNotMatch(inputXmlBridge, /ensureResizeHandles|persistPanelWidths|panel\.style\.setProperty/, 'InputXML bridge must not own parent panel resizing');
 
 assert.match(inputXmlSetModelBridge, /__PCF_GLB_RVM_INPUTXML_SOURCE_TOOLS__/, 'setModel bridge reads InputXML options from source-tools API when available');
-assert.match(sourceToolsBridge, /rvm-non-primitive-source-tools-ui\/v8/, 'Source Tools UI schema must advance for shared source-kind policy');
+assert.match(sourceToolsBridge, /rvm-non-primitive-source-tools-ui\/v9-dashboard/, 'Source Tools UI schema must advance for dashboard layout');
 assert.match(sourceToolsBridge, /isRvmNonPrimitiveSourceKind\(normalizeSourceKind\(value\)\)/, 'Source Tools UI gate must use shared non-primitive policy');
-assert.match(sourceToolsBridge, /data-source-tools-group="inputxml-family"/, 'right Source Tools panel must contain InputXML family group');
+assert.match(sourceToolsBridge, /data-source-tools-layout="dashboard-v3"/, 'right Source Tools panel must use dashboard layout');
+assert.match(sourceToolsBridge, /rvm-source-tools-dashboard-strip/, 'right Source Tools panel must contain dashboard strip');
+assert.match(sourceToolsBridge, /data-source-tools-group="auto-bend"/, 'right Source Tools panel must contain Auto Bend group');
 assert.match(sourceToolsBridge, /data-source-tools-group="support-overlay"/, 'right Source Tools panel must contain Support Overlay group');
 assert.match(sourceToolsBridge, /rvm-inputxml-apply-transform/, 'axis transform must have an explicit Apply action in right panel');
 assert.match(sourceToolsBridge, /AUTO_TOOLS[\s\S]*reapplyAutoBendFromControls/, 'Auto Bend controls must route to Auto Bend only');
@@ -101,4 +103,4 @@ assert.match(leftBridge, /width:100%!important/, 'hierarchy tree must fill the l
 assert.match(leftBridge, /grid-template-columns:20px minmax\(0,1fr\) max-content max-content/, 'hierarchy columns must use adaptive CSS tracks');
 assert.match(leftBridge, /setPanelWidth[\s\S]*root\?\.style\?\.setProperty\(variable, value\)[\s\S]*body\?\.style\?\.setProperty\(variable, value\)/, 'parent panel resize must still write width variables to root and .rvm-body');
 
-console.log('nonprimitive source tools stagedJSON control regression passed');
+console.log('nonprimitive source tools stagedJSON dashboard control regression passed');
