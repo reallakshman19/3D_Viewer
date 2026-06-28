@@ -48,6 +48,7 @@
 .xml-compare-topology-actions { display: flex; flex-wrap: wrap; gap: 8px; padding: 10px 12px; border-bottom: 1px solid rgba(148, 163, 184, 0.14); background: rgba(2, 6, 23, 0.22); }
 .xml-compare-topology-filter-summary,
 .xml-compare-empty { padding: 10px 12px; color: #94a3b8; font-size: 12px; }
+.xml-compare-table-scroll { overflow: auto; }
 .xml-compare-topology-table { width: 100%; border-collapse: collapse; font-size: 11px; }
 .xml-compare-topology-table th,
 .xml-compare-topology-table td { padding: 7px 9px; border-bottom: 1px solid rgba(148, 163, 184, 0.12); text-align: left; vertical-align: top; }
@@ -96,4 +97,24 @@
 .xml-compare-hover-card span { color: #e2e8f0; font-size: 11px; }
 .xml-compare-hover-card { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; padding: 8px 10px; }
 .xml-compare-hover-card > span { color: #94a3b8; font-size: 11px; }
-@media (max-width: 1280px) { .xml-compare-layout, .xml-compare-workspace-grid, .xml-compare-bottom-tabs { grid-template-columns: 1fr; } }
+.xml-compare-sideload-backdrop { position: fixed; inset: 0; z-index: 50; display: grid; place-items: center; padding: 24px; background: rgba(2, 6, 23, 0.74); }
+.xml-compare-sideload-dialog { width: min(1120px, 96vw); max-height: 92vh; display: flex; flex-direction: column; overflow: hidden; border: 1px solid rgba(96, 165, 250, 0.28); border-radius: 16px; background: #0f172a; box-shadow: 0 24px 70px rgba(0, 0, 0, 0.42); }
+.xml-compare-sideload-dialog header,
+.xml-compare-sideload-dialog footer { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 14px 16px; border-bottom: 1px solid rgba(148, 163, 184, 0.16); }
+.xml-compare-sideload-dialog footer { border-top: 1px solid rgba(148, 163, 184, 0.16); border-bottom: 0; }
+.xml-compare-sideload-dialog h3 { margin: 0 0 4px; color: #dbeafe; font-size: 18px; }
+.xml-compare-sideload-dialog p { margin: 0; color: #94a3b8; font-size: 12px; }
+.xml-compare-sideload-dialog button { padding: 7px 10px; border: 1px solid rgba(96, 165, 250, 0.32); border-radius: 8px; background: #1e293b; color: #dbeafe; cursor: pointer; }
+.xml-compare-sideload-target { padding: 12px 16px; border-bottom: 1px solid rgba(148, 163, 184, 0.12); }
+.xml-compare-sideload-target label { display: flex; align-items: center; gap: 10px; color: #bfdbfe; font-size: 12px; font-weight: 700; }
+.xml-compare-sideload-target select { padding: 6px 9px; border: 1px solid rgba(96, 165, 250, 0.28); border-radius: 8px; background: #0b1220; color: #dbeafe; }
+.xml-compare-sideload-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; padding: 14px 16px; overflow: auto; }
+.xml-compare-sideload-grid label { display: flex; flex-direction: column; gap: 8px; color: #bfdbfe; font-size: 12px; font-weight: 800; }
+.xml-compare-sideload-grid textarea { min-height: 220px; resize: vertical; padding: 10px; border: 1px solid rgba(96, 165, 250, 0.24); border-radius: 10px; background: #020617; color: #dbeafe; font: 12px/1.45 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+.xml-compare-sideload-report { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin: 0; flex: 1; }
+.xml-compare-sideload-report div { padding: 7px 9px; border: 1px solid rgba(148, 163, 184, 0.14); border-radius: 9px; background: rgba(2, 6, 23, 0.36); }
+.xml-compare-sideload-report dt { color: #93c5fd; font-size: 10px; text-transform: uppercase; }
+.xml-compare-sideload-report dd { margin: 2px 0 0; color: #e2e8f0; font-size: 12px; }
+.xml-compare-sideload-empty { color: #94a3b8; font-size: 12px; }
+.xml-compare-sideload-actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
+@media (max-width: 1280px) { .xml-compare-layout, .xml-compare-workspace-grid, .xml-compare-bottom-tabs, .xml-compare-sideload-grid { grid-template-columns: 1fr; } }
