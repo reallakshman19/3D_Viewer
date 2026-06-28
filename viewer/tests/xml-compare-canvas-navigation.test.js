@@ -1,0 +1,28 @@
+import assert from 'node:assert/strict';
+import { createXmlCompareNavigationState, reduceXmlCompareNavigationState, XML_COMPARE_NAV_MODES } from '../xml-compare/XmlCompareCanvasNavigation.js';
+import { renderXmlCompareCanvasToolbarHtml } from '../xml-compare/XmlCompareCanvasToolbar.js';
+import { createXmlCompareFitCommand } from '../xml-compare/XmlCompareFitController.js';
+import { createXmlCompareHoverCard, renderXmlCompareHoverCardHtml } from '../xml-compare/XmlCompareHoverInspector.js';
+
+let state=createXmlCompareNavigationState({side:'source'});
+assert.equal(state.mode,XML_COMPARE_NAV_MODES.SELECT);
+state=reduceXmlCompareNavigationState(state,{type:'SET_MODE',mode:'orbit'});
+assert.equal(state.mode,XML_COMPARE_NAV_MODES.ORBIT);
+state=reduceXmlCompareNavigationState(state,{type:'SELECT',uid:'source:node:10'});
+assert.equal(state.selectedUid,'source:node:10');
+const toolbar=renderXmlCompareCanvasToolbarHtml({side:'source',activeMode:'orbit'});
+assert.match(toolbar,/Select/);
+assert.match(toolbar,/Orbit/);
+assert.match(toolbar,/Pan/);
+assert.match(toolbar,/Zoom/);
+assert.match(toolbar,/Fit All/);
+const records=[{position:{x:0,y:0,z:0}},{position:{x:10,y:20,z:-5}}];
+const fit=createXmlCompareFitCommand({side:'target',records});
+assert.equal(fit.ok,true);
+assert.deepEqual(fit.bounds.center,{x:5,y:10,z:-2.5});
+const record={uid:'source:node:10',nodeNumber:'10',componentType:'PIPE',componentRefNo:'C-1',branchName:'B1',lineNo:'L1',pipingClass:'31441C4',process:{pressure1:'700',temperature1:'120',fluidDensity:'67'}};
+const card=createXmlCompareHoverCard(record);
+assert.equal(card.ok,true);
+assert.ok(card.rows.some((row)=>row.key==='process.pressure1'&&row.value==='700'));
+assert.match(renderXmlCompareHoverCardHtml(record),/componentType/);
+console.log('xml-compare-canvas-navigation: all assertions passed');
