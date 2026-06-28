@@ -11,10 +11,17 @@ state=applyXmlCompareCanvasAction(state,{type:'fit-all',side:'target',records:[{
 assert.equal(state.fitCommands.target.ok,true);
 assert.ok(state.logs.some((entry)=>entry.code==='XML-COMPARE-CANVAS-FIT-ALL'));
 const report={datasets:{A:{componentCount:1,components:[{id:'A-1',type:'PIPE',label:'Pipe A',pipelineRef:'L1',points:[{x:0,y:0,z:0}]}]},B:{componentCount:0,components:[]}},topologyIssues:{summary:{issueCount:0},issues:[]},parseErrors:[]};
+state=applyXmlCompareCanvasAction(state,{type:'hover-record',side:'source',uid:'A-1',records:[{uid:'A-1',position:{x:0,y:0,z:0}}]});
+state=applyXmlCompareCanvasAction(state,{type:'select-record',side:'source',uid:'A-1',records:[{uid:'A-1',position:{x:0,y:0,z:0}}]});
+assert.equal(state.source.hoveredUid,'A-1');
+assert.equal(state.source.selectedUid,'A-1');
+assert.ok(state.logs.some((entry)=>entry.code==='XML-COMPARE-CANVAS-HOVER'));
+assert.ok(state.logs.some((entry)=>entry.code==='XML-COMPARE-CANVAS-SELECT'));
 const model=createXmlCompareWorkspaceModel({report,canvasState:state});
 assert.equal(model.source.records.length,1);
 assert.equal(model.navStates.source.mode,'orbit');
 assert.ok(model.logs.some((entry)=>entry.code==='XML-COMPARE-CANVAS-FIT-ALL'));
 const html=renderXmlCompareWorkspaceShellHtml(model);
 assert.match(html,/data-xml-compare-nav-mode="orbit" class="is-active"/);
+assert.match(html,/data-xml-compare-record-uid="A-1"/);
 console.log('xml-compare-canvas-state-activation: all assertions passed');
