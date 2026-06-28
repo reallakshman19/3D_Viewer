@@ -8,6 +8,7 @@ import './xml-compare-cii-enriched-profile.test.js';
 import './xml-compare-workspace-shell.test.js';
 import './xml-compare-canvas-navigation.test.js';
 import './xml-compare-workspace-model.test.js';
+import './xml-compare-load-intake.test.js';
 import './xml-compare-tab-workspace-mount.test.js';
 import './xml-compare-canvas-host.test.js';
 import './xml-compare-canvas-state-activation.test.js';
@@ -86,6 +87,6 @@ assert.match(response.logs.stdout.join('\n'), /richGeometryComponents=/);
 
 const xmlCompareGate = runXmlCompareArchitectureGate();
 assert.equal(xmlCompareGate.ok, true);
-assert.ok(xmlCompareGate.checkedModuleCount >= 21, 'XML Compare architecture gate covers sideload and empty workspace modules');
+assert.ok(xmlCompareGate.checkedModuleCount >= 22, 'XML Compare architecture gate covers load intake modules');
 
 console.log('inputxml-direct-managed-stage: all assertions passed');
