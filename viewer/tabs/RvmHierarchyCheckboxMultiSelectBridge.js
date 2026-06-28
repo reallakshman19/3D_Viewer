@@ -1,8 +1,9 @@
-const VERSION = '20260628-rvm-hierarchy-checkbox-multiselect-1';
+const VERSION = '20260628-rvm-hierarchy-checkbox-multiselect-sync-1';
 const INSTALL_KEY = '__PCF_GLB_RVM_HIERARCHY_CHECKBOX_MULTISELECT__';
 const STYLE_ID = 'rvm-hierarchy-checkbox-multiselect-style';
 const ROOT_SELECTOR = '[data-rvm-viewer]';
 const TREE_SELECTOR = '#rvm-tree';
+const MODEL_RESET_EVENTS = ['rvm-model-loaded', 'rvm-source-model-loaded', 'rvm-stagedjson-loaded', 'rvm-native-rvm-loaded'];
 const rootStates = new WeakMap();
 
 export function installRvmHierarchyCheckboxMultiSelectBridge() {
@@ -14,11 +15,13 @@ export function installRvmHierarchyCheckboxMultiSelectBridge() {
     version: VERSION,
     refresh: (reason = 'api') => refreshAll(reason),
     getSelectedIds: (root = document.querySelector(ROOT_SELECTOR)) => selectedIdsFor(root),
-    clear: (root = document.querySelector(ROOT_SELECTOR)) => clearSelection(root),
+    clear: (root = document.querySelector(ROOT_SELECTOR)) => clearSelection(root, 'api-clear'),
   };
   globalThis[INSTALL_KEY] = state;
   document.addEventListener('click', handleClick, true);
   document.addEventListener('change', handleChange, true);
+  document.addEventListener('rvm-selection-synced-to-tree', handleSelectionSyncedToTree, true);
+  for (const eventName of MODEL_RESET_EVENTS) document.addEventListener(eventName, handleModelReset, true);
   const refreshSoon = debounce((reason) => refreshAll(reason), 40);
   state.observer = new MutationObserver(() => refreshSoon('tree-mutation'));
   state.observer.observe(document.documentElement, { childList: true, subtree: true });
@@ -27,6 +30,8 @@ export function installRvmHierarchyCheckboxMultiSelectBridge() {
     state.observer?.disconnect?.();
     document.removeEventListener('click', handleClick, true);
     document.removeEventListener('change', handleChange, true);
+    document.removeEventListener('rvm-selection-synced-to-tree', handleSelectionSyncedToTree, true);
+    for (const eventName of MODEL_RESET_EVENTS) document.removeEventListener(eventName, handleModelReset, true);
     if (globalThis[INSTALL_KEY] === state) delete globalThis[INSTALL_KEY];
   };
   return state;
@@ -36,7 +41,7 @@ function stateFor(root) {
   if (!root) return null;
   let state = rootStates.get(root);
   if (!state) {
-    state = { selectedIds: new Set(), lastIndex: -1 };
+    state = { selectedIds: new Set(), staleIds: new Set(), lastIndex: -1, lastRowSignature: '' };
     rootStates.set(root, state);
   }
   return state;
@@ -62,9 +67,12 @@ function enhanceRoot(root, reason = 'manual') {
   tree.dataset.rvmHierarchyCheckboxMultiselect = VERSION;
   ensureControls(root, tree);
   const rows = rowList(tree);
+  const rowIds = new Set(rows.map(nodeId).filter(Boolean));
+  reconcileSelectionState(root, state, rowIds, reason);
   rows.forEach((row, index) => enhanceRow(row, state, index));
   syncRows(root, tree);
   updateControls(root, tree);
+  stampDiagnostics(root, tree, state);
   return rows.length;
 }
 
@@ -120,6 +128,32 @@ function nodeId(row) {
   return String(row?.dataset?.nodeId || '').trim();
 }
 
+function rowSignature(rowIds) {
+  const ids = Array.from(rowIds).sort();
+  return `${ids.length}:${ids.slice(0, 12).join('|')}::${ids.slice(-12).join('|')}`;
+}
+
+function reconcileSelectionState(root, state, rowIds, reason = 'refresh') {
+  if (!state) return;
+  const signature = rowSignature(rowIds);
+  const previousSignature = state.lastRowSignature;
+  state.lastRowSignature = signature;
+  state.staleIds.clear();
+  if (!rowIds.size) return;
+  const before = Array.from(state.selectedIds);
+  for (const id of before) {
+    if (!rowIds.has(id)) {
+      state.selectedIds.delete(id);
+      state.staleIds.add(id);
+    }
+  }
+  if (previousSignature && previousSignature !== signature && before.length && !state.selectedIds.size) {
+    state.lastIndex = -1;
+    root.dataset.rvmHierarchyMultiselectClearedForModel = 'true';
+    root.dataset.rvmHierarchyMultiselectClearReason = reason;
+  }
+}
+
 function handleClick(event) {
   const action = event.target?.closest?.('[data-rvm-hierarchy-multi-action]');
   if (!action) return;
@@ -151,6 +185,25 @@ function handleChange(event) {
   }
 }
 
+function handleModelReset(event) {
+  const root = event.target?.closest?.(ROOT_SELECTOR) || document.querySelector(ROOT_SELECTOR);
+  if (root) clearSelection(root, event.type || 'model-reset');
+}
+
+function handleSelectionSyncedToTree(event) {
+  const root = event.target?.closest?.(ROOT_SELECTOR) || document.querySelector(ROOT_SELECTOR);
+  const tree = root?.querySelector?.(TREE_SELECTOR);
+  const nodeIdValue = String(event?.detail?.nodeId || '').trim();
+  const state = stateFor(root);
+  if (!root || !tree || !state || !nodeIdValue) return;
+  if (!tree.querySelector(`li[data-node-id="${cssEscape(nodeIdValue)}"]`)) return;
+  state.selectedIds.clear();
+  state.selectedIds.add(nodeIdValue);
+  state.staleIds.clear();
+  syncRows(root, tree);
+  dispatchChange(root, tree, 'selection-sync');
+}
+
 function updateRowSelection(root, row, checked, shiftKey = false) {
   const tree = root?.querySelector?.(TREE_SELECTOR);
   const state = stateFor(root);
@@ -166,7 +219,7 @@ function updateRowSelection(root, row, checked, shiftKey = false) {
   }
   state.lastIndex = index;
   syncRows(root, tree);
-  dispatchChange(root, tree);
+  dispatchChange(root, tree, 'row-change');
 }
 
 function setVisibleSelection(root, checked) {
@@ -175,16 +228,18 @@ function setVisibleSelection(root, checked) {
   if (!root || !tree || !state) return;
   for (const row of visibleRows(tree)) setNodeSelected(state, nodeId(row), checked);
   syncRows(root, tree);
-  dispatchChange(root, tree);
+  dispatchChange(root, tree, 'select-visible');
 }
 
-function clearSelection(root) {
+function clearSelection(root, reason = 'clear') {
   const tree = root?.querySelector?.(TREE_SELECTOR);
   const state = stateFor(root);
   if (!root || !tree || !state) return [];
   state.selectedIds.clear();
+  state.staleIds.clear();
+  state.lastIndex = -1;
   syncRows(root, tree);
-  dispatchChange(root, tree);
+  dispatchChange(root, tree, reason);
   return [];
 }
 
@@ -192,6 +247,7 @@ function setNodeSelected(state, id, checked) {
   if (!id) return;
   if (checked) state.selectedIds.add(id);
   else state.selectedIds.delete(id);
+  state.staleIds.delete(id);
 }
 
 function syncRows(root, tree) {
@@ -206,6 +262,7 @@ function syncRows(root, tree) {
     row.dataset.rvmHierarchyMultiSelected = checked ? 'true' : 'false';
   }
   updateControls(root, tree);
+  stampDiagnostics(root, tree, state);
 }
 
 function visibleRows(tree) {
@@ -230,12 +287,39 @@ function updateControls(root, tree) {
   });
 }
 
-function dispatchChange(root, tree) {
-  const ids = selectedIdsFor(root);
-  root.dataset.rvmHierarchyMultiselectCount = String(ids.length);
+function diagnostics(root, tree, state = stateFor(root)) {
+  const visible = visibleRows(tree);
+  const selectedVisible = visible.filter((row) => state?.selectedIds?.has(nodeId(row)));
+  return {
+    version: VERSION,
+    selectedIds: selectedIdsFor(root),
+    selectedCount: state?.selectedIds?.size || 0,
+    staleCount: state?.staleIds?.size || 0,
+    staleIds: Array.from(state?.staleIds || []),
+    visibleCount: visible.length,
+    visibleSelectedCount: selectedVisible.length,
+    rowCount: rowList(tree).length,
+  };
+}
+
+function stampDiagnostics(root, tree, state = stateFor(root)) {
+  const info = diagnostics(root, tree, state);
+  if (root?.dataset) {
+    root.dataset.rvmHierarchyMultiselectCount = String(info.selectedCount);
+    root.dataset.rvmHierarchyMultiselectStaleCount = String(info.staleCount);
+    root.dataset.rvmHierarchyMultiselectVisibleSelectedCount = String(info.visibleSelectedCount);
+    root.dataset.rvmHierarchyMultiselectVisibleCount = String(info.visibleCount);
+    root.dataset.rvmHierarchyMultiselectRowCount = String(info.rowCount);
+  }
+  root.__rvmHierarchyMultiselectDiagnostics = info;
+  return info;
+}
+
+function dispatchChange(root, tree, reason = 'change') {
+  const info = stampDiagnostics(root, tree);
   root.dispatchEvent(new CustomEvent('rvm-hierarchy-multiselect-change', {
     bubbles: true,
-    detail: { version: VERSION, selectedIds: ids, selectedCount: ids.length, visibleCount: visibleRows(tree).length },
+    detail: { ...info, reason },
   }));
 }
 
@@ -244,6 +328,11 @@ function dispatchAction(root, action, ids) {
     bubbles: true,
     detail: { version: VERSION, action, selectedIds: ids, selectedCount: ids.length },
   }));
+}
+
+function cssEscape(value) {
+  if (globalThis.CSS?.escape) return globalThis.CSS.escape(value);
+  return String(value).replace(/"/g, '\\"');
 }
 
 function debounce(fn, wait) {
