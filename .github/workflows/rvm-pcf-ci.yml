@@ -59,6 +59,7 @@ on:
       - 'viewer/core/state.js'
       - 'viewer/tests/rvm-pcf-*.test.js'
       - 'viewer/tests/rvm-viewer-ui-contract.test.js'
+      - 'viewer/tests/rvm-right-panel-policy-matrix.test.js'
       - 'viewer/tests/rvm-toolbar-more-tools.test.js'
       - 'viewer/tests/rvm-toolbar-overflow-audit.test.js'
       - 'viewer/tests/inputxml-direct-managed-stage.test.js'
@@ -109,6 +110,9 @@ jobs:
 
       - name: Verify RVM viewer UI contracts
         run: node viewer/tests/rvm-viewer-ui-contract.test.js
+
+      - name: Verify RVM right panel policy matrix
+        run: node viewer/tests/rvm-right-panel-policy-matrix.test.js
 
       - name: Verify RVM More Tools overflow
         run: node viewer/tests/rvm-toolbar-more-tools.test.js
