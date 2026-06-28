@@ -109,7 +109,7 @@ assert(workflowModal.includes('data-modal-tab'), 'modal delegated handler must t
 assert(workflowModal.includes('aria-disabled="true"'), 'modal must support disabled workflow phase tabs');
 
 assert(bridge.includes('./legacy-adapter.js'), 'legacy adapter dependency must remain isolated to bridge boundary');
-assert(bridge.includes('legacy-adapter.js?v=20260625-service-1'), 'workflow bridge must cache-bust the service legacy adapter');
+assert(bridge.includes('legacy-adapter.js?v=20260627-inputxml-cii2019-live-guard-1'), 'workflow bridge must align with the active ModelConvertersTab legacy adapter module key');
 assert(bridge.includes('ensureDefaultMastersLoaded = async () => null'), 'bridge must block obsolete default-master preload');
 assert(bridge.includes("masterKey === 'pipingClass'"), 'bridge must block obsolete aggregate piping-class default load');
 assert(bridge.includes('hydrateCondenseSnapshot'), 'bridge must own Condense Rigid option hydration without the old bridge patch');
