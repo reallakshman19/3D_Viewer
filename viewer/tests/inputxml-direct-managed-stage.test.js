@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 
+import { runXmlCompareArchitectureGate } from '../../tools/xml-compare-architecture-gate.mjs';
 import { buildInputXmlDirectManagedStageJson } from '../converters/inputxml-managed-stage/InputXmlDirectManagedStageBuilder.js';
 import { run } from '../converters/inputxml-managed-stage/inputxml-managed-stage-runner.js';
 import './inputxml-managed-stage-topology.test.js';
@@ -71,5 +72,9 @@ assert.ok(uxml.components.length >= 2, 'UXML sidecar carries route components');
 assert.ok(uxml.segments.length >= 2, 'UXML sidecar carries APOS-LPOS route segments');
 assert.match(response.logs.stdout.join('\n'), /blankRestraintRows=1/);
 assert.match(response.logs.stdout.join('\n'), /richGeometryComponents=/);
+
+const xmlCompareGate = runXmlCompareArchitectureGate();
+assert.equal(xmlCompareGate.ok, true);
+assert.ok(xmlCompareGate.checkedModuleCount >= 3, 'XML Compare architecture gate covers the active XmlCompare modules');
 
 console.log('inputxml-direct-managed-stage: all assertions passed');
