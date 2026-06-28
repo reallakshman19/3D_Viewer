@@ -20,7 +20,7 @@ const parserText = fs.readFileSync(path.join(repoRoot, 'viewer/enrichment/select
 const popupSourceText = `${panelText}\n${popupRendererText}`;
 
 assert.ok(rendererText.includes('SelectedGeometryEnrichmentPanel.js?v=20260624-selected-geometry-floating-workflow-3'));
-assert.ok(rendererText.includes('viewer3d-rvm-tab.js?v=20260627-rvm-format-neutral-hierarchy-1'));
+assert.ok(rendererText.includes('viewer3d-rvm-tab.js?v=20260628-rvm-format-neutral-shared-kind-policy-1'));
 assert.ok(rendererText.includes('installSelectedGeometryEnrichmentPanel();'));
 assert.ok(rvmTabText.includes('SelectedGeometryEnrichmentPanel.js?v=20260624-selected-geometry-floating-workflow-3'));
 assert.ok(rvmTabText.includes('syncSelectedGeometryEnrichmentPanels();'));
