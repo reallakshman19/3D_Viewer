@@ -1,4 +1,4 @@
-import { installRvmSourceToolsStagedJsonKindGateBridge } from './RvmSourceToolsStagedJsonKindGateBridge.js?v=20260627-rvm-source-tools-stagedjson-kind-gate-1';
+import { installRvmSourceToolsStagedJsonKindGateBridge } from './RvmSourceToolsStagedJsonKindGateBridge.js?v=20260628-rvm-source-tools-stagedjson-native-kind-1';
 import { installRvmStagedJsonSupportRuntimeGateBridge } from './RvmStagedJsonSupportRuntimeGateBridge.js?v=20260628-rvm-stagedjson-support-runtime-native-kind-1';
 
 const CACHE_KEY = '20260620-rvm-stagedjson-validation-1';

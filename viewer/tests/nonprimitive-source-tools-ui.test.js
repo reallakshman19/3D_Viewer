@@ -7,8 +7,10 @@ const autoBridgeSource = await fs.readFile(new URL('../tabs/RvmNonPrimitiveAutoB
 const supportSettingsSource = await fs.readFile(new URL('../overlays/support/SupportOverlaySettings.js', import.meta.url), 'utf8');
 const inputXmlUiBridgeSource = await fs.readFile(new URL('../rvm-viewer/RvmInputXmlSupportGraphicsUiBridge.js', import.meta.url), 'utf8');
 
-assert.match(uiBridgeSource, /rvm-non-primitive-source-tools-ui\/v7/, 'source-tools UI exposes v7 schema marker');
-assert.match(uiBridgeSource, /dataset\.rvmNonPrimitiveSourceToolsStyle = 'v7'/, 'source-tools UI style injection is versioned');
+assert.match(uiBridgeSource, /rvm-non-primitive-source-tools-ui\/v8/, 'source-tools UI exposes v8 schema marker');
+assert.match(uiBridgeSource, /dataset\.rvmNonPrimitiveSourceToolsStyle = 'v8'/, 'source-tools UI style injection is versioned');
+assert.match(uiBridgeSource, /RvmSourceKindPolicy\.js/, 'source-tools UI uses shared source-kind policy');
+assert.match(uiBridgeSource, /isRvmNonPrimitiveSourceKind\(normalizeSourceKind\(value\)\)/, 'source-tools UI gates through shared source-kind policy');
 assert.match(uiBridgeSource, /data-source-tools-layout="grouped-v2"/, 'source-tools UI renders grouped layout marker');
 assert.match(uiBridgeSource, /data-source-tools-group="inputxml-family"/, 'source-tools UI groups InputXML-family controls');
 assert.match(uiBridgeSource, /data-source-tools-group="support-overlay"/, 'source-tools UI groups support overlay controls');
@@ -39,7 +41,7 @@ assert.match(inputXmlUiBridgeSource, /rvm-inputxml-source-tools-bridge\/v2/, 'In
 assert.doesNotMatch(inputXmlUiBridgeSource, /rvm-inputxml-graphics-controls|geo-top-ribbon/, 'InputXML compatibility bridge does not own top-ribbon UI');
 assert.doesNotMatch(inputXmlUiBridgeSource, /ensureResizeHandles|persistPanelWidths|panel\.style\.setProperty/, 'InputXML compatibility bridge does not own parent panel resizing');
 
-assert.match(deferredLoaderSource, /RvmNonPrimitiveSourceToolsUiBridge\.js\?v=20260624-source-tools-grouped-1/, 'sourcePreview deferred loader imports source-tools UI bridge with grouped cache key');
+assert.match(deferredLoaderSource, /RvmNonPrimitiveSourceToolsUiBridge\.js\?v=20260628-rvm-source-tools-shared-kind-policy-1/, 'sourcePreview deferred loader imports source-tools UI bridge with shared policy cache key');
 assert.match(deferredLoaderSource, /installRvmNonPrimitiveSourceToolsUiBridge/, 'sourcePreview deferred loader installs source-tools UI bridge');
 
 assert.match(autoBridgeSource, /restoreVisualTrimmedSegments/, 'auto-bend bridge can restore visual trims for live UI toggles');
