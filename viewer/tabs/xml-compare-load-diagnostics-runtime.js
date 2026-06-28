@@ -89,7 +89,7 @@ function renderPanel() {
   rows.innerHTML = html;
 }
 
-function log(event, detail = {}, level = 'log') {
+function log(event, detail = {}, level = 'log', options = {}) {
   const row = {
     id: ++state.seq,
     time: timeStamp(),
@@ -103,7 +103,7 @@ function log(event, detail = {}, level = 'log') {
   if (state.rows.length > MAX_ROWS * 2) state.rows.splice(0, state.rows.length - MAX_ROWS);
   const consoleMethod = console[level] || console.log;
   consoleMethod.call(console, `${DIAG_PREFIX} ${event}`, row.detail);
-  renderPanel();
+  if (options.render !== false) renderPanel();
 }
 
 async function inspectSelectedFile(input, eventName) {
@@ -150,7 +150,7 @@ function install() {
       labelText: label?.textContent?.trim() || '',
       inputPresent: true,
       filesLength: input.files?.length || 0,
-    });
+    }, 'log', { render: false });
   }, true);
   document.addEventListener('change', (event) => {
     const input = event.target?.closest?.('[data-xml-compare-load]');
