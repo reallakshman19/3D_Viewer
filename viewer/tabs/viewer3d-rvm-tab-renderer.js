@@ -19,7 +19,7 @@ import { RVM_VIEWER3D_MODULE_SPECIFIER, RVM_VIEWER_MODULE_CONTRACT_VERSION } fro
 import { RvmViewer3D } from '../rvm-viewer/RvmViewer3D.js?v=20260620-rvm-direct-tab-1';
 import { installRvmProgressiveModelRootPatch } from '../rvm-viewer/RvmProgressiveModelRootPatchV5.js?v=20260620-rvm-tree-select-nohide-1';
 import { installRvmHierarchySelectionBridge } from './RvmHierarchySelectionBridge.js?v=20260627-rvm-hierarchy-navis-safe-1';
-import { installRvmHierarchySmartGridBridge } from './RvmHierarchySmartGridBridge.js?v=20260627-rvm-hierarchy-smart-grid-1';
+import { installRvmHierarchySmartGridBridge } from './RvmHierarchySmartGridBridge.js?v=20260628-rvm-hierarchy-adaptive-columns-1';
 import { installRvmFormatNeutralExactSelectionBridge } from './RvmFormatNeutralExactSelectionBridge.js?v=20260627-rvm-format-neutral-exact-selection-1';
 import { installRvmViewerInteractionPatch, installRvmCanvasSelectionBridge } from './RvmViewerInteractionPatch.js?v=20260626-rvm-canvas-hierarchy-selection-sync-1';
 import { installRvmCanvasSelectionSinglePickGuardBridge } from './RvmCanvasSelectionSinglePickGuardBridge.js?v=20260622-rvm-canvas-single-pick-guard-1';
@@ -50,7 +50,7 @@ import { installRvmSelectionTreeSyncBridge } from './RvmSelectionTreeSyncBridge.
 import { installRvmMaterialModeBridge } from './RvmMaterialModeBridge.js?v=20260620-rvm-remaining-material-modes-1';
 import { installRvmBottomDiagnosticsDrawerBridge } from './RvmBottomDiagnosticsDrawerBridge.js?v=20260624-rvm-diagnostics-docked-drawer-1';
 import { installRvmDeferredBridgeLoader } from './RvmDeferredBridgeLoader.js?v=20260628-rvm-deferred-right-panel-layout-1';
-import { installRvmLeftPanelResizeCollapseBridge } from './RvmLeftPanelResizeCollapseBridge.js?v=20260624-rvm-panel-resize-1';
+import { installRvmLeftPanelResizeCollapseBridge } from './RvmLeftPanelResizeCollapseBridge.js?v=20260628-rvm-adaptive-hierarchy-columns-1';
 import { installRvmLeafSelectionIdentityBridge } from './RvmLeafSelectionIdentityBridge.js?v=20260622-rvm-leaf-selection-identity-1';
 import { installRvmLeafCanvasPickBridge } from './RvmLeafCanvasPickBridge.js?v=20260622-rvm-leaf-canvas-pick-orbit-guard-2';
 import { installRvmStagedJsonLoadAdapterBridge } from './RvmStagedJsonLoadAdapterBridge.js?v=20260627-rvm-stagedjson-load-adapter-1';
