@@ -3,7 +3,6 @@ import assert from 'assert/strict';
 function createContainer() {
   const listeners = {};
   let html = '';
-
   return {
     listeners,
     get innerHTML() {
@@ -16,9 +15,7 @@ function createContainer() {
       listeners[type] = handler;
     },
     removeEventListener(type, handler) {
-      if (listeners[type] === handler) {
-        delete listeners[type];
-      }
+      if (listeners[type] === handler) delete listeners[type];
     },
     contains() {
       return true;
@@ -30,9 +27,7 @@ function routeChangeEvent(value) {
   return {
     target: {
       closest(selector) {
-        if (selector === '[data-v3d-xc-inputxml-route]') {
-          return { value };
-        }
+        if (selector === '[data-v3d-xc-inputxml-route]') return { value };
         return null;
       },
     },
@@ -60,9 +55,7 @@ function actionClickEvent(action) {
   return {
     target: {
       closest(selector) {
-        if (selector === '[data-v3d-xc-action]') {
-          return { dataset: { v3dXcAction: action } };
-        }
+        if (selector === '[data-v3d-xc-action]') return { dataset: { v3dXcAction: action } };
         return null;
       },
     },
@@ -80,13 +73,7 @@ async function run() {
   const { INPUTXML_IMPORT_ROUTES, INPUTXML_IMPORT_ROUTE_STORAGE_KEY } = await import('../xml-compare/InputXmlImportRoutes.js');
 
   const container = createContainer();
-  const events = {
-    loaded: [],
-    preview: [],
-    compare: [],
-    cleared: 0,
-  };
-
+  const events = { loaded: [], preview: [], compare: [], cleared: 0 };
   const panel = mountXmlComparePanel(container, {
     onDatasetLoaded(datasetId, result) {
       events.loaded.push({ datasetId, result });
@@ -105,10 +92,13 @@ async function run() {
   assert.equal(panel.getState().routeStorageKey, INPUTXML_IMPORT_ROUTE_STORAGE_KEY);
   assert.equal(panel.getState().hasA, false);
   assert.equal(panel.getState().hasB, false);
+  assert.equal(panel.getState().loadStatus.kind, 'info');
   assert.ok(container.innerHTML.includes('v3d-xc-panel'));
   assert.ok(container.innerHTML.includes('InputXML Route'));
   assert.ok(container.innerHTML.includes('Load XML A'));
   assert.ok(container.innerHTML.includes('Load XML B'));
+  assert.ok(container.innerHTML.includes('No file selected'));
+  assert.ok(container.innerHTML.includes('data-v3d-xc-load-status'));
   assert.ok(container.innerHTML.includes('Preview'));
   assert.ok(container.innerHTML.includes('Compare'));
   assert.ok(container.innerHTML.includes('Clear'));
@@ -125,13 +115,23 @@ async function run() {
     </InputXML>
   `;
 
-  const fileA = { name: 'sample-a.xml', text: async () => xmlText };
-  const fileB = { name: 'sample-b.xml', text: async () => xmlText };
+  const fileA = { name: 'sample-a.xml', size: 2048, text: async () => xmlText };
+  const fileB = { name: 'sample-b.xml', size: 4096, text: async () => xmlText };
 
   container.listeners.change(fileChangeEvent('A', fileA));
+  assert.equal(panel.getState().loadStatus.kind, 'info');
+  assert.ok(container.innerHTML.includes('Reading XML A: sample-a.xml'));
+  assert.ok(container.innerHTML.includes('data-v3d-xc-file-state="reading"'));
   await waitForAsync();
 
+  assert.equal(panel.getState().fileAName, 'sample-a.xml');
+  assert.equal(panel.getState().loadStatus.kind, 'ok');
+  assert.ok(container.innerHTML.includes('XML A loaded: sample-a.xml'));
+  assert.ok(container.innerHTML.includes('sample-a.xml'));
+  assert.ok(container.innerHTML.includes('data-v3d-xc-file-state="loaded"'));
+
   container.listeners.change(fileChangeEvent('B', fileB));
+  assert.ok(container.innerHTML.includes('Reading XML B: sample-b.xml'));
   await waitForAsync();
 
   assert.equal(events.loaded.length, 2);
@@ -143,6 +143,7 @@ async function run() {
   assert.equal(panel.getState().hasB, true);
   assert.equal(panel.getState().routeA, INPUTXML_IMPORT_ROUTES.NATIVE_XML_BUILDER);
   assert.equal(panel.getState().routeB, INPUTXML_IMPORT_ROUTES.NATIVE_XML_BUILDER);
+  assert.equal(panel.getState().fileBName, 'sample-b.xml');
 
   container.listeners.click(actionClickEvent('preview'));
   container.listeners.click(actionClickEvent('compare'));
@@ -158,7 +159,10 @@ async function run() {
   assert.equal(events.cleared, 1);
   assert.equal(panel.getState().hasA, false);
   assert.equal(panel.getState().hasB, false);
+  assert.equal(panel.getState().fileAName, '');
+  assert.equal(panel.getState().fileBName, '');
   assert.ok(container.innerHTML.includes('No file loaded'));
+  assert.ok(container.innerHTML.includes('No file selected'));
 
   panel.destroy();
   assert.equal(container.innerHTML, '');
