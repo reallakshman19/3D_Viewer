@@ -58,15 +58,17 @@ assert.match(sourceToolsGateBridge, /root\.dataset\.rvmLoadedSourceKind = 'json'
 assert.match(sourceToolsGateBridge, /root\.dataset\.rvmSourceToolsOriginalKind = kind/, 'stagedJSON source tools gate must preserve the original source kind on the root');
 assert.match(sourceToolsGateBridge, /api\.render[\s\S]*api\.sync[\s\S]*api\.reapplyAutoBendOnly[\s\S]*api\.reapplySupportOverlayOnly/, 'stagedJSON source tools gate must wrap render, sync, and reapply paths');
 
-assert.match(supportRuntimeGateBridge, /rvm-stagedjson-support-runtime-gate\/v1/, 'stagedJSON support runtime gate bridge must expose a schema');
+assert.match(supportRuntimeGateBridge, /rvm-stagedjson-support-runtime-gate\/v2/, 'stagedJSON support runtime gate bridge must expose native-kind schema');
 assert.match(supportRuntimeGateBridge, /SUPPORT_OVERLAY_KEY = '__PCF_GLB_RVM_NON_PRIMITIVE_SUPPORT_OVERLAY__'/, 'stagedJSON support runtime gate must target support overlay API');
 assert.match(supportRuntimeGateBridge, /SUPPORT_DETAILS_KEY = '__PCF_GLB_RVM_NON_PRIMITIVE_SUPPORT_DETAILS_PANEL__'/, 'stagedJSON support runtime gate must target support details API');
-assert.match(supportRuntimeGateBridge, /coerceApplyArgs[\s\S]*sourceKind: 'json'/, 'stagedJSON support runtime gate must coerce support overlay apply sourceKind to JSON');
-assert.match(supportRuntimeGateBridge, /api\.applyFromSource = \(args = \{\}\) => applyFromSource\(coerceApplyArgs\(args\)\)/, 'stagedJSON support runtime gate must wrap support overlay applyFromSource');
+assert.match(supportRuntimeGateBridge, /normalizeApplyArgs[\s\S]*sourceKind: normalizeKind\(args\.sourceKind\)/, 'stagedJSON support runtime gate must preserve native stagedJSON sourceKind');
+assert.doesNotMatch(supportRuntimeGateBridge, /sourceKind: 'json'/, 'stagedJSON support runtime gate must not coerce support apply sourceKind to JSON');
+assert.match(supportRuntimeGateBridge, /root\.dataset\.rvmLoadedSourceKind = context\.sourceKind/, 'stagedJSON support runtime gate must preserve stagedJSON root kind for details');
+assert.match(supportRuntimeGateBridge, /api\.applyFromSource = \(args = \{\}\) => applyFromSource\(normalizeApplyArgs\(args\)\)/, 'stagedJSON support runtime gate must wrap support overlay applyFromSource without JSON coercion');
 assert.match(supportRuntimeGateBridge, /api\.render[\s\S]*api\.sync/, 'stagedJSON support runtime gate must wrap support details render and sync');
 assert.match(supportRuntimeGateBridge, /setModelWithStagedJsonSupportRuntimeGate/, 'stagedJSON support runtime gate must patch future setModel calls for support overlay reapply');
 assert.match(stagedJsonValidationBridge, /RvmSourceToolsStagedJsonKindGateBridge\.js\?v=20260627-rvm-source-tools-stagedjson-kind-gate-1/, 'stagedJSON validation bridge must import the Source Tools kind gate');
-assert.match(stagedJsonValidationBridge, /RvmStagedJsonSupportRuntimeGateBridge\.js\?v=20260627-rvm-stagedjson-support-runtime-gate-1/, 'stagedJSON validation bridge must import the support runtime gate');
+assert.match(stagedJsonValidationBridge, /RvmStagedJsonSupportRuntimeGateBridge\.js\?v=20260628-rvm-stagedjson-support-runtime-native-kind-1/, 'stagedJSON validation bridge must import the native-kind support runtime gate');
 assert.match(stagedJsonValidationBridge, /installRvmSourceToolsStagedJsonKindGateBridge\(\)/, 'stagedJSON validation bridge must install the Source Tools kind gate');
 assert.match(stagedJsonValidationBridge, /installRvmStagedJsonSupportRuntimeGateBridge\(\)/, 'stagedJSON validation bridge must install the support runtime gate');
 

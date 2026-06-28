@@ -1,25 +1,28 @@
 import { RvmViewer3D } from '../rvm-viewer/RvmViewer3D.js?v=20260622-rvm-leaf-picking-2';
 
-export const RVM_STAGEDJSON_SUPPORT_RUNTIME_GATE_SCHEMA = 'rvm-stagedjson-support-runtime-gate/v1';
+export const RVM_STAGEDJSON_SUPPORT_RUNTIME_GATE_SCHEMA = 'rvm-stagedjson-support-runtime-gate/v2';
 
-const VERSION = '20260627-rvm-stagedjson-support-runtime-gate-1';
-const INSTALL_FLAG = Symbol.for('pcf-glb-rvm-stagedjson-support-runtime-gate-1');
-const VIEWER_PATCH_FLAG = Symbol.for('pcf-glb-rvm-stagedjson-support-runtime-gate-viewer-1');
+const VERSION = '20260628-rvm-stagedjson-support-runtime-native-kind-1';
+const INSTALL_FLAG = Symbol.for('pcf-glb-rvm-stagedjson-support-runtime-gate-2');
+const VIEWER_PATCH_FLAG = Symbol.for('pcf-glb-rvm-stagedjson-support-runtime-gate-viewer-2');
 const SUPPORT_OVERLAY_KEY = '__PCF_GLB_RVM_NON_PRIMITIVE_SUPPORT_OVERLAY__';
 const SUPPORT_DETAILS_KEY = '__PCF_GLB_RVM_NON_PRIMITIVE_SUPPORT_DETAILS_PANEL__';
 const SOURCE_KINDS = new Set(['stagedjson', 'staged.json']);
 
 function normalizeKind(value = '') {
-  return String(value || '').trim().toLowerCase().replace(/^\./, '');
+  const kind = String(value || '').trim().toLowerCase().replace(/^\./, '');
+  if (kind === 'staged.json') return 'stagedjson';
+  return kind;
 }
 
 function isStagedKind(value) {
-  return SOURCE_KINDS.has(normalizeKind(value));
+  return SOURCE_KINDS.has(normalizeKind(value)) || normalizeKind(value) === 'stagedjson';
 }
 
 function stagedContextFrom(root, viewer) {
   const model = viewer?.modelGroup || viewer?.scene || null;
-  const sourceKind = normalizeKind(root?.dataset?.rvmLoadedSourceKind || viewer?.sourceKind || model?.userData?.__rvmNonPrimitiveSourceKind || model?.userData?.sourceKind || '');
+  const modelKind = model?.userData?.__rvmNonPrimitiveSourceKind || model?.userData?.sourceKind || '';
+  const sourceKind = normalizeKind(modelKind || viewer?.sourceKind || root?.dataset?.rvmLoadedSourceKind || '');
   const source = model?.userData?.__rvmNonPrimitiveSourceHierarchy || model?.userData?.__rvmNonPrimitiveAutoBendSourceHierarchy || null;
   const fileName = model?.userData?.fileName || root?.dataset?.rvmLoadedFileName || '';
   return { model, source, sourceKind, fileName, staged: isStagedKind(sourceKind) && Boolean(source) };
@@ -31,27 +34,28 @@ function withRootKind(root, viewer, callback) {
   const previous = root.dataset.rvmLoadedSourceKind || '';
   root.dataset.rvmSupportRuntimeOriginalKind = context.sourceKind;
   root.dataset.rvmSupportRuntimeStagedJsonGate = VERSION;
-  root.dataset.rvmLoadedSourceKind = 'json';
+  root.dataset.rvmLoadedSourceKind = context.sourceKind;
   try {
-    return callback({ ...context, sourceKind: 'json' });
+    return callback(context);
   } finally {
     if (previous) root.dataset.rvmLoadedSourceKind = previous;
     else delete root.dataset.rvmLoadedSourceKind;
   }
 }
 
-function coerceApplyArgs(args = {}) {
+function normalizeApplyArgs(args = {}) {
   if (!isStagedKind(args.sourceKind)) return args;
-  return { ...args, sourceKind: 'json', originalSourceKind: args.sourceKind, stagedJsonSupportRuntimeGate: VERSION };
+  return { ...args, sourceKind: normalizeKind(args.sourceKind), stagedJsonSupportRuntimeGate: VERSION };
 }
 
 function installSupportOverlayGate() {
   const api = globalThis[SUPPORT_OVERLAY_KEY];
   if (!api || api.__stagedJsonSupportRuntimeGate === VERSION || typeof api.applyFromSource !== 'function') return Boolean(api);
   const applyFromSource = api.applyFromSource;
-  api.applyFromSource = (args = {}) => applyFromSource(coerceApplyArgs(args));
+  api.applyFromSource = (args = {}) => applyFromSource(normalizeApplyArgs(args));
   api.__stagedJsonSupportRuntimeGate = VERSION;
   api.stagedJsonSupportRuntimeGateKinds = Array.from(SOURCE_KINDS);
+  api.stagedJsonSupportRuntimeNativeKind = true;
   return true;
 }
 
@@ -68,6 +72,7 @@ function installSupportDetailsGate() {
     return { status: 'synced', version: VERSION, roots: roots.length, results: roots.map((root) => withRootKind(root, viewer, () => render?.(root, viewer))) };
   };
   api.__stagedJsonSupportRuntimeGate = VERSION;
+  api.stagedJsonSupportRuntimeNativeKind = true;
   return true;
 }
 
@@ -83,7 +88,7 @@ function patchViewerSetModel() {
       queueMicrotask(() => {
         installSupportOverlayGate();
         installSupportDetailsGate();
-        globalThis[SUPPORT_OVERLAY_KEY]?.applyFromSource?.({ viewer: this, source, sourceKind: 'json', fileName: model?.userData?.fileName || '' });
+        globalThis[SUPPORT_OVERLAY_KEY]?.applyFromSource?.({ viewer: this, source, sourceKind, fileName: model?.userData?.fileName || '' });
         globalThis[SUPPORT_DETAILS_KEY]?.sync?.();
       });
     }
@@ -96,7 +101,7 @@ function patchViewerSetModel() {
 export function installRvmStagedJsonSupportRuntimeGateBridge() {
   if (globalThis[INSTALL_FLAG]) return globalThis.__PCF_GLB_RVM_STAGEDJSON_SUPPORT_RUNTIME_GATE__;
   globalThis[INSTALL_FLAG] = true;
-  const api = { schema: RVM_STAGEDJSON_SUPPORT_RUNTIME_GATE_SCHEMA, version: VERSION, installNow, sourceKinds: Array.from(SOURCE_KINDS) };
+  const api = { schema: RVM_STAGEDJSON_SUPPORT_RUNTIME_GATE_SCHEMA, version: VERSION, installNow, sourceKinds: Array.from(SOURCE_KINDS), nativeSourceKind: true };
   globalThis.__PCF_GLB_RVM_STAGEDJSON_SUPPORT_RUNTIME_GATE__ = api;
   patchViewerSetModel();
   const retry = (attempt = 0) => {
