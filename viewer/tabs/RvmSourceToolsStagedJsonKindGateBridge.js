@@ -1,25 +1,27 @@
-export const RVM_SOURCE_TOOLS_STAGEDJSON_KIND_GATE_SCHEMA = 'rvm-source-tools-stagedjson-kind-gate/v1';
+import { normalizeRvmSourceKind } from '../RvmSourceKindPolicy.js';
 
-const VERSION = '20260627-rvm-source-tools-stagedjson-kind-gate-1';
-const INSTALL_FLAG = Symbol.for('pcf-glb-rvm-source-tools-stagedjson-kind-gate-1');
+export const RVM_SOURCE_TOOLS_STAGEDJSON_KIND_GATE_SCHEMA = 'rvm-source-tools-stagedjson-kind-gate/v2';
+
+const VERSION = '20260628-rvm-source-tools-stagedjson-native-kind-1';
+const INSTALL_FLAG = Symbol.for('pcf-glb-rvm-source-tools-stagedjson-kind-gate-2');
 const SOURCE_TOOLS_KEY = '__PCF_GLB_RVM_NON_PRIMITIVE_SOURCE_TOOLS_UI__';
 const SOURCE_KINDS = new Set(['stagedjson', 'staged.json']);
 
 function normalizeKind(value = '') {
-  return String(value || '').trim().toLowerCase().replace(/^\./, '');
+  return normalizeRvmSourceKind(value);
 }
 
 function activeKind(root, viewer) {
   return normalizeKind(root?.dataset?.rvmLoadedSourceKind || viewer?.sourceKind || viewer?.modelGroup?.userData?.__rvmNonPrimitiveSourceKind || '');
 }
 
-function withJsonGate(root, viewer, callback) {
+function withNativeKind(root, viewer, callback) {
   const kind = activeKind(root, viewer);
   if (!SOURCE_KINDS.has(kind) || !root?.dataset) return callback();
   const previous = root.dataset.rvmLoadedSourceKind || '';
   root.dataset.rvmSourceToolsOriginalKind = kind;
   root.dataset.rvmSourceToolsStagedJsonGate = VERSION;
-  root.dataset.rvmLoadedSourceKind = 'json';
+  root.dataset.rvmLoadedSourceKind = kind;
   try {
     return callback();
   } finally {
@@ -36,18 +38,19 @@ function installNow() {
   const reapply = api.reapply;
   const reapplyAuto = api.reapplyAutoBendOnly;
   const reapplySupport = api.reapplySupportOverlayOnly;
-  api.render = (root = globalThis.document?.querySelector?.('[data-rvm-viewer]'), viewer = globalThis.__3D_RVM_VIEWER__) => withJsonGate(root, viewer, () => render?.(root, viewer));
+  api.render = (root = globalThis.document?.querySelector?.('[data-rvm-viewer]'), viewer = globalThis.__3D_RVM_VIEWER__) => withNativeKind(root, viewer, () => render?.(root, viewer));
   api.sync = () => {
     const roots = Array.from(globalThis.document?.querySelectorAll?.('[data-rvm-viewer]') || []);
     if (!roots.length) return sync?.();
     const viewer = globalThis.__3D_RVM_VIEWER__;
-    return { status: 'synced', version: VERSION, roots: roots.length, results: roots.map((root) => withJsonGate(root, viewer, () => render?.(root, viewer))) };
+    return { status: 'synced', version: VERSION, roots: roots.length, results: roots.map((root) => withNativeKind(root, viewer, () => render?.(root, viewer))) };
   };
-  api.reapply = (root, viewer = globalThis.__3D_RVM_VIEWER__) => withJsonGate(root, viewer, () => reapply?.(root, viewer));
-  api.reapplyAutoBendOnly = (root, viewer = globalThis.__3D_RVM_VIEWER__) => withJsonGate(root, viewer, () => reapplyAuto?.(root, viewer));
-  api.reapplySupportOverlayOnly = (root, viewer = globalThis.__3D_RVM_VIEWER__) => withJsonGate(root, viewer, () => reapplySupport?.(root, viewer));
+  api.reapply = (root, viewer = globalThis.__3D_RVM_VIEWER__) => withNativeKind(root, viewer, () => reapply?.(root, viewer));
+  api.reapplyAutoBendOnly = (root, viewer = globalThis.__3D_RVM_VIEWER__) => withNativeKind(root, viewer, () => reapplyAuto?.(root, viewer));
+  api.reapplySupportOverlayOnly = (root, viewer = globalThis.__3D_RVM_VIEWER__) => withNativeKind(root, viewer, () => reapplySupport?.(root, viewer));
   api.__stagedJsonKindGate = VERSION;
   api.stagedJsonKindGateKinds = Array.from(SOURCE_KINDS);
+  api.stagedJsonKindGateNativeKind = true;
   try { api.sync?.(); } catch (_) {}
   return true;
 }
@@ -55,7 +58,7 @@ function installNow() {
 export function installRvmSourceToolsStagedJsonKindGateBridge() {
   if (globalThis[INSTALL_FLAG]) return globalThis.__PCF_GLB_RVM_SOURCE_TOOLS_STAGEDJSON_KIND_GATE__;
   globalThis[INSTALL_FLAG] = true;
-  const api = { schema: RVM_SOURCE_TOOLS_STAGEDJSON_KIND_GATE_SCHEMA, version: VERSION, installNow, sourceKinds: Array.from(SOURCE_KINDS) };
+  const api = { schema: RVM_SOURCE_TOOLS_STAGEDJSON_KIND_GATE_SCHEMA, version: VERSION, installNow, sourceKinds: Array.from(SOURCE_KINDS), nativeSourceKind: true };
   globalThis.__PCF_GLB_RVM_SOURCE_TOOLS_STAGEDJSON_KIND_GATE__ = api;
   const retry = (attempt = 0) => {
     if (installNow() || attempt >= 20) return;
