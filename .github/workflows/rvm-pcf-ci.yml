@@ -26,4 +26,18 @@ jobs:
           show-progress: false
 
       - name: Verify direct InputXML stagedJSON conversion
-        run: node viewer/tests/inputxml-direct-managed-stage.test.js
+        shell: bash
+        run: |
+          set +e
+          node viewer/tests/inputxml-direct-managed-stage.test.js > direct-inputxml-stagedjson.log 2>&1
+          status=$?
+          cat direct-inputxml-stagedjson.log
+          exit $status
+
+      - name: Upload direct InputXML stagedJSON log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: direct-inputxml-stagedjson-log
+          path: direct-inputxml-stagedjson.log
+          if-no-files-found: ignore
