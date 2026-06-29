@@ -22,6 +22,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          show-progress: false
 
       - name: Verify direct InputXML stagedJSON conversion
         run: node viewer/tests/inputxml-direct-managed-stage.test.js
