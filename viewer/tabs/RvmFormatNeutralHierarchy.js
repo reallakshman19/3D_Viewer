@@ -8,6 +8,7 @@ import { RVM_HIERARCHY_PROVIDER_CONTRACT_VERSION, providerResultFromFormatNeutra
 export const FORMAT_NEUTRAL_HIERARCHY_VERSION = '20260628-format-neutral-shared-kind-policy-1';
 export const RVM_PROVIDER_TREE_READ_PATH_VERSION = '20260628-rvm-provider-tree-read-path-1';
 export const RVM_SOURCE_PROVIDER_TREE_PILOT_VERSION = '20260628-rvm-source-provider-tree-pilot-1';
+export const RVM_PROVIDER_TREE_RUNTIME_TELEMETRY_VERSION = '20260629-rvm-provider-runtime-telemetry-1';
 
 function text(value) { return String(value ?? '').trim(); }
 function lower(value) { return text(value).toLowerCase(); }
@@ -114,9 +115,12 @@ export function isSourceProviderTreePilotPayload(payload = {}, options = {}) {
   return isRvmSourcePreviewKind(providerTreeSourceKind(payload, options));
 }
 
+function providerTreeReadPathOptedIn(payload = {}, options = {}) {
+  return options.useProviderTreeReadPath === true || payload?.useProviderTreeReadPath === true || globalThis?.__PCF_GLB_RVM_PROVIDER_TREE_READ_PATH__ === true;
+}
+
 function providerTreeReadPathEnabled(payload = {}, options = {}) {
-  const enabled = options.useProviderTreeReadPath === true || payload?.useProviderTreeReadPath === true || globalThis?.__PCF_GLB_RVM_PROVIDER_TREE_READ_PATH__ === true;
-  return enabled && isSourceProviderTreePilotPayload(payload, options);
+  return providerTreeReadPathOptedIn(payload, options) && isSourceProviderTreePilotPayload(payload, options);
 }
 
 function normalizeProviderNode(node = {}) {
@@ -137,13 +141,47 @@ export function providerTreeNodesForPayload(payload = {}) {
   return Array.isArray(nodes) ? nodes.map(normalizeProviderNode).filter((node) => node.canonicalObjectId) : [];
 }
 
-export function hierarchyNodesForPayload(payload = {}, options = {}) {
-  if (providerTreeReadPathEnabled(payload, options)) {
-    const providerNodes = providerTreeNodesForPayload(payload);
-    if (providerNodes.length) return providerNodes;
-  }
+function legacyNodesForPayload(payload = {}) {
   const nodes = payload?.indexJson?.nodes || payload?.manifest?.nodes || payload?.manifest?.items || payload?.manifest?.runtime?.nodes || [];
   return Array.isArray(nodes) ? nodes : [];
+}
+
+function readPathReason({ optedIn, sourcePilot, providerCount }) {
+  if (!optedIn) return 'provider-read-path-not-enabled';
+  if (!sourcePilot) return 'not-source-preview-provider-pilot';
+  if (!providerCount) return 'provider-nodes-empty';
+  return 'provider-nodes-selected';
+}
+
+function rememberReadPathTelemetry(payload = {}, options = {}, readPath = 'legacy', nodes = [], providerNodes = []) {
+  const optedIn = providerTreeReadPathOptedIn(payload, options);
+  const sourcePilot = isSourceProviderTreePilotPayload(payload, options);
+  const provider = providerResultForPayload(payload);
+  const telemetry = {
+    version: RVM_PROVIDER_TREE_RUNTIME_TELEMETRY_VERSION,
+    readPath,
+    sourceKind: providerTreeSourceKind(payload, options) || 'unknown',
+    providerReadPathOptedIn: optedIn,
+    sourceProviderPilotEligible: sourcePilot,
+    providerCandidateCount: providerNodes.length,
+    renderedNodeCount: Array.isArray(nodes) ? nodes.length : 0,
+    providerId: provider?.providerId || '',
+    providerContractVersion: provider?.version || provider?.providerContractVersion || '',
+    reason: readPath === 'provider' ? 'provider-nodes-selected' : readPathReason({ optedIn, sourcePilot, providerCount: providerNodes.length }),
+  };
+  try { globalThis.__PCF_GLB_RVM_HIERARCHY_READ_PATH_TELEMETRY__ = telemetry; } catch (_) {}
+  return telemetry;
+}
+
+export function hierarchyNodesForPayload(payload = {}, options = {}) {
+  const providerNodes = providerTreeNodesForPayload(payload);
+  if (providerTreeReadPathEnabled(payload, options) && providerNodes.length) {
+    rememberReadPathTelemetry(payload, options, 'provider', providerNodes, providerNodes);
+    return providerNodes;
+  }
+  const nodes = legacyNodesForPayload(payload);
+  rememberReadPathTelemetry(payload, options, 'legacy', nodes, providerNodes);
+  return nodes;
 }
 
 export function makeHierarchyControllerState({ sourceKind = '', fileName = '', metadata = null, nodes = [] } = {}) {
