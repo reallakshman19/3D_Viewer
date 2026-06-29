@@ -1,4 +1,5 @@
-export const ENRICHMENT_CONFIG_SCHEMA = 'xml-compare-enrichment-config/v1';
+export const XML_COMPARE_ENRICHMENT_CONFIG_SCHEMA = 'xml-compare-enrichment-config/v1';
+export const ENRICHMENT_CONFIG_SCHEMA = XML_COMPARE_ENRICHMENT_CONFIG_SCHEMA;
 
 const COMP_TYPES = ['ATTA', 'ELBO', 'BRAN', 'OLET', 'RIGID', 'TEE', 'PIPE'];
 
@@ -17,7 +18,13 @@ export const DEFAULT_ENRICHMENT_CONFIG = Object.freeze({
   rating:       Object.freeze({ enabled: true, method: 'table', tableText: '', fixedValue: '' }),
   componentType: Object.freeze({ enabled: true, bendType: 'ELBO', sifType: 'BRAN', rigidType: 'ATTA', defaultType: 'ATTA' }),
   position:     Object.freeze({ enabled: false, startX: '', startY: '', startZ: '' }),
-  dtxr:         Object.freeze({ enabled: true, typeMapText: 'TYPE\tKIND\tDTXR_POS\n0\tANCHOR\tANCHOR\n3\tREST\tPIPE SUPPORT\n5\tREST\tPIPE SUPPORT\n7\tGUIDE\tGUIDE\n10\tGUIDE\tGUIDE\n17\tREST\tPIPE SUPPORT' }),
+  dtxr:         Object.freeze({ enabled: true, typeMapText: 'TYPE	KIND	DTXR_POS
+0	ANCHOR	ANCHOR
+3	REST	PIPE SUPPORT
+5	REST	PIPE SUPPORT
+7	GUIDE	GUIDE
+10	GUIDE	GUIDE
+17	REST	PIPE SUPPORT' }),
   pointPropertiesBasis: Object.freeze({ enabled: true, value: 'TO' }),
   restraintTypeConvert: Object.freeze({ enabled: false, rows: DEFAULT_RESTRAINT_TYPE_CONVERT_ROWS }),
 });
@@ -79,138 +86,41 @@ function renderRestraintTypeConvertSection(rtc) {
       <td><input class="enr-rtc-num" type="number" data-enr-rtc-row="${i}" data-enr-rtc-col="from" value="${esc(row.from || '')}" placeholder="e.g. 17" min="0" step="1"></td>
       <td class="enr-rtc-arrow">→</td>
       <td><input class="enr-rtc-num" type="number" data-enr-rtc-row="${i}" data-enr-rtc-col="to" value="${esc(row.to || '')}" placeholder="e.g. 14" min="0" step="1"></td>
-      <td><button type="button" class="enr-rtc-del" data-xml-compare-action="delete-restraint-type-row" data-row-index="${i}">✕</button></td>
+      <td><button type="button" data-xml-compare-action="delete-restraint-type-row" data-row-index="${i}">Delete</button></td>
     </tr>`).join('');
-
-  const body = `<table class="enr-rtc-table">
-      <thead><tr><th>Label</th><th>Source TYPE</th><th></th><th>Convert to</th><th></th></tr></thead>
-      <tbody>${tableRows}</tbody>
-    </table>
-    <button type="button" class="enr-rtc-add" data-xml-compare-action="add-restraint-type-row">+ Add row</button>
-    <p class="enr-hint">Rewrites RESTRAINT TYPE numbers in the source XML before other enrichments run. Useful when the model uses non-standard type codes. Applied only when "Apply to loaded XML" is clicked.</p>`;
-
-  return enrSection('restraintTypeConvert', 'Apply Restraint Type corrections to imported XML', rtc.enabled, body);
+  return enrSection('restraintTypeConvert', 'Restraint Type Conversion', rtc.enabled, `<p class="enr-help">Convert CAESAR restraint TYPE values before enrichment and analysis.</p><table class="enr-rtc-table"><thead><tr><th>Label</th><th>From TYPE</th><th></th><th>To TYPE</th><th></th></tr></thead><tbody>${tableRows}</tbody></table><button type="button" data-xml-compare-action="add-restraint-type-row">Add row</button>`);
 }
 
-export function renderXmlCompareEnrichmentConfigPopupHtml(config = {}) {
+function tabButton(tab, active) {
+  return `<button type="button" class="enr-tab ${active ? 'is-active' : ''}" data-xml-compare-action="enr-switch-tab" data-enr-tab-key="${esc(tab.key)}"><span>${esc(tab.icon)}</span>${esc(tab.label)}</button>`;
+}
+
+function sectionFor(key, cfg) {
+  if (key === 'restraintTypeConvert') return renderRestraintTypeConvertSection(cfg.restraintTypeConvert || {});
+  if (key === 'pipingClass') return enrSection('pipingClass', 'PipingClass', cfg.pipingClass?.enabled, `${enrField('pipingClass.regex','Regex',cfg.pipingClass?.regex || '')}${enrField('pipingClass.group','Group',cfg.pipingClass?.group || '1','number')}${enrField('pipingClass.tokenPosition','Token position',cfg.pipingClass?.tokenPosition || '4','number')}${enrField('pipingClass.tokenDelimiter','Token delimiter',cfg.pipingClass?.tokenDelimiter || '-')}`);
+  if (key === 'rating') return enrSection('rating', 'Rating', cfg.rating?.enabled, `${enrSelect('rating.method','Method',cfg.rating?.method || 'table',['fixed','table'])}${enrField('rating.fixedValue','Fixed value',cfg.rating?.fixedValue || '')}${enrTextarea('rating.tableText','Class→rating table',cfg.rating?.tableText || '', 'PIPINGCLASS\tRATING')}`);
+  if (key === 'componentType') return enrSection('componentType', 'ComponentType', cfg.componentType?.enabled, `${enrSelect('componentType.bendType','Bend',cfg.componentType?.bendType || 'ELBO',COMP_TYPES)}${enrSelect('componentType.sifType','SIF',cfg.componentType?.sifType || 'BRAN',COMP_TYPES)}${enrSelect('componentType.rigidType','Rigid',cfg.componentType?.rigidType || 'ATTA',COMP_TYPES)}${enrSelect('componentType.defaultType','Default',cfg.componentType?.defaultType || 'ATTA',COMP_TYPES)}`);
+  if (key === 'dtxr') return enrSection('dtxr', 'DTXR', cfg.dtxr?.enabled, `${enrTextarea('dtxr.typeMapText','TYPE map',cfg.dtxr?.typeMapText || '', 'TYPE\tKIND\tDTXR_POS')}`);
+  if (key === 'position') return enrSection('position', 'Position', cfg.position?.enabled, `${enrField('position.startX','Start X',cfg.position?.startX || '0','number')}${enrField('position.startY','Start Y',cfg.position?.startY || '0','number')}${enrField('position.startZ','Start Z',cfg.position?.startZ || '0','number')}`);
+  if (key === 'pointPropertiesBasis') return enrSection('pointPropertiesBasis', 'Point basis', cfg.pointPropertiesBasis?.enabled, `${enrSelect('pointPropertiesBasis.value','Value',cfg.pointPropertiesBasis?.value || 'TO',['FROM','TO'])}`);
+  return '';
+}
+
+export function renderXmlCompareEnrichmentConfigPopupHtml(config = createEnrichmentConfig()) {
   if (!config.open) return '';
-
-  const activeTab = config.activeEnrTab || 'restraint';
-
-  const pc   = { ...DEFAULT_ENRICHMENT_CONFIG.pipingClass,          ...(config.pipingClass          || {}) };
-  const rt   = { ...DEFAULT_ENRICHMENT_CONFIG.rating,               ...(config.rating               || {}) };
-  const ct   = { ...DEFAULT_ENRICHMENT_CONFIG.componentType,        ...(config.componentType        || {}) };
-  const pos  = { ...DEFAULT_ENRICHMENT_CONFIG.position,             ...(config.position             || {}) };
-  const dtxr = { ...DEFAULT_ENRICHMENT_CONFIG.dtxr,                 ...(config.dtxr                 || {}) };
-  const ppb  = { ...DEFAULT_ENRICHMENT_CONFIG.pointPropertiesBasis, ...(config.pointPropertiesBasis || {}) };
-  const rtc  = {
-    ...DEFAULT_ENRICHMENT_CONFIG.restraintTypeConvert,
-    ...(config.restraintTypeConvert || {}),
-    rows: config.restraintTypeConvert?.rows || DEFAULT_RESTRAINT_TYPE_CONVERT_ROWS.map(r => ({ ...r })),
-  };
-
-  const ratingMethod = rt.method === 'fixed' ? 'fixed' : 'table';
-
-  const sectionsByKey = {
-    restraintTypeConvert: renderRestraintTypeConvertSection(rtc),
-
-    pipingClass: enrSection('pipingClass', 'PipingClass — regex from LINE_ID', pc.enabled, `
-      <div class="enr-row">
-        ${enrField('pipingClass.regex', 'Regex pattern', pc.regex, 'text', '([0-9]{5})')}
-        ${enrField('pipingClass.group', 'Group #', pc.group, 'number', '1', 'min="0" max="9"')}
-      </div>
-      <div class="enr-row">
-        ${enrField('pipingClass.tokenPosition', 'Token position (fallback)', pc.tokenPosition, 'number', '4', 'min="1"')}
-        ${enrField('pipingClass.tokenDelimiter', 'Delimiter', pc.tokenDelimiter, 'text', '-')}
-      </div>
-      <p class="enr-hint">Regex is applied to LINE_ID (set by sideload table 1). Capture group is extracted. Token position is used as fallback when regex has no match.</p>
-    `),
-
-    rating: enrSection('rating', 'Rating — derived from PipingClass', rt.enabled, `
-      <div class="enr-radio-group">
-        <label><input type="radio" name="enr-rating-method" data-enr-field="rating.method" value="table" ${ratingMethod !== 'fixed' ? 'checked' : ''}> Lookup table</label>
-        <label><input type="radio" name="enr-rating-method" data-enr-field="rating.method" value="fixed" ${ratingMethod === 'fixed' ? 'checked' : ''}> Fixed value</label>
-      </div>
-      ${ratingMethod === 'fixed'
-        ? enrField('rating.fixedValue', 'Fixed rating', rt.fixedValue, 'text', '900')
-        : enrTextarea('rating.tableText', 'PipingClass → Rating (tab-separated, one row per line)', rt.tableText, 'PipingClass\tRating\n91261\t900\nS8810104\t150')
-      }
-    `),
-
-    componentType: enrSection('componentType', 'ComponentType — detected from XML structure', ct.enabled, `
-      <div class="enr-comp-grid">
-        <code>&lt;BEND&gt;</code><span class="enr-arrow">→</span>${enrSelect('componentType.bendType', '', ct.bendType, COMP_TYPES)}
-        <code>&lt;SIF&gt;</code><span class="enr-arrow">→</span>${enrSelect('componentType.sifType', '', ct.sifType, COMP_TYPES)}
-        <code>&lt;RIGID&gt;</code><span class="enr-arrow">→</span>${enrSelect('componentType.rigidType', '', ct.rigidType, COMP_TYPES)}
-        <span class="enr-default-label">Default (plain pipe)</span><span class="enr-arrow">→</span>${enrSelect('componentType.defaultType', '', ct.defaultType, COMP_TYPES)}
-      </div>
-    `),
-
-    dtxr: enrSection('dtxr', 'DTXR_POS / DTXR_PS — from RESTRAINT TYPE mapping', dtxr.enabled, `
-      ${enrTextarea('dtxr.typeMapText', 'TYPE → KIND → DTXR_POS (tab-separated, one row per line)', dtxr.typeMapText, 'TYPE\tKIND\tDTXR_POS\n0\tANCHOR\tANCHOR\n3\tREST\tPIPE SUPPORT')}
-      <p class="enr-hint">Maps the CII source RESTRAINT TYPE number to a support description. Both DTXR_POS and DTXR_PS are set to the same value. First active restraint TYPE per element is used.</p>
-    `),
-
-    position: enrSection('position', 'Position — accumulated from DELTA X/Y/Z', pos.enabled, `
-      <div class="enr-row enr-row-3">
-        ${enrField('position.startX', 'Start node X', pos.startX, 'number', '0')}
-        ${enrField('position.startY', 'Start node Y', pos.startY, 'number', '0')}
-        ${enrField('position.startZ', 'Start node Z', pos.startZ, 'number', '0')}
-      </div>
-      <p class="enr-hint">Enter the absolute coordinates of the first pipeline node (from E3D). DELTA values are accumulated along the run. Values of −1.0101 are treated as 0 mm.</p>
-    `),
-
-    pointPropertiesBasis: enrSection('pointPropertiesBasis', 'Point_properties_basis — fixed child element', ppb.enabled, `
-      <div class="enr-row">
-        ${enrField('pointPropertiesBasis.value', 'Value', ppb.value, 'text', 'TO')}
-      </div>
-      <p class="enr-hint">Adds &lt;Point_properties_basis&gt; to every PIPINGELEMENT. The value is always "TO" per CII 2019 convention.</p>
-    `),
-  };
-
-  const enabledByKey = {
-    restraintTypeConvert: rtc.enabled,
-    pipingClass:          pc.enabled,
-    rating:               rt.enabled,
-    componentType:        ct.enabled,
-    dtxr:                 dtxr.enabled,
-    position:             pos.enabled,
-    pointPropertiesBasis: ppb.enabled,
-  };
-
-  const tabBar = ENR_TABS.map(tab => {
-    const isActive = tab.key === activeTab;
-    const hasEnabled = tab.sectionKeys.some(k => enabledByKey[k]);
-    return `<button type="button" class="enr-tab-btn${isActive ? ' is-active' : ''}" data-xml-compare-action="enr-switch-tab" data-enr-tab-key="${esc(tab.key)}">
-      <span class="enr-tab-dot${hasEnabled ? ' is-on' : ''}"></span>${esc(tab.label)}
-    </button>`;
-  }).join('');
-
-  const activeTabDef = ENR_TABS.find(t => t.key === activeTab) || ENR_TABS[0];
-  const tabContent = activeTabDef.sectionKeys.map(k => sectionsByKey[k]).join('\n');
-
-  return `<div class="enr-backdrop" data-xml-compare-enrichment-popup>
-  <section class="enr-dialog" role="dialog" aria-modal="true" aria-label="Enrichment Config">
-    <header class="enr-dialog-header">
-      <div>
-        <h3>Enrichment Config</h3>
-        <p>Auto-populate derived fields when sideload tables are applied.</p>
-      </div>
-      <button type="button" data-xml-compare-action="close-enrichment">Close</button>
-    </header>
-    <nav class="enr-tab-bar" role="tablist">${tabBar}</nav>
-    <div class="enr-dialog-body">
-      ${tabContent}
-    </div>
-    <footer class="enr-dialog-footer">
-      <p class="enr-footer-note">Config is saved to browser localStorage. Enrichment runs when "Apply to loaded XML" is clicked in the Sideload panel.</p>
-      <div class="enr-footer-actions">
-        <button type="button" data-xml-compare-action="close-enrichment">Cancel</button>
-        <button type="button" data-xml-compare-action="save-enrichment" class="enr-btn-primary">Save Config</button>
-      </div>
-    </footer>
-  </section>
-</div>`;
+  const activeKey = config.activeEnrTab || 'restraint';
+  const activeTab = ENR_TABS.find(t => t.key === activeKey) || ENR_TABS[0];
+  return `<div class="xml-compare-sideload-backdrop" data-xml-compare-enrichment-popup="true">
+    <section class="xml-compare-sideload-dialog enr-dialog">
+      <header><div><h3>Enrichment Config</h3><p>Configure enrichment before applying sideload XML.</p></div><button type="button" data-xml-compare-action="close-enrichment">Close</button></header>
+      <div class="enr-tabs">${ENR_TABS.map(t => tabButton(t, t.key === activeTab.key)).join('')}</div>
+      <div class="enr-tab-panel">${activeTab.sectionKeys.map(key => sectionFor(key, config)).join('')}</div>
+      <footer><button type="button" data-xml-compare-action="save-enrichment">Save</button><small>${esc(activeTab.label)} settings</small></footer>
+    </section>
+  </div>`;
 }
 
-export const _test = Object.freeze({ esc, enrField, enrSelect, enrTextarea, enrSection, createEnrichmentConfig, DEFAULT_RESTRAINT_TYPE_CONVERT_ROWS, ENR_TABS });
+export function saveEnrichmentToStorage(config) { try { localStorage.setItem('xmlCompare.enrichmentConfig.v1', JSON.stringify(config)); } catch {} }
+export function loadEnrichmentFromStorage() { try { const raw = localStorage.getItem('xmlCompare.enrichmentConfig.v1'); return raw ? createEnrichmentConfig(JSON.parse(raw)) : createEnrichmentConfig(); } catch { return createEnrichmentConfig(); } }
+
+export const _test = Object.freeze({ esc, enrField, enrSelect, enrTextarea, sectionFor });

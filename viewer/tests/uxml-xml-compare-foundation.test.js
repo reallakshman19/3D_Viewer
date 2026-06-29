@@ -1,10 +1,9 @@
-import { describe, expect, it } from 'vitest';
+import assert from 'node:assert/strict';
+
 import { createXmlCompareElementIndex } from '../xml-compare/XmlCompareElementIndex.js';
 import { createXmlCompareMatchMap } from '../xml-compare/XmlCompareMatchMap.js';
 
-describe('xml compare foundation import contract', () => {
-  it('loads XML compare foundation modules', () => {
-    expect(createXmlCompareElementIndex([]).summary.elementCount).toBe(0);
-    expect(createXmlCompareMatchMap().summary.matchCount).toBe(0);
-  });
-});
+assert.equal(createXmlCompareElementIndex([]).summary.elementCount, 0);
+assert.equal(createXmlCompareMatchMap().summary.matchCount, 0);
+
+console.log('uxml-xml-compare-foundation: all assertions passed');
