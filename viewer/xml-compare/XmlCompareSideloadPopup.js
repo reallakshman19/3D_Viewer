@@ -12,6 +12,15 @@ function reportRows(report){
     ['Restraint tag rows',report.tagRows],
     ['Restraint tags applied',report.tagsApplied]
   ];
+  if(report.enrichment){
+    const e=report.enrichment;
+    if(e.pipingClassApplied)rows.push(['PipingClass enriched',e.pipingClassApplied]);
+    if(e.ratingApplied)rows.push(['Rating enriched',e.ratingApplied]);
+    if(e.componentTypeApplied)rows.push(['ComponentType enriched',e.componentTypeApplied]);
+    if(e.dtxrApplied)rows.push(['DTXR enriched',e.dtxrApplied]);
+    if(e.pointBasisApplied)rows.push(['PointBasis enriched',e.pointBasisApplied]);
+    if(e.positionApplied)rows.push(['Position enriched',e.positionApplied]);
+  }
   return `<dl class="xml-compare-sideload-report">${rows.map(([name,value])=>`<div><dt>${esc(name)}</dt><dd>${esc(value??0)}</dd></div>`).join('')}</dl>`;
 }
 

@@ -2313,7 +2313,7 @@ async function _openInputxml2019PreRunPopup(def, values, primaryFileName, primar
   const requirements = _parseInputxml2019Requirements(xmlText);
   const prepared = _prepareInputxml2019ConfigForRequirements(values.layoutConfigJson, requirements);
 
-  const popupHeaderFields = def.fields
+  const popupHeaderFields = (def.fields || def.options || [])
     .filter((entry) => INPUTXML2019_POPUP_HEADER_KEYS.includes(entry.key))
     .map((entry) => ({
       ...entry,
