@@ -16,7 +16,7 @@ const renderer = read('tabs/viewer3d-rvm-tab-renderer.js');
 const actionBridge = read('tabs/RvmHierarchyMultiSelectActionBridge.js');
 const visibility = read('rvm-viewer/RvmVisibilityController.js');
 
-assert.ok(actionBridge.includes("VERSION = '20260629-rvm-hierarchy-multiselect-action-status-1'"), 'action bridge must expose status-feedback version');
+assert.ok(actionBridge.includes("VERSION = '20260629-rvm-hierarchy-multiselect-action-status-2'"), 'action bridge must expose status-feedback version');
 assert.ok(actionBridge.includes("document.addEventListener('rvm-hierarchy-multiselect-action'"), 'action bridge must listen to multiselect action events');
 assert.ok(actionBridge.includes('dispatchHierarchyMultiSelectAction'), 'action bridge must export dispatch helper');
 assert.ok(actionBridge.includes('viewer.selectCanonicalIds?.(selectedIds, { additive: false })'), 'fit action must select canonical IDs');
@@ -41,7 +41,7 @@ assert.ok(visibility.includes('const isolatedMode = this._isolatedCanonicalIds.s
 assert.ok(visibility.includes('if (isolatedMode) this._isolatedCanonicalIds.add(id)'), 'selected show must add selected IDs to isolate set so they become visible');
 assert.ok(!visibility.includes('this._isolatedCanonicalIds.delete(id);'), 'selected show must not remove selected IDs from isolate set');
 assert.ok(visibility.includes('getVisibilityState()'), 'visibility controller must expose diagnostic state');
-assert.ok(renderer.includes('RvmHierarchyMultiSelectActionBridge.js?v=20260629-rvm-hierarchy-multiselect-action-status-1'), 'renderer must import action bridge with status-feedback cache key');
+assert.ok(renderer.includes('RvmHierarchyMultiSelectActionBridge.js?v=20260629-rvm-hierarchy-multiselect-action-status-2'), 'renderer must import action bridge with status-feedback cache key');
 assert.ok(renderer.includes('RvmSelectionDetailsInspectorBridge.js?v=20260629-rvm-selection-details-syntax-fix-1'), 'renderer must import syntax-fixed selection details bridge cache key');
 assert.ok(renderer.includes('installRvmHierarchyMultiSelectActionBridge()'), 'renderer must install action bridge');
 
