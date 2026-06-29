@@ -1,7 +1,7 @@
 import { isRvmSourcePreviewKind, normalizeRvmSourceKind } from '../RvmSourceKindPolicy.js';
 
-const VERSION = '20260628-rvm-deferred-source-tools-dashboard-1';
-const PREVIOUS_VERSION = '20260628-rvm-deferred-right-panel-ui-v2-1';
+const VERSION = '20260629-rvm-deferred-support-details-polish-1';
+const PREVIOUS_VERSION = '20260628-rvm-deferred-source-tools-dashboard-1';
 const API_KEY = '__PCF_GLB_RVM_BRIDGE_LOADER__';
 const ACTION_DIAGNOSTICS_KEY = '__PCF_GLB_RVM_ACTION_DIAGNOSTICS__';
 
@@ -9,7 +9,7 @@ const BRIDGE_GROUPS = Object.freeze({
   sourcePreview: [
     { id: 'nonprimitive-support-overlay', specifier: './RvmNonPrimitiveSupportOverlayBridge.js?v=20260623-nonprimitive-support-overlay-9', install: 'installRvmNonPrimitiveSupportOverlayBridge' },
     { id: 'nonprimitive-support-hard-disable', specifier: './RvmNonPrimitiveSupportOverlayHardDisableBridge.js?v=20260623-nonprimitive-support-hard-disable-1', install: 'installRvmNonPrimitiveSupportOverlayHardDisableBridge' },
-    { id: 'nonprimitive-support-details-panel', specifier: './RvmNonPrimitiveSupportOverlayDetailsPanelBridge.js?v=20260623-nonprimitive-support-details-panel-4', install: 'installRvmNonPrimitiveSupportOverlayDetailsPanelBridge' },
+    { id: 'nonprimitive-support-details-panel', specifier: './RvmNonPrimitiveSupportOverlayDetailsPanelBridge.js?v=20260629-rvm-support-details-polish-1', previousSpecifier: './RvmNonPrimitiveSupportOverlayDetailsPanelBridge.js?v=20260623-nonprimitive-support-details-panel-4', install: 'installRvmNonPrimitiveSupportOverlayDetailsPanelBridge' },
     { id: 'nonprimitive-support-hover', specifier: './RvmNonPrimitiveSupportOverlayHoverBridge.js?v=20260623-nonprimitive-support-hover-2', install: 'installRvmNonPrimitiveSupportOverlayHoverBridge' },
     { id: 'nonprimitive-auto-bend', specifier: './RvmNonPrimitiveAutoBendBridge.js?v=20260623-nonprimitive-auto-bend-preview-2', install: 'installRvmNonPrimitiveAutoBendBridge' },
     { id: 'nonprimitive-node-markers', specifier: './RvmNonPrimitiveNodeMarkerBridge.js?v=20260625-node-marker-deferred-1', install: 'installRvmNonPrimitiveNodeMarkerBridge' },
@@ -81,12 +81,8 @@ export function ensureRvmBridgeGroup(groupName, reason = 'manual') {
   const existing = groupPromises.get(groupName);
   if (existing) return existing;
   const promise = Promise.allSettled(group.map((spec) => loadAndInstall(spec, reason))).then((results) => {
-    const failures = results
-      .map((result, index) => ({ result, spec: group[index] }))
-      .filter(({ result }) => result.status === 'rejected');
-    if (failures.length) {
-      for (const { result, spec } of failures) reportRvmActionError(result.reason, { action: 'bridge-install', bridge: spec.id, group: groupName, reason });
-    }
+    const failures = results.map((result, index) => ({ result, spec: group[index] })).filter(({ result }) => result.status === 'rejected');
+    if (failures.length) for (const { result, spec } of failures) reportRvmActionError(result.reason, { action: 'bridge-install', bridge: spec.id, group: groupName, reason });
     if (groupName === 'sourcePreview' && !failures.length) refreshSourcePreviewRuntime(reason);
     refreshDiagnosticsDrawer();
     return { group: groupName, reason, results, failures };
@@ -213,12 +209,7 @@ function installRvmBridgeActionDiagnostics() {
 function reportRvmActionError(error, context = {}) {
   const root = document.querySelector('[data-rvm-viewer]');
   const message = String(error?.message || error || 'Unknown RVM action error');
-  const entry = {
-    at: new Date().toISOString(),
-    message,
-    stack: String(error?.stack || ''),
-    ...context,
-  };
+  const entry = { at: new Date().toISOString(), message, stack: String(error?.stack || ''), ...context };
   const current = globalThis[ACTION_DIAGNOSTICS_KEY] || { schema: 'rvm-action-diagnostics/v1', version: VERSION, failures: [] };
   current.version = VERSION;
   current.failures = [entry, ...(current.failures || [])].slice(0, 20);
