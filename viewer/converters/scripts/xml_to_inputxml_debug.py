@@ -239,7 +239,7 @@ def _add_point_properties(element: ET.Element, edge: base.Edge, by_number: dict[
             ET.SubElement(element, field).text = value
 
 
-def _inputxml_from_final_xml(final_xml: Path, support_config: dict[str, Any], use_json_restraints: bool) -> ET.ElementTree:
+def _inputxml_from_final_xml(final_xml: Path, support_config: dict[str, Any], use_json_restraints: bool, weight_scale: float = 1.0) -> ET.ElementTree:
     document = base._parse_xml_document(final_xml)
     by_number, by_name, hydro_by_branch = _node_meta(final_xml)
     insulation_density_map = patched._branch_insulation_density_map(final_xml)
@@ -291,7 +291,7 @@ def _inputxml_from_final_xml(final_xml: Path, support_config: dict[str, Any], us
                 weight_val = (
                     from_node.weight if (from_node.rigid == 2 and abs(from_node.weight) > 1e-12)
                     else to_node.weight
-                )
+                ) * weight_scale
                 ET.SubElement(element, "RIGID", {"WEIGHT": _fmt(weight_val, 6)})
             if to_node.component_type.upper() in {"TEE", "OLET", "BRAN"}:
                 meta = by_number.get(to_node.node_number) or by_name.get(to_node.node_name) or {}
@@ -316,6 +316,8 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--no-use-restraint-type-based-on-json", dest="use_restraint_type_based_on_json", action="store_false")
     parser.add_argument("--split-condensed-valve-flange", dest="split_condensed_valve_flange", action="store_true", default=None)
     parser.add_argument("--no-split-condensed-valve-flange", dest="split_condensed_valve_flange", action="store_false")
+    parser.add_argument("--weight-scale", dest="weight_scale", type=float, default=1.0,
+                        help="Multiplier applied to RIGID element weights (e.g. 10 to convert kgf → N).")
     return parser.parse_args()
 
 
@@ -326,7 +328,7 @@ def main() -> None:
         support_config["splitCondensedValveFlange"] = bool(args.split_condensed_valve_flange)
     final_xml = patched._maybe_enrich_from_staged_json(args.input, args.staged_json, support_config)
     final_xml = patched._apply_process_data_to_xml(final_xml, support_config)
-    tree = _inputxml_from_final_xml(final_xml, support_config, args.use_restraint_type_based_on_json)
+    tree = _inputxml_from_final_xml(final_xml, support_config, args.use_restraint_type_based_on_json, weight_scale=args.weight_scale)
     ET.indent(tree, space="  ")
     tree.write(args.output, encoding="unicode", xml_declaration=True)
     print(f"Wrote enriched InputXML debug artifact: {args.output}")

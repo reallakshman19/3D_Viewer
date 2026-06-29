@@ -387,6 +387,7 @@ async function _runXmlCiiEnrichedInputXmlExport(pyodide, converterId, primaryPat
   } else {
     argv.push('--use-restraint-type-based-on-json');
   }
+  if (options?.kgToNewton !== false) argv.push('--weight-scale', '10');
   await _runPythonScript(pyodide, '/scripts/xml_to_inputxml_debug.py', argv, stdout, stderr);
   return { script: 'xml_to_inputxml_debug.py', outputPath, outputName };
 }
