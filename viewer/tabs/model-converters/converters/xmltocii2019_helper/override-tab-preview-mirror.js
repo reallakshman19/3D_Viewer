@@ -1,5 +1,7 @@
 import { getXmlCiiPreviewRuntimeConfig, clearXmlCiiRuntimeBuckets } from '../../shared/preview-filldown.js?v=20260626-smart-fill-1';
 
+const RUNTIME_OVERRIDE_STORAGE_KEY = 'xmlCii2019.preview.runtimeOverrides.v1';
+
 function text(value) {
   return value === null || value === undefined ? '' : String(value);
 }
@@ -61,6 +63,10 @@ function processEntries(config) {
     .sort(([a], [b]) => a.localeCompare(b));
 }
 
+function clearEntryButton(bucketName, key) {
+  return `<button type="button" class="model-converters-mini-btn" data-clear-xml-cii-override-entry-bucket="${esc(bucketName)}" data-clear-xml-cii-override-entry-key="${esc(key)}" title="Clear this override" aria-label="Clear override" style="font-size:11px;padding:2px 7px;line-height:1;">×</button>`;
+}
+
 function tableHtml(title, leftLabel, rightLabel, entries, bucketName) {
   if (!entries.length) return '';
   return `<section class="model-converters-workflow-override-section" data-preview-override-mirror-section>
@@ -73,8 +79,8 @@ function tableHtml(title, leftLabel, rightLabel, entries, bucketName) {
     </div>
     <div class="model-converters-workflow-table-wrap">
       <table class="model-converters-workflow-table">
-        <thead><tr><th>${esc(leftLabel)}</th><th>${esc(rightLabel)}</th></tr></thead>
-        <tbody>${entries.map(([key, value]) => `<tr><td><code>${esc(key)}</code></td><td><strong>${esc(value)}</strong></td></tr>`).join('')}</tbody>
+        <thead><tr><th>${esc(leftLabel)}</th><th>${esc(rightLabel)}</th><th style="width:52px;">Clear</th></tr></thead>
+        <tbody>${entries.map(([key, value]) => `<tr><td><code>${esc(key)}</code></td><td><strong>${esc(value)}</strong></td><td>${clearEntryButton(bucketName, key)}</td></tr>`).join('')}</tbody>
       </table>
     </div>
   </section>`;
@@ -90,14 +96,14 @@ function findManualOverrideCard() {
 
 function previewOverrideFingerprint(config) {
   const payload = {
+    pipingClass: flatEntries(config, 'pipingClass'),
+    material: flatEntries(config, 'material'),
     rating: flatEntries(config, 'rating'),
     materialCode: flatEntries(config, 'materialCode'),
     wallThickness: flatEntries(config, 'wallThickness'),
     corrosion: flatEntries(config, 'corrosion'),
     rigidWeight: flatEntries(config, 'rigidWeight'),
     processData: processEntries(config),
-    nativePipingClassCount: Object.keys(config?.overrides?.pipingClass || {}).length,
-    nativeMaterialCount: Object.keys(config?.overrides?.material || {}).length,
   };
   return JSON.stringify(payload);
 }
@@ -111,6 +117,8 @@ function renderPreviewOverrideMirror() {
   if (card.dataset.previewOverrideMirrorFingerprint === fingerprint && card.querySelector('[data-preview-override-mirror]')) return;
 
   const sections = [
+    tableHtml('Derived Class Overrides', 'Derived Class Key', 'Piping Class', flatEntries(config, 'pipingClass'), 'pipingClass'),
+    tableHtml('Material Name Overrides', 'Line / Branch / Material Key', 'Material Name', flatEntries(config, 'material'), 'material'),
     tableHtml('Rating Overrides', 'Line / Branch / Class Key', 'Rating', flatEntries(config, 'rating'), 'rating'),
     tableHtml('Material Code Overrides', 'Line / Branch / Material Key', 'Code', flatEntries(config, 'materialCode'), 'materialCode'),
     tableHtml('Wall Thickness Overrides', 'Line / Branch Key', 'Wall Thickness', flatEntries(config, 'wallThickness'), 'wallThickness'),
@@ -123,41 +131,75 @@ function renderPreviewOverrideMirror() {
   card.dataset.previewOverrideMirrorFingerprint = fingerprint;
   if (!sections) return;
 
-  const nativeCount = Object.keys(config?.overrides?.pipingClass || {}).length + Object.keys(config?.overrides?.material || {}).length;
-  const mirroredCount = flatEntries(config, 'rating').length
+  const mirroredCount = flatEntries(config, 'pipingClass').length
+    + flatEntries(config, 'material').length
+    + flatEntries(config, 'rating').length
     + flatEntries(config, 'materialCode').length
     + flatEntries(config, 'wallThickness').length
     + flatEntries(config, 'corrosion').length
     + flatEntries(config, 'rigidWeight').length
     + processEntries(config).length;
   const countEl = card.querySelector('.model-converters-workflow-count');
-  if (countEl) countEl.textContent = `${nativeCount + mirroredCount} override(s)`;
+  if (countEl) countEl.textContent = `${mirroredCount} override(s)`;
 
-  card.insertAdjacentHTML('beforeend', `<div data-preview-override-mirror class="model-converters-workflow-detail-note" style="margin-top:12px;">Preview-saved override buckets are shown below. Native editable sections remain Piping Class and Material; edit Rating/Process values from Preview or Config JSON.</div>${sections}`);
+  card.insertAdjacentHTML('beforeend', `<div data-preview-override-mirror class="model-converters-workflow-detail-note" style="margin-top:12px;">Preview-saved and native override buckets are shown below. Use the × button to clear one override, or Clear to remove an entire bucket.</div>${sections}`);
 }
 
 // Companion buckets to clear together (e.g. __dtxrWallKeys tracks which wallThickness
 // entries were written by the DTXR button rather than manual edits).
 const BUCKET_COMPANIONS = { wallThickness: ['__dtxrWallKeys'] };
 
-function clearOverrideBucket(bucketName) {
-  const companions = BUCKET_COMPANIONS[bucketName] || [];
-  // Clear from supportConfigJson DOM input
+function mutateSupportConfigOverrides(mutator) {
   const input = document?.querySelector?.('[data-option-key="supportConfigJson"]');
   if (input && 'value' in input) {
     try {
       const config = JSON.parse(input.value || '{}');
-      if (config.overrides && typeof config.overrides === 'object') {
-        delete config.overrides[bucketName];
-        for (const companion of companions) delete config.overrides[companion];
-      }
+      if (!config.overrides || typeof config.overrides !== 'object' || Array.isArray(config.overrides)) config.overrides = {};
+      mutator(config.overrides);
       input.value = JSON.stringify(config);
       input.dispatchEvent(new Event('change', { bubbles: true }));
     } catch {}
   }
+}
+
+function mutateRuntimeOverrides(mutator) {
+  let runtime = getXmlCiiPreviewRuntimeConfig();
+  runtime = runtime && typeof runtime === 'object' && !Array.isArray(runtime) ? { ...runtime } : { overrides: {} };
+  runtime.overrides = runtime.overrides && typeof runtime.overrides === 'object' && !Array.isArray(runtime.overrides) ? { ...runtime.overrides } : {};
+  mutator(runtime.overrides);
+  runtime.updatedAt = new Date().toISOString();
+  try { localStorage.setItem(RUNTIME_OVERRIDE_STORAGE_KEY, JSON.stringify(runtime)); } catch {}
+  if (typeof window !== 'undefined') window.__xmlCiiPreviewRuntimeOverrides = runtime;
+}
+
+function clearOverrideBucket(bucketName) {
+  const companions = BUCKET_COMPANIONS[bucketName] || [];
+  mutateSupportConfigOverrides((overrides) => {
+    delete overrides[bucketName];
+    for (const companion of companions) delete overrides[companion];
+  });
   // Also clear from runtime overrides (written by fill-down, not just DOM config).
   // Without this step the runtime store re-merges the values on the next render.
   clearXmlCiiRuntimeBuckets(bucketName, ...companions);
+  try { localStorage.removeItem('xml-cii-pv-cache-v2'); } catch {}
+}
+
+function clearOverrideEntry(bucketName, key) {
+  const cleanBucket = clean(bucketName);
+  const cleanKey = clean(key);
+  if (!cleanBucket || !cleanKey) return;
+  mutateSupportConfigOverrides((overrides) => {
+    if (overrides[cleanBucket] && typeof overrides[cleanBucket] === 'object' && !Array.isArray(overrides[cleanBucket])) {
+      delete overrides[cleanBucket][cleanKey];
+      if (Object.keys(overrides[cleanBucket]).length === 0) delete overrides[cleanBucket];
+    }
+  });
+  mutateRuntimeOverrides((overrides) => {
+    if (overrides[cleanBucket] && typeof overrides[cleanBucket] === 'object' && !Array.isArray(overrides[cleanBucket])) {
+      delete overrides[cleanBucket][cleanKey];
+      if (Object.keys(overrides[cleanBucket]).length === 0) delete overrides[cleanBucket];
+    }
+  });
   try { localStorage.removeItem('xml-cii-pv-cache-v2'); } catch {}
 }
 
@@ -179,8 +221,14 @@ export function installXmlCiiPreviewOverrideTabMirror() {
   };
   schedule();
   new MutationObserver(schedule).observe(document.body, { childList: true, subtree: true });
-  // Delegate clear-bucket button clicks (buttons live inside the mirror sections).
+  // Delegate clear-bucket and clear-entry button clicks (buttons live inside the mirror sections).
   document.body.addEventListener('click', (event) => {
+    const entryBtn = event.target.closest('[data-clear-xml-cii-override-entry-bucket][data-clear-xml-cii-override-entry-key]');
+    if (entryBtn) {
+      clearOverrideEntry(entryBtn.getAttribute('data-clear-xml-cii-override-entry-bucket'), entryBtn.getAttribute('data-clear-xml-cii-override-entry-key'));
+      schedule();
+      return;
+    }
     const btn = event.target.closest('[data-clear-xml-cii-override-bucket]');
     if (!btn) return;
     const bucket = btn.getAttribute('data-clear-xml-cii-override-bucket');
