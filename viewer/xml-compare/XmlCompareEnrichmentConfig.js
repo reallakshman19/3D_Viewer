@@ -1,7 +1,16 @@
-export const XML_COMPARE_ENRICHMENT_CONFIG_SCHEMA = 'xml-compare-enrichment-config/v1';
+export const XML_COMPARE_ENRICHMENT_CONFIG_SCHEMA = 'xml-compare-enrichment-config/v2-syntax-fix';
 export const ENRICHMENT_CONFIG_SCHEMA = XML_COMPARE_ENRICHMENT_CONFIG_SCHEMA;
 
 const COMP_TYPES = ['ATTA', 'ELBO', 'BRAN', 'OLET', 'RIGID', 'TEE', 'PIPE'];
+const DEFAULT_DTXR_TYPE_MAP_TEXT = [
+  'TYPE\tKIND\tDTXR_POS',
+  '0\tANCHOR\tANCHOR',
+  '3\tREST\tPIPE SUPPORT',
+  '5\tREST\tPIPE SUPPORT',
+  '7\tGUIDE\tGUIDE',
+  '10\tGUIDE\tGUIDE',
+  '17\tREST\tPIPE SUPPORT',
+].join('\n');
 
 const DEFAULT_RESTRAINT_TYPE_CONVERT_ROWS = Object.freeze([
   Object.freeze({ label: '+Y',  from: '17', to: '14' }),
@@ -18,13 +27,7 @@ export const DEFAULT_ENRICHMENT_CONFIG = Object.freeze({
   rating:       Object.freeze({ enabled: true, method: 'table', tableText: '', fixedValue: '' }),
   componentType: Object.freeze({ enabled: true, bendType: 'ELBO', sifType: 'BRAN', rigidType: 'ATTA', defaultType: 'ATTA' }),
   position:     Object.freeze({ enabled: false, startX: '', startY: '', startZ: '' }),
-  dtxr:         Object.freeze({ enabled: true, typeMapText: 'TYPE	KIND	DTXR_POS
-0	ANCHOR	ANCHOR
-3	REST	PIPE SUPPORT
-5	REST	PIPE SUPPORT
-7	GUIDE	GUIDE
-10	GUIDE	GUIDE
-17	REST	PIPE SUPPORT' }),
+  dtxr:         Object.freeze({ enabled: true, typeMapText: DEFAULT_DTXR_TYPE_MAP_TEXT }),
   pointPropertiesBasis: Object.freeze({ enabled: true, value: 'TO' }),
   restraintTypeConvert: Object.freeze({ enabled: false, rows: DEFAULT_RESTRAINT_TYPE_CONVERT_ROWS }),
 });
@@ -123,4 +126,4 @@ export function renderXmlCompareEnrichmentConfigPopupHtml(config = createEnrichm
 export function saveEnrichmentToStorage(config) { try { localStorage.setItem('xmlCompare.enrichmentConfig.v1', JSON.stringify(config)); } catch {} }
 export function loadEnrichmentFromStorage() { try { const raw = localStorage.getItem('xmlCompare.enrichmentConfig.v1'); return raw ? createEnrichmentConfig(JSON.parse(raw)) : createEnrichmentConfig(); } catch { return createEnrichmentConfig(); } }
 
-export const _test = Object.freeze({ esc, enrField, enrSelect, enrTextarea, sectionFor });
+export const _test = Object.freeze({ esc, enrField, enrSelect, enrTextarea, sectionFor, DEFAULT_DTXR_TYPE_MAP_TEXT });
