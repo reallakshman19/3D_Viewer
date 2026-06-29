@@ -17,12 +17,17 @@ function assert(condition, message) {
   }
 }
 
-assert(workflow.includes('override-tab-preview-mirror.js?v=20260620-preview-override-mirror-1'), 'WorkflowShell installs override-tab mirror with cache bust');
+assert(workflow.includes('override-tab-preview-mirror.js?v=20260629-clear-native-overrides-1'), 'WorkflowShell installs override-tab mirror with native override clear cache bust');
 assert(mirror.includes('getXmlCiiPreviewRuntimeConfig'), 'mirror reads runtime Preview override cache');
 assert(mirror.includes('mergeOverrideConfig'), 'mirror merges runtime overrides with supportConfigJson');
-for (const bucket of ['rating', 'materialCode', 'wallThickness', 'corrosion', 'rigidWeight']) {
+for (const bucket of ['pipingClass', 'material', 'rating', 'materialCode', 'wallThickness', 'corrosion', 'rigidWeight']) {
   assert(mirror.includes(`flatEntries(config, '${bucket}')`), `mirror renders ${bucket} overrides`);
 }
+assert(mirror.includes('Derived Class Overrides'), 'mirror renders Derived Class Overrides section');
+assert(mirror.includes('Material Name Overrides'), 'mirror renders Material Name Overrides section');
+assert(mirror.includes('data-clear-xml-cii-override-entry-bucket'), 'mirror renders per-entry clear buttons');
+assert(mirror.includes('clearOverrideEntry'), 'mirror handles per-entry clear actions');
+assert(mirror.includes('RUNTIME_OVERRIDE_STORAGE_KEY'), 'mirror clears persisted runtime entries');
 assert(mirror.includes('processEntries(config)'), 'mirror renders processData overrides');
 assert(mirror.includes('previewOverrideFingerprint'), 'mirror avoids MutationObserver rerender loops');
 assert(mirror.includes('Manual Override'), 'mirror targets Manual Override tab only');
