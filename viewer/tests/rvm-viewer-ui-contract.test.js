@@ -22,6 +22,7 @@ const sourceToolsUi = read('tabs/RvmNonPrimitiveSourceToolsUiBridge.js');
 const supportDetailsBridge = read('tabs/RvmNonPrimitiveSupportOverlayDetailsPanelBridge.js');
 const supportDetailsPanel = read('overlays/support/SupportOverlayDetailsPanel.js');
 const selectionDetails = read('tabs/RvmSelectionDetailsInspectorBridge.js');
+const providerSelectionParity = read('tabs/RvmHierarchyProviderSelectionParityBridge.js');
 const formatNeutral = read('tabs/RvmFormatNeutralHierarchy.js');
 const toolbar = read('tabs/RvmToolbarCompactBridge.js');
 const sourceInput = read('tabs/RvmSourceFormatInputBridge.js');
@@ -41,10 +42,24 @@ assert.deepEqual([...new Set(rvmViewerImports)], [`RvmViewer3D.js?v=${key}`], 'r
 assert.ok(renderer.includes('viewer3d-rvm-tab.js?v=20260628-rvm-tab-startup-selection-fix-1'), 'renderer must import current mounted RVM tab key');
 assert.ok(renderer.includes('RvmDeferredBridgeLoader.js?v=20260629-rvm-deferred-support-details-polish-1'), 'renderer must import support details polish deferred loader key');
 assert.ok(renderer.includes('RvmSelectionDetailsInspectorBridge.js?v=20260629-rvm-selected-entity-restore-1'), 'renderer must import restored selected entity UI key');
+assert.ok(renderer.includes('RvmHierarchyProviderSelectionParityBridge.js?v=20260629-rvm-provider-selection-parity-1'), 'renderer must import provider selection parity bridge');
+assert.ok(renderer.includes('installRvmHierarchyProviderSelectionParityBridge()'), 'renderer must install provider selection parity bridge');
 assert.ok(!renderer.includes('RvmModelHealthBridge.js?v='), 'renderer must not eagerly import model health bridge');
 assert.ok(tab.includes('RvmFormatNeutralHierarchy.js?v=20260628-format-neutral-shared-kind-policy-1'), 'mounted RVM tab must import current format-neutral helper key');
 assert.ok(formatNeutral.includes('RvmSourceKindPolicy.js'), 'format-neutral helper must use shared source-kind policy');
 assert.ok(formatNeutral.includes('sourceKindFromFileName(fileName)'), 'format-neutral helper must delegate filename classification to shared policy');
+
+assert.ok(providerSelectionParity.includes("RVM_HIERARCHY_PROVIDER_SELECTION_PARITY_VERSION = '20260629-rvm-provider-selection-parity-1'"), 'provider selection parity bridge must expose version');
+assert.ok(providerSelectionParity.includes('computeHierarchyProviderSelectionParity'), 'provider selection parity bridge must export compute helper');
+assert.ok(providerSelectionParity.includes('rvm-hierarchy-provider-selection-parity'), 'provider selection parity bridge must emit parity diagnostics event');
+assert.ok(providerSelectionParity.includes('rvmHierarchyProviderSelectionMismatchCount'), 'provider selection parity bridge must stamp mismatch count');
+assert.ok(providerSelectionParity.includes('selectedMissingInProvider'), 'provider selection parity bridge must report selected IDs missing in provider nodes');
+assert.ok(providerSelectionParity.includes('selectedMissingInRender'), 'provider selection parity bridge must report selected IDs missing in render aliases');
+assert.ok(providerSelectionParity.includes('matchedRenderCount'), 'provider selection parity bridge must report render match count');
+assert.ok(providerSelectionParity.includes('providerDuplicateCount'), 'provider selection parity bridge must report provider duplicate IDs');
+assert.ok(providerSelectionParity.includes('Provider Selection Parity'), 'provider selection parity bridge must render debug panel title');
+assert.ok(providerSelectionParity.includes('rvm-selection-synced-to-tree'), 'provider selection parity bridge must refresh after tree sync');
+assert.ok(providerSelectionParity.includes('rvm-canvas-selection'), 'provider selection parity bridge must refresh after canvas selection');
 
 assert.ok(toolbar.includes("const VERSION = '20260627-rvm-toolbar-scroll-misc-1'"), 'toolbar must expose scroll/misc version');
 assert.ok(toolbar.includes("{ id: 'misc', label: 'Misc'"), 'toolbar must define Misc group');
@@ -126,4 +141,4 @@ assert.ok(navisHierarchy.includes('shouldPreserveFormatNeutralTree'), 'Navis bri
 assert.ok(selectionSync.includes('rvm-tab-dispose'), 'hierarchy sync bridge must clean up on tab disposal');
 assert.ok(drawer.includes('root.insertBefore(drawer, statusbar)'), 'drawer must dock before status bar');
 
-console.log('Verified RVM viewer UI contract: support details polish, Source Tools dashboard, and Selected Entity UI.');
+console.log('Verified RVM viewer UI contract: support details polish, Source Tools dashboard, Selected Entity UI, and provider selection parity.');
