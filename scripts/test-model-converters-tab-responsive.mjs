@@ -30,7 +30,10 @@ function assert(condition, message) {
   }
 }
 
-assert(/export\s*\{\s*renderModelConvertersTab\s*\}\s*from\s*['"]\.\/model-converters\/index\.js(?:\?[^'"]*)?['"]/.test(source.legacyShim), 'legacy shim must delegate renderModelConvertersTab to canonical model-converters entrypoint');
+assert(/MODEL_CONVERTERS_SHIM_VERSION\s*=\s*'20260629-model-converters-lazy-render-guard-1'/.test(source.legacyShim), 'legacy shim must expose the lazy render guard version');
+assert(/import\(CANONICAL_MODULE\)/.test(source.legacyShim), 'legacy shim must lazy-load the canonical model-converters entrypoint');
+assert(/renderLegacyFallback/.test(source.legacyShim), 'legacy shim must preserve a legacy fallback path');
+assert(!/export\s*\{\s*renderModelConvertersTab\s*\}\s*from/.test(source.legacyShim), 'legacy shim must not statically re-export the deep renderer chain');
 assert(/renderLegacyModelConvertersTab\(container, ctx\)/.test(source.tab), 'canonical model converter tab must render legacy adapter first');
 assert(/scheduleInstallerQueue\(container\)/.test(source.tab), 'optional installers must be scheduled through one guarded queue');
 assert(/requestIdleCallback/.test(source.tab), 'installer queue should prefer requestIdleCallback when available');
