@@ -27,7 +27,7 @@ import { installRvmProgressiveModelRootPatch } from '../rvm-viewer/RvmProgressiv
 import { installRvmHierarchySelectionBridge } from './RvmHierarchySelectionBridge.js?v=20260627-rvm-hierarchy-navis-safe-1';
 import { installRvmHierarchySmartGridBridge } from './RvmHierarchySmartGridBridge.js?v=20260628-rvm-hierarchy-adaptive-columns-1';
 import { installRvmHierarchyCheckboxMultiSelectBridge } from './RvmHierarchyCheckboxMultiSelectBridge.js?v=20260628-rvm-hierarchy-checkbox-multiselect-sync-1';
-import { installRvmHierarchyMultiSelectActionBridge } from './RvmHierarchyMultiSelectActionBridge.js?v=20260629-rvm-hierarchy-multiselect-action-status-1';
+import { installRvmHierarchyMultiSelectActionBridge } from './RvmHierarchyMultiSelectActionBridge.js?v=20260629-rvm-hierarchy-multiselect-action-status-2';
 import { installRvmFormatNeutralExactSelectionBridge } from './RvmFormatNeutralExactSelectionBridge.js?v=20260627-rvm-format-neutral-exact-selection-1';
 import { installRvmViewerInteractionPatch, installRvmCanvasSelectionBridge } from './RvmViewerInteractionPatch.js?v=20260626-rvm-canvas-hierarchy-selection-sync-1';
 import { installRvmCanvasSelectionSinglePickGuardBridge } from './RvmCanvasSelectionSinglePickGuardBridge.js?v=20260622-rvm-canvas-single-pick-guard-1';
