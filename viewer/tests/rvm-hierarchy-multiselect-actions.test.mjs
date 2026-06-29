@@ -16,7 +16,7 @@ const renderer = read('tabs/viewer3d-rvm-tab-renderer.js');
 const actionBridge = read('tabs/RvmHierarchyMultiSelectActionBridge.js');
 const visibility = read('rvm-viewer/RvmVisibilityController.js');
 
-assert.ok(actionBridge.includes("VERSION = '20260628-rvm-hierarchy-multiselect-actions-2'"), 'action bridge must expose hardened visibility semantics version');
+assert.ok(actionBridge.includes("VERSION = '20260629-rvm-hierarchy-multiselect-action-status-1'"), 'action bridge must expose status-feedback version');
 assert.ok(actionBridge.includes("document.addEventListener('rvm-hierarchy-multiselect-action'"), 'action bridge must listen to multiselect action events');
 assert.ok(actionBridge.includes('dispatchHierarchyMultiSelectAction'), 'action bridge must export dispatch helper');
 assert.ok(actionBridge.includes('viewer.selectCanonicalIds?.(selectedIds, { additive: false })'), 'fit action must select canonical IDs');
@@ -25,6 +25,11 @@ assert.ok(actionBridge.includes('viewer.visibility?.isolate?.(selectedIds)'), 'i
 assert.ok(actionBridge.includes('viewer.visibility?.hide?.(selectedIds)'), 'hide action must call visibility hide');
 assert.ok(actionBridge.includes('viewer.visibility.show(selectedIds)'), 'show action must call selected visibility show when available');
 assert.ok(actionBridge.includes('visibilityState(viewer)'), 'action bridge must collect visibility diagnostics');
+assert.ok(actionBridge.includes('statusMessage(result)'), 'action bridge must build user-facing status messages');
+assert.ok(actionBridge.includes('updateStatus(root, enriched)'), 'action bridge must update status after action application');
+assert.ok(actionBridge.includes('rvmHierarchyMultiselectLastMessage'), 'root dataset must expose last status message');
+assert.ok(actionBridge.includes('rvmHierarchyMultiselectLastError'), 'root dataset must expose last error');
+assert.ok(actionBridge.includes('rvmHierarchyMultiselectSelectedCount'), 'root dataset must expose selected count');
 assert.ok(actionBridge.includes('hiddenCount'), 'action result must expose hidden count');
 assert.ok(actionBridge.includes('isolatedCount'), 'action result must expose isolated count');
 assert.ok(actionBridge.includes('rvmHierarchyMultiselectHiddenCount'), 'root dataset must expose hidden count');
@@ -36,7 +41,8 @@ assert.ok(visibility.includes('const isolatedMode = this._isolatedCanonicalIds.s
 assert.ok(visibility.includes('if (isolatedMode) this._isolatedCanonicalIds.add(id)'), 'selected show must add selected IDs to isolate set so they become visible');
 assert.ok(!visibility.includes('this._isolatedCanonicalIds.delete(id);'), 'selected show must not remove selected IDs from isolate set');
 assert.ok(visibility.includes('getVisibilityState()'), 'visibility controller must expose diagnostic state');
-assert.ok(renderer.includes('RvmHierarchyMultiSelectActionBridge.js?v=20260628-rvm-hierarchy-multiselect-actions-1'), 'renderer must import action bridge cache key');
+assert.ok(renderer.includes('RvmHierarchyMultiSelectActionBridge.js?v=20260629-rvm-hierarchy-multiselect-action-status-1'), 'renderer must import action bridge with status-feedback cache key');
+assert.ok(renderer.includes('RvmSelectionDetailsInspectorBridge.js?v=20260629-rvm-selection-details-syntax-fix-1'), 'renderer must import syntax-fixed selection details bridge cache key');
 assert.ok(renderer.includes('installRvmHierarchyMultiSelectActionBridge()'), 'renderer must install action bridge');
 
-console.log('Verified hardened hierarchy multi-select visibility semantics.');
+console.log('Verified hierarchy multi-select action status feedback.');
