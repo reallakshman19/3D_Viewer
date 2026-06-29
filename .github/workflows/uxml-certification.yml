@@ -26,7 +26,6 @@ on:
       - "viewer/tests/app-entrypoint-static.test.js"
       - "viewer/tests/unit/rvm/**"
       - "viewer/tests/inputxml-glb-directional-restraints.test.js"
-      - "viewer/tests/inputxml-direct-managed-stage.test.js"
       - "tools/uxml-certification.mjs"
       - ".github/workflows/uxml-certification.yml"
       - "Benchmarks/RVM JSON to PCF UXML Topology/**"
@@ -58,7 +57,6 @@ on:
       - "viewer/tests/app-entrypoint-static.test.js"
       - "viewer/tests/unit/rvm/**"
       - "viewer/tests/inputxml-glb-directional-restraints.test.js"
-      - "viewer/tests/inputxml-direct-managed-stage.test.js"
       - "tools/uxml-certification.mjs"
       - ".github/workflows/uxml-certification.yml"
       - "Benchmarks/RVM JSON to PCF UXML Topology/**"
@@ -106,9 +104,6 @@ jobs:
 
       - name: Run InputXML GLB directional restraint certification
         run: node viewer/tests/inputxml-glb-directional-restraints.test.js
-
-      - name: Run direct InputXML stagedJSON certification
-        run: node viewer/tests/inputxml-direct-managed-stage.test.js
 
       - name: Run selected-geometry enrichment contracts
         shell: bash

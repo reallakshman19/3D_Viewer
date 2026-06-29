@@ -5,7 +5,7 @@
 // Previous deferred loader key: RvmDeferredBridgeLoader.js?v=20260628-rvm-deferred-right-panel-core-policy-1
 // Previous deferred loader key: RvmDeferredBridgeLoader.js?v=20260628-rvm-deferred-shared-kind-policy-1
 // Previous deferred loader key: RvmDeferredBridgeLoader.js?v=20260628-rvm-deferred-source-tools-shared-kind-1
-// Previous selection details key: RvmSelectionDetailsInspectorBridge.js?v=20260621-rvm-selection-details-inspector-1
+// Previous selection details key: RvmSelectionDetailsInspectorBridge.js?v=20260628-rvm-selected-entity-ui-v2-1
 // Previous hierarchy selection key: RvmHierarchySelectionBridge.js?v=20260626-rvm-hierarchy-text-hit-target-sync-1
 // Previous canvas interaction key: RvmViewerInteractionPatch.js?v=20260624-rvm-interaction-state-contract-1
 // Previous tree sync key: RvmSelectionTreeSyncBridge.js?v=20260626-rvm-hierarchy-selection-sync-2
@@ -27,7 +27,7 @@ import { installRvmProgressiveModelRootPatch } from '../rvm-viewer/RvmProgressiv
 import { installRvmHierarchySelectionBridge } from './RvmHierarchySelectionBridge.js?v=20260627-rvm-hierarchy-navis-safe-1';
 import { installRvmHierarchySmartGridBridge } from './RvmHierarchySmartGridBridge.js?v=20260628-rvm-hierarchy-adaptive-columns-1';
 import { installRvmHierarchyCheckboxMultiSelectBridge } from './RvmHierarchyCheckboxMultiSelectBridge.js?v=20260628-rvm-hierarchy-checkbox-multiselect-sync-1';
-import { installRvmHierarchyMultiSelectActionBridge } from './RvmHierarchyMultiSelectActionBridge.js?v=20260628-rvm-hierarchy-multiselect-actions-1';
+import { installRvmHierarchyMultiSelectActionBridge } from './RvmHierarchyMultiSelectActionBridge.js?v=20260629-rvm-hierarchy-multiselect-action-status-2';
 import { installRvmFormatNeutralExactSelectionBridge } from './RvmFormatNeutralExactSelectionBridge.js?v=20260627-rvm-format-neutral-exact-selection-1';
 import { installRvmViewerInteractionPatch, installRvmCanvasSelectionBridge } from './RvmViewerInteractionPatch.js?v=20260626-rvm-canvas-hierarchy-selection-sync-1';
 import { installRvmCanvasSelectionSinglePickGuardBridge } from './RvmCanvasSelectionSinglePickGuardBridge.js?v=20260622-rvm-canvas-single-pick-guard-1';
@@ -45,7 +45,7 @@ import { installRvmDeepSourcePathRecoveryBridge } from './RvmDeepSourcePathRecov
 import { installRvmZoneDensitySelectorBridge } from './RvmZoneDensitySelectorBridgeV5.js?v=20260622-rvm-zone-density-selector-5';
 import { installRvmNavisHierarchyBridge } from './RvmNavisHierarchyBridge.js?v=20260627-rvm-navis-format-neutral-aware-1';
 import { installRvmZoneLodContextBridge } from './RvmZoneLodContextBridge.js?v=20260621-rvm-zone-lod-context-1';
-import { installRvmSelectionDetailsInspectorBridge } from './RvmSelectionDetailsInspectorBridge.js?v=20260628-rvm-selected-entity-ui-v2-1';
+import { installRvmSelectionDetailsInspectorBridge } from './RvmSelectionDetailsInspectorBridge.js?v=20260629-rvm-selection-details-syntax-fix-1';
 import { installRvmJsonPcfTriggerBridge } from './RvmJsonPcfTriggerBridge.js?v=20260621-rvm-pcf-visible-scope-1';
 import { installRvmPolicyInfoBridge } from './RvmPolicyInfoBridge.js?v=20260621-rvm-policy-info-1';
 import { installRvmDiagnosticPanelCollapseBridge } from './RvmDiagnosticPanelCollapseBridge.js?v=20260621-rvm-diagnostic-collapse-1';
