@@ -9,8 +9,8 @@
  * rendering at import time.
  */
 
-const MODEL_CONVERTERS_SHIM_VERSION = '20260629-model-converters-lazy-render-guard-1';
-const CANONICAL_MODULE = './model-converters/index.js?v=20260629-model-converters-lazy-render-guard-1';
+const MODEL_CONVERTERS_SHIM_VERSION = '20260629-clear-native-overrides-1';
+const CANONICAL_MODULE = './model-converters/index.js?v=20260629-clear-native-overrides-1';
 const LEGACY_MODULE = './model-converters/legacy-adapter.js?v=20260629-model-converters-lazy-render-guard-1';
 
 function escapeHtml(value) {
