@@ -5968,10 +5968,13 @@ export function renderModelConvertersTab(container) {
 
   function xmlCiiRenderSpecwiseMasterPathsPanel(config, statusText) {
     const paths = xmlCiiSpecwiseMasterPaths(config);
-    const pathInput = (label, key) => `
-      <label class="model-converters-workflow-regex-field">
+    const pathInput = (label, key, showFetch = false) => `
+      <label class="model-converters-workflow-regex-field" style="display:block;">
         <span>${_esc(label)}</span>
-        <input type="text" value="${_escAttr(paths[key] || '')}" data-xml-cii-master-path="${_escAttr(key)}">
+        <div style="display:flex;gap:4px;align-items:center;">
+          <input type="text" value="${_escAttr(paths[key] || '')}" data-xml-cii-master-path="${_escAttr(key)}" style="flex:1;min-width:0;">
+          ${showFetch ? `<button type="button" class="model-converters-download-btn" data-xml-cii-fetch-index style="white-space:nowrap;padding:4px 8px;" title="Fetch index from path and rescan">Fetch</button>` : ''}
+        </div>
       </label>`;
     return `
       <div class="model-converters-workflow-master-card" data-xml-cii-specwise-paths-panel style="margin:10px 0;border-color:#25466b;">
@@ -5985,7 +5988,7 @@ export function renderModelConvertersTab(container) {
         <div class="model-converters-workflow-regex-grid" style="margin-top:10px;grid-template-columns:repeat(4,minmax(180px,1fr));">
           ${pathInput('Material Map Path', 'materialMapPath')}
           ${pathInput('Weights / Valve CA8 Path', 'weightPath')}
-          ${pathInput('Piping Class Index Path', 'pipingClassIndexPath')}
+          ${pathInput('Piping Class Index Path', 'pipingClassIndexPath', true)}
           ${pathInput('Piping Class Shard Folder', 'pipingClassShardFolder')}
         </div>
         <div data-xml-cii-path-status style="margin-top:8px;padding:8px 10px;border:1px solid #2b7656;border-radius:8px;color:#7dffc0;background:#0f1b2c;font-size:12px;">
@@ -6076,6 +6079,26 @@ export function renderModelConvertersTab(container) {
       const statusEl = panel.querySelector('[data-xml-cii-path-status]');
       try {
         if (statusEl) statusEl.textContent = 'Scanning XML branch names against specwise piping class index...';
+        const result = await xmlCiiRescanSpecwisePipingClass({ force: true, notifyUser: true });
+        if (statusEl) statusEl.textContent = result.message;
+      } catch (error) {
+        const message = _toText(error?.message || error);
+        if (statusEl) statusEl.textContent = message;
+        notify({ level: 'error', title: 'XML->CII Masters', message });
+      } finally {
+        rerender?.();
+      }
+    });
+    panel.querySelector('[data-xml-cii-fetch-index]')?.addEventListener('click', async () => {
+      const statusEl = panel.querySelector('[data-xml-cii-path-status]');
+      const pathInput = panel.querySelector('[data-xml-cii-master-path="pipingClassIndexPath"]');
+      const path = (pathInput?.value || '').trim();
+      if (!path) { if (statusEl) statusEl.textContent = 'Enter a Piping Class Index Path first.'; return; }
+      try {
+        if (statusEl) statusEl.textContent = `Fetching ${path}...`;
+        const config = _parseXmlCiiEnrichmentConfig(activeValues().supportConfigJson);
+        config.masterPaths = { ...xmlCiiSpecwiseMasterPaths(config), pipingClassIndexPath: xmlCiiNormalizeMasterPath(path) };
+        xmlCiiSaveConfig(config);
         const result = await xmlCiiRescanSpecwisePipingClass({ force: true, notifyUser: true });
         if (statusEl) statusEl.textContent = result.message;
       } catch (error) {
@@ -6517,14 +6540,14 @@ export function renderModelConvertersTab(container) {
       ${xmlCiiRenderSpecwiseMasterPathsPanel(config)}
       <div class="model-converters-workflow-master-tabs">
         ${summary.map((entry) => `
-          <button type="button" class="model-converters-workflow-master-tab ${entry.masterKey === activeTab ? 'is-active' : ''}" data-xml-cii-master-tab="${_esc(entry.masterKey)}">
+          <button type="button" class="model-converters-workflow-master-tab ${entry.masterKey === activeTab ? 'is-active' : ''}${entry.rows === 0 ? ' is-empty' : ''}" data-xml-cii-master-tab="${_esc(entry.masterKey)}">
             <span>${_esc(XML_CII_MASTER_DEFS[entry.masterKey].title)}</span>
-            <small>${entry.rows} row(s)</small>
+            <small>${entry.rows === 0 ? '⚠ no data' : `${entry.rows} row(s)`}</small>
           </button>
         `).join('')}
-        <button type="button" class="model-converters-workflow-master-tab ${activeTab === 'overrides' ? 'is-active' : ''}" data-xml-cii-master-tab="overrides">
+        <button type="button" class="model-converters-workflow-master-tab ${activeTab === 'overrides' ? 'is-active' : ''}${overrideCount === 0 ? ' is-empty' : ''}" data-xml-cii-master-tab="overrides">
           <span>Manual Override</span>
-          <small>${overrideCount} override(s)</small>
+          <small>${overrideCount === 0 ? 'none' : `${overrideCount} override(s)`}</small>
         </button>
       </div>
       ${activeTab === 'overrides' ? xmlCiiRenderOverridesPanel(config) : xmlCiiRenderMasterRowsPanel(activeMaster, config)}
@@ -7161,34 +7184,40 @@ export function renderModelConvertersTab(container) {
         else xmlCiiRenderWorkflowRoot(rootEl, detailEl);
       });
     });
-    rootEl.querySelectorAll('[data-xml-cii-override-key]').forEach((input) => {
-      input.addEventListener('input', () => {
-        xmlCiiSaveOverridesFromRoot(rootEl, input.getAttribute('data-xml-cii-override-key') || 'material');
+    // Override handlers use event delegation (attached once) so they survive DOM
+    // re-renders triggered by Add/Delete/tab-switch without needing to rebind.
+    if (!rootEl.dataset.xmlCiiOverrideDelegated) {
+      rootEl.dataset.xmlCiiOverrideDelegated = 'true';
+      rootEl.addEventListener('input', (event) => {
+        const inp = event.target.closest('[data-xml-cii-override-key]');
+        if (!inp) return;
+        xmlCiiSaveOverridesFromRoot(rootEl, inp.getAttribute('data-xml-cii-override-key') || 'material');
       });
-    });
-    rootEl.querySelectorAll('[data-xml-cii-override-add]').forEach((button) => {
-      button.addEventListener('click', () => {
-        const key = button.getAttribute('data-xml-cii-override-add') || 'material';
-        const config = _parseXmlCiiEnrichmentConfig(activeValues().supportConfigJson);
-        const overrides = xmlCiiEnsureOverrides(config);
-        overrides[key] = { ...overrides[key], '': '' };
-        xmlCiiSaveConfig(config);
-        xmlCiiRenderWorkflowRoot(rootEl, detailEl);
+      rootEl.addEventListener('click', (event) => {
+        const addBtn = event.target.closest('[data-xml-cii-override-add]');
+        if (addBtn) {
+          const key = addBtn.getAttribute('data-xml-cii-override-add') || 'material';
+          const config = _parseXmlCiiEnrichmentConfig(activeValues().supportConfigJson);
+          const overrides = xmlCiiEnsureOverrides(config);
+          overrides[key] = { ...overrides[key], '': '' };
+          xmlCiiSaveConfig(config);
+          xmlCiiRenderWorkflowRoot(rootEl, detailEl);
+          return;
+        }
+        const delBtn = event.target.closest('[data-xml-cii-override-del]');
+        if (delBtn) {
+          const [key, indexText] = (delBtn.getAttribute('data-xml-cii-override-del') || 'material:0').split(':');
+          const index = Number(indexText);
+          const config = _parseXmlCiiEnrichmentConfig(activeValues().supportConfigJson);
+          const overrides = xmlCiiEnsureOverrides(config);
+          const entries = Object.entries(overrides[key] || {});
+          entries.splice(Number.isFinite(index) ? index : 0, 1);
+          overrides[key] = Object.fromEntries(entries);
+          xmlCiiSaveConfig(config);
+          xmlCiiRenderWorkflowRoot(rootEl, detailEl);
+        }
       });
-    });
-    rootEl.querySelectorAll('[data-xml-cii-override-del]').forEach((button) => {
-      button.addEventListener('click', () => {
-        const [key, indexText] = (button.getAttribute('data-xml-cii-override-del') || 'material:0').split(':');
-        const index = Number(indexText);
-        const config = _parseXmlCiiEnrichmentConfig(activeValues().supportConfigJson);
-        const overrides = xmlCiiEnsureOverrides(config);
-        const entries = Object.entries(overrides[key] || {});
-        entries.splice(Number.isFinite(index) ? index : 0, 1);
-        overrides[key] = Object.fromEntries(entries);
-        xmlCiiSaveConfig(config);
-        xmlCiiRenderWorkflowRoot(rootEl, detailEl);
-      });
-    });
+    }
   }
 
   function bindXmlCiiRegexFields(rootEl) {

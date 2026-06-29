@@ -112,6 +112,43 @@ function buildEnrichedStageJson(xmlText, meta = {}) {
   payload.stats = { ...payload.stats, enrichedStageBranches: payload.branches.length, enrichedStageNodes: payload.branches.reduce((sum, branch) => sum + branch.nodes.length, 0) };
   return payload;
 }
+// Resolve "50.478- 110", "50/110", "50 to 110" → max value; return null if plain number.
+function _resolveTemperatureRangeToMax(raw) {
+  const s = String(raw ?? '').replace(/\s+/g, ' ').trim();
+  if (!s) return null;
+  if (Number.isFinite(Number(s))) return null; // already a valid float
+  const m = s.match(/^(-?\d+(?:\.\d+)?)\s*(?:-|\/|to)\s*(-?\d+(?:\.\d+)?)$/i);
+  if (m) {
+    const a = Number(m[1]), b = Number(m[2]);
+    if (Number.isFinite(a) && Number.isFinite(b)) return Math.max(a, b);
+  }
+  const nums = (s.match(/\d+(?:\.\d+)?/g) || []).map(Number).filter(n => Number.isFinite(n));
+  return nums.length >= 2 ? Math.max(...nums) : null;
+}
+
+// Replace temperature range values (e.g. "50.478- 110") with their max float
+// in the enriched XML before passing to xml_to_cii2019.py, which cannot parse ranges.
+function sanitizeXmlTemperatureRanges(xmlText) {
+  if (!xmlText || typeof DOMParser === 'undefined' || typeof XMLSerializer === 'undefined') return xmlText;
+  try {
+    const doc = new DOMParser().parseFromString(xmlText, 'application/xml');
+    if (doc.getElementsByTagName('parsererror').length) return xmlText;
+    const TEMP_FIELDS = ['Temperature1','Temperature2','Temperature3','Temperature4','Temperature5','Temperature6','Temperature7','Temperature8','Temperature9'];
+    let changed = false;
+    for (const branch of [...doc.getElementsByTagName('Branch')]) {
+      const tempContainer = xmlFirstChild(branch, 'Temperature');
+      if (!tempContainer) continue;
+      for (const field of TEMP_FIELDS) {
+        const el = xmlFirstChild(tempContainer, field);
+        if (!el) continue;
+        const resolved = _resolveTemperatureRangeToMax(el.textContent);
+        if (resolved !== null) { el.textContent = String(resolved); changed = true; }
+      }
+    }
+    return changed ? new XMLSerializer().serializeToString(doc) : xmlText;
+  } catch { return xmlText; }
+}
+
 function applyStagedGeometryAuthorityToEnriched(enriched, stagedJsonText) {
   const result = applyXmlCiiStagedGeometryAuthority(enriched.xmlText, stagedJsonText, { config: enriched.config });
   enriched.xmlText = result.xmlText;
@@ -178,6 +215,7 @@ export async function run(context) {
 
   ensureEnrichedPreviewLedger(enriched);
   const sideloadLogLines = applyOptionalManualSideload(enriched, runValues).stdout;
+  enriched.xmlText = sanitizeXmlTemperatureRanges(enriched.xmlText);
   const enrichedName = `${stem}_enriched.xml`;
   const enrichedStageName = `${stem}_enriched_staged.json`;
   if (!context.workerRunner) throw new Error('Python worker runtime is not available.');

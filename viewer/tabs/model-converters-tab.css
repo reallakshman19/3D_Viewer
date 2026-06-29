@@ -282,6 +282,20 @@
   background: #1d3554;
 }
 
+.model-converters-workflow-master-tab.is-empty {
+  border-color: #4a2d15;
+  color: #d97706;
+}
+
+.model-converters-workflow-master-tab.is-empty small {
+  color: #b45309;
+}
+
+.model-converters-workflow-master-tab.is-empty.is-active {
+  border-color: #d97706;
+  background: #2a1c08;
+}
+
 .model-converters-workflow-master-tab span {
   font-weight: 700;
 }
