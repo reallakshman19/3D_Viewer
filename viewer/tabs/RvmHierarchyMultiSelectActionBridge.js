@@ -1,4 +1,4 @@
-const VERSION = '20260628-rvm-hierarchy-multiselect-actions-2';
+const VERSION = '20260629-rvm-hierarchy-multiselect-action-status-1';
 const INSTALL_KEY = '__PCF_GLB_RVM_HIERARCHY_MULTISELECT_ACTIONS__';
 const ROOT_SELECTOR = '[data-rvm-viewer]';
 const ACTIONS = new Set(['fit', 'isolate', 'hide', 'show']);
@@ -42,6 +42,43 @@ function visibilityState(viewer) {
     isolatedCount: isolatedCanonicalIds.length,
     isolatedMode: isolatedCanonicalIds.length > 0,
   };
+}
+
+function actionLabel(action) {
+  if (action === 'fit') return 'Fit';
+  if (action === 'isolate') return 'Isolate';
+  if (action === 'hide') return 'Hide';
+  if (action === 'show') return 'Show';
+  return action || 'Action';
+}
+
+function statusMessage(result) {
+  const label = actionLabel(result.action);
+  if (result.error === 'viewer-not-found') return `${label} selected failed: viewer not ready.`;
+  if (result.error === 'empty-selection') return `${label} selected ignored: no checked hierarchy rows.`;
+  if (result.error) return `${label} selected failed: ${result.error}`;
+  if (!result.handled) return `${label} selected ignored.`;
+  const count = result.selectedCount || 0;
+  if (result.action === 'fit') return `Fit ${count} checked hierarchy item(s).`;
+  if (result.action === 'isolate') return `Isolated ${count} checked hierarchy item(s).`;
+  if (result.action === 'hide') return `Hidden ${count} checked hierarchy item(s).`;
+  if (result.action === 'show') return `Shown ${count} checked hierarchy item(s).`;
+  return `${label} applied to ${count} checked hierarchy item(s).`;
+}
+
+function updateStatus(root, result) {
+  const message = statusMessage(result);
+  const warning = !!result.error || !result.handled;
+  const targets = [root?.querySelector?.('#rvm-sb-msg'), root?.querySelector?.('[data-rvm-hierarchy-multiselect-status]')].filter(Boolean);
+  for (const target of targets) {
+    target.textContent = message;
+    if (warning) target.dataset.rvmStatusWarning = 'true';
+    else delete target.dataset.rvmStatusWarning;
+  }
+  if (root?.dataset) {
+    root.dataset.rvmHierarchyMultiselectLastMessage = message;
+    root.dataset.rvmHierarchyMultiselectLastError = result.error || '';
+  }
 }
 
 export function dispatchHierarchyMultiSelectAction(root, detail = {}) {
@@ -91,9 +128,11 @@ function emitResult(root, result, viewer = null) {
     root.dataset.rvmHierarchyMultiselectActionVersion = VERSION;
     root.dataset.rvmHierarchyMultiselectLastAction = enriched.action || '';
     root.dataset.rvmHierarchyMultiselectLastActionHandled = enriched.handled ? 'true' : 'false';
+    root.dataset.rvmHierarchyMultiselectSelectedCount = String(enriched.selectedCount || 0);
     root.dataset.rvmHierarchyMultiselectHiddenCount = String(enriched.hiddenCount || 0);
     root.dataset.rvmHierarchyMultiselectIsolatedCount = String(enriched.isolatedCount || 0);
   }
+  updateStatus(root, enriched);
   try { root?.dispatchEvent?.(new CustomEvent('rvm-hierarchy-multiselect-action-applied', { bubbles: true, detail: enriched })); } catch (_) {}
   return enriched;
 }
