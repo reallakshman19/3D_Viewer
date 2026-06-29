@@ -1,4 +1,4 @@
-const VERSION = '20260629-rvm-hierarchy-multiselect-action-status-1';
+const VERSION = '20260629-rvm-hierarchy-multiselect-action-status-2';
 const INSTALL_KEY = '__PCF_GLB_RVM_HIERARCHY_MULTISELECT_ACTIONS__';
 const ROOT_SELECTOR = '[data-rvm-viewer]';
 const ACTIONS = new Set(['fit', 'isolate', 'hide', 'show']);
