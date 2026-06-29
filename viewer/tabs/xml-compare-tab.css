@@ -21,6 +21,7 @@
 .xml-compare-toolbar { display: flex; flex-wrap: wrap; gap: 8px; padding: 10px 12px; border-bottom: 1px solid rgba(148, 163, 184, 0.18); background: #0f172a; }
 .xml-compare-file-btn { display: inline-flex; align-items: center; gap: 8px; padding: 8px 10px; border: 1px solid rgba(96, 165, 250, 0.32); border-radius: 8px; background: #111827; color: #dbeafe; font-size: 12px; cursor: pointer; }
 .xml-compare-file-btn input { max-width: 180px; color: #cbd5e1; }
+.xml-compare-file-btn.is-loaded { border-color: rgba(34,197,94,.55); background: rgba(20,83,45,.28); color: #bbf7d0; max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .xml-compare-toolbar button,
 .xml-compare-topology-actions button { padding: 7px 10px; border: 1px solid rgba(96, 165, 250, 0.32); border-radius: 8px; background: #1e293b; color: #dbeafe; font-size: 12px; cursor: pointer; }
 .xml-compare-toolbar button:hover,
@@ -89,14 +90,16 @@
 .xml-compare-canvas-viewport { min-height: 148px; position: relative; display: grid; place-items: center; border-bottom: 1px solid rgba(148, 163, 184, 0.12); background: radial-gradient(circle at center, rgba(59, 130, 246, 0.12), rgba(2, 6, 23, 0.4)); }
 .xml-compare-canvas-reticle { width: 78px; height: 78px; display: grid; place-items: center; border: 1px dashed rgba(147, 197, 253, 0.52); border-radius: 999px; color: #93c5fd; font-size: 12px; letter-spacing: 0.08em; }
 .xml-compare-canvas-metrics { position: absolute; left: 8px; right: 8px; bottom: 8px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
-.xml-compare-canvas-metrics div,
-.xml-compare-hover-card div { padding: 5px 7px; border: 1px solid rgba(148, 163, 184, 0.12); border-radius: 8px; background: rgba(15, 23, 42, 0.74); }
-.xml-compare-canvas-metrics b,
-.xml-compare-hover-card b { display: block; color: #93c5fd; font-size: 10px; text-transform: uppercase; }
-.xml-compare-canvas-metrics span,
-.xml-compare-hover-card span { color: #e2e8f0; font-size: 11px; }
-.xml-compare-hover-card { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; padding: 8px 10px; }
-.xml-compare-hover-card > span { color: #94a3b8; font-size: 11px; }
+.xml-compare-canvas-metrics div { padding: 5px 7px; border: 1px solid rgba(148, 163, 184, 0.12); border-radius: 8px; background: rgba(15, 23, 42, 0.74); }
+.xml-compare-canvas-metrics b { display: block; color: #93c5fd; font-size: 10px; text-transform: uppercase; }
+.xml-compare-canvas-metrics span { color: #e2e8f0; font-size: 11px; }
+.xml-compare-hover-card { max-height: 180px; overflow-y: auto; border-top: 1px solid rgba(148,163,184,.14); }
+.xml-compare-hover-table { width: 100%; border-collapse: collapse; font-size: 11px; }
+.xml-compare-hover-table th, .xml-compare-hover-table td { padding: 5px 9px; border-bottom: 1px solid rgba(148,163,184,.1); vertical-align: top; text-align: left; white-space: nowrap; }
+.xml-compare-hover-table th { width: 42%; color: #93c5fd; font-size: 10px; text-transform: uppercase; letter-spacing: .03em; font-weight: 700; background: rgba(2,6,23,.5); position: sticky; left: 0; }
+.xml-compare-hover-table td { color: #e2e8f0; font-family: ui-monospace, Menlo, Consolas, monospace; white-space: normal; word-break: break-all; }
+.xml-compare-hover-table tr:hover td, .xml-compare-hover-table tr:hover th { background: rgba(96,165,250,.08); }
+.xml-compare-hover-empty { display: block; padding: 8px 10px; color: #94a3b8; font-size: 11px; }
 .xml-compare-sideload-backdrop { position: fixed; inset: 0; z-index: 50; display: grid; place-items: center; padding: 24px; background: rgba(2, 6, 23, 0.74); }
 .xml-compare-sideload-dialog { width: min(1120px, 96vw); max-height: 92vh; display: flex; flex-direction: column; overflow: hidden; border: 1px solid rgba(96, 165, 250, 0.28); border-radius: 16px; background: #0f172a; box-shadow: 0 24px 70px rgba(0, 0, 0, 0.42); }
 .xml-compare-sideload-dialog header,
@@ -118,3 +121,40 @@
 .xml-compare-sideload-empty { color: #94a3b8; font-size: 12px; }
 .xml-compare-sideload-actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
 @media (max-width: 1280px) { .xml-compare-layout, .xml-compare-workspace-grid, .xml-compare-bottom-tabs, .xml-compare-sideload-grid { grid-template-columns: 1fr; } }
+
+/* Enrichment Config popup */
+.enr-backdrop { position: fixed; inset: 0; z-index: 60; display: grid; place-items: center; padding: 24px; background: rgba(2, 6, 23, 0.78); }
+.enr-dialog { width: min(860px, 96vw); max-height: 92vh; display: flex; flex-direction: column; overflow: hidden; border: 1px solid rgba(96, 165, 250, 0.32); border-radius: 16px; background: #0f172a; box-shadow: 0 24px 72px rgba(0, 0, 0, 0.48); }
+.enr-dialog-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 14px 16px; border-bottom: 1px solid rgba(148, 163, 184, 0.16); flex-shrink: 0; }
+.enr-dialog-header h3 { margin: 0 0 4px; color: #dbeafe; font-size: 18px; }
+.enr-dialog-header p { margin: 0; color: #94a3b8; font-size: 12px; }
+.enr-dialog-header button { padding: 7px 10px; border: 1px solid rgba(96, 165, 250, 0.32); border-radius: 8px; background: #1e293b; color: #dbeafe; cursor: pointer; flex-shrink: 0; }
+.enr-dialog-body { flex: 1; overflow-y: auto; padding: 12px 14px; display: flex; flex-direction: column; gap: 10px; }
+.enr-dialog-footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 16px; border-top: 1px solid rgba(148, 163, 184, 0.16); flex-shrink: 0; }
+.enr-footer-note { margin: 0; color: #64748b; font-size: 11px; }
+.enr-footer-actions { display: flex; gap: 8px; }
+.enr-footer-actions button { padding: 7px 12px; border: 1px solid rgba(96, 165, 250, 0.32); border-radius: 8px; background: #1e293b; color: #dbeafe; font-size: 12px; cursor: pointer; }
+.enr-btn-primary { background: #1d4ed8 !important; border-color: rgba(147, 197, 253, 0.5) !important; }
+.enr-btn-primary:hover { background: #2563eb !important; }
+.enr-section { border: 1px solid rgba(148, 163, 184, 0.14); border-radius: 12px; overflow: hidden; background: rgba(15, 23, 42, 0.6); }
+.enr-section-toggle { display: flex; align-items: center; gap: 9px; padding: 10px 12px; cursor: pointer; color: #bfdbfe; font-size: 12px; font-weight: 700; background: rgba(2, 6, 23, 0.28); border-bottom: 1px solid rgba(148, 163, 184, 0.1); }
+.enr-section-toggle input[type="checkbox"] { width: 15px; height: 15px; accent-color: #3b82f6; flex-shrink: 0; }
+.enr-section-content { padding: 12px; display: flex; flex-direction: column; gap: 10px; }
+.enr-section.is-disabled .enr-section-content { opacity: 0.42; pointer-events: none; }
+.enr-row { display: flex; flex-wrap: wrap; gap: 10px; }
+.enr-row-3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.enr-field { display: flex; flex-direction: column; gap: 5px; flex: 1; min-width: 100px; }
+.enr-field span { color: #93c5fd; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; }
+.enr-field input, .enr-field select { padding: 7px 9px; border: 1px solid rgba(96, 165, 250, 0.24); border-radius: 8px; background: #020617; color: #dbeafe; font-size: 12px; min-width: 0; }
+.enr-field select { cursor: pointer; }
+.enr-textarea-label { display: flex; flex-direction: column; gap: 5px; }
+.enr-textarea-label span { color: #93c5fd; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; }
+.enr-textarea-label textarea { min-height: 120px; resize: vertical; padding: 9px; border: 1px solid rgba(96, 165, 250, 0.24); border-radius: 10px; background: #020617; color: #dbeafe; font: 12px/1.45 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+.enr-radio-group { display: flex; gap: 16px; padding: 2px 0; }
+.enr-radio-group label { display: flex; align-items: center; gap: 6px; color: #cbd5e1; font-size: 12px; cursor: pointer; }
+.enr-radio-group input[type="radio"] { accent-color: #3b82f6; }
+.enr-comp-grid { display: grid; grid-template-columns: max-content max-content minmax(0, 160px); align-items: center; gap: 8px 10px; }
+.enr-comp-grid code { color: #93c5fd; font-size: 12px; background: rgba(96, 165, 250, 0.1); padding: 2px 6px; border-radius: 5px; }
+.enr-default-label { color: #94a3b8; font-size: 12px; }
+.enr-arrow { color: #475569; font-size: 14px; text-align: center; }
+.enr-hint { margin: 0; color: #64748b; font-size: 11px; line-height: 1.5; }
