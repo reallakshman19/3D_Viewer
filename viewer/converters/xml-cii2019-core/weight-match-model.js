@@ -454,9 +454,10 @@ function collectWeightRows(xmlTextVal, stagedJsonText, config, mode = 'zero-rigi
       const overrideWeight = xmlCiiRigidWeightOverrideForNode(branchName, node, config);
       const mappedWeight = overrideWeight ?? weight;
       const isMapped = mappedWeight !== null && mappedWeight > 0;
+      const reviewEndpoint = isXmlCiiWeightReviewEndpoint(node);
       if (mode === 'all-review-nodes') {
-        if (!reviewNode || lengthMm === null || lengthMm <= 6) return;
-      } else if (!reviewNode || lengthMm === null || (weight !== null && Math.abs(weight) > 1e-12)) return;
+        if (!reviewNode || !reviewEndpoint || lengthMm === null || lengthMm <= 6) return;
+      } else if (!reviewNode || !reviewEndpoint || lengthMm === null || (weight !== null && Math.abs(weight) > 1e-12)) return;
       let boreMm = xmlCiiNumberText(xmlText(node, 'BoreMm'));
       if (boreMm === null) {
         const od = xmlCiiNumberText(xmlText(node, 'OutsideDiameter'));

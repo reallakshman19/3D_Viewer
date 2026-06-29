@@ -283,8 +283,16 @@ def _inputxml_from_final_xml(final_xml: Path, support_config: dict[str, Any], us
             _add_point_properties(element, edge, by_number, by_name)
             if to_node.bend_radius > 0:
                 ET.SubElement(element, "BEND", {"RADIUS": _fmt(to_node.bend_radius, 6), "TYPE": _fmt(to_node.bend_type or 0), "ANGLE1": "0", "NODE1": _fmt(to_node.node_number), "ANGLE2": "0", "NODE2": _fmt(to_node.node_number), "ANGLE3": "0", "NODE3": _fmt(to_node.node_number), "NUM_MITER": "0", "FITTINGTHICKNESS": _fmt(to_node.wall_thickness, 6), "KFACTOR": "0"})
-            if to_node.rigid is not None or abs(to_node.weight) > 1e-9:
-                ET.SubElement(element, "RIGID", {"WEIGHT": _fmt(to_node.weight, 6)})
+            _rigid_at_to = to_node.rigid == 2 or (
+                from_node.rigid == 2 and to_node.component_type.upper() == "FLAN"
+            )
+            _rigid_no_endpoint_info = to_node.rigid is None and abs(to_node.weight) > 1e-9
+            if _rigid_at_to or _rigid_no_endpoint_info:
+                weight_val = (
+                    from_node.weight if (from_node.rigid == 2 and abs(from_node.weight) > 1e-12)
+                    else to_node.weight
+                )
+                ET.SubElement(element, "RIGID", {"WEIGHT": _fmt(weight_val, 6)})
             if to_node.component_type.upper() in {"TEE", "OLET", "BRAN"}:
                 meta = by_number.get(to_node.node_number) or by_name.get(to_node.node_name) or {}
                 ET.SubElement(element, "SIF", {"NODE": _fmt(to_node.node_number), "TYPE": _fmt(_tee_sif_type_from_meta(meta, support_config))})
