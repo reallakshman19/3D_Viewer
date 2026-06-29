@@ -1,11 +1,12 @@
 const INSTALL_FLAG = Symbol.for('pcf-glb-rvm-hierarchy-provider-debug-1');
 const SESSION_OPT_IN_KEY = 'pcf-glb-rvm-provider-tree-read-path';
 const SESSION_PARITY_OVERRIDE_KEY = 'pcf-glb-rvm-provider-tree-parity-override';
-export const RVM_HIERARCHY_PROVIDER_DEBUG_VERSION = '20260628-rvm-provider-debug-parity-guard-1';
+export const RVM_HIERARCHY_PROVIDER_DEBUG_VERSION = '20260629-rvm-provider-runtime-telemetry-1';
 
 function text(value) { return String(value ?? '').trim(); }
 function escapeHtml(value) { return text(value).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;'); }
 function row(label, value) { return `<div class="rvm-browser-diag-row"><span>${escapeHtml(label)}</span><b>${escapeHtml(value || '-')}</b></div>`; }
+function yesNo(value) { return value ? 'yes' : 'no'; }
 function sessionFlag(key) { try { return sessionStorage.getItem(key) === 'enabled'; } catch (_) { return false; } }
 function sessionOptInEnabled() { return sessionFlag(SESSION_OPT_IN_KEY); }
 function providerTreeOptInEnabled(root) { return globalThis.__PCF_GLB_RVM_PROVIDER_TREE_READ_PATH__ === true || root?.dataset?.rvmProviderTreeReadPath === 'enabled' || sessionOptInEnabled(); }
@@ -27,6 +28,26 @@ function applyParityOverride(root, enabled) {
 
 function providerFromRoot(root, detail = {}) {
   return detail?.provider || root?.__rvmNativeHierarchyProvider || root?.__rvmFormatNeutralHierarchy?.providerResult || root?.__rvmFormatNeutralHierarchy?.hierarchyProviderResult || root?.__rvmHierarchyProviderResult || null;
+}
+
+function runtimeTelemetry(root, detail = {}) {
+  return detail?.runtimeTelemetry
+    || detail?.providerRuntimeTelemetry
+    || root?.__rvmHierarchyProviderRuntimeTelemetry
+    || globalThis.__PCF_GLB_RVM_HIERARCHY_READ_PATH_TELEMETRY__
+    || null;
+}
+
+function stampRuntimeTelemetry(root, telemetry) {
+  if (!root?.dataset || !telemetry) return telemetry;
+  root.__rvmHierarchyProviderRuntimeTelemetry = telemetry;
+  root.dataset.rvmHierarchyProviderRuntimeTelemetry = telemetry.version || RVM_HIERARCHY_PROVIDER_DEBUG_VERSION;
+  root.dataset.rvmHierarchyReadPath = telemetry.readPath || 'unknown';
+  root.dataset.rvmHierarchyReadPathReason = telemetry.reason || '';
+  root.dataset.rvmHierarchyProviderReadPathOptedIn = yesNo(telemetry.providerReadPathOptedIn);
+  root.dataset.rvmHierarchyProviderCandidateCount = String(telemetry.providerCandidateCount ?? 0);
+  root.dataset.rvmHierarchyRenderedNodeCount = String(telemetry.renderedNodeCount ?? root?.dataset?.rvmHierarchyNodeCount ?? 0);
+  return telemetry;
 }
 
 function parityHardFailures(root) {
@@ -77,6 +98,22 @@ function debugToggleHtml(root) {
   return `<label class="rvm-browser-diag-row rvm-provider-tree-toggle"><span><input type="checkbox" data-rvm-provider-tree-toggle="true"${checked}> Provider tree read path</span><b>${escapeHtml(status)}</b></label>${parityGuardHtml(root)}<button type="button" class="rvm-mini-btn" data-rvm-provider-tree-apply-reload="true"${disabled}>Apply provider tree on reload</button>`;
 }
 
+function telemetryRows(root, detail = {}) {
+  const telemetry = stampRuntimeTelemetry(root, runtimeTelemetry(root, detail));
+  if (!telemetry) return [
+    ['Tree read path', 'unknown'],
+    ['Provider candidates', '0'],
+  ];
+  return [
+    ['Tree read path', telemetry.readPath || 'unknown'],
+    ['Read-path reason', telemetry.reason || '-'],
+    ['Provider read opt-in', yesNo(telemetry.providerReadPathOptedIn)],
+    ['Source pilot eligible', yesNo(telemetry.sourceProviderPilotEligible)],
+    ['Provider candidates', String(telemetry.providerCandidateCount ?? 0)],
+    ['Rendered tree nodes', String(telemetry.renderedNodeCount ?? '-')],
+  ];
+}
+
 function renderProviderDebug(root, detail = {}) {
   const panel = ensurePanel(root);
   if (!panel) return;
@@ -91,6 +128,7 @@ function renderProviderDebug(root, detail = {}) {
     ['Authority', authority],
     ['Node count', String(nodeCount || '-')],
     ['Contract', provider?.providerContractVersion || providerResult?.version || root?.dataset?.rvmHierarchyProviderContract || '-'],
+    ...telemetryRows(root, detail),
   ];
   panel.innerHTML = `<div class="rvm-panel-header">Hierarchy Provider</div><div class="rvm-browser-diag-grid">${rows.map(([label, value]) => row(label, value)).join('')}${debugToggleHtml(root)}</div>`;
 }
