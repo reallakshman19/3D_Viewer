@@ -15,7 +15,7 @@ function read(relativePath) {
 const renderer = read('tabs/viewer3d-rvm-tab-renderer.js');
 const bridge = read('tabs/RvmHierarchyProviderDebugBridge.js');
 
-assert.ok(bridge.includes("RVM_HIERARCHY_PROVIDER_DEBUG_VERSION = '20260628-rvm-provider-debug-parity-guard-1'"), 'debug bridge must expose parity guard version');
+assert.ok(bridge.includes("RVM_HIERARCHY_PROVIDER_DEBUG_VERSION = '20260629-rvm-provider-runtime-telemetry-1'"), 'debug bridge must expose runtime telemetry version');
 assert.ok(bridge.includes('rvm-hierarchy-provider-debug'), 'debug bridge must create debug panel');
 assert.ok(bridge.includes('data-rvm-provider-tree-toggle'), 'debug view must expose provider tree opt-in toggle');
 assert.ok(bridge.includes('data-rvm-provider-tree-apply-reload'), 'debug view must expose explicit reload apply button');
@@ -28,7 +28,12 @@ assert.ok(bridge.includes('SESSION_PARITY_OVERRIDE_KEY'), 'override must be brow
 assert.ok(bridge.includes('rvm-provider-tree-read-path-reload-request'), 'allowed reload must dispatch reload request event');
 assert.ok(bridge.includes('location.reload()'), 'allowed reload must request clean page reload only after explicit click');
 assert.ok(bridge.includes('rvm-hierarchy-provider-parity-audit'), 'debug bridge must update when parity audit changes');
-assert.ok(renderer.includes('RvmHierarchyProviderDebugBridge.js?v=20260628-rvm-provider-debug-parity-guard-1'), 'renderer must import provider debug bridge with parity guard cache key');
+assert.ok(bridge.includes('__PCF_GLB_RVM_HIERARCHY_READ_PATH_TELEMETRY__'), 'debug bridge must read runtime read-path telemetry');
+assert.ok(bridge.includes('rvmHierarchyReadPath'), 'debug bridge must stamp read path dataset marker');
+assert.ok(bridge.includes('rvmHierarchyProviderCandidateCount'), 'debug bridge must stamp provider candidate count');
+assert.ok(bridge.includes('Tree read path'), 'debug panel must display tree read path');
+assert.ok(bridge.includes('Provider candidates'), 'debug panel must display provider candidate count');
+assert.ok(renderer.includes('RvmHierarchyProviderDebugBridge.js?v=20260629-rvm-provider-runtime-telemetry-1'), 'renderer must import provider debug bridge with telemetry cache key');
 assert.ok(renderer.includes('installRvmHierarchyProviderDebugBridge()'), 'renderer must install provider debug bridge');
 
-console.log('Verified hierarchy provider debug parity guard contract.');
+console.log('Verified hierarchy provider runtime telemetry debug contract.');
