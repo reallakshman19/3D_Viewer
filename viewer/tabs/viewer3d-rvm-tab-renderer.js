@@ -8,6 +8,7 @@
 // Previous deferred loader key: RvmDeferredBridgeLoader.js?v=20260628-rvm-deferred-source-tools-shared-kind-1
 // Previous selection details key: RvmSelectionDetailsInspectorBridge.js?v=20260628-rvm-selected-entity-ui-v2-1
 // Previous selection details syntax key: RvmSelectionDetailsInspectorBridge.js?v=20260629-rvm-selection-details-syntax-fix-1
+// Previous hierarchy provider debug key: RvmHierarchyProviderDebugBridge.js?v=20260628-rvm-provider-debug-parity-guard-1
 // Previous hierarchy selection key: RvmHierarchySelectionBridge.js?v=20260626-rvm-hierarchy-text-hit-target-sync-1
 // Previous canvas interaction key: RvmViewerInteractionPatch.js?v=20260624-rvm-interaction-state-contract-1
 // Previous tree sync key: RvmSelectionTreeSyncBridge.js?v=20260626-rvm-hierarchy-selection-sync-2
@@ -65,7 +66,7 @@ import { installRvmLeafSelectionIdentityBridge } from './RvmLeafSelectionIdentit
 import { installRvmLeafCanvasPickBridge } from './RvmLeafCanvasPickBridge.js?v=20260622-rvm-leaf-canvas-pick-orbit-guard-2';
 import { installRvmStagedJsonLoadAdapterBridge } from './RvmStagedJsonLoadAdapterBridge.js?v=20260627-rvm-stagedjson-load-adapter-1';
 import { installRvmNativeHierarchyProviderRuntimeBridge } from './RvmNativeHierarchyProviderRuntimeBridge.js?v=20260628-rvm-native-provider-runtime-1';
-import { installRvmHierarchyProviderDebugBridge } from './RvmHierarchyProviderDebugBridge.js?v=20260628-rvm-provider-debug-parity-guard-1';
+import { installRvmHierarchyProviderDebugBridge } from './RvmHierarchyProviderDebugBridge.js?v=20260629-rvm-provider-runtime-telemetry-1';
 import { installRvmHierarchyProviderHealthBridge } from './RvmHierarchyProviderHealthBridge.js?v=20260628-rvm-provider-health-check-1';
 import { installRvmHierarchyProviderParityAuditBridge } from './RvmHierarchyProviderParityAuditBridge.js?v=20260628-rvm-provider-parity-audit-1';
 import { installRvmHierarchyProviderDiagnosticsExportBridge } from './RvmHierarchyProviderDiagnosticsExportBridge.js?v=20260628-rvm-provider-diagnostics-export-1';
