@@ -7,13 +7,13 @@ import {
 import { attachNodeMarkerGlyphs, clearNodeMarkerGlyphRoot } from '../overlays/nodes/NodeMarkerGlyphGeometry.js';
 import { buildNodeMarkerOverrideStoreContext, loadNodeMarkerOverrideSet, removeNodeMarkerOverride, saveNodeMarkerOverrideSet, upsertNodeMarkerOverride } from '../overlays/nodes/NodeMarkerOverrideStore.js';
 import * as NodeMarkerSourceTools from './RvmNonPrimitiveNodeMarkerSourceToolsBridge.js';
-import { ensureNodeMarkerHover, installRvmNonPrimitiveNodeMarkerHoverBridge } from './RvmNonPrimitiveNodeMarkerHoverBridge.js?v=20260626-node-marker-hover-events-1';
-import { clear as clearNodeMarkerDetailsPanel, ensure as ensureNodeMarkerDetailsPanel, installRvmNonPrimitiveNodeMarkerDetailsPanelBridge } from './RvmNonPrimitiveNodeMarkerDetailsPanelBridge.js?v=20260626-node-marker-details-events-1';
+import { ensureNodeMarkerHover, installRvmNonPrimitiveNodeMarkerHoverBridge } from './RvmNonPrimitiveNodeMarkerHoverBridge.js';
+import { clear as clearNodeMarkerDetailsPanel, ensure as ensureNodeMarkerDetailsPanel, installRvmNonPrimitiveNodeMarkerDetailsPanelBridge } from './RvmNonPrimitiveNodeMarkerDetailsPanelBridge.js';
 
-export const RVM_NON_PRIMITIVE_NODE_MARKER_BRIDGE_SCHEMA = 'rvm-non-primitive-node-marker-bridge/v5';
+export const RVM_NON_PRIMITIVE_NODE_MARKER_BRIDGE_SCHEMA = 'rvm-non-primitive-node-marker-bridge/v4';
 
 const GLOBAL_KEY = '__PCF_GLB_RVM_NON_PRIMITIVE_NODE_MARKERS__';
-const INSTALL_FLAG = Symbol.for('pcf-glb-rvm-non-primitive-node-marker-bridge-v5');
+const INSTALL_FLAG = Symbol.for('pcf-glb-rvm-non-primitive-node-marker-bridge-v4');
 
 export function installRvmNonPrimitiveNodeMarkerBridge() {
   if (globalThis[INSTALL_FLAG] && globalThis[GLOBAL_KEY]) return globalThis[GLOBAL_KEY];
@@ -36,7 +36,6 @@ export function installRvmNonPrimitiveNodeMarkerBridge() {
     saveOverride,
     clearOverride,
     persistOverrides,
-    getEventRegistryDiagnostics: () => globalThis.__PCF_GLB_RVM_UI_EVENT_REGISTRY__?.getDiagnostics?.() || null,
   };
   globalThis[GLOBAL_KEY] = api;
   return api;

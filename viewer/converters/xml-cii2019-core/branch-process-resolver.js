@@ -184,8 +184,13 @@ export function resolveCorrosionFromPipingClass({ lineRow, boreMm, componentType
 export function resolveWallThicknessFromPipingClass({ pipingClassRow, overrides = {}, overrideKeys = [], xmlNode, xmlBranch, config = {} }) {
   const fromClass = classWallValue(pipingClassRow);
   const overrideWall = numericOverrideValue(overrides, 'wallThickness', overrideKeys);
-  if (shouldUseNumericOverride(overrideWall, fromClass, config)) return { valueMm: overrideWall, source: 'override' };
+  // Overrides written by the DTXR button are tagged in __dtxrWallKeys.
+  // Piping class is primary: DTXR-button overrides yield to piping class when it has data.
+  // Manual cell overrides (not in __dtxrWallKeys) still take priority over piping class.
+  const overrideIsDtxrApplied = overrideWall != null && overrideKeys.some((k) => overrides.__dtxrWallKeys?.[k]);
+  if (!overrideIsDtxrApplied && shouldUseNumericOverride(overrideWall, fromClass, config)) return { valueMm: overrideWall, source: 'override' };
   if (fromClass != null) return { valueMm: fromClass, source: 'piping-class-master' };
+  if (shouldUseNumericOverride(overrideWall, fromClass, config)) return { valueMm: overrideWall, source: 'override' };
   const fromXml = toFiniteNumber(xmlNode?.wallThickness ?? xmlNode?.WallThickness ?? xmlBranch?.wallThickness);
   if (fromXml != null) return { valueMm: fromXml, source: 'xml-fallback' };
   const fromConfig = toFiniteNumber(config.defaultWallThickness);

@@ -1,8 +1,21 @@
 import assert from 'node:assert/strict';
 
+import { runXmlCompareArchitectureGate } from '../../tools/xml-compare-architecture-gate.mjs';
 import { buildInputXmlDirectManagedStageJson } from '../converters/inputxml-managed-stage/InputXmlDirectManagedStageBuilder.js';
 import { run } from '../converters/inputxml-managed-stage/inputxml-managed-stage-runner.js';
 import './inputxml-managed-stage-topology.test.js';
+import './xml-compare-cii-enriched-profile.test.js';
+import './xml-compare-workspace-shell.test.js';
+import './xml-compare-canvas-navigation.test.js';
+import './xml-compare-workspace-model.test.js';
+import './xml-compare-load-intake.test.js';
+import './xml-compare-tab-workspace-mount.test.js';
+import './xml-compare-canvas-host.test.js';
+import './xml-compare-canvas-state-activation.test.js';
+import './xml-compare-canvas-record-interaction.test.js';
+import './xml-compare-connector-overlay.test.js';
+import './xml-compare-sideload-enricher.test.js';
+import './xml-compare-sideload-popup.test.js';
 
 const xml = `<CAESARII VERSION="11.00" XML_TYPE="Input"><PIPINGMODEL JOBNAME="BM" NUMELT="2" NUMREST="8" NUMBEND="1" NUMRIGID="1" NUMISECT="1">
 <PIPINGELEMENT FROM_NODE="10.000000" TO_NODE="20.000000" DELTA_X="-1.010100" DELTA_Y="-1.010100" DELTA_Z="-100.000000" DIAMETER="114.300000" WALL_THICK="6.000000" INSUL_THICK="20.000000" CORR_ALLOW="0.000000" TEMP_EXP_C1="350.000000" PRESSURE1="2.000000" HYDRO_PRESSURE="5.000000" MODULUS="203390.703125" HOT_MOD1="178960.625000" POISSONS="0.292000" PIPE_DENSITY="0.007833" INSUL_DENSITY="0.000140" FLUID_DENSITY="0.001000" MATERIAL_NUM="106.000000" MATERIAL_NAME="A106 B"><RIGID WEIGHT="186.808350" TYPE="Flange Pair" /></PIPINGELEMENT>
@@ -71,5 +84,9 @@ assert.ok(uxml.components.length >= 2, 'UXML sidecar carries route components');
 assert.ok(uxml.segments.length >= 2, 'UXML sidecar carries APOS-LPOS route segments');
 assert.match(response.logs.stdout.join('\n'), /blankRestraintRows=1/);
 assert.match(response.logs.stdout.join('\n'), /richGeometryComponents=/);
+
+const xmlCompareGate = runXmlCompareArchitectureGate();
+assert.equal(xmlCompareGate.ok, true);
+assert.ok(xmlCompareGate.checkedModuleCount >= 22, 'XML Compare architecture gate covers load intake modules');
 
 console.log('inputxml-direct-managed-stage: all assertions passed');

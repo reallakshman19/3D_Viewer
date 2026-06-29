@@ -15,7 +15,7 @@ import { WorkflowModal } from './shared/WorkflowModal.js?v=20260624-workflow-tab
 import { xmlCiiWorkflowGetBridge, xmlCiiWorkflowGetSnapshot, xmlCiiWorkflowInvalidateSnapshot } from './xml-cii-workflow-bridge.js?v=20260625-service-1';
 import { renderXmlCiiPopupNativePhase } from './xml-cii-popup-native-panels.js?v=20260625-service-1';
 import { renderXmlCiiCustomInputPanel, bindXmlCiiCustomInputPanel } from './custom-input/custom-input-panel.js?v=20260625-custom-input-2';
-import { renderXmlCiiJsonTracePanel, bindXmlCiiJsonTracePanel } from './json-trace/json-trace-panel.js?v=20260625-json-trace-1';
+import { renderXmlCiiJsonTracePanel, bindXmlCiiJsonTracePanel } from './json-trace/json-trace-panel.js?v=20260626-json-trace-source-1';
 import {
   createXmlCiiWorkflowState,
   persistXmlCiiWorkflowPhase,

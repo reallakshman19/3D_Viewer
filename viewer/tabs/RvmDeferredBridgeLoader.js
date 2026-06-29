@@ -1,36 +1,25 @@
-const VERSION = '20260626-rvm-deferred-report-export-shell-slot-1';
-const PREVIOUS_SOURCE_PREVIEW_LOADER_VERSION = '20260626-rvm-deferred-node-marker-events-1';
-const LEGACY_SOURCE_PREVIEW_LOADER_VERSION = '20260626-rvm-deferred-source-preview-hover-events-1';
+import { isRvmSourcePreviewKind, normalizeRvmSourceKind } from '../RvmSourceKindPolicy.js';
+
+const VERSION = '20260628-rvm-deferred-source-tools-dashboard-1';
+const PREVIOUS_VERSION = '20260628-rvm-deferred-right-panel-ui-v2-1';
 const API_KEY = '__PCF_GLB_RVM_BRIDGE_LOADER__';
 const ACTION_DIAGNOSTICS_KEY = '__PCF_GLB_RVM_ACTION_DIAGNOSTICS__';
-
-const SOURCE_PREVIEW_KIND_RE = /^(json|jscon|inputxml|uxml|txt|source-preview|stagedjson)$/i;
-const SOURCE_TOOLS_UI_PREVIOUS_CACHE_KEY = 'RvmNonPrimitiveSourceToolsUiBridge.js?v=20260624-source-tools-grouped-1';
-const SOURCE_TOOLS_UI_CACHE_KEY = 'RvmNonPrimitiveSourceToolsUiBridge.js?v=20260626-source-tools-shell-slot-1';
-const NODE_MARKER_BRIDGE_LEGACY_CACHE_KEY = 'RvmNonPrimitiveNodeMarkerBridge.js?v=20260625-node-marker-deferred-1';
-const NODE_MARKER_BRIDGE_PREVIOUS_CACHE_KEY = 'RvmNonPrimitiveNodeMarkerBridge.js?v=20260626-node-marker-shell-slot-1';
-const NODE_MARKER_BRIDGE_CACHE_KEY = 'RvmNonPrimitiveNodeMarkerBridge.js?v=20260626-node-marker-events-1';
-const SUPPORT_DETAILS_PANEL_PREVIOUS_CACHE_KEY = 'RvmNonPrimitiveSupportOverlayDetailsPanelBridge.js?v=20260626-supports-shell-slot-1';
-const SUPPORT_DETAILS_PANEL_LEGACY_CACHE_KEY = 'RvmNonPrimitiveSupportOverlayDetailsPanelBridge.js?v=20260623-nonprimitive-support-details-panel-4';
-const SUPPORT_DETAILS_PANEL_CACHE_KEY = 'RvmNonPrimitiveSupportOverlayDetailsPanelBridge.js?v=20260626-source-preview-support-events-1';
-const SUPPORT_HOVER_PREVIOUS_CACHE_KEY = 'RvmNonPrimitiveSupportOverlayHoverBridge.js?v=20260623-nonprimitive-support-hover-2';
-const SUPPORT_HOVER_CACHE_KEY = 'RvmNonPrimitiveSupportOverlayHoverBridge.js?v=20260626-source-preview-hover-events-1';
-const REPORT_EXPORT_PREVIOUS_CACHE_KEY = 'RvmReportExportBridge.js?v=20260621-rvm-report-export-1';
-const REPORT_EXPORT_CACHE_KEY = 'RvmReportExportBridge.js?v=20260626-rvm-report-export-shell-slot-1';
 
 const BRIDGE_GROUPS = Object.freeze({
   sourcePreview: [
     { id: 'nonprimitive-support-overlay', specifier: './RvmNonPrimitiveSupportOverlayBridge.js?v=20260623-nonprimitive-support-overlay-9', install: 'installRvmNonPrimitiveSupportOverlayBridge' },
     { id: 'nonprimitive-support-hard-disable', specifier: './RvmNonPrimitiveSupportOverlayHardDisableBridge.js?v=20260623-nonprimitive-support-hard-disable-1', install: 'installRvmNonPrimitiveSupportOverlayHardDisableBridge' },
-    { id: 'nonprimitive-support-details-panel', specifier: `./${SUPPORT_DETAILS_PANEL_CACHE_KEY}`, install: 'installRvmNonPrimitiveSupportOverlayDetailsPanelBridge' },
-    { id: 'nonprimitive-support-hover', specifier: `./${SUPPORT_HOVER_CACHE_KEY}`, install: 'installRvmNonPrimitiveSupportOverlayHoverBridge' },
+    { id: 'nonprimitive-support-details-panel', specifier: './RvmNonPrimitiveSupportOverlayDetailsPanelBridge.js?v=20260623-nonprimitive-support-details-panel-4', install: 'installRvmNonPrimitiveSupportOverlayDetailsPanelBridge' },
+    { id: 'nonprimitive-support-hover', specifier: './RvmNonPrimitiveSupportOverlayHoverBridge.js?v=20260623-nonprimitive-support-hover-2', install: 'installRvmNonPrimitiveSupportOverlayHoverBridge' },
     { id: 'nonprimitive-auto-bend', specifier: './RvmNonPrimitiveAutoBendBridge.js?v=20260623-nonprimitive-auto-bend-preview-2', install: 'installRvmNonPrimitiveAutoBendBridge' },
-    { id: 'nonprimitive-node-markers', specifier: `./${NODE_MARKER_BRIDGE_CACHE_KEY}`, install: 'installRvmNonPrimitiveNodeMarkerBridge' },
-    { id: 'nonprimitive-source-tools-ui', specifier: `./${SOURCE_TOOLS_UI_CACHE_KEY}`, install: 'installRvmNonPrimitiveSourceToolsUiBridge' },
+    { id: 'nonprimitive-node-markers', specifier: './RvmNonPrimitiveNodeMarkerBridge.js?v=20260625-node-marker-deferred-1', install: 'installRvmNonPrimitiveNodeMarkerBridge' },
+    { id: 'nonprimitive-source-tools-ui', specifier: './RvmNonPrimitiveSourceToolsUiBridge.js?v=20260628-rvm-source-tools-dashboard-1', previousSpecifier: './RvmNonPrimitiveSourceToolsUiBridge.js?v=20260628-rvm-source-tools-shared-kind-policy-1', install: 'installRvmNonPrimitiveSourceToolsUiBridge' },
   ],
   postModel: [
     { id: 'stagedjson-export', specifier: './RvmStagedJsonExportBridge.js?v=20260624-rvm-stagedjson-support-policy-1', install: 'installRvmStagedJsonExportBridge' },
     { id: 'stagedjson-validation', specifier: './RvmStagedJsonValidationBridge.js?v=20260624-rvm-stagedjson-support-policy-1', install: 'installRvmStagedJsonValidationBridge' },
+    { id: 'right-panel-format-policy', specifier: './RvmRightPanelFormatPolicyBridge.js?v=20260628-rvm-right-panel-ui-v2-1', previousSpecifier: './RvmRightPanelFormatPolicyBridge.js?v=20260628-rvm-right-panel-layout-1', install: 'installRvmRightPanelFormatPolicyBridge' },
+    { id: 'source-format-input', specifier: './RvmSourceFormatInputBridge.js?v=20260627-rvm-source-format-input-1', install: 'installRvmSourceFormatInputBridge' },
     { id: 'primitive-fallback', specifier: './RvmPrimitiveFallbackBridge.js?v=20260620-rvm-primitive-fallback-clickable-1', install: 'installRvmPrimitiveFallbackBridge' },
     { id: 'native-glb-export', specifier: './RvmNativeSceneGlbExportBridge.js?v=20260620-rvm-glb-component-hierarchy-v3-1', install: 'installRvmNativeSceneGlbExportBridge' },
     { id: 'glb-export-profile', specifier: './RvmGlbExportProfileBridge.js?v=20260620-rvm-glb-export-profile-units-1', install: 'installRvmGlbExportProfileBridge' },
@@ -42,9 +31,9 @@ const BRIDGE_GROUPS = Object.freeze({
     { id: 'object-search', specifier: './RvmObjectSearchBridge.js?v=20260621-rvm-object-search-1', install: 'installRvmObjectSearchBridge' },
     { id: 'visibility-snapshots', specifier: './RvmVisibilitySnapshotsBridge.js?v=20260621-rvm-visibility-snapshots-1', install: 'installRvmVisibilitySnapshotsBridge' },
     { id: 'selection-sets', specifier: './RvmSelectionSetsBridge.js?v=20260621-rvm-selection-sets-1', install: 'installRvmSelectionSetsBridge' },
-    { id: 'report-export', specifier: `./${REPORT_EXPORT_CACHE_KEY}`, install: 'installRvmReportExportBridge' },
-    { id: 'model-health', specifier: './RvmModelHealthBridge.js?v=20260621-rvm-health-issues-1', install: 'installRvmModelHealthBridge' },
-    { id: 'model-health-issues', specifier: './RvmModelHealthIssuesBridge.js?v=20260621-rvm-health-issues-1', install: 'installRvmModelHealthIssuesBridge' },
+    { id: 'report-export', specifier: './RvmReportExportBridge.js?v=20260627-rvm-report-misc-compact-1', previousSpecifier: './RvmReportExportBridge.js?v=20260621-rvm-report-export-1', install: 'installRvmReportExportBridge' },
+    { id: 'model-health', specifier: './RvmModelHealthBridge.js?v=20260627-rvm-health-misc-compact-1', previousSpecifier: './RvmModelHealthBridge.js?v=20260621-rvm-health-issues-1', install: 'installRvmModelHealthBridge' },
+    { id: 'model-health-issues', specifier: './RvmModelHealthIssuesBridge.js?v=20260627-rvm-health-issues-misc-compact-1', previousSpecifier: './RvmModelHealthIssuesBridge.js?v=20260621-rvm-health-issues-1', install: 'installRvmModelHealthIssuesBridge' },
   ],
 });
 
@@ -59,6 +48,7 @@ export function installRvmDeferredBridgeLoader() {
   refreshRootInstallEpoch();
   const api = globalThis[API_KEY] || {
     version: VERSION,
+    previousVersion: PREVIOUS_VERSION,
     groups: Object.keys(BRIDGE_GROUPS),
     ensureGroup: (groupName, reason = 'api') => ensureRvmBridgeGroup(groupName, reason),
     ensurePostModel: (reason = 'api') => ensureRvmBridgeGroup('postModel', reason),
@@ -67,6 +57,7 @@ export function installRvmDeferredBridgeLoader() {
     getDiagnostics: () => globalThis[ACTION_DIAGNOSTICS_KEY] || null,
   };
   api.version = VERSION;
+  api.previousVersion = PREVIOUS_VERSION;
   api.groups = Object.keys(BRIDGE_GROUPS);
   api.ensureSourcePreview = (reason = 'api') => ensureSourcePreviewGroupIfNeeded(reason);
   globalThis[API_KEY] = api;
@@ -176,12 +167,12 @@ function getSourcePreviewContext() {
   const sourceKind = normalizeSourceKind(root?.dataset?.rvmLoadedSourceKind || userData.__rvmNonPrimitiveSourceKind || userData.__rvmNonPrimitiveAutoBendSourceKind || viewer?.sourceKind || '');
   const source = userData.__rvmNonPrimitiveAutoBendSourceHierarchy || userData.__rvmNonPrimitiveSourceHierarchy || null;
   const supportSource = userData.__rvmNonPrimitiveSourceHierarchy || source;
-  const active = mode === 'source-preview' && SOURCE_PREVIEW_KIND_RE.test(sourceKind) && Boolean(source);
+  const active = mode === 'source-preview' && isRvmSourcePreviewKind(sourceKind) && Boolean(source);
   return { root, viewer, model, source, supportSource, sourceKind, fileName: userData.fileName || '', active, reason: active ? '' : `mode:${mode || '-'} kind:${sourceKind || '-'}` };
 }
 
 function normalizeSourceKind(value) {
-  return String(value || '').trim().toLowerCase();
+  return normalizeRvmSourceKind(value);
 }
 
 function refreshSourcePreviewRuntime(reason = 'source-preview-loaded') {
@@ -192,6 +183,7 @@ function refreshSourcePreviewRuntime(reason = 'source-preview-loaded') {
   try { globalThis.__PCF_GLB_RVM_NON_PRIMITIVE_SUPPORT_OVERLAY__?.applyFromSource?.({ viewer, root, source: supportSource, sourceKind, fileName }); } catch (error) { reportRvmActionError(error, { action: 'source-preview-support-overlay', reason }); }
   try { globalThis.__PCF_GLB_RVM_NON_PRIMITIVE_NODE_MARKERS__?.applyFromSource?.({ viewer, root, source, sourceKind, fileName }); } catch (error) { reportRvmActionError(error, { action: 'source-preview-node-markers', reason }); }
   try { globalThis.__PCF_GLB_RVM_NON_PRIMITIVE_SOURCE_TOOLS_UI__?.sync?.(); } catch (error) { reportRvmActionError(error, { action: 'source-preview-tools-sync', reason }); }
+  try { globalThis.__PCF_GLB_RVM_RIGHT_PANEL_FORMAT_POLICY__?.render?.(root, viewer); } catch (error) { reportRvmActionError(error, { action: 'right-panel-policy-sync', reason }); }
   return { status: 'refreshed', sourceKind, reason };
 }
 
@@ -200,6 +192,7 @@ function clearSourcePreviewRuntime(viewer, reason = 'clear-source-preview-runtim
   try { globalThis.__PCF_GLB_RVM_NON_PRIMITIVE_SUPPORT_OVERLAY__?.clear?.(viewer, reason); } catch (_) {}
   try { globalThis.__PCF_GLB_RVM_NON_PRIMITIVE_NODE_MARKERS__?.clear?.(viewer, reason); } catch (_) {}
   try { globalThis.__PCF_GLB_RVM_NON_PRIMITIVE_SOURCE_TOOLS_UI__?.sync?.(); } catch (_) {}
+  try { globalThis.__PCF_GLB_RVM_RIGHT_PANEL_FORMAT_POLICY__?.render?.(document.querySelector('[data-rvm-viewer]'), viewer); } catch (_) {}
   return { status: 'cleared', reason };
 }
 
@@ -275,5 +268,5 @@ function afterFirstPaint(fn) {
 }
 
 function escapeHtml(value) {
-  return String(value ?? '').replace(/[&<>"]/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch]));
+  return String(value ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }

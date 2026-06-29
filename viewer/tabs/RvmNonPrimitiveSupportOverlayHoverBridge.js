@@ -1,6 +1,6 @@
 import * as THREE from 'three';
+import { isRvmNonPrimitiveSourceKind, normalizeRvmSourceKind } from '../RvmSourceKindPolicy.js';
 import { RvmViewer3D } from '../rvm-viewer/RvmViewer3D.js?v=20260622-rvm-leaf-picking-2';
-import { installRvmUiEventRegistry, registerRvmUiEvent, routeRvmUiEvent } from './RvmUiEventRegistry.js?v=20260626-rvm-ui-event-registry-1';
 import {
   buildSupportOverlayHoverPreviewState,
   clearSupportOverlayHovers,
@@ -10,29 +10,25 @@ import {
   SUPPORT_OVERLAY_HOVER_SCHEMA,
 } from '../overlays/support/SupportOverlayHover.js';
 
-export const RVM_NON_PRIMITIVE_SUPPORT_HOVER_SCHEMA = 'rvm-non-primitive-support-overlay-hover/v3';
+export const RVM_NON_PRIMITIVE_SUPPORT_HOVER_SCHEMA = 'rvm-non-primitive-support-overlay-hover/v2';
 
 const ROOT_SELECTOR = '[data-rvm-viewer]';
 const SUPPORT_OVERLAY_ROOT_NAME = '__RVM_NON_PRIMITIVE_SUPPORT_OVERLAY__';
 const GLOBAL_KEY = '__PCF_GLB_RVM_NON_PRIMITIVE_SUPPORT_HOVER__';
-const PATCH_FLAG = Symbol.for('pcf-glb-rvm-non-primitive-support-hover-v3');
-const VIEWER_PATCH_FLAG = Symbol.for('pcf-glb-rvm-non-primitive-support-hover-viewer-v3');
-const POINTER_FLAG = Symbol.for('pcf-glb-rvm-non-primitive-support-hover-pointer-v3');
+const PATCH_FLAG = Symbol.for('pcf-glb-rvm-non-primitive-support-hover-v2');
+const VIEWER_PATCH_FLAG = Symbol.for('pcf-glb-rvm-non-primitive-support-hover-viewer-v2');
+const POINTER_FLAG = Symbol.for('pcf-glb-rvm-non-primitive-support-hover-pointer-v2');
 const STYLE_FLAG = Symbol.for('pcf-glb-rvm-non-primitive-support-hover-style-v2');
-const SOURCE_KIND_RE = /^(json|jscon|inputxml|txt|source-preview)$/i;
-const PRIMITIVE_KIND_RE = /^(rvm|glb|gltf|rev)$/i;
 const HOVER_THROTTLE_MS = 80;
 
 export function installRvmNonPrimitiveSupportOverlayHoverBridge() {
   if (globalThis[PATCH_FLAG]) return;
-  installRvmUiEventRegistry();
   globalThis[PATCH_FLAG] = true;
   globalThis[GLOBAL_KEY] = {
     schema: RVM_NON_PRIMITIVE_SUPPORT_HOVER_SCHEMA,
     hoverSchema: SUPPORT_OVERLAY_HOVER_SCHEMA,
     previewFromPointer: previewSupportOverlayHoverFromPointer,
     clear: clearSupportOverlayHoverPreview,
-    getEventRegistryDiagnostics: () => globalThis.__PCF_GLB_RVM_UI_EVENT_REGISTRY__?.getDiagnostics?.() || null,
   };
   installSupportHoverStyles();
   patchRvmViewerSetModelForSupportHover();
@@ -103,15 +99,9 @@ function patchRvmViewerSetModelForSupportHover() {
 
 function ensureSupportHoverPointerEvents(viewer) {
   if (!viewer || viewer[POINTER_FLAG]) return;
-  installRvmUiEventRegistry();
-  registerRvmUiEvent('canvas-source-preview-support-hover', ({ detail }) => {
-    const localViewer = detail.viewer || globalThis.__3D_RVM_VIEWER__;
-    const sourceEvent = detail.sourceEvent || {};
-    return previewSupportOverlayHoverFromPointer(localViewer, sourceEvent);
-  }, { id: 'rvm-source-preview-support-hover', priority: 35 });
   const dom = viewer.renderer?.domElement || viewer.container;
   if (!dom?.addEventListener) return;
-  const onMove = (event) => routeRvmUiEvent(findViewerRoot(event), 'canvas-source-preview-support-hover', { viewer, sourceEvent: event });
+  const onMove = (event) => previewSupportOverlayHoverFromPointer(viewer, event);
   const onLeave = () => clearSupportOverlayHoverPreview(viewer, 'pointer-leave');
   const onDown = () => clearSupportOverlayHoverPreview(viewer, 'navigation-pointer-down');
   dom.addEventListener('pointermove', onMove, false);
@@ -341,14 +331,12 @@ function findDetailsOwner(object, roots) {
 }
 
 function isNonPrimitiveKind(kind) {
-  const normalized = normalizeSourceKind(kind);
-  return SOURCE_KIND_RE.test(normalized) && !PRIMITIVE_KIND_RE.test(normalized);
+  return isRvmNonPrimitiveSourceKind(normalizeSourceKind(kind));
 }
 
 function normalizeSourceKind(value) {
-  const kind = String(value || '').trim().toLowerCase().replace(/^\./, '');
-  if (!kind || kind === 'aveva-json' || kind === 'source-preview') return 'json';
-  if (kind === 'xml' || kind === 'uxml') return 'inputxml';
+  const kind = normalizeRvmSourceKind(value);
+  if (!kind || kind === 'source-preview') return 'json';
   return kind;
 }
 

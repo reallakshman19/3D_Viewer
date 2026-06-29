@@ -37,7 +37,7 @@ assert(/splitCondensedValveFlange/.test(renderer) && /split_condensed_valve_flan
 assert(/collectXmlCiiWeightMatchRows\(geometryXml/.test(renderer), 'Workflow 4A must collect weight rows from the post-enrichment geometry XML');
 assert(/applyPreferredWeightsByDefault/.test(renderer), 'Workflow 4A must auto-apply preferred weights after Build Weight Data');
 assert(/preferred-auto/.test(renderer), 'Workflow 4A auto-application must mark preferred auto-mapped weights');
-assert(/isEndpoint2/.test(renderer) && /nodeName: useValveHint \? row\.nodeName : ''/.test(renderer), 'Workflow 4A Valve Hint must only apply to Endpoint 2 nodes');
+assert(/nodeName: row\.nodeName/.test(renderer) && /Endpoint restriction removed/.test(renderer), 'Workflow 4A Valve Hint must follow current all-eligible-node policy');
 assert(/Update Wall thickness based on DTXR/.test(preview), 'Preview must expose DTXR-based Wall thickness update button');
 assert(/resolveXmlCiiWallThicknessFromDtxr/.test(preview), 'Preview must resolve Wall thickness from DTXR schedule and bore');
 assert(/Use JSON Trace staged source/.test(preview) && /resolveStagedJsonText/.test(preview), 'Preview must expose and lazily resolve the JSON Trace staged-source toggle');

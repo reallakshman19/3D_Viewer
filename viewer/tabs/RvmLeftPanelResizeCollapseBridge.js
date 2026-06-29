@@ -1,23 +1,23 @@
-const INSTALL_FLAG = Symbol.for('pcf-glb-rvm-left-panel-resize-collapse-v2');
+const INSTALL_FLAG = Symbol.for('pcf-glb-rvm-left-panel-resize-collapse-v3');
 const STYLE_ID = 'rvm-left-panel-resize-collapse-style';
-const VERSION = '20260624-rvm-panel-resize-1';
+const VERSION = '20260628-rvm-adaptive-hierarchy-columns-1';
 
 const PANEL_SELECTORS = [
   '[data-rvm-support-att-panel]',
   '[data-rvm-support-engine-panel]',
 ];
 
-const HIERARCHY_KEYS = Object.freeze({
-  width: 'rvm.hierarchy.width',
-  kindWidth: 'rvm.hierarchy.kindWidth',
-  countWidth: 'rvm.hierarchy.countWidth',
-  actionWidth: 'rvm.hierarchy.actionWidth',
-});
-
 const PANEL_WIDTH_KEYS = Object.freeze({
   left: 'rvm.panel.leftWidth',
   right: 'rvm.panel.rightWidth',
 });
+
+const RETIRED_HIERARCHY_WIDTH_VARIABLES = [
+  '--rvm-hierarchy-w',
+  '--rvm-tree-kind-w',
+  '--rvm-tree-count-w',
+  '--rvm-tree-action-w',
+];
 
 export function installRvmLeftPanelResizeCollapseBridge() {
   if (typeof document === 'undefined') return null;
@@ -40,9 +40,10 @@ function scan() {
   enhanceMainPanelResizers(root);
   const tree = left.querySelector('#rvm-tree');
   if (tree) {
-    tree.dataset.rvmResizablePanel = 'hierarchy';
-    enhanceHierarchyWidthControls(left, tree);
-    applyHierarchyWidths(left, tree);
+    tree.dataset.rvmResizablePanel = 'hierarchy-adaptive';
+    tree.dataset.rvmHierarchyAdaptiveColumns = VERSION;
+    removeHierarchyWidthControls(left, tree);
+    applyAdaptiveHierarchyLayout(tree);
   }
   movePanelsToLeft(root, left);
   for (const selector of PANEL_SELECTORS) {
@@ -104,15 +105,15 @@ function ensurePanelResizer(root, panel, side) {
 
 function panelWidthFromPointer(side, rect, clientX) {
   const raw = side === 'left' ? clientX - rect.left : rect.right - clientX;
-  const min = side === 'left' ? 180 : 210;
-  const max = side === 'left' ? 560 : 760;
+  const min = side === 'left' ? 220 : 210;
+  const max = side === 'left' ? 620 : 760;
   return Math.max(min, Math.min(max, Math.round(raw)));
 }
 
 function applyStoredPanelWidth(root, side) {
   const key = PANEL_WIDTH_KEYS[side];
   if (!key) return;
-  const value = readCssSize(key, side === 'left' ? '260px' : '300px');
+  const value = readCssSize(key, side === 'left' ? '320px' : '300px');
   setPanelWidth(root, side, value);
 }
 
@@ -137,51 +138,14 @@ function movePanelsToLeft(root, left) {
   }
 }
 
-function enhanceHierarchyWidthControls(left, tree) {
-  if (!left || !tree || left.querySelector('[data-rvm-hierarchy-width-controls]')) return;
-  const controls = document.createElement('div');
-  controls.className = 'rvm-hierarchy-width-controls';
-  controls.dataset.rvmHierarchyWidthControls = 'true';
-  controls.innerHTML = `
-    <label title="Hierarchy tree width"><span>Tree W</span><input type="range" min="220" max="680" step="10" data-rvm-hierarchy-width-field="width"></label>
-    <label title="Kind badge column width"><span>Kind</span><input type="range" min="26" max="96" step="2" data-rvm-hierarchy-width-field="kindWidth"></label>
-    <label title="Count column width"><span>Count</span><input type="range" min="32" max="96" step="2" data-rvm-hierarchy-width-field="countWidth"></label>
-    <label title="On/Off action column width"><span>Act</span><input type="range" min="28" max="84" step="2" data-rvm-hierarchy-width-field="actionWidth"></label>
-  `;
-  left.insertBefore(controls, tree);
-  syncHierarchyControlValues(controls);
-  controls.addEventListener('input', (event) => {
-    const input = event.target?.closest?.('[data-rvm-hierarchy-width-field]');
-    if (!input) return;
-    const field = input.dataset.rvmHierarchyWidthField;
-    const key = HIERARCHY_KEYS[field];
-    if (!key) return;
-    const unit = field === 'width' ? 'px' : 'px';
-    const value = `${Math.round(Number(input.value) || fallbackValue(field))}${unit}`;
-    try { localStorage.setItem(key, value); } catch (_) {}
-    applyHierarchyWidths(left, tree);
-  });
+function removeHierarchyWidthControls(left, tree) {
+  left?.querySelectorAll?.('[data-rvm-hierarchy-width-controls], .rvm-hierarchy-width-controls').forEach((controls) => controls.remove());
+  tree?.querySelectorAll?.('[data-rvm-hierarchy-width-controls], .rvm-hierarchy-width-controls').forEach((controls) => controls.remove());
 }
 
-function syncHierarchyControlValues(controls) {
-  controls?.querySelectorAll?.('[data-rvm-hierarchy-width-field]').forEach((input) => {
-    const field = input.dataset.rvmHierarchyWidthField;
-    const key = HIERARCHY_KEYS[field];
-    const value = readCssSize(key, `${fallbackValue(field)}px`);
-    input.value = String(parseInt(value, 10) || fallbackValue(field));
-  });
-}
-
-function applyHierarchyWidths(left, tree) {
-  if (!left || !tree) return;
-  const width = readCssSize(HIERARCHY_KEYS.width, '320px');
-  const kindWidth = readCssSize(HIERARCHY_KEYS.kindWidth, '42px');
-  const countWidth = readCssSize(HIERARCHY_KEYS.countWidth, '54px');
-  const actionWidth = readCssSize(HIERARCHY_KEYS.actionWidth, '40px');
-  tree.style.setProperty('--rvm-hierarchy-w', width);
-  tree.style.setProperty('--rvm-tree-kind-w', kindWidth);
-  tree.style.setProperty('--rvm-tree-count-w', countWidth);
-  tree.style.setProperty('--rvm-tree-action-w', actionWidth);
+function applyAdaptiveHierarchyLayout(tree) {
+  if (!tree) return;
+  for (const variable of RETIRED_HIERARCHY_WIDTH_VARIABLES) tree.style.removeProperty(variable);
 }
 
 function readCssSize(key, fallback) {
@@ -190,14 +154,6 @@ function readCssSize(key, fallback) {
     if (/^\d+(?:\.\d+)?px$/.test(raw)) return raw;
   } catch (_) {}
   return fallback;
-}
-
-function fallbackValue(field) {
-  if (field === 'width') return 320;
-  if (field === 'kindWidth') return 42;
-  if (field === 'countWidth') return 54;
-  if (field === 'actionWidth') return 40;
-  return 40;
 }
 
 function enhancePanel(panel) {
@@ -239,22 +195,29 @@ function setCollapsed(panel, collapsed) {
 }
 
 function injectStyles() {
-  if (document.getElementById(STYLE_ID)) return;
-  const style = document.createElement('style');
-  style.id = STYLE_ID;
+  let style = document.getElementById(STYLE_ID);
+  if (!style) {
+    style = document.createElement('style');
+    style.id = STYLE_ID;
+    document.head.appendChild(style);
+  }
+  if (style.dataset.rvmLeftPanelResizeCollapse === VERSION) return;
+  style.dataset.rvmLeftPanelResizeCollapse = VERSION;
   style.textContent = `
-    .rvm-tab-root{--rvm-left-panel-width:var(--rvm-left-w,260px);--rvm-right-panel-width:var(--rvm-right-w,300px);}
+    .rvm-tab-root{--rvm-left-panel-width:var(--rvm-left-w,320px);--rvm-right-panel-width:var(--rvm-right-w,300px);}
     .rvm-body{min-width:0;}
-    .rvm-left-panel[data-rvm-left-panel-resizable="true"]{position:relative;overflow:auto;gap:6px;padding-bottom:8px;width:var(--rvm-left-panel-width,var(--rvm-left-w,260px))!important;min-width:180px;max-width:min(560px,calc(100% - 420px));flex:0 0 var(--rvm-left-panel-width,var(--rvm-left-w,260px))!important;}
+    .rvm-left-panel[data-rvm-left-panel-resizable="true"]{position:relative;overflow:auto;gap:6px;padding-bottom:8px;width:var(--rvm-left-panel-width,var(--rvm-left-w,320px))!important;min-width:220px;max-width:min(620px,calc(100% - 420px));flex:0 0 var(--rvm-left-panel-width,var(--rvm-left-w,320px))!important;}
     .rvm-right-panel[data-rvm-right-panel-resizable="true"]{position:relative;width:var(--rvm-right-panel-width,var(--rvm-right-w,300px))!important;min-width:210px;max-width:min(760px,calc(100% - 420px));flex:0 0 var(--rvm-right-panel-width,var(--rvm-right-w,300px))!important;}
     .rvm-viewport{min-width:240px;}
-    .rvm-hierarchy-width-controls{flex:0 0 auto;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:4px;margin:4px 5px 2px;padding:5px;border:1px solid rgba(126,190,255,.20);border-radius:8px;background:rgba(15,23,42,.62);}
-    .rvm-hierarchy-width-controls label{display:flex;align-items:center;gap:4px;min-width:0;color:#a9c3e8;font:600 9px/1.1 system-ui,sans-serif;}
-    .rvm-hierarchy-width-controls span{min-width:34px;white-space:nowrap;}
-    .rvm-hierarchy-width-controls input{min-width:0;width:100%;}
-    .rvm-left-panel[data-rvm-left-panel-resizable="true"] #rvm-tree[data-rvm-resizable-panel="hierarchy"]{flex:0 0 auto;min-width:220px;width:min(100%,var(--rvm-hierarchy-w,320px));min-height:120px;height:clamp(150px,34vh,420px);max-height:70vh;resize:both;overflow:auto;border-bottom:1px solid rgba(126,190,255,.22);}
-    .rvm-left-panel[data-rvm-left-panel-resizable="true"] #rvm-tree .rvm-navis-row{grid-template-columns:16px minmax(0,1fr) var(--rvm-tree-action-w,40px) var(--rvm-tree-action-w,40px);}
-    .rvm-left-panel[data-rvm-left-panel-resizable="true"] #rvm-tree .rvm-navis-select{grid-template-columns:auto var(--rvm-tree-kind-w,42px) minmax(72px,1fr) var(--rvm-tree-count-w,54px);}
+    .rvm-hierarchy-width-controls{display:none!important;}
+    .rvm-left-panel[data-rvm-left-panel-resizable="true"] #rvm-tree[data-rvm-resizable-panel="hierarchy-adaptive"]{flex:1 1 auto;min-width:0;width:100%!important;max-width:100%;min-height:120px;height:clamp(180px,42vh,520px);max-height:70vh;resize:vertical;overflow:auto;border-bottom:1px solid rgba(126,190,255,.22);}
+    .rvm-left-panel[data-rvm-left-panel-resizable="true"] #rvm-tree .rvm-navis-row{grid-template-columns:20px minmax(0,1fr) max-content max-content;}
+    .rvm-left-panel[data-rvm-left-panel-resizable="true"] #rvm-tree .rvm-navis-select{grid-template-columns:16px minmax(38px,max-content) minmax(0,1fr) minmax(24px,max-content);}
+    .rvm-left-panel[data-rvm-left-panel-resizable="true"] #rvm-tree .rvm-kind{min-width:0;max-width:clamp(36px,18%,90px);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+    .rvm-left-panel[data-rvm-left-panel-resizable="true"] #rvm-tree .rvm-navis-label,.rvm-left-panel[data-rvm-left-panel-resizable="true"] #rvm-tree .rvm-tree-label{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+    .rvm-left-panel[data-rvm-left-panel-resizable="true"] #rvm-tree .rvm-tree-count{min-width:18px;max-width:52px;justify-self:end;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+    .rvm-left-panel[data-rvm-left-panel-resizable="true"] #rvm-tree .rvm-navis-branch-off,.rvm-left-panel[data-rvm-left-panel-resizable="true"] #rvm-tree .rvm-navis-branch-on{width:auto;min-width:30px;max-width:42px;padding:0 4px;}
+    @media (max-width:1100px){.rvm-left-panel[data-rvm-left-panel-resizable="true"] #rvm-tree .rvm-navis-select{grid-template-columns:16px minmax(0,1fr) minmax(22px,max-content);}.rvm-left-panel[data-rvm-left-panel-resizable="true"] #rvm-tree .rvm-kind{display:none;}}
     .rvm-left-collapsible-panel{flex:0 0 auto;min-height:34px;max-height:60vh;resize:vertical;overflow:auto;margin:6px 6px 0;border:1px solid rgba(96,165,250,.28);border-radius:10px;background:rgba(15,23,42,.70);}
     .rvm-left-collapsible-panel.is-collapsed{height:auto!important;min-height:32px;max-height:36px;resize:none;overflow:hidden;}
     .rvm-left-collapsible-panel.is-collapsed > :not(.rvm-left-collapsible-title):not(h3){display:none!important;}
@@ -266,5 +229,4 @@ function injectStyles() {
     .rvm-panel-resizer-left{right:-4px;}
     .rvm-panel-resizer-right{left:-4px;}
   `;
-  document.head.appendChild(style);
 }

@@ -78,20 +78,9 @@ assert.match(renderSupportOverlayDetailsPanelHtml(empty), /data-support-details-
 
 const bridge = await fs.readFile(new URL('../tabs/RvmNonPrimitiveSupportOverlayDetailsPanelBridge.js', import.meta.url), 'utf8');
 const deferredLoader = await fs.readFile(new URL('../tabs/RvmDeferredBridgeLoader.js', import.meta.url), 'utf8');
-const renderer = await fs.readFile(new URL('../tabs/viewer3d-rvm-tab-renderer.js', import.meta.url), 'utf8');
 const sourceTools = await fs.readFile(new URL('../tabs/RvmNonPrimitiveSourceToolsUiBridge.js', import.meta.url), 'utf8');
 
-assert.match(bridge, /rvm-non-primitive-support-overlay-details-panel\/v6/);
-assert.match(bridge, /RvmUiEventRegistry\.js\?v=20260626-rvm-ui-event-registry-1/);
-assert.match(bridge, /installRvmUiEventRegistry/);
-assert.match(bridge, /registerRvmUiEvent\('canvas-source-preview-support-select'/);
-assert.match(bridge, /routeRvmUiEvent[\s\S]*canvas-source-preview-support-select/);
-assert.match(bridge, /getEventRegistryDiagnostics/);
-assert.match(bridge, /SUPPORTS_SLOT_SELECTOR/);
-assert.match(bridge, /__PCF_GLB_RVM_UI_SHELL__\?\.setRightPanelTab/);
-assert.match(bridge, /__PCF_GLB_RVM_UI_SHELL__\?\.registerPanel/);
-assert.match(bridge, /dataset\.rvmPanelSlotHost = 'supports'/);
-assert.match(bridge, /moveExistingPanelToShellSlot/);
+assert.match(bridge, /rvm-non-primitive-support-overlay-details-panel\/v4/);
 assert.match(bridge, /__RVM_NON_PRIMITIVE_SUPPORT_OVERLAY__/);
 assert.match(bridge, /raycaster\.intersectObjects/);
 assert.match(bridge, /nonPrimitiveSupportOverlaySelectedDetails/);
@@ -99,15 +88,13 @@ assert.match(bridge, /supportOverlayDetails/);
 assert.match(bridge, /highlightSupportOverlayGlyph/);
 assert.match(bridge, /nonPrimitiveSupportOverlayHighlightState/);
 assert.match(bridge, /mode === 'source-preview' && isNonPrimitiveKind\(kind\)/);
-assert.match(bridge, /PRIMITIVE_KIND_RE[\s\S]*rvm\|glb\|gltf\|rev/);
+assert.match(bridge, /RvmSourceKindPolicy\.js/);
+assert.match(bridge, /isRvmNonPrimitiveSourceKind\(normalizeSourceKind\(kind\)\)/);
+assert.doesNotMatch(bridge, /SOURCE_KIND_RE|PRIMITIVE_KIND_RE/);
 assert.doesNotMatch(bridge, /RvmSupportSymbols|RvmSupportGeometryBridge|RvmRawSupportCylinderGuardBridge|Support Summary|SupportATT|SupportEngine/);
 assert.doesNotMatch(bridge, /selection\.select|selection\.pick|RvmSelectionAdapter/);
 
-assert.match(deferredLoader, /SUPPORT_DETAILS_PANEL_PREVIOUS_CACHE_KEY/);
-assert.match(deferredLoader, /SUPPORT_DETAILS_PANEL_LEGACY_CACHE_KEY/);
-assert.match(deferredLoader, /SUPPORT_DETAILS_PANEL_CACHE_KEY/);
-assert.match(deferredLoader, /20260626-source-preview-support-events-1/);
-assert.match(renderer, /RvmDeferredBridgeLoader\.js\?v=20260626-rvm-deferred-source-preview-hover-events-1/);
+assert.match(deferredLoader, /RvmNonPrimitiveSupportOverlayDetailsPanelBridge\.js\?v=20260623-nonprimitive-support-details-panel-4/);
 assert.match(deferredLoader, /installRvmNonPrimitiveSupportOverlayBridge[\s\S]*installRvmNonPrimitiveSupportOverlayDetailsPanelBridge[\s\S]*installRvmNonPrimitiveAutoBendBridge/);
 assert.match(sourceTools, /rvm-nonprimitive-source-tools-panel/);
 

@@ -1,30 +1,18 @@
 import * as THREE from 'three';
 import { collectNodeMarkerRoots } from '../overlays/nodes/NodeMarkerGlyphGeometry.js';
 import { buildNodeMarkerDetailsJson, buildNodeMarkerDetailsPanelState, emptyNodeMarkerDetailsPanelState, renderNodeMarkerDetailsPanelHtml } from '../overlays/nodes/NodeMarkerDetailsPanel.js';
-import { installRvmUiEventRegistry, registerRvmUiEvent, routeRvmUiEvent } from './RvmUiEventRegistry.js?v=20260626-rvm-ui-event-registry-1';
 
-export const RVM_NON_PRIMITIVE_NODE_MARKER_DETAILS_PANEL_SCHEMA = 'rvm-non-primitive-node-marker-details-panel-bridge/v4';
+export const RVM_NON_PRIMITIVE_NODE_MARKER_DETAILS_PANEL_SCHEMA = 'rvm-non-primitive-node-marker-details-panel-bridge/v2';
 const GLOBAL_KEY = '__PCF_GLB_RVM_NON_PRIMITIVE_NODE_MARKER_DETAILS_PANEL__';
-const INSTALL_FLAG = Symbol.for('pcf-glb-rvm-non-primitive-node-marker-details-panel-v4');
-const PICKING_FLAG = Symbol.for('pcf-glb-rvm-non-primitive-node-marker-details-picking-v4');
+const INSTALL_FLAG = Symbol.for('pcf-glb-rvm-non-primitive-node-marker-details-panel-v2');
+const PICKING_FLAG = Symbol.for('pcf-glb-rvm-non-primitive-node-marker-details-picking-v2');
 const PANEL_ID = 'rvm-nonprimitive-node-marker-details-panel';
 const ROOT_SELECTOR = '[data-rvm-viewer]';
-const NODE_MARKERS_SLOT_SELECTOR = '[data-rvm-panel-slot="node-markers"]';
 
 export function installRvmNonPrimitiveNodeMarkerDetailsPanelBridge() {
   if (globalThis[INSTALL_FLAG] && globalThis[GLOBAL_KEY]) return globalThis[GLOBAL_KEY];
-  installRvmUiEventRegistry();
   globalThis[INSTALL_FLAG] = true;
-  const api = {
-    schema: RVM_NON_PRIMITIVE_NODE_MARKER_DETAILS_PANEL_SCHEMA,
-    ensure,
-    render,
-    clear,
-    selectFromPointer,
-    copyJson,
-    downloadJson,
-    getEventRegistryDiagnostics: () => globalThis.__PCF_GLB_RVM_UI_EVENT_REGISTRY__?.getDiagnostics?.() || null,
-  };
+  const api = { schema: RVM_NON_PRIMITIVE_NODE_MARKER_DETAILS_PANEL_SCHEMA, ensure, render, clear, selectFromPointer, copyJson, downloadJson };
   globalThis[GLOBAL_KEY] = api;
   return api;
 }
@@ -46,7 +34,6 @@ export function render(root, viewer = globalThis.__3D_RVM_VIEWER__) {
   const panel = ensurePanel(root);
   if (!panel) return null;
   const state = viewer?.nonPrimitiveNodeMarkerSelectedDetails || emptyNodeMarkerDetailsPanelState('no-selection');
-  if (state.status === 'selected') globalThis.__PCF_GLB_RVM_UI_SHELL__?.setRightPanelTab?.(root, 'node-markers', 'node-marker-selected');
   panel.hidden = false;
   panel.dataset.nodeMarkerDetailsActive = 'true';
   panel.innerHTML = renderNodeMarkerDetailsPanelHtml(state, { escapeHtml });
@@ -81,14 +68,9 @@ export function selectFromPointer(viewer = globalThis.__3D_RVM_VIEWER__, event =
 
 function bindCanvasClick(viewer) {
   if (!viewer || viewer[PICKING_FLAG]) return;
-  installRvmUiEventRegistry();
-  registerRvmUiEvent('canvas-source-preview-node-marker-select', ({ detail }) => {
-    const localViewer = detail.viewer || globalThis.__3D_RVM_VIEWER__;
-    return selectFromPointer(localViewer, detail.sourceEvent || {});
-  }, { id: 'rvm-source-preview-node-marker-details-select', priority: 31 });
   const dom = viewer.renderer?.domElement || viewer.container;
   if (!dom?.addEventListener) return;
-  const onClick = (event) => routeRvmUiEvent(findViewerRoot(event), 'canvas-source-preview-node-marker-select', { viewer, sourceEvent: event });
+  const onClick = (event) => selectFromPointer(viewer, event);
   dom.addEventListener('click', onClick, false);
   viewer[PICKING_FLAG] = { dom, onClick };
 }
@@ -105,23 +87,11 @@ function pickNodeMarker(viewer, roots, event) {
   return raycaster.intersectObjects(targets, false)[0]?.object || null;
 }
 
-function findViewerRoot(event = {}) {
-  return event?.currentTarget?.closest?.(ROOT_SELECTOR)
-    || event?.target?.closest?.(ROOT_SELECTOR)
-    || globalThis.document?.querySelector?.(ROOT_SELECTOR)
-    || null;
-}
-
 function ensurePanel(root) {
   let panel = root.querySelector(`#${PANEL_ID}`);
-  if (panel) {
-    moveExistingPanelToShellSlot(root, panel);
-    return panel;
-  }
-  const shellSlot = getNodeMarkersShellSlot(root);
+  if (panel) return panel;
   const rightPanel = root.querySelector('.rvm-right-panel');
-  const target = shellSlot || rightPanel;
-  if (!target || !globalThis.document?.createElement) return null;
+  if (!rightPanel || !globalThis.document?.createElement) return null;
   const header = globalThis.document.createElement('div');
   panel = globalThis.document.createElement('div');
   header.className = 'rvm-panel-header';
@@ -130,54 +100,12 @@ function ensurePanel(root) {
   panel.id = PANEL_ID;
   panel.className = 'rvm-support-details-panel rvm-node-marker-details-panel rvm-tag-list';
   panel.dataset.rvmNonPrimitiveNodeMarkerDetails = 'true';
-  if (shellSlot) {
-    registerNodeMarkerDetailsPanel(root);
-    header.dataset.rvmPanelSlotHost = 'node-markers';
-    panel.dataset.rvmPanelSlotHost = 'node-markers';
-    removeSlotEmpty(shellSlot);
-    shellSlot.append(header, panel);
-  } else {
-    const sourceToolsPanel = rightPanel.querySelector('#rvm-nonprimitive-source-tools-panel');
-    if (sourceToolsPanel?.nextSibling) {
-      rightPanel.insertBefore(header, sourceToolsPanel.nextSibling);
-      rightPanel.insertBefore(panel, header.nextSibling);
-    } else rightPanel.append(header, panel);
-  }
+  const sourceToolsPanel = rightPanel.querySelector('#rvm-nonprimitive-source-tools-panel');
+  if (sourceToolsPanel?.nextSibling) {
+    rightPanel.insertBefore(header, sourceToolsPanel.nextSibling);
+    rightPanel.insertBefore(panel, header.nextSibling);
+  } else rightPanel.append(header, panel);
   return panel;
-}
-
-function getNodeMarkersShellSlot(root) {
-  const shell = globalThis.__PCF_GLB_RVM_UI_SHELL__;
-  shell?.install?.(root, { reason: 'node-marker-details' });
-  shell?.sync?.(root, { reason: 'node-marker-details' });
-  return root.querySelector?.(NODE_MARKERS_SLOT_SELECTOR) || null;
-}
-
-function registerNodeMarkerDetailsPanel(root) {
-  globalThis.__PCF_GLB_RVM_UI_SHELL__?.registerPanel?.(root, {
-    id: 'nonprimitive-node-marker-details-panel',
-    title: 'Node Marker Details',
-    slot: 'node-markers',
-    priority: 10,
-  });
-}
-
-function moveExistingPanelToShellSlot(root, panel) {
-  const shellSlot = getNodeMarkersShellSlot(root);
-  if (!shellSlot || shellSlot.contains(panel)) return;
-  const header = root.querySelector('[data-rvm-non-primitive-node-marker-details-header="true"]') || panel.previousElementSibling;
-  registerNodeMarkerDetailsPanel(root);
-  removeSlotEmpty(shellSlot);
-  if (header?.dataset?.rvmNonPrimitiveNodeMarkerDetailsHeader === 'true') {
-    header.dataset.rvmPanelSlotHost = 'node-markers';
-    shellSlot.appendChild(header);
-  }
-  panel.dataset.rvmPanelSlotHost = 'node-markers';
-  shellSlot.appendChild(panel);
-}
-
-function removeSlotEmpty(slot) {
-  for (const empty of [...slot?.querySelectorAll?.('.rvm-panel-slot-empty') || []]) empty.remove?.();
 }
 
 function bindPanel(panel, viewer) {

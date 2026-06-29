@@ -3,8 +3,9 @@ import * as THREE from 'three';
 import { RuntimeEvents } from '../contracts/runtime-events.js';
 import { on } from '../core/event-bus.js';
 
-const INSTALL_FLAG = Symbol.for('pcf-glb-rvm-selection-details-inspector-v1');
-const BRIDGE_VERSION = '20260621-rvm-selection-details-inspector-1';
+const INSTALL_FLAG = Symbol.for('pcf-glb-rvm-selection-details-inspector-v2-ui');
+const BRIDGE_VERSION = '20260628-rvm-selected-entity-ui-v2-1';
+const PREVIOUS_VERSION = '20260621-rvm-selection-details-inspector-1';
 const MAX_ATTRIBUTE_ROWS = 42;
 const MAX_SELECTED_OBJECTS = 1500;
 const MAX_ALIAS_SCAN_OBJECTS = 20000;
@@ -142,7 +143,7 @@ function fmtVec(vec) {
 }
 
 function commonPrefix(values = []) {
-  const clean = values.map((value) => String(value || '').replace(/\\/g, '/').split('/').filter(Boolean)).filter((parts) => parts.length);
+  const clean = values.map((value) => String(value || '').replace(/\/g, '/').split('/').filter(Boolean)).filter((parts) => parts.length);
   if (!clean.length) return '';
   const out = [];
   for (let i = 0; i < clean[0].length; i += 1) {
@@ -183,6 +184,12 @@ function firstDefined(...values) {
   return '-';
 }
 
+function selectionSource(objects = []) {
+  if (!objects.length) return 'none';
+  const direct = viewer()?._rvmCanvasSelectedMeshes;
+  return Array.isArray(direct) && direct.length ? 'canvas' : 'hierarchy';
+}
+
 function attributeRows(objects = []) {
   const first = objects[0] || null;
   const attrs = attrsFor(first);
@@ -208,6 +215,7 @@ function summaryRows(objects = []) {
 
   return [
     ['Selection objects', objects.length],
+    ['Selection source', selectionSource(objects)],
     ['Visible / hidden', `${visible} / ${hidden}`],
     ['First object', firstDefined(data.displayName, data.sourceName, props.displayName, attrs.NAME, first?.name)],
     ['Source path', sourcePrefix || sourcePathFor(first)],
@@ -216,7 +224,6 @@ function summaryRows(objects = []) {
     ['RVM primitive code', firstDefined(attrs.RVM_PRIMITIVE_CODE, attrs.RVM_CODE, data.primitiveCode)],
     ['Native facet primary', yesNo(objects.some((obj) => obj?.userData?.browserRvmNativeFacetGroupPrimary))],
     ['Bbox placeholder wireframe', yesNo(objects.some((obj) => obj?.userData?.browserRvmBboxPlaceholderWireframe))],
-    ['Blocked bbox slab promotion', yesNo(objects.some((obj) => obj?.userData?.bboxPromotedSolidBlocked))],
     ['Hierarchy LOD', lodModes.size ? [...lodModes].join(', ') : '100/default'],
     ['PCF extraction scope', objects.length ? 'selection-ready' : 'no-selection'],
     ['Size XYZ', size ? `${fmt(size.x)} × ${fmt(size.y)} × ${fmt(size.z)}` : '-'],
@@ -224,6 +231,24 @@ function summaryRows(objects = []) {
     ['Bbox min', box ? fmtVec(box.min) : '-'],
     ['Bbox max', box ? fmtVec(box.max) : '-'],
   ];
+}
+
+function selectionKpis(objects = []) {
+  const visible = objects.filter((obj) => obj?.visible !== false).length;
+  const hidden = objects.length - visible;
+  const primitiveKinds = new Set(objects.map(primitiveFor).filter((value) => value && value !== '-'));
+  const types = new Set(objects.map(typeFor).filter((value) => value && value !== '-'));
+  return [
+    ['Objects', objects.length],
+    ['Visible', visible],
+    ['Hidden', hidden],
+    ['Types', types.size || 0],
+    ['Prims', primitiveKinds.size || 0],
+  ];
+}
+
+function kpi(label, value) {
+  return `<span class="rvm-selection-kpi"><b>${esc(value)}</b><small>${esc(label)}</small></span>`;
 }
 
 function row(key, value) {
@@ -235,24 +260,32 @@ function renderPanel(objects = [], reason = '') {
   const panel = root?.querySelector?.('#rvm-attributes-panel');
   if (!root || !panel) return;
   if (!objects.length) {
-    panel.innerHTML = '<div class="rvm-empty-state">No object selected.</div>';
+    panel.innerHTML = `
+      <div class="rvm-selection-details-card rvm-selection-details-card--empty" data-rvm-selection-details-inspector="true" data-rvm-selection-details-ui="${esc(BRIDGE_VERSION)}">
+        <div class="rvm-selection-details-title"><span>Selected Entity</span><small>${esc(reason || 'no selection')}</small></div>
+        <div class="rvm-selection-empty-state">Pick an object in the canvas or hierarchy to inspect its attributes, path, bbox, and primitive summary.</div>
+      </div>`;
     updateSelectionCount(root, 0);
     return;
   }
   const summary = summaryRows(objects);
   const attrs = attributeRows(objects);
+  const source = selectionSource(objects);
+  panel.dataset.rvmSelectionDetailsUi = BRIDGE_VERSION;
   panel.innerHTML = `
-    <div class="rvm-selection-details-card" data-rvm-selection-details-inspector="true">
-      <div class="rvm-selection-details-title"><span>RVM selection details</span><small>${esc(BRIDGE_VERSION)}</small></div>
+    <div class="rvm-selection-details-card rvm-selection-details-card--v2" data-rvm-selection-details-inspector="true" data-rvm-selection-details-ui="${esc(BRIDGE_VERSION)}" data-rvm-selection-source="${esc(source)}">
+      <div class="rvm-selection-details-title"><span>Selected Entity</span><small>${esc(source)} · ${esc(BRIDGE_VERSION)}</small></div>
+      <div class="rvm-selection-kpi-strip" data-rvm-selection-kpis="true">${selectionKpis(objects).map(([label, value]) => kpi(label, value)).join('')}</div>
       <div class="rvm-tree-action-row rvm-selection-details-actions">
-        <button type="button" class="rvm-btn" data-rvm-selection-detail-action="fit-selection">Fit</button>
+        <button type="button" class="rvm-btn is-primary" data-rvm-selection-detail-action="fit-selection">Fit</button>
         <button type="button" class="rvm-btn" data-rvm-selection-detail-action="hide-selection">Hide</button>
         <button type="button" class="rvm-btn" data-rvm-selection-detail-action="show-hidden">Show Hidden</button>
         <button type="button" class="rvm-btn" data-rvm-selection-detail-action="copy-path">Copy Path</button>
-        <button type="button" class="rvm-btn" data-rvm-selection-detail-action="clear-selection">Clear</button>
+        <button type="button" class="rvm-btn is-secondary" data-rvm-selection-detail-action="clear-selection">Clear</button>
       </div>
+      <div class="rvm-selection-details-title rvm-selection-subtitle"><span>Summary</span><small>${esc(reason || 'selected object')}</small></div>
       <div class="rvm-selection-detail-grid">${summary.map(([key, value]) => row(key, value)).join('')}</div>
-      <div class="rvm-selection-details-title"><span>Attributes</span><small>${esc(reason || 'selected object')}</small></div>
+      <div class="rvm-selection-details-title rvm-selection-subtitle"><span>Attributes</span><small>${esc(attrs.length)} row(s)</small></div>
       <div class="rvm-selection-detail-grid">${attrs.map(([key, value]) => row(key, value)).join('')}</div>
     </div>`;
   updateSelectionCount(root, objects.length);
@@ -378,7 +411,7 @@ function installStyles() {
   const style = document.createElement('style');
   style.id = 'rvm-selection-details-inspector-style';
   style.textContent = `
-    .rvm-selection-details-card{display:grid;gap:8px;min-width:0}.rvm-selection-details-title{display:flex;align-items:center;justify-content:space-between;gap:8px;color:#93c5fd;font-weight:700;font-size:12px;letter-spacing:.04em;text-transform:uppercase}.rvm-selection-details-title small{font-size:8px;color:#7f94b7;text-transform:none;font-weight:500;letter-spacing:0}.rvm-selection-detail-grid{display:grid;gap:3px}.rvm-selection-detail-row{display:grid;grid-template-columns:minmax(88px,.75fr) minmax(0,1.25fr);gap:6px;align-items:start;padding:4px 6px;border:1px solid rgba(126,190,255,.12);border-radius:5px;background:rgba(255,255,255,.026);font-size:10px}.rvm-selection-detail-row span{color:#9eb7d8}.rvm-selection-detail-row b{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#edf6ff;font-weight:600}.rvm-selection-details-actions{display:flex;flex-wrap:wrap;gap:5px}.rvm-selection-details-actions .rvm-btn{padding:4px 7px;font-size:11px}
+    .rvm-selection-details-card{display:grid;gap:8px;min-width:0}.rvm-selection-details-title{display:flex;align-items:center;justify-content:space-between;gap:8px;color:#93c5fd;font-weight:800;font-size:12px;letter-spacing:.04em;text-transform:uppercase}.rvm-selection-details-title small{font-size:8px;color:#7f94b7;text-transform:none;font-weight:500;letter-spacing:0}.rvm-selection-subtitle{margin-top:2px}.rvm-selection-kpi-strip{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:5px}.rvm-selection-kpi{display:grid;gap:1px;padding:6px 4px;border:1px solid rgba(126,190,255,.13);border-radius:8px;background:rgba(255,255,255,.025);text-align:center}.rvm-selection-kpi b{color:#edf6ff;font-size:13px;line-height:1}.rvm-selection-kpi small{color:#8fa5c7;font-size:8px;text-transform:uppercase;letter-spacing:.04em}.rvm-selection-detail-grid{display:grid;gap:3px}.rvm-selection-detail-row{display:grid;grid-template-columns:minmax(90px,.64fr) minmax(0,1.36fr);gap:6px;align-items:start;padding:4px 6px;border:1px solid rgba(126,190,255,.12);border-radius:6px;background:rgba(255,255,255,.026);font-size:10px}.rvm-selection-detail-row span{color:#9eb7d8}.rvm-selection-detail-row b{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#edf6ff;font-weight:600}.rvm-selection-details-actions{display:flex;flex-wrap:wrap;gap:5px}.rvm-selection-details-actions .rvm-btn{padding:4px 7px;font-size:11px}.rvm-selection-details-actions .rvm-btn.is-primary{border-color:rgba(147,197,253,.45);background:#15304f}.rvm-selection-details-actions .rvm-btn.is-secondary{opacity:.82}.rvm-selection-empty-state{border:1px dashed rgba(148,163,184,.24);border-radius:9px;padding:8px;color:#94a3b8;background:rgba(15,23,42,.42);font-size:10.5px;line-height:1.4}@media(max-width:1150px){.rvm-selection-kpi-strip{grid-template-columns:repeat(2,minmax(0,1fr))}.rvm-selection-detail-row{grid-template-columns:1fr}}
   `;
   document.head.appendChild(style);
 }
@@ -393,6 +426,7 @@ export function installRvmSelectionDetailsInspectorBridge() {
   globalThis.addEventListener?.('rvm-model-loaded', () => setTimeout(() => refresh({}, 'model-loaded'), 180));
   globalThis.__PCF_GLB_RVM_SELECTION_DETAILS_INSPECTOR__ = {
     version: BRIDGE_VERSION,
+    previousVersion: PREVIOUS_VERSION,
     refresh,
     collectSelectedObjects,
   };

@@ -3,7 +3,9 @@
  */
 
 import './xml-cii-rich-worker-cache-bust.js?v=20260623-xml-cii-rich-worker-1';
-import { renderLegacyModelConvertersTab } from './legacy-adapter.js?v=20260625-service-1';
+import { renderLegacyModelConvertersTab } from './legacy-adapter.js?v=20260627-inputxml-cii2019-live-guard-1';
+import { CONVERTERS as LIVE_MODEL_CONVERTERS } from './converter-registry.js?v=20260617-basic-glb-3';
+import { run as inputXmlToCii2019LiveRun } from './converters/inputxml-to-cii2019.js?v=20260627-inputxml-cii2019-live-guard-1';
 import { installBmCiiSupportAnnotationPopup } from './bm-cii-support-annotation-popup.js?v=20260617-bmcii-open-basic-handoff-2';
 import { installInputXmlPropertyTransferUi } from './inputxml-property-transfer-popup-ui-v4.js?v=20260615-inputxml-property-transfer-popup-host-hide-1';
 import { installRvmAttrUxmlAddon } from './rvmattr-uxml-addon.js?v=20260618-port-bore-contract-1';
@@ -21,8 +23,10 @@ import { installInputXmlManagedStageBridge } from './inputxml-managed-stage-brid
 import { installXmlCiiDefaultMasterAutoloadLite } from '../xml-cii-master-autoload-lite.js?v=20260624-startup-autoload-noise-1';
 import { installXmlCiiPreviewLineKeyRemap } from './xml-cii-preview-linekey-remap.js?v=20260620-rating-runtime-1';
 import { installXmlCiiRuntimeOverrideSync } from './xml-cii-runtime-override-sync.js?v=20260624-master-tab-responsive-1';
+import { installXmlCiiPostRunValidator } from './xml-cii-post-run-validator.js';
 
 const TRACE_PREFIX = '[BM_CII_CONVERTER_TRACE]';
+const INPUTXML_CII2019_LIVE_GUARD_VERSION = '20260627-inputxml-cii2019-live-guard-1';
 const STYLE_LINKS = Object.freeze([
   ['model-converters-tab-css', './tabs/model-converters-tab.css?v=20260624-button-scope-1'],
   ['model-converters-css-fix', './tabs/model-converters-css-fix.css?v=20260624-simple-rich-isolation-1'],
@@ -34,7 +38,11 @@ function installSafely(name, installer, container) { try { installer(container);
 function monotonicNow() { return typeof performance !== 'undefined' && typeof performance.now === 'function' ? performance.now() : Date.now(); }
 function scheduleModelConverterTask(callback) { if (typeof requestIdleCallback === 'function') return requestIdleCallback(callback, { timeout: 750 }); if (typeof requestAnimationFrame === 'function') return requestAnimationFrame(() => callback(null)); return Promise.resolve().then(() => callback(null)); }
 function scheduleInstallerQueue(container) { const queue = MODEL_CONVERTER_INSTALLERS.map((entry) => entry); const runNext = (deadline) => { const startedAt = monotonicNow(); while (queue.length) { const [name, install] = queue.shift(); installSafely(name, install, container); const elapsed = monotonicNow() - startedAt; if (deadline?.timeRemaining && deadline.timeRemaining() <= 4) break; if (!deadline?.timeRemaining && elapsed > 12) break; } if (queue.length) scheduleModelConverterTask(runNext); }; scheduleModelConverterTask(runNext); }
+function installInputXmlCii2019LiveRunnerGuard() { const converter = Array.isArray(LIVE_MODEL_CONVERTERS) ? LIVE_MODEL_CONVERTERS.find((entry) => entry?.id === 'inputxml_to_cii2019') : null; if (!converter) { console.warn(`${TRACE_PREFIX} InputXML->CII(2019) live guard could not find registry entry.`); return false; } if (converter.run !== inputXmlToCii2019LiveRun) { converter.run = inputXmlToCii2019LiveRun; } converter.liveGuardVersion = INPUTXML_CII2019_LIVE_GUARD_VERSION; return true; }
+function installCriticalXmlCiiWorkflow(container) { installSafely('xml-cii-workflow-button-scope', installXmlCiiWorkflowButtonScope, container); installSafely('xml-cii-workflow-popup', installXmlCiiWorkflowPopup, container); }
+
 const MODEL_CONVERTER_INSTALLERS = Object.freeze([
-  ['rvmattr-uxml-addon', installRvmAttrUxmlAddon], ['xml-cii-workflow-button-scope', installXmlCiiWorkflowButtonScope], ['xml-cii-simple-workflow-controller', installXmlCiiSimpleWorkflowController], ['xml-cii-open-regex', installXmlCiiWorkflowOpenRegex], ['xml-cii-workflow-popup', installXmlCiiWorkflowPopup], ['xml-cii-custom-input-workflow-tab', installXmlCiiCustomInputWorkflowTab], ['xml-cii-branch-sample-sync', installXmlCiiBranchSampleSync], ['xml-cii-finalise-run-button', installXmlCiiFinaliseRunButton], ['xml-cii-short-element-toggle', installXmlCiiShortElementToggle], ['xml-cii-weight-semantic-info', installXmlCiiWeightSemanticInfo], ['bm-cii-support-annotation-popup', installBmCiiSupportAnnotationPopup], ['inputxml-property-transfer-popup-ui-v4', installInputXmlPropertyTransferUi], ['inputxml-basic-glb-bridge', installInputXmlBasicGlbBridge], ['inputxml-managed-stage-bridge', installInputXmlManagedStageBridge], ['xml-cii-default-master-autoload-lite', installXmlCiiDefaultMasterAutoloadLite], ['xml-cii-preview-linekey-remap', installXmlCiiPreviewLineKeyRemap], ['xml-cii-runtime-override-sync', installXmlCiiRuntimeOverrideSync],
+  ['rvmattr-uxml-addon', installRvmAttrUxmlAddon], ['xml-cii-workflow-button-scope', installXmlCiiWorkflowButtonScope], ['xml-cii-simple-workflow-controller', installXmlCiiSimpleWorkflowController], ['xml-cii-open-regex', installXmlCiiWorkflowOpenRegex], ['xml-cii-workflow-popup', installXmlCiiWorkflowPopup], ['xml-cii-custom-input-workflow-tab', installXmlCiiCustomInputWorkflowTab], ['xml-cii-branch-sample-sync', installXmlCiiBranchSampleSync], ['xml-cii-finalise-run-button', installXmlCiiFinaliseRunButton], ['xml-cii-short-element-toggle', installXmlCiiShortElementToggle], ['xml-cii-weight-semantic-info', installXmlCiiWeightSemanticInfo], ['bm-cii-support-annotation-popup', installBmCiiSupportAnnotationPopup], ['inputxml-property-transfer-popup-ui-v4', installInputXmlPropertyTransferUi], ['inputxml-basic-glb-bridge', installInputXmlBasicGlbBridge], ['inputxml-managed-stage-bridge', installInputXmlManagedStageBridge], ['xml-cii-default-master-autoload-lite', installXmlCiiDefaultMasterAutoloadLite], ['xml-cii-preview-linekey-remap', installXmlCiiPreviewLineKeyRemap], ['xml-cii-runtime-override-sync', installXmlCiiRuntimeOverrideSync], ['xml-cii-post-run-validator', installXmlCiiPostRunValidator],
 ]);
-export function renderModelConvertersTab(container, ctx) { console.log('RENDER MODEL CONVERTERS TAB CALLED!', container); ensureModelConvertersStyles(); renderLegacyModelConvertersTab(container, ctx); console.log('RENDER LEGACY MODEL CONVERTERS TAB RETURNED!'); markStylesReady(container); scheduleInstallerQueue(container); }
+export function renderModelConvertersTab(container, ctx) { console.log('RENDER MODEL CONVERTERS TAB CALLED!', container); installInputXmlCii2019LiveRunnerGuard(); ensureModelConvertersStyles(); renderLegacyModelConvertersTab(container, ctx); console.log('RENDER LEGACY MODEL CONVERTERS TAB RETURNED!'); markStylesReady(container); installCriticalXmlCiiWorkflow(container); scheduleInstallerQueue(container); }
+export const __INPUTXML_CII2019_LIVE_GUARD_VERSION__ = INPUTXML_CII2019_LIVE_GUARD_VERSION;

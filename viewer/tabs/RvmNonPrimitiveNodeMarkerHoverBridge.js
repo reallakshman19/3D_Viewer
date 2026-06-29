@@ -1,27 +1,19 @@
 import * as THREE from 'three';
 import { NODE_MARKER_ROOT_NAME, collectNodeMarkerRoots } from '../overlays/nodes/NodeMarkerGlyphGeometry.js';
 import { buildNodeMarkerHoverPreview, emptyNodeMarkerHoverState, renderNodeMarkerHoverHtml } from '../overlays/nodes/NodeMarkerHover.js';
-import { installRvmUiEventRegistry, registerRvmUiEvent, routeRvmUiEvent } from './RvmUiEventRegistry.js?v=20260626-rvm-ui-event-registry-1';
 
-export const RVM_NON_PRIMITIVE_NODE_MARKER_HOVER_SCHEMA = 'rvm-non-primitive-node-marker-hover-bridge/v2';
+export const RVM_NON_PRIMITIVE_NODE_MARKER_HOVER_SCHEMA = 'rvm-non-primitive-node-marker-hover-bridge/v1';
 
 const GLOBAL_KEY = '__PCF_GLB_RVM_NON_PRIMITIVE_NODE_MARKER_HOVER__';
-const INSTALL_FLAG = Symbol.for('pcf-glb-rvm-non-primitive-node-marker-hover-v2');
-const POINTER_FLAG = Symbol.for('pcf-glb-rvm-non-primitive-node-marker-hover-pointer-v2');
+const INSTALL_FLAG = Symbol.for('pcf-glb-rvm-non-primitive-node-marker-hover-v1');
+const POINTER_FLAG = Symbol.for('pcf-glb-rvm-non-primitive-node-marker-hover-pointer-v1');
 const STYLE_FLAG = Symbol.for('pcf-glb-rvm-non-primitive-node-marker-hover-style-v1');
 const ROOT_SELECTOR = '[data-rvm-viewer]';
 
 export function installRvmNonPrimitiveNodeMarkerHoverBridge() {
   if (globalThis[INSTALL_FLAG] && globalThis[GLOBAL_KEY]) return globalThis[GLOBAL_KEY];
-  installRvmUiEventRegistry();
   globalThis[INSTALL_FLAG] = true;
-  const api = {
-    schema: RVM_NON_PRIMITIVE_NODE_MARKER_HOVER_SCHEMA,
-    ensure: ensureNodeMarkerHover,
-    previewFromPointer,
-    clear: clearNodeMarkerHover,
-    getEventRegistryDiagnostics: () => globalThis.__PCF_GLB_RVM_UI_EVENT_REGISTRY__?.getDiagnostics?.() || null,
-  };
+  const api = { schema: RVM_NON_PRIMITIVE_NODE_MARKER_HOVER_SCHEMA, ensure: ensureNodeMarkerHover, previewFromPointer, clear: clearNodeMarkerHover };
   globalThis[GLOBAL_KEY] = api;
   installStyles();
   return api;
@@ -30,14 +22,9 @@ export function installRvmNonPrimitiveNodeMarkerHoverBridge() {
 export function ensureNodeMarkerHover(viewer = globalThis.__3D_RVM_VIEWER__) {
   installRvmNonPrimitiveNodeMarkerHoverBridge();
   if (!viewer || viewer[POINTER_FLAG]) return { status: viewer ? 'already-installed' : 'skipped', reason: viewer ? '' : 'viewer-missing' };
-  installRvmUiEventRegistry();
-  registerRvmUiEvent('canvas-source-preview-node-marker-hover', ({ detail }) => {
-    const localViewer = detail.viewer || globalThis.__3D_RVM_VIEWER__;
-    return previewFromPointer(localViewer, detail.sourceEvent || {});
-  }, { id: 'rvm-source-preview-node-marker-hover', priority: 34 });
   const dom = viewer.renderer?.domElement || viewer.container;
   if (!dom?.addEventListener) return { status: 'skipped', reason: 'dom-missing' };
-  const onMove = (event) => routeRvmUiEvent(findViewerRoot(event), 'canvas-source-preview-node-marker-hover', { viewer, sourceEvent: event });
+  const onMove = (event) => previewFromPointer(viewer, event);
   const onLeave = () => clearNodeMarkerHover(viewer, 'pointer-leave');
   const onDown = () => clearNodeMarkerHover(viewer, 'navigation-pointer-down');
   dom.addEventListener('pointermove', onMove, false);
@@ -83,7 +70,7 @@ function findMarkerOwner(viewer, roots, rect, event) {
 }
 
 function renderTooltip(preview, event) {
-  const root = findViewerRoot(event);
+  const root = event?.currentTarget?.closest?.(ROOT_SELECTOR) || globalThis.document?.querySelector?.(ROOT_SELECTOR);
   const tooltip = ensureTooltip(root);
   if (!tooltip) return null;
   tooltip.hidden = false;
@@ -117,13 +104,6 @@ function hideTooltip(reason) {
     tip.dataset.nodeMarkerHoverCleared = reason;
     tip.innerHTML = '';
   }
-}
-
-function findViewerRoot(event = {}) {
-  return event?.currentTarget?.closest?.(ROOT_SELECTOR)
-    || event?.target?.closest?.(ROOT_SELECTOR)
-    || globalThis.document?.querySelector?.(ROOT_SELECTOR)
-    || null;
 }
 
 function installStyles() {

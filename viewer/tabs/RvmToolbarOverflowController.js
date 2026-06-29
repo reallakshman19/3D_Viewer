@@ -1,5 +1,5 @@
-const VERSION = '20260626-rvm-toolbar-overflow-controller-4';
-const PREVIOUS_VERSION = '20260626-rvm-toolbar-overflow-controller-3';
+const VERSION = '20260627-rvm-toolbar-overflow-controller-grouped-restore-1';
+const PREVIOUS_VERSION = '20260626-rvm-toolbar-overflow-controller-4';
 const CONTROLLER_KEY = '__PCF_GLB_RVM_TOOLBAR_OVERFLOW__';
 const MENU_PREFIX = 'rvm-tools-menu';
 const TRACE_LIMIT = 30;

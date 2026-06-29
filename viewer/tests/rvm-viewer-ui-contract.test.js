@@ -6,96 +6,105 @@ import { fileURLToPath } from 'node:url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const viewerRoot = path.resolve(__dirname, '..');
-const files = {
-  contract: 'tabs/rvm-viewer-module-contract.js',
-  renderer: 'tabs/viewer3d-rvm-tab-renderer.js',
-  tab: 'tabs/viewer3d-rvm-tab.js',
-  toolbar: 'tabs/RvmToolbarCompactBridge.js',
-  overflow: 'tabs/RvmToolbarOverflowController.js',
-  spacing: 'tabs/RvmViewportFirstSpacingBridge.js',
-  deferredLoader: 'tabs/RvmDeferredBridgeLoader.js',
-  uiShell: 'tabs/RvmViewerUiShell.js',
-  bottomDiagnostics: 'tabs/RvmBottomDiagnosticsDrawerBridge.js',
-  reportExport: 'tabs/RvmReportExportBridge.js',
-  stagedExport: 'tabs/RvmStagedJsonExportBridge.js',
-  stagedValidation: 'tabs/RvmStagedJsonValidationBridge.js',
-};
 function read(relativePath) {
   const file = path.join(viewerRoot, relativePath);
   assert.ok(fs.existsSync(file), `missing source file: ${relativePath}`);
   return fs.readFileSync(file, 'utf8');
 }
-function activeImport(source, moduleName) {
-  const match = source.match(new RegExp(`import\\s+\\{[^}]+\\}\\s+from\\s+['\"]([^'\"]*${moduleName}\\.js\\?v=[^'\"]+)['\"]`));
-  return match?.[1] || '';
-}
-function rvmViewerImports(source) { return [...source.matchAll(/from\s+["']([^"']*RvmViewer3D\.js\?v=[^"']+)["']/g)].map((match) => match[1]); }
 
-const contract = read(files.contract);
-const renderer = read(files.renderer);
-const tab = read(files.tab);
-const toolbar = read(files.toolbar);
-const overflow = read(files.overflow);
-const spacing = read(files.spacing);
-const deferredLoader = read(files.deferredLoader);
-const uiShell = read(files.uiShell);
-const bottomDiagnostics = read(files.bottomDiagnostics);
-const reportExport = read(files.reportExport);
-const stagedExport = read(files.stagedExport);
-const stagedValidation = read(files.stagedValidation);
+const contract = read('tabs/rvm-viewer-module-contract.js');
+const renderer = read('tabs/viewer3d-rvm-tab-renderer.js');
+const tab = read('tabs/viewer3d-rvm-tab.js');
+const deferredLoader = read('tabs/RvmDeferredBridgeLoader.js');
+const rightPanelPolicy = read('tabs/RvmFormatPolicy.js');
+const rightPanelBridge = read('tabs/RvmRightPanelFormatPolicyBridge.js');
+const sourceToolsUi = read('tabs/RvmNonPrimitiveSourceToolsUiBridge.js');
+const selectionDetails = read('tabs/RvmSelectionDetailsInspectorBridge.js');
+const formatNeutral = read('tabs/RvmFormatNeutralHierarchy.js');
+const toolbar = read('tabs/RvmToolbarCompactBridge.js');
+const sourceInput = read('tabs/RvmSourceFormatInputBridge.js');
+const navisHierarchy = read('tabs/RvmNavisHierarchyBridge.js');
+const hierarchySelection = read('tabs/RvmHierarchySelectionBridge.js');
+const selectionSync = read('tabs/RvmSelectionTreeSyncBridge.js');
+const drawer = read('tabs/RvmBottomDiagnosticsDrawerBridge.js');
 
-const viewerKey = contract.match(/RVM_VIEWER3D_MODULE_CACHE_KEY\s*=\s*["']([^"']+)["']/)?.[1];
-assert.ok(viewerKey, 'module identity contract must expose RVM_VIEWER3D_MODULE_CACHE_KEY');
-const viewerSuffixes = [...rvmViewerImports(renderer), ...rvmViewerImports(tab)].map((specifier) => specifier.slice(specifier.lastIndexOf('RvmViewer3D.js')));
-assert.deepEqual([...new Set(viewerSuffixes)], [`RvmViewer3D.js?v=${viewerKey}`], 'renderer and mounted tab must share one RvmViewer3D ES module identity');
+const key = contract.match(/RVM_VIEWER3D_MODULE_CACHE_KEY\s*=\s*["']([^"']+)["']/)?.[1];
+assert.ok(key, 'module identity contract must expose RVM_VIEWER3D_MODULE_CACHE_KEY');
+const rvmViewerImports = [
+  ...renderer.matchAll(/from\s+["']([^"']*RvmViewer3D\.js\?v=[^"']+)["']/g),
+  ...tab.matchAll(/from\s+["']([^"']*RvmViewer3D\.js\?v=[^"']+)["']/g),
+].map((match) => match[1].slice(match[1].lastIndexOf('RvmViewer3D.js')));
+assert.deepEqual([...new Set(rvmViewerImports)], [`RvmViewer3D.js?v=${key}`], 'renderer and mounted tab must share one RvmViewer3D ES module identity');
 
-assert.equal(activeImport(renderer, 'RvmToolbarCompactBridge'), './RvmToolbarCompactBridge.js?v=20260626-rvm-toolbar-secondary-groups-2', 'renderer must actively import grouped toolbar click fix');
-assert.equal(activeImport(renderer, 'RvmViewportFirstSpacingBridge'), './RvmViewportFirstSpacingBridge.js?v=20260626-rvm-viewport-first-spacing-3', 'renderer must actively import grouped secondary viewport spacing bridge');
-assert.equal(activeImport(renderer, 'RvmViewerUiShell'), './RvmViewerUiShell.js?v=20260626-rvm-ui-shell-slots-2', 'renderer must actively import current UI shell cache key');
-assert.equal(activeImport(renderer, 'RvmDeferredBridgeLoader'), './RvmDeferredBridgeLoader.js?v=20260626-rvm-deferred-report-export-shell-slot-1', 'renderer must actively import current deferred-loader cache key');
-assert.ok(renderer.includes('Previous RVM compact toolbar cache key: RvmToolbarCompactBridge.js?v=20260626-rvm-toolbar-secondary-groups-1'), 'renderer must preserve previous grouped toolbar cache key evidence');
-assert.ok(renderer.includes('Previous RVM viewport spacing cache key: RvmViewportFirstSpacingBridge.js?v=20260626-rvm-viewport-first-spacing-3'), 'renderer must preserve previous spacing cache key evidence');
-assert.ok(renderer.indexOf('installRvmToolbarCompactBridge();') < renderer.indexOf('installRvmViewportFirstSpacingBridge();'), 'spacing must apply after grouped toolbar policy');
-assert.ok(renderer.indexOf('installRvmViewportFirstSpacingBridge();') < renderer.indexOf('installRvmViewerUiShell();'), 'spacing must apply before shell slot moves');
+assert.ok(renderer.includes('viewer3d-rvm-tab.js?v=20260628-rvm-tab-startup-selection-fix-1'), 'renderer must import current mounted RVM tab key');
+assert.ok(renderer.includes('RvmDeferredBridgeLoader.js?v=20260628-rvm-deferred-source-tools-dashboard-1'), 'renderer must import Source Tools dashboard deferred loader key');
+assert.ok(renderer.includes('RvmSelectionDetailsInspectorBridge.js?v=20260628-rvm-selected-entity-ui-v2-1'), 'renderer must import selected entity UI v2 key');
+assert.ok(!renderer.includes('RvmModelHealthBridge.js?v='), 'renderer must not eagerly import model health bridge');
+assert.ok(tab.includes('RvmFormatNeutralHierarchy.js?v=20260628-format-neutral-shared-kind-policy-1'), 'mounted RVM tab must import current format-neutral helper key');
+assert.ok(formatNeutral.includes('RvmSourceKindPolicy.js'), 'format-neutral helper must use shared source-kind policy');
+assert.ok(formatNeutral.includes('sourceKindFromFileName(fileName)'), 'format-neutral helper must delegate filename classification to shared policy');
 
-assert.ok(toolbar.includes("const VERSION = '20260626-rvm-toolbar-secondary-groups-2'"), 'toolbar policy must expose grouped click-fix version');
-assert.ok(toolbar.includes("const PREVIOUS_VERSION = '20260626-rvm-toolbar-secondary-groups-1'"), 'toolbar policy must preserve previous grouped version');
-assert.ok(toolbar.includes('RvmToolbarOverflowController.js?v=20260626-rvm-toolbar-overflow-controller-4'), 'toolbar policy must import click-fix overflow controller');
-assert.ok(toolbar.includes('position:fixed'), 'toolbar menu panel CSS must avoid clipping by toolbar containers');
-assert.ok(toolbar.includes('overflow:visible'), 'toolbar ribbon CSS must not clip grouped menus');
-for (const label of ['View', 'Visibility', 'Inspect', 'Export', 'Source', 'Diag']) assert.ok(toolbar.includes(`label: '${label}'`), `toolbar must define ${label} secondary menu`);
-assert.ok(toolbar.includes('classifySecondaryMenu') && toolbar.includes('secondary-grouped'), 'toolbar must classify advanced sections into named groups');
-assert.ok(!toolbar.includes('More tools</span>'), 'generic More Tools dumping-ground label must be removed');
-assert.ok(!toolbar.includes('<details'), 'grouped menus must not depend on native details toggling');
+assert.ok(toolbar.includes("const VERSION = '20260627-rvm-toolbar-scroll-misc-1'"), 'toolbar must expose scroll/misc version');
+assert.ok(toolbar.includes("{ id: 'misc', label: 'Misc'"), 'toolbar must define Misc group');
+assert.ok(toolbar.includes('overflow-x:auto'), 'toolbar must scroll horizontally when expanded buttons overflow');
+assert.ok(deferredLoader.includes('20260628-rvm-deferred-source-tools-dashboard-1'), 'deferred loader must expose Source Tools dashboard key');
+assert.ok(deferredLoader.includes('20260628-rvm-deferred-right-panel-ui-v2-1'), 'deferred loader must retain previous right panel UI v2 key');
+assert.ok(deferredLoader.includes('RvmRightPanelFormatPolicyBridge.js?v=20260628-rvm-right-panel-ui-v2-1'), 'deferred loader must import right panel UI v2 bridge with cache key');
+assert.ok(deferredLoader.includes('RvmNonPrimitiveSourceToolsUiBridge.js?v=20260628-rvm-source-tools-dashboard-1'), 'deferred loader must import Source Tools dashboard bridge with cache key');
+assert.ok(deferredLoader.includes('right-panel-policy-sync'), 'source-preview refresh must resync the right panel policy');
 
-assert.ok(overflow.includes("const VERSION = '20260626-rvm-toolbar-overflow-controller-4'"), 'overflow controller must expose click/display fix version');
-assert.ok(overflow.includes("const PREVIOUS_VERSION = '20260626-rvm-toolbar-overflow-controller-3'"), 'overflow controller must preserve previous grouped version');
-assert.ok(overflow.includes('positionMenu(entry)') && overflow.includes("menu.style.position = 'fixed'"), 'overflow controller must position opened menu as fixed overlay');
-assert.ok(overflow.includes('updateButtonCaret(entry.button, open)'), 'overflow controller must visibly update caret state');
-assert.ok(overflow.includes('stopImmediatePropagation'), 'overflow controller click path must not be swallowed by later root owners');
-assert.ok(overflow.includes('getMenuEntries') && overflow.includes('openMenuId'), 'overflow controller must support multiple grouped menu roots');
-assert.ok(overflow.includes('buttonCount >= 1 && buttonCount === menuCount && overflowRootCount === buttonCount'), 'overflow DOM audit must allow grouped dropdown roots');
-assert.ok(!overflow.includes('MutationObserver'), 'overflow controller must not use MutationObserver as the behavior fix');
+assert.ok(sourceToolsUi.includes('rvm-non-primitive-source-tools-ui/v9-dashboard'), 'Source Tools UI must expose dashboard schema');
+assert.ok(sourceToolsUi.includes('data-source-tools-layout="dashboard-v3"'), 'Source Tools UI must render dashboard layout marker');
+assert.ok(sourceToolsUi.includes('rvm-source-tools-dashboard-strip'), 'Source Tools UI must render dashboard strip');
+assert.ok(sourceToolsUi.includes('rvm-source-tools-tile'), 'Source Tools UI must render status tiles');
+assert.ok(sourceToolsUi.includes('data-source-tools-group="auto-bend"'), 'Source Tools UI must group Auto Bend controls');
+assert.ok(sourceToolsUi.includes('data-source-tools-group="support-overlay"'), 'Source Tools UI must group Support Overlay controls');
+assert.ok(sourceToolsUi.includes('data-state="${escapeHtml(autoState)}"'), 'Source Tools UI must expose active/inactive auto state');
+assert.ok(sourceToolsUi.includes('data-state="${escapeHtml(supportState)}"'), 'Source Tools UI must expose support state');
+assert.ok(sourceToolsUi.includes('Apply axis'), 'Source Tools UI must keep compact axis apply control');
 
-assert.ok(spacing.includes("const VERSION = '20260626-rvm-viewport-first-spacing-3'"), 'viewport spacing bridge must expose grouped secondary spacing version');
-assert.ok(spacing.includes("secondaryToolbarGroups: ['view', 'visibility', 'inspect', 'export', 'source', 'diag']"), 'viewport spacing diagnostics must list secondary groups');
-assert.ok(spacing.includes('[data-rvm-viewer] .geo-top-ribbon{display:flex;justify-content:flex-start!important;'), 'RVM toolbar must override inherited generic space-between layout');
-assert.ok(!spacing.includes('.app-shell') && !spacing.includes('.app-nav') && !spacing.includes('#tab-bar') && !spacing.includes('#tab-content'), 'viewport spacing bridge must not style landing/app shell selectors');
+assert.ok(selectionDetails.includes('20260628-rvm-selected-entity-ui-v2-1'), 'selection details bridge must expose selected entity UI v2 version');
+assert.ok(selectionDetails.includes('Selected Entity'), 'selection details bridge must render selected entity title');
+assert.ok(selectionDetails.includes('data-rvm-selection-details-ui'), 'selection details bridge must stamp UI version');
+assert.ok(selectionDetails.includes('data-rvm-selection-source'), 'selection details bridge must expose canvas/hierarchy source marker');
+assert.ok(selectionDetails.includes('selectionSource(objects)'), 'selection details bridge must compute selection source');
+assert.ok(selectionDetails.includes('rvm-selection-kpi-strip'), 'selection details bridge must render KPI strip');
+assert.ok(selectionDetails.includes('data-rvm-selection-kpis'), 'selection details bridge must expose KPI marker');
+assert.ok(selectionDetails.includes('rvm-selection-empty-state'), 'selection details bridge must render improved empty state');
+assert.ok(selectionDetails.includes('previousVersion: PREVIOUS_VERSION'), 'selection details API must expose previous version');
 
-for (const eagerForbidden of ['RvmModelHealthBridge.js?v=', 'RvmModelHealthIssuesBridge.js?v=', 'RvmObjectSearchBridge.js?v=', 'RvmVisibilitySnapshotsBridge.js?v=', 'RvmSelectionSetsBridge.js?v=', 'RvmReportExportBridge.js?v=', 'RvmNonPrimitiveSupportOverlayBridge.js?v=', 'RvmNonPrimitiveSupportOverlayDetailsPanelBridge.js?v=', 'RvmNonPrimitiveSupportOverlayHoverBridge.js?v=', 'RvmNonPrimitiveAutoBendBridge.js?v=', 'RvmNonPrimitiveNodeMarkerBridge.js?v=', 'RvmNonPrimitiveSourceToolsUiBridge.js?v=']) {
-  assert.ok(!renderer.includes(`import`) || !activeImport(renderer, eagerForbidden.replace('.js?v=', '')), `renderer must not eagerly import ${eagerForbidden}`);
-}
-assert.ok(tab.includes('data-rvm-internal-toolbar="object-browser-1"'), 'RVM internal toolbar must be explicitly scoped to this tab');
-assert.ok(tab.includes("label: 'Navigate / View'") && tab.includes("label: 'Review'") && tab.includes("label: 'Orient'"), 'RVM tab must keep primary toolbar groups and orient source');
-assert.ok(tab.includes('data-rvm-object-browser="true"') && tab.includes('data-rvm-status-structured="true"'), 'Object Browser and structured statusbar must remain present');
-assert.ok(!tab.includes('PCF GLB VIEWER'), 'RVM internal tab source must not redefine landing/header app chrome');
-assert.ok(deferredLoader.includes('RvmReportExportBridge.js?v=20260626-rvm-report-export-shell-slot-1'), 'deferred loader must import shell-slot report export bridge');
-assert.ok(deferredLoader.includes('RvmNonPrimitiveSourceToolsUiBridge.js?v=20260626-source-tools-shell-slot-1'), 'deferred loader must import shell-slot source tools UI bridge');
-assert.ok(uiShell.includes("exports: 'exports'") && uiShell.includes("slots.exports !== 1"), 'UI shell must own exports slot');
-assert.ok(bottomDiagnostics.includes("DIAGNOSTICS_SLOT_SELECTOR = '[data-rvm-panel-slot=\"diagnostics\"]'"), 'diagnostics drawer must target diagnostics shell slot');
-assert.ok(reportExport.includes("EXPORTS_SLOT_SELECTOR = '[data-rvm-panel-slot=\"exports\"]'"), 'report export must target exports shell slot');
-assert.ok(stagedExport.includes('binary-rvm-support-tools-retired'), 'support export must preserve binary RVM retirement policy');
-assert.ok(stagedValidation.includes('support-mode-unavailable-for-current-source'), 'support validation must fail clearly when support mode is unavailable');
-assert.ok(!uiShell.includes('convertXmlToCii') && !uiShell.includes('xml-cii2019'), 'UI shell must not include XML->CII conversion logic');
+assert.ok(rightPanelPolicy.includes('RVM_RIGHT_PANEL_SECTIONS'), 'format policy must expose explicit right panel sections');
+assert.ok(rightPanelPolicy.includes('STAGEDJSON_REVIEW'), 'format policy must expose stagedJSON review section');
+assert.ok(rightPanelPolicy.includes('NATIVE_DIAGNOSTICS'), 'format policy must expose native diagnostics section');
+assert.ok(rightPanelPolicy.includes("mode === 'source-preview'"), 'format policy must only allow source-preview policy in source-preview mode');
+assert.ok(rightPanelPolicy.includes('getRvmRightPanelSections'), 'format policy must expose section helpers');
+assert.ok(rightPanelPolicy.includes('fileKind === \'stagedjson\''), 'format policy must prefer stagedJSON filename when loader stamped generic json');
 
-console.log('Verified RVM grouped toolbar click/display fix, runtime cache ownership, scoped spacing, shell slots, deferred bridge ownership, diagnostics/export ownership, and XML-CII isolation.');
+assert.ok(rightPanelBridge.includes("rvm-right-panel-format-policy/v4-ui"), 'right panel bridge must expose UI v2 schema');
+assert.ok(rightPanelBridge.includes("20260628-rvm-right-panel-ui-v2-1"), 'right panel bridge must expose UI v2 version');
+assert.ok(rightPanelBridge.includes('PANEL_META'), 'right panel bridge must define section metadata');
+assert.ok(rightPanelBridge.includes('rvm-right-panel-v2'), 'right panel bridge must install right panel v2 class');
+assert.ok(rightPanelBridge.includes('rvm-right-section-card'), 'right panel bridge must render card-style sections');
+assert.ok(rightPanelBridge.includes('rvm-right-section-badge'), 'right panel bridge must render section badges');
+assert.ok(rightPanelBridge.includes('decorateRightPanelUi'), 'right panel bridge must decorate existing sections after ordering');
+assert.ok(rightPanelBridge.includes('rvmRightPanelUiDecorated'), 'right panel bridge must stamp UI decoration count');
+assert.ok(rightPanelBridge.includes('Right Panel'), 'right panel bridge must render section policy panel');
+assert.ok(rightPanelBridge.includes('applyRightPanelSectionPolicy'), 'right panel bridge must apply section policy');
+assert.ok(rightPanelBridge.includes('orderRightPanelSections'), 'right panel bridge must order panel sections');
+assert.ok(rightPanelBridge.includes('hideEmptyRightPanelHeaders'), 'right panel bridge must hide empty headers');
+assert.ok(rightPanelBridge.includes('rvmRightPanelOrdered'), 'right panel bridge must stamp ordering diagnostics');
+assert.ok(rightPanelBridge.includes('rvmRightPanelEmptyHeadersHidden'), 'right panel bridge must stamp empty-header diagnostics');
+assert.ok(rightPanelBridge.includes('data-rvm-stagedjson-kpis'), 'stagedJSON review must expose KPI row');
+assert.ok(rightPanelBridge.includes('rvm-stagedjson-card--clear'), 'stagedJSON review must use clearer card style');
+assert.ok(rightPanelBridge.includes('rvm-source-tools-grid--grouped') || rightPanelBridge.includes('rvm-source-tools-grid--dashboard'), 'right panel layout must keep compact Source Tools styling hook');
+assert.ok(rightPanelBridge.includes('Selected Entity'), 'right panel bridge must rename RVM-only selection title to generic selected entity');
+assert.ok(rightPanelBridge.includes('Copy JSON') && rightPanelBridge.includes('download-stagedjson'), 'stagedJSON right panel must expose clearer copy/download actions');
+
+assert.ok(sourceInput.includes("'.stagedjson'") && sourceInput.includes("'.staged.json'") && sourceInput.includes("'.txt'"), 'source file input bridge must accept stagedJSON and txt source formats');
+assert.ok(renderer.includes('RvmHierarchySelectionBridge.js?v=20260627-rvm-hierarchy-navis-safe-1'), 'renderer must import Navis-safe hierarchy selection bridge');
+assert.ok(hierarchySelection.includes('NAVIS_CONTROL_SELECTOR'), 'legacy hierarchy selection must not intercept Navis controls');
+assert.ok(navisHierarchy.includes('shouldPreserveFormatNeutralTree'), 'Navis bridge must not overwrite source-owned format-neutral tree');
+assert.ok(selectionSync.includes('rvm-tab-dispose'), 'hierarchy sync bridge must clean up on tab disposal');
+assert.ok(drawer.includes('root.insertBefore(drawer, statusbar)'), 'drawer must dock before status bar');
+
+console.log('Verified RVM viewer UI contract: Source Tools dashboard and Selected Entity UI.');

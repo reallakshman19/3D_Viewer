@@ -1,4 +1,4 @@
-import { canUseAutoBend, normalizeSourceKind } from '../overlays/autobend/NonPrimitiveAutoBendGate.js';
+import { canUseAutoBend, normalizeSourceKind, sourceKindFromContext, sourceKindFromFileName } from '../overlays/autobend/NonPrimitiveAutoBendGate.js';
 import { readNonPrimitiveAutoBendSettings } from '../overlays/autobend/NonPrimitiveAutoBendSettings.js';
 
 let passed = 0;
@@ -9,7 +9,16 @@ function check(condition, label) {
 }
 
 check(normalizeSourceKind('.xml') === 'inputxml', 'auto-bend xml aliases to inputxml');
-for (const sourceKind of ['json', 'jscon', 'inputxml', 'txt']) {
+check(normalizeSourceKind('.uxml') === 'inputxml', 'auto-bend uxml aliases to inputxml');
+check(normalizeSourceKind('.staged.json') === 'stagedjson', 'auto-bend staged.json aliases to stagedjson');
+check(sourceKindFromFileName('model.stagedjson') === 'stagedjson', 'auto-bend detects stagedjson filename');
+check(sourceKindFromFileName('model.staged.json') === 'stagedjson', 'auto-bend detects staged.json filename before generic json');
+check(sourceKindFromFileName('line.uxml.json') === 'inputxml', 'auto-bend detects uxml.json filename before generic json');
+check(sourceKindFromFileName('line.uxml') === 'inputxml', 'auto-bend detects uxml filename');
+check(sourceKindFromContext({ fileExtension: 'json', fileName: 'model.staged.json' }) === 'stagedjson', 'auto-bend prefers staged.json filename over generic json extension');
+check(sourceKindFromContext({ fileExtension: 'json', fileName: 'line.uxml.json' }) === 'inputxml', 'auto-bend prefers uxml.json filename over generic json extension');
+check(sourceKindFromContext({ sourceKind: 'json', fileName: 'model.staged.json' }) === 'json', 'auto-bend preserves explicit sourceKind over filename');
+for (const sourceKind of ['json', 'jscon', 'inputxml', 'uxml', 'txt', 'stagedjson']) {
   check(canUseAutoBend({ sourceKind }), `auto-bend accepts ${sourceKind}`);
 }
 for (const sourceKind of ['rvm', 'glb', 'gltf']) {
@@ -18,6 +27,9 @@ for (const sourceKind of ['rvm', 'glb', 'gltf']) {
 check(!canUseAutoBend({ sourceKind: 'inputxml', modelPrimitiveMode: 'rvm-native' }), 'auto-bend rejects rvm-native primitive mode');
 check(!canUseAutoBend({ sourceKind: 'json', modelPrimitiveMode: 'glb-native' }), 'auto-bend rejects glb-native primitive mode');
 check(canUseAutoBend({ fileName: 'line.inputxml' }), 'auto-bend accepts inputxml filename');
+check(canUseAutoBend({ fileName: 'model.stagedjson' }), 'auto-bend accepts stagedjson filename');
+check(canUseAutoBend({ fileName: 'model.staged.json' }), 'auto-bend accepts staged.json filename');
+check(canUseAutoBend({ fileName: 'line.uxml.json' }), 'auto-bend accepts uxml.json filename');
 check(!canUseAutoBend({ fileName: 'line.glb' }), 'auto-bend rejects glb filename');
 
 const storage = new Map();

@@ -1,42 +1,25 @@
 import * as THREE from 'three';
-import { installRvmUiEventRegistry, registerRvmUiEvent, routeRvmUiEvent } from './RvmUiEventRegistry.js?v=20260626-rvm-ui-event-registry-1';
 
-const BRIDGE_VERSION = '20260626-rvm-canvas-single-pick-registry-1';
-const INSTALL_FLAG = Symbol.for('pcf-glb-rvm-canvas-single-pick-registry-1');
+const BRIDGE_VERSION = '20260622-rvm-canvas-single-pick-guard-1';
+const INSTALL_FLAG = Symbol.for('pcf-glb-rvm-canvas-single-pick-guard-1');
 const GLOBAL_KEY = '__PCF_GLB_RVM_CANVAS_SINGLE_PICK_GUARD__';
 
 export function installRvmCanvasSelectionSinglePickGuardBridge() {
   if (typeof document === 'undefined') return null;
   if (globalThis[INSTALL_FLAG]) return globalThis[INSTALL_FLAG];
-  installRvmUiEventRegistry();
-  const state = {
-    version: BRIDGE_VERSION,
-    routedPointerUps: 0,
-    trimNow: () => trimCurrentSelection(globalThis.__3D_RVM_VIEWER__),
-    getEventRegistryDiagnostics: () => globalThis.__PCF_GLB_RVM_UI_EVENT_REGISTRY__?.getDiagnostics?.() || null,
-  };
+  const state = { version: BRIDGE_VERSION, trimNow: () => trimCurrentSelection(globalThis.__3D_RVM_VIEWER__) };
   globalThis[INSTALL_FLAG] = state;
   globalThis[GLOBAL_KEY] = state;
-
-  registerRvmUiEvent('canvas-single-pick', ({ detail }) => {
-    const viewer = detail.viewer || globalThis.__3D_RVM_VIEWER__;
-    const event = detail.sourceEvent || {};
-    const canvas = viewer?.renderer?.domElement;
-    if (!canvas || event.target !== canvas || event.button !== 0) return false;
-    if (event.ctrlKey || event.shiftKey || event.metaKey) return false;
-    if (String(viewer?._rvmInteractionMode || viewer?._navMode || 'select').toLowerCase() !== 'select') return false;
-    const hit = pickLeafAt(viewer, event.clientX, event.clientY);
-    setTimeout(() => trimCurrentSelection(viewer, hit), 0);
-    requestAnimationFrame(() => trimCurrentSelection(viewer, hit));
-    state.routedPointerUps += 1;
-    return { status: 'queued', hit: Boolean(hit) };
-  }, { id: 'rvm-canvas-single-pick-guard', priority: 20 });
 
   document.addEventListener('pointerup', (event) => {
     const viewer = globalThis.__3D_RVM_VIEWER__;
     const canvas = viewer?.renderer?.domElement;
     if (!canvas || event.target !== canvas || event.button !== 0) return;
-    routeRvmUiEvent(document.querySelector('[data-rvm-viewer]'), 'canvas-single-pick', { viewer, sourceEvent: event });
+    if (event.ctrlKey || event.shiftKey || event.metaKey) return;
+    if (String(viewer?._rvmInteractionMode || viewer?._navMode || 'select').toLowerCase() !== 'select') return;
+    const hit = pickLeafAt(viewer, event.clientX, event.clientY);
+    setTimeout(() => trimCurrentSelection(viewer, hit), 0);
+    requestAnimationFrame(() => trimCurrentSelection(viewer, hit));
   }, true);
 
   return state;

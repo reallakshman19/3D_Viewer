@@ -58,12 +58,33 @@ export class RvmVisibilityController {
         this._applyVisibility();
     }
 
+    show(canonicalIds) {
+        const ids = Array.isArray(canonicalIds) ? canonicalIds.filter(Boolean) : [];
+        if (!ids.length) return this.showAll();
+        const isolatedMode = this._isolatedCanonicalIds.size > 0;
+        for (const id of ids) {
+            this._hiddenCanonicalIds.delete(id);
+            if (isolatedMode) this._isolatedCanonicalIds.add(id);
+        }
+        this._applyVisibility();
+    }
+
     getHiddenCanonicalIds() {
         return Array.from(this._hiddenCanonicalIds);
     }
 
     getIsolatedCanonicalIds() {
         return Array.from(this._isolatedCanonicalIds);
+    }
+
+    getVisibilityState() {
+        return {
+            hiddenCanonicalIds: this.getHiddenCanonicalIds(),
+            isolatedCanonicalIds: this.getIsolatedCanonicalIds(),
+            hiddenCount: this._hiddenCanonicalIds.size,
+            isolatedCount: this._isolatedCanonicalIds.size,
+            isolatedMode: this._isolatedCanonicalIds.size > 0,
+        };
     }
 
     _applyVisibility() {

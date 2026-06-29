@@ -214,6 +214,25 @@
   display: none; /* hide "Current" label in popup to save space */
 }
 
+/* Disabled / greyed-out tabs (e.g. Custom Input when XML is loaded) */
+.model-converters-workflow-popup-tabs .model-converters-workflow-phase.is-disabled,
+.model-converters-workflow-popup-tabs .model-converters-workflow-phase[disabled] {
+  opacity: 0.38;
+  cursor: not-allowed;
+  pointer-events: none;
+  color: #6b7c93 !important;
+  border-color: #2a3546 !important;
+  background: rgba(10, 17, 30, 0.6) !important;
+  text-decoration: line-through;
+  text-decoration-color: rgba(107, 124, 147, 0.5);
+}
+
+/* Separator visual hint – custom-input is last, add a subtle left margin gap */
+.model-converters-workflow-popup-tabs .model-converters-workflow-phase[data-modal-tab="custom-input"] {
+  margin-left: auto;
+  border-left: 2px dashed #2a3e58;
+}
+
 
 .model-converters-workflow-popup-body {
   flex: 1;

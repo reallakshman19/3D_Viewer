@@ -1,0 +1,25 @@
+import assert from 'node:assert/strict';
+import { renderXmlCompareWorkspaceShellHtml } from '../xml-compare/XmlCompareWorkspaceShell.js';
+import { createXmlCompareDebugSnapshot } from '../xml-compare/XmlCompareDebugPanel.js';
+
+const source={profile:'xml-cii2019-enriched-stage',fileName:'A_enriched_staged.json',summary:{nodeCount:2,diagnosticCount:1}};
+const target={profile:'xml-cii2019-enriched-xml',fileName:'B_enriched.xml',summary:{nodeCount:3,diagnosticCount:0}};
+const logs=[{ts:'2026-06-28T00:00:00.000Z',level:'info',code:'XML-COMPARE-SOURCE-LOADED',message:'Source loaded'}];
+const diagnostics=[{code:'XML-COMPARE-CII-NODE-POSITION-MISSING',uid:'source:node:1',message:'Position missing'}];
+const html=renderXmlCompareWorkspaceShellHtml({source,target,logs,diagnostics});
+assert.match(html,/data-xml-compare-workspace-shell/);
+assert.match(html,/Source/);
+assert.match(html,/Target/);
+assert.match(html,/Connectors/);
+assert.match(html,/Details/);
+assert.match(html,/XML Compare Log/);
+assert.match(html,/Diagnostics/);
+assert.match(html,/Debug/);
+assert.match(html,/xml-cii2019-enriched-stage/);
+assert.match(html,/XML-COMPARE-CII-NODE-POSITION-MISSING/);
+const snapshot=createXmlCompareDebugSnapshot({source,target,logs,diagnostics});
+assert.equal(snapshot.sourceCount,2);
+assert.equal(snapshot.targetCount,3);
+assert.equal(snapshot.logCount,1);
+assert.equal(snapshot.diagnosticCount,1);
+console.log('xml-compare-workspace-shell: all assertions passed');

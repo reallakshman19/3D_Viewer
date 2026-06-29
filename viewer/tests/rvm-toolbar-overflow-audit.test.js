@@ -41,4 +41,4 @@ assert.ok(inventory.includes('No single toolbar-overflow owner existed'), 'inven
 assert.ok(inventory.includes('RvmToolbarOverflowController.js'), 'inventory must identify the overflow owner module');
 assert.ok(inventory.includes('trace'), 'inventory must mention traceability/audit diagnostics');
 
-console.log('Verified RVM toolbar overflow auditability for grouped click/display fix: DOM validation, fixed positioning, bounded trace, diagnostics, root audit stamp, and inventory root-cause evidence.');
+console.log('Verified RVM toolbar overflow auditability for restored grouped menus: DOM validation, fixed positioning, bounded trace, diagnostics, root audit stamp, and inventory root-cause evidence.');

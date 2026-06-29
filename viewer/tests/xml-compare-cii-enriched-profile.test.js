@@ -1,0 +1,28 @@
+import assert from 'node:assert/strict';
+import { detectXmlCompareProfile, XML_COMPARE_PROFILE_TYPES } from '../xml-compare/XmlCompareProfileDetector.js';
+import { adaptCiiEnrichedStageToCompareRecords } from '../xml-compare/XmlCompareCiiEnrichedStageAdapter.js';
+import { adaptCiiEnrichedXmlToCompareRecords } from '../xml-compare/XmlCompareCiiEnrichedXmlAdapter.js';
+import { XML_COMPARE_CII_PROPERTY_FIELDS, xmlComparePropertiesByGroup } from '../xml-compare/XmlComparePropertySchema.js';
+
+const stage={schema:'xml-cii2019-enriched-stage/v1',source:'BM.XML',enrichedXml:'BM_enriched.xml',branches:[{branchName:'/ASIM-1835-4-P8810212/B1',pipelineReference:'P8810212',lineNo:'P8810212',pressure:{Pressure1:'700',HydroPressure:'0'},temperature:{Temperature1:'120',Temperature2:'309',Temperature3:'-5'},materialNumber:'106',fluidDensity:'67',nodes:[{nodeNumber:'10',nodeName:'PS-10',endpoint:'FROM',componentType:'PIPE',componentRefNo:'C-1',position:'0 0 0',pipingClass:'31441C4',rating:'300',boreMm:'100',wallThickness:'6.02',corrosionAllowance:'1',materialName:'ASTM A106-B',materialCode:'106',elementLengthMm:'1500',dtxrPs:'PS.X',dtxrPos:'E 0 N 0 U 0'}]}]};
+const xml='<Root><Branch><Branchname>/ASIM-1835-4-P8810212/B1</Branchname><PipelineReference>P8810212</PipelineReference><LineNo>P8810212</LineNo><Pressure><Pressure1>700</Pressure1><HydroPressure>0</HydroPressure></Pressure><Temperature><Temperature1>120</Temperature1><Temperature2>309</Temperature2><Temperature3>-5</Temperature3></Temperature><MaterialNumber>106</MaterialNumber><FluidDensity>67</FluidDensity><Node><NodeNumber>10</NodeNumber><NodeName>PS-10</NodeName><Endpoint>FROM</Endpoint><ComponentType>PIPE</ComponentType><ComponentRefNo>C-1</ComponentRefNo><Position>0 0 0</Position><PipingClass>31441C4</PipingClass><Rating>300</Rating><BoreMm>100</BoreMm><WallThickness>6.02</WallThickness><CorrosionAllowance>1</CorrosionAllowance><MaterialName>ASTM A106-B</MaterialName><MaterialCode>106</MaterialCode><ElementLengthMm>1500</ElementLengthMm><DTXR_PS>PS.X</DTXR_PS><DTXR_POS>E 0 N 0 U 0</DTXR_POS></Node></Branch></Root>';
+assert.equal(detectXmlCompareProfile({name:'BM_enriched_staged.json',json:stage}).type,XML_COMPARE_PROFILE_TYPES.CII_ENRICHED_STAGE);
+assert.equal(detectXmlCompareProfile({name:'BM_enriched.xml',text:xml}).type,XML_COMPARE_PROFILE_TYPES.CII_ENRICHED_XML);
+const fromStage=adaptCiiEnrichedStageToCompareRecords(stage,{side:'source'});
+const fromXml=adaptCiiEnrichedXmlToCompareRecords(xml,{side:'target',sourceName:'BM_enriched.xml'});
+assert.equal(fromStage.summary.branchCount,1);
+assert.equal(fromStage.summary.nodeCount,1);
+assert.equal(fromStage.records[0].componentRefNo,'C-1');
+assert.equal(fromStage.records[0].process.pressure1,'700');
+assert.equal(fromStage.records[0].process.temperature2,'309');
+assert.equal(fromStage.records[0].materialCode,'106');
+assert.equal(fromStage.records[0].dtxrPs,'PS.X');
+assert.equal(fromStage.records[0].lengthMm,1500);
+assert.equal(fromXml.summary.nodeCount,1);
+assert.equal(fromXml.records[0].branchName,fromStage.records[0].branchName);
+assert.equal(fromXml.records[0].process.temperature3,'-5');
+assert.equal(fromXml.records[0].pipingClass,'31441C4');
+assert.ok(XML_COMPARE_CII_PROPERTY_FIELDS.some((field)=>field.key==='process.pressure1'));
+assert.ok(xmlComparePropertiesByGroup().process.some((field)=>field.label==='Pressure1'));
+assert.equal(fromStage.diagnostics.length,0);
+console.log('xml-compare-cii-enriched-profile: all assertions passed');

@@ -51,6 +51,16 @@ export const RuntimeEvents = Object.freeze({
   RVM_CONFIG_CHANGED: 'rvm-config-changed',
   RVM_EXTRACT_PCF_REQUESTED: 'rvm-extract-pcf-requested',
   RVM_PCF_EXTRACT_STATE_CHANGED: 'rvm-pcf-extract-state-changed',
+  XML_COMPARE_SOURCE_LOADED: 'xml-compare-source-loaded',
+  XML_COMPARE_TARGET_LOADED: 'xml-compare-target-loaded',
+  XML_COMPARE_ELEMENT_PICKED: 'xml-compare-element-picked',
+  XML_COMPARE_ALIGNMENT_CHANGED: 'xml-compare-alignment-changed',
+  XML_COMPARE_MATCHES_CHANGED: 'xml-compare-matches-changed',
+  XML_COMPARE_MANUAL_LINK_CREATED: 'xml-compare-manual-link-created',
+  XML_COMPARE_MANUAL_LINK_DELETED: 'xml-compare-manual-link-deleted',
+  XML_COMPARE_PORT_PREVIEW_READY: 'xml-compare-port-preview-ready',
+  XML_COMPARE_PORT_APPLIED: 'xml-compare-port-applied',
+  XML_COMPARE_EXPORT_READY: 'xml-compare-export-ready',
 });
 
 const _validEvents = new Set(Object.values(RuntimeEvents));

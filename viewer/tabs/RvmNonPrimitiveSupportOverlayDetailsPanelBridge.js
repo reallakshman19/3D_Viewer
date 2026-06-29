@@ -1,6 +1,6 @@
 import * as THREE from 'three';
+import { isRvmNonPrimitiveSourceKind, normalizeRvmSourceKind } from '../RvmSourceKindPolicy.js';
 import { RvmViewer3D } from '../rvm-viewer/RvmViewer3D.js?v=20260622-rvm-leaf-picking-2';
-import { installRvmUiEventRegistry, registerRvmUiEvent, routeRvmUiEvent } from './RvmUiEventRegistry.js?v=20260626-rvm-ui-event-registry-1';
 import {
   buildSupportOverlayDetailsPanelState,
   emptySupportOverlayDetailsPanelState,
@@ -19,23 +19,19 @@ import {
   SUPPORT_OVERLAY_HIGHLIGHT_SCHEMA,
 } from '../overlays/support/SupportOverlayHighlight.js';
 
-export const RVM_NON_PRIMITIVE_SUPPORT_DETAILS_PANEL_SCHEMA = 'rvm-non-primitive-support-overlay-details-panel/v6';
+export const RVM_NON_PRIMITIVE_SUPPORT_DETAILS_PANEL_SCHEMA = 'rvm-non-primitive-support-overlay-details-panel/v4';
 
 const ROOT_SELECTOR = '[data-rvm-viewer]';
 const PANEL_ID = 'rvm-nonprimitive-support-details-panel';
-const SUPPORTS_SLOT_SELECTOR = '[data-rvm-panel-slot="supports"]';
 const SUPPORT_OVERLAY_ROOT_NAME = '__RVM_NON_PRIMITIVE_SUPPORT_OVERLAY__';
 const GLOBAL_KEY = '__PCF_GLB_RVM_NON_PRIMITIVE_SUPPORT_DETAILS_PANEL__';
-const PATCH_FLAG = Symbol.for('pcf-glb-rvm-non-primitive-support-details-panel-v6');
-const VIEWER_PATCH_FLAG = Symbol.for('pcf-glb-rvm-non-primitive-support-details-panel-viewer-v6');
-const PICKING_FLAG = Symbol.for('pcf-glb-rvm-non-primitive-support-details-picking-v6');
-const STYLE_FLAG = Symbol.for('pcf-glb-rvm-non-primitive-support-details-panel-style-v3');
-const SOURCE_KIND_RE = /^(json|jscon|inputxml|txt|source-preview)$/i;
-const PRIMITIVE_KIND_RE = /^(rvm|glb|gltf|rev)$/i;
+const PATCH_FLAG = Symbol.for('pcf-glb-rvm-non-primitive-support-details-panel-v4');
+const VIEWER_PATCH_FLAG = Symbol.for('pcf-glb-rvm-non-primitive-support-details-panel-viewer-v4');
+const PICKING_FLAG = Symbol.for('pcf-glb-rvm-non-primitive-support-details-picking-v4');
+const STYLE_FLAG = Symbol.for('pcf-glb-rvm-non-primitive-support-details-panel-style-v2');
 
 export function installRvmNonPrimitiveSupportOverlayDetailsPanelBridge() {
   if (globalThis[PATCH_FLAG]) return;
-  installRvmUiEventRegistry();
   globalThis[PATCH_FLAG] = true;
   globalThis[GLOBAL_KEY] = {
     schema: RVM_NON_PRIMITIVE_SUPPORT_DETAILS_PANEL_SCHEMA,
@@ -50,7 +46,6 @@ export function installRvmNonPrimitiveSupportOverlayDetailsPanelBridge() {
     downloadJson: downloadSupportOverlayDetailsJson,
     clearHighlight: clearSupportOverlayHighlights,
     clearOnEscape: handleSupportDetailsKeyboardShortcut,
-    getEventRegistryDiagnostics: () => globalThis.__PCF_GLB_RVM_UI_EVENT_REGISTRY__?.getDiagnostics?.() || null,
   };
   installSupportDetailsStyles();
   patchRvmViewerSetModelForSupportDetailsPanel();
@@ -66,18 +61,13 @@ function installSupportDetailsStyles() {
   const doc = globalThis.document;
   if (!doc?.createElement) return;
   const style = doc.createElement('style');
-  style.dataset.rvmNonPrimitiveSupportDetailsStyle = 'v3';
+  style.dataset.rvmNonPrimitiveSupportDetailsStyle = 'v2';
   style.textContent = `
     .rvm-support-details-panel {
       flex: 0 0 auto;
       padding: 7px;
       border-bottom: 1px solid var(--geo-border, #333);
       background: rgba(12, 17, 24, 0.82);
-    }
-
-    [data-rvm-panel-slot="supports"] .rvm-support-details-panel {
-      border-bottom: 0;
-      background: transparent;
     }
 
     .rvm-source-tools-detail {
@@ -159,7 +149,6 @@ export function renderSupportOverlayDetailsPanel(root, viewer = globalThis.__3D_
     sourceFile: diagnostics.sourceFile || '',
     highlighted: isSupportDetailsHighlighted(viewer, rawDetails),
   });
-  if (state.status === 'selected') globalThis.__PCF_GLB_RVM_UI_SHELL__?.setRightPanelTab?.(root, 'supports', 'support-details-selected');
   panel.innerHTML = renderSupportOverlayDetailsPanelHtml(state, { escapeHtml });
   bindDetailsPanel(panel, viewer);
   return panel;
@@ -167,14 +156,9 @@ export function renderSupportOverlayDetailsPanel(root, viewer = globalThis.__3D_
 
 function ensureDetailsPanel(root) {
   let panel = root.querySelector(`#${PANEL_ID}`);
-  if (panel) {
-    moveExistingPanelToShellSlot(root, panel);
-    return panel;
-  }
-  const shellSlot = getSupportsShellSlot(root);
+  if (panel) return panel;
   const rightPanel = root.querySelector('.rvm-right-panel');
-  const target = shellSlot || rightPanel;
-  if (!target) return null;
+  if (!rightPanel) return null;
   const header = globalThis.document?.createElement?.('div');
   panel = globalThis.document?.createElement?.('div');
   if (!header || !panel) return null;
@@ -185,64 +169,22 @@ function ensureDetailsPanel(root) {
   panel.className = 'rvm-support-details-panel rvm-tag-list';
   panel.dataset.rvmNonPrimitiveSupportDetails = 'true';
 
-  if (shellSlot) {
-    registerSupportDetailsPanel(root);
-    header.dataset.rvmPanelSlotHost = 'supports';
-    panel.dataset.rvmPanelSlotHost = 'supports';
-    removeSlotEmpty(shellSlot);
-    shellSlot.append(header, panel);
+  const sourceToolsPanel = rightPanel.querySelector('#rvm-nonprimitive-source-tools-panel');
+  if (sourceToolsPanel?.nextSibling) {
+    rightPanel.insertBefore(header, sourceToolsPanel.nextSibling);
+    rightPanel.insertBefore(panel, header.nextSibling);
+  } else if (sourceToolsPanel) {
+    rightPanel.append(header, panel);
   } else {
-    const sourceToolsPanel = rightPanel.querySelector('#rvm-nonprimitive-source-tools-panel');
-    if (sourceToolsPanel?.nextSibling) {
-      rightPanel.insertBefore(header, sourceToolsPanel.nextSibling);
-      rightPanel.insertBefore(panel, header.nextSibling);
-    } else if (sourceToolsPanel) {
-      rightPanel.append(header, panel);
+    const diagnosticsHeader = rightPanel.querySelector('[data-rvm-browser-diagnostics-header="true"]');
+    if (diagnosticsHeader) {
+      rightPanel.insertBefore(header, diagnosticsHeader);
+      rightPanel.insertBefore(panel, diagnosticsHeader);
     } else {
-      const diagnosticsHeader = rightPanel.querySelector('[data-rvm-browser-diagnostics-header="true"]');
-      if (diagnosticsHeader) {
-        rightPanel.insertBefore(header, diagnosticsHeader);
-        rightPanel.insertBefore(panel, diagnosticsHeader);
-      } else {
-        rightPanel.append(header, panel);
-      }
+      rightPanel.append(header, panel);
     }
   }
   return panel;
-}
-
-function getSupportsShellSlot(root) {
-  const shell = globalThis.__PCF_GLB_RVM_UI_SHELL__;
-  shell?.install?.(root, { reason: 'support-details' });
-  shell?.sync?.(root, { reason: 'support-details' });
-  return root.querySelector?.(SUPPORTS_SLOT_SELECTOR) || null;
-}
-
-function registerSupportDetailsPanel(root) {
-  globalThis.__PCF_GLB_RVM_UI_SHELL__?.registerPanel?.(root, {
-    id: 'nonprimitive-support-details-panel',
-    title: 'Support Details',
-    slot: 'supports',
-    priority: 10,
-  });
-}
-
-function moveExistingPanelToShellSlot(root, panel) {
-  const shellSlot = getSupportsShellSlot(root);
-  if (!shellSlot || shellSlot.contains(panel)) return;
-  const header = root.querySelector('[data-rvm-non-primitive-support-details-header="true"]') || panel.previousElementSibling;
-  registerSupportDetailsPanel(root);
-  removeSlotEmpty(shellSlot);
-  if (header?.dataset?.rvmNonPrimitiveSupportDetailsHeader === 'true') {
-    header.dataset.rvmPanelSlotHost = 'supports';
-    shellSlot.appendChild(header);
-  }
-  panel.dataset.rvmPanelSlotHost = 'supports';
-  shellSlot.appendChild(panel);
-}
-
-function removeSlotEmpty(slot) {
-  for (const empty of [...slot?.querySelectorAll?.('.rvm-panel-slot-empty') || []]) empty.remove?.();
 }
 
 export function clearSupportOverlayDetailsPanel(panel, viewer = globalThis.__3D_RVM_VIEWER__, reason = 'clear') {
@@ -320,15 +262,9 @@ function clearViewerSupportHighlights(viewer, reason = 'clear') {
 
 function ensureSupportDetailsPicking(viewer) {
   if (!viewer || viewer[PICKING_FLAG]) return;
-  installRvmUiEventRegistry();
-  registerRvmUiEvent('canvas-source-preview-support-select', ({ detail }) => {
-    const localViewer = detail.viewer || globalThis.__3D_RVM_VIEWER__;
-    const sourceEvent = detail.sourceEvent || {};
-    return selectSupportOverlayDetailsFromPointer(localViewer, sourceEvent);
-  }, { id: 'rvm-source-preview-support-details-select', priority: 30 });
   const dom = viewer.renderer?.domElement || viewer.container;
   if (!dom?.addEventListener) return;
-  const onClick = (event) => routeRvmUiEvent(globalThis.document?.querySelector?.(ROOT_SELECTOR), 'canvas-source-preview-support-select', { viewer, sourceEvent: event });
+  const onClick = (event) => selectSupportOverlayDetailsFromPointer(viewer, event);
   dom.addEventListener('click', onClick, false);
   viewer[PICKING_FLAG] = { dom, onClick };
 }
@@ -423,14 +359,12 @@ function emitDetailsSelection(viewer, state) {
 }
 
 function isNonPrimitiveKind(kind) {
-  const normalized = normalizeSourceKind(kind);
-  return SOURCE_KIND_RE.test(normalized) && !PRIMITIVE_KIND_RE.test(normalized);
+  return isRvmNonPrimitiveSourceKind(normalizeSourceKind(kind));
 }
 
 function normalizeSourceKind(value) {
-  const kind = String(value || '').trim().toLowerCase().replace(/^\./, '');
-  if (!kind || kind === 'aveva-json' || kind === 'source-preview') return 'json';
-  if (kind === 'xml' || kind === 'uxml') return 'inputxml';
+  const kind = normalizeRvmSourceKind(value);
+  if (!kind || kind === 'source-preview') return 'json';
   return kind;
 }
 

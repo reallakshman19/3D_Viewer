@@ -1,4 +1,4 @@
-import { scoreField, isValidFieldMatch } from '../viewer/converters/xml-cii2019-core/linelist-mapping.js';
+import { detectLineListFieldMap, normalizeLineListRow, scoreField, isValidFieldMatch } from '../viewer/converters/xml-cii2019-core/linelist-mapping.js';
 
 let passed = 0;
 let failed = 0;
@@ -72,6 +72,29 @@ console.log('\n=== rating alias fix ===');
   const ratingScore4 = scoreField('rating', 'Pressure Rating', []);
   console.log(`  Score for 'Pressure Rating' as rating: ${ratingScore4}`);
   assert(ratingScore4 < 200, '"Pressure Rating" should be rejected due to /pressure/i reject rule');
+}
+
+console.log('\n=== process field alias fix ===');
+{
+  const rows = [{
+    Service: 'P',
+    'Line Number': '8810212',
+    'Piping Class': '91261',
+    'Design Pr': '11600',
+    'Hydro Test Pressure': '22035',
+    'Op. Temp': '325',
+    'Temp C2': '309',
+    'Temp Min': '5',
+    'Mixed kg/m3': '67',
+  }];
+  const map = detectLineListFieldMap(rows, {});
+  const normalized = normalizeLineListRow(rows[0], map, 0);
+  assert(normalized.p1 === '11600', 'Design Pr should normalize to p1');
+  assert(normalized.hydroPressure === '22035', 'Hydro Test Pressure should normalize to hydroPressure');
+  assert(normalized.t1 === '325', 'Op. Temp should normalize to t1');
+  assert(normalized.t2 === '309', 'Temp C2 should normalize to t2');
+  assert(normalized.t3 === '5', 'Temp Min should normalize to t3');
+  assert(normalized.density === '67', 'Mixed kg/m3 should normalize to density');
 }
 
 console.log(`\n=== Summary: ${passed} passed, ${failed} failed ===\n`);

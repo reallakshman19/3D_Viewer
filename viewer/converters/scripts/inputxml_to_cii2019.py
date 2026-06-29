@@ -318,17 +318,17 @@ def _parse_bend(element: ET.Element) -> BendAux | None:
     if bend is None:
         return None
     return BendAux(
-        radius=_to_float(bend.attrib.get("RADIUS"), "BEND/RADIUS"),
-        type_code=_to_float(bend.attrib.get("TYPE"), "BEND/TYPE"),
-        angle1=_to_float(bend.attrib.get("ANGLE1"), "BEND/ANGLE1"),
-        node1=_to_float(bend.attrib.get("NODE1"), "BEND/NODE1"),
-        angle2=_to_float(bend.attrib.get("ANGLE2"), "BEND/ANGLE2"),
-        node2=_to_float(bend.attrib.get("NODE2"), "BEND/NODE2"),
-        angle3=_to_float(bend.attrib.get("ANGLE3"), "BEND/ANGLE3"),
-        node3=_to_float(bend.attrib.get("NODE3"), "BEND/NODE3"),
-        num_miter=_to_float(bend.attrib.get("NUM_MITER"), "BEND/NUM_MITER"),
-        fitting_thickness=_to_float(bend.attrib.get("FITTINGTHICKNESS"), "BEND/FITTINGTHICKNESS"),
-        kfactor=_to_float(bend.attrib.get("KFACTOR"), "BEND/KFACTOR"),
+        radius=_to_float_or_default(bend.attrib.get("RADIUS"), "BEND/RADIUS", SENTINEL_MISSING),
+        type_code=_to_float_or_default(bend.attrib.get("TYPE"), "BEND/TYPE", SENTINEL_MISSING),
+        angle1=_to_float_or_default(bend.attrib.get("ANGLE1"), "BEND/ANGLE1", SENTINEL_MISSING),
+        node1=_to_float_or_default(bend.attrib.get("NODE1"), "BEND/NODE1", SENTINEL_MISSING),
+        angle2=_to_float_or_default(bend.attrib.get("ANGLE2"), "BEND/ANGLE2", SENTINEL_MISSING),
+        node2=_to_float_or_default(bend.attrib.get("NODE2"), "BEND/NODE2", SENTINEL_MISSING),
+        angle3=_to_float_or_default(bend.attrib.get("ANGLE3"), "BEND/ANGLE3", SENTINEL_MISSING),
+        node3=_to_float_or_default(bend.attrib.get("NODE3"), "BEND/NODE3", SENTINEL_MISSING),
+        num_miter=_to_float_or_default(bend.attrib.get("NUM_MITER"), "BEND/NUM_MITER", SENTINEL_MISSING),
+        fitting_thickness=_to_float_or_default(bend.attrib.get("FITTINGTHICKNESS"), "BEND/FITTINGTHICKNESS", SENTINEL_MISSING),
+        kfactor=_to_float_or_default(bend.attrib.get("KFACTOR"), "BEND/KFACTOR", SENTINEL_MISSING),
     )
 
 
@@ -336,27 +336,28 @@ def _parse_rigid_weight(element: ET.Element) -> float | None:
     rigid = element.find("RIGID")
     if rigid is None:
         return None
-    return _to_float(rigid.attrib.get("WEIGHT"), "RIGID/WEIGHT")
+    return _to_float_or_default(rigid.attrib.get("WEIGHT"), "RIGID/WEIGHT", 0.0)
 
 
 def _parse_restraints(element: ET.Element) -> list[RestraintAux]:
     restraints: list[RestraintAux] = []
     for restraint in element.findall("RESTRAINT"):
-        node = _to_float(restraint.attrib.get("NODE"), "RESTRAINT/NODE")
+        node = _to_float_or_default(restraint.attrib.get("NODE"), "RESTRAINT/NODE", SENTINEL_MISSING)
         if _is_missing(node):
             continue
+        friction_raw = restraint.attrib.get("FRIC_COEF") or restraint.attrib.get("MU")
         restraints.append(
             RestraintAux(
                 slot=_parse_restraint_slot(restraint.attrib.get("NUM"), len(restraints) + 1),
                 node=node,
-                type_code=_to_float(restraint.attrib.get("TYPE"), "RESTRAINT/TYPE"),
-                stiffness=_to_float(restraint.attrib.get("STIFFNESS"), "RESTRAINT/STIFFNESS"),
-                gap=_to_float(restraint.attrib.get("GAP"), "RESTRAINT/GAP"),
-                friction=_to_float(restraint.attrib.get("FRIC_COEF"), "RESTRAINT/FRIC_COEF"),
-                connecting_node=_to_float(restraint.attrib.get("CNODE"), "RESTRAINT/CNODE"),
-                xcos=_to_float(restraint.attrib.get("XCOSINE"), "RESTRAINT/XCOSINE"),
-                ycos=_to_float(restraint.attrib.get("YCOSINE"), "RESTRAINT/YCOSINE"),
-                zcos=_to_float(restraint.attrib.get("ZCOSINE"), "RESTRAINT/ZCOSINE"),
+                type_code=_to_float_or_default(restraint.attrib.get("TYPE"), "RESTRAINT/TYPE", SENTINEL_MISSING),
+                stiffness=_to_float_or_default(restraint.attrib.get("STIFFNESS"), "RESTRAINT/STIFFNESS", SENTINEL_MISSING),
+                gap=_to_float_or_default(restraint.attrib.get("GAP"), "RESTRAINT/GAP", SENTINEL_MISSING),
+                friction=_to_float_or_default(friction_raw, "RESTRAINT/FRIC_COEF", SENTINEL_MISSING),
+                connecting_node=_to_float_or_default(restraint.attrib.get("CNODE"), "RESTRAINT/CNODE", SENTINEL_MISSING),
+                xcos=_to_float_or_default(restraint.attrib.get("XCOSINE"), "RESTRAINT/XCOSINE", SENTINEL_MISSING),
+                ycos=_to_float_or_default(restraint.attrib.get("YCOSINE"), "RESTRAINT/YCOSINE", SENTINEL_MISSING),
+                zcos=_to_float_or_default(restraint.attrib.get("ZCOSINE"), "RESTRAINT/ZCOSINE", SENTINEL_MISSING),
                 tag=_safe_text(restraint.attrib.get("TAG")),
                 guid=_safe_text(restraint.attrib.get("GUID")),
             )
@@ -367,7 +368,7 @@ def _parse_restraints(element: ET.Element) -> list[RestraintAux]:
 def _parse_sifs(element: ET.Element) -> list[SifAux]:
     sifs: list[SifAux] = []
     for sif in element.findall("SIF"):
-        node = _to_float(sif.attrib.get("NODE"), "SIF/NODE")
+        node = _to_float_or_default(sif.attrib.get("NODE"), "SIF/NODE", SENTINEL_MISSING)
         if _is_missing(node):
             continue
         sifs.append(SifAux(node=node))
@@ -449,13 +450,13 @@ def _parse_model(path: Path, defaults: ConverterDefaults) -> ParsedModel:
     parsed_elements: list[ElementResolved] = []
     parsed_hangers: list[HangerAux] = []
     for element in piping_model.findall("PIPINGELEMENT"):
-        diameter_raw = _to_float(element.attrib.get("DIAMETER"), "PIPINGELEMENT/DIAMETER")
-        wall_raw = _to_float(element.attrib.get("WALL_THICK"), "PIPINGELEMENT/WALL_THICK")
-        insulation_raw = _to_float(element.attrib.get("INSUL_THICK"), "PIPINGELEMENT/INSUL_THICK")
-        corrosion_raw = _to_float(element.attrib.get("CORR_ALLOW"), "PIPINGELEMENT/CORR_ALLOW")
-        t1_raw = _to_float(element.attrib.get("TEMP_EXP_C1"), "PIPINGELEMENT/TEMP_EXP_C1")
-        t2_raw = _to_float(element.attrib.get("TEMP_EXP_C2"), "PIPINGELEMENT/TEMP_EXP_C2")
-        t3_raw = _to_float(element.attrib.get("TEMP_EXP_C3"), "PIPINGELEMENT/TEMP_EXP_C3")
+        diameter_raw = _to_float_or_default(element.attrib.get("DIAMETER"), "PIPINGELEMENT/DIAMETER", SENTINEL_MISSING)
+        wall_raw = _to_float_or_default(element.attrib.get("WALL_THICK"), "PIPINGELEMENT/WALL_THICK", SENTINEL_MISSING)
+        insulation_raw = _to_float_or_default(element.attrib.get("INSUL_THICK"), "PIPINGELEMENT/INSUL_THICK", SENTINEL_MISSING)
+        corrosion_raw = _to_float_or_default(element.attrib.get("CORR_ALLOW"), "PIPINGELEMENT/CORR_ALLOW", SENTINEL_MISSING)
+        t1_raw = _to_float_or_default(element.attrib.get("TEMP_EXP_C1"), "PIPINGELEMENT/TEMP_EXP_C1", SENTINEL_MISSING)
+        t2_raw = _to_float_or_default(element.attrib.get("TEMP_EXP_C2"), "PIPINGELEMENT/TEMP_EXP_C2", SENTINEL_MISSING)
+        t3_raw = _to_float_or_default(element.attrib.get("TEMP_EXP_C3"), "PIPINGELEMENT/TEMP_EXP_C3", SENTINEL_MISSING)
         material_raw = _to_float_or_default(
             element.attrib.get("MATERIAL_NUM"),
             "PIPINGELEMENT/MATERIAL_NUM",
@@ -486,15 +487,15 @@ def _parse_model(path: Path, defaults: ConverterDefaults) -> ParsedModel:
                 from_node=_to_float(element.attrib.get("FROM_NODE"), "PIPINGELEMENT/FROM_NODE"),
                 to_node=_to_float(element.attrib.get("TO_NODE"), "PIPINGELEMENT/TO_NODE"),
                 delta_x=_value_or_default(
-                    _to_float(element.attrib.get("DELTA_X"), "PIPINGELEMENT/DELTA_X"),
+                    _to_float_or_default(element.attrib.get("DELTA_X"), "PIPINGELEMENT/DELTA_X", SENTINEL_MISSING),
                     0.0,
                 ),
                 delta_y=_value_or_default(
-                    _to_float(element.attrib.get("DELTA_Y"), "PIPINGELEMENT/DELTA_Y"),
+                    _to_float_or_default(element.attrib.get("DELTA_Y"), "PIPINGELEMENT/DELTA_Y", SENTINEL_MISSING),
                     0.0,
                 ),
                 delta_z=_value_or_default(
-                    _to_float(element.attrib.get("DELTA_Z"), "PIPINGELEMENT/DELTA_Z"),
+                    _to_float_or_default(element.attrib.get("DELTA_Z"), "PIPINGELEMENT/DELTA_Z", SENTINEL_MISSING),
                     0.0,
                 ),
                 diameter=carry_diameter,

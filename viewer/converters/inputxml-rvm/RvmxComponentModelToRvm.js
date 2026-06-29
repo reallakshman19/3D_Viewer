@@ -17,6 +17,12 @@
 // NOTE: ASCII/REV output is NOT loaded by Navisworks -- the binary framing
 // (next_chunk_offset per chunk) is mandatory, so this writer emits binary.
 
+import {
+  RVM_PRIMITIVE_CAPABILITY_REGISTRY_VERSION,
+  assertRvmPrimitiveCodeEmitAllowed,
+  getRvmPrimitiveCapability,
+} from '../../rvm/RvmPrimitiveCapabilityRegistry.js';
+
 // ---------- vec helpers ----------
 const sub = (a, b) => [a[0]-b[0], a[1]-b[1], a[2]-b[2]];
 const add = (a, b) => [a[0]+b[0], a[1]+b[1], a[2]+b[2]];
@@ -31,6 +37,19 @@ function frame(z) {
   const ref = Math.abs(z[1]) < 0.9 ? [0, 1, 0] : [1, 0, 0];
   const x = norm(cross(ref, z));
   return [x, cross(z, x), z];
+}
+
+function primitiveUnlockKey(kind) {
+  if (kind === 4) return 'legacy-inputxml-rvm-torus';
+  if (kind === 7) return 'legacy-inputxml-rvm-snout';
+  return '';
+}
+
+function assertWriterPrimitive(kind, group) {
+  return assertRvmPrimitiveCodeEmitAllowed(kind, {
+    context: `inputxml-rvm writer group ${group || 'UNKNOWN'}`,
+    unlockKey: primitiveUnlockKey(kind),
+  });
 }
 
 // ---------- binary writers (big-endian) ----------
@@ -60,6 +79,7 @@ function tagBytes(t) {
 function makeWriter() {
   const prims = [];
   function emit(group, kind, axes, center, params, bbox, attrs, rest) {
+    assertWriterPrimitive(kind, group);
     const [x, y, z] = axes;
     // column-major M_3x4 data: Xaxis, Yaxis, Zaxis, center
     const M = [x[0], x[1], x[2], y[0], y[1], y[2], z[0], z[1], z[2], center[0], center[1], center[2]];
@@ -91,6 +111,50 @@ function torus(w, g, C, dIn, dOut, R, r, at) {
   if (len(Z) < 1e-9) return;
   const Zn = norm(Z), Y = cross(Zn, X), rr = R + r;
   w.emit(g, 4, [X, Y, Zn], O, [R, r, beta], [-rr, -rr, -r, rr, rr, r], at, false);
+}
+
+function primParamsFor(p) {
+  if (p.kind === 8) return p.params.slice(0, 2);
+  if (p.kind === 2 || p.kind === 4) return p.params.slice(0, 3);
+  if (p.kind === 7) return p.params.slice(0, 9);
+  return [];
+}
+
+function primitiveAuditRecord(p, index) {
+  const params = primParamsFor(p);
+  const capability = getRvmPrimitiveCapability(p.kind);
+  const matrixWords = Array.isArray(p.M) ? p.M.length : 0;
+  const bboxWords = Array.isArray(p.bbox) ? p.bbox.length : 0;
+  const paramWords = params.length;
+  const bodyWords = 2 + matrixWords + bboxWords + paramWords;
+  return {
+    index,
+    group: p.group,
+    kind: p.kind,
+    primitiveName: capability.name,
+    writerStatus: capability.writerStatus,
+    unlockKeyUsed: primitiveUnlockKey(p.kind) || '',
+    rest: Boolean(p.rest),
+    matrixWords,
+    bboxWords,
+    paramWords,
+    bodyWords,
+    bodyBytes: bodyWords * 4,
+    chunkBytes: 24 + bodyWords * 4,
+    params,
+    bbox: Array.isArray(p.bbox) ? [...p.bbox] : [],
+  };
+}
+
+function buildPrimitiveAudit(prims) {
+  const records = prims.map((p, index) => primitiveAuditRecord(p, index));
+  return {
+    schema: 'inputxml-rvm-writer-primitive-audit/v1',
+    registryVersion: RVM_PRIMITIVE_CAPABILITY_REGISTRY_VERSION,
+    primitiveCount: records.length,
+    primitiveKinds: Object.fromEntries(records.reduce((map, record) => map.set(String(record.kind), (map.get(String(record.kind)) || 0) + 1), new Map())),
+    records,
+  };
 }
 
 // ---------- main ----------
@@ -157,9 +221,7 @@ export function componentModelToRvm(model, options = {}) {
   }
 
   // ---- assemble binary chunks ----
-  const primParams = (p) => p.kind === 8 ? p.params.slice(0, 2)
-    : (p.kind === 2 || p.kind === 4) ? p.params.slice(0, 3)
-    : p.kind === 7 ? p.params.slice(0, 9) : [];
+  const primParams = primParamsFor;
   const cntbBody = (name) => concat([u32(1), wstr(name), farr([0, 0, 0]), u32(0)]);
   const primBody = (p) => concat([u32(1), u32(p.kind), farr(p.M), farr(p.bbox), farr(primParams(p))]);
   const runs = (list) => {
@@ -209,5 +271,5 @@ export function componentModelToRvm(model, options = {}) {
   for (const p of rest) att += attGroup(p.group, p.attrs, 1);
   att += 'END\n';
 
-  return { rvm, att, primitiveCount: w.prims.length }; // rvm is a Uint8Array (binary)
+  return { rvm, att, primitiveCount: w.prims.length, audit: buildPrimitiveAudit(w.prims) }; // rvm is a Uint8Array (binary)
 }

@@ -353,9 +353,13 @@ export async function run(context) {
     }
   }
 
+  const workerOptions = Object.fromEntries(
+    Object.entries(runValues).filter(([, v]) => typeof v !== 'function'),
+  );
+
   return await context.workerRunner.runJob({
     converterId: context.converterId,
     inputFiles: context.inputFiles,
-    options: runValues,
+    options: workerOptions,
   });
 }

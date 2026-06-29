@@ -1,25 +1,29 @@
-const NON_PRIMITIVE_SOURCE_KINDS = new Set(['json', 'jscon', 'inputxml', 'txt']);
-const PRIMITIVE_SOURCE_KINDS = new Set(['rvm', 'glb', 'gltf']);
+import {
+  isRvmPrimitiveSourceKind,
+  isRvmSourcePreviewKind,
+  normalizeRvmSourceKind,
+  sourceKindFromContext as resolveSourceKindFromContext,
+  sourceKindFromFileName as resolveSourceKindFromFileName,
+} from '../../RvmSourceKindPolicy.js';
+
+const NON_PRIMITIVE_AUTO_BEND_KINDS = new Set(['json', 'jscon', 'inputxml', 'txt', 'stagedjson']);
 
 export function normalizeSourceKind(value) {
-  const text = String(value || '').trim().toLowerCase().replace(/^\./, '');
-  if (text === 'xml') return 'inputxml';
-  return text;
+  return normalizeRvmSourceKind(value);
+}
+
+export function sourceKindFromFileName(fileName = '') {
+  return resolveSourceKindFromFileName(fileName);
 }
 
 export function sourceKindFromContext(context = {}) {
-  return normalizeSourceKind(
-    context.sourceKind
-      || context.loadedSourceKind
-      || context.fileExtension
-      || context.fileName?.split('.').pop()
-  );
+  return resolveSourceKindFromContext(context);
 }
 
 export function canUseAutoBend(context = {}) {
   const sourceKind = sourceKindFromContext(context);
-  if (!NON_PRIMITIVE_SOURCE_KINDS.has(sourceKind)) return false;
-  if (PRIMITIVE_SOURCE_KINDS.has(sourceKind)) return false;
+  if (!isRvmSourcePreviewKind(sourceKind) || !NON_PRIMITIVE_AUTO_BEND_KINDS.has(sourceKind)) return false;
+  if (isRvmPrimitiveSourceKind(sourceKind)) return false;
   if (context.modelPrimitiveMode === 'rvm-native') return false;
   if (context.modelPrimitiveMode === 'glb-native') return false;
   if (context.viewerMode === 'rvm') return false;
@@ -28,6 +32,6 @@ export function canUseAutoBend(context = {}) {
 }
 
 export const NON_PRIMITIVE_AUTO_BEND_SOURCE_KINDS = Object.freeze({
-  nonPrimitive: [...NON_PRIMITIVE_SOURCE_KINDS],
-  primitive: [...PRIMITIVE_SOURCE_KINDS],
+  nonPrimitive: [...NON_PRIMITIVE_AUTO_BEND_KINDS],
+  primitive: ['rvm', 'rev', 'glb', 'gltf'],
 });

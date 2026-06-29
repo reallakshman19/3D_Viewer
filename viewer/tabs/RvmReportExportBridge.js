@@ -1,12 +1,10 @@
 import * as THREE from 'three';
 
-const INSTALL_FLAG = Symbol.for('pcf-glb-rvm-report-export-bridge-v2-shell-slot');
-const BRIDGE_VERSION = '20260626-rvm-report-export-shell-slot-1';
-const PREVIOUS_BRIDGE_VERSION = '20260621-rvm-report-export-1';
+const INSTALL_FLAG = Symbol.for('pcf-glb-rvm-report-export-bridge-misc-compact-1');
+const BRIDGE_VERSION = '20260627-rvm-report-misc-compact-1';
 const MAX_EXPORT_ROWS = 50000;
 const MAX_SCAN_OBJECTS = 120000;
 const REPORT_SCOPES = ['selected', 'visible', 'hidden', 'all'];
-const EXPORTS_SLOT_SELECTOR = '[data-rvm-panel-slot="exports"]';
 
 function esc(value) {
   return String(value ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -174,7 +172,6 @@ function collectReportRows(scope = 'visible') {
   const rows = collected.objects.map((obj, index) => rowForObject(obj, index + 1));
   return {
     version: BRIDGE_VERSION,
-    previousVersion: PREVIOUS_BRIDGE_VERSION,
     schema: 'rvm-rendered-object-report/v1',
     scope: collected.scope,
     generatedAt: new Date().toISOString(),
@@ -278,27 +275,20 @@ function injectToolbar(root) {
     ribbon.insertBefore(section, sets?.nextSibling || ribbon.querySelector('.rvm-measure-tool-group') || null);
   }
   section.dataset.rvmReportExport = BRIDGE_VERSION;
-  section.dataset.rvmReportExportPrevious = PREVIOUS_BRIDGE_VERSION;
   section.innerHTML = `
     <span class="rvm-ribbon-label">Report</span>
     <div class="rvm-ribbon-button-row">
       <button type="button" class="rvm-tool-btn" data-rvm-report-open="true" title="Export RVM rendered-object report"><span aria-hidden="true">▤</span><span>Objects</span></button>
       <button type="button" class="rvm-tool-btn" data-rvm-report-quick-csv="true" title="Export visible objects as CSV"><span aria-hidden="true">CSV</span><span>Visible</span></button>
-    </div>
-    <div class="rvm-report-export-summary" data-rvm-report-toolbar-summary>Report: selected / visible / hidden / full</div>`;
+    </div>`;
 }
 
 function ensureDialog() {
   let dialog = document.getElementById('rvm-report-export-dialog');
-  if (dialog) {
-    hostDialogInExportsSlot(dialog);
-    return dialog;
-  }
+  if (dialog) return dialog;
   dialog = document.createElement('div');
   dialog.id = 'rvm-report-export-dialog';
   dialog.className = 'rvm-report-export-dialog';
-  dialog.dataset.rvmReportExportPanel = BRIDGE_VERSION;
-  dialog.dataset.rvmReportExportPrevious = PREVIOUS_BRIDGE_VERSION;
   dialog.setAttribute('aria-hidden', 'true');
   dialog.innerHTML = `
     <div class="rvm-report-export-card" role="dialog" aria-modal="false" aria-label="Export RVM object report">
@@ -323,52 +313,13 @@ function ensureDialog() {
       </div>
       <p class="rvm-report-export-note">Exports rendered-object metadata only. Bounded to ${MAX_EXPORT_ROWS.toLocaleString()} rows and ${MAX_SCAN_OBJECTS.toLocaleString()} scanned objects for browser safety.</p>
     </div>`;
-  hostDialogInExportsSlot(dialog);
+  document.body.appendChild(dialog);
   bindDialog(dialog);
   return dialog;
 }
 
-function hostDialogInExportsSlot(dialog) {
-  const root = rootEl();
-  const slot = getExportsShellSlot(root);
-  if (slot) {
-    registerExportsPanel(root);
-    clearSlotEmpty(slot);
-    dialog.dataset.rvmPanelSlotHost = 'exports';
-    dialog.dataset.rvmReportExportHost = 'exports';
-    if (!slot.contains(dialog)) slot.appendChild(dialog);
-    return dialog;
-  }
-  dialog.dataset.rvmReportExportHost = 'body-fallback';
-  if (!dialog.parentElement) document.body.appendChild(dialog);
-  return dialog;
-}
-
-function getExportsShellSlot(root) {
-  if (!root) return null;
-  const shell = globalThis.__PCF_GLB_RVM_UI_SHELL__;
-  shell?.install?.(root, { reason: 'report-export' });
-  shell?.sync?.(root, { reason: 'report-export' });
-  return root.querySelector?.(EXPORTS_SLOT_SELECTOR) || null;
-}
-
-function registerExportsPanel(root) {
-  globalThis.__PCF_GLB_RVM_UI_SHELL__?.registerPanel?.(root, {
-    id: 'rvm-report-export-panel',
-    title: 'RVM Object Report Export',
-    slot: 'exports',
-    priority: 10,
-  });
-}
-
-function clearSlotEmpty(slot) {
-  for (const empty of [...slot?.querySelectorAll?.('.rvm-panel-slot-empty') || []]) empty.remove?.();
-}
-
 function openDialog() {
-  const root = rootEl();
   const dialog = ensureDialog();
-  globalThis.__PCF_GLB_RVM_UI_SHELL__?.setRightPanelTab?.(root, 'exports', 'report-export-open');
   dialog.classList.add('is-open');
   dialog.setAttribute('aria-hidden', 'false');
   renderSummary(dialog);
@@ -382,8 +333,6 @@ function closeDialog() {
 }
 
 function bindDialog(dialog) {
-  if (dialog.dataset.rvmReportExportBound === BRIDGE_VERSION) return;
-  dialog.dataset.rvmReportExportBound = BRIDGE_VERSION;
   dialog.addEventListener('change', (event) => {
     if (event.target?.matches?.('[data-rvm-report-scope]')) renderSummary(dialog);
   }, true);
@@ -414,7 +363,6 @@ function attach() {
   const root = rootEl();
   if (!root) return false;
   injectToolbar(root);
-  ensureDialog();
   return true;
 }
 
@@ -423,11 +371,9 @@ function injectStyles() {
   const style = document.createElement('style');
   style.id = 'rvm-report-export-bridge-style';
   style.textContent = `
-    .rvm-report-export-tool-group .rvm-tool-btn span:first-child{font-size:10px}.rvm-report-export-summary{margin-top:3px;color:#94a3b8;font-size:9.5px;white-space:nowrap}
+    .rvm-report-export-tool-group .rvm-tool-btn span:first-child{font-size:10px}
     .rvm-report-export-dialog{position:fixed;inset:0;display:none;align-items:flex-start;justify-content:center;padding-top:92px;background:rgba(2,6,23,.42);z-index:12010}.rvm-report-export-dialog.is-open{display:flex}
-    .rvm-report-export-dialog[data-rvm-panel-slot-host="exports"]{position:relative;inset:auto;display:block;padding:0;background:transparent;z-index:auto}.rvm-report-export-dialog[data-rvm-panel-slot-host="exports"][aria-hidden="true"]{display:none}.rvm-report-export-dialog[data-rvm-panel-slot-host="exports"].is-open{display:block}
     .rvm-report-export-card{width:min(520px,calc(100vw - 44px));display:grid;gap:10px;border:1px solid rgba(126,190,255,.28);border-radius:12px;background:#0b1424;box-shadow:0 22px 70px rgba(0,0,0,.48);padding:12px;color:#dbeafe}
-    .rvm-report-export-dialog[data-rvm-panel-slot-host="exports"] .rvm-report-export-card{width:100%;box-shadow:none;background:rgba(11,20,36,.74);}
     .rvm-report-export-head{display:flex;align-items:center;justify-content:space-between;gap:12px}.rvm-report-export-head b{font-size:14px;color:#bfdbfe}.rvm-report-export-head small{display:block;color:#7f94b7;font-size:9px}.rvm-report-export-head button{border:1px solid rgba(148,163,184,.28);background:#111827;color:#e5e7eb;border-radius:7px;width:28px;height:26px}
     .rvm-report-export-controls{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.rvm-report-export-controls label{display:flex;align-items:center;gap:6px;color:#bcd8ff;font-size:12px}.rvm-report-export-controls select{border:1px solid rgba(126,190,255,.24);border-radius:7px;background:#111827;color:#e5e7eb;padding:7px 8px}.rvm-report-export-controls button,.rvm-report-export-actions button{border:1px solid rgba(126,190,255,.24);border-radius:7px;background:#132238;color:#dbeafe;padding:7px 9px}
     .rvm-report-export-summary-box{border:1px solid rgba(126,190,255,.15);border-radius:8px;background:rgba(255,255,255,.035);padding:8px;color:#dbeafe;font-size:12px}.rvm-report-export-actions{display:flex;gap:8px;flex-wrap:wrap}.rvm-report-export-note{margin:0;color:#8ea8c8;font-size:10.5px;line-height:1.35}
@@ -449,14 +395,9 @@ export function installRvmReportExportBridge() {
   };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', waitAttach, { once: true });
   else waitAttach();
-  globalThis.addEventListener?.('rvm-model-loaded', () => setTimeout(() => {
-    attach();
-    const toolbarSummary = rootEl()?.querySelector?.('[data-rvm-report-toolbar-summary]');
-    if (toolbarSummary) toolbarSummary.textContent = 'Report: ready for selected / visible / hidden / full';
-  }, 320));
+  globalThis.addEventListener?.('rvm-model-loaded', () => setTimeout(() => attach(), 320));
   globalThis.__PCF_GLB_RVM_REPORT_EXPORT__ = {
     version: BRIDGE_VERSION,
-    previousVersion: PREVIOUS_BRIDGE_VERSION,
     collectReportRows,
     exportReport,
     rowsToCsv,

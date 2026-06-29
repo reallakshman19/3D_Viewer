@@ -1,3 +1,6 @@
+import { installRvmSourceToolsStagedJsonKindGateBridge } from './RvmSourceToolsStagedJsonKindGateBridge.js?v=20260628-rvm-source-tools-stagedjson-native-kind-1';
+import { installRvmStagedJsonSupportRuntimeGateBridge } from './RvmStagedJsonSupportRuntimeGateBridge.js?v=20260628-rvm-stagedjson-support-runtime-native-kind-1';
+
 const CACHE_KEY = '20260620-rvm-stagedjson-validation-1';
 const SCHEMA = 'rvm-stagedjson-validation/v1-gates';
 const GLOBAL_KEY = '__PCF_GLB_RVM_STAGEDJSON_VALIDATION_DIAGNOSTICS__';
@@ -5,6 +8,8 @@ const EXPORT_API = '__PCF_GLB_RVM_STAGEDJSON_EXPORT__';
 
 export function installRvmStagedJsonValidationBridge() {
   injectStyles();
+  installRvmSourceToolsStagedJsonKindGateBridge();
+  installRvmStagedJsonSupportRuntimeGateBridge();
   const api = {
     version: SCHEMA,
     validateGeometry: () => validateMode('geometry'),
@@ -93,19 +98,7 @@ function validateDoc(doc, expectedMode = 'geometry') {
   return report;
 }
 
-function validateRecords(records, role, report) {
-  for (const [i, rec] of records.entries()) {
-    const prefix = `${role}[${i}]`;
-    if (!rec.id && !rec.COMPONENT_ID) report.idErrors.push(`${prefix}:missing-id`);
-    if (role === 'support' && !rec.SUPPORT_KIND) report.warnings.push(`${prefix}:support-kind-missing`);
-    if (!hasSourceTrace(rec)) report.sourceTraceMissing.push(`${prefix}:source-trace-missing`);
-    for (const field of ['APOS', 'LPOS', 'BPOS', 'POS']) {
-      if (rec[field] && !parsePoint(rec[field])) report.positionErrors.push(`${prefix}:${field}`);
-    }
-    if (rec.HBOR !== '' && rec.HBOR != null && !Number.isFinite(Number(rec.HBOR))) report.hborErrors.push(`${prefix}:HBOR`);
-  }
-}
-
+function validateRecords(records, role, report) { for (const [i, rec] of records.entries()) { const prefix = `${role}[${i}]`; if (!rec.id && !rec.COMPONENT_ID) report.idErrors.push(`${prefix}:missing-id`); if (role === 'support' && !rec.SUPPORT_KIND) report.warnings.push(`${prefix}:support-kind-missing`); if (!hasSourceTrace(rec)) report.sourceTraceMissing.push(`${prefix}:source-trace-missing`); for (const field of ['APOS', 'LPOS', 'BPOS', 'POS']) { if (rec[field] && !parsePoint(rec[field])) report.positionErrors.push(`${prefix}:${field}`); } if (rec.HBOR !== '' && rec.HBOR != null && !Number.isFinite(Number(rec.HBOR))) report.hborErrors.push(`${prefix}:HBOR`); } }
 function hasSourceTrace(rec) { return !!(rec.SOURCE_PATH || (Array.isArray(rec.SOURCE_UUIDS) && rec.SOURCE_UUIDS.length) || rec.SOURCE_UUIDS || rec.RVM_OWNER_NAME); }
 function parsePoint(v) { const nums = Array.isArray(v) ? v : String(v).split(',').map((x) => Number(String(x).trim())); return nums.length >= 3 && nums.slice(0, 3).every(Number.isFinite); }
 function countBy(list, key) { const out = {}; for (const item of list || []) { const k = item?.[key] || 'UNKNOWN'; out[k] = (out[k] || 0) + 1; } return out; }

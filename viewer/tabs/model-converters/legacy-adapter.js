@@ -66,6 +66,8 @@ import { xmlCiiRenderWeightMatchPhase as xmlCiiRenderWeightMatchPhaseImported, b
 import { xmlCiiRenderSupportMapperPhase as xmlCiiRenderSupportMapperPhaseImported, bindXmlCiiSupportMapperPhase as bindXmlCiiSupportMapperPhaseImported } from './converters/xmltocii2019_helper/support-types-panel.js';
 import { extractXmlCiiBranchSample as _extractXmlCiiBranchSample } from './xml-cii-branch-sample-sync.js';
 import { xmlCiiWorkflowParsedStagedSource } from './workflow/services/xml-cii-staged-source-service.js?v=20260625-service-1';
+import { xmlCiiSetupPostRunValidation, xmlCiiRegisterPostRunCallback } from './xml-cii-workflow-runner.js?v=20260626-standalone-val-1';
+import { runXmlCiiStandalonePostRunValidation } from './xml-cii-post-run-validator-standalone.js?v=20260626-standalone-val-1';
 
 
 const STORAGE_KEY = 'model-converters.defaults.v1';
@@ -184,11 +186,11 @@ const XML_CII_MASTER_DEFS = Object.freeze({
       rating: Object.freeze(['RATING', 'Rating', 'Pressure Class']),
       material: Object.freeze(['MATERIAL', 'Material', 'Material_Name']),
       convertedBore: Object.freeze(['convertedBore', 'Converted Bore', 'DN', 'NB', 'Bore', 'Size', 'NPS']),
-      p1: Object.freeze(['P1', 'Design Pr', 'Op. Pr', 'Operating Pressure', 'Design Pressure']),
-      hydroPressure: Object.freeze(['hydroPressure', 'Hydro Test Pressure', 'Hydrotest Pressure', 'Hydro Pressure', 'Hydro Pr', 'Hyd Test Pr', 'Hyd. Test Pressure', 'Test Pressure', 'TEST_PRESSURE', 'HYDRO_TEST_PRESSURE', 'Pressure Test', 'Proof Pressure']),
-      t1: Object.freeze(['T1', 'Design Temp', 'Design Temperature', 'Op. Temp', 'Operating Temp']),
-      t2: Object.freeze(['T2', 'Temp', 'Temp. C', 'Temp C', 'Temp °C', 'Temperature', 'Temperature2', 'Temperature 2']),
-      t3: Object.freeze(['T3', 'Temp Min', 'Temp Min C', 'Temp Min °C', 'Min Temp', 'Minimum Temp', 'Min', 'Temperature3', 'Temperature 3']),
+      p1: Object.freeze(['P1', 'Design Pr', 'Op. Pr', 'Operating Pressure', 'Design Pressure', 'P1 / Design Pressure']),
+      hydroPressure: Object.freeze(['hydroPressure', 'Hydro Test Pressure', 'Hydrotest Pressure', 'Hydro Pressure', 'Hydro Pr', 'Hyd Test Pr', 'Hyd. Test Pressure', 'Test Pressure', 'TEST_PRESSURE', 'HYDRO_TEST_PRESSURE', 'Pressure Test', 'Proof Pressure', 'Hydro/Test Pressure']),
+      t1: Object.freeze(['T1', 'Design Temp', 'Design Temperature', 'Op. Temp', 'Operating Temp', 'T1 (C)', 'T1 (ºC)']),
+      t2: Object.freeze(['T2', 'Temp', 'Temp. C', 'Temp C', 'Temp ºC', 'Temperature', 'Temperature2', 'Temperature 2', 'T2 (C)', 'T2 (ºC)']),
+      t3: Object.freeze(['T3', 'Temp Min', 'Temp Min C', 'Temp Min °C', 'Min Temp', 'Minimum Temp', 'Min', 'Temperature3', 'Temperature 3', 'T3 (C)', 'T3 (ºC)']),
       insThk: Object.freeze(['InsThk', 'Insulation', 'Ins Thk', 'Insulation thickness']),
       densityMixed: Object.freeze(['Mixed kg/m3', 'Density Mixed', 'Mixed Density', 'Density (Mixed)']),
       densityGas: Object.freeze(['Gas kg/m3', 'Density Gas', 'Gas Density', 'Density (Gas)']),
@@ -1068,15 +1070,16 @@ const _XML_CII_LABEL_ROW_KEYWORDS = Object.freeze({
   rating:       ['rating', 'pressure class', 'class rating'],
   material:     ['material', 'material_name', 'material name'],
   convertedBore:['bore', 'size', 'dn', 'nps', 'nb', 'nominal pipe', 'nominal bore'],
-  p1:           ['p1', 'design pr', 'design pressure', 'operating pressure', 'design cond'],
-  t1:           ['t1', 'design temp', 'design temperature', 'operating temp'],
-  t2:           ['t2', 'temp', 'temperature', 'temp max'],
-  t3:           ['t3', 'temp min', 'minimum temp', 'min temp', 'temperature min', 'min'],
+  p1:           ['p1', 'design pr', 'design pressure', 'operating pressure', 'design cond', 'p1 / design pressure'],
+  t1:           ['t1', 'design temp', 'design temperature', 'operating temp', 't1 (c)', 't1 (ºc)'],
+  t2:           ['t2', 'temp', 'temperature', 'temp max', 't2 (c)', 't2 (ºc)'],
+  t3:           ['t3', 'temp min', 'minimum temp', 'min temp', 'temperature min', 'min', 't3 (c)', 't3 (ºc)'],
   insThk:       ['insulation', 'ins thk', 'insthk', 'insulation thickness'],
   densityMixed: ['mixed', 'density mixed', 'mixed kg', 'mixed density'],
   densityGas:   ['gas kg', 'density gas', 'gas density'],
-  densityLiquid:['liquid kg', 'density liquid', 'liquid density'],
+  densityLiquid:['liquid kg', 'density liquid', 'density liquid'],
   phase:        ['phase', 'fluid phase', 'medium phase'],
+  hydroPressure:['hydropressure', 'hydro test pressure', 'hydrotest pressure', 'hydro pressure', 'test pressure', 'hydro/test pressure'],
 });
 
 function _xmlCiiLabelRowHint(header, rawRows) {
@@ -2310,7 +2313,7 @@ async function _openInputxml2019PreRunPopup(def, values, primaryFileName, primar
   const requirements = _parseInputxml2019Requirements(xmlText);
   const prepared = _prepareInputxml2019ConfigForRequirements(values.layoutConfigJson, requirements);
 
-  const popupHeaderFields = def.fields
+  const popupHeaderFields = (def.fields || def.options || [])
     .filter((entry) => INPUTXML2019_POPUP_HEADER_KEYS.includes(entry.key))
     .map((entry) => ({
       ...entry,
@@ -2842,11 +2845,11 @@ function _xmlCiiApplyLineListProcessData(document, branch, row, config, branchLi
   const rowLineKey = _rowText(row, ['lineNo', 'lineSeqNo', 'lineKey']) || '';
   const lineKey = branchLineKey || rowLineKey;
   const pdOverride = (lineKey && config?.overrides?.processData?.[lineKey]) || {};
-  const p1 = _xmlCiiProcessValue(pdOverride, row, 'p1', ['p1', 'P1']);
-  const hydro = _xmlCiiProcessValue(pdOverride, row, 'hydroPressure', ['hydroPressure', 'Hydro Test Pressure', 'Hydrotest Pressure', 'Hydro Pressure', 'Hydro Pr', 'Hyd Test Pr', 'Hyd. Test Pressure', 'Test Pressure', 'TEST_PRESSURE', 'HYDRO_TEST_PRESSURE', 'Pressure Test', 'Proof Pressure']);
-  const t1 = _xmlCiiProcessValue(pdOverride, row, 't1', ['t1', 'T1']);
-  const t2 = _xmlCiiProcessValue(pdOverride, row, 't2', ['t2', 'T2', 'Temperature2', 'Temperature 2', 'Temp', 'Temp. C', 'Temp °C']);
-  const t3 = _xmlCiiProcessValue(pdOverride, row, 't3', ['t3', 'T3', 'Temperature3', 'Temperature 3', 'Temp Min', 'Temp Min C', 'Temp Min °C', 'Min']);
+  const p1 = _xmlCiiProcessValue(pdOverride, row, 'p1', ['p1', 'P1', 'P1 / Design Pressure']);
+  const hydro = _xmlCiiProcessValue(pdOverride, row, 'hydroPressure', ['hydroPressure', 'Hydro Test Pressure', 'Hydrotest Pressure', 'Hydro Pressure', 'Hydro Pr', 'Hyd Test Pr', 'Hyd. Test Pressure', 'Test Pressure', 'TEST_PRESSURE', 'HYDRO_TEST_PRESSURE', 'Pressure Test', 'Proof Pressure', 'Hydro/Test Pressure']);
+  const t1 = _xmlCiiProcessValue(pdOverride, row, 't1', ['t1', 'T1', 'T1 (C)', 'T1 (ºC)']);
+  const t2 = _xmlCiiProcessValue(pdOverride, row, 't2', ['t2', 'T2', 'Temperature2', 'Temperature 2', 'Temp', 'Temp. C', 'Temp ºC', 'T2 (C)', 'T2 (ºC)']);
+  const t3 = _xmlCiiProcessValue(pdOverride, row, 't3', ['t3', 'T3', 'Temperature3', 'Temperature 3', 'Temp Min', 'Temp Min C', 'Temp Min °C', 'Min', 'T3 (C)', 'T3 (ºC)']);
   const insThk = _xmlCiiProcessValue(pdOverride, row, 'insThk', ['insThk', 'InsThk']);
   const density = _xmlCiiProcessValue(pdOverride, row, 'density', ['density', 'Density']);
   
@@ -3342,6 +3345,7 @@ async function _enrichXmlForCii2019(xmlText, stagedJsonText, options = {}) {
   const stagedComponentIndex = _buildStagedComponentIndex(stagedJsonText, config);
   let stagedDtxrPositionIndex = _buildStagedDtxrPositionIndex(stagedJsonText, config);
   stagedDtxrPositionIndex = _xmlCiiCalibrateDtxrPositionIndex(stagedDtxrPositionIndex, document, config);
+  const stagedDtxrRefIndex = buildStagedDtxrIndex(stagedJsonText, config);
   if (stagedDtxrPositionIndex?.inferredOffset) {
     stagedSupportIndex = calibrateStagedSupportIndexCoordinates(stagedSupportIndex, stagedDtxrPositionIndex.inferredOffset, config);
     diagnostics.push({
@@ -3525,7 +3529,17 @@ async function _enrichXmlForCii2019(xmlText, stagedJsonText, options = {}) {
     if (dtxrPos.text) {
       _xmlSetText(document, node, 'DTXR_POS', dtxrPos.text);
       stats.dtxrPosAnnotations += 1;
-      diagnostics.push({ type: 'dtxr-pos', nodeNumber: _xmlText(node, 'NodeNumber'), nodeName: _xmlText(node, 'NodeName'), componentType, position: _xmlText(node, 'Position'), count: dtxrPos.values.length, matchedBy: 'DTXR_POS', matchedKey: _xmlText(node, 'Position'), finalValue: dtxrPos.text, status: 'applied' });
+      diagnostics.push({ type: 'dtxr-pos', nodeNumber: _xmlText(node, 'NodeNumber'), nodeName: _xmlText(node, 'NodeName'), componentType, position: _xmlText(node, 'Position'), count: dtxrPos.values.length, matchedBy: 'DTXR_POS', matchedKey: _xmlText(node, 'Position'), sourcePath: dtxrPos.matchedPath || '', method: 'DTXR_POS exact or within +/-6mm trace tolerance', finalValue: dtxrPos.text, status: 'applied' });
+    } else {
+      const _existingDtxrPos = _xmlText(node, 'DTXR_POS');
+      if (!_existingDtxrPos) {
+        const _dtxrRef = resolveXmlCiiNodeDtxr(node, stagedDtxrRefIndex, config);
+        if (_dtxrRef?.value && _dtxrRef.matchedBy === 'component-refno') {
+          _xmlSetText(document, node, 'DTXR_POS', _dtxrRef.value);
+          stats.dtxrPosAnnotations += 1;
+          diagnostics.push({ type: 'dtxr-pos', nodeNumber: _xmlText(node, 'NodeNumber'), nodeName: _xmlText(node, 'NodeName'), componentType, matchedBy: 'component-refno', matchedKey: _dtxrRef.matchedKey || '', sourcePath: _dtxrRef.sourcePath || _dtxrRef.matchedKey || '', jsonNodeNo: '', method: `component-refno: ${_dtxrRef.matchedKey || ''}`, finalValue: _dtxrRef.value, status: 'applied' });
+        }
+      }
     }
     if (staged) {
       const allKinds = Array.from(new Set(stagedMatches.map(m => m.kind).filter(Boolean)));
@@ -6605,11 +6619,28 @@ export function renderModelConvertersTab(container) {
       });
     });
     rootEl.querySelectorAll('[data-xml-cii-finalize-run]').forEach((btn) => {
-      btn.addEventListener('click', () => {
+      btn.addEventListener('click', async () => {
+        const _capturedFile = primaryInputEl?.files?.[0] || primaryFile;
+        const _capturedConfig = _parseXmlCiiEnrichmentConfig(activeValues().supportConfigJson);
+        // Close the workflow UI before showing the validator popup
         xmlCiiCloseWorkflowPopup();
-        window['__xmlCiiConversionWorkflowAllowDirectRun'] = true;
-        setTimeout(() => { window['__xmlCiiConversionWorkflowAllowDirectRun'] = false; }, 0);
-        runBtnEl?.click();
+        const triggerRun = () => {
+          window['__xmlCiiConversionWorkflowAllowDirectRun'] = true;
+          setTimeout(() => { window['__xmlCiiConversionWorkflowAllowDirectRun'] = false; }, 0);
+          runBtnEl?.click();
+        };
+        // Run validator (dryRun) — actual conversion fires only from onClose / onNoIssues
+        await runXmlCiiStandalonePostRunValidation({
+          xmlFile: _capturedFile,
+          resolveStagedJsonText: (cfg) => xmlCiiCurrentStagedJsonSource(cfg || _capturedConfig),
+          config: _capturedConfig,
+          enrichXmlForCii2019: async (xmlText, jsonText, opts) => {
+            const vals = activeValues();
+            return _enrichXmlForCii2019(xmlText, jsonText, { ...vals, supportConfigJson: JSON.stringify(_capturedConfig), dryRun: true, ...opts });
+          },
+          onClose: triggerRun,
+          onNoIssues: triggerRun,
+        });
       });
     });
   }
@@ -7998,7 +8029,7 @@ export function renderModelConvertersTab(container) {
     ]);
     _xmlCiiLastDiagnosticStatus = `Done - ${rows.length} rows`;
     _xmlCiiLastDiagnosticError = '';
-    return rows.slice(0, 500);
+    return rows;
   }
 
   async function xmlCiiComputePopupWeightRows() {
@@ -8716,9 +8747,22 @@ export function renderModelConvertersTab(container) {
             });
           });
           target.querySelectorAll('[data-xml-cii-finalize-run]').forEach((btn) => {
-            btn.addEventListener('click', () => {
+            btn.addEventListener('click', async () => {
+              const _capturedFile = primaryInputEl?.files?.[0] || primaryFile;
+              const _capturedConfig = _parseXmlCiiEnrichmentConfig(activeValues().supportConfigJson);
               if (typeof self.closePopup === 'function') self.closePopup();
-              document.querySelector('#model-converters-run')?.click();
+              const triggerRun = () => { document.querySelector('#model-converters-run')?.click(); };
+              await runXmlCiiStandalonePostRunValidation({
+                xmlFile: _capturedFile,
+                resolveStagedJsonText: (cfg) => xmlCiiCurrentStagedJsonSource(cfg || _capturedConfig),
+                config: _capturedConfig,
+                enrichXmlForCii2019: async (xmlText, jsonText, opts) => {
+                  const vals = activeValues();
+                  return _enrichXmlForCii2019(xmlText, jsonText, { ...vals, supportConfigJson: JSON.stringify(_capturedConfig), dryRun: true, ...opts });
+                },
+                onClose: triggerRun,
+                onNoIssues: triggerRun,
+              });
             });
           });
         }
