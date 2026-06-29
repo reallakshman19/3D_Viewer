@@ -15,8 +15,8 @@ const details = {
   family: 'GUIDE',
   rawType: 'GUIDE +/-Z',
   nodeId: '16990',
-  sourceKind: 'json',
-  sourceFile: 'managed-stage.json',
+  sourceKind: 'stagedjson',
+  sourceFile: 'managed-stage.stagedjson',
   sourceCoordinate: { x: 1000, y: 0, z: 50 },
   mappedCoordinate: { x: 1, y: 0, z: 0.05 },
   pipeAxis: { x: 1, y: 0, z: 0 },
@@ -38,11 +38,12 @@ const details = {
 
 const selected = buildSupportOverlayDetailsPanelState(details, { highlighted: true });
 assert.equal(selected.schema, SUPPORT_OVERLAY_DETAILS_PANEL_SCHEMA);
-assert.equal(SUPPORT_OVERLAY_DETAILS_PANEL_SCHEMA, 'support-overlay-details-panel/v3');
+assert.equal(SUPPORT_OVERLAY_DETAILS_PANEL_SCHEMA, 'support-overlay-details-panel/v4-polish');
 assert.equal(selected.status, 'selected');
 assert.equal(selected.supportId, 'PS-101');
 assert.equal(selected.family, 'GUIDE');
 assert.equal(selected.highlighted, true);
+assert.equal(selected.sourceKind, 'stagedjson');
 assert.deepEqual(selected.sourceCoordinate, { x: 1000, y: 0, z: 50 });
 assert.deepEqual(selected.mappedCoordinate, { x: 1, y: 0, z: 0.05 });
 assert.deepEqual(selected.pipeAxis, { x: 1, y: 0, z: 0 });
@@ -63,9 +64,20 @@ assert.ok(selected.attributes.some((row) => row.key === 'SUPPORT_NO' && row.valu
 const selectedHtml = renderSupportOverlayDetailsPanelHtml(selected);
 assert.match(selectedHtml, /data-support-details-panel="selected"/);
 assert.match(selectedHtml, /data-support-details-highlighted="true"/);
-assert.match(selectedHtml, /PS-101 GUIDE/);
+assert.match(selectedHtml, /data-support-details-family="GUIDE"/);
+assert.match(selectedHtml, /rvm-support-details-card--compact/);
+assert.match(selectedHtml, /rvm-support-kind-badge/);
+assert.match(selectedHtml, /rvm-support-status-badge/);
+assert.match(selectedHtml, /data-support-details-kpis="true"/);
+assert.match(selectedHtml, /data-support-details-priority="true"/);
+assert.match(selectedHtml, /Support tag/);
+assert.match(selectedHtml, /Support kind/);
+assert.match(selectedHtml, /Source restraint/);
+assert.match(selectedHtml, /Host pipe \/ segment/);
+assert.match(selectedHtml, /Pipe OD \/ bore/);
 assert.match(selectedHtml, /GUIDE \+\/-Z/);
 assert.match(selectedHtml, /10 mm · visual 100 mm/);
+assert.match(selectedHtml, /Raw source attributes/);
 assert.match(selectedHtml, /data-support-details-action="copy-json"/);
 assert.match(selectedHtml, /data-support-details-action="download-json"/);
 assert.match(selectedHtml, /data-support-details-action="clear"/);
@@ -75,12 +87,18 @@ assert.equal(empty.status, 'empty');
 assert.equal(empty.highlighted, false);
 assert.equal(empty.primitiveExcluded, true);
 assert.match(renderSupportOverlayDetailsPanelHtml(empty), /data-support-details-panel="empty"/);
+assert.match(renderSupportOverlayDetailsPanelHtml(empty), /rvm-support-empty-state/);
 
 const bridge = await fs.readFile(new URL('../tabs/RvmNonPrimitiveSupportOverlayDetailsPanelBridge.js', import.meta.url), 'utf8');
 const deferredLoader = await fs.readFile(new URL('../tabs/RvmDeferredBridgeLoader.js', import.meta.url), 'utf8');
 const sourceTools = await fs.readFile(new URL('../tabs/RvmNonPrimitiveSourceToolsUiBridge.js', import.meta.url), 'utf8');
 
-assert.match(bridge, /rvm-non-primitive-support-overlay-details-panel\/v4/);
+assert.match(bridge, /rvm-non-primitive-support-overlay-details-panel\/v5-polish/);
+assert.match(bridge, /SupportOverlayDetailsPanel\.js\?v=20260629-support-details-polish-1/);
+assert.match(bridge, /rvm-support-details-kpi-row/);
+assert.match(bridge, /rvm-support-kind-badge/);
+assert.match(bridge, /rvm-support-details-raw/);
+assert.match(bridge, /dataset\.supportDetailsUi/);
 assert.match(bridge, /__RVM_NON_PRIMITIVE_SUPPORT_OVERLAY__/);
 assert.match(bridge, /raycaster\.intersectObjects/);
 assert.match(bridge, /nonPrimitiveSupportOverlaySelectedDetails/);
@@ -94,8 +112,10 @@ assert.doesNotMatch(bridge, /SOURCE_KIND_RE|PRIMITIVE_KIND_RE/);
 assert.doesNotMatch(bridge, /RvmSupportSymbols|RvmSupportGeometryBridge|RvmRawSupportCylinderGuardBridge|Support Summary|SupportATT|SupportEngine/);
 assert.doesNotMatch(bridge, /selection\.select|selection\.pick|RvmSelectionAdapter/);
 
+assert.match(deferredLoader, /RvmNonPrimitiveSupportOverlayDetailsPanelBridge\.js\?v=20260629-rvm-support-details-polish-1/);
 assert.match(deferredLoader, /RvmNonPrimitiveSupportOverlayDetailsPanelBridge\.js\?v=20260623-nonprimitive-support-details-panel-4/);
+assert.match(deferredLoader, /20260629-rvm-deferred-support-details-polish-1/);
 assert.match(deferredLoader, /installRvmNonPrimitiveSupportOverlayBridge[\s\S]*installRvmNonPrimitiveSupportOverlayDetailsPanelBridge[\s\S]*installRvmNonPrimitiveAutoBendBridge/);
 assert.match(sourceTools, /rvm-nonprimitive-source-tools-panel/);
 
-console.log('non-primitive support overlay details panel tests passed');
+console.log('non-primitive support overlay details panel compact UI tests passed');
