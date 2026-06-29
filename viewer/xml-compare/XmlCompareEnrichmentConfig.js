@@ -2,6 +2,16 @@ export const ENRICHMENT_CONFIG_SCHEMA = 'xml-compare-enrichment-config/v1';
 
 const COMP_TYPES = ['ATTA', 'ELBO', 'BRAN', 'OLET', 'RIGID', 'TEE', 'PIPE'];
 
+const DEFAULT_RESTRAINT_TYPE_CONVERT_ROWS = Object.freeze([
+  Object.freeze({ label: '+Y',  from: '17', to: '14' }),
+  Object.freeze({ label: 'LIM', from: '7',  to: '8'  }),
+  Object.freeze({ label: 'GUI', from: '10', to: '9'  }),
+  Object.freeze({ label: 'X',   from: '1',  to: '2'  }),
+  Object.freeze({ label: 'Y',   from: '2',  to: '3'  }),
+  Object.freeze({ label: 'Z',   from: '3',  to: '5'  }),
+  Object.freeze({ label: '',    from: '18', to: '15' }),
+]);
+
 export const DEFAULT_ENRICHMENT_CONFIG = Object.freeze({
   pipingClass: Object.freeze({ enabled: true, regex: '([0-9]{5})', group: '1', tokenPosition: '4', tokenDelimiter: '-' }),
   rating:       Object.freeze({ enabled: true, method: 'table', tableText: '', fixedValue: '' }),
@@ -9,6 +19,7 @@ export const DEFAULT_ENRICHMENT_CONFIG = Object.freeze({
   position:     Object.freeze({ enabled: false, startX: '', startY: '', startZ: '' }),
   dtxr:         Object.freeze({ enabled: true, typeMapText: 'TYPE\tKIND\tDTXR_POS\n0\tANCHOR\tANCHOR\n3\tREST\tPIPE SUPPORT\n5\tREST\tPIPE SUPPORT\n7\tGUIDE\tGUIDE\n10\tGUIDE\tGUIDE\n17\tREST\tPIPE SUPPORT' }),
   pointPropertiesBasis: Object.freeze({ enabled: true, value: 'TO' }),
+  restraintTypeConvert: Object.freeze({ enabled: false, rows: DEFAULT_RESTRAINT_TYPE_CONVERT_ROWS }),
 });
 
 export function createEnrichmentConfig(overrides = {}) {
@@ -20,6 +31,13 @@ export function createEnrichmentConfig(overrides = {}) {
     position:             { ...DEFAULT_ENRICHMENT_CONFIG.position,             ...(overrides.position             || {}) },
     dtxr:                 { ...DEFAULT_ENRICHMENT_CONFIG.dtxr,                 ...(overrides.dtxr                 || {}) },
     pointPropertiesBasis: { ...DEFAULT_ENRICHMENT_CONFIG.pointPropertiesBasis, ...(overrides.pointPropertiesBasis || {}) },
+    restraintTypeConvert: {
+      ...DEFAULT_ENRICHMENT_CONFIG.restraintTypeConvert,
+      ...(overrides.restraintTypeConvert || {}),
+      rows: Array.isArray(overrides.restraintTypeConvert?.rows)
+        ? overrides.restraintTypeConvert.rows.map(r => ({ ...r }))
+        : DEFAULT_RESTRAINT_TYPE_CONVERT_ROWS.map(r => ({ ...r })),
+    },
   };
 }
 
@@ -46,6 +64,26 @@ function enrSection(toggleKey, title, enabled, body) {
   </section>`;
 }
 
+function renderRestraintTypeConvertSection(rtc) {
+  const rows = Array.isArray(rtc.rows) ? rtc.rows : DEFAULT_RESTRAINT_TYPE_CONVERT_ROWS.map(r => ({ ...r }));
+  const tableRows = rows.map((row, i) => `<tr>
+      <td><input class="enr-rtc-label" type="text" data-enr-rtc-row="${i}" data-enr-rtc-col="label" value="${esc(row.label || '')}" placeholder="label"></td>
+      <td><input class="enr-rtc-num" type="number" data-enr-rtc-row="${i}" data-enr-rtc-col="from" value="${esc(row.from || '')}" placeholder="e.g. 17" min="0" step="1"></td>
+      <td class="enr-rtc-arrow">→</td>
+      <td><input class="enr-rtc-num" type="number" data-enr-rtc-row="${i}" data-enr-rtc-col="to" value="${esc(row.to || '')}" placeholder="e.g. 14" min="0" step="1"></td>
+      <td><button type="button" class="enr-rtc-del" data-xml-compare-action="delete-restraint-type-row" data-row-index="${i}">✕</button></td>
+    </tr>`).join('');
+
+  const body = `<table class="enr-rtc-table">
+      <thead><tr><th>Label</th><th>Source TYPE</th><th></th><th>Convert to</th><th></th></tr></thead>
+      <tbody>${tableRows}</tbody>
+    </table>
+    <button type="button" class="enr-rtc-add" data-xml-compare-action="add-restraint-type-row">+ Add row</button>
+    <p class="enr-hint">Rewrites RESTRAINT TYPE numbers in the source XML before other enrichments run. Useful when the model uses non-standard type codes. Changes are applied only when "Apply to loaded XML" is used.</p>`;
+
+  return enrSection('restraintTypeConvert', 'Apply Restraint Type corrections to imported XML', rtc.enabled, body);
+}
+
 export function renderXmlCompareEnrichmentConfigPopupHtml(config = {}) {
   if (!config.open) return '';
   const pc  = { ...DEFAULT_ENRICHMENT_CONFIG.pipingClass,          ...(config.pipingClass          || {}) };
@@ -54,6 +92,7 @@ export function renderXmlCompareEnrichmentConfigPopupHtml(config = {}) {
   const pos = { ...DEFAULT_ENRICHMENT_CONFIG.position,             ...(config.position             || {}) };
   const dtxr = { ...DEFAULT_ENRICHMENT_CONFIG.dtxr,               ...(config.dtxr                 || {}) };
   const ppb = { ...DEFAULT_ENRICHMENT_CONFIG.pointPropertiesBasis, ...(config.pointPropertiesBasis || {}) };
+  const rtc = { ...DEFAULT_ENRICHMENT_CONFIG.restraintTypeConvert, ...(config.restraintTypeConvert || {}), rows: config.restraintTypeConvert?.rows || DEFAULT_RESTRAINT_TYPE_CONVERT_ROWS.map(r => ({ ...r })) };
 
   const pcSection = enrSection('pipingClass', 'PipingClass — regex from LINE_ID', pc.enabled, `
     <div class="enr-row">
@@ -110,6 +149,8 @@ export function renderXmlCompareEnrichmentConfigPopupHtml(config = {}) {
     <p class="enr-hint">Adds &lt;Point_properties_basis&gt; to every PIPINGELEMENT. The value is always "TO" per CII 2019 convention.</p>
   `);
 
+  const rtcSection = renderRestraintTypeConvertSection(rtc);
+
   return `<div class="enr-backdrop" data-xml-compare-enrichment-popup>
   <section class="enr-dialog" role="dialog" aria-modal="true" aria-label="Enrichment Config">
     <header class="enr-dialog-header">
@@ -120,6 +161,7 @@ export function renderXmlCompareEnrichmentConfigPopupHtml(config = {}) {
       <button type="button" data-xml-compare-action="close-enrichment">Close</button>
     </header>
     <div class="enr-dialog-body">
+      ${rtcSection}
       ${pcSection}
       ${rtSection}
       ${ctSection}
@@ -128,7 +170,7 @@ export function renderXmlCompareEnrichmentConfigPopupHtml(config = {}) {
       ${ppbSection}
     </div>
     <footer class="enr-dialog-footer">
-      <p class="enr-footer-note">Enrichment runs automatically when "Apply to loaded XML" is clicked in the Sideload panel.</p>
+      <p class="enr-footer-note">Config is saved to browser localStorage. Enrichment runs automatically when "Apply to loaded XML" is clicked in the Sideload panel.</p>
       <div class="enr-footer-actions">
         <button type="button" data-xml-compare-action="close-enrichment">Cancel</button>
         <button type="button" data-xml-compare-action="save-enrichment" class="enr-btn-primary">Save Config</button>
@@ -138,4 +180,4 @@ export function renderXmlCompareEnrichmentConfigPopupHtml(config = {}) {
 </div>`;
 }
 
-export const _test = Object.freeze({ esc, enrField, enrSelect, enrTextarea, enrSection, createEnrichmentConfig });
+export const _test = Object.freeze({ esc, enrField, enrSelect, enrTextarea, enrSection, createEnrichmentConfig, DEFAULT_RESTRAINT_TYPE_CONVERT_ROWS });
