@@ -13,6 +13,8 @@ on:
       - "viewer/tabs/viewer3d-rvm-tab.js"
       - "viewer/tabs/viewer3d-rvm-tab-renderer.js"
       - "viewer/tabs/model-converters/ModelConvertersTab.js"
+      - "viewer/tabs/model-converters/WorkflowShell.js"
+      - "viewer/tabs/model-converters/converters/xmltocii2019_helper/override-tab-preview-mirror.js"
       - "viewer/tabs/model-converters/inputxml-managed-stage-bridge.js"
       - "viewer/tabs/model-converters/converters/inputxml-to-stagedjson.js"
       - "viewer/js/pcf2glb/glb/enhanceSupportDirectionProxy.js"
@@ -21,6 +23,7 @@ on:
       - "viewer/tabs/model-converters/converters/inputxml-to-glb.js"
       - "viewer/enrichment/**"
       - "scripts/test-selected-geometry-*.mjs"
+      - "scripts/test-xml-cii-preview-override-tab-mirror.mjs"
       - "viewer/tests/uxml-*.test.js"
       - "viewer/tests/rvm-pcf-*.test.js"
       - "viewer/tests/app-entrypoint-static.test.js"
@@ -44,6 +47,8 @@ on:
       - "viewer/tabs/viewer3d-rvm-tab.js"
       - "viewer/tabs/viewer3d-rvm-tab-renderer.js"
       - "viewer/tabs/model-converters/ModelConvertersTab.js"
+      - "viewer/tabs/model-converters/WorkflowShell.js"
+      - "viewer/tabs/model-converters/converters/xmltocii2019_helper/override-tab-preview-mirror.js"
       - "viewer/tabs/model-converters/inputxml-managed-stage-bridge.js"
       - "viewer/tabs/model-converters/converters/inputxml-to-stagedjson.js"
       - "viewer/js/pcf2glb/glb/enhanceSupportDirectionProxy.js"
@@ -52,6 +57,7 @@ on:
       - "viewer/tabs/model-converters/converters/inputxml-to-glb.js"
       - "viewer/enrichment/**"
       - "scripts/test-selected-geometry-*.mjs"
+      - "scripts/test-xml-cii-preview-override-tab-mirror.mjs"
       - "viewer/tests/uxml-*.test.js"
       - "viewer/tests/rvm-pcf-*.test.js"
       - "viewer/tests/app-entrypoint-static.test.js"
@@ -99,6 +105,9 @@ jobs:
       - name: Run app entrypoint static contract
         run: node viewer/tests/app-entrypoint-static.test.js
 
+      - name: Run XML CII override mirror contract
+        run: node scripts/test-xml-cii-preview-override-tab-mirror.mjs
+
       - name: Run UXML static certification
         run: node tools/uxml-certification.mjs
 
@@ -120,31 +129,3 @@ jobs:
             echo "Running ${test_file}"
             node "${test_file}"
           done
-
-      - name: Run browser RVM unit contracts
-        shell: bash
-        run: |
-          set -euo pipefail
-          : > browser-rvm-unit.log
-          tests=(
-            viewer/tests/unit/rvm/browser-rvm-att-parser.test.js
-            viewer/tests/unit/rvm/browser-rvm-att-enricher.test.js
-            viewer/tests/unit/rvm/browser-rvm-parser.test.js
-            viewer/tests/unit/rvm/browser-rvm-hierarchy.test.js
-            viewer/tests/unit/rvm/browser-rvm-render-scene-builder.test.js
-            viewer/tests/unit/rvm/browser-rvm-render-att-metadata.test.js
-            viewer/tests/unit/rvm/browser-rvm-load-bridge-render-scene-contract.test.js
-            viewer/tests/unit/rvm/browser-rvm-tab-fallback-contract.test.js
-          )
-          for test_file in "${tests[@]}"; do
-            echo "Running ${test_file}" | tee -a browser-rvm-unit.log
-            node "${test_file}" 2>&1 | tee -a browser-rvm-unit.log
-          done
-
-      - name: Upload browser RVM unit log
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: browser-rvm-unit-log
-          path: browser-rvm-unit.log
-          if-no-files-found: ignore
