@@ -14,6 +14,7 @@ function reportRows(report){
   ];
   if(report.enrichment){
     const e=report.enrichment;
+    if(e.restraintTypeConverted)rows.push(['Restraint type converted',e.restraintTypeConverted]);
     if(e.pipingClassApplied)rows.push(['PipingClass enriched',e.pipingClassApplied]);
     if(e.ratingApplied)rows.push(['Rating enriched',e.ratingApplied]);
     if(e.componentTypeApplied)rows.push(['ComponentType enriched',e.componentTypeApplied]);

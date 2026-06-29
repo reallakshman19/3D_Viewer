@@ -24,7 +24,18 @@ function childEl(name, value) {
 }
 
 function emptyReport() {
-  return { pipingClassApplied: 0, ratingApplied: 0, componentTypeApplied: 0, positionApplied: 0, dtxrApplied: 0, pointBasisApplied: 0 };
+  return { restraintTypeConverted: 0, pipingClassApplied: 0, ratingApplied: 0, componentTypeApplied: 0, positionApplied: 0, dtxrApplied: 0, pointBasisApplied: 0 };
+}
+
+function buildRestraintTypeConvertMap(cfg) {
+  const map = new Map();
+  if (!cfg?.enabled || !Array.isArray(cfg.rows)) return map;
+  for (const row of cfg.rows) {
+    const from = String(row.from ?? '').trim();
+    const to = String(row.to ?? '').trim();
+    if (from && to && from !== to) map.set(from, to);
+  }
+  return map;
 }
 
 function buildAnalysisMap(xmlText) {
@@ -93,25 +104,42 @@ function extractPipingClass(lineId, cfg) {
 }
 
 export function applyXmlCompareEnrichment(xmlText, config = {}) {
-  const { pipingClass: pcCfg, rating: rtCfg, componentType: ctCfg, position: posCfg, dtxr: dtxrCfg, pointPropertiesBasis: ppbCfg } = config || {};
-  const anyEnabled = [pcCfg, rtCfg, ctCfg, posCfg, dtxrCfg, ppbCfg].some(c => c?.enabled);
+  const { pipingClass: pcCfg, rating: rtCfg, componentType: ctCfg, position: posCfg, dtxr: dtxrCfg, pointPropertiesBasis: ppbCfg, restraintTypeConvert: rtcCfg } = config || {};
+  const anyEnabled = [pcCfg, rtCfg, ctCfg, posCfg, dtxrCfg, ppbCfg, rtcCfg].some(c => c?.enabled);
   if (!anyEnabled) return { xmlText, report: emptyReport() };
 
-  const analysisMap = buildAnalysisMap(xmlText);
+  const report = emptyReport();
+
+  // Apply RESTRAINT TYPE conversion first so downstream analysis uses corrected types
+  const rtcMap = buildRestraintTypeConvertMap(rtcCfg);
+  let workingText = xmlText;
+  if (rtcMap.size > 0) {
+    workingText = workingText.replace(/<RESTRAINT\b([^>]*)>/gi, (match, attrs) => {
+      const typeMatch = /\bTYPE\s*=\s*"([^"]*)"/.exec(attrs);
+      if (!typeMatch) return match;
+      const fromType = typeMatch[1].trim();
+      const toType = rtcMap.get(fromType);
+      if (toType == null) return match;
+      report.restraintTypeConverted += 1;
+      const newAttrs = attrs.replace(/\bTYPE\s*=\s*"[^"]*"/, `TYPE="${xmlEsc(toType)}"`);
+      return `<RESTRAINT${newAttrs}>`;
+    });
+  }
+
+  const analysisMap = buildAnalysisMap(workingText);
   const typeMap = dtxrCfg?.enabled ? parseTypeMap(dtxrCfg.typeMapText) : new Map();
   const ratingMap = (rtCfg?.enabled && rtCfg.method !== 'fixed') ? parseRatingTable(rtCfg.tableText) : new Map();
-  const report = emptyReport();
   const nodeCoords = new Map();
 
   if (posCfg?.enabled) {
-    const firstTag = /<PIPINGELEMENT\b([^>]*)>/i.exec(xmlText);
+    const firstTag = /<PIPINGELEMENT\b([^>]*)>/i.exec(workingText);
     if (firstTag) {
       const fn = normalizeNode(attrVal(firstTag[1], 'FROM_NODE'));
       if (fn) nodeCoords.set(fn, { x: Number(posCfg.startX) || 0, y: Number(posCfg.startY) || 0, z: Number(posCfg.startZ) || 0 });
     }
   }
 
-  const output = xmlText.replace(/<PIPINGELEMENT\b([^>]*)>/gi, (match, attrs) => {
+  const output = workingText.replace(/<PIPINGELEMENT\b([^>]*)>/gi, (match, attrs) => {
     const fromNode = normalizeNode(attrVal(attrs, 'FROM_NODE'));
     const toNode = normalizeNode(attrVal(attrs, 'TO_NODE'));
     const key = `${fromNode}->${toNode}`;
@@ -180,4 +208,4 @@ export function applyXmlCompareEnrichment(xmlText, config = {}) {
   return { xmlText: output, report };
 }
 
-export const _test = Object.freeze({ normalizeNode, isSentinel, attrVal, extractPipingClass, parseTypeMap, parseRatingTable, buildAnalysisMap, emptyReport });
+export const _test = Object.freeze({ normalizeNode, isSentinel, attrVal, extractPipingClass, parseTypeMap, parseRatingTable, buildAnalysisMap, buildRestraintTypeConvertMap, emptyReport });
