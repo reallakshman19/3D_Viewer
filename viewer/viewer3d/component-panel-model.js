@@ -2,6 +2,25 @@
  * component-panel-model.js - Selection payload to UI model for 3D viewer component panel.
  */
 
+const DEFAULT_PCF_MAPPING = Object.freeze({
+  T1: 'COMPONENT-ATTRIBUTE2',
+  P1: 'COMPONENT-ATTRIBUTE1',
+  WALLTHK: 'COMPONENT-ATTRIBUTE4',
+  WEIGHT: 'COMPONENT-ATTRIBUTE8',
+  CORRALLW: 'COMPONENT-ATTRIBUTE7',
+  INSULTHK: 'COMPONENT-ATTRIBUTE5',
+  FLUIDDENS: 'COMPONENT-ATTRIBUTE9',
+});
+
+function getPcfMappingSafe() {
+  try {
+    const saved = typeof localStorage === 'undefined' ? null : localStorage.getItem('pcfMapping');
+    return saved ? { ...DEFAULT_PCF_MAPPING, ...JSON.parse(saved) } : { ...DEFAULT_PCF_MAPPING };
+  } catch {
+    return { ...DEFAULT_PCF_MAPPING };
+  }
+}
+
 function fmtPoint(pt) {
   if (!pt) return '-';
   return `${Number(pt.x ?? 0).toFixed(2)}, ${Number(pt.y ?? 0).toFixed(2)}, ${Number(pt.z ?? 0).toFixed(2)}`;
@@ -45,11 +64,9 @@ function geometryRows(comp) {
   ];
 }
 
-import { getPcfMapping } from '../core/settings.js';
-
 function processRows(comp) {
   const a = comp?.attributes || {};
-  const mapping = getPcfMapping();
+  const mapping = getPcfMappingSafe();
 
   const getKey = (name) => {
       const caTag = mapping[name];
@@ -130,3 +147,5 @@ export function buildComponentPanelModel(comp, cfg) {
     sections,
   };
 }
+
+export const _test = Object.freeze({ getPcfMappingSafe });
