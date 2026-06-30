@@ -93,11 +93,17 @@ const filtered = filterBrowserRvmRenderInstructions({
 });
 assert.equal(filtered.diagnostics.code11FacetGuardedCount, 2, 'code 11 support facet instructions must be guarded from semantic placeholder promotion');
 assert.equal(filtered.diagnostics.code11FacetDecodedCount, 1, 'decoded code 11 facets must remain native facet candidates');
-assert.equal(filtered.diagnostics.code11FacetWireframeFallbackCount, 1, 'undecoded code 11 facets must fall back only to wireframe bbox diagnostics');
+assert.equal(filtered.diagnostics.code11FacetWireframeFallbackCount, 1, 'undecoded code 11 facets must fall back to diagnostic geometry only');
+assert.equal(filtered.diagnostics.code11FacetXMarkerCount, 2, 'undecoded code 11 facets should add two small X-marker strokes');
 assert.equal(filtered.instructions[0].type, 'FACET_GROUP');
 assert.equal(filtered.instructions[0].attributes.TYPE, 'SUPPORT');
 assert.equal(filtered.instructions[0].attributes.RVM_BROWSER_CODE11_RENDER_POLICY, 'native-facetgroup-only-no-semantic-placeholder-promotion');
 assert.equal(filtered.instructions[1].type, 'FACET_GROUP_UNDECODED');
-assert.equal(filtered.instructions[1].attributes.RVM_BROWSER_CODE11_RENDER_POLICY, 'wireframe-bbox-diagnostic-no-synthetic-support-stand');
+assert.equal(filtered.instructions[1].attributes.RVM_BROWSER_CODE11_RENDER_POLICY, 'wireframe-bbox-plus-subtle-x-diagnostic-no-synthetic-support-stand');
+const xMarkers = filtered.instructions.filter((item) => item.kind === 'UNDECODED_FACET_X_MARKER');
+assert.equal(xMarkers.length, 2, 'fallback must use two subtle X-marker strokes');
+assert.ok(xMarkers.every((item) => item.renderPrimitive === 'CYLINDER_BBOX'), 'X-marker strokes must render as small cylinders, not support placeholders');
+assert.ok(xMarkers.every((item) => item.radius > 0 && item.radius <= 0.01), 'X-marker strokes must remain subtle');
+assert.ok(xMarkers.every((item) => item.attributes.RVM_BROWSER_CODE11_X_MARKER === 'true'), 'X-marker strokes must be explicitly identifiable');
 
 console.log('rvm primitive decoder capability integration passed');
