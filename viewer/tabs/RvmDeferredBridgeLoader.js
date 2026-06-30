@@ -1,7 +1,7 @@
 import { isRvmSourcePreviewKind, normalizeRvmSourceKind } from '../RvmSourceKindPolicy.js';
 
-const VERSION = '20260630-rvm-native-tags-hierarchy-1';
-const PREVIOUS_VERSION = '20260629-rvm-deferred-support-details-polish-1';
+const VERSION = '20260629-rvm-deferred-support-details-polish-1';
+const PREVIOUS_VERSION = '20260628-rvm-deferred-source-tools-dashboard-1';
 const API_KEY = '__PCF_GLB_RVM_BRIDGE_LOADER__';
 const ACTION_DIAGNOSTICS_KEY = '__PCF_GLB_RVM_ACTION_DIAGNOSTICS__';
 
