@@ -1,4 +1,4 @@
-export const CATEGORIZED_INPUTXML_CONVERTER_SCHEMA='categorized-inputxml-converter/v2';
+export const CATEGORIZED_INPUTXML_CONVERTER_SCHEMA='categorized-inputxml-converter/v3';
 
 const esc=(value)=>String(value??'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll("'",'&apos;');
 const clean=(value)=>String(value??'').trim();
@@ -17,6 +17,7 @@ const CHILD_BLOCKS=Object.freeze({BEND:'BendBlock',SIF:'SifBlock',RIGID:'RigidBl
 const NODE_BLOCKS=Object.freeze({RESTRAINT:'RestraintsBlock',DISPLACEMENTS:'DisplacementBlock',FORCESMOMENTS:'ForceMomentBlock'});
 const BRANCH_BLOCKS=Object.freeze({ALLOWABLESTRESS:'AllowableStressBlock'});
 const CONTROL_ATTRS=new Set(['NUM','NUMBER','SIF_NUM','DISP_NUM','FORCMNT_NUM','NODE','NODE_NUM','NODE1','NODE2','NODE3','CNODE']);
+const EXTERNAL_START_RE=/<\/?(?:RESTRAINT|DISPLACEMENTS|FORCESMOMENTS|ALLOWABLESTRESS|PIPINGMODEL|CAESARII)\b/i;
 
 function attrsOf(tag=''){
   const out={};
@@ -33,11 +34,27 @@ function activeNodeBlock(xml=''){const tag=openName(xml),attrs=attrsOf(xml),node
 function activeBranchBlock(xml=''){return hasMeaningfulDescendantAttrs(xml,{zeroUnset:true});}
 function elementKey(attrs={}){return `${normalizeNode(attrs.FROM_NODE)}->${normalizeNode(attrs.TO_NODE)}`;}
 function lineId(attrs={}){return clean(attrs.LINE_ID||attrs['PIPELINE-REFERENCE']||'UNSPECIFIED_LINE');}
+function firstOpenTag(xml=''){return String(xml).match(/^<PIPINGELEMENT\b[^>]*>/i)?.[0]||'';}
 function splitPipingElements(xml=''){
-  const matches=[];
-  const re=/<PIPINGELEMENT\b[^>]*(?:\/>|>[\s\S]*?<\/PIPINGELEMENT>)/gi;
-  let match;while((match=re.exec(String(xml))))matches.push(match[0]);
-  return matches;
+  const text=String(xml??'');
+  const starts=[];
+  const re=/<PIPINGELEMENT\b[^>]*>/gi;
+  let match;while((match=re.exec(text)))starts.push(match.index);
+  const elements=[];
+  for(let i=0;i<starts.length;i+=1){
+    const start=starts[i],end=starts[i+1]??text.length;
+    let chunk=text.slice(start,end).trim();
+    const closeIndex=chunk.search(/<\/PIPINGELEMENT>/i);
+    if(closeIndex>=0)chunk=chunk.slice(0,closeIndex+'</PIPINGELEMENT>'.length).trim();
+    else{
+      const open=firstOpenTag(chunk);
+      const rest=chunk.slice(open.length);
+      const external=rest.search(EXTERNAL_START_RE);
+      if(external>=0)chunk=(open+rest.slice(0,external)).trim();
+    }
+    if(chunk)elements.push(chunk);
+  }
+  return elements;
 }
 function splitLooseBlocks(xml='',tagName=''){
   const matches=[];
@@ -46,7 +63,7 @@ function splitLooseBlocks(xml='',tagName=''){
   return matches;
 }
 function childrenOfElement(elementXml=''){
-  const body=elementXml.includes('</PIPINGELEMENT>')?elementXml.replace(/^<PIPINGELEMENT\b[^>]*>/i,'').replace(/<\/PIPINGELEMENT>\s*$/i,''):'';
+  const body=elementXml.replace(/^<PIPINGELEMENT\b[^>]*>/i,'').replace(/<\/PIPINGELEMENT>\s*$/i,'');
   const children=[];
   for(const tagName of Object.keys(CHILD_BLOCKS))children.push(...splitLooseBlocks(body,tagName).filter(activeChildBlock));
   return children;
@@ -78,19 +95,26 @@ function branchBlocks(xml=''){
 function blockXml(blockName='',attrs={},used=new Set()){
   const keys=BLOCK_FIELDS[blockName]||[];
   const rows=[];
-  for(const key of keys){if(attrs[key]!=null&&clean(attrs[key])!==''){rows.push(`      <${key}>${esc(attrs[key])}</${key}>`);used.add(key);}}
+  for(const key of keys){
+    if(attrs[key]==null||clean(attrs[key])==='')continue;
+    used.add(key);
+    if(!isUnset(attrs[key]))rows.push(`      <${key}>${esc(attrs[key])}</${key}>`);
+  }
   return rows.length?`    <${blockName}>\n${rows.join('\n')}\n    </${blockName}>`:'';
 }
 function childBlockXml(blockName='',children=[]){const active=children.filter((child)=>clean(child));return active.length?`    <${blockName}>\n${active.map((child)=>`      ${clean(child)}`).join('\n')}\n    </${blockName}>`:'';}
 function miscXml(attrs={},used=new Set()){
   const rows=[];
-  for(const [key,value] of Object.entries(attrs)){if(key==='FROM_NODE'||key==='TO_NODE'||used.has(key))continue;rows.push(`      <UnmappedAttribute name="${esc(key)}">${esc(value)}</UnmappedAttribute>`);}
+  for(const [key,value] of Object.entries(attrs)){
+    if(key==='FROM_NODE'||key==='TO_NODE'||used.has(key)||isUnset(value))continue;
+    rows.push(`      <UnmappedAttribute name="${esc(key)}">${esc(value)}</UnmappedAttribute>`);
+  }
   return rows.length?`    <MiscBlock>\n${rows.join('\n')}\n    </MiscBlock>`:'    <MiscBlock />';
 }
 function cdata(text=''){return String(text).replaceAll(']]>',']]]]><![CDATA[>');}
 function decdata(text=''){return String(text).replaceAll(']]]]><![CDATA[>',']]>');}
 function categorizedElementXml(elementXml='',nodeBlockMap=new Map()){
-  const open=elementXml.match(/^<PIPINGELEMENT\b[^>]*>/i)?.[0]||elementXml.match(/^<PIPINGELEMENT\b[^>]*\/>/i)?.[0]||'';
+  const open=firstOpenTag(elementXml)||elementXml.match(/^<PIPINGELEMENT\b[^>]*\/>/i)?.[0]||'';
   const attrs=attrsOf(open);
   const key=elementKey(attrs),from=normalizeNode(attrs.FROM_NODE),to=normalizeNode(attrs.TO_NODE),line=lineId(attrs),used=new Set();
   const children=childrenOfElement(elementXml);
@@ -122,7 +146,7 @@ export function inputXmlToCategorizedInputXml(xmlText='',{sourceName='InputXML'}
   for(const element of splitPipingElements(xmlText)){const entry=categorizedElementXml(element,nodeBlockMap);if(!byLine.has(entry.line))byLine.set(entry.line,[]);byLine.get(entry.line).push(entry.xml);}
   const branchXml=Object.entries(branchGroups).map(([name,blocks])=>` <${name}>\n${blocks.map((block)=>`  ${clean(block)}`).join('\n')}\n </${name}>`).join('\n');
   const lines=[...byLine.entries()].map(([line,elements])=>` <Line id="${esc(line)}">\n${elements.join('\n')}\n </Line>`).join('\n');
-  return `<?xml version="1.0" encoding="UTF-8"?>\n<CategorizedInputXML schema="categorized-inputxml/v1" sourceName="${esc(sourceName)}">\n${branchXml?`${branchXml}\n`:''}${lines}\n <OriginalDocument><![CDATA[${cdata(xmlText)}]]></OriginalDocument>\n</CategorizedInputXML>\n`;
+  return `<?xml version="1.0" encoding="UTF-8"?>\n<CategorizedInputXML schema="categorized-inputxml/v1" sourceName="${esc(sourceName)}">\n${branchXml?`${branchXml}\n`:''}${lines}\n</CategorizedInputXML>\n`;
 }
 export function categorizedInputXmlToInputXml(categorizedText=''){
   const original=originalDocument(categorizedText);
