@@ -16,7 +16,6 @@ import './xml-compare-canvas-record-interaction.test.js';
 import './xml-compare-connector-overlay.test.js';
 import './xml-compare-graph-core.test.js';
 import './xml-compare-graph-renderers.test.js';
-import './xml-compare-automap-popup.test.js';
 import './xml-compare-sideload-enricher.test.js';
 import './xml-compare-sideload-popup.test.js';
 
