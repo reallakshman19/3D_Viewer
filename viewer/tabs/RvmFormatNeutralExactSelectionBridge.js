@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 
-const VERSION = '20260630-rvm-exact-native-selection-1';
+const VERSION = '20260630-rvm-exact-native-group-selection-1';
 const INSTALL_FLAG = Symbol.for('pcf-glb-rvm-format-neutral-exact-selection-1');
 const NAVIS_CONTROL_SELECTOR = '[data-rvm-navis-toggle],[data-rvm-navis-off],[data-rvm-navis-on],[data-rvm-navis-select],.rvm-navis-row';
 const EXACT_SELECTION_SOURCE_KINDS = new Set(['stagedjson', 'uxml', 'json', 'jscon', 'txt', 'source-preview', 'inputxml', 'rvm']);
@@ -52,6 +52,7 @@ function idCandidatesForNodes(nodes, row, nativeRvm) {
     if (!nativeRvm) { add(attrs.ID); add(attrs.NAME); add(attrs.TAG); }
     add(attrs.CANONICAL_ID);
     add(attrs.RVM_BYTE_OFFSET);
+    add(attrs.RVM_CANONICAL_PATH);
     if (Array.isArray(node?.renderObjectIds)) node.renderObjectIds.forEach(add);
     if (Array.isArray(node?.canonicalIds)) node.canonicalIds.forEach(add);
   }
@@ -61,7 +62,7 @@ function objectAliases(obj) {
   const data = obj?.userData || {};
   const props = data.browserRvmProperties || {};
   const attrs = data.browserRvmAttributes || data.attributes || props.attributes || {};
-  return [obj?.uuid, obj?.name, data.name, data.canonicalId, data.canonicalObjectId, data.sourceObjectId, data.renderObjectId, data.leafRenderObjectId, data.sourcePath, data.sourceName, data.displayName, props.canonicalId, props.sourcePath, props.displayName, props.name, attrs.ID, attrs.NAME, attrs.TAG, attrs.RVM_OWNER_NAME, attrs.RVM_OWNER_PATH, attrs.CANONICAL_ID, attrs.RVM_BYTE_OFFSET].filter(Boolean).map(norm);
+  return [obj?.uuid, obj?.name, data.name, data.canonicalId, data.canonicalObjectId, data.sourceObjectId, data.renderObjectId, data.leafRenderObjectId, data.sourcePath, data.sourceName, data.displayName, props.canonicalId, props.sourcePath, props.displayName, props.name, attrs.ID, attrs.NAME, attrs.TAG, attrs.RVM_OWNER_NAME, attrs.RVM_OWNER_PATH, attrs.RVM_CANONICAL_PATH, attrs.CANONICAL_ID, attrs.RVM_BYTE_OFFSET].filter(Boolean).map(norm);
 }
 function collectExactObjects(viewer, ids) {
   const wanted = new Set(ids.map(norm).filter(Boolean));
@@ -111,6 +112,7 @@ function fitObjects(viewer, objects) {
   requestAnimationFrame(() => { forceViewerResize(viewer); try { if (box && !box.isEmpty()) viewer?._fitBox?.(box); } catch (_) {} });
 }
 function renderObjectIdFor(obj) { return norm(obj?.userData?.renderObjectId || obj?.userData?.leafRenderObjectId || obj?.userData?.name || obj?.name || obj?.uuid); }
+function nodeLabelForSelection(node, row) { return norm(node?.name || node?.attributes?.NAME || rowLabel(row) || rowId(row)); }
 function updatePanel(root, node, row, matches, scopeCount, note = '', ids = []) {
   const panel = root?.querySelector?.('#rvm-attributes-panel');
   if (!panel) return;
@@ -118,7 +120,7 @@ function updatePanel(root, node, row, matches, scopeCount, note = '', ids = []) 
   const matchedRenderIds = matches.map(renderObjectIdFor).filter(Boolean);
   const diagnostic = { sourceKind: sourceKind(root), nodeId: rowId(row), scopeNodeCount: scopeCount || 1, candidateIdCount: ids.length, matchedRenderIds, matchCount: matchedRenderIds.length };
   root.__rvmSourceHierarchySelectionDiagnostics = diagnostic;
-  const rows = [['Node', rowId(row)], ['Label', rowLabel(row)], ['Kind', node?.kind || node?.type || attrs.TYPE || '-'], ['Hierarchy scope nodes', String(scopeCount || 1)], ['Exact render matches', String(matches.length)], ['Selection mode', note || 'exact source node ids']];
+  const rows = [['Node', rowId(row)], ['Label', nodeLabelForSelection(node, row)], ['Kind', node?.kind || node?.type || attrs.TYPE || '-'], ['Hierarchy scope nodes', String(scopeCount || 1)], ['Exact render matches', String(matches.length)], ['Selection mode', note || 'exact source node ids']];
   const diagnosticRows = [['Source kind', diagnostic.sourceKind || '-'], ['Candidate IDs', String(diagnostic.candidateIdCount)], ['Matched render IDs', matchedRenderIds.slice(0, 6).join(', ') || '-'], ['Mapping status', matchedRenderIds.length ? 'Render object match found' : 'No render object match for this source row']];
   const attrRows = Object.entries(attrs).slice(0, 18);
   const esc = (value) => String(value ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -134,19 +136,23 @@ function selectRow(root, row, event) {
   const nativeRvm = isNativeRvmSource(root);
   const ids = idCandidatesForNodes(scopedNodes.length ? scopedNodes : [node].filter(Boolean), row, nativeRvm);
   let matches = collectExactObjects(viewer, ids);
-  let note = scopedNodes.length > 1 ? 'exact source subtree ids' : 'exact source node ids';
+  let note = scopedNodes.length > 1 ? 'exact native subtree ids' : 'exact native source node ids';
   if (!matches.length && !nativeRvm) { matches = collectStrictFallbackObjects(viewer, rowLabel(row)); note = matches.length ? 'strict full-label fallback' : 'no exact render object match'; }
   else if (!matches.length) note = 'native rvm exact ids only';
   event?.preventDefault?.(); event?.stopPropagation?.(); event?.stopImmediatePropagation?.();
   markSelected(root, row);
   try { viewer?.selection?.clearSelection?.(); } catch (_) {}
-  if (viewer) viewer._rvmCanvasSelectedMeshes = matches;
+  if (viewer) {
+    viewer._rvmHierarchySelectedMeshes = matches;
+    viewer._rvmCanvasSelectedMeshes = matches;
+    viewer._rvmActiveHierarchySelection = { version: VERSION, sourceKind: sourceKind(root), nodeId: rowId(row), label: nodeLabelForSelection(node, row), node, scopeNodeCount: scopedNodes.length || 1, matchCount: matches.length };
+  }
   const renderIds = matches.map(renderObjectIdFor).filter(Boolean);
   try { if (renderIds.length) viewer?.selection?.selectCanonicalIds?.(renderIds, { additive: false }); } catch (_) {}
   fitObjects(viewer, matches);
   updatePanel(root, node, row, matches, scopedNodes.length || 1, note, ids);
-  setStatus(root, matches.length ? `Selected ${matches.length} exact object(s) for ${rowLabel(row) || rowId(row)}` : `Selected source row ${rowLabel(row) || rowId(row)}; no exact render object match`);
-  try { root.dispatchEvent(new CustomEvent('rvm-hierarchy-selection', { bubbles: true, detail: { nodeId: rowId(row), label: rowLabel(row), matches, diagnostics: root.__rvmSourceHierarchySelectionDiagnostics, scopeNodeCount: scopedNodes.length || 1, version: VERSION, exactSourceSelection: true } })); } catch (_) {}
+  setStatus(root, matches.length ? `Selected ${matches.length} native object(s) for ${nodeLabelForSelection(node, row) || rowId(row)}` : `Selected source row ${nodeLabelForSelection(node, row) || rowId(row)}; no exact render object match`);
+  try { root.dispatchEvent(new CustomEvent('rvm-hierarchy-selection', { bubbles: true, detail: { nodeId: rowId(row), label: nodeLabelForSelection(node, row), node, matches, objects: matches, renderObjectIds: renderIds, diagnostics: root.__rvmSourceHierarchySelectionDiagnostics, scopeNodeCount: scopedNodes.length || 1, version: VERSION, exactSourceSelection: true, nativeRvm } })); } catch (_) {}
 }
 function onPointer(event) { const root = event.target?.closest?.('[data-rvm-viewer]'); if (!isFormatNeutralSourceTree(root)) return; if (event.target?.closest?.(NAVIS_CONTROL_SELECTOR)) return; const row = event.target?.closest?.('#rvm-tree li[data-node-id]'); if (!row || !root.contains(row)) return; selectRow(root, row, event); }
 function onKey(event) { if (event.key !== 'Enter' && event.key !== ' ') return; onPointer(event); }
