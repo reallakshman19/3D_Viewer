@@ -1,9 +1,7 @@
-import {
-  validateRvmStageModel,
-  validateStagePackageManifest,
-  validateStageRenderRecipesForModel,
-  validateStageWorkerMessage,
-} from './RvmStageModelContract.js';
+import { validateStagePackageManifest } from './StagePackageManifest.js';
+import { validateStageRenderRecipesForModel } from './StageRenderRecipes.js';
+import { validateRvmStageModel } from './StageValidation.js';
+import { validateStageWorkerMessage } from './StageWorkerProtocol.js';
 import {
   buildStageRenderPlan,
   validateStageRenderPlan,
