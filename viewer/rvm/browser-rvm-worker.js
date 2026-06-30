@@ -1,7 +1,7 @@
 import { parseRvmArrayBuffer } from './BrowserRvmHierarchyTransformParser.js?v=20260630-native-container-hierarchy-1';
 import { enrichBrowserRvmHierarchyWithAtt } from './BrowserRvmAttEnricher.js';
 import { collectBrowserRvmRenderInstructions } from './BrowserRvmRenderContractAdapter.js';
-import { filterBrowserRvmRenderInstructions } from './BrowserRvmInstructionFilterV2.js?v=20260621-rvm-zero-geometry-1';
+import { filterBrowserRvmRenderInstructions } from './BrowserRvmInstructionFilterV2.js?v=20260630-code11-facet-x-diagnostic-1';
 
 // BrowserRvmHierarchyTransformParser.js?v=20260630-native-container-hierarchy-1 repairs transformed APOS/LPOS/HBOR contracts,
 // decodes PRIM 11 facet-group payloads using the C++ parser layout, and preserves native CNTB/CNTE container hierarchy.
@@ -16,7 +16,9 @@ const KEEP_ATTRIBUTE_NAMES = new Set([
   'RVM_BROWSER_RENDER_SOURCE', 'RVM_BROWSER_GEOMETRY_CONTRACT_VERSION', 'RVM_BROWSER_ATT_ENRICHED', 'RVM_BROWSER_ATT_ATTRIBUTE_COUNT',
   'RVM_BROWSER_BBOX', 'RVM_BROWSER_CENTER', 'RVM_BROWSER_AXIS_START', 'RVM_BROWSER_AXIS_END', 'RVM_BROWSER_LENGTH', 'RVM_BROWSER_RADIUS',
   'RVM_BROWSER_DIAMETER', 'RVM_BROWSER_SCALE_SAFE_CONTRACT', 'RVM_BROWSER_SCALE_SAFE_CONTRACT_SCHEMA', 'RVM_BROWSER_SUPPORT_HINT', 'RVM_BROWSER_SUPPORT_KIND',
-  'RVM_BROWSER_SUPPORT_RAW_PRIMITIVE_PRESERVED', 'RVM_BROWSER_SUPPORT_RAW_PRIMITIVE_POLICY', 'RVM_BROWSER_SUPPORT_RAW_CYLINDER_PRESERVED', 'RVM_BROWSER_SUPPORT_RAW_CYLINDER_POLICY'
+  'RVM_BROWSER_SUPPORT_RAW_PRIMITIVE_PRESERVED', 'RVM_BROWSER_SUPPORT_RAW_PRIMITIVE_POLICY', 'RVM_BROWSER_SUPPORT_RAW_CYLINDER_PRESERVED', 'RVM_BROWSER_SUPPORT_RAW_CYLINDER_POLICY',
+  'RVM_BROWSER_CODE11_SEMANTIC_RENDER_GUARD', 'RVM_BROWSER_CODE11_NATIVE_FACET_DECODED', 'RVM_BROWSER_CODE11_RENDER_POLICY',
+  'RVM_BROWSER_CODE11_X_MARKER', 'RVM_BROWSER_CODE11_X_MARKER_POLICY', 'RVM_BROWSER_CODE11_SOURCE_OWNER'
 ]);
 
 self.onmessage = async (event) => {
@@ -79,6 +81,10 @@ self.onmessage = async (event) => {
           browserRvmOriginalInstructionCount: rawInstructionSet.count || rawInstructionSet.instructions?.length || 0,
           browserRvmOversizedNonPipingSkippedCount: compactInstructionSet.diagnostics?.oversizedNonPipingSkippedCount || 0,
           browserRvmOversizedNonPipingFilter: compactInstructionSet.diagnostics?.oversizedNonPipingFilter || null,
+          browserRvmCode11FacetGuardedCount: compactInstructionSet.diagnostics?.code11FacetGuardedCount || 0,
+          browserRvmCode11FacetDecodedCount: compactInstructionSet.diagnostics?.code11FacetDecodedCount || 0,
+          browserRvmCode11FacetWireframeFallbackCount: compactInstructionSet.diagnostics?.code11FacetWireframeFallbackCount || 0,
+          browserRvmCode11FacetXMarkerCount: compactInstructionSet.diagnostics?.code11FacetXMarkerCount || 0,
           browserRvmScaleSafeContract: parsed.diagnostics?.browserRvmScaleSafeContract || null,
           browserRvmCppMat3x4LayoutApplied: Boolean(parsed.diagnostics?.rvmCppMat3x4LayoutApplied),
           browserRvmCppMat3x4ScaledRadiusApplied: parsed.diagnostics?.rvmCppMat3x4ScaledRadiusApplied || 0,

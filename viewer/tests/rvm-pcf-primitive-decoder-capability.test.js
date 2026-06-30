@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { componentModelToRvm } from '../converters/inputxml-rvm/RvmxComponentModelToRvm.js';
 import { parseRvmArrayBuffer } from '../rvm/BrowserRvmHierarchyTransformParser.js';
+import { filterBrowserRvmRenderInstructions } from '../rvm/BrowserRvmInstructionFilterV2.js';
 import { RVM_PRIMITIVE_CAPABILITY_REGISTRY_VERSION } from '../rvm/RvmPrimitiveCapabilityRegistry.js';
 
 function exactArrayBuffer(bytes) {
@@ -53,5 +54,56 @@ for (const node of nodes) {
 assert.ok((byCode.get('8') || 0) >= 2, 'parsed nodes must include cylinders');
 assert.ok((byCode.get('7') || 0) >= 1, 'parsed nodes must include snout');
 assert.ok((byCode.get('4') || 0) >= 1, 'parsed nodes must include torus');
+
+const decodedFacetParams = {
+  version: 1,
+  kind: 11,
+  kindName: 'FacetGroup',
+  decoded: true,
+  facetGroup: true,
+  polygonCount: 1,
+  contourCount: 1,
+  vertexCount: 4,
+  polygons: [{ contourCount: 1, contours: [{ vertexCount: 4, vertices: [0, 0, 0, 100, 0, 0, 100, 50, 0, 0, 50, 0], normals: [0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1] }] }],
+};
+const filtered = filterBrowserRvmRenderInstructions({
+  schemaVersion: 'test-code11-filter',
+  instructions: [
+    {
+      sourcePath: 'ROOT/BRANCH//PS-171036.10/RVM_PRIM_CODE_11',
+      sourceName: 'RVM_PRIM_CODE_11',
+      displayName: 'RVM_PRIM_CODE_11',
+      type: 'SUPPORT',
+      kind: 'SUPPORT',
+      renderPrimitive: 'FACET_GROUP_BBOX_PLACEHOLDER',
+      bbox: '162.525,159.958,100.750,162.675,160.058,100.756',
+      attributes: { TYPE: 'SUPPORT', RVM_OWNER_NAME: '/PS-171036.10', RVM_PRIMITIVE_CODE: '11', RVM_NATIVE_PRIMITIVE_PARAMS: JSON.stringify(decodedFacetParams) },
+    },
+    {
+      sourcePath: 'ROOT/BRANCH//PS-171035.6H/RVM_PRIM_CODE_11',
+      sourceName: 'RVM_PRIM_CODE_11',
+      displayName: 'RVM_PRIM_CODE_11',
+      type: 'SUPPORT',
+      kind: 'SUPPORT',
+      renderPrimitive: 'FACET_GROUP_BBOX_PLACEHOLDER',
+      bbox: '157.550,160.149,100.750,157.650,160.249,100.915',
+      attributes: { TYPE: 'SUPPORT', RVM_OWNER_NAME: '/PS-171035.6H', RVM_PRIMITIVE_CODE: '11', RVM_NATIVE_PRIMITIVE_PARAMS: JSON.stringify({ version: 1, kind: 11, decoded: false, facetGroup: true }) },
+    },
+  ],
+});
+assert.equal(filtered.diagnostics.code11FacetGuardedCount, 2, 'code 11 support facet instructions must be guarded from semantic placeholder promotion');
+assert.equal(filtered.diagnostics.code11FacetDecodedCount, 1, 'decoded code 11 facets must remain native facet candidates');
+assert.equal(filtered.diagnostics.code11FacetWireframeFallbackCount, 1, 'undecoded code 11 facets must fall back to diagnostic geometry only');
+assert.equal(filtered.diagnostics.code11FacetXMarkerCount, 2, 'undecoded code 11 facets should add two small X-marker strokes');
+assert.equal(filtered.instructions[0].type, 'FACET_GROUP');
+assert.equal(filtered.instructions[0].attributes.TYPE, 'SUPPORT');
+assert.equal(filtered.instructions[0].attributes.RVM_BROWSER_CODE11_RENDER_POLICY, 'native-facetgroup-only-no-semantic-placeholder-promotion');
+assert.equal(filtered.instructions[1].type, 'FACET_GROUP_UNDECODED');
+assert.equal(filtered.instructions[1].attributes.RVM_BROWSER_CODE11_RENDER_POLICY, 'wireframe-bbox-plus-subtle-x-diagnostic-no-synthetic-support-stand');
+const xMarkers = filtered.instructions.filter((item) => item.kind === 'UNDECODED_FACET_X_MARKER');
+assert.equal(xMarkers.length, 2, 'fallback must use two subtle X-marker strokes');
+assert.ok(xMarkers.every((item) => item.renderPrimitive === 'CYLINDER_BBOX'), 'X-marker strokes must render as small cylinders, not support placeholders');
+assert.ok(xMarkers.every((item) => item.radius > 0 && item.radius <= 0.01), 'X-marker strokes must remain subtle');
+assert.ok(xMarkers.every((item) => item.attributes.RVM_BROWSER_CODE11_X_MARKER === 'true'), 'X-marker strokes must be explicitly identifiable');
 
 console.log('rvm primitive decoder capability integration passed');
