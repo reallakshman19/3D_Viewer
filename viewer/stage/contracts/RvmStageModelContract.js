@@ -5,4 +5,5 @@ export * from './StageIdentity.js';
 export * from './StagePackageManifest.js';
 export * from './StageRenderRecipes.js';
 export * from './StageValidation.js';
+export * from './StageWorkerAcceptance.js';
 export * from './StageWorkerProtocol.js';
