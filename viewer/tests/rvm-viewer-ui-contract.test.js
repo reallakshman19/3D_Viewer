@@ -36,6 +36,7 @@ const dynamicChildCheckbox = read('tabs/RvmHierarchyDynamicChildCheckboxBridge.j
 const visualQualityControls = read('tabs/RvmVisualQualityControlsBridge.js');
 const zoneDensitySelector = read('tabs/RvmZoneDensitySelectorBridgeV5.js');
 const zoneLodContext = read('tabs/RvmZoneLodContextBridge.js');
+const code4ElbowRender = read('rvm/BrowserRvmCode4ElbowRenderBridge.js');
 const workerFirst = read('rvm-viewer/RvmBrowserRvmWorkerFirstBridge.js');
 const selectionSync = read('tabs/RvmSelectionTreeSyncBridge.js');
 const drawer = read('tabs/RvmBottomDiagnosticsDrawerBridge.js');
@@ -71,6 +72,7 @@ assert.ok(deferredLoader.includes('20260629-rvm-deferred-support-details-polish-
 assert.ok(deferredLoader.includes('20260628-rvm-deferred-source-tools-dashboard-1'), 'deferred loader must retain previous Source Tools dashboard key');
 assert.ok(deferredLoader.includes('RvmRightPanelPartitionBridge.js?v=20260630-rvm-right-panel-partition-1'), 'deferred loader must install strict right-panel partition bridge');
 assert.ok(deferredLoader.includes('RvmHierarchyDynamicChildCheckboxBridge.js?v=20260630-rvm-hierarchy-dynamic-child-checkbox-1'), 'deferred loader must install dynamic child checkbox bridge');
+assert.ok(deferredLoader.includes('BrowserRvmCode4ElbowRenderBridge.js?v=20260630-rvm-code4-elbow-native-overlay-1'), 'deferred loader must install code 4 native elbow overlay bridge');
 assert.ok(deferredLoader.includes('right-panel-policy-sync'), 'source-preview refresh must resync the right panel policy');
 assert.ok(supportDetailsBridge.includes('rvm-non-primitive-support-overlay-details-panel/v5-polish'), 'support details bridge must expose polish schema');
 assert.ok(supportDetailsPanel.includes('support-overlay-details-panel/v4-polish'), 'support details panel must expose polished schema');
@@ -105,6 +107,10 @@ assert.ok(hierarchyCheckbox.includes('> ul{grid-column:3 / -1;'), 'checkbox mult
 assert.ok(dynamicChildCheckbox.includes('ensureRowCheckbox'), 'dynamic child checkbox bridge must inject missing child checkboxes');
 assert.ok(dynamicChildCheckbox.includes('onCheckboxChange'), 'dynamic child checkbox bridge must cascade parent checkbox changes');
 assert.ok(dynamicChildCheckbox.includes('indeterminate'), 'dynamic child checkbox bridge must mark partial parent rows');
+assert.ok(code4ElbowRender.includes('RVM_NATIVE_PRIMITIVE_PARAMS'), 'code 4 elbow render bridge must use native primitive params');
+assert.ok(code4ElbowRender.includes('RVM_TRANSFORM_3X4'), 'code 4 elbow render bridge must use native transform matrix');
+assert.ok(code4ElbowRender.includes('TubeGeometry'), 'code 4 elbow render bridge must render a visible tube arc');
+assert.ok(code4ElbowRender.includes('normalizeAngle'), 'code 4 elbow render bridge must normalize RVM angle units');
 
 assert.ok(visualQualityControls.includes("['full', 'Full']"), 'Visual Quality controls must expose Full option');
 assert.ok(visualQualityControls.includes("['medium', 'Medium']"), 'Visual Quality controls must expose Medium option');
@@ -129,4 +135,4 @@ assert.ok(selectionSync.includes('is-canvas-selected'), 'hierarchy sync bridge m
 assert.ok(selectionSync.includes('RVM_NATIVE_CONTAINER_PARENT'), 'hierarchy sync bridge must match native owner aliases');
 assert.ok(drawer.includes('root.insertBefore(drawer, statusbar)'), 'drawer must dock before status bar');
 
-console.log('Verified RVM viewer UI contract: dynamic child checkboxes, right-panel partition, Visual Quality controls, Source Tools dashboard, Selected Entity UI, and provider selection parity.');
+console.log('Verified RVM viewer UI contract: code 4 elbow overlay, dynamic child checkboxes, right-panel partition, Visual Quality controls, Source Tools dashboard, Selected Entity UI, and provider selection parity.');
