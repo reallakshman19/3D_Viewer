@@ -2,5 +2,7 @@ export * from './StageConstants.js';
 export * from './StageDiagnostics.js';
 export * from './StageFactory.js';
 export * from './StageIdentity.js';
+export * from './StagePackageManifest.js';
 export * from './StageRenderRecipes.js';
 export * from './StageValidation.js';
+export * from './StageWorkerProtocol.js';
