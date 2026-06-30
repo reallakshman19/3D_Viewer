@@ -8,8 +8,8 @@ import {
   groupRvmOwnerHierarchy
 } from './BrowserRvmHierarchyParser.js';
 
-export const BROWSER_RVM_HIERARCHY_TRANSFORM_SCHEMA = 'browser-rvm-hierarchy-transform-wrapper/v6-native-container-hierarchy';
-export const BROWSER_RVM_SCALE_SAFE_CONTRACT_SCHEMA = 'browser-rvm-scale-safe-contract/v5-native-container-hierarchy';
+export const BROWSER_RVM_HIERARCHY_TRANSFORM_SCHEMA = 'browser-rvm-hierarchy-transform-wrapper/v5-facetgroup-contract';
+export const BROWSER_RVM_SCALE_SAFE_CONTRACT_SCHEMA = 'browser-rvm-scale-safe-contract/v4-facetgroup-contract';
 export {
   BROWSER_RVM_GEOMETRY_CONTRACT_VERSION,
   BROWSER_RVM_GEOMETRY_QUALITY_VERSION,
