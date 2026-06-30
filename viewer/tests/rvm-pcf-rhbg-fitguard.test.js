@@ -24,10 +24,11 @@ check(runtime.includes('viewer3d-rvm-tab-renderer.js?v=20260630-rvm-tree-checkbo
 check(renderer.includes('viewer3d-rvm-tab.js?v=20260630-rvm-hierarchy-path-context-1'), 'renderer uses hierarchy path/context tab cache key');
 check(renderer.includes('RvmHierarchySelectionBridge.js?v=20260630-rvm-hierarchy-exact-rvm-1'), 'renderer imports native-RVM exact hierarchy pass-through bridge');
 check(renderer.includes('RvmFormatNeutralExactSelectionBridge.js?v=20260630-rvm-format-neutral-exact-rvm-1'), 'renderer imports native-RVM exact selection bridge');
-check(renderer.includes('RvmSelectionTreeSyncBridge.js?v=20260627-rvm-hierarchy-selection-sync-dispose-1'), 'renderer imports disposable tree sync bridge');
+check(renderer.includes('RvmSelectionTreeSyncBridge.js?v=20260630-rvm-canvas-multiselect-tree-sync-1'), 'renderer imports canvas multi-select tree sync bridge');
 check(renderer.includes('installRvmFormatNeutralExactSelectionBridge()'), 'exact selection bridge installs from renderer');
 check(hierarchy.includes("const BRIDGE_VERSION = 'rvm-hierarchy-selection-bridge/v5-native-rvm-exact-pass-through'"), 'hierarchy bridge exposes native-RVM pass-through version');
-check(treeSync.includes("const BRIDGE_VERSION = '20260627-rvm-hierarchy-selection-sync-dispose-1'"), 'tree sync exposes current version');
+check(treeSync.includes("const BRIDGE_VERSION = '20260630-rvm-canvas-multiselect-tree-sync-1'"), 'tree sync exposes canvas multi-select version');
+check(treeSync.includes('selectedAliasGroups') && treeSync.includes('RVM_NATIVE_CONTAINER_PARENT'), 'tree sync maps native owner aliases back to rows');
 check(exact.includes('GENERIC_LABELS'), 'exact selection bridge blocks generic kind labels');
 check(tab.includes('sourceKindFromFileName') && tab.includes('function sourceKindForJsonFileName'), 'mounted tab delegates source kind classification to shared policy');
 check(formatNeutral.includes('RvmSourceKindPolicy.js') && formatNeutral.includes('sourceKindFromFileName(fileName)'), 'format-neutral hierarchy delegates filename classification to shared policy');
