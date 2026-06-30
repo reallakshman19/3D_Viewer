@@ -1,12 +1,14 @@
 import { validateRvmStageModel, normalizeRenderQuality, RVM_STAGE_SCHEMA } from '../stage/contracts/RvmStageModelContract.js';
+import { createSampleRvmStageModelV1 } from '../stage/samples/sample-rvm-stage-model-v1.js';
 import { createJsonViewerShell } from '../stage/ui/JsonViewerShell.js';
 import { renderHierarchyTree } from '../stage/ui/JsonViewerHierarchyTree.js';
 import { renderProperties } from '../stage/ui/JsonViewerPropertiesPanel.js';
 import { renderDiagnostics } from '../stage/ui/JsonViewerDiagnosticsPanel.js';
 
 const EMPTY_CANVAS_TEXT = '3D Json Viewer — load RvmStageModel.v1';
+const SAMPLE_SOURCE_NAME = 'sample-rvm-stage-model-v1.js';
 
-function countDiagnostics(model, validationErrors) {
+function diagnosticCount(model, validationErrors) {
   const messages = Array.isArray(model?.diagnostics?.messages) ? model.diagnostics.messages.length : 0;
   return messages + validationErrors.length;
 }
@@ -39,9 +41,30 @@ function updateStatus(handles, state) {
   handles.statusText.textContent = state.statusText;
   handles.schemaText.textContent = `schema: ${model?.schema || RVM_STAGE_SCHEMA}`;
   handles.sourceText.textContent = `source: ${state.sourceFileName || model?.source?.fileName || '—'}`;
-  handles.primitiveText.textContent = `primitives: ${model?.primitives?.length || 0}`;
+  handles.nodeText.textContent = `nodes: ${model?.hierarchy?.nodes?.length || 0}`;
   handles.componentText.textContent = `components: ${model?.components?.length || 0}`;
-  handles.diagnosticsText.textContent = `diagnostics: ${countDiagnostics(model, state.validationErrors)}`;
+  handles.primitiveText.textContent = `primitives: ${model?.primitives?.length || 0}`;
+  handles.diagnosticsText.textContent = `diagnostics: ${diagnosticCount(model, state.validationErrors)}`;
+  handles.qualityText.textContent = `quality: ${state.renderQuality}`;
+}
+
+function acceptModel(model, sourceName, handles, state) {
+  const validation = validateRvmStageModel(model);
+  state.sourceFileName = sourceName;
+  if (!validation.valid) {
+    state.model = null;
+    state.selectedRef = null;
+    state.validationErrors = validation.errors;
+    state.activePanel = 'diagnostics';
+    state.statusText = 'Invalid staged model';
+    return false;
+  }
+  state.model = model;
+  state.selectedRef = defaultSelection(model);
+  state.validationErrors = [];
+  state.activePanel = 'properties';
+  state.statusText = `Loaded ${sourceName}`;
+  return true;
 }
 
 function renderAll(handles, state) {
@@ -53,28 +76,27 @@ function renderAll(handles, state) {
   activatePanel(handles, state.activePanel);
 }
 
+function loadSample(handles, state) {
+  try {
+    const sample = createSampleRvmStageModelV1();
+    acceptModel(sample, SAMPLE_SOURCE_NAME, handles, state);
+  } catch (error) {
+    state.model = null;
+    state.selectedRef = null;
+    state.validationErrors = [`Sample load failed: ${error?.message || error}`];
+    state.activePanel = 'diagnostics';
+    state.sourceFileName = SAMPLE_SOURCE_NAME;
+    state.statusText = 'Sample load failed';
+  }
+  renderAll(handles, state);
+}
+
 async function loadStageFile(file, handles, state) {
   state.statusText = `Loading ${file.name}…`;
   updateStatus(handles, state);
   try {
-    const text = await file.text();
-    const parsed = JSON.parse(text);
-    const validation = validateRvmStageModel(parsed);
-    if (!validation.valid) {
-      state.model = null;
-      state.selectedRef = null;
-      state.validationErrors = validation.errors;
-      state.activePanel = 'diagnostics';
-      state.sourceFileName = file.name;
-      state.statusText = 'Invalid staged model';
-      return;
-    }
-    state.model = parsed;
-    state.selectedRef = defaultSelection(parsed);
-    state.validationErrors = [];
-    state.activePanel = 'properties';
-    state.sourceFileName = file.name;
-    state.statusText = `Loaded ${file.name}`;
+    const parsed = JSON.parse(await file.text());
+    acceptModel(parsed, file.name, handles, state);
   } catch (error) {
     state.model = null;
     state.selectedRef = null;
@@ -92,10 +114,11 @@ function wireEvents(handles, state) {
   const onToolbarClick = (event) => {
     const action = event.target?.dataset?.action;
     if (action === 'open-stage-json') handles.fileInput.click();
+    if (action === 'load-sample') loadSample(handles, state);
     if (action === 'fit') state.statusText = 'Fit requested — renderer pending';
     if (action === 'reset') state.statusText = 'Reset requested — renderer pending';
     if (action === 'show-diagnostics') state.activePanel = 'diagnostics';
-    renderAll(handles, state);
+    if (action !== 'load-sample') renderAll(handles, state);
   };
   const onFileChange = (event) => {
     const file = event.target.files?.[0];
