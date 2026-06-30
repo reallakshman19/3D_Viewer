@@ -62,12 +62,13 @@ const instructionSet = {
 };
 
 const filtered = filterBrowserRvmRenderInstructions(instructionSet);
-assert.equal(filtered.count, 2);
+assert.equal(filtered.count, 4);
 assert.equal(filtered.diagnostics.code11FacetGuardedCount, 2);
 assert.equal(filtered.diagnostics.code11FacetDecodedCount, 1);
 assert.equal(filtered.diagnostics.code11FacetWireframeFallbackCount, 1);
+assert.equal(filtered.diagnostics.code11FacetXMarkerCount, 2);
 
-const [decoded, fallback] = filtered.instructions;
+const [decoded, fallback, markerA, markerB] = filtered.instructions;
 assert.equal(decoded.type, 'FACET_GROUP');
 assert.equal(decoded.kind, 'FACET_GROUP');
 assert.equal(decoded.renderPrimitive, 'FACET_GROUP_BBOX_PLACEHOLDER');
@@ -79,7 +80,15 @@ assert.equal(fallback.type, 'FACET_GROUP_UNDECODED');
 assert.equal(fallback.kind, 'FACET_GROUP');
 assert.equal(fallback.renderPrimitive, 'FACET_GROUP_BBOX_PLACEHOLDER');
 assert.equal(fallback.attributes.TYPE, 'SUPPORT');
-assert.equal(fallback.attributes.RVM_BROWSER_CODE11_RENDER_POLICY, 'wireframe-bbox-diagnostic-no-synthetic-support-stand');
+assert.equal(fallback.attributes.RVM_BROWSER_CODE11_RENDER_POLICY, 'wireframe-bbox-plus-subtle-x-diagnostic-no-synthetic-support-stand');
 assert.equal(fallback.attributes.RVM_BROWSER_CODE11_NATIVE_FACET_DECODED, 'false');
+
+for (const marker of [markerA, markerB]) {
+  assert.equal(marker.type, 'DIAGNOSTIC');
+  assert.equal(marker.kind, 'UNDECODED_FACET_X_MARKER');
+  assert.equal(marker.renderPrimitive, 'CYLINDER_BBOX');
+  assert.equal(marker.attributes.RVM_BROWSER_CODE11_X_MARKER, 'true');
+  assert.ok(marker.radius > 0 && marker.radius <= 0.01);
+}
 
 console.log('Browser RVM code 11 facet render guard test passed');
