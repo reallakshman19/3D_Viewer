@@ -21,7 +21,7 @@ function loadTabDiagnostics(){
 function loadSamplePickers(){
   if(typeof document==='undefined')return;
   if(loadSamplePickersPromise)return;
-  loadSamplePickersPromise=import('../tabs/xml-compare-enriched-sample-pickers.js?v=20260630-samples-through-linewise-1').catch(()=>null);
+  loadSamplePickersPromise=import('../tabs/xml-compare-enriched-sample-pickers.js?v=20260630-samples-through-linewise-2').catch(()=>null);
 }
 
 function loadCategorizedConverter(){
