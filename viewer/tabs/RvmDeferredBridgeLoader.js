@@ -1,7 +1,7 @@
 import { isRvmSourcePreviewKind, normalizeRvmSourceKind } from '../RvmSourceKindPolicy.js';
 
-const VERSION = '20260629-rvm-deferred-support-details-polish-1';
-const PREVIOUS_VERSION = '20260628-rvm-deferred-source-tools-dashboard-1';
+const VERSION = '20260630-rvm-native-tags-hierarchy-1';
+const PREVIOUS_VERSION = '20260629-rvm-deferred-support-details-polish-1';
 const API_KEY = '__PCF_GLB_RVM_BRIDGE_LOADER__';
 const ACTION_DIAGNOSTICS_KEY = '__PCF_GLB_RVM_ACTION_DIAGNOSTICS__';
 
@@ -18,6 +18,7 @@ const BRIDGE_GROUPS = Object.freeze({
   postModel: [
     { id: 'right-panel-tabs', specifier: './RvmRightPanelTabsBridge.js?v=20260629-rvm-right-panel-tabs-1', install: 'installRvmRightPanelTabsBridge' },
     { id: 'tag-tools', specifier: './RvmTagToolsBridge.js?v=20260630-rvm-tag-tools-2', install: 'installRvmTagToolsBridge' },
+    { id: 'tag-coordinate-bridge', specifier: './RvmTagCoordinateBridge.js?v=20260630-rvm-tag-coordinate-bridge-1', install: 'installRvmTagCoordinateBridge' },
     { id: 'stagedjson-export', specifier: './RvmStagedJsonExportBridge.js?v=20260624-rvm-stagedjson-support-policy-1', install: 'installRvmStagedJsonExportBridge' },
     { id: 'stagedjson-validation', specifier: './RvmStagedJsonValidationBridge.js?v=20260624-rvm-stagedjson-support-policy-1', install: 'installRvmStagedJsonValidationBridge' },
     { id: 'right-panel-format-policy', specifier: './RvmRightPanelFormatPolicyBridge.js?v=20260628-rvm-right-panel-ui-v2-1', previousSpecifier: './RvmRightPanelFormatPolicyBridge.js?v=20260628-rvm-right-panel-layout-1', install: 'installRvmRightPanelFormatPolicyBridge' },
