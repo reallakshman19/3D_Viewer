@@ -5,9 +5,22 @@ function addMessage(list, className, text) {
   list.appendChild(item);
 }
 
-function severityText(diagnostics) {
-  const counts = diagnostics?.severityCounts || {};
-  return `info ${counts.info || 0} · warning ${counts.warning || 0} · error ${counts.error || 0}`;
+function mapSummary(title, value) {
+  const box = document.createElement('div');
+  box.className = 'json-viewer-diagnostics-counts';
+  const heading = document.createElement('b');
+  heading.textContent = title;
+  const rows = Object.entries(value || {});
+  const text = document.createElement('span');
+  text.textContent = rows.length ? rows.map(([key, count]) => `${key}: ${count}`).join(' · ') : 'none';
+  box.append(heading, text);
+  return box;
+}
+
+function messageText(message) {
+  if (!message || typeof message !== 'object') return String(message);
+  const code = message.code ? `${message.code}: ` : '';
+  return `${code}${message.message || message.text || 'Diagnostic message'}`;
 }
 
 export function renderDiagnostics(target, diagnostics, validationErrors = []) {
@@ -15,19 +28,23 @@ export function renderDiagnostics(target, diagnostics, validationErrors = []) {
   const title = document.createElement('h2');
   title.className = 'json-viewer-panel-title';
   title.textContent = 'Diagnostics';
+
   const summary = document.createElement('div');
   summary.className = 'json-viewer-diagnostics-summary';
-  summary.textContent = validationErrors.length ? `${validationErrors.length} validation issue(s)` : severityText(diagnostics);
+  summary.append(
+    mapSummary('severityCounts', diagnostics?.severityCounts),
+    mapSummary('fallbackCounts', diagnostics?.fallbackCounts),
+    mapSummary('renderKindCounts', diagnostics?.renderKindCounts),
+  );
 
   const list = document.createElement('ul');
   list.className = 'json-viewer-diagnostics-list';
-  for (const error of validationErrors) addMessage(list, 'is-error', error);
+  for (const error of validationErrors) addMessage(list, 'is-error', `validation: ${error}`);
 
   const messages = Array.isArray(diagnostics?.messages) ? diagnostics.messages : [];
   for (const message of messages.slice(0, 40)) {
     const severity = message.severity || 'info';
-    const text = message.message || message.text || String(message);
-    addMessage(list, `is-${severity}`, text);
+    addMessage(list, `is-${severity}`, messageText(message));
   }
 
   if (!validationErrors.length && !messages.length) {
