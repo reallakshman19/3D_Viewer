@@ -89,9 +89,17 @@ function addUnknownDiagnosticPrimitive(model) {
     ref: { nodeId, componentId, primitiveId, nativeCode: 99, recordOffset: 9001 },
     fallback: { reason: 'unknown-native-code', renderKind: 'UNKNOWN_DIAGNOSTIC', recipe: 'bbox-wireframe' },
   };
+  const definition = {
+    name: '/RMSS/UNKNOWN-CODE-99',
+    semanticType: 'UNKNOWN',
+    bboxWorld,
+    geometryConfidence: 'diagnostic',
+    semanticConfidence: 'unknown',
+    diagnostics: [diagnostic],
+  };
 
-  model.hierarchy.nodes.push(createNode(nodeId, { name: '/RMSS/UNKNOWN-CODE-99', bboxWorld }, componentId, [primitiveId]));
-  model.components.push(createComponent(componentId, nodeId, { name: '/RMSS/UNKNOWN-CODE-99', semanticType: 'UNKNOWN', bboxWorld }, [primitiveId]));
+  model.hierarchy.nodes.push(createNode(nodeId, definition, componentId, [primitiveId]));
+  model.components.push(createComponent(componentId, nodeId, definition, [primitiveId]));
   model.primitives.push({
     id: primitiveId,
     nodeId,
@@ -133,9 +141,12 @@ function createComponent(id, nodeId, definition, primitiveIds) {
     ownerPath: definition.name,
     primitiveIds: [...primitiveIds],
     bboxWorld: definition.bboxWorld,
-    confidence: { geometry: 'native', semantic: definition.semanticType === 'UNKNOWN' ? 'unknown' : 'attribute' },
+    confidence: {
+      geometry: definition.geometryConfidence || 'native',
+      semantic: definition.semanticConfidence || 'attribute',
+    },
     renderPolicy: createRenderPolicy(),
-    diagnostics: [],
+    diagnostics: definition.diagnostics || [],
   };
 }
 
