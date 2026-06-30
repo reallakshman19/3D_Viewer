@@ -1,11 +1,12 @@
 import { renderXmlCompareGraphCanvasHtml } from './XmlCompareGraphCanvas.js';
 import { renderXmlCompareGraphConnectorLaneHtml } from './XmlCompareGraphConnectorLane.js';
+import { renderXmlCompareAutoMapPopupHtml } from './XmlCompareAutoMapPopup.js';
 import { renderXmlCompareDetailsPanelHtml } from './XmlCompareDetailsPanel.js';
 import { renderXmlCompareDiagnosticsPanelHtml } from './XmlCompareDiagnosticsPanel.js';
 import { renderXmlCompareDebugPanelHtml } from './XmlCompareDebugPanel.js';
 import { renderXmlCompareLogScreenHtml } from './XmlCompareLogScreen.js';
 
-export const XML_COMPARE_WORKSPACE_SHELL_SCHEMA='xml-compare-workspace-shell/v3';
+export const XML_COMPARE_WORKSPACE_SHELL_SCHEMA='xml-compare-workspace-shell/v4';
 
 let loadDiagnosticsPromise=null;
 
@@ -68,6 +69,7 @@ export function renderXmlCompareWorkspaceShellHtml({
       ${renderXmlCompareDiagnosticsPanelHtml({diagnostics})}
       ${renderXmlCompareDebugPanelHtml({source,target,logs,diagnostics,manualConnectors})}
     </div>
+    ${renderXmlCompareAutoMapPopupHtml({matchMap,source,target})}
   </section>`;
 }
 
