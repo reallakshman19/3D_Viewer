@@ -20,6 +20,7 @@ const BRIDGE_GROUPS = Object.freeze({
     { id: 'right-panel-tabs', specifier: './RvmRightPanelTabsBridge.js?v=20260629-rvm-right-panel-tabs-1', install: 'installRvmRightPanelTabsBridge' },
     { id: 'right-panel-partition', specifier: './RvmRightPanelPartitionBridge.js?v=20260630-rvm-right-panel-partition-1', install: 'installRvmRightPanelPartitionBridge' },
     { id: 'hierarchy-dynamic-child-checkbox', specifier: './RvmHierarchyDynamicChildCheckboxBridge.js?v=20260630-rvm-hierarchy-dynamic-child-checkbox-1', install: 'installRvmHierarchyDynamicChildCheckboxBridge' },
+    { id: 'code4-elbow-render', specifier: '../rvm/BrowserRvmCode4ElbowRenderBridge.js?v=20260630-rvm-code4-elbow-native-overlay-1', install: 'installBrowserRvmCode4ElbowRenderBridge' },
     { id: 'tag-tools', specifier: './RvmTagToolsBridge.js?v=20260630-rvm-tag-tools-2', install: 'installRvmTagToolsBridge' },
     { id: 'tag-coordinate-bridge', specifier: './RvmTagCoordinateBridge.js?v=20260630-rvm-tag-coordinate-bridge-1', install: 'installRvmTagCoordinateBridge' },
     { id: 'stagedjson-export', specifier: './RvmStagedJsonExportBridge.js?v=20260624-rvm-stagedjson-support-policy-1', install: 'installRvmStagedJsonExportBridge' },
