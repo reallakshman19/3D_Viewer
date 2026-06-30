@@ -93,6 +93,8 @@ function point(row){const x=numberValue(row.x),y=numberValue(row.y),z=numberValu
 function clonePoint(p){return{x:Number(p.x),y:Number(p.y),z:Number(p.z)};}
 function addPoint(p,dx,dy,dz){return{x:Number(p.x)+dx,y:Number(p.y)+dy,z:Number(p.z)+dz};}
 function applyGlobalAttrs(openTag,fromPoint,toPoint,basisNode){let next=openTag;next=setAttr(next,'FROM_GLOBAL_X',fmt(fromPoint.x));next=setAttr(next,'FROM_GLOBAL_Y',fmt(fromPoint.y));next=setAttr(next,'FROM_GLOBAL_Z',fmt(fromPoint.z));next=setAttr(next,'TO_GLOBAL_X',fmt(toPoint.x));next=setAttr(next,'TO_GLOBAL_Y',fmt(toPoint.y));next=setAttr(next,'TO_GLOBAL_Z',fmt(toPoint.z));next=setAttr(next,'GLOBAL_COORD_BASIS_NODE',basisNode);return next;}
+function popupFieldValue(name){try{if(typeof document==='undefined')return '';return document.querySelector(`[data-xml-compare-sideload-field="${name}"]`)?.value||'';}catch{return '';}}
+function normalizeTables(tables={}){return{...tables,coordinateText:clean(tables.coordinateText)||popupFieldValue('coordinateText')};}
 export function buildXmlCompareSideloadIndex({lineIdText='',nodeNameText='',restraintTagText='',coordinateText=''}={}){
   const lineIdRows=tableRows(lineIdText,['from','to','lineId']);
   const nodeNameRows=tableRows(nodeNameText,['from','to','fromName','toName']);
@@ -128,7 +130,7 @@ function tagForRestraint(openTag,index){
   return index.tagExact.get(keys.exact)||index.tagNodeType.get(keys.nodeType)||index.tagNode.get(keys.node)||'';
 }
 export function applyXmlCompareSideload(xmlText='',tables={}){
-  const index=buildXmlCompareSideloadIndex(tables);
+  const index=buildXmlCompareSideloadIndex(normalizeTables(tables));
   const report={schema:XML_COMPARE_SIDELOAD_ENRICHER_SCHEMA,lineIdsApplied:0,nodeNamesApplied:0,tagsApplied:0,coordinatesApplied:0,coordinateNodesResolved:index.nodeCoordinates.size,...index.stats};
   const nodeCoordinates=new Map([...index.nodeCoordinates.entries()].map(([node,p])=>[node,clonePoint(p)]));
   let basisNode=[...index.nodeCoordinates.keys()][0]||'';
@@ -164,4 +166,4 @@ export function buildXmlCompareSideloadFileName(fileName='sideload.xml'){
   const base=clean(fileName)||'sideload.xml';
   return base.replace(/(\.txt|\.xml)?$/i,'_sideloaded.xml');
 }
-export const _test=Object.freeze({clean,normalizeNode,normalizeScalar,numberValue,deltaValue,pairKey,splitLine,tableRows,attrValue,setAttr,tagKeys,tagForRestraint,point,applyGlobalAttrs});
+export const _test=Object.freeze({clean,normalizeNode,normalizeScalar,numberValue,deltaValue,pairKey,splitLine,tableRows,attrValue,setAttr,tagKeys,tagForRestraint,point,applyGlobalAttrs,normalizeTables});
