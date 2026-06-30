@@ -1,4 +1,4 @@
-export const CATEGORIZED_INPUTXML_CONVERTER_SCHEMA='categorized-inputxml-converter/v3';
+export const CATEGORIZED_INPUTXML_CONVERTER_SCHEMA='categorized-inputxml-converter/v4';
 
 const esc=(value)=>String(value??'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll("'",'&apos;');
 const clean=(value)=>String(value??'').trim();
@@ -36,8 +36,7 @@ function elementKey(attrs={}){return `${normalizeNode(attrs.FROM_NODE)}->${norma
 function lineId(attrs={}){return clean(attrs.LINE_ID||attrs['PIPELINE-REFERENCE']||'UNSPECIFIED_LINE');}
 function firstOpenTag(xml=''){return String(xml).match(/^<PIPINGELEMENT\b[^>]*>/i)?.[0]||'';}
 function splitPipingElements(xml=''){
-  const text=String(xml??'');
-  const starts=[];
+  const text=String(xml??''),starts=[];
   const re=/<PIPINGELEMENT\b[^>]*>/gi;
   let match;while((match=re.exec(text)))starts.push(match.index);
   const elements=[];
@@ -47,9 +46,7 @@ function splitPipingElements(xml=''){
     const closeIndex=chunk.search(/<\/PIPINGELEMENT>/i);
     if(closeIndex>=0)chunk=chunk.slice(0,closeIndex+'</PIPINGELEMENT>'.length).trim();
     else{
-      const open=firstOpenTag(chunk);
-      const rest=chunk.slice(open.length);
-      const external=rest.search(EXTERNAL_START_RE);
+      const open=firstOpenTag(chunk),rest=chunk.slice(open.length),external=rest.search(EXTERNAL_START_RE);
       if(external>=0)chunk=(open+rest.slice(0,external)).trim();
     }
     if(chunk)elements.push(chunk);
@@ -93,23 +90,33 @@ function branchBlocks(xml=''){
   return groups;
 }
 function blockXml(blockName='',attrs={},used=new Set()){
-  const keys=BLOCK_FIELDS[blockName]||[];
-  const rows=[];
-  for(const key of keys){
-    if(attrs[key]==null||clean(attrs[key])==='')continue;
-    used.add(key);
-    if(!isUnset(attrs[key]))rows.push(`      <${key}>${esc(attrs[key])}</${key}>`);
-  }
+  const keys=BLOCK_FIELDS[blockName]||[],rows=[];
+  for(const key of keys){if(attrs[key]==null||clean(attrs[key])==='')continue;used.add(key);if(!isUnset(attrs[key]))rows.push(`      <${key}>${esc(attrs[key])}</${key}>`);}
   return rows.length?`    <${blockName}>\n${rows.join('\n')}\n    </${blockName}>`:'';
 }
 function childBlockXml(blockName='',children=[]){const active=children.filter((child)=>clean(child));return active.length?`    <${blockName}>\n${active.map((child)=>`      ${clean(child)}`).join('\n')}\n    </${blockName}>`:'';}
 function miscXml(attrs={},used=new Set()){
   const rows=[];
-  for(const [key,value] of Object.entries(attrs)){
-    if(key==='FROM_NODE'||key==='TO_NODE'||used.has(key)||isUnset(value))continue;
-    rows.push(`      <UnmappedAttribute name="${esc(key)}">${esc(value)}</UnmappedAttribute>`);
-  }
+  for(const [key,value] of Object.entries(attrs)){if(key==='FROM_NODE'||key==='TO_NODE'||used.has(key)||isUnset(value))continue;rows.push(`      <UnmappedAttribute name="${esc(key)}">${esc(value)}</UnmappedAttribute>`);}
   return rows.length?`    <MiscBlock>\n${rows.join('\n')}\n    </MiscBlock>`:'    <MiscBlock />';
+}
+function deltaLength(attrs={}){const dx=isUnset(attrs.DELTA_X)?0:num(attrs.DELTA_X),dy=isUnset(attrs.DELTA_Y)?0:num(attrs.DELTA_Y),dz=isUnset(attrs.DELTA_Z)?0:num(attrs.DELTA_Z);if([dx,dy,dz].every((v)=>v==null))return '';const value=Math.sqrt((dx||0)*(dx||0)+(dy||0)*(dy||0)+(dz||0)*(dz||0));return Number.isFinite(value)&&value>0?value.toFixed(3):'';}
+function derivePipingClass(attrs={},line=''){const direct=clean(attrs.PipingClass||attrs.PIPING_CLASS||attrs.PIPINGCLASS);if(direct)return{value:direct,source:'existing-field'};const parts=clean(line).replace(/^\/+/, '').replace(/\/B\d+$/i,'').split('-').filter(Boolean);const value=parts.find((part)=>/[A-Z]{1,}\d{2,}|\d{3,}[A-Z]/i.test(part))||'';return value?{value,source:'line-token'}:null;}
+function deriveRating(attrs={},pipingClass=''){const direct=clean(attrs.Rating||attrs.RATING||attrs.CLASS_GRADE);if(direct)return{value:direct,source:'existing-field'};const hit=clean(pipingClass).match(/(?:CL|CLASS|RATING)?\s*([0-9]{2,4})/i);return hit?{value:hit[1],source:'piping-class'}:null;}
+function deriveBore(attrs={},line=''){const direct=clean(attrs.BoreMm||attrs.BORE_MM);if(direct)return{value:direct,source:'existing-field'};const quoted=clean(line).match(/(\d+(?:\.\d+)?)\s*"/);if(quoted){const n=Number(quoted[1]);return Number.isFinite(n)?{value:(n*25.4).toFixed(3),source:'line-size-token'}:null;}return null;}
+function derivedBlockXml(attrs={},line=''){
+  const pc=derivePipingClass(attrs,line),rating=deriveRating(attrs,pc?.value||''),bore=deriveBore(attrs,line),length=deltaLength(attrs),material=clean(attrs.MaterialName||attrs.MATERIAL_NAME||attrs.MATERIAL||'');
+  const rows=[];
+  if(pc)rows.push(`      <PipingClass source="${esc(pc.source)}">${esc(pc.value)}</PipingClass>`);
+  if(rating)rows.push(`      <Rating source="${esc(rating.source)}">${esc(rating.value)}</Rating>`);
+  if(bore)rows.push(`      <BoreMm source="${esc(bore.source)}">${esc(bore.value)}</BoreMm>`);
+  if(length)rows.push(`      <ElementLengthMm source="delta-vector">${esc(length)}</ElementLengthMm>`);
+  if(material)rows.push(`      <MaterialName source="existing-field">${esc(material)}</MaterialName>`);
+  return rows.length?`    <DerivedBlock>\n${rows.join('\n')}\n    </DerivedBlock>`:'';
+}
+function lineMaterialBlockXml(branchGroups={}){
+  const blocks=branchGroups.AllowableStressBlock||[];
+  return blocks.length?`  <MaterialBlock scope="line">\n    <AllowableStressBlock>\n${blocks.map((block)=>`      ${clean(block)}`).join('\n')}\n    </AllowableStressBlock>\n  </MaterialBlock>`:'';
 }
 function cdata(text=''){return String(text).replaceAll(']]>',']]]]><![CDATA[>');}
 function decdata(text=''){return String(text).replaceAll(']]]]><![CDATA[>',']]>');}
@@ -127,6 +134,7 @@ function categorizedElementXml(elementXml='',nodeBlockMap=new Map()){
   blocks.push(blockXml('SectionDimensionBlock',attrs,used));
   blocks.push(blockXml('ProcessBlock',attrs,used));
   blocks.push(blockXml('MaterialBlock',attrs,used));
+  blocks.push(derivedBlockXml(attrs,line));
   blocks.push(blockXml('DerivedCoordinateBlock',attrs,used));
   for(const name of ['BendBlock','SifBlock','RigidBlock','FlangeBlock'])blocks.push(childBlockXml(name,childGroups[name]||[]));
   for(const name of ['RestraintsBlock','DisplacementBlock','ForceMomentBlock'])blocks.push(childBlockXml(name,nodeGroups[name]||[]));
@@ -141,12 +149,11 @@ function categorizedExternalBlocks(categorizedText=''){
 }
 function originalDocument(categorizedText=''){const match=String(categorizedText).match(/<OriginalDocument>\s*<!\[CDATA\[([\s\S]*?)\]\]>\s*<\/OriginalDocument>/i);return match?decdata(match[1]):'';}
 export function inputXmlToCategorizedInputXml(xmlText='',{sourceName='InputXML'}={}){
-  const nodeBlockMap=nodeBlocks(xmlText),branchGroups=branchBlocks(xmlText);
+  const nodeBlockMap=nodeBlocks(xmlText),branchGroups=branchBlocks(xmlText),lineMaterial=lineMaterialBlockXml(branchGroups);
   const byLine=new Map();
   for(const element of splitPipingElements(xmlText)){const entry=categorizedElementXml(element,nodeBlockMap);if(!byLine.has(entry.line))byLine.set(entry.line,[]);byLine.get(entry.line).push(entry.xml);}
-  const branchXml=Object.entries(branchGroups).map(([name,blocks])=>` <${name}>\n${blocks.map((block)=>`  ${clean(block)}`).join('\n')}\n </${name}>`).join('\n');
-  const lines=[...byLine.entries()].map(([line,elements])=>` <Line id="${esc(line)}">\n${elements.join('\n')}\n </Line>`).join('\n');
-  return `<?xml version="1.0" encoding="UTF-8"?>\n<CategorizedInputXML schema="categorized-inputxml/v1" sourceName="${esc(sourceName)}">\n${branchXml?`${branchXml}\n`:''}${lines}\n</CategorizedInputXML>\n`;
+  const lines=[...byLine.entries()].map(([line,elements])=>` <Line id="${esc(line)}">\n${lineMaterial?`${lineMaterial}\n`:''}${elements.join('\n')}\n </Line>`).join('\n');
+  return `<?xml version="1.0" encoding="UTF-8"?>\n<CategorizedInputXML schema="categorized-inputxml/v1" sourceName="${esc(sourceName)}">\n${lines}\n</CategorizedInputXML>\n`;
 }
 export function categorizedInputXmlToInputXml(categorizedText=''){
   const original=originalDocument(categorizedText);
@@ -165,4 +172,4 @@ export function categorizedFileName(name='',direction='input-to-categorized'){
   const base=clean(name||'input.xml').replace(/\.(xml|txt)$/i,'');
   return direction==='categorized-to-input'?`${base}_inputxml.xml`:`${base}_categorized_enriched.xml`;
 }
-export const _test=Object.freeze({attrsOf,isUnset,activeChildBlock,activeNodeBlock,activeBranchBlock,splitPipingElements,splitLooseBlocks,nodeBlocks,branchBlocks,categorizedExternalBlocks,originalDocument,inputXmlToCategorizedInputXml,categorizedInputXmlToInputXml,categorizedFileName});
+export const _test=Object.freeze({attrsOf,isUnset,activeChildBlock,activeNodeBlock,activeBranchBlock,splitPipingElements,splitLooseBlocks,nodeBlocks,branchBlocks,categorizedExternalBlocks,originalDocument,deltaLength,derivedBlockXml,lineMaterialBlockXml,inputXmlToCategorizedInputXml,categorizedInputXmlToInputXml,categorizedFileName});
