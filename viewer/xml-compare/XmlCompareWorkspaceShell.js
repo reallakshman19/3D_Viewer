@@ -6,7 +6,7 @@ import { renderXmlCompareDiagnosticsPanelHtml } from './XmlCompareDiagnosticsPan
 import { renderXmlCompareDebugPanelHtml } from './XmlCompareDebugPanel.js';
 import { renderXmlCompareLogScreenHtml } from './XmlCompareLogScreen.js';
 
-export const XML_COMPARE_WORKSPACE_SHELL_SCHEMA='xml-compare-workspace-shell/v4';
+export const XML_COMPARE_WORKSPACE_SHELL_SCHEMA='xml-compare-workspace-shell/v5';
 
 let loadDiagnosticsPromise=null;
 let loadSamplePickersPromise=null;
@@ -81,7 +81,7 @@ export function renderXmlCompareWorkspaceShellHtml({
   loadCategorizedConverter();
   loadToolbarGate();
   const manualState=createManualState(manualConnectors,navStates);
-  return `<section class="xml-compare-workspace-shell is-rebuilt" data-xml-compare-workspace-shell>
+  return `<section class="xml-compare-workspace-shell is-rebuilt" data-xml-compare-workspace-shell data-xml-compare-workspace-shell-schema="${XML_COMPARE_WORKSPACE_SHELL_SCHEMA}">
     <div class="xml-compare-workspace-grid is-two-canvas">
       ${sideCard('source','Source',source||{},navStates.source,manualState)}
       ${connectorLane(matchMap,manualState)}
