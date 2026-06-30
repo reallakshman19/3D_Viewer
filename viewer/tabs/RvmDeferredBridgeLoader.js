@@ -17,6 +17,8 @@ const BRIDGE_GROUPS = Object.freeze({
   ],
   postModel: [
     { id: 'right-panel-tabs', specifier: './RvmRightPanelTabsBridge.js?v=20260629-rvm-right-panel-tabs-1', install: 'installRvmRightPanelTabsBridge' },
+    { id: 'right-panel-partition', specifier: './RvmRightPanelPartitionBridge.js?v=20260630-rvm-right-panel-partition-1', install: 'installRvmRightPanelPartitionBridge' },
+    { id: 'hierarchy-dynamic-child-checkbox', specifier: './RvmHierarchyDynamicChildCheckboxBridge.js?v=20260630-rvm-hierarchy-dynamic-child-checkbox-1', install: 'installRvmHierarchyDynamicChildCheckboxBridge' },
     { id: 'tag-tools', specifier: './RvmTagToolsBridge.js?v=20260630-rvm-tag-tools-2', install: 'installRvmTagToolsBridge' },
     { id: 'tag-coordinate-bridge', specifier: './RvmTagCoordinateBridge.js?v=20260630-rvm-tag-coordinate-bridge-1', install: 'installRvmTagCoordinateBridge' },
     { id: 'stagedjson-export', specifier: './RvmStagedJsonExportBridge.js?v=20260624-rvm-stagedjson-support-policy-1', install: 'installRvmStagedJsonExportBridge' },
@@ -138,131 +140,50 @@ function startModelReadyPolling(api) {
     if (modelReady) {
       root.dataset.rvmModelLoaded = 'true';
       afterFirstPaint(() => {
-        api.ensurePostModel('detected-model-group');
-        api.ensureSourcePreview('detected-model-group');
+        api.ensurePostModel('model-ready-poll');
+        api.ensureSourcePreview('model-ready-poll');
       });
       return;
     }
-    if (attempts < 240) setTimeout(tick, 500);
+    if (attempts < 90) setTimeout(tick, 350);
   };
-  afterFirstPaint(tick);
+  setTimeout(tick, 250);
 }
 
-function ensureSourcePreviewGroupIfNeeded(reason = 'source-preview-check') {
-  const context = getSourcePreviewContext();
-  if (!context.active) {
-    clearSourcePreviewRuntime(context.viewer, context.reason || 'not-source-preview');
-    return Promise.resolve({ group: 'sourcePreview', reason, skipped: true, status: 'not-source-preview' });
-  }
+function ensureSourcePreviewGroupIfNeeded(reason = 'manual') {
+  const root = document.querySelector('[data-rvm-viewer]');
+  const sourceKind = normalizeRvmSourceKind(root?.dataset?.rvmLoadedSourceKind || '');
+  if (!isRvmSourcePreviewKind(sourceKind)) return Promise.resolve({ group: 'sourcePreview', reason, skipped: true, sourceKind });
   return ensureRvmBridgeGroup('sourcePreview', reason);
 }
 
-function getSourcePreviewContext() {
+function refreshSourcePreviewRuntime(reason = 'manual') {
   const root = document.querySelector('[data-rvm-viewer]');
-  const viewer = globalThis.__3D_RVM_VIEWER__;
-  const model = viewer?.modelGroup || viewer?.scene || null;
-  const userData = model?.userData || {};
-  const mode = String(root?.dataset?.rvmModelPrimitiveMode || viewer?.modelPrimitiveMode || '').toLowerCase();
-  const sourceKind = normalizeSourceKind(root?.dataset?.rvmLoadedSourceKind || userData.__rvmNonPrimitiveSourceKind || userData.__rvmNonPrimitiveAutoBendSourceKind || viewer?.sourceKind || '');
-  const source = userData.__rvmNonPrimitiveAutoBendSourceHierarchy || userData.__rvmNonPrimitiveSourceHierarchy || null;
-  const supportSource = userData.__rvmNonPrimitiveSourceHierarchy || source;
-  const active = mode === 'source-preview' && isRvmSourcePreviewKind(sourceKind) && Boolean(source);
-  return { root, viewer, model, source, supportSource, sourceKind, fileName: userData.fileName || '', active, reason: active ? '' : `mode:${mode || '-'} kind:${sourceKind || '-'}` };
-}
-
-function normalizeSourceKind(value) {
-  return normalizeRvmSourceKind(value);
-}
-
-function refreshSourcePreviewRuntime(reason = 'source-preview-loaded') {
-  const context = getSourcePreviewContext();
-  if (!context.active) return clearSourcePreviewRuntime(context.viewer, context.reason || reason);
-  const { root, viewer, source, supportSource, sourceKind, fileName } = context;
-  try { globalThis.__PCF_GLB_RVM_NON_PRIMITIVE_AUTO_BEND__?.applyFromSource?.({ viewer, source, sourceKind, fileName }); } catch (error) { reportRvmActionError(error, { action: 'source-preview-auto-bend', reason }); }
-  try { globalThis.__PCF_GLB_RVM_NON_PRIMITIVE_SUPPORT_OVERLAY__?.applyFromSource?.({ viewer, root, source: supportSource, sourceKind, fileName }); } catch (error) { reportRvmActionError(error, { action: 'source-preview-support-overlay', reason }); }
-  try { globalThis.__PCF_GLB_RVM_NON_PRIMITIVE_NODE_MARKERS__?.applyFromSource?.({ viewer, root, source, sourceKind, fileName }); } catch (error) { reportRvmActionError(error, { action: 'source-preview-node-markers', reason }); }
-  try { globalThis.__PCF_GLB_RVM_NON_PRIMITIVE_SOURCE_TOOLS_UI__?.sync?.(); } catch (error) { reportRvmActionError(error, { action: 'source-preview-tools-sync', reason }); }
-  try { globalThis.__PCF_GLB_RVM_RIGHT_PANEL_FORMAT_POLICY__?.render?.(root, viewer); } catch (error) { reportRvmActionError(error, { action: 'right-panel-policy-sync', reason }); }
-  return { status: 'refreshed', sourceKind, reason };
-}
-
-function clearSourcePreviewRuntime(viewer, reason = 'clear-source-preview-runtime') {
-  try { globalThis.__PCF_GLB_RVM_NON_PRIMITIVE_AUTO_BEND__?.clear?.(viewer, reason); } catch (_) {}
-  try { globalThis.__PCF_GLB_RVM_NON_PRIMITIVE_SUPPORT_OVERLAY__?.clear?.(viewer, reason); } catch (_) {}
-  try { globalThis.__PCF_GLB_RVM_NON_PRIMITIVE_NODE_MARKERS__?.clear?.(viewer, reason); } catch (_) {}
-  try { globalThis.__PCF_GLB_RVM_NON_PRIMITIVE_SOURCE_TOOLS_UI__?.sync?.(); } catch (_) {}
-  try { globalThis.__PCF_GLB_RVM_RIGHT_PANEL_FORMAT_POLICY__?.render?.(document.querySelector('[data-rvm-viewer]'), viewer); } catch (_) {}
-  return { status: 'cleared', reason };
+  const sourceKind = normalizeRvmSourceKind(root?.dataset?.rvmLoadedSourceKind || '');
+  if (!root || !isRvmSourcePreviewKind(sourceKind)) return;
+  try { globalThis.__PCF_GLB_RVM_RIGHT_PANEL_FORMAT_POLICY__?.refresh?.(root, `source-preview-${reason}`); } catch (_) {}
+  try { globalThis.__PCF_GLB_RVM_NON_PRIMITIVE_SOURCE_TOOLS_UI__?.refresh?.(root, `source-preview-${reason}`); } catch (_) {}
 }
 
 function installRvmBridgeActionDiagnostics() {
   if (actionDiagnosticsInstalled) return;
   actionDiagnosticsInstalled = true;
-  globalThis.__PCF_GLB_RVM_REPORT_ACTION_ERROR__ = reportRvmActionError;
-  globalThis.addEventListener?.('unhandledrejection', (event) => {
-    if (!document.querySelector('[data-rvm-viewer]')) return;
-    reportRvmActionError(event.reason || event, { action: 'unhandled-promise' });
-  });
-  globalThis.addEventListener?.('error', (event) => {
-    if (!document.querySelector('[data-rvm-viewer]')) return;
-    reportRvmActionError(event.error || event.message || event, { action: 'window-error' });
-  });
+  globalThis.addEventListener?.('error', (event) => reportRvmActionError(event.error || event.message, { action: 'window-error' }));
+  globalThis.addEventListener?.('unhandledrejection', (event) => reportRvmActionError(event.reason, { action: 'unhandledrejection' }));
 }
 
 function reportRvmActionError(error, context = {}) {
-  const root = document.querySelector('[data-rvm-viewer]');
-  const message = String(error?.message || error || 'Unknown RVM action error');
-  const entry = { at: new Date().toISOString(), message, stack: String(error?.stack || ''), ...context };
-  const current = globalThis[ACTION_DIAGNOSTICS_KEY] || { schema: 'rvm-action-diagnostics/v1', version: VERSION, failures: [] };
-  current.version = VERSION;
-  current.failures = [entry, ...(current.failures || [])].slice(0, 20);
-  current.failureCount = current.failures.length;
-  globalThis[ACTION_DIAGNOSTICS_KEY] = current;
-  if (root) {
-    root.dataset.rvmButtonActionFailures = String(current.failureCount);
-    const status = root.querySelector('#rvm-sb-msg');
-    if (status) status.textContent = `RVM action failed: ${message}`;
-    updateActionDiagnosticsPanel(root, current);
-  }
-  try { globalThis.dispatchEvent?.(new CustomEvent('rvm-action-diagnostics', { detail: current })); } catch (_) {}
+  const entry = { at: new Date().toISOString(), message: error?.message || String(error || 'Unknown RVM action error'), stack: error?.stack || '', ...context };
+  const existing = globalThis[ACTION_DIAGNOSTICS_KEY] || { errors: [] };
+  existing.errors = [...(existing.errors || []), entry].slice(-20);
+  globalThis[ACTION_DIAGNOSTICS_KEY] = existing;
   refreshDiagnosticsDrawer();
-  console.warn('[RVM action diagnostics]', context, error);
-  return current;
-}
-
-function updateActionDiagnosticsPanel(root, diagnostics) {
-  if (!root) return;
-  let panel = root.querySelector('[data-rvm-action-diagnostics-panel]');
-  if (!panel) {
-    panel = document.createElement('div');
-    panel.dataset.rvmActionDiagnosticsPanel = VERSION;
-    panel.className = 'rvm-action-diagnostics-panel rvm-browser-parse-diagnostics';
-    panel.innerHTML = '<h3>RVM Action Errors</h3><div data-rvm-action-diagnostics-body></div>';
-    const right = root.querySelector('.rvm-right-panel') || root;
-    right.appendChild(panel);
-    try { globalThis.__PCF_GLB_RVM_RIGHT_PANEL_TABS__?.moveToTab?.(root, panel, 'diagnostics'); } catch (_) {}
-  }
-  const body = panel.querySelector('[data-rvm-action-diagnostics-body]') || panel;
-  const failures = diagnostics?.failures || [];
-  body.innerHTML = failures.length
-    ? failures.slice(0, 6).map((failure) => `<div class="rvm-browser-diag-warning"><b>${escapeHtml(failure.action || failure.bridge || 'action')}</b>: ${escapeHtml(failure.message)}</div>`).join('')
-    : '<div class="rvm-empty-state">No action errors.</div>';
-  try { globalThis.__PCF_GLB_RVM_RIGHT_PANEL_TABS__?.refresh?.(root, 'action-diagnostics'); } catch (_) {}
 }
 
 function refreshDiagnosticsDrawer() {
-  try { globalThis.__PCF_GLB_RVM_BOTTOM_DIAGNOSTICS_DRAWER__?.refresh?.(); } catch (_) {}
+  try { globalThis.__PCF_GLB_RVM_BOTTOM_DIAGNOSTICS_DRAWER__?.refresh?.('bridge-action-diagnostics'); } catch (_) {}
 }
 
-function afterFirstPaint(fn) {
-  const run = () => {
-    if (typeof globalThis.requestIdleCallback === 'function') globalThis.requestIdleCallback(fn, { timeout: 1200 });
-    else setTimeout(fn, 0);
-  };
-  if (typeof globalThis.requestAnimationFrame === 'function') globalThis.requestAnimationFrame(run);
-  else setTimeout(run, 0);
-}
-
-function escapeHtml(value) {
-  return String(value ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+function afterFirstPaint(callback) {
+  requestAnimationFrame(() => requestAnimationFrame(callback));
 }
