@@ -6,7 +6,7 @@ import { renderXmlCompareAutoMapPopupHtml, _test as popupTest } from '../xml-com
 
 const sourceHierarchy=createXmlCompareLineNodeHierarchy([
   {uid:'SRC-1',lineNo:'L-1',points:[{x:0,y:0,z:0},{x:10,y:0,z:0}],position:{x:0,y:0,z:0},attributes:{from:'10',to:'20',FROM_NODE:'10.000000',TO_NODE:'20.000000',FROM_GLOBAL_X:'100.000000',FROM_GLOBAL_Y:'200.000000',FROM_GLOBAL_Z:'300.000000',DELTA_X:'10.000000',DELTA_Y:'0.000000',DELTA_Z:'0.000000',DIAMETER:'114.300000',Temperature1:'120',Pressure1:'700','COMPONENT-ATTRIBUTE2':'120','COMPONENT-ATTRIBUTE1':'700',TEMP_EXP_C1:'120',PRESSURE1:'700',DESIGN_PRESSURE:'900',INSUL_THICK:'50',MATERIAL_NAME:'A106 B',PIPELINE_REFERENCE:'PIPE-A'}},
-  {uid:'SRC-2',lineNo:'L-1',points:[{x:10,y:0,z:0},{x:20,y:0,z:0}],position:{x:10,y:0,z:0},attributes:{FROM_NODE:'20.000000',TO_NODE:'30.000000',Temperature1:'121',Pressure1:'701',HYDRO_PRESSURE:'1200'}}
+  {uid:'SRC-2',lineNo:'L-1',points:[{x:10,y:0,z:0},{x:20,y:0,z:0}],position:{x:10,y:0,z:0},attributes:{FROM_NODE:'20.000000',TO_NODE:'30.000000',DELTA_X:'10.000000',DELTA_Y:'0.000000',DELTA_Z:'0.000000',DIAMETER:'114.300000',Temperature1:'121',Pressure1:'701',HYDRO_PRESSURE:'1200'}}
 ]);
 const targetHierarchy=createXmlCompareLineNodeHierarchy([
   {uid:'TGT-1',lineNo:'L-9',points:[{x:1000,y:500,z:0},{x:1010,y:500,z:0}],position:{x:1000,y:500,z:0},attributes:{from:'1000',to:'1010',FROM_NODE:'1000.000000',TO_NODE:'1010.000000',Temperature1:'',Pressure1:''}},
@@ -63,6 +63,12 @@ assert.match(html,/MaterialBlock/);
 assert.match(html,/copy-node-owned-blocks/);
 assert.match(html,/copy-element-owned-blocks/);
 assert.match(html,/copy-line-owned-blocks/);
+assert.match(html,/Inferred element pairs: 2/);
+assert.match(html,/10-&gt;20/);
+assert.match(html,/1000-&gt;1010/);
+assert.match(html,/20-&gt;30/);
+assert.match(html,/1010-&gt;1020/);
+assert.match(html,/all-inferred-element-pairs/);
 assert.match(html,/Line scope owns ProcessBlock and MaterialBlock/);
 assert.match(html,/preview-only/);
 assert.match(html,/data-xml-compare-node-pair/);
@@ -87,13 +93,25 @@ assert.ok(!lineFields.includes('DIAMETER'));
 assert.ok(!lineFields.includes('from'));
 assert.ok(!lineFields.includes('to'));
 
+const inferred=popupTest.inferElementPairsFromNodePairs(rows);
+assert.equal(inferred.length,2);
+assert.deepEqual(inferred.map((pair)=>pair.sourceElement),['10->20','20->30']);
+assert.deepEqual(inferred.map((pair)=>pair.targetElement),['1000->1010','1010->1020']);
+assert.deepEqual(inferred[0].endpointMap,{10:'1000',20:'1010'});
+assert.equal(inferred[0].sourceFields.DELTA_X,'10.000000');
+assert.equal(inferred[0].sourceFields.DIAMETER,'114.300000');
+
 const nodePlan=popupTest.nodeTransferPlan(rows,nodeFields);
 assert.equal(nodePlan.length,3);
 assert.equal(nodePlan[0].targetNode,'1000');
 assert.ok(nodePlan[0].selectedBlocks.includes('GlobalCoordinateBlock'));
 assert.equal(nodePlan[0].fields.Temperature1,undefined);
 const elementPlan=popupTest.elementTransferPlan(rows,elementFields);
-assert.equal(elementPlan.length,3);
+assert.equal(elementPlan.length,2);
+assert.equal(elementPlan[0].sourceElement,'10->20');
+assert.equal(elementPlan[0].targetElement,'1000->1010');
+assert.equal(elementPlan[1].sourceElement,'20->30');
+assert.equal(elementPlan[1].targetElement,'1010->1020');
 assert.ok(elementPlan[0].selectedBlocks.includes('RouteGeometryBlock'));
 assert.equal(elementPlan[0].fields.MATERIAL_NAME,undefined);
 const linePlan=popupTest.lineTransferPlan(rows,lineFields);
