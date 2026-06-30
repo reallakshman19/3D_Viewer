@@ -24,11 +24,15 @@ test('sample includes required Phase 1 renderer contract cases', () => {
   assert.ok(hasPrimitive(model, 'UNKNOWN_DIAGNOSTIC'));
 });
 
-test('sample unknown native code fallback is counted', () => {
+test('sample unknown native code fallback is counted and diagnostic-scoped', () => {
   const model = createSampleRvmStageModelV1();
+  const unknownComponent = model.components.find((component) => component.semanticType === 'UNKNOWN');
   assert.equal(model.diagnostics.severityCounts.warning, 1);
   assert.equal(model.diagnostics.fallbackCounts['unknown-native-code'], 1);
   assert.equal(model.diagnostics.renderKindCounts.UNKNOWN_DIAGNOSTIC, 1);
+  assert.equal(unknownComponent.confidence.geometry, 'diagnostic');
+  assert.equal(unknownComponent.confidence.semantic, 'unknown');
+  assert.equal(unknownComponent.diagnostics.length, 1);
 });
 
 function hasComponent(model, semanticType) {
