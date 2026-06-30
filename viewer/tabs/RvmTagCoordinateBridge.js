@@ -40,6 +40,18 @@ function patchRvmTagStorePrototype() {
   const originalGetAllTags = proto.getAllTags;
   const originalGetTag = proto.getTag;
   const originalExportToXml = proto.exportToXml;
+  const originalPersist = proto._persist;
+
+  if (typeof originalPersist === 'function') {
+    proto._persist = function persistRawTagCoordinates() {
+      this[RAW_MODE_KEY] = true;
+      try {
+        return originalPersist.call(this);
+      } finally {
+        this[RAW_MODE_KEY] = false;
+      }
+    };
+  }
 
   proto.createTag = function createTagWithNativeCoordinates(config = {}) {
     return originalCreateTag.call(this, normalizeManualTagConfig(config));
