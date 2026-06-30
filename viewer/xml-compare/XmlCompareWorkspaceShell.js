@@ -20,7 +20,7 @@ function loadTabDiagnostics(){
 function loadSamplePickers(){
   if(typeof document==='undefined')return;
   if(loadSamplePickersPromise)return;
-  loadSamplePickersPromise=import('../tabs/xml-compare-enriched-sample-pickers.js?v=20260630-enriched-sample-pickers-1').catch(()=>null);
+  loadSamplePickersPromise=import('../tabs/xml-compare-enriched-sample-pickers.js?v=20260630-enriched-sample-pickers-2').catch(()=>null);
 }
 
 const esc=(v)=>String(v??'')
