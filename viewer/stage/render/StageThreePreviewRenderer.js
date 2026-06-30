@@ -44,7 +44,7 @@ export function renderStagePreview(rendererState, model, renderPlan) {
     rendererState.rootGroup.add(object);
     if (entry.bboxWorld) visibleBboxes.push(entry.bboxWorld);
   }
-  renderSelection(rendererState, model);
+  if (renderPlan.source?.quality !== 'hidden') renderSelection(rendererState, model);
   fitCamera(rendererState, mergeBboxes(visibleBboxes) || modelBbox(model));
   draw(rendererState);
 }
