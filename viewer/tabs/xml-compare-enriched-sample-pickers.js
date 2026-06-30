@@ -3,15 +3,15 @@ import { loadXmlCompareEnrichedSample } from './xml-compare-enriched-samples-dat
 const STYLE_ID='xml-compare-enriched-sample-pickers-style';
 const ROW_ATTR='data-xml-compare-enriched-sample-pickers';
 const SAMPLES=Object.freeze({
-  a:{label:'BM_CII_INPUT_SOURCE FILE_enriched XML',fileName:'BM_CII_INPUT_SOURCE_FILE_enriched.xml',title:'Load generated Source enriched XML'},
-  b:{label:'BM_CII_LINEBASIS_INPUT_TARGET FILE_enriched XML',fileName:'BM_CII_LINEBASIS_INPUT_TARGET_FILE_enriched.xml',title:'Load generated Target enriched XML'}
+  a:{label:'BM_CII Source → Line-wise workflow',fileName:'BM_CII_INPUT_SOURCE_FILE_enriched.xml',title:'Open Source sample in Line-wise XML Enrichment workflow'},
+  b:{label:'BM_CII Target → Line-wise workflow',fileName:'BM_CII_LINEBASIS_INPUT_TARGET_FILE_enriched.xml',title:'Open Target sample in Line-wise XML Enrichment workflow'}
 });
 
 function injectStyle(){
   if(document.getElementById(STYLE_ID))return;
   const style=document.createElement('style');
   style.id=STYLE_ID;
-  style.textContent=`.xml-compare-enriched-sample-pickers{display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:8px 10px;border-top:1px solid rgba(96,165,250,.18);border-bottom:1px solid rgba(96,165,250,.18);background:rgba(2,6,23,.36)}.xml-compare-enriched-sample-pickers button{display:flex;align-items:center;justify-content:center;gap:7px;min-height:34px;border:1px solid rgba(34,197,94,.45);border-radius:10px;background:rgba(6,78,59,.38);color:#dcfce7;font-size:12px;font-weight:850;cursor:pointer}.xml-compare-enriched-sample-pickers button:hover{border-color:rgba(134,239,172,.88);background:rgba(6,95,70,.58)}.xml-compare-enriched-sample-pickers button[disabled]{opacity:.65;cursor:wait}.xml-compare-enriched-sample-pickers small{display:block;color:#a7f3d0;font-size:10px;font-weight:700;line-height:1.15}@media(max-width:900px){.xml-compare-enriched-sample-pickers{grid-template-columns:1fr}}`;
+  style.textContent=`.xml-compare-enriched-sample-pickers{display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:8px 10px;border-top:1px solid rgba(96,165,250,.18);border-bottom:1px solid rgba(96,165,250,.18);background:rgba(2,6,23,.36)}.xml-compare-enriched-sample-pickers button{display:flex;align-items:center;justify-content:center;gap:7px;min-height:34px;border:1px solid rgba(168,85,247,.50);border-radius:10px;background:rgba(88,28,135,.36);color:#f3e8ff;font-size:12px;font-weight:850;cursor:pointer}.xml-compare-enriched-sample-pickers button:hover{border-color:rgba(216,180,254,.88);background:rgba(107,33,168,.58)}.xml-compare-enriched-sample-pickers button[disabled]{opacity:.65;cursor:wait}.xml-compare-enriched-sample-pickers small{display:block;color:#ddd6fe;font-size:10px;font-weight:700;line-height:1.15}@media(max-width:900px){.xml-compare-enriched-sample-pickers{grid-template-columns:1fr}}`;
   document.head.append(style);
 }
 
@@ -37,20 +37,42 @@ function setInputFile(input,file){
   input.dispatchEvent(new Event('change',{bubbles:true}));
 }
 
+function openLinewiseWorkflow(){
+  const button=document.querySelector('[data-xml-compare-categorized-open]');
+  if(!button)return null;
+  button.click();
+  return document.querySelector('[data-xml-compare-categorized-popup]');
+}
+
+function selectCanvasSide(side){
+  const selector=`input[name="xml-compare-canvas-side"][value="${side}"]`;
+  const radio=document.querySelector(selector);
+  if(radio&&!radio.checked){radio.checked=true;radio.dispatchEvent(new Event('change',{bubbles:true}));}
+}
+
+function importIntoLinewiseWorkflow(file,side){
+  openLinewiseWorkflow();
+  selectCanvasSide(side);
+  const input=document.querySelector('[data-xml-compare-categorized-popup] input[data-xml-compare-categorized-import]');
+  if(!input)return false;
+  setInputFile(input,file);
+  return true;
+}
+
 async function loadSample(side,button){
-  const input=document.querySelector(`input[data-xml-compare-load="${side}"]`);
-  if(!input)return;
   button.disabled=true;
-  const oldText=button.dataset.oldText||button.textContent;
+  const oldText=button.dataset.oldText||button.innerHTML;
   button.dataset.oldText=oldText;
-  button.textContent='Loading enriched XML...';
+  button.textContent='Opening line-wise workflow...';
   try{
     const sample=await loadXmlCompareEnrichedSample(side==='b'?'target':'source');
     const file=new File([sample.text],sample.fileName,{type:'application/xml'});
-    setInputFile(input,file);
+    const imported=importIntoLinewiseWorkflow(file,side);
+    if(!imported)throw new Error('Line-wise workflow import control not found');
   }catch(error){
-    console.error('[XML Compare Samples] Failed to load embedded enriched sample',error);
-    input.click();
+    console.error('[XML Compare Samples] Failed to open enriched sample in line-wise workflow',error);
+    const fallback=document.querySelector('[data-xml-compare-categorized-open]');
+    fallback?.click();
   }finally{
     button.disabled=false;
     button.innerHTML=side==='b'
