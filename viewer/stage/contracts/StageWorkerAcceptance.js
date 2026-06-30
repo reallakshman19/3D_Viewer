@@ -27,7 +27,7 @@ export function createStageWorkerAcceptanceReport(input = {}) {
   if (!hasStart) errors.push('STAGE_WORKER_START message is required');
   if (!terminalType) errors.push('terminal worker message is required');
 
-  if (isSuccessful(messages)) validateSuccessfulOutput(input, errors, warnings);
+  if (hasSuccessfulTerminal(messages)) validateSuccessfulOutput(input, messages, errors, warnings);
   if (isFailedOrCancelled(messages)) validateFailedOrCancelled(messages, errors);
 
   return {
@@ -65,7 +65,8 @@ function validateMessages(messages, errors) {
   }
 }
 
-function validateSuccessfulOutput(input, errors, warnings) {
+function validateSuccessfulOutput(input, messages, errors, warnings) {
+  if (!hasStageReady(messages)) errors.push('STAGE_WORKER_STAGE_READY message is required for successful output');
   const modelResult = validateRvmStageModel(input.stageModel);
   if (!modelResult.valid) errors.push(...prefix('stageModel', modelResult.errors));
 
@@ -117,7 +118,11 @@ function hasFallbackPrimitive(primitive) {
     || (primitive?.diagnostics || []).some((item) => item?.fallback);
 }
 
-function isSuccessful(messages) {
+function hasSuccessfulTerminal(messages) {
+  return messages.some((message) => message?.type === 'STAGE_WORKER_STAGE_READY' || message?.type === 'STAGE_WORKER_PACKAGE_READY');
+}
+
+function hasStageReady(messages) {
   return messages.some((message) => message?.type === 'STAGE_WORKER_STAGE_READY');
 }
 
