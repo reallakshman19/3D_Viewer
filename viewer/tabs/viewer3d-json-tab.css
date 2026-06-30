@@ -82,6 +82,10 @@
   padding: 16px;
 }
 
+.json-viewer-canvas-message {
+  white-space: pre-line;
+}
+
 .json-viewer-button,
 .json-viewer-quality-select,
 .json-viewer-right-tab {
