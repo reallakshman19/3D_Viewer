@@ -59,6 +59,23 @@ function importIntoLinewiseWorkflow(file,side){
   return true;
 }
 
+function isCategorizedCanvasFile(file){
+  return /categorized/i.test(String(file?.name||''));
+}
+
+async function gateDirectCanvasLoad(event){
+  const input=event.target?.closest?.('input[data-xml-compare-load]');
+  if(!input)return;
+  const file=input.files?.[0];
+  if(!file||isCategorizedCanvasFile(file))return;
+  event.preventDefault();
+  event.stopImmediatePropagation();
+  const side=input.dataset.xmlCompareLoad==='b'?'b':'a';
+  const copy=new File([await file.text()],file.name,{type:file.type||'application/xml'});
+  input.value='';
+  importIntoLinewiseWorkflow(copy,side);
+}
+
 async function loadSample(side,button){
   button.disabled=true;
   const oldText=button.dataset.oldText||button.innerHTML;
@@ -93,6 +110,7 @@ function clickHandler(event){
 function install(){
   if(typeof document==='undefined')return;
   document.addEventListener('click',clickHandler,{capture:true});
+  document.addEventListener('change',(event)=>{gateDirectCanvasLoad(event).catch((error)=>console.error('[XML Compare Samples] Direct load gate failed',error));},{capture:true});
   injectPickers();
   const observer=new MutationObserver(()=>injectPickers());
   observer.observe(document.body,{childList:true,subtree:true});
