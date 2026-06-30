@@ -267,7 +267,7 @@ function resetMenuPosition(menu) {
 
 function updateButtonCaret(button, open) {
   const caret = button?.querySelector?.('.rvm-toolbar-caret');
-  if (caret) caret.textContent = open ? '^' : 'v';
+  if (caret) caret.textContent = open ? '\u25B2' : '\u25BC';
   if (button?.dataset) button.dataset.rvmToolbarMenuOpen = String(open);
 }
 
