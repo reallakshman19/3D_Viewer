@@ -1,7 +1,14 @@
 import { validateRvmStageModel, normalizeRenderQuality, RVM_STAGE_SCHEMA } from '../stage/contracts/RvmStageModelContract.js';
 import { createSampleRvmStageModelV1 } from '../stage/samples/sample-rvm-stage-model-v1.js';
 import { buildStageRenderPlan, STAGE_RENDER_PLAN_SCHEMA } from '../stage/render/StageRenderPlan.js';
-import { createStageThreePreviewRenderer, renderStagePreview, disposeStageThreePreviewRenderer } from '../stage/render/StageThreePreviewRenderer.js';
+import {
+  createStageThreePreviewRenderer,
+  renderStagePreview,
+  disposeStageThreePreviewRenderer,
+  fitStagePreviewToRenderPlan,
+  resetStagePreview,
+  updateStagePreviewSelection,
+} from '../stage/render/StageThreePreviewRenderer.js';
 import { createJsonViewerShell } from '../stage/ui/JsonViewerShell.js';
 import { renderHierarchyTree } from '../stage/ui/JsonViewerHierarchyTree.js';
 import { renderProperties } from '../stage/ui/JsonViewerPropertiesPanel.js';
@@ -59,7 +66,9 @@ function renderPreview(handles, state) {
   try {
     const previewRenderer = ensurePreviewRenderer(handles, state);
     previewRenderer.selectedRef = state.selectedRef;
+    previewRenderer.forceFit = state.previewFitPending || previewRenderer.forceFit;
     renderStagePreview(previewRenderer, state.model, state.renderPlan);
+    state.previewFitPending = false;
     state.previewDiagnostics = [];
   } catch (error) {
     disposePreview(state);
@@ -97,6 +106,7 @@ function acceptModel(model, sourceName, state) {
   const validation = validateRvmStageModel(model);
   state.sourceFileName = sourceName;
   state.previewDiagnostics = [];
+  state.previewFitPending = true;
   if (!validation.valid) {
     state.model = null;
     state.renderPlan = null;
@@ -115,13 +125,34 @@ function acceptModel(model, sourceName, state) {
   return true;
 }
 
-function renderAll(handles, state) {
+function renderSidePanels(handles, state) {
   renderHierarchyTree(handles.hierarchyList, state.model, state.selectedRef);
   renderProperties(handles.propertiesPanel, state.model, state.selectedRef);
-  renderPreview(handles, state);
   renderDiagnostics(handles.diagnosticsPanel, state.model?.diagnostics, state.validationErrors, [...(state.renderPlan?.diagnostics || []), ...state.previewDiagnostics]);
   updateStatus(handles, state);
   activatePanel(handles, state.activePanel);
+}
+
+function renderAll(handles, state) {
+  renderPreview(handles, state);
+  renderSidePanels(handles, state);
+}
+
+function runPreviewCommand(action, handles, state) {
+  if (!state.model || !state.renderPlan || !state.previewRenderer) {
+    state.statusText = `${action} requested — no preview loaded`;
+    renderAll(handles, state);
+    return;
+  }
+  if (action === 'fit') {
+    fitStagePreviewToRenderPlan(state.previewRenderer, state.renderPlan);
+    state.statusText = 'Fit applied to preview';
+  }
+  if (action === 'reset') {
+    resetStagePreview(state.previewRenderer);
+    state.statusText = 'Preview camera reset';
+  }
+  updateStatus(handles, state);
 }
 
 function loadSample(handles, state) {
@@ -163,10 +194,9 @@ function wireEvents(handles, state) {
     const action = event.target?.dataset?.action;
     if (action === 'open-stage-json') handles.fileInput.click();
     if (action === 'load-sample') loadSample(handles, state);
-    if (action === 'fit') state.statusText = 'Fit requested — renderer handled';
-    if (action === 'reset') state.statusText = 'Reset requested — renderer rebuilt';
+    if (action === 'fit' || action === 'reset') runPreviewCommand(action, handles, state);
     if (action === 'show-diagnostics') state.activePanel = 'diagnostics';
-    if (action !== 'load-sample') renderAll(handles, state);
+    if (!['load-sample', 'fit', 'reset'].includes(action)) renderAll(handles, state);
   };
   const onFileChange = (event) => {
     const file = event.target.files?.[0];
@@ -183,13 +213,17 @@ function wireEvents(handles, state) {
     if (!row) return;
     state.selectedRef = { type: row.dataset.refType, id: row.dataset.refId };
     state.activePanel = 'properties';
-    renderAll(handles, state);
+    if (state.previewRenderer) {
+      state.previewRenderer.selectedRef = state.selectedRef;
+      updateStagePreviewSelection(state.previewRenderer, state.model);
+    }
+    renderSidePanels(handles, state);
   };
   const onRightTabClick = (event) => {
     const panel = event.target?.dataset?.panel;
     if (!panel) return;
     state.activePanel = panel;
-    renderAll(handles, state);
+    renderSidePanels(handles, state);
   };
   handles.toolbar.addEventListener('click', onToolbarClick);
   handles.fileInput.addEventListener('change', onFileChange);
@@ -212,6 +246,7 @@ export function renderViewer3DJson(root) {
     renderPlan: null,
     previewRenderer: null,
     previewDiagnostics: [],
+    previewFitPending: false,
     sourceFileName: '',
     selectedRef: null,
     validationErrors: [],
