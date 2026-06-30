@@ -9,6 +9,7 @@ const PREVIOUS_VERSION = '20260629-rvm-selection-details-syntax-fix-1';
 const MAX_SELECTED_OBJECTS = 1500;
 const MAX_ALIAS_SCAN_OBJECTS = 20000;
 const MAX_ATTRIBUTE_ROWS = 42;
+const GROUP_SELECTABLE_TYPES = new Set(['SUPPORT', 'FLANGE', 'GASK', 'VALVE', 'ELBOW', 'BEND', 'TEE', 'OLET', 'REDUCER', 'NOZZLE', 'CAP', 'STRAINER', 'INSTRUMENT']);
 
 function esc(value) {
   return String(value ?? '').replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' }[ch]));
@@ -20,7 +21,7 @@ function attrsFor(obj) { const data = obj?.userData || {}; const props = data.br
 function propsFor(obj) { return obj?.userData?.browserRvmProperties || {}; }
 function renderIdFor(obj) { return String(obj?.userData?.name || obj?.name || obj?.uuid || '').trim(); }
 function normalizePath(value) { return String(value || '').split('\\').join('/'); }
-function sourcePathFor(obj) { const data = obj?.userData || {}; const props = propsFor(obj); const attrs = attrsFor(obj); return normalizePath(data.sourcePath || props.sourcePath || attrs.RVM_OWNER_PATH || attrs.RVM_OWNER_NAME || data.displayName || obj?.name || '-'); }
+function sourcePathFor(obj) { const data = obj?.userData || {}; const props = propsFor(obj); const attrs = attrsFor(obj); return normalizePath(attrs.RVM_OWNER_PATH || data.sourcePath || props.sourcePath || attrs.RVM_OWNER_NAME || data.displayName || obj?.name || '-'); }
 function typeFor(obj) { const data = obj?.userData || {}; const attrs = attrsFor(obj); return data.type || data.kind || attrs.TYPE || attrs.RVM_TYPE || '-'; }
 function primitiveFor(obj) { const data = obj?.userData || {}; const attrs = attrsFor(obj); return data.effectiveRenderPrimitive || data.renderPrimitive || attrs.RVM_BROWSER_RENDER_PRIMITIVE || attrs.RVM_PRIMITIVE_KIND || '-'; }
 function fmt(value, digits = 3) { const n = Number(value); return Number.isFinite(n) ? n.toFixed(digits) : '-'; }
@@ -49,7 +50,7 @@ function aliasesFor(obj) {
   const data = obj?.userData || {};
   const props = propsFor(obj);
   const attrs = attrsFor(obj);
-  return [renderIdFor(obj), obj?.uuid, obj?.name, data.canonicalObjectId, data.sourceObjectId, data.sourcePath, data.sourceName, data.displayName, props.sourcePath, props.displayName, props.sourceName, attrs.RVM_OWNER_PATH, attrs.RVM_OWNER_NAME, attrs.RVM_REVIEW_NAME, attrs.NAME]
+  return [renderIdFor(obj), obj?.uuid, obj?.name, data.canonicalObjectId, data.sourceObjectId, data.sourcePath, data.sourceName, data.displayName, props.sourcePath, props.displayName, props.sourceName, attrs.RVM_OWNER_PATH, attrs.RVM_OWNER_NAME, attrs.RVM_REVIEW_NAME, attrs.RVM_CANONICAL_PATH, attrs.NAME, attrs.RVM_BYTE_OFFSET]
     .map((value) => String(value ?? '').trim()).filter(Boolean);
 }
 
@@ -62,22 +63,62 @@ function selectedIdsFromPayload(payload = {}) {
   return selected;
 }
 
+function nativeOwnerKey(obj) {
+  const attrs = attrsFor(obj);
+  return String(attrs.RVM_NATIVE_CONTAINER_PARENT || attrs.RVM_OWNER_PATH || '').trim();
+}
+
+function nativeOwnerName(obj) {
+  const attrs = attrsFor(obj);
+  return String(attrs.RVM_OWNER_NAME || attrs.RVM_REVIEW_NAME || '').trim();
+}
+
+function isComponentOwnerSelectable(obj) {
+  const attrs = attrsFor(obj);
+  const type = String(typeFor(obj) || '').toUpperCase();
+  const owner = nativeOwnerName(obj).toUpperCase();
+  if (GROUP_SELECTABLE_TYPES.has(type)) return true;
+  if (/^\/(PS|SL)-/.test(owner)) return true;
+  return /\b(FLANGE|GASK|VALVE|ELBOW|BEND|TEE|OLET|REDUCER|NOZZLE|CAP|STRAINER|SUPPORT|INSTRUMENT)\b/.test(owner);
+}
+
+function expandNativeOwnerGroup(objects = []) {
+  const v = viewer();
+  const seed = objects.filter(Boolean);
+  if (!v?.modelGroup || seed.length !== 1 || !isComponentOwnerSelectable(seed[0])) return seed;
+  const key = nativeOwnerKey(seed[0]);
+  if (!key) return seed;
+  const group = [];
+  let scanned = 0;
+  v.modelGroup.traverse?.((obj) => {
+    if (group.length >= MAX_SELECTED_OBJECTS || scanned > MAX_ALIAS_SCAN_OBJECTS) return;
+    if (!(obj?.isMesh || obj?.isLine || obj?.isLineSegments || obj?.isPoints) || obj.visible === false) return;
+    scanned += 1;
+    if (nativeOwnerKey(obj) === key) group.push(obj);
+  });
+  return group.length > 1 ? group : seed;
+}
+
 function collectSelectedObjects(payload = {}) {
+  if (Array.isArray(payload.objects) && payload.objects.length) return payload.objects.slice(0, MAX_SELECTED_OBJECTS);
+  if (Array.isArray(payload.matches) && payload.matches.length) return payload.matches.slice(0, MAX_SELECTED_OBJECTS);
   const v = viewer();
   if (!v?.modelGroup) return [];
-  const direct = Array.isArray(v._rvmCanvasSelectedMeshes) ? v._rvmCanvasSelectedMeshes.filter((obj) => obj && (obj.isMesh || obj.isLine || obj.isPoints)) : [];
-  if (direct.length) return direct.slice(0, MAX_SELECTED_OBJECTS);
+  const hierarchy = Array.isArray(v._rvmHierarchySelectedMeshes) ? v._rvmHierarchySelectedMeshes.filter((obj) => obj && (obj.isMesh || obj.isLine || obj.isLineSegments || obj.isPoints)) : [];
+  if (hierarchy.length && v._rvmActiveHierarchySelection) return hierarchy.slice(0, MAX_SELECTED_OBJECTS);
+  const direct = Array.isArray(v._rvmCanvasSelectedMeshes) ? v._rvmCanvasSelectedMeshes.filter((obj) => obj && (obj.isMesh || obj.isLine || obj.isLineSegments || obj.isPoints)) : [];
+  if (direct.length) return expandNativeOwnerGroup(direct).slice(0, MAX_SELECTED_OBJECTS);
   const ids = selectedIdsFromPayload(payload);
   if (!ids.size) return [];
   const matches = [];
   let scanned = 0;
   v.modelGroup.traverse?.((obj) => {
     if (matches.length >= MAX_SELECTED_OBJECTS || scanned > MAX_ALIAS_SCAN_OBJECTS) return;
-    if (!(obj?.isMesh || obj?.isLine || obj?.isPoints)) return;
+    if (!(obj?.isMesh || obj?.isLine || obj?.isLineSegments || obj?.isPoints)) return;
     scanned += 1;
     if (aliasesFor(obj).some((alias) => ids.has(alias))) matches.push(obj);
   });
-  return matches;
+  return expandNativeOwnerGroup(matches).slice(0, MAX_SELECTED_OBJECTS);
 }
 
 function boxForObjects(objects = []) {
@@ -92,9 +133,18 @@ function boxForObjects(objects = []) {
   return any ? box : null;
 }
 
+function sameOwnerName(objects = []) {
+  const names = Array.from(new Set(objects.map(nativeOwnerName).filter(Boolean)));
+  return names.length === 1 ? names[0] : '';
+}
+
 function selectionSource(objects = []) {
   if (!objects.length) return 'none';
-  const direct = viewer()?._rvmCanvasSelectedMeshes;
+  const v = viewer();
+  if (v?._rvmActiveHierarchySelection) return 'hierarchy';
+  const owner = sameOwnerName(objects);
+  if (owner && objects.length > 1) return 'native-rvm-group';
+  const direct = v?._rvmCanvasSelectedMeshes;
   return Array.isArray(direct) && direct.length ? 'canvas' : 'hierarchy';
 }
 
@@ -106,6 +156,30 @@ function selectionKpis(objects = []) {
   return [['Objects', objects.length], ['Visible', visible], ['Hidden', hidden], ['Types', types.size || 0], ['Prims', primitives.size || 0]];
 }
 
+function firstObjectLabel(objects = []) {
+  const active = viewer()?._rvmActiveHierarchySelection;
+  if (active?.label) return active.label;
+  const owner = sameOwnerName(objects);
+  if (owner) return owner;
+  const first = objects[0] || null;
+  const attrs = attrsFor(first);
+  const data = first?.userData || {};
+  const props = propsFor(first);
+  return data.displayName || data.sourceName || props.displayName || attrs.RVM_OWNER_NAME || attrs.NAME || first?.name || '-';
+}
+
+function sourcePathForSelection(objects = []) {
+  const active = viewer()?._rvmActiveHierarchySelection;
+  if (active?.node?.canonicalObjectId || active?.node?.attributes?.RVM_BROWSER_BRANCH_PATH) return normalizePath(active.node.attributes?.RVM_BROWSER_BRANCH_PATH || active.node.canonicalObjectId);
+  const owner = sameOwnerName(objects);
+  if (owner) {
+    const path = sourcePathFor(objects[0]).replace(/\s+\/\s+/g, '/');
+    return path && path !== '-' ? path : owner;
+  }
+  const paths = objects.map(sourcePathFor).filter((path) => path && path !== '-');
+  return commonPrefix(paths) || sourcePathFor(objects[0]);
+}
+
 function summaryRows(objects = []) {
   const first = objects[0] || null;
   const visible = objects.filter((obj) => obj?.visible !== false).length;
@@ -113,22 +187,19 @@ function summaryRows(objects = []) {
   const box = boxForObjects(objects);
   const size = box ? box.getSize(new THREE.Vector3()) : null;
   const center = box ? box.getCenter(new THREE.Vector3()) : null;
-  const paths = objects.map(sourcePathFor).filter((path) => path && path !== '-');
-  const sourcePrefix = commonPrefix(paths);
   const attrs = attrsFor(first);
-  const data = first?.userData || {};
-  const props = propsFor(first);
   const primitives = new Set(objects.map(primitiveFor).filter(Boolean));
   const types = new Set(objects.map(typeFor).filter(Boolean));
+  const codes = new Set(objects.map((obj) => attrsFor(obj).RVM_PRIMITIVE_CODE).filter(Boolean));
   return [
     ['Selection objects', objects.length],
     ['Selection source', selectionSource(objects)],
     ['Visible / hidden', `${visible} / ${hidden}`],
-    ['First object', data.displayName || data.sourceName || props.displayName || attrs.NAME || first?.name || '-'],
-    ['Source path', sourcePrefix || sourcePathFor(first)],
+    ['First object', firstObjectLabel(objects)],
+    ['Source path', sourcePathForSelection(objects)],
     ['Type(s)', [...types].slice(0, 6).join(', ') || '-'],
     ['Primitive(s)', [...primitives].slice(0, 6).join(', ') || '-'],
-    ['RVM primitive code', attrs.RVM_PRIMITIVE_CODE || attrs.RVM_CODE || data.primitiveCode || '-'],
+    ['RVM primitive code', codes.size > 1 ? [...codes].slice(0, 6).join(', ') : (attrs.RVM_PRIMITIVE_CODE || attrs.RVM_CODE || first?.userData?.primitiveCode || '-')],
     ['Size XYZ', size ? `${fmt(size.x)} × ${fmt(size.y)} × ${fmt(size.z)}` : '-'],
     ['Center XYZ', fmtVec(center)],
     ['Bbox min', box ? fmtVec(box.min) : '-'],
@@ -137,7 +208,19 @@ function summaryRows(objects = []) {
 }
 
 function attributeRows(objects = []) {
-  const rows = Object.entries(attrsFor(objects[0] || null) || {}).slice(0, MAX_ATTRIBUTE_ROWS);
+  const active = viewer()?._rvmActiveHierarchySelection;
+  if (active?.node?.attributes) return Object.entries(active.node.attributes).slice(0, MAX_ATTRIBUTE_ROWS);
+  const first = objects[0] || null;
+  const attrs = { ...attrsFor(first) };
+  const owner = sameOwnerName(objects);
+  if (owner) {
+    attrs.NAME = owner;
+    attrs.TYPE = attrs.TYPE || 'Group';
+    attrs.RVM_REVIEW_NAME = owner;
+    attrs.RVM_REVIEW_PATH = sourcePathForSelection(objects);
+    attrs.RVM_GROUP_OBJECT_COUNT = String(objects.length);
+  }
+  const rows = Object.entries(attrs || {}).slice(0, MAX_ATTRIBUTE_ROWS);
   return rows.length ? rows : [['Attributes', 'No attributes attached to selected object']];
 }
 
@@ -212,13 +295,13 @@ function clearSelection() {
   const root = rootEl();
   const v = viewer();
   try { v?.selection?.clearSelection?.(); } catch (_) {}
-  if (v) v._rvmCanvasSelectedMeshes = [];
+  if (v) { v._rvmCanvasSelectedMeshes = []; v._rvmHierarchySelectedMeshes = []; v._rvmActiveHierarchySelection = null; }
   root?.querySelectorAll?.('#rvm-tree li.is-selected').forEach((rowEl) => rowEl.classList.remove('is-selected'));
   renderPanel([], 'clear-selection');
 }
 
 async function copySelectionPath(objects = []) {
-  const path = sourcePathFor(objects[0] || null);
+  const path = sourcePathForSelection(objects);
   if (!path || path === '-') return false;
   try { await navigator.clipboard?.writeText?.(path); return true; } catch (_) { return false; }
 }
@@ -251,6 +334,7 @@ export function installRvmSelectionDetailsInspectorBridge() {
   globalThis[INSTALL_FLAG] = true;
   installStyles();
   document.addEventListener('click', handleAction, true);
+  document.addEventListener('rvm-hierarchy-selection', (event) => setTimeout(() => refresh(event.detail || {}, 'hierarchy-selection'), 0), true);
   on(RuntimeEvents.RVM_NODE_SELECTED, (payload) => setTimeout(() => refresh(payload, 'rvm-node-selected'), 0));
   globalThis.addEventListener?.('rvm-model-loaded', () => setTimeout(() => refresh({}, 'model-loaded'), 180));
   globalThis.__PCF_GLB_RVM_SELECTION_DETAILS_INSPECTOR__ = { version: BRIDGE_VERSION, previousVersion: PREVIOUS_VERSION, refresh, collectSelectedObjects };
