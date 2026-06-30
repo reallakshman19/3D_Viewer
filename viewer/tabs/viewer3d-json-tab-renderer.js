@@ -1,6 +1,7 @@
 import { validateRvmStageModel, normalizeRenderQuality, RVM_STAGE_SCHEMA } from '../stage/contracts/RvmStageModelContract.js';
 import { createSampleRvmStageModelV1 } from '../stage/samples/sample-rvm-stage-model-v1.js';
 import { buildStageRenderPlan, STAGE_RENDER_PLAN_SCHEMA } from '../stage/render/StageRenderPlan.js';
+import { createStageThreePreviewRenderer, renderStagePreview, disposeStageThreePreviewRenderer } from '../stage/render/StageThreePreviewRenderer.js';
 import { createJsonViewerShell } from '../stage/ui/JsonViewerShell.js';
 import { renderHierarchyTree } from '../stage/ui/JsonViewerHierarchyTree.js';
 import { renderProperties } from '../stage/ui/JsonViewerPropertiesPanel.js';
@@ -12,7 +13,7 @@ const SAMPLE_SOURCE_NAME = 'sample-rvm-stage-model-v1.js';
 function diagnosticCount(state) {
   const modelMessages = Array.isArray(state.model?.diagnostics?.messages) ? state.model.diagnostics.messages.length : 0;
   const planMessages = Array.isArray(state.renderPlan?.diagnostics) ? state.renderPlan.diagnostics.length : 0;
-  return modelMessages + planMessages + state.validationErrors.length;
+  return modelMessages + planMessages + state.validationErrors.length + state.previewDiagnostics.length;
 }
 
 function activatePanel(handles, panel) {
@@ -29,29 +30,52 @@ function defaultSelection(model) {
 }
 
 function updateRenderPlan(state) {
-  if (!state.model) {
-    state.renderPlan = null;
-    return;
-  }
-  state.renderPlan = buildStageRenderPlan(state.model, state.renderQuality);
+  state.renderPlan = state.model ? buildStageRenderPlan(state.model, state.renderQuality) : null;
 }
 
-function updateCanvas(handles, state) {
-  const plan = state.renderPlan;
-  handles.canvasHost.classList.toggle('has-model', Boolean(state.model));
-  if (!plan) {
-    handles.canvasMessage.textContent = EMPTY_CANVAS_TEXT;
-    return;
-  }
+function previewText(plan) {
+  if (!plan) return EMPTY_CANVAS_TEXT;
   const byOutput = plan.summary?.byOutput || {};
-  handles.canvasMessage.textContent = [
+  return [
     STAGE_RENDER_PLAN_SCHEMA,
     `Quality: ${plan.source.quality}`,
     `Entries: ${plan.summary.totalEntries}`,
     `Procedural: ${byOutput.procedural || 0}`,
     `BBox/diagnostic: ${byOutput.bbox || 0}`,
     `Hidden: ${plan.summary.hidden}`,
+    `Diagnostic-only: ${plan.summary.diagnosticOnly}`,
   ].join('\n');
+}
+
+function ensurePreviewRenderer(handles, state) {
+  if (!state.previewRenderer) state.previewRenderer = createStageThreePreviewRenderer(handles.canvasHost);
+  return state.previewRenderer;
+}
+
+function renderPreview(handles, state) {
+  handles.canvasHost.classList.toggle('has-model', Boolean(state.model));
+  handles.canvasMessage.textContent = previewText(state.renderPlan);
+  if (!state.model || !state.renderPlan) return disposePreview(state);
+  try {
+    const previewRenderer = ensurePreviewRenderer(handles, state);
+    previewRenderer.selectedRef = state.selectedRef;
+    renderStagePreview(previewRenderer, state.model, state.renderPlan);
+    state.previewDiagnostics = [];
+  } catch (error) {
+    disposePreview(state);
+    state.previewDiagnostics = [previewDiagnostic(error)];
+    state.activePanel = 'diagnostics';
+    handles.canvasMessage.textContent = `Preview renderer failed\n${previewText(state.renderPlan)}`;
+  }
+}
+
+function disposePreview(state) {
+  disposeStageThreePreviewRenderer(state.previewRenderer);
+  state.previewRenderer = null;
+}
+
+function previewDiagnostic(error) {
+  return { severity: 'error', code: 'STAGE_PREVIEW_RENDER_FAILED', message: error?.message || String(error) };
 }
 
 function updateStatus(handles, state) {
@@ -72,6 +96,7 @@ function updateStatus(handles, state) {
 function acceptModel(model, sourceName, state) {
   const validation = validateRvmStageModel(model);
   state.sourceFileName = sourceName;
+  state.previewDiagnostics = [];
   if (!validation.valid) {
     state.model = null;
     state.renderPlan = null;
@@ -93,8 +118,8 @@ function acceptModel(model, sourceName, state) {
 function renderAll(handles, state) {
   renderHierarchyTree(handles.hierarchyList, state.model, state.selectedRef);
   renderProperties(handles.propertiesPanel, state.model, state.selectedRef);
-  renderDiagnostics(handles.diagnosticsPanel, state.model?.diagnostics, state.validationErrors, state.renderPlan?.diagnostics || []);
-  updateCanvas(handles, state);
+  renderPreview(handles, state);
+  renderDiagnostics(handles.diagnosticsPanel, state.model?.diagnostics, state.validationErrors, [...(state.renderPlan?.diagnostics || []), ...state.previewDiagnostics]);
   updateStatus(handles, state);
   activatePanel(handles, state.activePanel);
 }
@@ -138,8 +163,8 @@ function wireEvents(handles, state) {
     const action = event.target?.dataset?.action;
     if (action === 'open-stage-json') handles.fileInput.click();
     if (action === 'load-sample') loadSample(handles, state);
-    if (action === 'fit') state.statusText = 'Fit requested — renderer pending';
-    if (action === 'reset') state.statusText = 'Reset requested — renderer pending';
+    if (action === 'fit') state.statusText = 'Fit requested — renderer handled';
+    if (action === 'reset') state.statusText = 'Reset requested — renderer rebuilt';
     if (action === 'show-diagnostics') state.activePanel = 'diagnostics';
     if (action !== 'load-sample') renderAll(handles, state);
   };
@@ -185,6 +210,8 @@ export function renderViewer3DJson(root) {
   const state = {
     model: null,
     renderPlan: null,
+    previewRenderer: null,
+    previewDiagnostics: [],
     sourceFileName: '',
     selectedRef: null,
     validationErrors: [],
@@ -195,5 +222,8 @@ export function renderViewer3DJson(root) {
   handles.qualitySelect.value = state.renderQuality;
   const cleanup = wireEvents(handles, state);
   renderAll(handles, state);
-  return cleanup;
+  return () => {
+    cleanup();
+    disposePreview(state);
+  };
 }
