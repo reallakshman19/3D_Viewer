@@ -49,7 +49,7 @@ function updateCanvas(handles, state) {
     `Quality: ${plan.source.quality}`,
     `Entries: ${plan.summary.totalEntries}`,
     `Procedural: ${byOutput.procedural || 0}`,
-    `BBox/diagnostic: ${(byOutput.bbox || 0) + (byOutput['mesh-chunk'] || 0)}`,
+    `BBox/diagnostic: ${byOutput.bbox || 0}`,
     `Hidden: ${plan.summary.hidden}`,
   ].join('\n');
 }
