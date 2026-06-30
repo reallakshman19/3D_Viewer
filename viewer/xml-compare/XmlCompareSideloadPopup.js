@@ -1,4 +1,4 @@
-export const XML_COMPARE_SIDELOAD_POPUP_SCHEMA='xml-compare-sideload-popup/v1';
+export const XML_COMPARE_SIDELOAD_POPUP_SCHEMA='xml-compare-sideload-popup/v2';
 
 const esc=(value)=>String(value??'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll("'",'&#039;');
 
@@ -10,7 +10,10 @@ function reportRows(report){
     ['FROM/TO name rows',report.nodeNameRows],
     ['FROM/TO names applied',report.nodeNamesApplied],
     ['Restraint tag rows',report.tagRows],
-    ['Restraint tags applied',report.tagsApplied]
+    ['Restraint tags applied',report.tagsApplied],
+    ['Node coordinate rows',report.coordinateRows],
+    ['Global coordinates applied',report.coordinatesApplied],
+    ['Coordinate nodes resolved',report.coordinateNodesResolved]
   ];
   if(report.enrichment){
     const e=report.enrichment;
@@ -54,6 +57,9 @@ export function renderXmlCompareSideloadPopupHtml(state={}){
         </label>
         <label>3. FROM_NODE, TO_NODE, NODE, TYPE, STIFFNESS, GAP, MU, CNODE, TAG
           <textarea data-xml-compare-sideload-field="restraintTagText" spellcheck="false" placeholder="FROM_NODE&#9;TO_NODE&#9;NODE&#9;TYPE&#9;STIFFNESS&#9;GAP&#9;MU&#9;CNODE&#9;TAG">${esc(state.restraintTagText)}</textarea>
+        </label>
+        <label>4. Node Vs Coordinates / Global Coordinates
+          <textarea data-xml-compare-sideload-field="coordinateText" spellcheck="false" placeholder="NODE&#9;GLOBAL_X&#9;GLOBAL_Y&#9;GLOBAL_Z">${esc(state.coordinateText)}</textarea>
         </label>
       </div>
       <footer>
