@@ -8,6 +8,7 @@ import {
   fitStagePreviewCamera,
   resetStagePreviewCamera,
 } from './StagePreviewCameraControls.js';
+import { attachStagePreviewPicking, detachStagePreviewPicking } from './StagePreviewPicking.js';
 
 const SUPPORTED_RENDER_KINDS = ['CYLINDER', 'BOX', 'ELBOW', 'FACET_GROUP', 'UNKNOWN_DIAGNOSTIC', 'hidden'];
 
@@ -32,6 +33,7 @@ export function createStageThreePreviewRenderer(canvasHost) {
   state.onResize = () => resizeStagePreview(state);
   window.addEventListener('resize', state.onResize);
   attachStagePreviewCameraControls(state);
+  attachStagePreviewPicking(state, (ref) => state.selectionCallback?.(ref));
   resizeStagePreview(state);
   return state;
 }
@@ -53,6 +55,11 @@ export function renderStagePreview(rendererState, model, renderPlan) {
   if (rendererState.forceFit || !rendererState.cameraControls?.initialized) fitStagePreviewCamera(rendererState, rendererState.currentBbox);
   rendererState.forceFit = false;
   draw(rendererState);
+}
+
+export function setStagePreviewSelectionCallback(rendererState, callback) {
+  if (!rendererState || rendererState.disposed) return;
+  rendererState.selectionCallback = callback;
 }
 
 export function updateStagePreviewSelection(rendererState, model = rendererState?.lastModel) {
@@ -79,6 +86,7 @@ export function resetStagePreview(rendererState) {
 
 export function disposeStageThreePreviewRenderer(rendererState) {
   if (!rendererState || rendererState.disposed) return;
+  detachStagePreviewPicking(rendererState);
   detachStagePreviewCameraControls(rendererState);
   window.removeEventListener('resize', rendererState.onResize);
   disposeObjectTree(rendererState.rootGroup);
@@ -92,6 +100,7 @@ function createState(canvasHost, scene, camera, renderer, rootGroup, selectionGr
   return {
     canvasHost, scene, camera, renderer, rootGroup, selectionGroup,
     selectedRef: null,
+    selectionCallback: null,
     disposed: false,
     forceFit: true,
     currentBbox: null,
@@ -105,7 +114,11 @@ function addRenderEntry(state, entry, primitiveById, visibleBboxes) {
   if (entry.output === 'hidden') return;
   const object = createPreviewObject(entry, primitiveById.get(entry.primitiveId));
   if (!object) return;
+  object.userData.renderEntryId = entry.id;
   object.userData.stageRenderEntryId = entry.id;
+  object.userData.primitiveId = entry.primitiveId || '';
+  object.userData.componentId = entry.componentId || '';
+  object.userData.nodeId = entry.nodeId || '';
   state.rootGroup.add(object);
   addToIndex(state.objectIndex, entry, object);
   if (entry.bboxWorld) visibleBboxes.push(entry.bboxWorld);

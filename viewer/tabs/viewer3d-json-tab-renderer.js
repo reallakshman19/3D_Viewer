@@ -8,6 +8,7 @@ import {
   fitStagePreviewToRenderPlan,
   resetStagePreview,
   updateStagePreviewSelection,
+  setStagePreviewSelectionCallback,
 } from '../stage/render/StageThreePreviewRenderer.js';
 import { createJsonViewerShell } from '../stage/ui/JsonViewerShell.js';
 import { renderHierarchyTree } from '../stage/ui/JsonViewerHierarchyTree.js';
@@ -55,7 +56,10 @@ function previewText(plan) {
 }
 
 function ensurePreviewRenderer(handles, state) {
-  if (!state.previewRenderer) state.previewRenderer = createStageThreePreviewRenderer(handles.canvasHost);
+  if (!state.previewRenderer) {
+    state.previewRenderer = createStageThreePreviewRenderer(handles.canvasHost);
+    setStagePreviewSelectionCallback(state.previewRenderer, (ref) => applyPreviewSelection(ref, handles, state));
+  }
   return state.previewRenderer;
 }
 
@@ -138,6 +142,18 @@ function renderAll(handles, state) {
   renderSidePanels(handles, state);
 }
 
+function applyPreviewSelection(ref, handles, state) {
+  if (!ref?.type || !ref?.id) return;
+  state.selectedRef = ref;
+  state.activePanel = 'properties';
+  state.statusText = `Selected ${ref.type} ${ref.id}`;
+  if (state.previewRenderer) {
+    state.previewRenderer.selectedRef = ref;
+    updateStagePreviewSelection(state.previewRenderer, state.model);
+  }
+  renderSidePanels(handles, state);
+}
+
 function runPreviewCommand(action, handles, state) {
   if (!state.model || !state.renderPlan || !state.previewRenderer) {
     state.statusText = `${action} requested — no preview loaded`;
@@ -211,13 +227,7 @@ function wireEvents(handles, state) {
   const onTreeClick = (event) => {
     const row = event.target.closest?.('[data-ref-type][data-ref-id]');
     if (!row) return;
-    state.selectedRef = { type: row.dataset.refType, id: row.dataset.refId };
-    state.activePanel = 'properties';
-    if (state.previewRenderer) {
-      state.previewRenderer.selectedRef = state.selectedRef;
-      updateStagePreviewSelection(state.previewRenderer, state.model);
-    }
-    renderSidePanels(handles, state);
+    applyPreviewSelection({ type: row.dataset.refType, id: row.dataset.refId }, handles, state);
   };
   const onRightTabClick = (event) => {
     const panel = event.target?.dataset?.panel;
