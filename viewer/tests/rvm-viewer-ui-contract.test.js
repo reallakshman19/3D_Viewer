@@ -144,7 +144,9 @@ assert.ok(sourceInput.includes("'.stagedjson'") && sourceInput.includes("'.stage
 assert.ok(renderer.includes('RvmHierarchySelectionBridge.js?v=20260630-rvm-hierarchy-exact-rvm-1'), 'renderer must import native-RVM exact hierarchy pass-through bridge');
 assert.ok(renderer.includes('RvmFormatNeutralExactSelectionBridge.js?v=20260630-rvm-format-neutral-exact-rvm-1'), 'renderer must import native-RVM exact selection bridge');
 assert.ok(renderer.includes('RvmZoneLodContextBridge.js?v=20260630-rvm-zone-lod-context-3'), 'renderer must import current hierarchy context menu bridge');
-assert.ok(renderer.includes('RvmHierarchySmartGridBridge.js?v=20260630-rvm-hierarchy-path-grid-2'), 'renderer must import current hierarchy path smart grid bridge');
+assert.ok(renderer.includes('RvmHierarchySmartGridBridge.js?v=20260630-rvm-hierarchy-path-grid-compact-font-1'), 'renderer must import compact hierarchy path smart grid bridge');
+assert.ok(renderer.includes('RvmSelectionTreeSyncBridge.js?v=20260630-rvm-canvas-multiselect-tree-sync-1'), 'renderer must import canvas multi-select tree sync bridge');
+assert.ok(renderer.includes('RvmLeafCanvasPickBridge.js?v=20260630-rvm-leaf-canvas-multiselect-tree-sync-1'), 'renderer must import canvas multi-select picker bridge');
 assert.ok(renderer.includes('RvmHierarchyCheckboxMultiSelectBridge.js?v=20260630-rvm-hierarchy-checkbox-tree-controls-1'), 'renderer must import current checkbox tree controls bridge');
 assert.ok(hierarchySelection.includes('NAVIS_CONTROL_SELECTOR'), 'legacy hierarchy selection must not intercept Navis controls');
 assert.ok(hierarchySelection.includes('isFormatNeutralRvmTree'), 'legacy hierarchy selection must pass native RVM rows to exact source selection');
@@ -157,7 +159,8 @@ assert.ok(tab.includes("recursive: true, sourceKind: 'rvm'"), 'direct RVM load m
 assert.ok(tab.includes('data-rvm-tree-path'), 'mounted RVM tree rows must expose readable parent path text');
 assert.ok(workerFirst.includes('data-rvm-tree-path'), 'worker-first RVM tree rows must expose readable parent path text');
 assert.ok(workerFirst.includes('function pathLabel'), 'worker-first RVM tree must derive parent > child path labels');
-assert.ok(hierarchySmartGrid.includes('20260630-rvm-hierarchy-path-grid-2'), 'smart grid bridge must expose hierarchy path UI version');
+assert.ok(hierarchySmartGrid.includes('20260630-rvm-hierarchy-path-grid-compact-font-1'), 'smart grid bridge must expose compact hierarchy path UI version');
+assert.ok(hierarchySmartGrid.includes('font-size:9px'), 'smart grid bridge must reduce hierarchy text size');
 assert.ok(hierarchySmartGrid.includes('ensurePathLabel'), 'smart grid bridge must add path labels for rows missing rendered path spans');
 assert.ok(hierarchySmartGrid.includes('.rvm-tree-path'), 'smart grid bridge must style hierarchy breadcrumb paths');
 assert.ok(hierarchyCheckbox.includes('grid-template-columns:18px 18px minmax(0,1fr) max-content'), 'checkbox multiselect rows must reserve expander and checkbox columns');
@@ -169,6 +172,9 @@ assert.ok(zoneLodContext.includes('selectedContextNodes'), 'zone context menu mu
 assert.ok(zoneLodContext.includes('objectMatchesIds'), 'zone context menu must match hierarchy rows through object aliases');
 assert.ok(zoneLodContext.includes('.rvm-tree-node.has-zone-lod-override'), 'zone context menu must mark format-neutral tree rows with render percentage overrides');
 assert.ok(selectionSync.includes('rvm-tab-dispose'), 'hierarchy sync bridge must clean up on tab disposal');
+assert.ok(selectionSync.includes('selectedAliasGroups'), 'hierarchy sync bridge must map canvas multi-selection to tree rows');
+assert.ok(selectionSync.includes('is-canvas-selected'), 'hierarchy sync bridge must visually mark canvas-selected tree rows');
+assert.ok(selectionSync.includes('RVM_NATIVE_CONTAINER_PARENT'), 'hierarchy sync bridge must match native owner aliases');
 assert.ok(drawer.includes('root.insertBefore(drawer, statusbar)'), 'drawer must dock before status bar');
 
 console.log('Verified RVM viewer UI contract: support details polish, Source Tools dashboard, Selected Entity UI, and provider selection parity.');

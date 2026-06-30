@@ -3,7 +3,7 @@ import { emit } from '../core/event-bus.js';
 import { RuntimeEvents } from '../contracts/runtime-events.js';
 
 const INSTALL_FLAG = Symbol.for('pcf-glb-rvm-leaf-canvas-pick-v2-navigation-safe');
-const VERSION = '20260630-rvm-leaf-canvas-native-group-pick-1';
+const VERSION = '20260630-rvm-leaf-canvas-multiselect-tree-sync-1';
 const CLICK_TOLERANCE = 5;
 const SELECTED_COLOR = 0x60a5fa;
 const SELECTED_EMISSIVE = 0x2563eb;
@@ -34,13 +34,14 @@ function bindActiveViewer(state = globalThis[INSTALL_FLAG]) {
   canvas.dataset.rvmLeafCanvasPickBridge = VERSION;
   viewer._rvmLeafCanvasPickVersion = VERSION;
   patchSelectionAdapter(viewer.selection);
+  repairPointerStack(viewer, 'leaf-bind');
   let down = null;
 
   canvas.addEventListener('pointerdown', (event) => {
-    const mode = currentMode(viewer);
+    repairPointerStack(viewer, 'leaf-pointerdown');
     if (event.button !== 0) return;
-    if (mode === 'select') {
-      down = { x: event.clientX, y: event.clientY, time: now(), additive: event.ctrlKey || event.shiftKey || event.metaKey };
+    if (isSelectMode(viewer, root)) {
+      down = { x: event.clientX, y: event.clientY, time: now(), additive: isAdditiveEvent(event) };
       event.preventDefault();
       event.stopPropagation();
       event.stopImmediatePropagation?.();
@@ -50,18 +51,15 @@ function bindActiveViewer(state = globalThis[INSTALL_FLAG]) {
   }, true);
 
   canvas.addEventListener('pointerup', (event) => {
-    const mode = currentMode(viewer);
+    repairPointerStack(viewer, 'leaf-pointerup');
     if (event.button !== 0) return;
-    if (mode !== 'select') {
-      // Selection must not run in orbit/pan/marquee/measure modes, but those tools
-      // need pointerup to continue to OrbitControls, RvmViewer3D marquee/measure handlers,
-      // and document-level listeners.  Do not stop propagation here.
+    if (!isSelectMode(viewer, root)) {
       down = null;
       return;
     }
     if (!down) return;
     const moved = Math.hypot(event.clientX - down.x, event.clientY - down.y);
-    const additive = down.additive || event.ctrlKey || event.shiftKey || event.metaKey;
+    const additive = down.additive || isAdditiveEvent(event);
     down = null;
     event.preventDefault();
     event.stopPropagation();
@@ -75,19 +73,27 @@ function bindActiveViewer(state = globalThis[INSTALL_FLAG]) {
     selectLeafObject(viewer, root, hit.object, hit.point, { additive });
   }, true);
 
+  canvas.addEventListener('pointercancel', () => { down = null; }, true);
+  canvas.addEventListener('lostpointercapture', () => { down = null; }, true);
   return viewer;
 }
 
 function patchSelectionAdapter(selection) {
   if (!selection || selection.__rvmLeafCanvasPickVersion === VERSION) return;
   selection.__rvmLeafCanvasPickVersion = VERSION;
-  selection.selectByRenderObjectId = function selectByRenderObjectId(renderId, canonicalId = renderId, options = {}) {
+  selection.selectRenderObjectIds = function selectRenderObjectIds(renderIds = [], canonicalIds = renderIds, options = {}) {
+    const rids = unique(renderIds.map(String).filter(Boolean));
+    const cids = unique(canonicalIds.map(String).filter(Boolean));
     if (!options.additive) this.clearSelection?.();
-    this._selectedCanonicalId = canonicalId || renderId;
-    this._selectedCanonicalIds = [this._selectedCanonicalId];
-    this._selectedRenderIds = [renderId].filter(Boolean);
+    this._selectedRenderIds = options.additive ? unique([...(this._selectedRenderIds || []), ...rids]) : rids;
+    this._selectedCanonicalIds = options.additive ? unique([...(this._selectedCanonicalIds || []), ...cids]) : cids;
+    this._selectedCanonicalId = this._selectedCanonicalIds[0] || null;
+    this._restoreMaterials?.();
     this._highlight?.(this._selectedRenderIds, 0x2244cc);
     this._emitSelection?.();
+  };
+  selection.selectByRenderObjectId = function selectByRenderObjectId(renderId, canonicalId = renderId, options = {}) {
+    this.selectRenderObjectIds?.([renderId].filter(Boolean), [canonicalId || renderId].filter(Boolean), options);
   };
 }
 
@@ -106,19 +112,36 @@ function pickLeafObject(viewer, clientX, clientY) {
 
 function selectLeafObject(viewer, root, object, point, options = {}) {
   if (!object) return false;
-  if (!options.additive) clearLeafSelection(viewer, root, { keepPanel: true });
   const selectionObjects = nativeOwnerGroupObjects(viewer, object);
+  if (options.additive && selectionIncludesObjects(viewer, selectionObjects)) {
+    removeSelectionObjects(viewer, root, selectionObjects, { point, pickedObject: object, additive: true });
+    return true;
+  }
+  if (!options.additive) clearLeafSelection(viewer, root, { keepPanel: true, silent: true });
   for (const item of selectionObjects) applySelectedMaterial(item);
   viewer._rvmActiveHierarchySelection = null;
   viewer._rvmHierarchySelectedMeshes = [];
   viewer._rvmCanvasSelectedMeshes = unique([...(viewer._rvmCanvasSelectedMeshes || []), ...selectionObjects]);
-  const renderIds = selectionObjects.map(renderIdFor).filter(Boolean);
-  const canonicalIds = selectionObjects.map((item, index) => canonicalIdFor(viewer, item, renderIds[index])).filter(Boolean);
-  try { viewer.selection?.selectByRenderObjectId?.(renderIds[0] || renderIdFor(object), canonicalIds[0] || canonicalIdFor(viewer, object, renderIdFor(object)), { additive: options.additive }); } catch (_) {}
-  emit(RuntimeEvents.RVM_NODE_SELECTED, { canonicalId: canonicalIds[0], canonicalIds, renderObjectIds: renderIds, leafObjectOnly: selectionObjects.length === 1, nativeOwnerGroupPick: selectionObjects.length > 1, objects: selectionObjects });
-  renderDetails(root, object, point, selectionObjects);
+  syncSelectionAdapter(viewer, viewer._rvmCanvasSelectedMeshes);
+  dispatchCanvasSelection(root, viewer, object, point, { additive: options.additive, pickedObjects: selectionObjects });
+  renderDetails(root, object, point, viewer._rvmCanvasSelectedMeshes, selectionObjects);
   updateSelectedCount(root, viewer._rvmCanvasSelectedMeshes.length);
+  requestRender(viewer);
   return true;
+}
+
+function removeSelectionObjects(viewer, root, objects = [], options = {}) {
+  const removeSet = new Set(objects.filter(Boolean));
+  for (const item of removeSet) restoreMaterial(item);
+  viewer._rvmCanvasSelectedMeshes = (viewer._rvmCanvasSelectedMeshes || []).filter((item) => item && !removeSet.has(item));
+  viewer._rvmHierarchySelectedMeshes = [];
+  viewer._rvmActiveHierarchySelection = null;
+  syncSelectionAdapter(viewer, viewer._rvmCanvasSelectedMeshes);
+  dispatchCanvasSelection(root, viewer, options.pickedObject || null, options.point || null, { additive: true, removedObjects: [...removeSet] });
+  if (viewer._rvmCanvasSelectedMeshes.length) renderDetails(root, viewer._rvmCanvasSelectedMeshes[0], options.point || null, viewer._rvmCanvasSelectedMeshes, []);
+  else renderEmptySelection(root);
+  updateSelectedCount(root, viewer._rvmCanvasSelectedMeshes.length);
+  requestRender(viewer);
 }
 
 function clearLeafSelection(viewer, root = null, options = {}) {
@@ -127,35 +150,43 @@ function clearLeafSelection(viewer, root = null, options = {}) {
   viewer._rvmCanvasSelectedMeshes = [];
   viewer._rvmHierarchySelectedMeshes = [];
   viewer._rvmActiveHierarchySelection = null;
-  try { viewer.selection?.clearSelection?.(); } catch (_) {}
-  if (root) updateSelectedCount(root, 0);
-  if (!options.keepPanel) {
-    const panel = root?.querySelector?.('#rvm-attributes-panel');
-    if (panel) panel.innerHTML = '<div class="rvm-empty-state">No object selected.</div>';
+  try { viewer?.selection?.clearSelection?.(); } catch (_) {}
+  if (root) {
+    updateSelectedCount(root, 0);
+    clearCanvasTreeHighlight(root);
+    if (!options.silent) dispatchCanvasSelection(root, viewer, null, null, { cleared: true });
   }
+  if (!options.keepPanel) renderEmptySelection(root);
+  requestRender(viewer);
 }
 
-function renderDetails(root, object, point, selectionObjects = [object]) {
+function renderEmptySelection(root) {
+  const panel = root?.querySelector?.('#rvm-attributes-panel');
+  if (panel) panel.innerHTML = '<div class="rvm-empty-state">No object selected.</div>';
+}
+
+function renderDetails(root, object, point, selectedObjects = [object], pickedObjects = [object]) {
   const panel = root?.querySelector?.('#rvm-attributes-panel');
   if (!panel) return;
   const data = object?.userData || {};
   const props = data.browserRvmProperties || {};
   const attrs = data.browserRvmAttributes || props.attributes || data.attributes || {};
-  const box = safeBoxForObjects(selectionObjects);
+  const box = safeBoxForObjects(selectedObjects);
   const size = box ? box.getSize(new THREE.Vector3()) : null;
   const owner = nativeOwnerName(object);
   const rows = [
-    ['Picked', selectionObjects.length > 1 && owner ? owner : (props.displayName || data.displayName || object?.name || object?.uuid || '-')],
+    ['Picked', pickedObjects.length > 1 && owner ? owner : (props.displayName || data.displayName || object?.name || object?.uuid || '-')],
     ['Source path', attrs.RVM_OWNER_PATH || props.sourcePath || data.sourcePath || '-'],
-    ['Type', selectionObjects.length > 1 ? 'Group' : (props.type || data.type || attrs.TYPE || '-')],
+    ['Type', pickedObjects.length > 1 ? 'Group' : (props.type || data.type || attrs.TYPE || '-')],
     ['Kind', props.kind || data.kind || attrs.RVM_PRIMITIVE_KIND || '-'],
     ['Render primitive', props.effectiveRenderPrimitive || data.effectiveRenderPrimitive || data.renderKind || data.renderPrimitive || '-'],
-    ['Matched meshes', selectionObjects.length],
-    ['Selection mode', selectionObjects.length > 1 ? 'Native RVM owner group' : 'Leaf object'],
+    ['Picked meshes', pickedObjects.length],
+    ['Total selected meshes', selectedObjects.length],
+    ['Selection mode', selectedObjects.length > pickedObjects.length ? 'Canvas multi-select' : (pickedObjects.length > 1 ? 'Native RVM owner group' : 'Leaf object')],
     ['Size', size ? `${fmt(size.x)} × ${fmt(size.y)} × ${fmt(size.z)}` : '-'],
     ['Pick point', point ? `${fmt(point.x)}, ${fmt(point.y)}, ${fmt(point.z)}` : '-'],
   ];
-  const groupAttrs = selectionObjects.length > 1 && owner ? { ...attrs, NAME: owner, TYPE: 'Group', RVM_GROUP_OBJECT_COUNT: String(selectionObjects.length) } : attrs;
+  const groupAttrs = pickedObjects.length > 1 && owner ? { ...attrs, NAME: owner, TYPE: 'Group', RVM_GROUP_OBJECT_COUNT: String(pickedObjects.length), RVM_CANVAS_MULTI_SELECTED_COUNT: String(selectedObjects.length) } : attrs;
   const attrRows = Object.entries(groupAttrs || {}).slice(0, 28).map(([key, value]) => [key, value]);
   panel.innerHTML = `
     <div class="rvm-canvas-selection-card">
@@ -169,13 +200,7 @@ function renderDetails(root, object, point, selectionObjects = [object]) {
 function isSelectableLeaf(obj) {
   if (!(obj?.isMesh || obj?.isLine || obj?.isLineSegments || obj?.isPoints)) return false;
   const data = obj.userData || {};
-  return obj.visible !== false
-    && data.supportSymbol !== true
-    && data.rvmHiddenByUser !== true
-    && data.rvmInteractionIgnore !== true
-    && data.pickable !== false
-    && data.selectable !== false
-    && !data.nonSelectableReason;
+  return obj.visible !== false && data.supportSymbol !== true && data.rvmHiddenByUser !== true && data.rvmInteractionIgnore !== true && data.pickable !== false && data.selectable !== false && !data.nonSelectableReason;
 }
 
 function applySelectedMaterial(object) {
@@ -207,6 +232,40 @@ function restoreMaterial(object) {
   delete object.userData.rvmCanvasSelectionOriginalMaterial;
 }
 
+function syncSelectionAdapter(viewer, objects = []) {
+  const renderIds = objects.map(renderIdFor).filter(Boolean);
+  const canonicalIds = objects.map((item, index) => canonicalIdFor(viewer, item, renderIds[index])).filter(Boolean);
+  try {
+    if (viewer?.selection?.selectRenderObjectIds) viewer.selection.selectRenderObjectIds(renderIds, canonicalIds, { additive: false });
+    else if (viewer?.selection) {
+      viewer.selection.clearSelection?.();
+      viewer.selection._selectedRenderIds = renderIds;
+      viewer.selection._selectedCanonicalIds = canonicalIds;
+      viewer.selection._selectedCanonicalId = canonicalIds[0] || null;
+      viewer.selection._emitSelection?.();
+    }
+  } catch (_) {}
+}
+
+function dispatchCanvasSelection(root, viewer, object, point, detail = {}) {
+  if (!root) return;
+  const objects = Array.isArray(viewer?._rvmCanvasSelectedMeshes) ? viewer._rvmCanvasSelectedMeshes.filter(Boolean) : [];
+  const renderObjectIds = objects.map(renderIdFor).filter(Boolean);
+  const canonicalIds = objects.map((item, index) => canonicalIdFor(viewer, item, renderObjectIds[index])).filter(Boolean);
+  const eventDetail = { version: VERSION, source: 'canvas', object, point, objects, matches: objects, renderObjectIds, canonicalIds, selectedCount: objects.length, ...detail };
+  try { root.dispatchEvent(new CustomEvent('rvm-canvas-selection', { bubbles: true, detail: eventDetail })); } catch (_) {}
+  emit(RuntimeEvents.RVM_NODE_SELECTED, { canonicalId: canonicalIds[0] || null, canonicalIds, renderObjectIds, leafObjectOnly: objects.length === 1, nativeOwnerGroupPick: Boolean(detail.pickedObjects?.length > 1), objects });
+}
+
+function clearCanvasTreeHighlight(root) {
+  root?.querySelectorAll?.('#rvm-tree li.is-selected, #rvm-tree li.is-canvas-selected').forEach((row) => row.classList.remove('is-selected', 'is-canvas-selected'));
+}
+
+function selectionIncludesObjects(viewer, objects = []) {
+  const selected = new Set((viewer?._rvmCanvasSelectedMeshes || []).filter(Boolean));
+  return objects.length > 0 && objects.every((item) => selected.has(item));
+}
+
 function renderIdFor(object) {
   const data = object?.userData || {};
   return String(data.renderObjectId || data.leafRenderObjectId || object?.uuid || data.name || object?.name || '').trim();
@@ -214,11 +273,7 @@ function renderIdFor(object) {
 
 function canonicalIdFor(viewer, object, renderId) {
   const data = object?.userData || {};
-  return viewer?.selection?.identityMap?.canonicalFromRender?.(renderId)
-    || data.canonicalId
-    || data.sourcePath
-    || data.browserRvmProperties?.sourcePath
-    || renderId;
+  return viewer?.selection?.identityMap?.canonicalFromRender?.(renderId) || data.canonicalId || data.sourcePath || data.browserRvmProperties?.sourcePath || renderId;
 }
 
 function attrsFor(object) {
@@ -259,36 +314,20 @@ function nativeOwnerGroupObjects(viewer, object) {
   return out.length > 1 ? out : [object];
 }
 
-function currentMode(viewer) {
-  return String(viewer?._rvmInteractionMode || viewer?._navMode || 'select').trim().toLowerCase();
+function isSelectMode(viewer, root) {
+  const activeAction = String(root?.querySelector?.('[data-action].is-active')?.dataset?.action || '').toUpperCase();
+  if (activeAction === 'NAV_SELECT') return true;
+  const mode = String(viewer?.__rvmInteractionCurrentMode || viewer?._rvmInteractionMode || viewer?._navMode || 'select').trim().toLowerCase();
+  return !mode || mode === 'select' || mode === 'nav_select' || mode === 'selection';
 }
 
-function safeBox(object) {
-  try {
-    const box = new THREE.Box3().setFromObject(object);
-    return box && !box.isEmpty() ? box : null;
-  } catch (_) {
-    return null;
-  }
-}
+function isAdditiveEvent(event) { return Boolean(event?.ctrlKey || event?.shiftKey || event?.metaKey); }
+function repairPointerStack(viewer, reason) { try { globalThis.__PCF_GLB_RVM_NAVIGATION_ARBITER__?.repair?.(viewer, reason); } catch (_) {} }
+function requestRender(viewer) { try { viewer?.requestRender?.(); } catch (_) {} }
 
-function safeBoxForObjects(objects = []) {
-  const box = new THREE.Box3();
-  let any = false;
-  for (const object of objects) {
-    const item = safeBox(object);
-    if (item && !item.isEmpty()) { box.union(item); any = true; }
-  }
-  return any ? box : null;
-}
-
-function updateSelectedCount(root, count) {
-  const chip = root?.querySelector?.('[data-rvm-status-chip="selected"]');
-  const footer = root?.querySelector?.('#rvm-sel-count');
-  if (chip) chip.textContent = `Selected: ${count || 0}`;
-  if (footer) footer.textContent = String(count || 0);
-}
-
+function safeBox(object) { try { const box = new THREE.Box3().setFromObject(object); return box && !box.isEmpty() ? box : null; } catch (_) { return null; } }
+function safeBoxForObjects(objects = []) { const box = new THREE.Box3(); let any = false; for (const object of objects) { const item = safeBox(object); if (item && !item.isEmpty()) { box.union(item); any = true; } } return any ? box : null; }
+function updateSelectedCount(root, count) { const chip = root?.querySelector?.('[data-rvm-status-chip="selected"]'); const footer = root?.querySelector?.('#rvm-sel-count'); if (chip) chip.textContent = `Selected: ${count || 0}`; if (footer) footer.textContent = String(count || 0); }
 function row(key, value) { return `<div class="rvm-browser-diag-row"><span>${escapeHtml(key)}</span><b>${escapeHtml(value === undefined || value === null || value === '' ? '-' : String(value))}</b></div>`; }
 function escapeHtml(value) { return String(value ?? '').replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch])); }
 function fmt(value) { const n = Number(value); return Number.isFinite(n) ? n.toFixed(3) : '-'; }

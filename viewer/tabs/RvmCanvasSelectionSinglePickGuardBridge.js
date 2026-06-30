@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 
-const BRIDGE_VERSION = '20260622-rvm-canvas-single-pick-guard-1';
+const BRIDGE_VERSION = '20260630-rvm-canvas-single-pick-enhanced-leaf-safe-1';
 const INSTALL_FLAG = Symbol.for('pcf-glb-rvm-canvas-single-pick-guard-1');
 const GLOBAL_KEY = '__PCF_GLB_RVM_CANVAS_SINGLE_PICK_GUARD__';
 
@@ -15,6 +15,7 @@ export function installRvmCanvasSelectionSinglePickGuardBridge() {
     const viewer = globalThis.__3D_RVM_VIEWER__;
     const canvas = viewer?.renderer?.domElement;
     if (!canvas || event.target !== canvas || event.button !== 0) return;
+    if (canvas.dataset?.rvmLeafCanvasPickBridge) return;
     if (event.ctrlKey || event.shiftKey || event.metaKey) return;
     if (String(viewer?._rvmInteractionMode || viewer?._navMode || 'select').toLowerCase() !== 'select') return;
     const hit = pickLeafAt(viewer, event.clientX, event.clientY);
@@ -87,8 +88,7 @@ function restoreMaterial(mesh) {
   mesh.material = original || mesh.material;
   for (const mat of current) {
     const originalList = Array.isArray(original) ? original : [original];
-    if (originalList.includes(mat)) continue;
-    mat?.dispose?.();
+    if (!originalList.includes(mat)) mat?.dispose?.();
   }
   delete mesh.userData.rvmCanvasSelectionHighlighted;
   delete mesh.userData.rvmCanvasSelectionOriginalMaterial;
