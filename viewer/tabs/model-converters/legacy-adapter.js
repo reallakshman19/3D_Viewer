@@ -19,7 +19,6 @@ import { resolveBranchProcessData } from '../../converters/xml-cii2019-core/bran
 import { buildStagedDtxrIndex, resolveXmlCiiNodeDtxr } from '../../converters/xml-cii2019-core/dtxr-resolver.js';
 import { xmlCiiDtxrPsForNode, xmlCiiDtxrPosForNode, buildStagedDtxrPositionIndex, xmlCiiCalibrateDtxrPositionIndex } from '../../converters/xml-cii2019-core/dtxr-resolver.js';
 import {
-  findWeightMasterMatch,
   collectXmlCiiZeroRigidWeightIssues,
   applyXmlCiiRigidWeightOverrides,
   xmlCiiForwardElementLengths,
@@ -255,6 +254,8 @@ const XML_CII_MASTER_DEFS = Object.freeze({
 });
 
 const XML_CII_MASTER_ORDER = Object.freeze(['linelist', 'pipingClass', 'material', 'weight']);
+const XML_CII_LAST_PIPING_CLASS_INDEX_PATH_KEY = 'model-converters.xml-cii.last-piping-class-index-path.v1';
+const XML_CII_LINELIST_MAPPING_TEMPLATES_KEY = 'model-converters.xml-cii.linelist-column-mapping-templates.v1';
 
 function _defaultInputxml2019LayoutConfigJson() {
   return JSON.stringify({
@@ -1382,6 +1383,9 @@ function _xmlCiiRowsToTableHtml(rows, maxRows, fieldMap) {
         headers.push(field);
       }
     }
+    if (safeRows.some((row) => _toText(row?.density).trim()) && !headers.includes('density')) {
+      headers.push('density');
+    }
     headers = Array.from(new Set(headers));
   } else {
     headers = _xmlCiiHeadersFromRows(safeRows)
@@ -1394,7 +1398,12 @@ function _xmlCiiRowsToTableHtml(rows, maxRows, fieldMap) {
         <thead><tr>${headers.map((header) => `<th>${_esc(headerLabels[header] || header)}</th>`).join('')}</tr></thead>
         <tbody>
           ${safeRows.slice(0, maxRows).map((row) => `
-            <tr>${headers.map((header) => `<td>${_esc(row?.[header] ?? '')}</td>`).join('')}</tr>
+            <tr>${headers.map((header) => {
+              const densityStyle = header === 'density'
+                ? ' style="font-family:Georgia, Times New Roman, serif;font-style:italic;color:#2f5597;" title="Derived density from phase-specific line-list fields"'
+                : '';
+              return `<td${densityStyle}>${_esc(row?.[header] ?? '')}</td>`;
+            }).join('')}</tr>
           `).join('')}
         </tbody>
       </table>
@@ -3037,10 +3046,6 @@ async function _loadXmlCiiWeightMasterRows(config, diagnostics = []) {
   }
 }
 
-function _findWeightMasterMatch({ boreMm, rating, lengthMm }, config) {
-  return findWeightMasterMatch({ boreMm, rating, lengthMm }, config);
-}
-
 function _xmlCiiRigidWeightOverrideKey(branchName, nodeNumber) {
   return xmlCiiRigidWeightOverrideKey(branchName, nodeNumber);
 }
@@ -3486,17 +3491,10 @@ async function _enrichXmlForCii2019(xmlText, stagedJsonText, options = {}) {
       const manualRigidWeight = _isXmlCiiRigidNode(node)
         ? _xmlCiiRigidWeightOverrideForNode(branchName, node, config)
         : null;
-      const weightMatch = manualRigidWeight === null
-        ? _findWeightMasterMatch({ boreMm: branchBore, rating: branchRating, lengthMm }, config)
-        : null;
       if (manualRigidWeight !== null) {
         _xmlSetText(document, node, 'Weight', String(manualRigidWeight));
         stats.weightAnnotations += 1;
         diagnostics.push({ type: 'rigid-weight-manual-override', nodeNumber: _xmlText(node, 'NodeNumber'), branchName, boreMm: branchBore, rating: branchRating, lengthMm, weight: manualRigidWeight });
-      } else if (weightMatch) {
-        _xmlSetText(document, node, 'Weight', String(weightMatch.weight));
-        stats.weightAnnotations += 1;
-        diagnostics.push({ type: 'weight-master-match', nodeNumber: _xmlText(node, 'NodeNumber'), branchName, boreMm: branchBore, rating: branchRating, lengthMm, weight: weightMatch.weight, lengthDelta: weightMatch.lengthDelta });
       }
     });
   }
@@ -5783,6 +5781,96 @@ export function renderModelConvertersTab(container) {
     return xmlCiiMasterLocalState.get(masterKey);
   }
 
+  function xmlCiiStorageGet(key) {
+    try {
+      return typeof window !== 'undefined' ? (window.localStorage.getItem(key) || '') : '';
+    } catch {
+      return '';
+    }
+  }
+
+  function xmlCiiStorageSet(key, value) {
+    try {
+      if (typeof window !== 'undefined') window.localStorage.setItem(key, value);
+      return true;
+    } catch (error) {
+      console.warn(`[XML->CII] Failed to write localStorage key ${key}:`, error);
+      return false;
+    }
+  }
+
+  function xmlCiiLastPipingClassIndexPath() {
+    return _toText(xmlCiiStorageGet(XML_CII_LAST_PIPING_CLASS_INDEX_PATH_KEY)).trim();
+  }
+
+  function xmlCiiSaveLastPipingClassIndexPath(path) {
+    const normalized = xmlCiiNormalizeMasterPath(path);
+    if (normalized) xmlCiiStorageSet(XML_CII_LAST_PIPING_CLASS_INDEX_PATH_KEY, normalized);
+    return normalized;
+  }
+
+  function xmlCiiReadLineListMappingTemplates() {
+    try {
+      const parsed = JSON.parse(xmlCiiStorageGet(XML_CII_LINELIST_MAPPING_TEMPLATES_KEY) || '{}');
+      const source = Array.isArray(parsed)
+        ? Object.fromEntries(parsed.map((entry) => [_toText(entry?.fileName || entry?.sourceName).trim(), entry]).filter(([key]) => key))
+        : parsed;
+      if (!source || typeof source !== 'object' || Array.isArray(source)) return {};
+      return Object.fromEntries(Object.entries(source).filter(([, entry]) => entry?.fieldMap && typeof entry.fieldMap === 'object' && !Array.isArray(entry.fieldMap)));
+    } catch {
+      return {};
+    }
+  }
+
+  function xmlCiiWriteLineListMappingTemplates(templates) {
+    xmlCiiStorageSet(XML_CII_LINELIST_MAPPING_TEMPLATES_KEY, JSON.stringify(templates || {}, null, 2));
+  }
+
+  function xmlCiiLineListTemplateFileName(local) {
+    const sourceName = _toText(local?.sourceName).trim();
+    return sourceName || 'Unnamed line list';
+  }
+
+  function xmlCiiMappingFieldCount(fieldMap) {
+    return Object.values(fieldMap || {}).filter((value) => _toText(value).trim()).length;
+  }
+
+  function xmlCiiLineListMappingTemplateRows() {
+    return Object.values(xmlCiiReadLineListMappingTemplates())
+      .sort((left, right) => _toText(right.updatedAt).localeCompare(_toText(left.updatedAt)));
+  }
+
+  function xmlCiiSaveLineListMappingTemplate() {
+    const local = xmlCiiLocalMasterState('linelist');
+    const fieldMap = local.fieldMap && typeof local.fieldMap === 'object' && !Array.isArray(local.fieldMap) ? { ...local.fieldMap } : {};
+    const mappedFieldCount = xmlCiiMappingFieldCount(fieldMap);
+    if (!mappedFieldCount) return null;
+    const fileName = xmlCiiLineListTemplateFileName(local);
+    const templates = xmlCiiReadLineListMappingTemplates();
+    const existing = templates[fileName] || {};
+    templates[fileName] = {
+      fileName,
+      sourceName: fileName,
+      fieldMap,
+      headers: _xmlCiiHeadersFromRows(local.rawRows).filter((header) => header !== '_raw' && header !== '_rowIndex'),
+      mappedFieldCount,
+      createdAt: existing.createdAt || new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    xmlCiiWriteLineListMappingTemplates(templates);
+    return templates[fileName];
+  }
+
+  function xmlCiiApplyLineListMappingTemplate(fileName) {
+    const key = _toText(fileName).trim();
+    const template = xmlCiiReadLineListMappingTemplates()[key];
+    if (!template) throw new Error(`No saved line-list column mapping found for "${key}".`);
+    const local = xmlCiiLocalMasterState('linelist');
+    local.fieldMap = { ...(template.fieldMap || {}) };
+    if (local.rawRows.length) xmlCiiSaveMasterRows('linelist');
+    return template;
+  }
+
   function xmlCiiActiveWorkflowTab(rootEl) {
     const configured = rootEl?.dataset.activeMaster || 'linelist';
     if (configured === 'overrides') return configured;
@@ -5820,7 +5908,17 @@ export function renderModelConvertersTab(container) {
     const current = config?.masterPaths && typeof config.masterPaths === 'object' && !Array.isArray(config.masterPaths)
       ? config.masterPaths
       : {};
-    const paths = { ...XML_CII_SPECWISE_MASTER_PATH_DEFAULTS, ...current };
+    const rememberedIndexPath = xmlCiiLastPipingClassIndexPath();
+    const defaults = rememberedIndexPath
+      ? { ...XML_CII_SPECWISE_MASTER_PATH_DEFAULTS, pipingClassIndexPath: rememberedIndexPath }
+      : XML_CII_SPECWISE_MASTER_PATH_DEFAULTS;
+    const paths = { ...defaults, ...current };
+    if (
+      rememberedIndexPath
+      && (!current.pipingClassIndexPath || current.pipingClassIndexPath === XML_CII_SPECWISE_MASTER_PATH_DEFAULTS.pipingClassIndexPath)
+    ) {
+      paths.pipingClassIndexPath = rememberedIndexPath;
+    }
     delete paths.legacyPipingMasterPath;
     return paths;
   }
@@ -5997,6 +6095,34 @@ export function renderModelConvertersTab(container) {
       </div>`;
   }
 
+  function xmlCiiRenderPipingClassIndexPathPanel(config) {
+    const paths = xmlCiiSpecwiseMasterPaths(config);
+    return `
+      <div class="model-converters-workflow-master-card" data-xml-cii-specwise-paths-panel data-xml-cii-piping-index-panel style="margin:10px 0;border-color:#25466b;">
+        <div class="model-converters-workflow-master-head">
+          <div>
+            <div class="model-converters-workflow-detail-title">Piping Class Index Path</div>
+            <div class="model-converters-workflow-detail-text">Fetch specwise piping-class rows from the selected index path. The last fetched path is remembered locally.</div>
+          </div>
+          <button type="button" class="model-converters-run-btn" data-xml-cii-rescan-piping>Rescan XML</button>
+        </div>
+        <div class="model-converters-workflow-regex-grid" style="margin-top:10px;grid-template-columns:2fr 1.4fr auto;">
+          <label class="model-converters-workflow-regex-field">
+            <span>Piping Class Index Path</span>
+            <input type="text" value="${_escAttr(paths.pipingClassIndexPath || '')}" data-xml-cii-master-path="pipingClassIndexPath">
+          </label>
+          <label class="model-converters-workflow-regex-field">
+            <span>Piping Class Shard Folder</span>
+            <input type="text" value="${_escAttr(paths.pipingClassShardFolder || '')}" data-xml-cii-master-path="pipingClassShardFolder">
+          </label>
+          <button type="button" class="model-converters-download-btn" data-xml-cii-fetch-index style="align-self:end;white-space:nowrap;">Fetch</button>
+        </div>
+        <div data-xml-cii-path-status style="margin-top:8px;padding:8px 10px;border:1px solid #2b7656;border-radius:8px;color:#7dffc0;background:#0f1b2c;font-size:12px;">
+          ${_esc(xmlCiiSpecwiseStatusText(config))}
+        </div>
+      </div>`;
+  }
+
   async function xmlCiiRescanSpecwisePipingClass(options = {}) {
     const force = options.force === true;
     const notifyUser = options.notifyUser === true;
@@ -6062,14 +6188,18 @@ export function renderModelConvertersTab(container) {
   }
 
   function xmlCiiBindSpecwiseMasterPathsPanel(rootEl, rerender) {
-    const panel = rootEl?.querySelector?.('[data-xml-cii-specwise-paths-panel]');
+    const panels = Array.from(rootEl?.querySelectorAll?.('[data-xml-cii-specwise-paths-panel]') || []);
+    panels.forEach((panel) => {
     if (!panel || panel.dataset.bound === 'true') return;
     panel.dataset.bound = 'true';
     panel.querySelectorAll('[data-xml-cii-master-path]').forEach((input) => {
       input.addEventListener('change', () => {
         const config = _parseXmlCiiEnrichmentConfig(activeValues().supportConfigJson);
+        const key = input.getAttribute('data-xml-cii-master-path') || '';
+        const normalized = xmlCiiNormalizeMasterPath(input.value);
         config.masterPaths = xmlCiiSpecwiseMasterPaths(config);
-        config.masterPaths[input.getAttribute('data-xml-cii-master-path') || ''] = xmlCiiNormalizeMasterPath(input.value);
+        config.masterPaths[key] = normalized;
+        if (key === 'pipingClassIndexPath') xmlCiiSaveLastPipingClassIndexPath(normalized);
         delete config.masterPaths.legacyPipingMasterPath;
         xmlCiiSaveConfig(config);
         rerender?.();
@@ -6079,25 +6209,14 @@ export function renderModelConvertersTab(container) {
       const statusEl = panel.querySelector('[data-xml-cii-path-status]');
       try {
         if (statusEl) statusEl.textContent = 'Scanning XML branch names against specwise piping class index...';
-        const result = await xmlCiiRescanSpecwisePipingClass({ force: true, notifyUser: true });
-        if (statusEl) statusEl.textContent = result.message;
-      } catch (error) {
-        const message = _toText(error?.message || error);
-        if (statusEl) statusEl.textContent = message;
-        notify({ level: 'error', title: 'XML->CII Masters', message });
-      } finally {
-        rerender?.();
-      }
-    });
-    panel.querySelector('[data-xml-cii-fetch-index]')?.addEventListener('click', async () => {
-      const statusEl = panel.querySelector('[data-xml-cii-path-status]');
-      const pathInput = panel.querySelector('[data-xml-cii-master-path="pipingClassIndexPath"]');
-      const path = (pathInput?.value || '').trim();
-      if (!path) { if (statusEl) statusEl.textContent = 'Enter a Piping Class Index Path first.'; return; }
-      try {
-        if (statusEl) statusEl.textContent = `Fetching ${path}...`;
         const config = _parseXmlCiiEnrichmentConfig(activeValues().supportConfigJson);
-        config.masterPaths = { ...xmlCiiSpecwiseMasterPaths(config), pipingClassIndexPath: xmlCiiNormalizeMasterPath(path) };
+        const nextPaths = { ...xmlCiiSpecwiseMasterPaths(config) };
+        panel.querySelectorAll('[data-xml-cii-master-path]').forEach((input) => {
+          const key = input.getAttribute('data-xml-cii-master-path') || '';
+          if (key) nextPaths[key] = xmlCiiNormalizeMasterPath(input.value);
+        });
+        if (nextPaths.pipingClassIndexPath) xmlCiiSaveLastPipingClassIndexPath(nextPaths.pipingClassIndexPath);
+        config.masterPaths = nextPaths;
         xmlCiiSaveConfig(config);
         const result = await xmlCiiRescanSpecwisePipingClass({ force: true, notifyUser: true });
         if (statusEl) statusEl.textContent = result.message;
@@ -6108,6 +6227,34 @@ export function renderModelConvertersTab(container) {
       } finally {
         rerender?.();
       }
+    });
+    panel.querySelectorAll('[data-xml-cii-fetch-index]').forEach((button) => button.addEventListener('click', async () => {
+      const statusEl = panel.querySelector('[data-xml-cii-path-status]');
+      const pathInput = panel.querySelector('[data-xml-cii-master-path="pipingClassIndexPath"]');
+      const path = (pathInput?.value || '').trim();
+      if (!path) { if (statusEl) statusEl.textContent = 'Enter a Piping Class Index Path first.'; return; }
+      try {
+        if (statusEl) statusEl.textContent = `Fetching ${path}...`;
+        const config = _parseXmlCiiEnrichmentConfig(activeValues().supportConfigJson);
+        const normalized = xmlCiiSaveLastPipingClassIndexPath(path);
+        const nextPaths = { ...xmlCiiSpecwiseMasterPaths(config), pipingClassIndexPath: normalized };
+        panel.querySelectorAll('[data-xml-cii-master-path]').forEach((input) => {
+          const key = input.getAttribute('data-xml-cii-master-path') || '';
+          if (key) nextPaths[key] = xmlCiiNormalizeMasterPath(input.value);
+        });
+        config.masterPaths = nextPaths;
+        if (config.masterPaths.pipingClassIndexPath) xmlCiiSaveLastPipingClassIndexPath(config.masterPaths.pipingClassIndexPath);
+        xmlCiiSaveConfig(config);
+        const result = await xmlCiiRescanSpecwisePipingClass({ force: true, notifyUser: true });
+        if (statusEl) statusEl.textContent = result.message;
+      } catch (error) {
+        const message = _toText(error?.message || error);
+        if (statusEl) statusEl.textContent = message;
+        notify({ level: 'error', title: 'XML->CII Masters', message });
+      } finally {
+        rerender?.();
+      }
+    }));
     });
   }
 
@@ -6382,6 +6529,61 @@ export function renderModelConvertersTab(container) {
     `;
   }
 
+  function xmlCiiRenderLineListMappingTemplateControls(local) {
+    const templates = xmlCiiLineListMappingTemplateRows();
+    const currentName = xmlCiiLineListTemplateFileName(local);
+    const selectedTemplate = templates.find((template) => template.fileName === currentName) || templates[0] || null;
+    return `
+      <div style="display:inline-flex;align-items:center;gap:6px;">
+        <select data-xml-cii-linelist-template ${templates.length ? '' : 'disabled'} title="Saved line-list column mapping templates">
+          ${templates.length ? templates.map((template) => `
+            <option value="${_escAttr(template.fileName)}" ${selectedTemplate?.fileName === template.fileName ? 'selected' : ''}>
+              ${_esc(template.fileName)}
+            </option>
+          `).join('') : '<option value="">No mapped rows saved</option>'}
+        </select>
+        <button type="button" class="model-converters-download-btn" data-xml-cii-use-linelist-template ${templates.length ? '' : 'disabled'}>Use mapped Row</button>
+      </div>`;
+  }
+
+  function xmlCiiRenderLineListMappingTemplatesPanel() {
+    const templates = xmlCiiLineListMappingTemplateRows();
+    return `
+      <section class="model-converters-workflow-override-section">
+        <div class="model-converters-workflow-master-head">
+          <div>
+            <div class="model-converters-workflow-detail-title">Saving Column Mapping</div>
+            <div class="model-converters-workflow-detail-text">Line list column mappings saved by file name after Save Mapped Rows.</div>
+          </div>
+          <div class="model-converters-workflow-count">${templates.length} template(s)</div>
+        </div>
+        <div class="model-converters-workflow-table-wrap">
+          <table class="model-converters-workflow-table">
+            <thead>
+              <tr>
+                <th>Line list File name</th>
+                <th>Mapped Fields</th>
+                <th>Updated</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${templates.length ? templates.map((template) => `
+                <tr>
+                  <td>${_esc(template.fileName)}</td>
+                  <td>${_esc(String(template.mappedFieldCount || xmlCiiMappingFieldCount(template.fieldMap)))}</td>
+                  <td>${_esc(template.updatedAt || '')}</td>
+                </tr>
+              `).join('') : `
+                <tr>
+                  <td colspan="3" class="model-converters-workflow-empty">No saved line-list mapping templates.</td>
+                </tr>
+              `}
+            </tbody>
+          </table>
+        </div>
+      </section>`;
+  }
+
   function xmlCiiRenderMasterRowsPanel(masterKey, config) {
     const masterDef = XML_CII_MASTER_DEFS[masterKey];
     const local = xmlCiiLocalMasterState(masterKey);
@@ -6402,6 +6604,8 @@ export function renderModelConvertersTab(container) {
           <div class="model-converters-workflow-count">${savedRows.length} saved row(s)</div>
         </div>
 
+        ${masterKey === 'pipingClass' ? xmlCiiRenderPipingClassIndexPathPanel(config) : ''}
+
         <div class="model-converters-workflow-toolbar">
           <label class="model-converters-download-btn">
             Import CSV/XLSX/JSON
@@ -6411,6 +6615,7 @@ export function renderModelConvertersTab(container) {
           <button type="button" class="model-converters-download-btn" data-xml-cii-auto-map="${_esc(masterKey)}" ${local.rawRows.length ? '' : 'disabled'}>Auto Map Fields</button>
           ${masterKey === 'linelist' ? `
             <button type="button" class="model-converters-download-btn" data-xml-cii-dynamic-map="${_esc(masterKey)}" ${local.rawRows.length ? '' : 'disabled'}>Dynamic mapped Fields</button>
+            ${xmlCiiRenderLineListMappingTemplateControls(local)}
           ` : ''}
           <button type="button" class="model-converters-run-btn" data-xml-cii-save-master="${_esc(masterKey)}" ${local.rawRows.length ? '' : 'disabled'}>Save Mapped Rows</button>
           <button type="button" class="model-converters-download-btn" data-xml-cii-clear-master="${_esc(masterKey)}" ${savedRows.length || local.rawRows.length ? '' : 'disabled'}>Clear</button>
@@ -6501,7 +6706,7 @@ export function renderModelConvertersTab(container) {
       <div class="model-converters-workflow-master-card">
         <div class="model-converters-workflow-master-head">
           <div>
-            <div class="model-converters-workflow-detail-title">Manual Override</div>
+            <div class="model-converters-workflow-detail-title">Manual Override/Mapped default templates</div>
             <div class="model-converters-workflow-detail-text">
               Saved into supportConfigJson.overrides so XML->CII can run standalone with the same highest-precedence corrections.
             </div>
@@ -6512,6 +6717,7 @@ export function renderModelConvertersTab(container) {
         </div>
         ${renderRows('pipingClass', 'Derived Class', 'Mapped Class')}
         ${renderRows('material', 'Material Name', 'Code')}
+        ${xmlCiiRenderLineListMappingTemplatesPanel()}
       </div>
     `;
   }
@@ -6523,12 +6729,16 @@ export function renderModelConvertersTab(container) {
     const activeMaster = xmlCiiActiveMasterKey(rootEl);
     const overrides = xmlCiiEnsureOverrides(config);
     const overrideCount = Object.keys(overrides.pipingClass || {}).length + Object.keys(overrides.material || {}).length;
+    const templateCount = xmlCiiLineListMappingTemplateRows().length;
     const summary = XML_CII_MASTER_ORDER.map((masterKey) => {
       const masterDef = XML_CII_MASTER_DEFS[masterKey];
       const local = xmlCiiLocalMasterState(masterKey);
+      const rows = _xmlCiiMasterRowsFromConfig(config, masterDef).length || local.rawRows.length;
+      const empty = masterKey === 'pipingClass' ? rows <= 1 : rows === 0;
       return {
         masterKey,
-        rows: _xmlCiiMasterRowsFromConfig(config, masterDef).length || local.rawRows.length,
+        rows: empty ? 0 : rows,
+        empty,
       };
     });
 
@@ -6540,14 +6750,14 @@ export function renderModelConvertersTab(container) {
       ${xmlCiiRenderSpecwiseMasterPathsPanel(config)}
       <div class="model-converters-workflow-master-tabs">
         ${summary.map((entry) => `
-          <button type="button" class="model-converters-workflow-master-tab ${entry.masterKey === activeTab ? 'is-active' : ''}${entry.rows === 0 ? ' is-empty' : ''}" data-xml-cii-master-tab="${_esc(entry.masterKey)}">
+          <button type="button" class="model-converters-workflow-master-tab ${entry.masterKey === activeTab ? 'is-active' : ''}${entry.empty ? ' is-empty' : ''}" data-xml-cii-master-tab="${_esc(entry.masterKey)}">
             <span>${_esc(XML_CII_MASTER_DEFS[entry.masterKey].title)}</span>
             <small>${entry.rows === 0 ? '⚠ no data' : `${entry.rows} row(s)`}</small>
           </button>
         `).join('')}
-        <button type="button" class="model-converters-workflow-master-tab ${activeTab === 'overrides' ? 'is-active' : ''}${overrideCount === 0 ? ' is-empty' : ''}" data-xml-cii-master-tab="overrides">
-          <span>Manual Override</span>
-          <small>${overrideCount === 0 ? 'none' : `${overrideCount} override(s)`}</small>
+        <button type="button" class="model-converters-workflow-master-tab ${activeTab === 'overrides' ? 'is-active' : ''}" data-xml-cii-master-tab="overrides">
+          <span>Manual Override/Mapped default templates</span>
+          <small>${overrideCount} override(s), ${templateCount} template(s)</small>
         </button>
       </div>
       ${activeTab === 'overrides' ? xmlCiiRenderOverridesPanel(config) : xmlCiiRenderMasterRowsPanel(activeMaster, config)}
@@ -6978,10 +7188,11 @@ export function renderModelConvertersTab(container) {
     xmlCiiSaveConfig(config);
   }
 
-  function xmlCiiSaveMasterRows(masterKey) {
+  function xmlCiiSaveMasterRows(masterKey, options) {
     const masterDef = XML_CII_MASTER_DEFS[masterKey];
     const local = xmlCiiLocalMasterState(masterKey);
     const rows = _xmlCiiMapRowsWithFieldMap(local.rawRows, local.fieldMap, masterKey);
+    const saveMappingTemplate = options?.saveMappingTemplate === true;
 
     if (masterKey === 'linelist') {
       const activeVal = activeValues();
@@ -7020,6 +7231,13 @@ export function renderModelConvertersTab(container) {
         window.localStorage.setItem('model-converters.last-linelist.v1', JSON.stringify(dataToSave));
       } catch (err) {
         console.warn('Failed to save last loaded line list to localStorage:', err);
+      }
+
+      if (saveMappingTemplate) {
+        const template = xmlCiiSaveLineListMappingTemplate();
+        if (template) {
+          notify({ level: 'success', title: 'Line List Mapping', message: `Saved column mapping template for ${template.fileName}.` });
+        }
       }
     }
 
@@ -7145,13 +7363,25 @@ export function renderModelConvertersTab(container) {
         notify({ level: 'success', title: 'Dynamic Mapping', message: 'Dynamic mapped fields saved successfully.' });
       });
     });
+    rootEl.querySelectorAll('[data-xml-cii-use-linelist-template]').forEach((button) => {
+      button.addEventListener('click', () => {
+        const select = button.parentElement?.querySelector('[data-xml-cii-linelist-template]');
+        try {
+          const template = xmlCiiApplyLineListMappingTemplate(select?.value || '');
+          notify({ level: 'success', title: 'Line List Mapping', message: `Applied mapped row template for ${template.fileName}.` });
+          rerender();
+        } catch (error) {
+          notify({ level: 'error', title: 'Line List Mapping', message: _toText(error?.message || error) });
+        }
+      });
+    });
     rootEl.querySelectorAll('[data-xml-cii-save-master]').forEach((button) => {
       button.addEventListener('click', () => {
         const masterKey = button.getAttribute('data-xml-cii-save-master') || 'linelist';
         if (masterKey === 'linelist') {
           xmlCiiSaveDynamicMappedFields(masterKey);
         }
-        xmlCiiSaveMasterRows(masterKey);
+        xmlCiiSaveMasterRows(masterKey, { saveMappingTemplate: masterKey === 'linelist' });
       });
     });
     rootEl.querySelectorAll('[data-xml-cii-clear-master]').forEach((button) => {
@@ -7836,6 +8066,7 @@ export function renderModelConvertersTab(container) {
     const savedFieldMap = _xmlCiiMasterFieldMapFromConfig(config, masterDef);
     const fieldMap = Object.keys(local.fieldMap || {}).length ? local.fieldMap : savedFieldMap;
     const sourceRows = local.rawRows.length ? local.rawRows : savedRows;
+    const visibleRows = savedRows.length || local.rawRows.length;
     const headers = _xmlCiiHeadersFromRows(sourceRows).filter((header) => header !== '_raw' && header !== '_rowIndex');
     const previewMap = _xmlCiiBuildColumnPreviewMap(sourceRows, headers);
     const fields = Object.keys(masterDef.aliases || {}).map((fieldName) => ({
@@ -7856,10 +8087,11 @@ export function renderModelConvertersTab(container) {
       key: masterKey,
       title: masterDef.title,
       description: masterDef.description,
-      rows: savedRows.length || local.rawRows.length,
+      rows: masterKey === 'pipingClass' && visibleRows <= 1 ? 0 : visibleRows,
       rawRows: local.rawRows.length,
       sourceName: local.sourceName || '',
       hasDefault: !!masterDef.defaultUrl,
+      mappingTemplates: masterKey === 'linelist' ? xmlCiiLineListMappingTemplateRows() : [],
       fields,
       previewColumns,
       previewRows,
@@ -7885,6 +8117,7 @@ export function renderModelConvertersTab(container) {
     return {
       count: groups.reduce((sum, group) => sum + group.entries.length, 0),
       groups,
+      mappingTemplates: xmlCiiLineListMappingTemplateRows(),
     };
   }
 
@@ -8015,7 +8248,7 @@ export function renderModelConvertersTab(container) {
 
   function xmlCiiSavePopupMaster(masterKey) {
     if (masterKey === 'linelist') xmlCiiSaveDynamicMappedFields(masterKey);
-    xmlCiiSaveMasterRows(masterKey);
+    xmlCiiSaveMasterRows(masterKey, { saveMappingTemplate: masterKey === 'linelist' });
   }
 
   async function xmlCiiBuildPopupPreviewRows() {
@@ -8509,6 +8742,10 @@ export function renderModelConvertersTab(container) {
       return xmlCiiSavePopupMaster(masterKey);
     },
 
+    applyPopupLineListMappingTemplate(fileName) {
+      return xmlCiiApplyLineListMappingTemplate(fileName);
+    },
+
     clearPopupMaster(masterKey) {
       return xmlCiiClearMasterRows(masterKey);
     },
@@ -8717,12 +8954,25 @@ export function renderModelConvertersTab(container) {
             });
           });
 
+          target.querySelectorAll('[data-xml-cii-use-linelist-template]').forEach((button) => {
+            button.addEventListener('click', () => {
+              const select = button.parentElement?.querySelector('[data-xml-cii-linelist-template]');
+              try {
+                const template = xmlCiiApplyLineListMappingTemplate(select?.value || '');
+                notify({ level: 'success', title: 'Line List Mapping', message: `Applied mapped row template for ${template.fileName}.` });
+                rerender();
+              } catch (err) {
+                notify({ level: 'error', title: 'Line List Mapping', message: _toText(err?.message || err) });
+              }
+            });
+          });
+
           // Save Mapped Rows
           target.querySelectorAll('[data-xml-cii-save-master]').forEach((button) => {
             button.addEventListener('click', () => {
               const masterKey = button.getAttribute('data-xml-cii-save-master') || 'linelist';
               if (masterKey === 'linelist') xmlCiiSaveDynamicMappedFields(masterKey);
-              xmlCiiSaveMasterRows(masterKey);
+              xmlCiiSaveMasterRows(masterKey, { saveMappingTemplate: masterKey === 'linelist' });
               rerender();
             });
           });

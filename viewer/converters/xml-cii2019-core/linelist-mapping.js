@@ -1,3 +1,5 @@
+import { resolveLineListDensity } from './line-density-resolver.js';
+
 export const FIELD_RULES = {
   lineSeqNo: {
     all: [
@@ -618,11 +620,9 @@ export function normalizeLineListRow(row, fieldMap, index) {
     phase: readRowValue(row, [fieldMap.phase])
   };
 
-  normalized.density =
-    normalized.densityMixed ||
-    normalized.densityGas ||
-    normalized.densityLiquid ||
-    '';
+  const densityInfo = resolveLineListDensity(normalized, null);
+  normalized.density = densityInfo.value || '';
+  normalized.densitySource = densityInfo.source || 'none';
 
   return normalized;
 }

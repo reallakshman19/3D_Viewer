@@ -15,8 +15,7 @@ export const BRANCH_COLUMNS = [
   { id: 't3', label: 'T3 (C)', hint: 'Edit', width: 90, minWidth: 60 },
   { id: 'density', label: 'Density', hint: 'Edit', width: 90, minWidth: 60 },
   { id: 'wallThickness', label: 'Wall Thk', hint: 'Edit', width: 90, minWidth: 60 },
-  { id: 'corrosion', label: 'Corrosion', hint: 'Edit', width: 90, minWidth: 60 },
-  { id: 'wt', label: 'Wt', width: 80, minWidth: 50 }
+  { id: 'corrosion', label: 'Corrosion', hint: 'Edit', width: 90, minWidth: 60 }
 ];
 
 export const NODE_WEIGHT_COLUMNS = [
@@ -50,14 +49,12 @@ export class EditablePreviewTable {
     this.onFillDownClick = onFillDownClick;
     this.onProcessInputChange = onProcessInputChange;
     this.onProcessFillDownClick = onProcessFillDownClick;
-    this.onWeightCandidateSelect = onWeightCandidateSelect;
     this.processInputHtmlRenderer = processInputHtmlRenderer;
     this.matchBadgeHtmlRenderer = matchBadgeHtmlRenderer;
   }
 
   renderHTML() {
     const branchWidths = loadColumnWidths('xmlCii.preview.branch.columnWidths.v1');
-    const nodeWidths = loadColumnWidths('xmlCii.preview.nodeWeight.columnWidths.v1');
     const colHdr = (col) => `
       <th class="mc-preview-th" data-col-id="${this._escapeAttr(col.id)}" style="position: relative;">
         <span class="xml-cii-th-label">${this._escape(col.label)}</span>${col.hint ? `<span class="mc-preview-edit-hint">${this._escape(col.hint)}</span>` : ''}
@@ -65,15 +62,13 @@ export class EditablePreviewTable {
       </th>`;
     const branchColgroup = renderColGroup(BRANCH_COLUMNS, branchWidths);
     const branchThead = BRANCH_COLUMNS.map(colHdr).join('');
-    return `<div class="mc-preview-wrap xml-cii-preview-table-wrap"><table class="mc-preview-table xml-cii-preview-table--fixed" data-resizable-table="branch-preview">${branchColgroup}<thead><tr>${branchThead}</tr></thead><tbody>${this.branchRows.map((row, ri) => this._renderBranchRow(row, ri, nodeWidths)).join('')}</tbody></table></div>`;
+    return `<div class="mc-preview-wrap xml-cii-preview-table-wrap"><table class="mc-preview-table xml-cii-preview-table--fixed" data-resizable-table="branch-preview">${branchColgroup}<thead><tr>${branchThead}</tr></thead><tbody>${this.branchRows.map((row, ri) => this._renderBranchRow(row, ri)).join('')}</tbody></table></div>`;
   }
 
-  _renderBranchRow(row, ri, nodeWidths) {
-    const nw = this.nodesByBranch[row.branchName] || [];
+  _renderBranchRow(row, ri) {
     const pipingClassTitle = this._pipingClassTitle(row);
     const pcBadge = this.matchBadgeHtmlRenderer ? this.matchBadgeHtmlRenderer(row.pipingClassMethod, row.pipingClassConfidence, row.pipingClassNeedsReview, row.pipingClass, row.pipingClassDerived) : `<span class="mc-preview-editable-val">${this._escape(row.pipingClass || '')}</span>`;
     const mcBadge = this.matchBadgeHtmlRenderer ? this.matchBadgeHtmlRenderer(row.materialCodeMethod, null, row.materialCodeNeedsReview, row.materialCode, row.material) : `<span class="mc-preview-editable-val">${this._escape(row.materialCode || '')}</span>`;
-    const wIcon = nw.length ? `<button type="button" class="mc-preview-weight-btn" data-mc-preview-row="${ri}" title="Show node weights">Wt ${nw.length}</button>` : '<span class="mc-preview-muted">—</span>';
     const tdApprox = (needs, attrs = '') => needs ? `class="mc-preview-td mc-preview-approx" ${attrs}` : `class="mc-preview-td" ${attrs}`;
     const fillDownBtn = (field, fromRow) => `<button type="button" class="mc-preview-filldown-btn" data-mc-fill-field="${this._escape(field)}" data-mc-fill-from="${fromRow}" title="Smart fill by field key: wall thickness by piping class + size; corrosion/material code by piping class; process data by line key.">↓</button>`;
     const renderProcessField = (fieldKey, val, src, pcKey = '') => this.processInputHtmlRenderer ? this.processInputHtmlRenderer(fieldKey, row.lineKey, val, src, ri, pcKey) : `<input type="text" value="${this._escape(val)}" data-mc-pd-field="${this._escape(fieldKey)}" data-mc-pd-linekey="${this._escape(row.lineKey)}" data-mc-pd-row="${ri}">`;
@@ -108,9 +103,7 @@ export class EditablePreviewTable {
         <td class="mc-preview-td mc-preview-pd-td">${renderProcessField('density', row.density, row.densitySource)}</td>
         <td ${tdApprox(false, editAttrs('wallThickness', wallKey, `title="Wall thickness override key: ${this._escapeAttr(wallKey)}"`))}>${editablePlain('wallThickness', row.wallThickness, wallKey, row.wallThicknessSource)}${fillDownBtn('wallThickness', ri)}</td>
         <td ${tdApprox(false, editAttrs('corrosion', corrosionKey, `title="Corrosion override key: ${this._escapeAttr(corrosionKey)}"`))}>${editablePlain('corrosion', row.corrosion, corrosionKey, row.corrosionSource)}${fillDownBtn('corrosion', ri)}</td>
-        <td class="mc-preview-td">${wIcon}</td>
-      </tr>
-      <tr class="mc-preview-node-row" id="mc-preview-nodes-${ri}" style="display:none"><td colspan="${BRANCH_COLUMNS.length}" class="mc-preview-node-cell">${nw.length ? this._renderNodeTable(nw, ri, nodeWidths) : ''}</td></tr>`;
+      </tr>`;
   }
 
   _renderNodeTable(nw, ri, nodeWidths) {
@@ -133,10 +126,6 @@ export class EditablePreviewTable {
   bind(hostEl) {
     const branchTable = hostEl.querySelector('[data-resizable-table="branch-preview"]');
     if (branchTable) attachColumnResizers(branchTable, BRANCH_COLUMNS, { storageKey: 'xmlCii.preview.branch.columnWidths.v1' });
-    hostEl.querySelectorAll('.mc-preview-node-table').forEach(nodeTable => attachColumnResizers(nodeTable, NODE_WEIGHT_COLUMNS, { storageKey: 'xmlCii.preview.nodeWeight.columnWidths.v1' }));
-    hostEl.querySelectorAll('[data-mc-preview-row]').forEach(btn => btn.addEventListener('click', () => { const ri = btn.getAttribute('data-mc-preview-row'); const nodeRow = hostEl.querySelector(`#mc-preview-nodes-${ri}`); if (nodeRow) nodeRow.style.display = nodeRow.style.display === 'none' ? '' : 'none'; }));
-    hostEl.querySelectorAll('[data-mc-weight-candidate]').forEach(btn => btn.addEventListener('click', (event) => { event.stopPropagation(); const key = btn.getAttribute('data-mc-weight-key') || ''; const weight = btn.getAttribute('data-mc-weight-value') || ''; const typeDesc = btn.getAttribute('data-mc-weight-valvetype') || ''; const method = btn.getAttribute('data-mc-weight-method') || ''; const weightInput = key ? hostEl.querySelector(`input[data-mc-weight-cell="${CSS.escape(key)}"]`) : null; if (weightInput) { weightInput.value = weight; weightInput.title = typeDesc ? `Selected TypeDesc: ${typeDesc}` : 'Selected candidate weight'; weightInput.classList.add('mc-preview-weight-selected'); weightInput.dispatchEvent(new Event('input', { bubbles: true })); weightInput.dispatchEvent(new Event('change', { bubbles: true })); } hostEl.querySelectorAll(`[data-mc-weight-key="${CSS.escape(key)}"]`).forEach((el) => el.classList.remove('selected')); btn.classList.add('selected'); if (typeof this.onWeightCandidateSelect === 'function') this.onWeightCandidateSelect({ key, weight, valveType: typeDesc, typeDesc, weightMethod: method, button: btn, input: weightInput }); }));
-    hostEl.querySelectorAll('.mc-preview-weight-input[data-mc-weight-key]').forEach(input => input.addEventListener('change', () => { const key = input.getAttribute('data-mc-weight-key') || ''; const weight = input.value || ''; if (typeof this.onWeightCandidateSelect === 'function') this.onWeightCandidateSelect({ key, weight, valveType: '', typeDesc: '', input }); }));
     hostEl.querySelectorAll('[data-mc-edit-type]').forEach(td => { td.style.cursor = 'pointer'; td.addEventListener('click', (e) => { if (e.target.closest('.mc-preview-filldown-btn')) return; const editType = td.getAttribute('data-mc-edit-type'); const derivedKey = td.getAttribute('data-mc-edit-derived') || td.getAttribute('data-mc-edit-key') || td.getAttribute('data-mc-edit-mat') || ''; let currentVal = td.querySelector('.mc-preview-editable-val')?.textContent?.trim() || ''; if (currentVal === '—') currentVal = ''; const rowIndex = Number(td.getAttribute('data-mc-edit-row') || 0); if (typeof this.onCellEditClick === 'function') this.onCellEditClick({ editType, derivedKey, currentVal, rowIndex, td }); }); });
     hostEl.querySelectorAll('.mc-preview-filldown-btn[data-mc-fill-field]:not(.mc-pd-filldown)').forEach(btn => btn.addEventListener('click', (e) => { e.stopPropagation(); const field = btn.getAttribute('data-mc-fill-field') || ''; const fromRow = Number(btn.getAttribute('data-mc-fill-from') || 0); const sourceTd = btn.closest('[data-mc-edit-type]'); const currentVal = sourceTd?.querySelector('.mc-preview-editable-val')?.textContent?.trim() || ''; if (typeof this.onFillDownClick === 'function') this.onFillDownClick({ field, fromRow, currentVal, sourceTd, btn }); }));
     hostEl.querySelectorAll('[data-mc-pd-field]').forEach(input => input.addEventListener('change', () => { const fieldKey = input.dataset.mcPdField; const lineKey = input.dataset.mcPdLinekey; const rowIndex = Number(input.dataset.mcPdRow || 0); const value = input.value; if (typeof this.onProcessInputChange === 'function') this.onProcessInputChange({ fieldKey, lineKey, value, rowIndex, input }); }));

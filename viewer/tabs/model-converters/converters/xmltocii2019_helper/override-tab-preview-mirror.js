@@ -84,7 +84,7 @@ function findManualOverrideCard() {
   const cards = [...document.querySelectorAll('.model-converters-workflow-master-card')];
   return cards.find((card) => {
     const title = card.querySelector('.model-converters-workflow-master-head .model-converters-workflow-detail-title');
-    return clean(title?.textContent) === 'Manual Override';
+    return clean(title?.textContent).startsWith('Manual Override');
   }) || null;
 }
 

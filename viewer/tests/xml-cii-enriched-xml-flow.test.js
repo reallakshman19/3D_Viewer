@@ -73,7 +73,7 @@ for (const token of [
   "t3: 'T3'",
   'Temperature2',
   'Temperature3',
-  'Rigid zero-weight review applied',
+  'Component zero-weight review applied',
   'const enriched = await enrichXmlForCii2019',
   'ElementLengthMm',
   'Rating annotations',
