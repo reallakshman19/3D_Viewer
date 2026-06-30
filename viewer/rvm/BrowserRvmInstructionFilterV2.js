@@ -1,4 +1,4 @@
-export const BROWSER_RVM_INSTRUCTION_FILTER_SCHEMA = 'browser-rvm-instruction-filter/v4-plant-primitive-visible';
+export const BROWSER_RVM_INSTRUCTION_FILTER_SCHEMA = 'browser-rvm-instruction-filter/v5-code11-facet-safe';
 
 const DEFAULT_OPTIONS = Object.freeze({
   enabled: true,
@@ -26,8 +26,17 @@ export function filterBrowserRvmRenderInstructions(instructionSet = {}, options 
   const kept = [];
   const diagonalThreshold = positiveNumber(opts.maxAbsoluteDiagonal, DEFAULT_OPTIONS.maxAbsoluteDiagonal);
   const boxSideThreshold = positiveNumber(opts.maxPrimitiveBoxSide, DEFAULT_OPTIONS.maxPrimitiveBoxSide);
+  let code11FacetGuardedCount = 0;
+  let code11FacetDecodedCount = 0;
+  let code11FacetWireframeFallbackCount = 0;
 
-  for (const instruction of source) {
+  for (const rawInstruction of source) {
+    const instruction = normalizeCode11FacetInstruction(rawInstruction);
+    if (instruction !== rawInstruction) {
+      code11FacetGuardedCount += 1;
+      if (instruction.attributes?.RVM_BROWSER_CODE11_NATIVE_FACET_DECODED === 'true') code11FacetDecodedCount += 1;
+      else code11FacetWireframeFallbackCount += 1;
+    }
     const item = classifyInstruction(instruction);
     const oversizedPrimitiveBox = opts.hideOversizedPrimitiveBoxes === true
       && item.boxish
@@ -62,8 +71,54 @@ export function filterBrowserRvmRenderInstructions(instructionSet = {}, options 
     hideOversizedPrimitiveBoxes: opts.hideOversizedPrimitiveBoxes === true,
     skippedReasons: summarizeSkipped(skipped),
     oversizedNonPipingHidden: skipped.length,
-    policy: 'keep-valid-plant-primitives-visible-hide-only-absurd-unprotected-non-piping-boxes',
+    code11FacetGuardedCount,
+    code11FacetDecodedCount,
+    code11FacetWireframeFallbackCount,
+    policy: 'keep-valid-plant-primitives-visible-hide-only-absurd-unprotected-non-piping-boxes-code11-facet-safe',
   });
+}
+
+function normalizeCode11FacetInstruction(instruction = {}) {
+  const attrs = instruction.attributes || {};
+  if (!isCode11FacetInstruction(instruction, attrs)) return instruction;
+  const decoded = hasDecodedCode11FacetParams(attrs);
+  return {
+    ...instruction,
+    type: decoded ? 'FACET_GROUP' : 'FACET_GROUP_UNDECODED',
+    kind: 'FACET_GROUP',
+    renderPrimitive: 'FACET_GROUP_BBOX_PLACEHOLDER',
+    attributes: {
+      ...attrs,
+      TYPE: attrs.TYPE || instruction.type || '',
+      RVM_BROWSER_RENDER_PRIMITIVE: 'FACET_GROUP_BBOX_PLACEHOLDER',
+      RVM_BROWSER_CODE11_SEMANTIC_RENDER_GUARD: 'true',
+      RVM_BROWSER_CODE11_NATIVE_FACET_DECODED: String(decoded),
+      RVM_BROWSER_CODE11_RENDER_POLICY: decoded
+        ? 'native-facetgroup-only-no-semantic-placeholder-promotion'
+        : 'wireframe-bbox-diagnostic-no-synthetic-support-stand',
+    },
+  };
+}
+
+function isCode11FacetInstruction(instruction = {}, attrs = {}) {
+  const code = Number(attrs.RVM_PRIMITIVE_CODE || attrs.RVM_CODE || instruction.primitiveCode || 0);
+  const primitive = String(instruction.renderPrimitive || attrs.RVM_BROWSER_RENDER_PRIMITIVE || '').toUpperCase();
+  const kind = String(attrs.RVM_PRIMITIVE_KIND_NAME || '').toUpperCase();
+  return code === 11 || primitive === 'FACET_GROUP_BBOX_PLACEHOLDER' || kind === 'FACETGROUP';
+}
+
+function hasDecodedCode11FacetParams(attrs = {}) {
+  const params = parseJson(attrs.RVM_NATIVE_PRIMITIVE_PARAMS);
+  return Number(params?.kind || attrs.RVM_PRIMITIVE_CODE || 0) === 11
+    && params?.decoded === true
+    && params?.facetGroup === true
+    && Array.isArray(params?.polygons)
+    && params.polygons.length > 0;
+}
+
+function parseJson(value) {
+  if (!value) return null;
+  try { return JSON.parse(String(value)); } catch (_) { return null; }
 }
 
 function classifyInstruction(instruction = {}) {
@@ -115,6 +170,9 @@ function withDiagnostics(instructionSet, instructions, skipped, diagnostics) {
       originalInstructionCount: diagnostics.originalCount,
       filteredInstructionCount: diagnostics.keptCount,
       oversizedNonPipingSkippedCount: diagnostics.skippedCount,
+      code11FacetGuardedCount: diagnostics.code11FacetGuardedCount || 0,
+      code11FacetDecodedCount: diagnostics.code11FacetDecodedCount || 0,
+      code11FacetWireframeFallbackCount: diagnostics.code11FacetWireframeFallbackCount || 0,
     },
     skippedInstructions: skipped,
   };
@@ -133,6 +191,9 @@ function makeDiagnostics(count, skippedCount, reason) {
     hideOversizedPrimitiveBoxes: DEFAULT_OPTIONS.hideOversizedPrimitiveBoxes,
     skippedReasons: {},
     oversizedNonPipingHidden: skippedCount,
+    code11FacetGuardedCount: 0,
+    code11FacetDecodedCount: 0,
+    code11FacetWireframeFallbackCount: 0,
   };
 }
 
