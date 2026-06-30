@@ -20,6 +20,10 @@ function button(className, text, action) {
   return node;
 }
 
+function statusChip() {
+  return el('span', 'json-viewer-status-chip');
+}
+
 export function createJsonViewerShell(root) {
   root.classList.add('json-viewer-tab-root');
   const shell = el('section', 'json-viewer-shell');
@@ -27,6 +31,7 @@ export function createJsonViewerShell(root) {
 
   const toolbar = el('header', 'json-viewer-toolbar');
   const openStageButton = button('json-viewer-button is-primary', 'Open Stage JSON', 'open-stage-json');
+  const loadSampleButton = button('json-viewer-button', 'Load Sample', 'load-sample');
   const fileInput = el('input', 'json-viewer-file-input');
   fileInput.type = 'file';
   fileInput.accept = '.json,application/json';
@@ -50,7 +55,7 @@ export function createJsonViewerShell(root) {
   const fitButton = button('json-viewer-button', 'Fit', 'fit');
   const resetButton = button('json-viewer-button', 'Reset', 'reset');
   const diagnosticsButton = button('json-viewer-button', 'Diagnostics', 'show-diagnostics');
-  toolbar.append(openStageButton, fileInput, openRvmButton, qualityLabel, fitButton, resetButton, diagnosticsButton);
+  toolbar.append(openStageButton, loadSampleButton, fileInput, openRvmButton, qualityLabel, fitButton, resetButton, diagnosticsButton);
 
   const body = el('div', 'json-viewer-body');
   const leftPanel = el('aside', 'json-viewer-left-panel');
@@ -81,12 +86,14 @@ export function createJsonViewerShell(root) {
 
   const status = el('footer', 'json-viewer-status-strip');
   const statusText = el('span', 'json-viewer-status-text', 'Ready');
-  const schemaText = el('span', 'json-viewer-status-chip');
-  const sourceText = el('span', 'json-viewer-status-chip');
-  const primitiveText = el('span', 'json-viewer-status-chip');
-  const componentText = el('span', 'json-viewer-status-chip');
-  const diagnosticsText = el('span', 'json-viewer-status-chip');
-  status.append(statusText, schemaText, sourceText, primitiveText, componentText, diagnosticsText);
+  const schemaText = statusChip();
+  const sourceText = statusChip();
+  const nodeText = statusChip();
+  const componentText = statusChip();
+  const primitiveText = statusChip();
+  const diagnosticsText = statusChip();
+  const qualityText = statusChip();
+  status.append(statusText, schemaText, sourceText, nodeText, componentText, primitiveText, diagnosticsText, qualityText);
 
   shell.append(toolbar, body, status);
   root.replaceChildren(shell);
@@ -95,6 +102,7 @@ export function createJsonViewerShell(root) {
     shell,
     toolbar,
     openStageButton,
+    loadSampleButton,
     fileInput,
     qualitySelect,
     fitButton,
@@ -111,8 +119,10 @@ export function createJsonViewerShell(root) {
     statusText,
     schemaText,
     sourceText,
+    nodeText,
     primitiveText,
     componentText,
     diagnosticsText,
+    qualityText,
   };
 }
