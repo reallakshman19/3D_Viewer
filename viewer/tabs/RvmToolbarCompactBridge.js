@@ -179,7 +179,7 @@ function ensureSecondaryToolMenus(ribbon) {
       menuRoot.dataset.rvmToolbarMoreGroup = def.id;
       menuRoot.dataset.rvmToolbarOrder = String(def.order);
       menuRoot.hidden = true;
-      menuRoot.innerHTML = `<button type="button" class="rvm-tool-btn rvm-toolbar-more-summary" data-rvm-toolbar-more data-rvm-toolbar-more-group="${escapeAttr(def.id)}" aria-expanded="false"><span>${escapeHtml(def.label)}</span><span aria-hidden="true" class="rvm-toolbar-caret">▼</span></button><div class="rvm-toolbar-more-panel rvm-toolbar-secondary-panel" data-rvm-tools-menu data-rvm-tools-menu-group="${escapeAttr(def.id)}" data-rvm-toolbar-more-panel hidden><div class="rvm-toolbar-secondary-title">${escapeHtml(def.title)}</div><div class="rvm-toolbar-secondary-empty" data-rvm-tools-empty hidden></div></div>`;
+      menuRoot.innerHTML = `<button type="button" class="rvm-tool-btn rvm-toolbar-more-summary" data-rvm-toolbar-more data-rvm-toolbar-more-group="${escapeAttr(def.id)}" aria-expanded="false"><span>${escapeHtml(def.label)}</span><span aria-hidden="true" class="rvm-toolbar-caret">v</span></button><div class="rvm-toolbar-more-panel rvm-toolbar-secondary-panel" data-rvm-tools-menu data-rvm-tools-menu-group="${escapeAttr(def.id)}" data-rvm-toolbar-more-panel hidden><div class="rvm-toolbar-secondary-title">${escapeHtml(def.title)}</div><div class="rvm-toolbar-secondary-empty" data-rvm-tools-empty hidden></div></div>`;
     }
     menus.set(def.id, menuRoot);
     if (!menuRoot.parentElement) ribbon.insertBefore(menuRoot, modeChip);

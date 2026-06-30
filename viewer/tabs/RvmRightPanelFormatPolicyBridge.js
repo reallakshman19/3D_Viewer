@@ -86,7 +86,7 @@ function ensurePanelPair(root, id, title, beforeSelector = '[data-rvm-browser-di
   panel.className = 'rvm-right-format-panel rvm-right-section-card rvm-tag-list';
   panel.dataset.rvmRightPanelFormatBody = id;
   const before = beforeSelector ? right.querySelector(beforeSelector) : null;
-  if (before) {
+  if (before && before.parentElement === right) {
     right.insertBefore(header, before);
     right.insertBefore(panel, before);
   } else {
@@ -508,6 +508,7 @@ function render(root = rootEl(), activeViewer = viewer()) {
   orderRightPanelSections(root);
   decorateRightPanelUi(root);
   hideEmptyRightPanelHeaders(root);
+  try { globalThis.__PCF_GLB_RVM_RIGHT_PANEL_TABS__?.refresh?.(root, 'right-panel-format-policy'); } catch (_) {}
   return context;
 }
 

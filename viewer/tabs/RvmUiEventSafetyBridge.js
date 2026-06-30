@@ -251,7 +251,7 @@ function toggleNode(root, nodeId) {
   }
   row?.classList?.add('is-expanded');
   const button = li.querySelector('[data-rvm-navis-toggle]');
-  if (button) button.textContent = '−';
+  if (button) button.textContent = '-';
   li.insertAdjacentHTML('afterend', renderChildrenList(node));
   ensureTreeCheckboxes(root);
 }
@@ -269,7 +269,7 @@ function renderNodeRow(node) {
     <div class="rvm-navis-row ${allOff ? 'is-branch-off' : ''}" style="--rvm-navis-depth:${depth}">
       <button type="button" class="rvm-navis-expander" data-rvm-navis-toggle="${esc(node.id)}" ${hasChildren ? '' : 'disabled'}>${hasChildren ? '+' : ''}</button>
       <input type="checkbox" class="rvm-navis-visible-checkbox" data-rvm-navis-visible-checkbox="${esc(node.id)}" ${allOff ? '' : 'checked'} aria-label="${allOff ? 'Show' : 'Hide'} ${esc(node.label)}" />
-      <button type="button" class="rvm-navis-select" data-rvm-navis-select="${esc(node.id)}" title="Select / fit ${esc(node.label)}"><span class="rvm-navis-icon">${hasChildren ? '▣' : '◇'}</span><span class="rvm-kind">${esc(node.kind || 'NODE')}</span><span class="rvm-navis-label">${esc(node.label)}</span><span class="rvm-tree-count">${Number(node.count || 0)}${allOff ? ' off' : ''}</span></button>
+      <button type="button" class="rvm-navis-select" data-rvm-navis-select="${esc(node.id)}" title="Select / fit ${esc(node.label)}"><span class="rvm-navis-icon">${hasChildren ? '[+]' : '[N]'}</span><span class="rvm-kind">${esc(node.kind || 'NODE')}</span><span class="rvm-navis-label">${esc(node.label)}</span><span class="rvm-tree-count">${Number(node.count || 0)}${allOff ? ' off' : ''}</span></button>
       <button type="button" class="rvm-navis-branch-off" data-rvm-navis-off="${esc(node.id)}">Off</button>
       <button type="button" class="rvm-navis-branch-on" data-rvm-navis-on="${esc(node.id)}">On</button>
     </div>

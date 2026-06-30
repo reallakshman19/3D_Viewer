@@ -115,4 +115,4 @@ async function importLegacyGeometryWorkflowBridge(entry) {
   installer();
 }
 
-export { init } from './app-label-perf-runtime.js?v=20260627-rvm-format-neutral-hierarchy-1';
+export { init } from './app-label-perf-runtime.js?v=20260630-rvm-tree-checkbox-lod-1';

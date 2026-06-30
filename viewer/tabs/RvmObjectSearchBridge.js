@@ -246,7 +246,7 @@ function injectToolbar(root) {
   section.innerHTML = `
     <span class="rvm-ribbon-label">Find</span>
     <div class="rvm-ribbon-button-row">
-      <button type="button" class="rvm-tool-btn" data-rvm-object-search-open="true" title="Search rendered RVM object names, hierarchy paths and primitive types"><span aria-hidden="true">⌕</span><span>Objects</span></button>
+      <button type="button" class="rvm-tool-btn" data-rvm-object-search-open="true" title="Search rendered RVM object names, hierarchy paths and primitive types"><span aria-hidden="true">?</span><span>Objects</span></button>
       <button type="button" class="rvm-tool-btn" data-rvm-object-search-reindex="true" title="Rebuild object search index"><span aria-hidden="true">↻</span><span>Index</span></button>
     </div>
     <div class="rvm-object-search-summary" data-rvm-object-search-summary>Find index: pending</div>`;

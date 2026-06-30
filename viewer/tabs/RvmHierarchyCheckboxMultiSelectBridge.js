@@ -1,4 +1,4 @@
-const VERSION = '20260628-rvm-hierarchy-checkbox-multiselect-sync-1';
+const VERSION = '20260630-rvm-hierarchy-checkbox-tree-controls-1';
 const INSTALL_KEY = '__PCF_GLB_RVM_HIERARCHY_CHECKBOX_MULTISELECT__';
 const STYLE_ID = 'rvm-hierarchy-checkbox-multiselect-style';
 const ROOT_SELECTOR = '[data-rvm-viewer]';
@@ -88,6 +88,14 @@ function ensureControls(root, tree) {
     <button type="button" data-rvm-hierarchy-multi-action="isolate" disabled>Isolate</button>
     <button type="button" data-rvm-hierarchy-multi-action="hide" disabled>Hide</button>
     <button type="button" data-rvm-hierarchy-multi-action="show" disabled>Show</button>
+    <select data-rvm-hierarchy-lod-detail aria-label="Render selected hierarchy rows">
+      <option value="250">250%</option>
+      <option value="100" selected>100%</option>
+      <option value="50">50%</option>
+      <option value="25">25%</option>
+      <option value="hidden">Hidden</option>
+    </select>
+    <button type="button" data-rvm-hierarchy-lod-apply disabled>Apply Render</button>
   `;
   tree.insertAdjacentElement('beforebegin', controls);
 }
@@ -99,10 +107,15 @@ function enhanceRow(row, state, index) {
   row.dataset.rvmHierarchyMultiselectIndex = String(index);
   const navisRow = row.querySelector(':scope > .rvm-navis-row');
   const legacyRow = row.querySelector(':scope > .rvm-tree-node');
-  const host = navisRow || legacyRow;
-  if (!host) return;
-  host.dataset.rvmCheckboxMultiselectRow = 'true';
-  let checkbox = host.querySelector(':scope > [data-rvm-hierarchy-row-checkbox]');
+  if (!navisRow && !legacyRow) return;
+  const nativeTreeRow = Boolean(legacyRow && !navisRow);
+  const host = navisRow || row;
+  if (navisRow) navisRow.dataset.rvmCheckboxMultiselectRow = 'true';
+  if (nativeTreeRow) {
+    row.dataset.rvmCheckboxTreeRow = 'true';
+    ensureNativeExpander(row);
+  }
+  let checkbox = nativeTreeRow ? row.querySelector(':scope > [data-rvm-hierarchy-row-checkbox]') : host.querySelector(':scope > [data-rvm-hierarchy-row-checkbox]');
   if (!checkbox) {
     checkbox = document.createElement('input');
     checkbox.type = 'checkbox';
@@ -110,14 +123,52 @@ function enhanceRow(row, state, index) {
     checkbox.dataset.rvmHierarchyRowCheckbox = 'true';
     checkbox.setAttribute('aria-label', 'Select hierarchy row');
     checkbox.addEventListener('click', (event) => event.stopPropagation());
-    const expander = navisRow?.querySelector?.(':scope > .rvm-navis-expander');
-    if (expander?.nextSibling) host.insertBefore(checkbox, expander.nextSibling);
-    else host.insertBefore(checkbox, host.firstChild);
+    if (nativeTreeRow) {
+      const label = labelText(row);
+      checkbox.title = `Select ${label}`;
+      const before = legacyRow || row.firstChild;
+      row.insertBefore(checkbox, before);
+    } else {
+      const expander = navisRow?.querySelector?.(':scope > .rvm-navis-expander');
+      if (expander?.nextSibling) host.insertBefore(checkbox, expander.nextSibling);
+      else host.insertBefore(checkbox, host.firstChild);
+    }
   }
   checkbox.dataset.nodeId = id;
   checkbox.checked = state.selectedIds.has(id);
   row.classList.toggle('is-multi-selected', checkbox.checked);
   row.dataset.rvmHierarchyMultiSelected = checkbox.checked ? 'true' : 'false';
+}
+
+function ensureNativeExpander(row) {
+  const childList = row.querySelector(':scope > ul');
+  const expandable = Boolean(childList?.querySelector?.(':scope > li[data-node-id]'));
+  let expander = row.querySelector(':scope > [data-rvm-hierarchy-expander]');
+  if (!expander) {
+    expander = document.createElement('button');
+    expander.type = 'button';
+    expander.className = 'rvm-hierarchy-row-expander';
+    expander.dataset.rvmHierarchyExpander = 'true';
+    expander.addEventListener('click', (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      toggleNativeRow(row);
+    });
+    row.insertBefore(expander, row.firstChild);
+  }
+  expander.disabled = !expandable;
+  expander.setAttribute('aria-hidden', expandable ? 'false' : 'true');
+  expander.setAttribute('aria-label', row.dataset.rvmHierarchyCollapsed === 'true' ? 'Expand hierarchy row' : 'Collapse hierarchy row');
+  expander.title = expandable ? (row.dataset.rvmHierarchyCollapsed === 'true' ? 'Expand' : 'Collapse') : '';
+  expander.textContent = expandable ? (row.dataset.rvmHierarchyCollapsed === 'true' ? '+' : '-') : '';
+  row.classList.toggle('is-tree-expandable', expandable);
+  row.classList.toggle('is-tree-collapsed', row.dataset.rvmHierarchyCollapsed === 'true');
+}
+
+function toggleNativeRow(row) {
+  const collapsed = row.dataset.rvmHierarchyCollapsed !== 'true';
+  row.dataset.rvmHierarchyCollapsed = collapsed ? 'true' : 'false';
+  ensureNativeExpander(row);
 }
 
 function rowList(tree) {
@@ -155,6 +206,20 @@ function reconcileSelectionState(root, state, rowIds, reason = 'refresh') {
 }
 
 function handleClick(event) {
+  const lodApply = event.target?.closest?.('[data-rvm-hierarchy-lod-apply]');
+  if (lodApply) {
+    event.preventDefault();
+    event.stopPropagation();
+    const root = lodApply.closest?.(ROOT_SELECTOR);
+    const ids = selectedIdsFor(root);
+    if (!root || !ids.length) return;
+    const detail = root.querySelector?.('[data-rvm-hierarchy-lod-detail]')?.value || '100';
+    root.dispatchEvent(new CustomEvent('rvm-hierarchy-lod-action', {
+      bubbles: true,
+      detail: { version: VERSION, selectedIds: ids, selectedCount: ids.length, renderDetail: detail },
+    }));
+    return;
+  }
   const action = event.target?.closest?.('[data-rvm-hierarchy-multi-action]');
   if (!action) return;
   event.preventDefault();
@@ -256,7 +321,7 @@ function syncRows(root, tree) {
   for (const row of rowList(tree)) {
     const id = nodeId(row);
     const checked = state.selectedIds.has(id);
-    const checkbox = row.querySelector(':scope > .rvm-navis-row > [data-rvm-hierarchy-row-checkbox], :scope > .rvm-tree-node > [data-rvm-hierarchy-row-checkbox]');
+    const checkbox = row.querySelector(':scope > [data-rvm-hierarchy-row-checkbox], :scope > .rvm-navis-row > [data-rvm-hierarchy-row-checkbox], :scope > .rvm-tree-node > [data-rvm-hierarchy-row-checkbox]');
     if (checkbox) checkbox.checked = checked;
     row.classList.toggle('is-multi-selected', checked);
     row.dataset.rvmHierarchyMultiSelected = checked ? 'true' : 'false';
@@ -283,6 +348,9 @@ function updateControls(root, tree) {
   const count = controls.querySelector('[data-rvm-hierarchy-selected-count]');
   if (count) count.textContent = `${state.selectedIds.size} selected`;
   controls.querySelectorAll('[data-rvm-hierarchy-multi-action]').forEach((button) => {
+    button.disabled = state.selectedIds.size === 0;
+  });
+  controls.querySelectorAll('[data-rvm-hierarchy-lod-apply]').forEach((button) => {
     button.disabled = state.selectedIds.size === 0;
   });
 }
@@ -335,6 +403,10 @@ function cssEscape(value) {
   return String(value).replace(/"/g, '\\"');
 }
 
+function labelText(row) {
+  return String(row?.querySelector?.(':scope > .rvm-tree-node [data-rvm-tree-label], :scope > .rvm-tree-node .rvm-tree-label')?.textContent || row?.dataset?.nodeId || 'hierarchy row').replace(/\s+/g, ' ').trim();
+}
+
 function debounce(fn, wait) {
   let timer = 0;
   return (reason) => {
@@ -354,6 +426,7 @@ function injectStyles() {
   style.textContent = `
     [data-rvm-viewer] .rvm-hierarchy-multiselect-controls{display:flex;align-items:center;gap:5px;flex-wrap:wrap;margin:4px 6px;padding:5px 6px;border:1px solid rgba(126,190,255,.20);border-radius:8px;background:rgba(15,23,42,.62);font:600 10px/1.1 system-ui,sans-serif;color:#bfdbfe;}
     [data-rvm-viewer] .rvm-hierarchy-multiselect-controls label{display:inline-flex;align-items:center;gap:4px;white-space:nowrap;}
+    [data-rvm-viewer] .rvm-hierarchy-multiselect-controls select{height:21px;max-width:78px;border:1px solid rgba(126,190,255,.28);border-radius:5px;background:#0f172a;color:#dbeafe;font:600 10px/1 system-ui,sans-serif;}
     [data-rvm-viewer] .rvm-hierarchy-multiselect-controls button{height:21px;padding:0 6px;border:1px solid rgba(126,190,255,.28);border-radius:5px;background:#111827;color:#dbeafe;font:600 10px/1 system-ui,sans-serif;cursor:pointer;}
     [data-rvm-viewer] .rvm-hierarchy-multiselect-controls button:disabled{opacity:.45;cursor:not-allowed;}
     [data-rvm-viewer] .rvm-hierarchy-multiselect-count{margin-left:auto;color:#93c5fd;}
@@ -362,8 +435,14 @@ function injectStyles() {
     [data-rvm-viewer] #rvm-tree .rvm-navis-row[data-rvm-checkbox-multiselect-row="true"] > .rvm-navis-select{grid-column:3;}
     [data-rvm-viewer] #rvm-tree .rvm-navis-row[data-rvm-checkbox-multiselect-row="true"] > .rvm-navis-branch-off{grid-column:4;}
     [data-rvm-viewer] #rvm-tree .rvm-navis-row[data-rvm-checkbox-multiselect-row="true"] > .rvm-navis-branch-on{grid-column:5;}
-    [data-rvm-viewer] #rvm-tree .rvm-tree-node[data-rvm-checkbox-multiselect-row="true"]{grid-template-columns:18px minmax(38px,max-content) minmax(0,1fr) minmax(24px,max-content);}
-    [data-rvm-viewer] #rvm-tree .rvm-tree-node[data-rvm-checkbox-multiselect-row="true"] > .rvm-hierarchy-row-checkbox{grid-column:1;justify-self:center;align-self:center;width:14px;height:14px;margin:0;accent-color:#60a5fa;}
+    [data-rvm-viewer] #rvm-tree li[data-rvm-checkbox-tree-row="true"]{display:grid;grid-template-columns:18px 18px minmax(0,1fr) max-content;gap:4px;align-items:start;}
+    [data-rvm-viewer] #rvm-tree li[data-rvm-checkbox-tree-row="true"] > .rvm-hierarchy-row-expander{grid-column:1;width:16px;height:22px;margin:1px 0 0;padding:0;border:1px solid rgba(96,165,250,.35);border-radius:4px;background:#0f172a;color:#dbeafe;font:700 12px/1 system-ui,sans-serif;cursor:pointer;}
+    [data-rvm-viewer] #rvm-tree li[data-rvm-checkbox-tree-row="true"] > .rvm-hierarchy-row-expander[disabled]{opacity:.25;cursor:default;}
+    [data-rvm-viewer] #rvm-tree li[data-rvm-checkbox-tree-row="true"] > .rvm-hierarchy-row-checkbox{grid-column:2;justify-self:center;align-self:center;width:14px;height:14px;margin:5px 0 0;accent-color:#60a5fa;}
+    [data-rvm-viewer] #rvm-tree li[data-rvm-checkbox-tree-row="true"] > .rvm-tree-node{grid-column:3;grid-row:1;}
+    [data-rvm-viewer] #rvm-tree li[data-rvm-checkbox-tree-row="true"] > .rvm-tree-visibility-toggle{grid-column:4;grid-row:1;}
+    [data-rvm-viewer] #rvm-tree li[data-rvm-checkbox-tree-row="true"] > ul{grid-column:3 / -1;margin:2px 0 0 6px;padding-left:8px;border-left:1px solid rgba(96,165,250,.20);}
+    [data-rvm-viewer] #rvm-tree li[data-rvm-checkbox-tree-row="true"][data-rvm-hierarchy-collapsed="true"] > ul{display:none;}
     [data-rvm-viewer] #rvm-tree li.is-multi-selected > .rvm-navis-row .rvm-navis-select,[data-rvm-viewer] #rvm-tree li.is-multi-selected > .rvm-tree-node{background:rgba(22,163,74,.18);outline:1px solid rgba(74,222,128,.50);box-shadow:inset 3px 0 0 rgba(74,222,128,.70);}
     @media (max-width:1100px){[data-rvm-viewer] #rvm-tree .rvm-navis-row[data-rvm-checkbox-multiselect-row="true"]{grid-template-columns:20px 18px minmax(0,1fr) max-content max-content;}[data-rvm-viewer] .rvm-hierarchy-multiselect-count{margin-left:0;}}
   `;

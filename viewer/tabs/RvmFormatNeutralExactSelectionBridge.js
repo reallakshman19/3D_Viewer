@@ -1,9 +1,9 @@
 import * as THREE from 'three';
 
-const VERSION = '20260628-rvm-source-hierarchy-diagnostics-1';
+const VERSION = '20260630-rvm-exact-native-selection-1';
 const INSTALL_FLAG = Symbol.for('pcf-glb-rvm-format-neutral-exact-selection-1');
 const NAVIS_CONTROL_SELECTOR = '[data-rvm-navis-toggle],[data-rvm-navis-off],[data-rvm-navis-on],[data-rvm-navis-select],.rvm-navis-row';
-const EXACT_SELECTION_SOURCE_KINDS = new Set(['stagedjson', 'uxml', 'json', 'jscon', 'txt', 'source-preview', 'inputxml']);
+const EXACT_SELECTION_SOURCE_KINDS = new Set(['stagedjson', 'uxml', 'json', 'jscon', 'txt', 'source-preview', 'inputxml', 'rvm']);
 const GENERIC_LABELS = new Set(['flange', 'valve', 'pipe', 'elbow', 'bend', 'support', 'branch', 'group', 'node', 'component', 'cylinder', 'torus', 'box', 'sphere']);
 
 function norm(value) { return String(value || '').trim(); }
@@ -15,6 +15,7 @@ function rowLabel(row) { return norm(row?.querySelector?.('[data-rvm-tree-label]
 function sourceKind(root) { return lower(root?.dataset?.rvmLoadedSourceKind || root?.dataset?.rvmHierarchySourceKind || root?.__rvmFormatNeutralHierarchy?.sourceKind); }
 function sourceNodes(root) { const nodes = root?.__rvmFormatNeutralHierarchy?.nodes; return Array.isArray(nodes) ? nodes : []; }
 function isFormatNeutralSourceTree(root) { return root?.dataset?.rvmHierarchyController === 'format-neutral' && EXACT_SELECTION_SOURCE_KINDS.has(sourceKind(root)); }
+function isNativeRvmSource(root) { return sourceKind(root) === 'rvm'; }
 function nodeForRow(root, row) { const id = rowId(row); return sourceNodes(root).find((node) => nodeKey(node) === id) || null; }
 function descendantsForNode(root, node) {
   const nodes = sourceNodes(root);
@@ -39,17 +40,18 @@ function descendantsForNode(root, node) {
   visit(node);
   return out;
 }
-function idCandidatesForNodes(nodes, row) {
+function idCandidatesForNodes(nodes, row, nativeRvm) {
   const ids = [];
   const add = (value) => { const text = norm(value); if (text && !ids.includes(text)) ids.push(text); };
   add(rowId(row));
   for (const node of nodes) {
+    const attrs = node?.attributes || {};
     add(node?.canonicalObjectId);
     add(node?.id);
     add(node?.sourceObjectId);
-    add(node?.attributes?.ID);
-    add(node?.attributes?.NAME);
-    add(node?.attributes?.TAG);
+    if (!nativeRvm) { add(attrs.ID); add(attrs.NAME); add(attrs.TAG); }
+    add(attrs.CANONICAL_ID);
+    add(attrs.RVM_BYTE_OFFSET);
     if (Array.isArray(node?.renderObjectIds)) node.renderObjectIds.forEach(add);
     if (Array.isArray(node?.canonicalIds)) node.canonicalIds.forEach(add);
   }
@@ -59,7 +61,7 @@ function objectAliases(obj) {
   const data = obj?.userData || {};
   const props = data.browserRvmProperties || {};
   const attrs = data.browserRvmAttributes || data.attributes || props.attributes || {};
-  return [obj?.uuid, obj?.name, data.name, data.canonicalId, data.renderObjectId, data.leafRenderObjectId, data.sourcePath, data.sourceName, data.displayName, props.sourcePath, props.displayName, props.name, attrs.ID, attrs.NAME, attrs.TAG, attrs.RVM_OWNER_NAME, attrs.RVM_OWNER_PATH, attrs.CANONICAL_ID].filter(Boolean).map(norm);
+  return [obj?.uuid, obj?.name, data.name, data.canonicalId, data.canonicalObjectId, data.sourceObjectId, data.renderObjectId, data.leafRenderObjectId, data.sourcePath, data.sourceName, data.displayName, props.canonicalId, props.sourcePath, props.displayName, props.name, attrs.ID, attrs.NAME, attrs.TAG, attrs.RVM_OWNER_NAME, attrs.RVM_OWNER_PATH, attrs.CANONICAL_ID, attrs.RVM_BYTE_OFFSET].filter(Boolean).map(norm);
 }
 function collectExactObjects(viewer, ids) {
   const wanted = new Set(ids.map(norm).filter(Boolean));
@@ -129,10 +131,12 @@ function selectRow(root, row, event) {
   const viewer = globalThis.__3D_RVM_VIEWER__;
   const node = nodeForRow(root, row);
   const scopedNodes = descendantsForNode(root, node);
-  const ids = idCandidatesForNodes(scopedNodes.length ? scopedNodes : [node].filter(Boolean), row);
+  const nativeRvm = isNativeRvmSource(root);
+  const ids = idCandidatesForNodes(scopedNodes.length ? scopedNodes : [node].filter(Boolean), row, nativeRvm);
   let matches = collectExactObjects(viewer, ids);
   let note = scopedNodes.length > 1 ? 'exact source subtree ids' : 'exact source node ids';
-  if (!matches.length) { matches = collectStrictFallbackObjects(viewer, rowLabel(row)); note = matches.length ? 'strict full-label fallback' : 'no exact render object match'; }
+  if (!matches.length && !nativeRvm) { matches = collectStrictFallbackObjects(viewer, rowLabel(row)); note = matches.length ? 'strict full-label fallback' : 'no exact render object match'; }
+  else if (!matches.length) note = 'native rvm exact ids only';
   event?.preventDefault?.(); event?.stopPropagation?.(); event?.stopImmediatePropagation?.();
   markSelected(root, row);
   try { viewer?.selection?.clearSelection?.(); } catch (_) {}

@@ -15,7 +15,7 @@ function read(relativePath) {
 const renderer = read('tabs/viewer3d-rvm-tab-renderer.js');
 const bridge = read('tabs/RvmHierarchyCheckboxMultiSelectBridge.js');
 
-assert.ok(bridge.includes("VERSION = '20260628-rvm-hierarchy-checkbox-multiselect-sync-1'"), 'bridge must expose checkbox multiselect sync version');
+assert.ok(bridge.includes("VERSION = '20260630-rvm-hierarchy-checkbox-tree-controls-1'"), 'bridge must expose checkbox tree controls version');
 assert.ok(bridge.includes('data-rvm-hierarchy-row-checkbox'), 'bridge must add row checkboxes');
 assert.ok(bridge.includes('data-rvm-hierarchy-select-visible'), 'bridge must add header/select-visible checkbox');
 assert.ok(bridge.includes('header.indeterminate'), 'header checkbox must support tri-state/partial state');
@@ -36,9 +36,14 @@ assert.ok(bridge.includes('data-rvm-hierarchy-multi-action="fit"'), 'bridge must
 assert.ok(bridge.includes('data-rvm-hierarchy-multi-action="isolate"'), 'bridge must expose isolate selected action');
 assert.ok(bridge.includes('data-rvm-hierarchy-multi-action="hide"'), 'bridge must expose hide selected action');
 assert.ok(bridge.includes('data-rvm-hierarchy-multi-action="show"'), 'bridge must expose show selected action');
+assert.ok(bridge.includes('data-rvm-hierarchy-expander'), 'bridge must expose native tree expand/collapse controls');
+assert.ok(bridge.includes('data-rvm-hierarchy-lod-detail'), 'bridge must expose checked-row render detail selector');
+assert.ok(bridge.includes('data-rvm-hierarchy-lod-apply'), 'bridge must expose checked-row render apply action');
+assert.ok(bridge.includes('rvm-hierarchy-lod-action'), 'bridge must dispatch checked-row render detail event');
 assert.ok(bridge.includes('event.stopPropagation()'), 'checkbox changes must not break normal row click selection');
 assert.ok(bridge.includes('grid-template-columns:20px 18px minmax(0,1fr) max-content max-content'), 'checkbox column must be integrated into adaptive tree grid');
-assert.ok(renderer.includes('RvmHierarchyCheckboxMultiSelectBridge.js?v=20260628-rvm-hierarchy-checkbox-multiselect-sync-1'), 'renderer must import checkbox multiselect sync bridge');
+assert.ok(bridge.includes('grid-template-columns:18px 18px minmax(0,1fr) max-content'), 'native rows must reserve expander and checkbox columns');
+assert.ok(renderer.includes('RvmHierarchyCheckboxMultiSelectBridge.js?v=20260630-rvm-hierarchy-checkbox-tree-controls-1'), 'renderer must import checkbox tree controls bridge');
 assert.ok(renderer.includes('installRvmHierarchyCheckboxMultiSelectBridge()'), 'renderer must install checkbox multiselect bridge');
 
 console.log('Verified hierarchy checkbox multi-select sync bridge contract.');

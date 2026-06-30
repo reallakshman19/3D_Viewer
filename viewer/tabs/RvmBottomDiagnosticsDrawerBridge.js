@@ -88,7 +88,7 @@ function ensureDrawer(root) {
   drawer.dataset.collapsed = String(isCollapsed());
   drawer.innerHTML = `
     <button class="rvm-bottom-diagnostics-header" type="button" aria-expanded="${String(!isCollapsed())}" data-rvm-bottom-diagnostics-toggle>
-      <span class="rvm-bottom-diagnostics-caret" aria-hidden="true">▴</span>
+      <span class="rvm-bottom-diagnostics-caret" aria-hidden="true">^</span>
       <strong>RVM Diagnostics</strong>
       <span class="rvm-bottom-diagnostics-summary" data-rvm-bottom-diagnostics-summary>collapsed</span>
     </button>
@@ -118,6 +118,7 @@ function relocateAndSummarize(root) {
   for (const spec of PANEL_SPECS) {
     const panel = root.querySelector(spec.selector);
     if (!panel || panel.closest('[data-rvm-bottom-diagnostics-body]') === body) continue;
+    if (panel.closest('[data-rvm-right-panel-tab-panels]')) continue;
     panel.dataset.rvmBottomDiagnosticsItem = spec.key;
     panel.dataset.rvmBottomDiagnosticsTitle = spec.title;
     panel.classList.add('rvm-bottom-diagnostics-card');
@@ -150,7 +151,7 @@ function updateHeader(drawer, root) {
       `<span>errors ${counts.errors}</span>`,
       `<span>warnings ${counts.warnings}</span>`,
       counts.acceptance ? `<span>${escapeHtml(counts.acceptance)}</span>` : '',
-    ].filter(Boolean).join(' · ');
+    ].filter(Boolean).join(' - ');
   }
 }
 

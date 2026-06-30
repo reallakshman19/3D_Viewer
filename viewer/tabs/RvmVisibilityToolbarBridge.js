@@ -46,11 +46,11 @@ function injectToolbar(root) {
   section.innerHTML = `
     <span class="rvm-ribbon-label">Visibility</span>
     <div class="rvm-ribbon-button-row">
-      <button class="rvm-tool-btn" data-rvm-visibility-action="isolate-selection" type="button" title="Show only selected geometry" aria-label="Isolate selected geometry"><span aria-hidden="true">◉</span><span>Isolate</span></button>
-      <button class="rvm-tool-btn" data-rvm-visibility-action="hide-selection" type="button" title="Hide selected geometry" aria-label="Hide selected geometry"><span aria-hidden="true">◌</span><span>Hide</span></button>
-      <button class="rvm-tool-btn" data-rvm-visibility-action="show-all" type="button" title="Restore manually hidden/isolated geometry" aria-label="Show all manually hidden or isolated geometry"><span aria-hidden="true">◎</span><span>Show All</span></button>
-      <button class="rvm-tool-btn" data-rvm-visibility-action="clear-selection" type="button" title="Clear selected geometry" aria-label="Clear selected geometry"><span aria-hidden="true">×</span><span>Clear</span></button>
-      <button class="rvm-tool-btn" data-rvm-visibility-action="select-mode" data-rvm-force-select="true" type="button" title="Select mode / Esc" aria-label="Select mode"><span aria-hidden="true">⌖</span><span>Select</span></button>
+      <button class="rvm-tool-btn" data-rvm-visibility-action="isolate-selection" type="button" title="Show only selected geometry" aria-label="Isolate selected geometry"><span aria-hidden="true">I</span><span>Isolate</span></button>
+      <button class="rvm-tool-btn" data-rvm-visibility-action="hide-selection" type="button" title="Hide selected geometry" aria-label="Hide selected geometry"><span aria-hidden="true">H</span><span>Hide</span></button>
+      <button class="rvm-tool-btn" data-rvm-visibility-action="show-all" type="button" title="Restore manually hidden/isolated geometry" aria-label="Show all manually hidden or isolated geometry"><span aria-hidden="true">A</span><span>Show All</span></button>
+      <button class="rvm-tool-btn" data-rvm-visibility-action="clear-selection" type="button" title="Clear selected geometry" aria-label="Clear selected geometry"><span aria-hidden="true">X</span><span>Clear</span></button>
+      <button class="rvm-tool-btn" data-rvm-visibility-action="select-mode" data-rvm-force-select="true" type="button" title="Select mode / Esc" aria-label="Select mode"><span aria-hidden="true">*</span><span>Select</span></button>
     </div>
     <div class="rvm-visibility-summary" data-rvm-visibility-summary>Manual hide/isolate: 0</div>`;
   section.addEventListener('click', onToolbarClick, true);
@@ -239,7 +239,7 @@ function updateToolbarState(root, v) {
   if (!root) return;
   const stats = visibleStats(v);
   const summary = root.querySelector('[data-rvm-visibility-summary]');
-  if (summary) summary.textContent = `Visible ${stats.visible}/${stats.total} · hidden ${stats.hiddenManual} · isolate-hidden ${stats.isolatedHidden}`;
+  if (summary) summary.textContent = `Visible ${stats.visible}/${stats.total} - hidden ${stats.hiddenManual} - isolate-hidden ${stats.isolatedHidden}`;
   const visibleChip = root.querySelector('[data-rvm-status-chip="visible"]');
   const objectsChip = root.querySelector('[data-rvm-status-chip="objects"]');
   if (visibleChip) visibleChip.textContent = `Visible: ${stats.visible}`;

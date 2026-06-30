@@ -147,7 +147,7 @@ function instructionDiagonal(instruction = {}, attrs = {}) {
 function parseBbox(value) {
   const nums = Array.isArray(value)
     ? value.slice(0, 6).map(Number)
-    : String(value || '').replace(/[\[\]]/g, ' ').split(/[\s,]+/g).map(Number).filter(Number.isFinite);
+    : String(value || '').replace(/[\[\]]/g, ' ').split(/[\s,]+/g).filter((entry) => entry.trim() !== '').map(Number).filter(Number.isFinite);
   return nums.length >= 6 && nums.slice(0, 6).every(Number.isFinite) ? nums.slice(0, 6) : null;
 }
 

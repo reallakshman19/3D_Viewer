@@ -228,6 +228,153 @@ function formatNum(value) {
   return n.toFixed(10);
 }
 
+function basename(value) {
+  return clean(value).replace(/\\/g, '/').split('/').filter(Boolean).pop() || '';
+}
+
+function navisModelFilename(bundleId, rootAttrs = {}) {
+  const rootName = basename(rootAttrs.filename);
+  const bundleName = basename(bundleId);
+
+  if (bundleName) return bundleName;
+  if (rootName && !/^tags?\.xml$/i.test(rootName)) return rootName;
+
+  return 'model.rvm';
+}
+
+function navisGuid(value) {
+  const text = clean(value).replace(/^TAG-/i, '');
+  if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(text)) return text;
+  if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID();
+
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, char => {
+    const random = Math.floor(Math.random() * 16);
+    const value = char === 'x' ? random : (random & 0x3) | 0x8;
+    return value.toString(16);
+  });
+}
+
+function vectorFromPoints(from, to) {
+  if (!from || !to) return null;
+
+  return {
+    x: Number(to.x) - Number(from.x),
+    y: Number(to.y) - Number(from.y),
+    z: Number(to.z) - Number(from.z),
+  };
+}
+
+function normalizeVector(vector, fallback) {
+  const x = Number(vector?.x);
+  const y = Number(vector?.y);
+  const z = Number(vector?.z);
+  const len = Math.sqrt(x * x + y * y + z * z);
+
+  if (!Number.isFinite(len) || len <= 1e-9) return fallback;
+
+  return { x: x / len, y: y / len, z: z / len };
+}
+
+function cross(a, b) {
+  return {
+    x: a.y * b.z - a.z * b.y,
+    y: a.z * b.x - a.x * b.z,
+    z: a.x * b.y - a.y * b.x,
+  };
+}
+
+function quaternionFromRotationMatrix(m00, m01, m02, m10, m11, m12, m20, m21, m22) {
+  const trace = m00 + m11 + m22;
+
+  if (trace > 0) {
+    const s = Math.sqrt(trace + 1) * 2;
+    return { a: (m21 - m12) / s, b: (m02 - m20) / s, c: (m10 - m01) / s, d: 0.25 * s };
+  }
+
+  if (m00 > m11 && m00 > m22) {
+    const s = Math.sqrt(1 + m00 - m11 - m22) * 2;
+    return { a: 0.25 * s, b: (m01 + m10) / s, c: (m02 + m20) / s, d: (m21 - m12) / s };
+  }
+
+  if (m11 > m22) {
+    const s = Math.sqrt(1 + m11 - m00 - m22) * 2;
+    return { a: (m01 + m10) / s, b: 0.25 * s, c: (m12 + m21) / s, d: (m02 - m20) / s };
+  }
+
+  const s = Math.sqrt(1 + m22 - m00 - m11) * 2;
+  return { a: (m02 + m20) / s, b: (m12 + m21) / s, c: 0.25 * s, d: (m10 - m01) / s };
+}
+
+function cameraRotationFromState(cameraState = {}, navis = {}) {
+  if (cameraState.rotationQuaternion) return cameraState.rotationQuaternion;
+  if (navis.cameraRotationQuaternion) return navis.cameraRotationQuaternion;
+
+  const position = cameraState.position || navis.cameraPosition || null;
+  const forward = normalizeVector(
+    cameraState.forward || navis.forward || vectorFromPoints(position, cameraState.target),
+    { x: 0, y: 0, z: -1 }
+  );
+  const up = normalizeVector(navis.upVector || { x: 0, y: 0, z: 1 }, { x: 0, y: 0, z: 1 });
+  let right = normalizeVector(cross(forward, up), { x: 1, y: 0, z: 0 });
+  const correctedUp = normalizeVector(cross(right, forward), { x: 0, y: 0, z: 1 });
+  const backward = { x: -forward.x, y: -forward.y, z: -forward.z };
+
+  right = normalizeVector(right, { x: 1, y: 0, z: 0 });
+
+  return quaternionFromRotationMatrix(
+    right.x, correctedUp.x, backward.x,
+    right.y, correctedUp.y, backward.y,
+    right.z, correctedUp.z, backward.z
+  );
+}
+
+function appendDefaultClipplaneset(doc, viewEl) {
+  const clipplaneset = doc.createElement('clipplaneset');
+  setAttrs(clipplaneset, { linked: '0', current: '0', mode: 'planes', enabled: '0' });
+
+  for (const wrapperName of ['range', 'box']) {
+    const wrapper = doc.createElement(wrapperName);
+    const box3f = doc.createElement('box3f');
+    const min = doc.createElement('min');
+    const max = doc.createElement('max');
+    const minPos = doc.createElement('pos3f');
+    const maxPos = doc.createElement('pos3f');
+
+    setAttrs(minPos, { x: formatNum(1), y: formatNum(1), z: formatNum(1) });
+    setAttrs(maxPos, { x: formatNum(0), y: formatNum(0), z: formatNum(0) });
+
+    min.appendChild(minPos);
+    max.appendChild(maxPos);
+    box3f.appendChild(min);
+    box3f.appendChild(max);
+    wrapper.appendChild(box3f);
+    clipplaneset.appendChild(wrapper);
+
+    if (wrapperName === 'range') {
+      const clipplanes = doc.createElement('clipplanes');
+      for (const alignment of ['top', 'bottom', 'front', 'back', 'left', 'right']) {
+        const clipplane = doc.createElement('clipplane');
+        const plane = doc.createElement('plane');
+        const vec = doc.createElement('vec3f');
+
+        setAttrs(clipplane, { state: 'default', distance: formatNum(0), alignment });
+        setAttrs(plane, { distance: formatNum(0) });
+        setAttrs(vec, { x: formatNum(0), y: formatNum(1), z: formatNum(0) });
+
+        plane.appendChild(vec);
+        clipplane.appendChild(plane);
+        clipplanes.appendChild(clipplane);
+      }
+      clipplaneset.appendChild(clipplanes);
+    }
+  }
+
+  const boxRotation = doc.createElement('box-rotation');
+  appendQuaternion(doc, boxRotation, { a: 0, b: 0, c: 0, d: 1 });
+  clipplaneset.appendChild(boxRotation);
+  viewEl.appendChild(clipplaneset);
+}
+
 function createFallbackId(prefix = 'TAG') {
   if (globalThis.crypto?.randomUUID) {
     return `${prefix}-${globalThis.crypto.randomUUID()}`;
@@ -629,14 +776,19 @@ function appendCamera(doc, viewpointEl, tag) {
     projection: 'persp',
     near: '0.1',
     far: '1000',
-    aspect: '',
+    aspect: '1.3333333333',
     height: '0.7853980000',
     ...(navis.cameraAttrs || {}),
-    ...(cameraState.navisCameraAttrs || {}),
   };
 
   const cameraEl = doc.createElement('camera');
-  setAttrs(cameraEl, cameraAttrs);
+  setAttrs(cameraEl, {
+    projection: cameraAttrs.projection,
+    near: cameraAttrs.near,
+    far: cameraAttrs.far,
+    aspect: cameraAttrs.aspect,
+    height: cameraAttrs.height,
+  });
 
   const position =
     cameraState.position ||
@@ -646,44 +798,10 @@ function appendCamera(doc, viewpointEl, tag) {
   appendPoint3f(doc, cameraEl, 'position', position);
 
   const rotation =
-    cameraState.rotationQuaternion ||
-    navis.cameraRotationQuaternion ||
-    null;
+    cameraRotationFromState(cameraState, navis) ||
+    { a: 0, b: 0, c: 0, d: 1 };
 
-  if (rotation) {
-    appendQuaternion(doc, cameraEl, rotation);
-  } else if (cameraState.target && position) {
-    const dx = Number(cameraState.target.x) - Number(position.x);
-    const dy = Number(cameraState.target.y) - Number(position.y);
-    const dz = Number(cameraState.target.z) - Number(position.z);
-    const len = Math.sqrt(dx * dx + dy * dy + dz * dz) || 1;
-
-    const forwardEl = doc.createElement('forward');
-    const vec = doc.createElement('vec3f');
-
-    vec.setAttribute('x', formatNum(dx / len));
-    vec.setAttribute('y', formatNum(dy / len));
-    vec.setAttribute('z', formatNum(dz / len));
-
-    forwardEl.appendChild(vec);
-    cameraEl.appendChild(forwardEl);
-
-    cameraEl.setAttribute('target_x', formatNum(cameraState.target.x));
-    cameraEl.setAttribute('target_y', formatNum(cameraState.target.y));
-    cameraEl.setAttribute('target_z', formatNum(cameraState.target.z));
-  } else if (cameraState.forward) {
-    const forwardEl = doc.createElement('forward');
-    const vec = doc.createElement('vec3f');
-
-    vec.setAttribute('x', formatNum(cameraState.forward.x));
-    vec.setAttribute('y', formatNum(cameraState.forward.y));
-    vec.setAttribute('z', formatNum(cameraState.forward.z));
-
-    forwardEl.appendChild(vec);
-    cameraEl.appendChild(forwardEl);
-  } else {
-    appendQuaternion(doc, cameraEl, { a: 0, b: 0, c: 0, d: 1 });
-  }
+  appendQuaternion(doc, cameraEl, rotation);
 
   viewpointEl.appendChild(cameraEl);
 }
@@ -781,28 +899,20 @@ function appendRedline(doc, viewEl, tag, commentId) {
   const redlinesEl = doc.createElement('redlines');
   const rltagEl = doc.createElement('rltag');
   const navisRedline = tag.navis?.redline || {};
+  const sourceAttrs = navisRedline.attrs || {};
 
   setAttrs(rltagEl, {
     thickness: '3',
     pattern: '65535',
-    ...(navisRedline.attrs || {}),
+    ...(sourceAttrs.thickness ? { thickness: sourceAttrs.thickness } : {}),
+    ...(sourceAttrs.pattern ? { pattern: sourceAttrs.pattern } : {}),
     id: String(commentId),
     commentid: String(commentId),
   });
 
-  if (tag.canonicalObjectId) rltagEl.setAttribute('canonicalObjectId', tag.canonicalObjectId);
-  if (tag.sourceObjectId) rltagEl.setAttribute('sourceObjectId', tag.sourceObjectId);
-  if (tag.severity) rltagEl.setAttribute('severity', tag.severity);
-  if (tag.bundleId) rltagEl.setAttribute('bundleId', tag.bundleId);
-
   appendColour(doc, rltagEl, navisRedline.colour || { red: 1, green: 0, blue: 0 });
   appendPoint2f(doc, rltagEl, 'pos1', navisRedline.pos1 || { x: 0, y: 0 });
   appendPoint2f(doc, rltagEl, 'pos2', navisRedline.pos2 || { x: 0, y: 0 });
-  appendPoint3f(doc, rltagEl, 'pos3d', tag.worldPosition || navisRedline.pos3d || { x: 0, y: 0, z: 0 });
-
-  if (navisRedline.bounds) {
-    appendBox3f(doc, rltagEl, 'bounds', navisRedline.bounds);
-  }
 
   redlinesEl.appendChild(rltagEl);
   viewEl.appendChild(redlinesEl);
@@ -814,7 +924,10 @@ function appendOptionalNavisFragments(doc, viewEl, tag) {
 
   if (clipplaneset) {
     viewEl.appendChild(clipplaneset);
+    return;
   }
+
+  appendDefaultClipplaneset(doc, viewEl);
 }
 
 export class RvmTagXmlStore {
@@ -882,7 +995,7 @@ export class RvmTagXmlStore {
     root.setAttribute('xmlns:xsi', 'http://www.w3.org/2001/XMLSchema-instance');
     root.setAttribute('xsi:noNamespaceSchemaLocation', NAVIS_SCHEMA);
     root.setAttribute('units', firstNavis?.rootAttrs?.units || 'm');
-    root.setAttribute('filename', firstNavis?.rootAttrs?.filename || 'tags.xml');
+    root.setAttribute('filename', navisModelFilename(this.bundleId, firstNavis?.rootAttrs));
 
     if (firstNavis?.rootAttrs?.filepath) {
       root.setAttribute('filepath', firstNavis.rootAttrs.filepath);
@@ -893,14 +1006,15 @@ export class RvmTagXmlStore {
 
     let commentCounter = 1;
 
+    let viewCounter = 1;
+
     for (const tag of this.tags.values()) {
       const navis = tag.navis || {};
       const viewEl = doc.createElement('view');
 
       setAttrs(viewEl, {
-        ...(navis.viewAttrs || {}),
-        name: navis.viewAttrs?.name || tag.text || tag.id,
-        guid: navis.viewAttrs?.guid || tag.id,
+        name: `Tag View ${viewCounter++}`,
+        guid: navisGuid(navis.viewAttrs?.guid || tag.id),
       });
 
       appendViewpoint(doc, viewEl, tag);

@@ -28,6 +28,11 @@ const toolbar = read('tabs/RvmToolbarCompactBridge.js');
 const sourceInput = read('tabs/RvmSourceFormatInputBridge.js');
 const navisHierarchy = read('tabs/RvmNavisHierarchyBridge.js');
 const hierarchySelection = read('tabs/RvmHierarchySelectionBridge.js');
+const exactSelection = read('tabs/RvmFormatNeutralExactSelectionBridge.js');
+const hierarchySmartGrid = read('tabs/RvmHierarchySmartGridBridge.js');
+const hierarchyCheckbox = read('tabs/RvmHierarchyCheckboxMultiSelectBridge.js');
+const zoneLodContext = read('tabs/RvmZoneLodContextBridge.js');
+const workerFirst = read('rvm-viewer/RvmBrowserRvmWorkerFirstBridge.js');
 const selectionSync = read('tabs/RvmSelectionTreeSyncBridge.js');
 const drawer = read('tabs/RvmBottomDiagnosticsDrawerBridge.js');
 
@@ -39,11 +44,12 @@ const rvmViewerImports = [
 ].map((match) => match[1].slice(match[1].lastIndexOf('RvmViewer3D.js')));
 assert.deepEqual([...new Set(rvmViewerImports)], [`RvmViewer3D.js?v=${key}`], 'renderer and mounted tab must share one RvmViewer3D ES module identity');
 
-assert.ok(renderer.includes('viewer3d-rvm-tab.js?v=20260628-rvm-tab-startup-selection-fix-1'), 'renderer must import current mounted RVM tab key');
-assert.ok(renderer.includes('RvmDeferredBridgeLoader.js?v=20260629-rvm-deferred-support-details-polish-1'), 'renderer must import support details polish deferred loader key');
-assert.ok(renderer.includes('RvmSelectionDetailsInspectorBridge.js?v=20260629-rvm-selected-entity-restore-1'), 'renderer must import restored selected entity UI key');
+assert.ok(renderer.includes('viewer3d-rvm-tab.js?v=20260630-rvm-hierarchy-path-context-1'), 'renderer must import current mounted RVM tab key');
+assert.ok(renderer.includes('RvmDeferredBridgeLoader.js?v=20260628-rvm-deferred-source-tools-dashboard-1'), 'renderer must import Source Tools dashboard deferred loader key');
+assert.ok(renderer.includes('RvmSelectionDetailsInspectorBridge.js?v=20260628-rvm-selected-entity-ui-v2-1'), 'renderer must import selected entity UI v2 key');
 assert.ok(renderer.includes('RvmHierarchyProviderSelectionParityBridge.js?v=20260629-rvm-provider-selection-parity-1'), 'renderer must import provider selection parity bridge');
 assert.ok(renderer.includes('installRvmHierarchyProviderSelectionParityBridge()'), 'renderer must install provider selection parity bridge');
+
 assert.ok(!renderer.includes('RvmModelHealthBridge.js?v='), 'renderer must not eagerly import model health bridge');
 assert.ok(tab.includes('RvmFormatNeutralHierarchy.js?v=20260628-format-neutral-shared-kind-policy-1'), 'mounted RVM tab must import current format-neutral helper key');
 assert.ok(formatNeutral.includes('RvmSourceKindPolicy.js'), 'format-neutral helper must use shared source-kind policy');
@@ -135,9 +141,33 @@ assert.ok(rightPanelBridge.includes('Selected Entity'), 'right panel bridge must
 assert.ok(rightPanelBridge.includes('Copy JSON') && rightPanelBridge.includes('download-stagedjson'), 'stagedJSON right panel must expose clearer copy/download actions');
 
 assert.ok(sourceInput.includes("'.stagedjson'") && sourceInput.includes("'.staged.json'") && sourceInput.includes("'.txt'"), 'source file input bridge must accept stagedJSON and txt source formats');
-assert.ok(renderer.includes('RvmHierarchySelectionBridge.js?v=20260627-rvm-hierarchy-navis-safe-1'), 'renderer must import Navis-safe hierarchy selection bridge');
+assert.ok(renderer.includes('RvmHierarchySelectionBridge.js?v=20260630-rvm-hierarchy-exact-rvm-1'), 'renderer must import native-RVM exact hierarchy pass-through bridge');
+assert.ok(renderer.includes('RvmFormatNeutralExactSelectionBridge.js?v=20260630-rvm-format-neutral-exact-rvm-1'), 'renderer must import native-RVM exact selection bridge');
+assert.ok(renderer.includes('RvmZoneLodContextBridge.js?v=20260630-rvm-zone-lod-context-3'), 'renderer must import current hierarchy context menu bridge');
+assert.ok(renderer.includes('RvmHierarchySmartGridBridge.js?v=20260630-rvm-hierarchy-path-grid-2'), 'renderer must import current hierarchy path smart grid bridge');
+assert.ok(renderer.includes('RvmHierarchyCheckboxMultiSelectBridge.js?v=20260630-rvm-hierarchy-checkbox-tree-controls-1'), 'renderer must import current checkbox tree controls bridge');
 assert.ok(hierarchySelection.includes('NAVIS_CONTROL_SELECTOR'), 'legacy hierarchy selection must not intercept Navis controls');
+assert.ok(hierarchySelection.includes('isFormatNeutralRvmTree'), 'legacy hierarchy selection must pass native RVM rows to exact source selection');
+assert.ok(exactSelection.includes("'rvm'"), 'exact source selection must handle native RVM hierarchy rows');
+assert.ok(exactSelection.includes('isNativeRvmSource(root)'), 'exact source selection must identify native RVM mode');
+assert.ok(exactSelection.includes('!nativeRvm'), 'native RVM exact selection must not use label fallback matching');
+assert.ok(exactSelection.includes('RVM_BYTE_OFFSET'), 'native RVM exact selection must include stable byte offset aliases when available');
 assert.ok(navisHierarchy.includes('shouldPreserveFormatNeutralTree'), 'Navis bridge must not overwrite source-owned format-neutral tree');
+assert.ok(tab.includes("recursive: true, sourceKind: 'rvm'"), 'direct RVM load must render parent/child hierarchy instead of forcing flat rows');
+assert.ok(tab.includes('data-rvm-tree-path'), 'mounted RVM tree rows must expose readable parent path text');
+assert.ok(workerFirst.includes('data-rvm-tree-path'), 'worker-first RVM tree rows must expose readable parent path text');
+assert.ok(workerFirst.includes('function pathLabel'), 'worker-first RVM tree must derive parent > child path labels');
+assert.ok(hierarchySmartGrid.includes('20260630-rvm-hierarchy-path-grid-2'), 'smart grid bridge must expose hierarchy path UI version');
+assert.ok(hierarchySmartGrid.includes('ensurePathLabel'), 'smart grid bridge must add path labels for rows missing rendered path spans');
+assert.ok(hierarchySmartGrid.includes('.rvm-tree-path'), 'smart grid bridge must style hierarchy breadcrumb paths');
+assert.ok(hierarchyCheckbox.includes('grid-template-columns:18px 18px minmax(0,1fr) max-content'), 'checkbox multiselect rows must reserve expander and checkbox columns');
+assert.ok(hierarchyCheckbox.includes('> ul{grid-column:3 / -1;'), 'checkbox multiselect rows must align child tree branches under labels');
+assert.ok(zoneLodContext.includes("new Set(['hidden', '25', '50', '100', '250'])"), 'zone context menu must support render percentage choices including 250');
+assert.ok(zoneLodContext.includes('rvm-hierarchy-lod-action'), 'zone context menu must support checked hierarchy render-detail actions');
+assert.ok(zoneLodContext.includes('formatNeutralModelForRoot'), 'zone context menu must support format-neutral tree rows');
+assert.ok(zoneLodContext.includes('selectedContextNodes'), 'zone context menu must apply to checked hierarchy rows when right-clicking a selected zone');
+assert.ok(zoneLodContext.includes('objectMatchesIds'), 'zone context menu must match hierarchy rows through object aliases');
+assert.ok(zoneLodContext.includes('.rvm-tree-node.has-zone-lod-override'), 'zone context menu must mark format-neutral tree rows with render percentage overrides');
 assert.ok(selectionSync.includes('rvm-tab-dispose'), 'hierarchy sync bridge must clean up on tab disposal');
 assert.ok(drawer.includes('root.insertBefore(drawer, statusbar)'), 'drawer must dock before status bar');
 

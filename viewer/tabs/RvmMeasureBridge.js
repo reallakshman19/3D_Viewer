@@ -137,7 +137,7 @@ function fmt(value) {
 
 function vectorRow(label, vector) {
   if (!vector) return `<div><span>${esc(label)}</span><b>-</b></div>`;
-  return `<div><span>${esc(label)}</span><b>${fmt(vector.x)} × ${fmt(vector.y)} × ${fmt(vector.z)}</b></div>`;
+  return `<div><span>${esc(label)}</span><b>${fmt(vector.x)} x ${fmt(vector.y)} x ${fmt(vector.z)}</b></div>`;
 }
 
 function ensureCard() {
@@ -193,10 +193,10 @@ function measureSelectionExtents() {
     center,
     diagonal,
   };
-  updateSummary(root, `Measure: ${selected.length}${capped ? '+' : ''} obj · size ${fmt(size.x)} × ${fmt(size.y)} × ${fmt(size.z)}`);
-  setStatus(root, `Measure: selection extents ${fmt(size.x)} × ${fmt(size.y)} × ${fmt(size.z)}.`);
+  updateSummary(root, `Measure: ${selected.length}${capped ? '+' : ''} obj - size ${fmt(size.x)} x ${fmt(size.y)} x ${fmt(size.z)}`);
+  setStatus(root, `Measure: selection extents ${fmt(size.x)} x ${fmt(size.y)} x ${fmt(size.z)}.`);
   renderCard(`
-    <div class="rvm-measure-card-head"><b>Selection extents</b><button type="button" data-rvm-measure-action="close">×</button></div>
+    <div class="rvm-measure-card-head"><b>Selection extents</b><button type="button" data-rvm-measure-action="close">X</button></div>
     <div class="rvm-measure-card-body">
       <div><span>Objects</span><b>${selected.length}${capped ? '+' : ''}</b></div>
       ${vectorRow('Size XYZ', size)}
@@ -228,10 +228,10 @@ function measureCenterDistance() {
   const delta = new THREE.Vector3().subVectors(cb, ca);
   const distance = delta.length();
   drawMeasureLine(ca, cb);
-  updateSummary(root, `Measure: distance ${fmt(distance)} · Δ ${fmt(delta.x)}, ${fmt(delta.y)}, ${fmt(delta.z)}`);
+  updateSummary(root, `Measure: distance ${fmt(distance)} - d ${fmt(delta.x)}, ${fmt(delta.y)}, ${fmt(delta.z)}`);
   setStatus(root, `Measure: center distance ${fmt(distance)}.`);
   renderCard(`
-    <div class="rvm-measure-card-head"><b>Center distance</b><button type="button" data-rvm-measure-action="close">×</button></div>
+    <div class="rvm-measure-card-head"><b>Center distance</b><button type="button" data-rvm-measure-action="close">X</button></div>
     <div class="rvm-measure-card-body">
       <div><span>Distance</span><b>${fmt(distance)}</b></div>
       ${vectorRow('Delta XYZ', delta)}
@@ -306,9 +306,9 @@ function injectToolbar(root) {
   section.innerHTML = `
     <span class="rvm-ribbon-label">Measure</span>
     <div class="rvm-ribbon-button-row">
-      <button type="button" class="rvm-tool-btn" data-rvm-measure-action="extents" title="Measure bbox extents of selected RVM object or branch"><span aria-hidden="true">□</span><span>Extents</span></button>
-      <button type="button" class="rvm-tool-btn" data-rvm-measure-action="distance" title="Measure center-to-center distance between two selected objects"><span aria-hidden="true">↔</span><span>Distance</span></button>
-      <button type="button" class="rvm-tool-btn" data-rvm-measure-action="clear" title="Clear measurement overlay"><span aria-hidden="true">×</span><span>Clear</span></button>
+      <button type="button" class="rvm-tool-btn" data-rvm-measure-action="extents" title="Measure bbox extents of selected RVM object or branch"><span aria-hidden="true">[]</span><span>Extents</span></button>
+      <button type="button" class="rvm-tool-btn" data-rvm-measure-action="distance" title="Measure center-to-center distance between two selected objects"><span aria-hidden="true">D</span><span>Distance</span></button>
+      <button type="button" class="rvm-tool-btn" data-rvm-measure-action="clear" title="Clear measurement overlay"><span aria-hidden="true">X</span><span>Clear</span></button>
     </div>
     <div class="rvm-measure-summary" data-rvm-measure-summary>Measure: no result</div>`;
 }

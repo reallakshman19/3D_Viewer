@@ -64,6 +64,11 @@ function handleWorkerFirstRvmChange(event, input) {
 async function loadWorkerFirstRvm({ root, viewer, files, rvmFile, abortController }) {
   const status = root?.querySelector?.('#rvm-sb-msg') || null;
   const startedAt = Date.now();
+  if (root?.dataset) {
+    root.dataset.rvmLoadedSourceKind = 'rvm';
+    root.dataset.rvmLoadedFileName = rvmFile.name;
+    root.dataset.rvmModelPrimitiveMode = 'rvm-native';
+  }
   setStatus(status, `Loading ${rvmFile.name} with worker-first RVM path…`);
   renderWorkerDiagnostics({
     fileName: rvmFile.name,
@@ -148,8 +153,62 @@ function browserSupportOptions(root) {
 function updateRvmTabTreeFromPayload(root, payload) {
   const tree = root?.querySelector?.('#rvm-tree');
   if (!tree || !payload?.manifest?.nodes) return;
-  const nodes = payload.manifest.nodes.slice(0, MAX_TREE_ROWS);
-  tree.innerHTML = nodes.map((node) => `<button type="button" class="rvm-tree-row" data-rvm-source-object-id="${esc(node.sourceObjectId || node.canonicalObjectId || '')}"><span class="rvm-tree-indent" style="width:${Math.min(Number(node.depth || 0), 12) * 10}px"></span><span class="rvm-tree-kind">${esc(node.kind || node.type || 'RVM')}</span><span class="rvm-tree-name">${esc(node.name || node.canonicalObjectId || 'RVM node')}</span></button>`).join('') || '<div class="rvm-empty-state">No RVM hierarchy nodes found.</div>';
+  const allNodes = Array.isArray(payload.manifest.nodes) ? payload.manifest.nodes.filter((node) => nodeId(node)) : [];
+  const byId = new Map(allNodes.map((node) => [nodeId(node), node]));
+  const children = new Map();
+  for (const node of allNodes) {
+    const parent = parentId(node);
+    if (!children.has(parent)) children.set(parent, []);
+    children.get(parent).push(node);
+  }
+  const roots = children.get('') || allNodes.filter((node) => !parentId(node) || !byId.has(parentId(node)));
+  let rendered = 0;
+  const renderNode = (node, depth = 0) => {
+    if (rendered >= MAX_TREE_ROWS) return '';
+    rendered += 1;
+    const id = nodeId(node);
+    const label = nodeLabel(node);
+    const path = pathLabel(node, byId);
+    const kind = String(node.kind || node.type || 'RVM').toUpperCase();
+    const kids = children.get(id) || [];
+    const count = kids.length || (Array.isArray(node.renderObjectIds) ? node.renderObjectIds.length : Number(node.count || 0));
+    const pathHtml = path && path !== label ? `<span class="rvm-tree-path" data-rvm-tree-path-label="true">${esc(path)}</span>` : '';
+    const childHtml = kids.length && depth < 10 ? `<ul>${kids.map((child) => renderNode(child, depth + 1)).filter(Boolean).join('')}</ul>` : '';
+    return `<li data-node-id="${esc(id)}" data-depth="${depth}" data-rvm-source-kind="rvm" data-rvm-source-object-id="${esc(node.sourceObjectId || id)}" data-rvm-parent-node-id="${esc(parentId(node))}" data-rvm-tree-path="${esc(path)}"><button type="button" class="rvm-tree-node" title="${esc(path || label)}"><span class="rvm-kind">${esc(kind)}</span><span data-rvm-tree-label="true">${esc(label)}</span>${count ? `<span class="rvm-tree-count">${esc(count)}</span>` : ''}${pathHtml}</button><button type="button" class="rvm-tree-visibility-toggle" data-rvm-visibility-toggle="${esc(id)}" aria-pressed="false" title="Hide or show this row">Hide</button>${childHtml}</li>`;
+  };
+  const suffix = allNodes.length > rendered ? `<li class="rvm-empty-state">Tree capped at ${MAX_TREE_ROWS} rows. Use search/filter to narrow.</li>` : '';
+  tree.innerHTML = roots.map((node) => renderNode(node)).filter(Boolean).join('') + suffix || '<li class="rvm-empty-state">No RVM hierarchy nodes found.</li>';
+  const state = {
+    sourceKind: 'rvm',
+    nodeCount: payload.manifest.nodes.length,
+    renderedNodeCount: rendered,
+    fileName: root?.dataset?.rvmLoadedFileName || '',
+    nodes: allNodes,
+  };
+  root.__rvmFormatNeutralHierarchy = state;
+  root.dataset.rvmHierarchyController = 'format-neutral';
+  root.dataset.rvmHierarchySourceKind = 'rvm';
+  root.dataset.rvmHierarchyNodeCount = String(payload.manifest.nodes.length);
+  try { root.dispatchEvent(new CustomEvent('rvm-tree-rendered', { bubbles: true, detail: state })); } catch (_) {}
+}
+
+function nodeId(node = {}) { return String(node.canonicalObjectId || node.id || node.sourceObjectId || '').trim(); }
+function parentId(node = {}) { return String(node.parentCanonicalObjectId || node.parentId || node.parent || '').trim(); }
+function nodeLabel(node = {}) { return String(node.name || node.label || node.displayName || node.sourceObjectId || node.canonicalObjectId || node.id || 'RVM node'); }
+function pathLabel(node, byId = new Map()) {
+  const parts = [];
+  const seen = new Set();
+  let current = node;
+  while (current && !seen.has(nodeId(current))) {
+    seen.add(nodeId(current));
+    parts.unshift(nodeLabel(current));
+    const parent = parentId(current);
+    current = parent ? byId.get(parent) : null;
+  }
+  if (parts.length > 1) return parts.join(' > ');
+  const raw = node?.attributes?.RVM_OWNER_PATH || node?.attributes?.RVM_REVIEW_PATH || node?.sourcePath || node?.canonicalObjectId || '';
+  const attrParts = String(raw || '').replace(/\\/g, '/').split('/').map((part) => part.trim()).filter(Boolean);
+  return attrParts.length > 1 ? attrParts.join(' > ') : parts.join(' > ');
 }
 
 function renderWorkerDiagnostics(diagnostics = {}, root = document) {
@@ -168,7 +227,7 @@ function renderWorkerDiagnostics(diagnostics = {}, root = document) {
     ['Native facet groups', diagnostics.browserRvmNativeFacetGroupPrimaryCount ?? '-'],
     ['Zone mode', zoneText(diagnostics.browserRvmZoneSelection)],
     ['LOD', lodText(diagnostics.browserRvmLodSelection)],
-    ['Tree nodes rendered', root?.querySelectorAll?.('#rvm-tree .rvm-tree-row')?.length ?? '-'],
+    ['Tree nodes rendered', root?.querySelectorAll?.('#rvm-tree li[data-node-id]')?.length ?? '-'],
     ['Max event-loop stall', ms(diagnostics.browserRvmMaxEventLoopStallMs)],
     ['Long tasks >100 ms', diagnostics.browserRvmEventLoopStallCount ?? '-'],
     ['Binary PRIM', diagnostics.browserRvmPrimitiveCounts?.PRIM ?? diagnostics.primitiveCounts?.PRIM ?? '-'],

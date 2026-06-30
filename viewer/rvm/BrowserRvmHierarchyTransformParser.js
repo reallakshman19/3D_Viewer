@@ -163,12 +163,12 @@ function vecFromAny(value) {
     const x = Number(value.x), y = Number(value.y), z = Number(value.z);
     return [x, y, z].every(Number.isFinite) ? { x, y, z } : null;
   }
-  const nums = String(value).replace(/[\[\]{}]/g, ' ').split(/[\s,:]+/g).map(Number).filter(Number.isFinite);
+  const nums = String(value).replace(/[\[\]{}]/g, ' ').split(/[\s,:]+/g).filter((entry) => entry.trim() !== '').map(Number).filter(Number.isFinite);
   return nums.length >= 3 ? { x: nums[0], y: nums[1], z: nums[2] } : null;
 }
 
 function normalizeBbox(value) {
-  const nums = Array.isArray(value) ? value.map(Number) : String(value || '').replace(/[\[\]]/g, ' ').split(/[\s,]+/g).map(Number).filter(Number.isFinite);
+  const nums = Array.isArray(value) ? value.map(Number) : String(value || '').replace(/[\[\]]/g, ' ').split(/[\s,]+/g).filter((entry) => entry.trim() !== '').map(Number).filter(Number.isFinite);
   if (nums.length < 6) return null;
   return [Math.min(nums[0], nums[3]), Math.min(nums[1], nums[4]), Math.min(nums[2], nums[5]), Math.max(nums[0], nums[3]), Math.max(nums[1], nums[4]), Math.max(nums[2], nums[5])];
 }

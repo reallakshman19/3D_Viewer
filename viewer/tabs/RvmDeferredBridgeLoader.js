@@ -16,6 +16,8 @@ const BRIDGE_GROUPS = Object.freeze({
     { id: 'nonprimitive-source-tools-ui', specifier: './RvmNonPrimitiveSourceToolsUiBridge.js?v=20260628-rvm-source-tools-dashboard-1', previousSpecifier: './RvmNonPrimitiveSourceToolsUiBridge.js?v=20260628-rvm-source-tools-shared-kind-policy-1', install: 'installRvmNonPrimitiveSourceToolsUiBridge' },
   ],
   postModel: [
+    { id: 'right-panel-tabs', specifier: './RvmRightPanelTabsBridge.js?v=20260629-rvm-right-panel-tabs-1', install: 'installRvmRightPanelTabsBridge' },
+    { id: 'tag-tools', specifier: './RvmTagToolsBridge.js?v=20260630-rvm-tag-tools-2', install: 'installRvmTagToolsBridge' },
     { id: 'stagedjson-export', specifier: './RvmStagedJsonExportBridge.js?v=20260624-rvm-stagedjson-support-policy-1', install: 'installRvmStagedJsonExportBridge' },
     { id: 'stagedjson-validation', specifier: './RvmStagedJsonValidationBridge.js?v=20260624-rvm-stagedjson-support-policy-1', install: 'installRvmStagedJsonValidationBridge' },
     { id: 'right-panel-format-policy', specifier: './RvmRightPanelFormatPolicyBridge.js?v=20260628-rvm-right-panel-ui-v2-1', previousSpecifier: './RvmRightPanelFormatPolicyBridge.js?v=20260628-rvm-right-panel-layout-1', install: 'installRvmRightPanelFormatPolicyBridge' },
@@ -237,12 +239,14 @@ function updateActionDiagnosticsPanel(root, diagnostics) {
     panel.innerHTML = '<h3>RVM Action Errors</h3><div data-rvm-action-diagnostics-body></div>';
     const right = root.querySelector('.rvm-right-panel') || root;
     right.appendChild(panel);
+    try { globalThis.__PCF_GLB_RVM_RIGHT_PANEL_TABS__?.moveToTab?.(root, panel, 'diagnostics'); } catch (_) {}
   }
   const body = panel.querySelector('[data-rvm-action-diagnostics-body]') || panel;
   const failures = diagnostics?.failures || [];
   body.innerHTML = failures.length
     ? failures.slice(0, 6).map((failure) => `<div class="rvm-browser-diag-warning"><b>${escapeHtml(failure.action || failure.bridge || 'action')}</b>: ${escapeHtml(failure.message)}</div>`).join('')
     : '<div class="rvm-empty-state">No action errors.</div>';
+  try { globalThis.__PCF_GLB_RVM_RIGHT_PANEL_TABS__?.refresh?.(root, 'action-diagnostics'); } catch (_) {}
 }
 
 function refreshDiagnosticsDrawer() {

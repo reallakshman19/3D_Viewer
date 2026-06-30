@@ -18,8 +18,10 @@
 // Previous cache marker: core/app.js?v=20260627-rvm-view-orient-menu-split-1
 // Previous cache marker: core/app.js?v=20260627-rvm-view-expanded-nonempty-menus-1
 // Previous cache marker: core/app.js?v=20260627-rvm-toolbar-scroll-misc-1
-// Active cache key: core/app.js?v=20260627-rvm-format-neutral-hierarchy-1
+// Previous cache marker: core/app.js?v=20260627-rvm-format-neutral-hierarchy-1
+// Previous cache marker: core/app.js?v=20260630-rvm-exact-native-selection-1
+// Active cache key: core/app.js?v=20260630-rvm-tree-checkbox-lod-1
 function startupMount() { return document.getElementById('app') || document.getElementById('app-layout') || document.getElementById('app-shell') || document.body; }
 function reportStartupError(error) { console.error('3D Viewer startup error', error); const label = document.getElementById('app-loading-label'); if (label) label.textContent = 'Viewer startup error. Check the browser console.'; const shell = startupMount(); if (!shell) return; shell.innerHTML = '<div style="padding:24px;color:#fca5a5;background:#111827;min-height:100vh;font-family:system-ui,sans-serif;"><h1 style="margin-top:0;color:#fecaca;">3D Viewer startup error</h1><p>Refresh once. If the problem remains, check the browser console.</p></div>'; }
-async function startViewer() { const { init } = await import('./core/app.js?v=20260627-rvm-format-neutral-hierarchy-1'); await init(startupMount()); }
+async function startViewer() { const { init } = await import('./core/app.js?v=20260630-rvm-tree-checkbox-lod-1'); await init(startupMount()); }
 startViewer().catch(reportStartupError);

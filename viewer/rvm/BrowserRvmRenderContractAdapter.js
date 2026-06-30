@@ -222,7 +222,7 @@ function finiteNumber(value) {
 }
 
 function parseVec3(value) {
-  const parts = String(value || '').split(/[\s,]+/g).map((entry) => Number(entry)).filter(Number.isFinite);
+  const parts = String(value || '').split(/[\s,]+/g).filter((entry) => entry.trim() !== '').map((entry) => Number(entry)).filter(Number.isFinite);
   if (parts.length < 3) return null;
   return { x: parts[0], y: parts[1], z: parts[2] };
 }

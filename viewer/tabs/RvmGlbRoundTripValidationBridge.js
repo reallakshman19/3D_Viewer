@@ -42,8 +42,8 @@ function injectControls(root) {
       <button class="rvm-btn" type="button" data-rvm-glb-roundtrip-action="selected">Selected</button>
       <button class="rvm-btn" type="button" data-rvm-glb-roundtrip-action="json">JSON</button>
     </div>`;
-  const validateSection = ribbon.querySelector('[data-rvm-glb-export-validation]');
-  if (validateSection?.nextSibling) ribbon.insertBefore(section, validateSection.nextSibling);
+  const validateSection = directRibbonSection(ribbon.querySelector('[data-rvm-glb-export-validation]'), ribbon);
+  if (validateSection) ribbon.insertBefore(section, validateSection.nextSibling);
   else ribbon.appendChild(section);
   section.addEventListener('click', async (event) => {
     const button = event.target?.closest?.('[data-rvm-glb-roundtrip-action]');
@@ -60,6 +60,13 @@ function injectControls(root) {
     }
   });
   setStatus(root, 'RVM GLB round-trip validation ready');
+}
+
+function directRibbonSection(node, ribbon) {
+  if (!node || !ribbon) return null;
+  if (node.parentElement === ribbon) return node;
+  const section = node.closest?.('.rvm-ribbon-section');
+  return section?.parentElement === ribbon ? section : null;
 }
 
 async function exportAndRoundTrip(scope) {

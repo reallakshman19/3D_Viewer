@@ -15,9 +15,9 @@ function read(relativePath) {
 const renderer = read('tabs/viewer3d-rvm-tab-renderer.js');
 const exactSelection = read('tabs/RvmFormatNeutralExactSelectionBridge.js');
 
-assert.ok(renderer.includes('RvmFormatNeutralExactSelectionBridge.js?v=20260627-rvm-format-neutral-exact-selection-1'), 'renderer must import the exact source-selection bridge');
-assert.ok(renderer.indexOf('installRvmFormatNeutralExactSelectionBridge()') < renderer.indexOf('installRvmHierarchySelectionBridge'), 'exact source-selection bridge must install before legacy hierarchy selection bridge');
-assert.ok(exactSelection.includes("const VERSION = '20260628-rvm-source-hierarchy-diagnostics-1'"), 'exact selection bridge must expose current diagnostics version');
+assert.ok(renderer.includes('RvmFormatNeutralExactSelectionBridge.js?v=20260630-rvm-format-neutral-exact-rvm-1'), 'renderer must import the exact source-selection bridge');
+assert.ok(renderer.indexOf('installRvmFormatNeutralExactSelectionBridge();') < renderer.indexOf('installRvmHierarchySelectionBridge(RvmViewer3D)'), 'exact source-selection bridge must install before legacy hierarchy selection bridge');
+assert.ok(exactSelection.includes("const VERSION = '20260630-rvm-exact-native-selection-1'"), 'exact selection bridge must expose current diagnostics version');
 assert.ok(exactSelection.includes("root?.dataset?.rvmHierarchyController === 'format-neutral'"), 'bridge must only run on format-neutral source trees');
 assert.ok(exactSelection.includes('EXACT_SELECTION_SOURCE_KINDS'), 'bridge must be gated to source-preview-like formats');
 assert.ok(exactSelection.includes('descendantsForNode(root, node)'), 'branch/group selection must include descendant source nodes');
@@ -32,6 +32,7 @@ assert.ok(exactSelection.includes('GENERIC_LABELS'), 'bridge must block generic 
 assert.ok(exactSelection.includes('scopeNodeCount'), 'selection event must expose branch/component hierarchy scope size');
 assert.ok(exactSelection.includes('diagnostics: root.__rvmSourceHierarchySelectionDiagnostics'), 'selection event must include diagnostics payload');
 assert.ok(exactSelection.includes("event?.stopImmediatePropagation?.()"), 'bridge must stop the legacy capture handler after exact source selection');
-assert.ok(!exactSelection.includes("sourceKind(root) === 'rvm'"), 'bridge must not hijack binary RVM hierarchy selection');
+assert.ok(exactSelection.includes("'rvm'"), 'bridge must handle native RVM hierarchy selection');
+assert.ok(exactSelection.includes('!nativeRvm'), 'native RVM hierarchy selection must skip label fallback matching');
 
 console.log('Verified format-neutral source hierarchy selection diagnostics contract.');

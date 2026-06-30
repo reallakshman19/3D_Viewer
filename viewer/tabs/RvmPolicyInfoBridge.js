@@ -76,7 +76,7 @@ function attachToRoot(root) {
     section.className = 'rvm-ribbon-section rvm-policy-info-section';
     section.setAttribute(SECTION_ATTR, 'true');
     section.innerHTML = `
-      <button type="button" class="rvm-btn rvm-policy-info-button" data-rvm-policy-info-button="true" aria-expanded="false" title="Show rule-based and hardcoded RVM viewer policies">ⓘ Rules</button>
+      <button type="button" class="rvm-btn rvm-policy-info-button" data-rvm-policy-info-button="true" aria-expanded="false" title="Show rule-based and hardcoded RVM viewer policies">i Rules</button>
       <div class="rvm-policy-info-popover" data-rvm-policy-info-popover="true" hidden></div>
     `;
     const search = ribbon.querySelector('.rvm-ribbon-search');

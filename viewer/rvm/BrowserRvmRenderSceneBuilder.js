@@ -651,7 +651,7 @@ function parseBbox(value) {
     return nums.every(Number.isFinite) ? nums : null;
   }
   if (typeof value === 'string') {
-    const nums = value.split(/[\s,]+/g).map(Number).filter(Number.isFinite);
+    const nums = value.replace(/[\[\]]/g, ' ').split(/[\s,]+/g).filter((entry) => entry.trim() !== '').map(Number).filter(Number.isFinite);
     return nums.length >= 6 ? nums.slice(0, 6) : null;
   }
   return null;

@@ -176,7 +176,7 @@ function applySectionBox(box, mode = 'selection') {
     : fallbackApplyBoxSection(v, activeBaseBox.clone(), activePadding);
   const finalBox = appliedBox && !appliedBox.isEmpty ? appliedBox : activeBaseBox.clone().expandByScalar(activePadding);
   const size = finalBox.getSize(new THREE.Vector3());
-  updateSummary(root, `Clip: ${mode} · ${fmt(size.x)} × ${fmt(size.y)} × ${fmt(size.z)} · pad ${fmt(activePadding)}`);
+  updateSummary(root, `Clip: ${mode} - ${fmt(size.x)} x ${fmt(size.y)} x ${fmt(size.z)} - pad ${fmt(activePadding)}`);
   setStatus(root, `Clip: ${mode} section box applied.`);
   v.requestRender?.();
   return { version: BRIDGE_VERSION, mode, box: finalBox, padding: activePadding };
@@ -260,11 +260,11 @@ function injectToolbar(root) {
   section.innerHTML = `
     <span class="rvm-ribbon-label">Clip</span>
     <div class="rvm-ribbon-button-row">
-      <button type="button" class="rvm-tool-btn" data-rvm-section-box-action="selection" title="Apply a section box around selected RVM object or hierarchy branch"><span aria-hidden="true">▧</span><span>Sel Box</span></button>
-      <button type="button" class="rvm-tool-btn" data-rvm-section-box-action="model" title="Apply a section box around currently visible RVM geometry"><span aria-hidden="true">□</span><span>Model</span></button>
-      <button type="button" class="rvm-tool-btn" data-rvm-section-box-action="expand" title="Expand active section box padding"><span aria-hidden="true">＋</span><span>Pad</span></button>
-      <button type="button" class="rvm-tool-btn" data-rvm-section-box-action="shrink" title="Shrink active section box padding"><span aria-hidden="true">－</span><span>Pad</span></button>
-      <button type="button" class="rvm-tool-btn" data-rvm-section-box-action="off" title="Turn section box clipping off"><span aria-hidden="true">⊘</span><span>Off</span></button>
+      <button type="button" class="rvm-tool-btn" data-rvm-section-box-action="selection" title="Apply a section box around selected RVM object or hierarchy branch"><span aria-hidden="true">SB</span><span>Sel Box</span></button>
+      <button type="button" class="rvm-tool-btn" data-rvm-section-box-action="model" title="Apply a section box around currently visible RVM geometry"><span aria-hidden="true">[]</span><span>Model</span></button>
+      <button type="button" class="rvm-tool-btn" data-rvm-section-box-action="expand" title="Expand active section box padding"><span aria-hidden="true">+</span><span>Pad</span></button>
+      <button type="button" class="rvm-tool-btn" data-rvm-section-box-action="shrink" title="Shrink active section box padding"><span aria-hidden="true">-</span><span>Pad</span></button>
+      <button type="button" class="rvm-tool-btn" data-rvm-section-box-action="off" title="Turn section box clipping off"><span aria-hidden="true">OFF</span><span>Off</span></button>
     </div>
     <div class="rvm-section-summary" data-rvm-section-summary>Clip: off</div>`;
 }

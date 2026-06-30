@@ -34,7 +34,7 @@ function status(root, message, warning = false) {
 }
 
 function commonPrefix(values = []) {
-  const clean = values.map((value) => normalizePath(value).split('/').filter(Boolean)).filter((parts) => parts.length);
+  const clean = values.map((value) => String(value || '').replace(/\\/g, '/').split('/').filter(Boolean)).filter((parts) => parts.length);
   if (!clean.length) return '';
   const out = [];
   for (let i = 0; i < clean[0].length; i += 1) {

@@ -37,8 +37,8 @@ function injectControls(root) {
   section.className = 'rvm-ribbon-section rvm-stagedjson-validation-section';
   section.dataset.rvmStagedjsonValidation = CACHE_KEY;
   section.innerHTML = '<span class="rvm-ribbon-label">StagedCheck</span><div class="rvm-stagedjson-validation-buttons" role="group" aria-label="RVM stagedJSON validation"><button class="rvm-btn" type="button" data-rvm-stagedjson-validation="geometry">Geometry</button><button class="rvm-btn" type="button" data-rvm-stagedjson-validation="support">Support</button><button class="rvm-btn" type="button" data-rvm-stagedjson-validation="json">JSON</button></div>';
-  const staged = ribbon.querySelector('[data-rvm-stagedjson-export]');
-  if (staged?.nextSibling) ribbon.insertBefore(section, staged.nextSibling);
+  const staged = directRibbonSection(ribbon.querySelector('[data-rvm-stagedjson-export]'), ribbon);
+  if (staged) ribbon.insertBefore(section, staged.nextSibling);
   else ribbon.appendChild(section);
   section.addEventListener('click', async (event) => {
     const button = event.target?.closest?.('[data-rvm-stagedjson-validation]');
@@ -50,6 +50,13 @@ function injectControls(root) {
       else downloadJson(validateMode(mode === 'support' ? 'support' : 'geometry'), fileName(mode));
     } finally { button.disabled = false; }
   });
+}
+
+function directRibbonSection(node, ribbon) {
+  if (!node || !ribbon) return null;
+  if (node.parentElement === ribbon) return node;
+  const section = node.closest?.('.rvm-ribbon-section');
+  return section?.parentElement === ribbon ? section : null;
 }
 
 function validateMode(mode) {
