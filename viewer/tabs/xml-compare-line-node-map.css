@@ -80,6 +80,30 @@
   font-size: 12px;
 }
 
+.xml-compare-auto-map-actions {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 6px;
+  padding: 8px 10px;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.12);
+}
+
+.xml-compare-auto-map-actions button {
+  min-height: 28px;
+  border: 1px solid rgba(96, 165, 250, 0.28);
+  border-radius: 8px;
+  background: rgba(15, 23, 42, 0.86);
+  color: #dbeafe;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.xml-compare-auto-map-actions button:hover {
+  border-color: rgba(125, 211, 252, 0.88);
+  background: rgba(30, 41, 59, 0.96);
+}
+
 .xml-compare-graph-connector-counts {
   display: grid;
   grid-template-columns: 1fr;
