@@ -27,7 +27,7 @@ function loadSamplePickers(){
 function loadCategorizedConverter(){
   if(typeof document==='undefined')return;
   if(loadCategorizedConverterPromise)return;
-  loadCategorizedConverterPromise=import('../tabs/xml-compare-categorized-converter-runtime.js?v=20260630-linewise-workspace-1').catch(()=>null);
+  loadCategorizedConverterPromise=import('../tabs/xml-compare-categorized-converter-runtime.js?v=20260630-linewise-ui-revamp-1').catch(()=>null);
 }
 
 const esc=(v)=>String(v??'')
