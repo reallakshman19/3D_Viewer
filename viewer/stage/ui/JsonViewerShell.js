@@ -93,7 +93,9 @@ export function createJsonViewerShell(root) {
   const primitiveText = statusChip();
   const diagnosticsText = statusChip();
   const qualityText = statusChip();
-  status.append(statusText, schemaText, sourceText, nodeText, componentText, primitiveText, diagnosticsText, qualityText);
+  const planEntryText = statusChip();
+  const planDiagnosticText = statusChip();
+  status.append(statusText, schemaText, sourceText, nodeText, componentText, primitiveText, diagnosticsText, qualityText, planEntryText, planDiagnosticText);
 
   shell.append(toolbar, body, status);
   root.replaceChildren(shell);
@@ -124,5 +126,7 @@ export function createJsonViewerShell(root) {
     componentText,
     diagnosticsText,
     qualityText,
+    planEntryText,
+    planDiagnosticText,
   };
 }

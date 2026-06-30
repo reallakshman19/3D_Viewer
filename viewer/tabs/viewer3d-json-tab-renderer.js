@@ -1,5 +1,6 @@
 import { validateRvmStageModel, normalizeRenderQuality, RVM_STAGE_SCHEMA } from '../stage/contracts/RvmStageModelContract.js';
 import { createSampleRvmStageModelV1 } from '../stage/samples/sample-rvm-stage-model-v1.js';
+import { buildStageRenderPlan, STAGE_RENDER_PLAN_SCHEMA } from '../stage/render/StageRenderPlan.js';
 import { createJsonViewerShell } from '../stage/ui/JsonViewerShell.js';
 import { renderHierarchyTree } from '../stage/ui/JsonViewerHierarchyTree.js';
 import { renderProperties } from '../stage/ui/JsonViewerPropertiesPanel.js';
@@ -8,9 +9,10 @@ import { renderDiagnostics } from '../stage/ui/JsonViewerDiagnosticsPanel.js';
 const EMPTY_CANVAS_TEXT = '3D Json Viewer — load RvmStageModel.v1';
 const SAMPLE_SOURCE_NAME = 'sample-rvm-stage-model-v1.js';
 
-function diagnosticCount(model, validationErrors) {
-  const messages = Array.isArray(model?.diagnostics?.messages) ? model.diagnostics.messages.length : 0;
-  return messages + validationErrors.length;
+function diagnosticCount(state) {
+  const modelMessages = Array.isArray(state.model?.diagnostics?.messages) ? state.model.diagnostics.messages.length : 0;
+  const planMessages = Array.isArray(state.renderPlan?.diagnostics) ? state.renderPlan.diagnostics.length : 0;
+  return modelMessages + planMessages + state.validationErrors.length;
 }
 
 function activatePanel(handles, panel) {
@@ -26,33 +28,53 @@ function defaultSelection(model) {
   return { type: 'root', id: model.hierarchy?.rootId || 'node-root' };
 }
 
-function updateCanvas(handles, model) {
-  handles.canvasHost.classList.toggle('has-model', Boolean(model));
-  if (!model) {
+function updateRenderPlan(state) {
+  if (!state.model) {
+    state.renderPlan = null;
+    return;
+  }
+  state.renderPlan = buildStageRenderPlan(state.model, state.renderQuality);
+}
+
+function updateCanvas(handles, state) {
+  const plan = state.renderPlan;
+  handles.canvasHost.classList.toggle('has-model', Boolean(state.model));
+  if (!plan) {
     handles.canvasMessage.textContent = EMPTY_CANVAS_TEXT;
     return;
   }
-  const primitives = Array.isArray(model.primitives) ? model.primitives.length : 0;
-  handles.canvasMessage.textContent = `Stage loaded: ${primitives} primitive placeholder(s). Geometry renderer is Phase 2.`;
+  const byOutput = plan.summary?.byOutput || {};
+  handles.canvasMessage.textContent = [
+    STAGE_RENDER_PLAN_SCHEMA,
+    `Quality: ${plan.source.quality}`,
+    `Entries: ${plan.summary.totalEntries}`,
+    `Procedural: ${byOutput.procedural || 0}`,
+    `BBox/diagnostic: ${byOutput.bbox || 0}`,
+    `Hidden: ${plan.summary.hidden}`,
+  ].join('\n');
 }
 
 function updateStatus(handles, state) {
   const model = state.model;
+  const plan = state.renderPlan;
   handles.statusText.textContent = state.statusText;
   handles.schemaText.textContent = `schema: ${model?.schema || RVM_STAGE_SCHEMA}`;
   handles.sourceText.textContent = `source: ${state.sourceFileName || model?.source?.fileName || '—'}`;
   handles.nodeText.textContent = `nodes: ${model?.hierarchy?.nodes?.length || 0}`;
   handles.componentText.textContent = `components: ${model?.components?.length || 0}`;
   handles.primitiveText.textContent = `primitives: ${model?.primitives?.length || 0}`;
-  handles.diagnosticsText.textContent = `diagnostics: ${diagnosticCount(model, state.validationErrors)}`;
+  handles.diagnosticsText.textContent = `diagnostics: ${diagnosticCount(state)}`;
   handles.qualityText.textContent = `quality: ${state.renderQuality}`;
+  handles.planEntryText.textContent = `plan entries: ${plan?.summary?.totalEntries || 0}`;
+  handles.planDiagnosticText.textContent = `render diagnostic: ${plan?.summary?.diagnosticOnly || 0}`;
 }
 
-function acceptModel(model, sourceName, handles, state) {
+function acceptModel(model, sourceName, state) {
   const validation = validateRvmStageModel(model);
   state.sourceFileName = sourceName;
   if (!validation.valid) {
     state.model = null;
+    state.renderPlan = null;
     state.selectedRef = null;
     state.validationErrors = validation.errors;
     state.activePanel = 'diagnostics';
@@ -64,24 +86,25 @@ function acceptModel(model, sourceName, handles, state) {
   state.validationErrors = [];
   state.activePanel = 'properties';
   state.statusText = `Loaded ${sourceName}`;
+  updateRenderPlan(state);
   return true;
 }
 
 function renderAll(handles, state) {
   renderHierarchyTree(handles.hierarchyList, state.model, state.selectedRef);
   renderProperties(handles.propertiesPanel, state.model, state.selectedRef);
-  renderDiagnostics(handles.diagnosticsPanel, state.model?.diagnostics, state.validationErrors);
-  updateCanvas(handles, state.model);
+  renderDiagnostics(handles.diagnosticsPanel, state.model?.diagnostics, state.validationErrors, state.renderPlan?.diagnostics || []);
+  updateCanvas(handles, state);
   updateStatus(handles, state);
   activatePanel(handles, state.activePanel);
 }
 
 function loadSample(handles, state) {
   try {
-    const sample = createSampleRvmStageModelV1();
-    acceptModel(sample, SAMPLE_SOURCE_NAME, handles, state);
+    acceptModel(createSampleRvmStageModelV1(), SAMPLE_SOURCE_NAME, state);
   } catch (error) {
     state.model = null;
+    state.renderPlan = null;
     state.selectedRef = null;
     state.validationErrors = [`Sample load failed: ${error?.message || error}`];
     state.activePanel = 'diagnostics';
@@ -95,10 +118,10 @@ async function loadStageFile(file, handles, state) {
   state.statusText = `Loading ${file.name}…`;
   updateStatus(handles, state);
   try {
-    const parsed = JSON.parse(await file.text());
-    acceptModel(parsed, file.name, handles, state);
+    acceptModel(JSON.parse(await file.text()), file.name, state);
   } catch (error) {
     state.model = null;
+    state.renderPlan = null;
     state.selectedRef = null;
     state.validationErrors = [`Malformed JSON: ${error?.message || error}`];
     state.activePanel = 'diagnostics';
@@ -127,6 +150,7 @@ function wireEvents(handles, state) {
   const onQualityChange = () => {
     state.renderQuality = normalizeRenderQuality(handles.qualitySelect.value);
     state.statusText = `Render quality: ${state.renderQuality}`;
+    updateRenderPlan(state);
     renderAll(handles, state);
   };
   const onTreeClick = (event) => {
@@ -160,6 +184,7 @@ export function renderViewer3DJson(root) {
   const handles = createJsonViewerShell(root);
   const state = {
     model: null,
+    renderPlan: null,
     sourceFileName: '',
     selectedRef: null,
     validationErrors: [],
