@@ -33,6 +33,12 @@ test('missing terminal message fails', () => {
   assertAcceptanceError(output, 'terminal worker message is required');
 });
 
+test('package-ready without stage-ready fails successful output acceptance', () => {
+  const output = createSampleWorkerAcceptanceOutputV1();
+  output.messages = output.messages.filter((message) => message.type !== 'STAGE_WORKER_STAGE_READY');
+  assertAcceptanceError(output, 'STAGE_WORKER_STAGE_READY message is required for successful output');
+});
+
 test('successful output without valid stageModel fails', () => {
   const output = createSampleWorkerAcceptanceOutputV1();
   output.stageModel = {};
