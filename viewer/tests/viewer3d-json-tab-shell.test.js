@@ -1,0 +1,56 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
+
+const root = path.resolve(new URL('../..', import.meta.url).pathname);
+const files = [
+  'viewer/tabs/viewer3d-json-tab.js',
+  'viewer/tabs/viewer3d-json-tab-renderer.js',
+  'viewer/stage/ui/JsonViewerShell.js',
+  'viewer/stage/ui/JsonViewerHierarchyTree.js',
+  'viewer/stage/ui/JsonViewerPropertiesPanel.js',
+  'viewer/stage/ui/JsonViewerDiagnosticsPanel.js',
+];
+const blacklist = [
+  'RvmDeferredBridgeLoader',
+  'RvmSupportGeometryBridge',
+  'RvmPrimitiveFallbackBridge',
+  'RvmVisualQualityControlsBridge',
+  'RvmZoneLodContextBridge',
+  'BrowserRvmRenderSceneBuilder',
+  'BrowserRvmCode4ElbowRenderBridge',
+];
+
+function read(file) {
+  return fs.readFileSync(path.join(root, file), 'utf8');
+}
+
+const tabSource = read('viewer/tabs/viewer3d-json-tab.js');
+const rendererSource = read('viewer/tabs/viewer3d-json-tab-renderer.js');
+const shellSource = read('viewer/stage/ui/JsonViewerShell.js');
+const css = read('viewer/tabs/viewer3d-json-tab.css');
+const index = read('viewer/index.html');
+const combined = [tabSource, rendererSource, shellSource].join('\n');
+
+assert.match(combined, /3D Json Viewer/);
+assert.match(combined, /Open Stage JSON/);
+assert.match(combined, /Open RVM/);
+assert.match(combined, /Phase 3: browser stage worker/);
+assert.match(tabSource + rendererSource, /RvmStageModelContract\.js/);
+assert.match(index, /3D Json Viewer/);
+
+for (const token of blacklist) {
+  for (const file of files) assert.equal(read(file).includes(token), false, `${file} imports ${token}`);
+}
+
+for (const file of files) {
+  const lineCount = read(file).split('\n').length;
+  assert.ok(lineCount < 300, `${file} has ${lineCount} lines`);
+}
+assert.ok(css.split('\n').length < 300, 'CSS line count must stay under 300');
+
+for (const className of ['json-viewer-shell', 'json-viewer-toolbar', 'json-viewer-body', 'json-viewer-canvas-host', 'json-viewer-status-strip']) {
+  assert.ok(css.includes(className), `CSS missing ${className}`);
+}
+
+console.log('3D Json Viewer tab shell source tests passed');
