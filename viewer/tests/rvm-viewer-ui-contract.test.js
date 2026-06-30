@@ -18,6 +18,7 @@ const tab = read('tabs/viewer3d-rvm-tab.js');
 const deferredLoader = read('tabs/RvmDeferredBridgeLoader.js');
 const rightPanelPolicy = read('tabs/RvmFormatPolicy.js');
 const rightPanelBridge = read('tabs/RvmRightPanelFormatPolicyBridge.js');
+const rightPanelPartition = read('tabs/RvmRightPanelPartitionBridge.js');
 const sourceToolsUi = read('tabs/RvmNonPrimitiveSourceToolsUiBridge.js');
 const supportDetailsBridge = read('tabs/RvmNonPrimitiveSupportOverlayDetailsPanelBridge.js');
 const supportDetailsPanel = read('overlays/support/SupportOverlayDetailsPanel.js');
@@ -31,6 +32,7 @@ const hierarchySelection = read('tabs/RvmHierarchySelectionBridge.js');
 const exactSelection = read('tabs/RvmFormatNeutralExactSelectionBridge.js');
 const hierarchySmartGrid = read('tabs/RvmHierarchySmartGridBridge.js');
 const hierarchyCheckbox = read('tabs/RvmHierarchyCheckboxMultiSelectBridge.js');
+const dynamicChildCheckbox = read('tabs/RvmHierarchyDynamicChildCheckboxBridge.js');
 const visualQualityControls = read('tabs/RvmVisualQualityControlsBridge.js');
 const zoneDensitySelector = read('tabs/RvmZoneDensitySelectorBridgeV5.js');
 const zoneLodContext = read('tabs/RvmZoneLodContextBridge.js');
@@ -67,6 +69,8 @@ assert.ok(toolbar.includes("{ id: 'misc', label: 'Misc'"), 'toolbar must define 
 assert.ok(toolbar.includes('overflow-x:auto'), 'toolbar must scroll horizontally when expanded buttons overflow');
 assert.ok(deferredLoader.includes('20260629-rvm-deferred-support-details-polish-1'), 'deferred loader must expose support details polish key');
 assert.ok(deferredLoader.includes('20260628-rvm-deferred-source-tools-dashboard-1'), 'deferred loader must retain previous Source Tools dashboard key');
+assert.ok(deferredLoader.includes('RvmRightPanelPartitionBridge.js?v=20260630-rvm-right-panel-partition-1'), 'deferred loader must install strict right-panel partition bridge');
+assert.ok(deferredLoader.includes('RvmHierarchyDynamicChildCheckboxBridge.js?v=20260630-rvm-hierarchy-dynamic-child-checkbox-1'), 'deferred loader must install dynamic child checkbox bridge');
 assert.ok(deferredLoader.includes('right-panel-policy-sync'), 'source-preview refresh must resync the right panel policy');
 assert.ok(supportDetailsBridge.includes('rvm-non-primitive-support-overlay-details-panel/v5-polish'), 'support details bridge must expose polish schema');
 assert.ok(supportDetailsPanel.includes('support-overlay-details-panel/v4-polish'), 'support details panel must expose polished schema');
@@ -76,6 +80,11 @@ assert.ok(selectionDetails.includes('data-rvm-selection-detail-action="fit-selec
 assert.ok(rightPanelPolicy.includes('RVM_RIGHT_PANEL_SECTIONS'), 'format policy must expose explicit right panel sections');
 assert.ok(rightPanelBridge.includes('Selected Entity'), 'right panel bridge must rename RVM-only selection title to generic selected entity');
 assert.ok(rightPanelBridge.includes('Copy JSON') && rightPanelBridge.includes('download-stagedjson'), 'stagedJSON right panel must expose clearer copy/download actions');
+assert.ok(rightPanelPartition.includes('#rvm-tags-panel'), 'partition bridge must route tags tab by explicit panel id');
+assert.ok(rightPanelPartition.includes('#rvm-browser-parse-diagnostics'), 'partition bridge must route diagnostics tab by explicit panel id');
+assert.ok(rightPanelPartition.includes('#rvm-attributes-panel'), 'partition bridge must route properties tab by explicit panel id');
+assert.ok(rightPanelPartition.includes('sanitizeTab(root, \'tags\''), 'partition bridge must prevent diagnostics from staying in Tags');
+assert.ok(rightPanelPartition.includes('sanitizeTab(root, \'diagnostics\''), 'partition bridge must prevent Tags from staying in Diagnostics');
 assert.ok(sourceInput.includes("'.stagedjson'") && sourceInput.includes("'.staged.json'") && sourceInput.includes("'.txt'"), 'source file input bridge must accept stagedJSON and txt source formats');
 
 assert.ok(hierarchySelection.includes('NAVIS_CONTROL_SELECTOR'), 'legacy hierarchy selection must not intercept Navis controls');
@@ -93,6 +102,9 @@ assert.ok(hierarchySmartGrid.includes('20260630-rvm-hierarchy-path-grid-compact-
 assert.ok(hierarchySmartGrid.includes('font-size:9px'), 'smart grid bridge must reduce hierarchy text size');
 assert.ok(hierarchyCheckbox.includes('grid-template-columns:18px 18px minmax(0,1fr) max-content'), 'checkbox multiselect rows must reserve expander and checkbox columns');
 assert.ok(hierarchyCheckbox.includes('> ul{grid-column:3 / -1;'), 'checkbox multiselect rows must align child tree branches under labels');
+assert.ok(dynamicChildCheckbox.includes('ensureRowCheckbox'), 'dynamic child checkbox bridge must inject missing child checkboxes');
+assert.ok(dynamicChildCheckbox.includes('onCheckboxChange'), 'dynamic child checkbox bridge must cascade parent checkbox changes');
+assert.ok(dynamicChildCheckbox.includes('indeterminate'), 'dynamic child checkbox bridge must mark partial parent rows');
 
 assert.ok(visualQualityControls.includes("['full', 'Full']"), 'Visual Quality controls must expose Full option');
 assert.ok(visualQualityControls.includes("['medium', 'Medium']"), 'Visual Quality controls must expose Medium option');
@@ -117,4 +129,4 @@ assert.ok(selectionSync.includes('is-canvas-selected'), 'hierarchy sync bridge m
 assert.ok(selectionSync.includes('RVM_NATIVE_CONTAINER_PARENT'), 'hierarchy sync bridge must match native owner aliases');
 assert.ok(drawer.includes('root.insertBefore(drawer, statusbar)'), 'drawer must dock before status bar');
 
-console.log('Verified RVM viewer UI contract: Visual Quality controls, Source Tools dashboard, Selected Entity UI, and provider selection parity.');
+console.log('Verified RVM viewer UI contract: dynamic child checkboxes, right-panel partition, Visual Quality controls, Source Tools dashboard, Selected Entity UI, and provider selection parity.');
