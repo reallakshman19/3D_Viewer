@@ -1,19 +1,19 @@
 import {
   recoverRvmDeepSourcePathFromInstruction,
   recoverDeepRvmSourcePathFromCandidates,
-  isWeakRvmSourcePath,
 } from './RvmDeepSourcePathRecoveryBridge.js?v=20260622-rvm-deep-source-path-recovery-1';
 
-const INSTALL_FLAG = Symbol.for('pcf-glb-rvm-zone-density-selector-v5');
-const STYLE_ID = 'rvm-zone-density-selector-style-v5';
-const VERSION = '20260622-rvm-zone-density-selector-5';
+const INSTALL_FLAG = Symbol.for('pcf-glb-rvm-zone-density-selector-v6-visual-quality');
+const STYLE_ID = 'rvm-zone-density-selector-style-v6';
+const VERSION = '20260630-rvm-visual-quality-selector-1';
 const LARGE_FILE_THRESHOLD_BYTES = 8 * 1024 * 1024;
 const ZONE_STORAGE_KEY = 'rvm_zone_density_last_selection_v2';
-const DENSITY_STORAGE_KEY = 'rvm_zone_density_detail_by_zone_v2';
-const GLOBAL_DETAIL_STORAGE_KEY = 'rvm_zone_lod_detail_v1';
+const DENSITY_STORAGE_KEY = 'rvm_zone_visual_quality_by_zone_v1';
+const GLOBAL_DETAIL_STORAGE_KEY = 'rvm_visual_quality_default_v1';
+const LEGACY_GLOBAL_DETAIL_STORAGE_KEY = 'rvm_zone_lod_detail_v1';
 const MAX_LEVEL = 2;
 const MAX_SELECTOR_ROWS = 240;
-const DENSITY_OPTIONS = [250, 100, 50, 25];
+const QUALITY_OPTIONS = ['full', 'medium', 'light', 'skeleton', 'hidden'];
 const GENERIC_BUCKETS = new Set(['EQUIPMENT', 'STRUCTURE', 'STRUCTURES', 'PIPING', 'PIPE', 'CIVIL', 'MODEL', 'RVM', 'REV']);
 const CIVIL_CATEGORY = new Set(['GRID', 'GRIDS', 'FDNS', 'FDN', 'FOUNDATION', 'FOOTING', 'PITS', 'PIT', 'ROAD', 'GRAD', 'GRADE', 'PAVE', 'TRENCH', 'DRAIN', 'PANEL', 'FRAMEWORK', 'FRMWORK', 'FRMW', 'STRUCTURE', 'STRUCTURAL']);
 const PROCESS_CATEGORY = new Set(['PI', 'SU', 'CI', 'PIPE', 'PIPING', 'EQUIPMENT', 'EQPT']);
@@ -22,7 +22,7 @@ export function installRvmZoneDensitySelectorBridge() {
   if (typeof document === 'undefined') return null;
   if (globalThis[INSTALL_FLAG]) return globalThis[INSTALL_FLAG];
   injectStyles();
-  const state = { version: VERSION, beforeRenderInstructions, buildSelectorRows, selectorSource: 'synthetic-navis-tree' };
+  const state = { version: VERSION, beforeRenderInstructions, buildSelectorRows, selectorSource: 'synthetic-navis-tree', visualQuality: true };
   globalThis[INSTALL_FLAG] = state;
   patchGlobalZoneApi(state);
   for (const delay of [0, 100, 500]) setTimeout(() => patchGlobalZoneApi(state), delay);
@@ -46,7 +46,7 @@ async function beforeRenderInstructions({ instructionSet, file, parsed, root } =
   const shouldPrompt = fileSize >= LARGE_FILE_THRESHOLD_BYTES && rows.length > 1;
   const selection = shouldPrompt
     ? await showZoneDensitySelector({ file, rows, instructionCount: instructions.length })
-    : { mode: 'all', selectedZones: [], zoneDensities: {}, selectorSource: rows.selectorSource || 'instructions' };
+    : { mode: 'all', selectedZones: [], zoneDensities: {}, selectorSource: rows.selectorSource || 'instructions', defaultQuality: 'full' };
   const filtered = applyZoneDensitySelection(instructionSet || { instructions }, selection);
   setStatus(root, statusForSelection(file, filtered?.diagnostics?.zoneSelection));
   return filtered;
@@ -61,21 +61,7 @@ export function buildSelectorRows({ instructions = [], manifestNodes = [], fileN
     if (!clean.length) return;
     for (let depth = 0; depth < clean.length; depth += 1) {
       const key = `/${clean.slice(0, depth + 1).join('/')}`.replace(/\/+/g, '/');
-      const entry = rowMap.get(key) || {
-        key,
-        path: key,
-        parentPath: parentPathFor(key),
-        name: depth === 0 ? `/${clean[depth]}` : clean[depth],
-        label: depth === 0 ? `/${clean[depth]}` : clean[depth],
-        count: 0,
-        primitiveCount: 0,
-        depth,
-        source: meta.source || source,
-        type: depth === 0 ? 'ZONE' : 'NODE',
-        childCount: 0,
-        hasChildren: false,
-        manifestOnly: true,
-      };
+      const entry = rowMap.get(key) || { key, path: key, parentPath: parentPathFor(key), name: depth === 0 ? `/${clean[depth]}` : clean[depth], label: depth === 0 ? `/${clean[depth]}` : clean[depth], count: 0, primitiveCount: 0, depth, source: meta.source || source, type: depth === 0 ? 'ZONE' : 'NODE', childCount: 0, hasChildren: false, manifestOnly: true };
       entry.count += count;
       entry.primitiveCount += count;
       entry.manifestOnly = entry.manifestOnly && count <= 0;
@@ -84,18 +70,15 @@ export function buildSelectorRows({ instructions = [], manifestNodes = [], fileN
       rowMap.set(key, entry);
     }
   };
-
   for (const node of Array.isArray(manifestNodes) ? manifestNodes : []) {
     const path = manifestPathForNode(node, manifestContext.byId);
     const parts = syntheticTreePartsFromPath(path, { fileName, name: node.name || node.attributes?.NAME });
     if (parts.length && !isGenericOnly(parts)) addTreeParts(parts, 0, { source: 'preload-manifest', type: node.type || node.kind || node.attributes?.TYPE || 'NODE' });
   }
-
   for (const instruction of instructions) {
     const parts = selectorTreePartsForInstruction(instruction, { fileName, manifestContext });
     addTreeParts(parts, 1, { source: 'instructions', type: instruction?.type || instruction?.kind || 'NODE' });
   }
-
   let rows = [...rowMap.values()].filter((row) => row.depth <= MAX_LEVEL && (row.count > 0 || row.source === 'preload-manifest'));
   rows = removeGenericRows(rows);
   rollChildren(rows);
@@ -111,18 +94,7 @@ function selectorTreePartsForInstruction(instruction = {}, { fileName = '', mani
   const raw = recoverRvmDeepSourcePathFromInstruction(instruction, { fileName });
   const manifestPath = manifestContext ? manifestPathForInstruction(instruction, manifestContext) : '';
   const manifest = recoverDeepRvmSourcePathFromCandidates([manifestPath], { fileName });
-  const candidateValues = [
-    raw?.displayPath,
-    manifest?.displayPath,
-    instruction.sourcePath,
-    instruction.reviewName,
-    instruction.displayName,
-    instruction.sourceName,
-    instruction.name,
-    instruction.attributes?.RVM_OWNER_PATH,
-    instruction.attributes?.RVM_REVIEW_PATH,
-    instruction.attributes?.REVIEW_NAME,
-  ];
+  const candidateValues = [raw?.displayPath, manifest?.displayPath, instruction.sourcePath, instruction.reviewName, instruction.displayName, instruction.sourceName, instruction.name, instruction.attributes?.RVM_OWNER_PATH, instruction.attributes?.RVM_REVIEW_PATH, instruction.attributes?.REVIEW_NAME];
   let best = [];
   let bestScore = -Infinity;
   for (const value of candidateValues) {
@@ -197,17 +169,7 @@ function compactTreeParts(parts = []) {
   return out;
 }
 
-function preferParentZones(rows = []) {
-  const roots = rows.filter((row) => row.depth === 0);
-  if (!roots.length) return rows;
-  const parentRoots = new Set();
-  for (const root of roots) {
-    const compact = collapseHyphenRoot(root.name || root.key);
-    if (compact && compact !== cleanPart(root.name || root.key)) parentRoots.add(`/${compact}`);
-  }
-  return rows;
-}
-
+function preferParentZones(rows = []) { return rows; }
 function collapseHyphenRoot(value = '') { return cleanPart(value); }
 
 export function applyZoneDensitySelection(instructionSet = {}, selection = {}) {
@@ -215,19 +177,32 @@ export function applyZoneDensitySelection(instructionSet = {}, selection = {}) {
   const selectedZones = selection.mode === 'selected' ? (selection.selectedZones || []).map(String) : [];
   const selectedNormalized = selectedZones.map((zone) => normalizeSelectorKey(zone)).filter(Boolean);
   const zoneDensities = selection.zoneDensities || {};
+  const defaultQuality = normalizeQuality(selection.defaultQuality || storageGet(GLOBAL_DETAIL_STORAGE_KEY, storageGet(LEGACY_GLOBAL_DETAIL_STORAGE_KEY, 'full')));
   const kept = [];
   let skippedByZone = 0;
-  let skippedByDensity = 0;
+  let skippedByHiddenQuality = 0;
+  const qualityCounts = {};
   for (const instruction of original) {
     const path = normalizeSelectorKey(selectorKeyForInstruction(instruction));
     const match = selectedNormalized.length ? bestZoneMatch(path, selectedNormalized) : '';
     if (selectedNormalized.length && !match) { skippedByZone += 1; continue; }
     const originalZone = selectedZones[selectedNormalized.indexOf(match)] || match;
-    const percent = positiveDensity(zoneDensities[originalZone] ?? zoneDensities[match] ?? storageGet(GLOBAL_DETAIL_STORAGE_KEY, '100'));
-    if (shouldKeepInstruction(instruction, percent)) kept.push({ ...instruction, rvmZoneDensityPercent: percent, rvmZoneDensityPath: originalZone || '' });
-    else skippedByDensity += 1;
+    const quality = normalizeQuality(zoneDensities[originalZone] ?? zoneDensities[match] ?? defaultQuality);
+    if (quality === 'hidden') { skippedByHiddenQuality += 1; continue; }
+    qualityCounts[quality] = (qualityCounts[quality] || 0) + 1;
+    kept.push({
+      ...instruction,
+      rvmVisualQuality: quality,
+      rvmZoneDensityPercent: qualityToLegacyPercent(quality),
+      rvmZoneVisualQualityPath: originalZone || '',
+      attributes: {
+        ...(instruction.attributes || {}),
+        RVM_BROWSER_VISUAL_QUALITY: quality,
+        RVM_BROWSER_VISUAL_QUALITY_LABEL: qualityLabel(quality),
+        RVM_BROWSER_VISUAL_QUALITY_SOURCE: 'large-load-dialog',
+      },
+    });
   }
-  kept.sort((a, b) => Number(b.rvmZoneDensityPercent || 100) - Number(a.rvmZoneDensityPercent || 100));
   return {
     ...instructionSet,
     instructions: kept,
@@ -235,20 +210,24 @@ export function applyZoneDensitySelection(instructionSet = {}, selection = {}) {
     diagnostics: {
       ...(instructionSet.diagnostics || {}),
       zoneSelection: {
-        schemaVersion: 'browser-rvm-zone-selection/v6-synthetic-navis-density-tree',
+        schemaVersion: 'browser-rvm-zone-selection/v7-visual-quality-tree',
         selectorSource: selection.selectorSource || 'instructions+synthetic',
         enabled: true,
         mode: selectedZones.length ? 'selected' : 'all',
         selectedZones,
         zoneDensities,
+        visualQualityByZone: zoneDensities,
+        defaultVisualQuality: defaultQuality,
         maxDisplayedHierarchyLevel: MAX_LEVEL,
         originalInstructionCount: original.length,
         afterZoneInstructionCount: original.length - skippedByZone,
         renderedInstructionCount: kept.length,
         skippedByZoneCount: skippedByZone,
-        skippedByDensityCount: skippedByDensity,
+        skippedByDensityCount: 0,
+        skippedByVisualQualityHiddenCount: skippedByHiddenQuality,
+        visualQualityCounts: qualityCounts,
       },
-      lodSelection: { schemaVersion: 'browser-rvm-lod/v2-per-zone-density', perZoneDensity: true, defaultDetailPercent: Number(storageGet(GLOBAL_DETAIL_STORAGE_KEY, '100')) || 100, skippedByLodCount: skippedByDensity },
+      lodSelection: { schemaVersion: 'browser-rvm-visual-quality/v1-per-zone', perZoneVisualQuality: true, defaultVisualQuality: defaultQuality, skippedByLodCount: skippedByHiddenQuality, hiddenByQualityCount: skippedByHiddenQuality },
     },
   };
 }
@@ -261,14 +240,15 @@ async function showZoneDensitySelector({ file, rows, instructionCount }) {
     const previous = new Set(loadJson(ZONE_STORAGE_KEY, []).filter((key) => rowKeys.has(key)));
     const previousDensities = loadJson(DENSITY_STORAGE_KEY, {});
     const defaultDensities = defaultDensityMap(rows, previousDensities);
+    const defaultQuality = normalizeQuality(storageGet(GLOBAL_DETAIL_STORAGE_KEY, storageGet(LEGACY_GLOBAL_DETAIL_STORAGE_KEY, 'light')));
     const defaultSelected = previous.size ? previous : new Set(topRows(rows, 3).map((row) => row.key));
     const overlay = document.createElement('div');
     overlay.className = 'rvm-zone-density-overlay';
     overlay.innerHTML = `
-      <div class="rvm-zone-density-modal" role="dialog" aria-modal="true" aria-label="Select RVM hierarchy zones and density">
+      <div class="rvm-zone-density-modal" role="dialog" aria-modal="true" aria-label="Select RVM hierarchy zones and Visual Quality">
         <div class="rvm-zone-density-head">
-          <div><b>Large RVM load: choose hierarchy zones to render</b><p>${esc(file?.name || 'RVM file')} has ${instructionCount} render instruction(s). Selector source: ${esc(rows.selectorSource || 'instructions')}. Synthetic Navis-style tree, first ${MAX_LEVEL + 1} levels only.</p></div>
-          <button type="button" data-zone-density-action="all">Render all</button>
+          <div><b>Large RVM load: choose hierarchy zones and Visual Quality</b><p>${esc(file?.name || 'RVM file')} has ${instructionCount} render instruction(s). Visual Quality keeps selected objects in the model; Light/Skeleton reduce visual effort instead of hiding 50% of objects. Unchecked zones are not loaded.</p></div>
+          <button type="button" data-zone-density-action="all">Load all Full</button>
         </div>
         <div class="rvm-zone-density-toolbar">
           <input data-zone-density-search placeholder="Search top hierarchy zones…" />
@@ -277,10 +257,11 @@ async function showZoneDensitySelector({ file, rows, instructionCount }) {
           <button type="button" data-zone-density-action="expand-all">Expand all</button>
           <button type="button" data-zone-density-action="collapse-all">Collapse</button>
           <button type="button" data-zone-density-action="clear">Clear</button>
-          <label>Default <select data-zone-density-default>${densityOptionsHtml(Number(storageGet(GLOBAL_DETAIL_STORAGE_KEY, '100')))}</select></label>
+          <label>Default Visual Quality <select data-zone-density-default>${densityOptionsHtml(defaultQuality)}</select></label>
         </div>
-        <div class="rvm-zone-density-list" role="tree">${rows.map((row) => zoneRowHtml(row, defaultSelected.has(row.key), defaultDensities[row.key] || 100)).join('')}</div>
-        <div class="rvm-zone-density-foot"><span data-zone-density-summary></span><button type="button" class="rvm-zone-density-primary" data-zone-density-action="selected">Render selected zones</button></div>
+        <div class="rvm-zone-density-help"><b>Visual Quality:</b> Full = native geometry, Medium = basic material, Light = wireframe/low opacity, Skeleton = diagnostic skeleton, Hidden = actual hide.</div>
+        <div class="rvm-zone-density-list" role="tree">${rows.map((row) => zoneRowHtml(row, defaultSelected.has(row.key), defaultDensities[row.key] || defaultQuality)).join('')}</div>
+        <div class="rvm-zone-density-foot"><span data-zone-density-summary></span><button type="button" class="rvm-zone-density-primary" data-zone-density-action="selected">Load selected zones</button></div>
       </div>`;
     document.body.appendChild(overlay);
     const summary = overlay.querySelector('[data-zone-density-summary]');
@@ -288,7 +269,8 @@ async function showZoneDensitySelector({ file, rows, instructionCount }) {
     const boxes = () => [...overlay.querySelectorAll('[data-zone-density-key]')];
     const visibleRows = () => [...overlay.querySelectorAll('[data-zone-density-row]')].filter((row) => row.style.display !== 'none');
     const selectedZones = () => boxes().filter((box) => box.checked).map((box) => box.dataset.zoneDensityKey);
-    const densities = () => Object.fromEntries([...overlay.querySelectorAll('[data-zone-density-percent]')].map((select) => [select.dataset.zoneDensityPercent, Number(select.value || 100)]));
+    const densities = () => Object.fromEntries([...overlay.querySelectorAll('[data-zone-density-percent]')].map((select) => [select.dataset.zoneDensityPercent, normalizeQuality(select.value || 'full')]));
+    const defaultValue = () => normalizeQuality(overlay.querySelector('[data-zone-density-default]')?.value || defaultQuality);
     const updateTreeState = () => {
       const allRows = [...overlay.querySelectorAll('[data-zone-density-row]')];
       for (const row of allRows.sort((a, b) => Number(b.dataset.zoneDepth || 0) - Number(a.dataset.zoneDepth || 0))) {
@@ -319,7 +301,14 @@ async function showZoneDensitySelector({ file, rows, instructionCount }) {
         if (button) button.textContent = row.dataset.zoneExpanded === 'true' ? '−' : '+';
       });
     };
-    const update = () => { updateTreeState(); applyVisibility(); const picked = selectedZones(); if (summary) summary.textContent = `${picked.length} zone(s) selected · ${visibleRows().length} visible · per-zone density supports 25/50/100/250%`; const primary = overlay.querySelector('[data-zone-density-action="selected"]'); if (primary) primary.disabled = picked.length === 0; };
+    const update = () => {
+      updateTreeState();
+      applyVisibility();
+      const picked = selectedZones();
+      if (summary) summary.textContent = `${picked.length} zone(s) selected · ${visibleRows().length} visible · Visual Quality: Full/Medium/Light/Skeleton/Hidden`;
+      const primary = overlay.querySelector('[data-zone-density-action="selected"]');
+      if (primary) primary.disabled = picked.length === 0;
+    };
     const close = (payload) => { overlay.remove(); resolve(payload); };
     overlay.addEventListener('change', (event) => {
       const box = event.target?.closest?.('[data-zone-density-key]');
@@ -335,9 +324,9 @@ async function showZoneDensitySelector({ file, rows, instructionCount }) {
         });
       }
       const def = event.target?.closest?.('[data-zone-density-default]');
-      if (def) { storageSet(GLOBAL_DETAIL_STORAGE_KEY, def.value || '100'); overlay.querySelectorAll('[data-zone-density-percent]').forEach((select) => { if (!select.dataset.zoneDensityTouched) select.value = def.value || '100'; }); }
-      const percent = event.target?.closest?.('[data-zone-density-percent]');
-      if (percent) percent.dataset.zoneDensityTouched = 'true';
+      if (def) { storageSet(GLOBAL_DETAIL_STORAGE_KEY, normalizeQuality(def.value || 'full')); overlay.querySelectorAll('[data-zone-density-percent]').forEach((select) => { if (!select.dataset.zoneDensityTouched) select.value = def.value || 'full'; }); }
+      const quality = event.target?.closest?.('[data-zone-density-percent]');
+      if (quality) quality.dataset.zoneDensityTouched = 'true';
       update();
     });
     overlay.addEventListener('click', (event) => {
@@ -346,12 +335,12 @@ async function showZoneDensitySelector({ file, rows, instructionCount }) {
       const action = event.target?.closest?.('[data-zone-density-action]')?.dataset.zoneDensityAction;
       if (!action) return;
       event.preventDefault();
-      if (action === 'all') close({ mode: 'all', selectedZones: [], zoneDensities: {}, selectorSource: rows.selectorSource || 'instructions+synthetic' });
+      if (action === 'all') close({ mode: 'all', selectedZones: [], zoneDensities: {}, defaultQuality: 'full', selectorSource: rows.selectorSource || 'instructions+synthetic' });
       if (action === 'clear') { boxes().forEach((box) => { box.checked = false; box.indeterminate = false; }); update(); }
       if (action === 'check-visible') { visibleRows().forEach((row) => { const box = row.querySelector('[data-zone-density-key]'); if (box) box.checked = true; }); update(); }
       if (action === 'top3') { const top = new Set(topRows(rows, 3).map((row) => row.key)); boxes().forEach((box) => { box.checked = top.has(box.dataset.zoneDensityKey); }); update(); }
       if (action === 'expand-all' || action === 'collapse-all') { overlay.querySelectorAll('[data-zone-density-row]').forEach((row) => { row.dataset.zoneExpanded = action === 'expand-all' ? 'true' : 'false'; }); update(); }
-      if (action === 'selected') { const picked = selectedZones(); const zoneDensities = densities(); storageSet(ZONE_STORAGE_KEY, JSON.stringify(picked)); storageSet(DENSITY_STORAGE_KEY, JSON.stringify(zoneDensities)); close({ mode: 'selected', selectedZones: picked, zoneDensities, selectorSource: rows.selectorSource || 'instructions+synthetic' }); }
+      if (action === 'selected') { const picked = selectedZones(); const zoneDensities = densities(); storageSet(ZONE_STORAGE_KEY, JSON.stringify(picked)); storageSet(DENSITY_STORAGE_KEY, JSON.stringify(zoneDensities)); close({ mode: 'selected', selectedZones: picked, zoneDensities, defaultQuality: defaultValue(), selectorSource: rows.selectorSource || 'instructions+synthetic' }); }
     });
     search?.addEventListener('input', update);
     update();
@@ -367,7 +356,7 @@ function zoneRowHtml(row, checked, density) {
     <input type="checkbox" data-zone-density-key="${esc(row.key)}" ${checked ? 'checked' : ''} />
     <span class="rvm-zone-density-name" title="${esc(row.key)}"><span class="rvm-zone-density-indent"></span>${esc(label)}</span>
     <span class="rvm-zone-density-count">${Number(row.count || 0)}</span>
-    <select data-zone-density-percent="${esc(row.key)}" title="Render density for ${esc(row.key)}">${densityOptionsHtml(density)}</select>
+    <select data-zone-density-percent="${esc(row.key)}" title="Visual Quality for ${esc(row.key)}">${densityOptionsHtml(density)}</select>
   </div>`;
 }
 
@@ -385,11 +374,10 @@ function rollChildren(rows = []) { const byKey = new Map(rows.map((row) => [row.
 function removeGenericRows(rows = []) { const hasRealRoot = rows.some((row) => row.depth === 0 && !GENERIC_BUCKETS.has(cleanPart(row.name || row.key).toUpperCase())); return hasRealRoot ? rows.filter((row) => !(row.depth === 0 && GENERIC_BUCKETS.has(cleanPart(row.name || row.key).toUpperCase()))) : rows; }
 function limitRowsByTopZones(rows = [], max = MAX_SELECTOR_ROWS) { const top = rows.filter((row) => row.depth === 0).sort((a, b) => sortZoneRows(a, b)); const allowed = new Set(); for (const row of top) { allowed.add(row.key); for (const child of rows.filter((item) => item.key !== row.key && item.key.startsWith(`${row.key}/`)).sort((a, b) => rowOrder(a, b))) allowed.add(child.key); if (allowed.size >= max) break; } return rows.filter((row) => allowed.has(row.key)).sort((a, b) => rowOrder(a, b)).slice(0, max); }
 function isAncestorExpanded(row, allRows) { const parent = row.dataset.zoneParent || ''; if (!parent) return true; const parentRow = allRows.find((item) => item.dataset.zonePath === parent); if (!parentRow || parentRow.dataset.zoneExpanded !== 'true') return false; return isAncestorExpanded(parentRow, allRows); }
-function shouldKeepInstruction(instruction = {}, percent = 100) { if (percent >= 100) return true; const type = String(instruction.type || '').toUpperCase(); const primitive = String(instruction.renderPrimitive || instruction.kind || '').toUpperCase(); if (type === 'SUPPORT' || primitive.includes('SUPPORT') || primitive.includes('CYLINDER') || type === 'PIPE') return true; const factor = percent >= 50 ? 2 : 4; return stableHash(`${selectorKeyForInstruction(instruction)}|${instruction.displayName}|${primitive}`) % factor === 0; }
 function bestZoneMatch(path, zones) { let best = ''; for (const zone of zones) if (path === zone || path.startsWith(`${zone}/`)) if (zone.length > best.length) best = zone; return best; }
 function normalizeSelectorKey(path = '') { return `/${String(path || '').split('/').filter(Boolean).join('/')}`.toLowerCase().replace(/\/+/g, '/').replace(/\/$/, ''); }
 function topRows(rows = [], count = 3) { return rows.filter((row) => Number(row.depth || 0) === 0).sort((a, b) => Number(b.count || 0) - Number(a.count || 0) || a.key.localeCompare(b.key)).slice(0, count); }
-function defaultDensityMap(rows = [], saved = {}) { const out = {}; for (const row of rows) out[row.key] = positiveDensity(saved[row.key] || storageGet(GLOBAL_DETAIL_STORAGE_KEY, '100')); return out; }
+function defaultDensityMap(rows = [], saved = {}) { const out = {}; for (const row of rows) out[row.key] = normalizeQuality(saved[row.key] || storageGet(GLOBAL_DETAIL_STORAGE_KEY, storageGet(LEGACY_GLOBAL_DETAIL_STORAGE_KEY, 'light'))); return out; }
 function parentPathFor(path = '') { const parts = String(path || '').split('/').filter(Boolean); return parts.length <= 1 ? '' : `/${parts.slice(0, -1).join('/')}`; }
 function sortZoneRows(a, b) { return Number(b.count || 0) - Number(a.count || 0) || String(a.key).localeCompare(String(b.key), undefined, { numeric: true, sensitivity: 'base' }); }
 function rowOrder(a, b) { const partsA = String(a.key || '').split('/').filter(Boolean); const partsB = String(b.key || '').split('/').filter(Boolean); const len = Math.min(partsA.length, partsB.length); for (let i = 0; i < len; i += 1) { const cmp = partsA[i].localeCompare(partsB[i], undefined, { numeric: true, sensitivity: 'base' }); if (cmp) return cmp; } return partsA.length - partsB.length; }
@@ -397,14 +385,15 @@ function scoreSelectorParts(parts = [], value = '') { let score = parts.length *
 function isGenericOnly(parts = []) { return parts.length === 1 && GENERIC_BUCKETS.has(String(parts[0]).toUpperCase()); }
 function isPlantLikePart(part = '') { const text = cleanPart(part); return /^[A-Z]{2,}[-_]\d+/i.test(text) || /\bCU[-_](CI|SU|PI)\b/i.test(text) || /^[A-Z0-9]+[-_][A-Z0-9]+[-_][A-Z0-9]+/i.test(text); }
 function cleanPart(value = '') { return String(value || '').replace(/^\/+|\/+$/g, '').trim(); }
-function densityOptionsHtml(current) { return DENSITY_OPTIONS.map((value) => `<option value="${value}" ${Number(current) === value ? 'selected' : ''}>${value}%</option>`).join(''); }
-function statusForSelection(file, zone = {}) { return zone?.enabled ? `Loaded ${file?.name || 'RVM'} zone mode ${zone.mode}: ${zone.renderedInstructionCount}/${zone.originalInstructionCount} instructions after zone/density filtering.` : ''; }
+function densityOptionsHtml(current) { const quality = normalizeQuality(current); return QUALITY_OPTIONS.map((value) => `<option value="${value}" ${quality === value ? 'selected' : ''}>${qualityLabel(value)}</option>`).join(''); }
+function qualityLabel(value) { const q = normalizeQuality(value); return q === 'full' ? 'Full' : q === 'medium' ? 'Medium' : q === 'light' ? 'Light' : q === 'skeleton' ? 'Skeleton' : 'Hidden'; }
+function normalizeQuality(value) { const text = String(value || '').trim().toLowerCase(); if (text === '250' || text === '100' || text === 'full') return 'full'; if (text === '75' || text === 'medium') return 'medium'; if (text === '50' || text === 'light') return 'light'; if (text === '25' || text === 'skeleton') return 'skeleton'; if (text === '0' || text === 'hidden' || text === 'hide' || text === 'off') return 'hidden'; return QUALITY_OPTIONS.includes(text) ? text : 'full'; }
+function qualityToLegacyPercent(value) { const q = normalizeQuality(value); return q === 'full' ? 100 : q === 'medium' ? 75 : q === 'light' ? 50 : q === 'skeleton' ? 25 : 0; }
+function statusForSelection(file, zone = {}) { return zone?.enabled ? `Loaded ${file?.name || 'RVM'} zone mode ${zone.mode}: ${zone.renderedInstructionCount}/${zone.originalInstructionCount} instructions after zone filtering; Visual Quality ${zone.defaultVisualQuality || 'full'}.` : ''; }
 function setStatus(root, message) { if (!message) return; const el = root?.querySelector?.('#rvm-sb-msg'); if (el) el.textContent = message; }
 function loadJson(key, fallback) { try { const parsed = JSON.parse(localStorage.getItem(key) || ''); return parsed ?? fallback; } catch { return fallback; } }
 function storageGet(key, fallback = '') { try { return localStorage.getItem(key) || fallback; } catch { return fallback; } }
 function storageSet(key, value) { try { localStorage.setItem(key, value); } catch {} }
-function positiveDensity(value) { const n = Number(value); return DENSITY_OPTIONS.includes(n) ? n : 100; }
-function stableHash(text = '') { let hash = 2166136261; for (let i = 0; i < text.length; i += 1) { hash ^= text.charCodeAt(i); hash = Math.imul(hash, 16777619); } return Math.abs(hash >>> 0); }
 function esc(value) { return String(value ?? '').replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch])); }
 
 function injectStyles() {
@@ -415,7 +404,7 @@ function injectStyles() {
     .rvm-zone-density-overlay{position:fixed;inset:0;background:rgba(2,6,23,.70);display:grid;place-items:center;z-index:99999;color:#e8f3ff;font-family:system-ui,sans-serif}
     .rvm-zone-density-modal{width:min(1040px,calc(100vw - 40px));max-height:min(820px,calc(100vh - 40px));background:#101827;border:1px solid rgba(126,190,255,.36);border-radius:14px;box-shadow:0 30px 80px rgba(0,0,0,.58);display:flex;flex-direction:column;overflow:hidden}
     .rvm-zone-density-head,.rvm-zone-density-toolbar,.rvm-zone-density-foot{display:flex;gap:10px;align-items:center;padding:12px;border-bottom:1px solid rgba(126,190,255,.18)}
-    .rvm-zone-density-head{justify-content:space-between}.rvm-zone-density-head p{margin:4px 0 0;color:#9fb4d2;font-size:12px}.rvm-zone-density-toolbar input{flex:1;min-width:180px}.rvm-zone-density-toolbar input,.rvm-zone-density-toolbar select,.rvm-zone-density-row select{background:#0b1220;color:#e8f3ff;border:1px solid rgba(126,190,255,.28);border-radius:8px;padding:6px 8px}.rvm-zone-density-head button,.rvm-zone-density-toolbar button,.rvm-zone-density-primary{background:#1d4ed8;color:#fff;border:1px solid rgba(147,197,253,.45);border-radius:8px;padding:7px 10px;cursor:pointer}.rvm-zone-density-list{overflow:auto;padding:8px;min-height:300px}.rvm-zone-density-row{display:grid;grid-template-columns:28px 26px minmax(360px,1fr) 86px 86px;gap:8px;align-items:center;padding:5px 8px;margin:2px 0;border:1px solid rgba(126,190,255,.10);border-radius:8px;background:rgba(15,23,42,.65)}.rvm-zone-density-row:hover{border-color:rgba(126,190,255,.35);background:rgba(30,41,59,.72)}.rvm-zone-density-toggle{height:22px;border-radius:6px;border:1px solid rgba(126,190,255,.25);background:#0b1220;color:#dbeafe;cursor:pointer}.rvm-zone-density-toggle:disabled{opacity:.35;cursor:default}.rvm-zone-density-name{padding-left:calc(var(--zone-depth) * 24px);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.rvm-zone-density-count{font-variant-numeric:tabular-nums;text-align:right;color:#b6c9e8}.rvm-zone-density-foot{border-top:1px solid rgba(126,190,255,.18);border-bottom:0;justify-content:space-between;color:#b6c9e8}.rvm-zone-density-primary:disabled{opacity:.45;cursor:not-allowed}
+    .rvm-zone-density-head{justify-content:space-between}.rvm-zone-density-head p{margin:4px 0 0;color:#9fb4d2;font-size:12px}.rvm-zone-density-toolbar{flex-wrap:wrap}.rvm-zone-density-toolbar input{flex:1;min-width:180px}.rvm-zone-density-toolbar input,.rvm-zone-density-toolbar select,.rvm-zone-density-row select{background:#0b1220;color:#e8f3ff;border:1px solid rgba(126,190,255,.28);border-radius:8px;padding:6px 8px}.rvm-zone-density-head button,.rvm-zone-density-toolbar button,.rvm-zone-density-primary{background:#1d4ed8;color:#fff;border:1px solid rgba(147,197,253,.45);border-radius:8px;padding:7px 10px;cursor:pointer}.rvm-zone-density-help{padding:8px 12px;color:#b6c9e8;border-bottom:1px solid rgba(126,190,255,.14);background:rgba(15,23,42,.42);font-size:12px}.rvm-zone-density-list{overflow:auto;padding:8px;min-height:300px}.rvm-zone-density-row{display:grid;grid-template-columns:28px 26px minmax(360px,1fr) 86px 132px;gap:8px;align-items:center;padding:5px 8px;margin:2px 0;border:1px solid rgba(126,190,255,.10);border-radius:8px;background:rgba(15,23,42,.65)}.rvm-zone-density-row:hover{border-color:rgba(126,190,255,.35);background:rgba(30,41,59,.72)}.rvm-zone-density-toggle{height:22px;border-radius:6px;border:1px solid rgba(126,190,255,.25);background:#0b1220;color:#dbeafe;cursor:pointer}.rvm-zone-density-toggle:disabled{opacity:.35;cursor:default}.rvm-zone-density-name{padding-left:calc(var(--zone-depth) * 24px);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.rvm-zone-density-count{font-variant-numeric:tabular-nums;text-align:right;color:#b6c9e8}.rvm-zone-density-foot{border-top:1px solid rgba(126,190,255,.18);border-bottom:0;justify-content:space-between;color:#b6c9e8}.rvm-zone-density-primary:disabled{opacity:.45;cursor:not-allowed}
   `;
   document.head.appendChild(style);
 }
