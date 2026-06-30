@@ -44,6 +44,29 @@
   scrollbar-color: rgba(109, 150, 202, 0.75) rgba(10, 18, 30, 0.55);
 }
 
+/* UX: compact hierarchy text; reduce tree typography by roughly 2px. */
+.rvm-tab-root #rvm-tree,
+.rvm-tab-root #rvm-tree .rvm-tree-node,
+.rvm-tab-root #rvm-tree .rvm-navis-select,
+.rvm-tab-root #rvm-tree .rvm-navis-label,
+.rvm-tab-root #rvm-tree .rvm-tree-label,
+.rvm-tab-root #rvm-tree [data-rvm-tree-label] {
+  font-size: 9px !important;
+  line-height: 1.15 !important;
+}
+
+.rvm-tab-root #rvm-tree .rvm-kind,
+.rvm-tab-root #rvm-tree .rvm-tree-count,
+.rvm-tab-root #rvm-tree .rvm-tree-path {
+  font-size: 8px !important;
+  line-height: 1.1 !important;
+}
+
+.rvm-tab-root #rvm-tree .rvm-navis-select,
+.rvm-tab-root #rvm-tree .rvm-tree-node {
+  min-height: 20px !important;
+}
+
 .rvm-tab-root .viewer-statusbar {
   flex-shrink: 0;
 }
