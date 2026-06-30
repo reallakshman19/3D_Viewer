@@ -9,11 +9,18 @@ import { renderXmlCompareLogScreenHtml } from './XmlCompareLogScreen.js';
 export const XML_COMPARE_WORKSPACE_SHELL_SCHEMA='xml-compare-workspace-shell/v4';
 
 let loadDiagnosticsPromise=null;
+let loadSamplePickersPromise=null;
 
 function loadTabDiagnostics(){
   if(typeof document==='undefined')return;
   if(loadDiagnosticsPromise)return;
   loadDiagnosticsPromise=import('../tabs/xml-compare-load-diagnostics-runtime.js?v=20260628-xml-compare-load-diagnostics-3').catch(()=>null);
+}
+
+function loadSamplePickers(){
+  if(typeof document==='undefined')return;
+  if(loadSamplePickersPromise)return;
+  loadSamplePickersPromise=import('../tabs/xml-compare-enriched-sample-pickers.js?v=20260630-enriched-sample-pickers-1').catch(()=>null);
 }
 
 const esc=(v)=>String(v??'')
@@ -56,6 +63,7 @@ export function renderXmlCompareWorkspaceShellHtml({
   manualConnectors=[]
 }={}){
   loadTabDiagnostics();
+  loadSamplePickers();
   const manualState=createManualState(manualConnectors,navStates);
   return `<section class="xml-compare-workspace-shell is-rebuilt" data-xml-compare-workspace-shell>
     <div class="xml-compare-workspace-grid is-two-canvas">
