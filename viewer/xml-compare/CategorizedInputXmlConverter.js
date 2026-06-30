@@ -20,9 +20,7 @@ function attrsOf(tag=''){
   String(tag).replace(/([A-Za-z_][\w:.-]*)\s*=\s*("([^"]*)"|'([^']*)')/g,(_,key,_q,dq,sq)=>{out[key]=dq??sq??'';return _;});
   return out;
 }
-function attrText(attrs={}){return Object.entries(attrs).map(([k,v])=>`${k}="${esc(v)}"`).join(' ');}
 function openName(tag=''){return clean(tag).match(/^<\/?\s*([A-Za-z_][\w:.-]*)/)?.[1]||'';}
-function firstAttr(tag='',name=''){return attrsOf(tag)[name]||'';}
 function elementKey(attrs={}){return `${normalizeNode(attrs.FROM_NODE)}->${normalizeNode(attrs.TO_NODE)}`;}
 function lineId(attrs={}){return clean(attrs.LINE_ID||attrs['PIPELINE-REFERENCE']||'UNSPECIFIED_LINE');}
 function splitPipingElements(xml=''){
@@ -93,6 +91,11 @@ function categorizedElementXml(elementXml='',nodeBlockMap=new Map()){
   blocks.push(`    <OriginalElement><![CDATA[${cdata(elementXml)}]]></OriginalElement>`);
   return {line,xml:`  <Element fromNode="${esc(from)}" toNode="${esc(to)}" elementKey="${esc(key)}">\n${blocks.filter(Boolean).join('\n')}\n  </Element>`};
 }
+function categorizedExternalBlocks(categorizedText=''){
+  const unique=new Map();
+  for(const tagName of Object.keys(NODE_BLOCKS))for(const block of splitLooseBlocks(categorizedText,tagName))unique.set(clean(block),clean(block));
+  return [...unique.values()];
+}
 export function inputXmlToCategorizedInputXml(xmlText='',{sourceName='InputXML'}={}){
   const nodeBlockMap=nodeBlocks(xmlText);
   const byLine=new Map();
@@ -104,7 +107,8 @@ export function categorizedInputXmlToInputXml(categorizedText=''){
   const originals=[];
   const re=/<OriginalElement>\s*<!\[CDATA\[([\s\S]*?)\]\]>\s*<\/OriginalElement>/gi;
   let match;while((match=re.exec(String(categorizedText))))originals.push(match[1].replaceAll(']]]]><![CDATA[>',']]>'));
-  if(originals.length)return `<?xml version="1.0" encoding="UTF-8"?>\n<CAESARII XML_TYPE="Input">\n<PIPINGMODEL>\n${originals.join('\n')}\n</PIPINGMODEL>\n</CAESARII>\n`;
+  const external=categorizedExternalBlocks(categorizedText);
+  if(originals.length)return `<?xml version="1.0" encoding="UTF-8"?>\n<CAESARII XML_TYPE="Input">\n<PIPINGMODEL>\n${[...originals,...external].join('\n')}\n</PIPINGMODEL>\n</CAESARII>\n`;
   return String(categorizedText).replace(/<CategorizedInputXML[\s\S]*?>|<\/CategorizedInputXML>/gi,'');
 }
 export function convertCategorizedInputXml(text='',direction='input-to-categorized',options={}){
@@ -114,4 +118,4 @@ export function categorizedFileName(name='',direction='input-to-categorized'){
   const base=clean(name||'input.xml').replace(/\.(xml|txt)$/i,'');
   return direction==='categorized-to-input'?`${base}_inputxml.xml`:`${base}_categorized_enriched.xml`;
 }
-export const _test=Object.freeze({attrsOf,splitPipingElements,splitLooseBlocks,nodeBlocks,inputXmlToCategorizedInputXml,categorizedInputXmlToInputXml,categorizedFileName});
+export const _test=Object.freeze({attrsOf,splitPipingElements,splitLooseBlocks,nodeBlocks,categorizedExternalBlocks,inputXmlToCategorizedInputXml,categorizedInputXmlToInputXml,categorizedFileName});
