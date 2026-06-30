@@ -1,4 +1,5 @@
 import { parseRvmArrayBuffer as parseTransformRvmArrayBuffer } from './BrowserRvmTransformParser.js?v=20260620-rvm-facetgroup-1';
+import { buildNativeRvmContainerHierarchy } from './BrowserRvmNativeContainerHierarchy.js?v=20260630-native-container-hierarchy-1';
 import {
   BROWSER_RVM_GEOMETRY_CONTRACT_VERSION,
   BROWSER_RVM_GEOMETRY_QUALITY_VERSION,
@@ -19,7 +20,8 @@ export {
 
 export async function parseRvmArrayBuffer(arrayBuffer, options = {}) {
   const parsed = await parseTransformRvmArrayBuffer(arrayBuffer, options);
-  const hierarchy = groupRvmOwnerHierarchy(parsed.hierarchy || []);
+  const nativeHierarchy = buildNativeRvmContainerHierarchy(parsed.hierarchy || [], arrayBuffer, options);
+  const hierarchy = nativeHierarchy.applied ? nativeHierarchy.hierarchy : groupRvmOwnerHierarchy(parsed.hierarchy || []);
   const repaired = repairTransformRenderContracts(hierarchy);
   return {
     ...parsed,
@@ -31,13 +33,15 @@ export async function parseRvmArrayBuffer(arrayBuffer, options = {}) {
       hierarchyTransformSchemaVersion: BROWSER_RVM_HIERARCHY_TRANSFORM_SCHEMA,
       hierarchySchemaVersion: BROWSER_RVM_HIERARCHY_SCHEMA,
       hierarchyGrouped: repaired.hierarchy[0]?.attributes?.BROWSER_RVM_HIERARCHY_GROUPED === 'true',
-      hierarchyGroupCount: Number(repaired.hierarchy[0]?.attributes?.BROWSER_RVM_HIERARCHY_GROUP_COUNT || 0),
-      primitiveSemantics: 'owner-name-and-rhbg-prim-code-map-cpp-mat3x4-facetgroup',
+      hierarchyGroupCount: Number(repaired.hierarchy[0]?.attributes?.BROWSER_RVM_HIERARCHY_GROUP_COUNT || repaired.hierarchy[0]?.attributes?.BROWSER_RVM_NATIVE_CONTAINER_COUNT || 0),
+      primitiveSemantics: nativeHierarchy.applied ? 'native-cntb-cnte-container-tree-cpp-mat3x4-facetgroup' : 'owner-name-and-rhbg-prim-code-map-cpp-mat3x4-facetgroup',
       primitiveSemanticsVersion: BROWSER_RVM_PRIMITIVE_SEMANTICS_VERSION,
       geometryQualityVersion: BROWSER_RVM_GEOMETRY_QUALITY_VERSION,
       geometryContractVersion: BROWSER_RVM_GEOMETRY_CONTRACT_VERSION,
       browserRvmTransformAwareHierarchy: true,
       browserRvmCppMat3x4Hierarchy: true,
+      browserRvmNativeContainerHierarchy: Boolean(nativeHierarchy.applied),
+      browserRvmNativeContainerHierarchyDiagnostics: nativeHierarchy.diagnostics,
       browserRvmScaleSafeContract: repaired.diagnostics
     }
   };
@@ -130,17 +134,18 @@ function flattenHierarchyToIndex(roots) {
   const nodes = [];
   let counter = 1;
   const walk = (node, parentCanonicalObjectId = null, path = '') => {
+    const attrs = node?.attributes || {};
     const name = String(node?.name || `Node-${counter}`);
-    const canonicalObjectId = path ? `${path}/${name}` : name;
+    const canonicalObjectId = String(attrs.RVM_CANONICAL_PATH || attrs.RVM_CANONICAL_ID || '').trim() || (path ? `${path}/${name}` : name);
     nodes.push({
       id: `BROWSER-RVM-${counter++}`,
-      sourceObjectId: canonicalObjectId,
+      sourceObjectId: attrs.RVM_BYTE_OFFSET || canonicalObjectId,
       canonicalObjectId,
       renderObjectIds: [canonicalObjectId],
       name,
-      kind: String(node?.type || node?.attributes?.TYPE || 'UNKNOWN').toUpperCase(),
+      kind: String(node?.type || attrs.TYPE || 'UNKNOWN').toUpperCase(),
       parentCanonicalObjectId,
-      attributes: stringifyAttributes(node?.attributes || {})
+      attributes: stringifyAttributes(attrs)
     });
     for (const child of Array.isArray(node?.children) ? node.children : []) walk(child, canonicalObjectId, canonicalObjectId);
   };

@@ -1,14 +1,15 @@
-import { parseRvmArrayBuffer } from './BrowserRvmHierarchyTransformParser.js?v=20260620-rvm-facetgroup-1';
+import { parseRvmArrayBuffer } from './BrowserRvmHierarchyTransformParser.js?v=20260630-native-container-hierarchy-1';
 import { enrichBrowserRvmHierarchyWithAtt } from './BrowserRvmAttEnricher.js';
 import { collectBrowserRvmRenderInstructions } from './BrowserRvmRenderContractAdapter.js';
 import { filterBrowserRvmRenderInstructions } from './BrowserRvmInstructionFilterV2.js?v=20260621-rvm-zero-geometry-1';
 
-// BrowserRvmHierarchyTransformParser.js?v=20260620-rvm-facetgroup-1 repairs transformed APOS/LPOS/HBOR contracts and decodes PRIM 11 facet-group payloads using the C++ parser layout.
-const DEFAULT_MANIFEST_NODE_LIMIT = 900;
+// BrowserRvmHierarchyTransformParser.js?v=20260630-native-container-hierarchy-1 repairs transformed APOS/LPOS/HBOR contracts,
+// decodes PRIM 11 facet-group payloads using the C++ parser layout, and preserves native CNTB/CNTE container hierarchy.
+const DEFAULT_MANIFEST_NODE_LIMIT = 5000;
 const DEFAULT_MAX_PRIMITIVE_BOX_SIDE = 50000;
 const KEEP_ATTRIBUTE_NAMES = new Set([
   'TYPE', 'NAME', 'RVM_PRIMITIVE_KIND', 'RVM_PRIMITIVE_KIND_NAME', 'RVM_BYTE_OFFSET', 'RVM_PRIMITIVE_CODE', 'RVM_RECORD_TAG',
-  'RVM_OWNER_NAME', 'RVM_OWNER_PATH', 'BROWSER_PARSE_METHOD', 'BROWSER_PARSE_CONFIDENCE', 'RVM_PRIM_TRANSFORM_APPLIED',
+  'RVM_OWNER_NAME', 'RVM_OWNER_PATH', 'RVM_CANONICAL_PATH', 'RVM_NATIVE_CONTAINER_PARENT', 'BROWSER_PARSE_METHOD', 'BROWSER_PARSE_CONFIDENCE', 'RVM_PRIM_TRANSFORM_APPLIED',
   'RVM_PRIM_TRANSFORM_SCHEMA', 'RVM_TRANSFORM_3X4', 'RVM_LOCAL_AXIS', 'RVM_TRANSFORM_COLUMN_SCALES', 'RVM_TRANSFORM_LAYOUT', 'RVM_NATIVE_PRIMITIVE_PARAMS',
   'RVM_NATIVE_PARAMS_DECODED', 'RVM_RADIUS_SCALE_SOURCE', 'RVM_RADIUS_SCALED_BY_TRANSFORM', 'RVM_FACET_GROUP_DECODED',
   'RVM_FACET_GROUP_POLYGON_COUNT', 'RVM_FACET_GROUP_CONTOUR_COUNT', 'RVM_FACET_GROUP_VERTEX_COUNT', 'RVM_BROWSER_RENDER_PRIMITIVE',
@@ -49,7 +50,8 @@ self.onmessage = async (event) => {
     measure('renderInstructionGeneration', t);
 
     t = mark();
-    const manifestNodes = flattenHierarchyForManifest(attEnrichment.hierarchy || [], positiveInteger(options.manifestNodeLimit, DEFAULT_MANIFEST_NODE_LIMIT));
+    const manifestLimit = positiveInteger(options.manifestNodeLimit, DEFAULT_MANIFEST_NODE_LIMIT);
+    const manifestNodes = flattenHierarchyForManifest(attEnrichment.hierarchy || [], manifestLimit);
     measure('manifest', t);
 
     self.postMessage({
@@ -87,7 +89,9 @@ self.onmessage = async (event) => {
           browserRvmFacetGroupVertexCount: parsed.diagnostics?.rvmFacetGroupVertexCount || 0,
           browserRvmFacetGroupDecodeSkippedCount: parsed.diagnostics?.rvmFacetGroupDecodeSkippedCount || 0,
           browserRvmPrimitiveKindCounts: parsed.diagnostics?.rvmPrimitiveKindCounts || {},
-          browserRvmManifestNodeLimit: positiveInteger(options.manifestNodeLimit, DEFAULT_MANIFEST_NODE_LIMIT),
+          browserRvmManifestNodeLimit: manifestLimit,
+          browserRvmManifestNodeTruncated: Boolean(manifestNodes.truncated),
+          browserRvmManifestOriginalNodeCount: manifestNodes.originalNodeCount || manifestNodes.nodes?.length || 0,
           browserRvmWorkerTimingsMs: timings,
           browserRvmAtt: attEnrichment.diagnostics,
           browserRvmRenderInstructions: compactInstructionSet.diagnostics
@@ -163,22 +167,28 @@ function summarizeInstructions(instructions = []) {
 
 function flattenHierarchyForManifest(roots = [], limit = DEFAULT_MANIFEST_NODE_LIMIT) {
   const out = [];
-  const visit = (node, parentCanonicalObjectId = '') => {
-    if (!node || out.length >= limit) return;
+  let originalNodeCount = 0;
+  const visit = (node, parentCanonicalObjectId = '', path = '') => {
+    if (!node) return;
+    originalNodeCount += 1;
+    if (out.length >= limit) return;
     const attrs = node.attributes || {};
-    const canonicalObjectId = attrs.RVM_OWNER_PATH || attrs.RVM_OWNER_NAME || attrs.NAME || node.name || `rvm-node-${out.length + 1}`;
+    const name = node.name || attrs.NAME || `rvm-node-${originalNodeCount}`;
+    const canonicalObjectId = attrs.RVM_CANONICAL_PATH || attrs.RVM_CANONICAL_ID || attrs.RVM_OWNER_PATH || attrs.RVM_OWNER_NAME || (path ? `${path}/${name}` : name);
     out.push({
       canonicalObjectId,
       parentCanonicalObjectId,
       sourceObjectId: attrs.RVM_BYTE_OFFSET || canonicalObjectId,
-      name: node.name || attrs.NAME || canonicalObjectId,
+      name,
       type: node.type || attrs.TYPE || 'RVM',
       kind: attrs.RVM_PRIMITIVE_KIND || attrs.RVM_BROWSER_PRIMITIVE_CLASS || node.type || attrs.TYPE || 'RVM',
       attributes: attrs,
     });
-    for (const child of Array.isArray(node.children) ? node.children : []) visit(child, canonicalObjectId);
+    for (const child of Array.isArray(node.children) ? node.children : []) visit(child, canonicalObjectId, canonicalObjectId);
   };
-  for (const root of Array.isArray(roots) ? roots : [roots]) visit(root, '');
+  for (const root of Array.isArray(roots) ? roots : [roots]) visit(root, '', '');
+  out.truncated = originalNodeCount > out.length;
+  out.originalNodeCount = originalNodeCount;
   return out;
 }
 
