@@ -10,6 +10,7 @@ export const XML_COMPARE_WORKSPACE_SHELL_SCHEMA='xml-compare-workspace-shell/v4'
 
 let loadDiagnosticsPromise=null;
 let loadSamplePickersPromise=null;
+let loadCategorizedConverterPromise=null;
 
 function loadTabDiagnostics(){
   if(typeof document==='undefined')return;
@@ -21,6 +22,12 @@ function loadSamplePickers(){
   if(typeof document==='undefined')return;
   if(loadSamplePickersPromise)return;
   loadSamplePickersPromise=import('../tabs/xml-compare-enriched-sample-pickers.js?v=20260630-enriched-sample-pickers-2').catch(()=>null);
+}
+
+function loadCategorizedConverter(){
+  if(typeof document==='undefined')return;
+  if(loadCategorizedConverterPromise)return;
+  loadCategorizedConverterPromise=import('../tabs/xml-compare-categorized-converter-runtime.js?v=20260630-categorized-converter-1').catch(()=>null);
 }
 
 const esc=(v)=>String(v??'')
@@ -64,6 +71,7 @@ export function renderXmlCompareWorkspaceShellHtml({
 }={}){
   loadTabDiagnostics();
   loadSamplePickers();
+  loadCategorizedConverter();
   const manualState=createManualState(manualConnectors,navStates);
   return `<section class="xml-compare-workspace-shell is-rebuilt" data-xml-compare-workspace-shell>
     <div class="xml-compare-workspace-grid is-two-canvas">
