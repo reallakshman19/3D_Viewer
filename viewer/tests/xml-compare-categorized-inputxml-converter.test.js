@@ -3,13 +3,14 @@ import assert from 'node:assert/strict';
 import { categorizedFileName, categorizedInputXmlToInputXml, inputXmlToCategorizedInputXml } from '../xml-compare/CategorizedInputXmlConverter.js';
 
 const input=`<CAESARII><PIPINGMODEL>
-<PIPINGELEMENT FROM_NODE="30.000000" TO_NODE="35.000000" FROM_NAME="N30" TO_NAME="N35" LINE_ID="/L/B1" DELTA_X="0.000000" DELTA_Y="0.000000" DELTA_Z="-1542.290000" DIAMETER="114.300000" WALL_THICK="6.000000" INSUL_THICK="20.000000" TEMP_EXP_C1="120.000000" PRESSURE1="700.000000" HYDRO_PRESSURE="5.000000" MATERIAL_NUM="106.000000" MATERIAL_NAME="A106 B" CORR_ALLOW="0.000000" FROM_GLOBAL_X="23227.580" TO_GLOBAL_Z="-22442.290">
+<PIPINGELEMENT FROM_NODE="30.000000" TO_NODE="35.000000" FROM_NAME="N30" TO_NAME="N35" LINE_ID="/L/B1" DELTA_X="0.000000" DELTA_Y="0.000000" DELTA_Z="-1542.290000" DIAMETER="114.300000" WALL_THICK="6.000000" INSUL_THICK="20.000000" TEMP_EXP_C1="120.000000" TEMP_EXP_C2="-1.010100" PRESSURE1="700.000000" HYDRO_PRESSURE="-1.010100" INSUL_DENSITY="-1.010100" FLUID_DENSITY="-1.010100" MATERIAL_NUM="106.000000" MATERIAL_NAME="A106 B" CORR_ALLOW="-1.010100" MILL_TOL_PLUS="-1.010100" MILL_TOL_MINUS="-1.010100" SEAM_WELD="-1.010100" FROM_GLOBAL_X="23227.580" TO_GLOBAL_Z="-22442.290">
 <BEND RADIUS="114.299995" TYPE="-1.010100" ANGLE1="45.000000" NODE1="219.000000"/>
 <SIF SIF_NUM="1" NODE="70.000000" TYPE="3.000000" SIF_IN="-1.010100"/>
 <SIF SIF_NUM="2" NODE="-1.010100" TYPE="-1.010100" SIF_IN="-1.010100" SIF_OUT="-1.010100"/>
 <RIGID WEIGHT="186.808350" TYPE="Flange Pair"/>
 <FLANGES METHOD="NC-3658.3" BOLT_CIRCLE_DIA="119.000000"/>
 </PIPINGELEMENT>
+<PIPINGELEMENT FROM_NODE="35.000000" TO_NODE="36.000000" LINE_ID="/L/B1" DELTA_X="-1.010100" DELTA_Y="-1.010100" DELTA_Z="-1.010100" DIAMETER="-1.010100" WALL_THICK="-1.010100" INSUL_THICK="-1.010100" TEMP_EXP_C1="-1.010100" TEMP_EXP_C2="-1.010100" PRESSURE1="-1.010100" PRESSURE2="-1.010100" HYDRO_PRESSURE="-1.010100" INSUL_DENSITY="-1.010100" FLUID_DENSITY="-1.010100" MATERIAL_NAME="-1.010100" CORR_ALLOW="-1.010100" MILL_TOL_PLUS="-1.010100" MILL_TOL_MINUS="-1.010100" SEAM_WELD="-1.010100">
 <RESTRAINT NUM="1" NODE="30.000000" TYPE="7.000000" STIFFNESS="0.000000" GAP="5.000000" FRIC_COEF="0.300000" CNODE="-1.010100" TAG="PS-30" GUID="G-30"/>
 <RESTRAINT NUM="2" NODE="-1.010100" TYPE="-1.010100" STIFFNESS="-1.010100" GAP="-1.010100" FRIC_COEF="-1.010100" CNODE="-1.010100" XCOSINE="0.000000" YCOSINE="0.000000" ZCOSINE="0.000000" TAG="" GUID=""/>
 <DISPLACEMENTS DISP_NUM="1" NODE_NUM="30.000000"><VECTOR NUMBER="1" DX="-75.000000" DY="0.000000" DZ="5.000000"/></DISPLACEMENTS>
@@ -36,23 +37,36 @@ assert.match(categorized,/DisplacementBlock/);
 assert.match(categorized,/ForceMomentBlock/);
 assert.match(categorized,/MiscBlock/);
 assert.match(categorized,/OriginalElement/);
-assert.match(categorized,/OriginalDocument/);
+assert.doesNotMatch(categorized,/OriginalDocument/);
 assert.match(categorized,/TEMP_EXP_C1/);
 assert.match(categorized,/PRESSURE1/);
+assert.doesNotMatch(categorized,/<TEMP_EXP_C2>-1\.010100<\/TEMP_EXP_C2>/);
+assert.doesNotMatch(categorized,/<HYDRO_PRESSURE>-1\.010100<\/HYDRO_PRESSURE>/);
+assert.doesNotMatch(categorized,/<INSUL_DENSITY>-1\.010100<\/INSUL_DENSITY>/);
+assert.doesNotMatch(categorized,/<FLUID_DENSITY>-1\.010100<\/FLUID_DENSITY>/);
+assert.doesNotMatch(categorized,/<CORR_ALLOW>-1\.010100<\/CORR_ALLOW>/);
+assert.doesNotMatch(categorized,/<MILL_TOL_PLUS>-1\.010100<\/MILL_TOL_PLUS>/);
+assert.doesNotMatch(categorized,/<MILL_TOL_MINUS>-1\.010100<\/MILL_TOL_MINUS>/);
+assert.doesNotMatch(categorized,/<SEAM_WELD>-1\.010100<\/SEAM_WELD>/);
+assert.doesNotMatch(categorized,/<DIAMETER>-1\.010100<\/DIAMETER>/);
 assert.match(categorized,/<SIF SIF_NUM="1"/);
 assert.doesNotMatch(categorized,/<SIF SIF_NUM="2"/);
 assert.doesNotMatch(categorized,/<RESTRAINT NUM="2"/);
 assert.doesNotMatch(categorized,/<DISPLACEMENTS DISP_NUM="2"/);
 assert.doesNotMatch(categorized,/<FORCESMOMENTS FORCMNT_NUM="2"/);
 assert.doesNotMatch(categorized,/<AllowableStressBlock>/);
+assert.equal((categorized.match(/<Element /g)||[]).length,2,'open-tag-only PIPINGELEMENT rows remain visible as elements');
 
 const roundTrip=categorizedInputXmlToInputXml(categorized);
-assert.equal(roundTrip,input);
-assert.match(roundTrip,/<SIF SIF_NUM="2" NODE="-1\.010100"/);
-assert.match(roundTrip,/<RESTRAINT NUM="2" NODE="-1\.010100"/);
-assert.match(roundTrip,/<DISPLACEMENTS DISP_NUM="2" NODE_NUM="-1\.010100"/);
-assert.match(roundTrip,/<FORCESMOMENTS FORCMNT_NUM="2" NODE_NUM="-1\.010100"/);
-assert.match(roundTrip,/<ALLOWABLESTRESS COLD_ALLOW="-1\.010100"/);
+assert.match(roundTrip,/PIPINGELEMENT FROM_NODE="30\.000000" TO_NODE="35\.000000"/);
+assert.match(roundTrip,/<SIF SIF_NUM="2" NODE="-1\.010100"/,'OriginalElement preserves element-level child placeholders for reverse conversion');
+assert.match(roundTrip,/<RESTRAINT NUM="1" NODE="30\.000000"/);
+assert.match(roundTrip,/<DISPLACEMENTS DISP_NUM="1" NODE_NUM="30\.000000"/);
+assert.match(roundTrip,/<FORCESMOMENTS FORCMNT_NUM="1" NODE_NUM="30\.000000"/);
+assert.doesNotMatch(roundTrip,/<RESTRAINT NUM="2" NODE="-1\.010100"/);
+assert.doesNotMatch(roundTrip,/<DISPLACEMENTS DISP_NUM="2" NODE_NUM="-1\.010100"/);
+assert.doesNotMatch(roundTrip,/<FORCESMOMENTS FORCMNT_NUM="2" NODE_NUM="-1\.010100"/);
+assert.doesNotMatch(roundTrip,/<ALLOWABLESTRESS COLD_ALLOW="-1\.010100"/);
 assert.equal(categorizedFileName('sample.txt','input-to-categorized'),'sample_categorized_enriched.xml');
 assert.equal(categorizedFileName('sample_categorized_enriched.xml','categorized-to-input'),'sample_categorized_enriched_inputxml.xml');
 
