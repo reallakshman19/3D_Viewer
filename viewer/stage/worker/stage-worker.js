@@ -1,5 +1,4 @@
 import {
-  createStageWorkerResult,
   createStageWorkerRuntime,
   runStageWorkerJob,
 } from './StageWorkerRuntime.js';
@@ -12,5 +11,5 @@ const runtime = createStageWorkerRuntime({
 
 self.onmessage = async (event) => {
   const result = await runStageWorkerJob(runtime, event.data);
-  self.postMessage({ kind: 'stage-worker-result', result: createStageWorkerResult({ result }) });
+  self.postMessage({ kind: 'stage-worker-result', result });
 };
