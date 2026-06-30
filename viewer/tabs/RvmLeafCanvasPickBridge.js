@@ -3,10 +3,12 @@ import { emit } from '../core/event-bus.js';
 import { RuntimeEvents } from '../contracts/runtime-events.js';
 
 const INSTALL_FLAG = Symbol.for('pcf-glb-rvm-leaf-canvas-pick-v2-navigation-safe');
-const VERSION = '20260622-rvm-leaf-canvas-pick-orbit-guard-2';
+const VERSION = '20260630-rvm-leaf-canvas-native-group-pick-1';
 const CLICK_TOLERANCE = 5;
 const SELECTED_COLOR = 0x60a5fa;
 const SELECTED_EMISSIVE = 0x2563eb;
+const MAX_NATIVE_OWNER_GROUP_OBJECTS = 500;
+const GROUP_SELECTABLE_TYPES = new Set(['SUPPORT', 'FLANGE', 'GASK', 'VALVE', 'ELBOW', 'BEND', 'TEE', 'OLET', 'REDUCER', 'NOZZLE', 'CAP', 'STRAINER', 'INSTRUMENT']);
 
 export function installRvmLeafCanvasPickBridge() {
   if (typeof document === 'undefined') return null;
@@ -105,13 +107,16 @@ function pickLeafObject(viewer, clientX, clientY) {
 function selectLeafObject(viewer, root, object, point, options = {}) {
   if (!object) return false;
   if (!options.additive) clearLeafSelection(viewer, root, { keepPanel: true });
-  applySelectedMaterial(object);
-  viewer._rvmCanvasSelectedMeshes = unique([...(viewer._rvmCanvasSelectedMeshes || []), object]);
-  const renderId = renderIdFor(object);
-  const canonicalId = canonicalIdFor(viewer, object, renderId);
-  try { viewer.selection?.selectByRenderObjectId?.(renderId, canonicalId, { additive: options.additive }); } catch (_) {}
-  emit(RuntimeEvents.RVM_NODE_SELECTED, { canonicalId, canonicalIds: [canonicalId].filter(Boolean), renderObjectIds: [renderId].filter(Boolean), leafObjectOnly: true });
-  renderDetails(root, object, point);
+  const selectionObjects = nativeOwnerGroupObjects(viewer, object);
+  for (const item of selectionObjects) applySelectedMaterial(item);
+  viewer._rvmActiveHierarchySelection = null;
+  viewer._rvmHierarchySelectedMeshes = [];
+  viewer._rvmCanvasSelectedMeshes = unique([...(viewer._rvmCanvasSelectedMeshes || []), ...selectionObjects]);
+  const renderIds = selectionObjects.map(renderIdFor).filter(Boolean);
+  const canonicalIds = selectionObjects.map((item, index) => canonicalIdFor(viewer, item, renderIds[index])).filter(Boolean);
+  try { viewer.selection?.selectByRenderObjectId?.(renderIds[0] || renderIdFor(object), canonicalIds[0] || canonicalIdFor(viewer, object, renderIdFor(object)), { additive: options.additive }); } catch (_) {}
+  emit(RuntimeEvents.RVM_NODE_SELECTED, { canonicalId: canonicalIds[0], canonicalIds, renderObjectIds: renderIds, leafObjectOnly: selectionObjects.length === 1, nativeOwnerGroupPick: selectionObjects.length > 1, objects: selectionObjects });
+  renderDetails(root, object, point, selectionObjects);
   updateSelectedCount(root, viewer._rvmCanvasSelectedMeshes.length);
   return true;
 }
@@ -120,6 +125,8 @@ function clearLeafSelection(viewer, root = null, options = {}) {
   const selected = Array.isArray(viewer?._rvmCanvasSelectedMeshes) ? viewer._rvmCanvasSelectedMeshes : [];
   for (const object of selected) restoreMaterial(object);
   viewer._rvmCanvasSelectedMeshes = [];
+  viewer._rvmHierarchySelectedMeshes = [];
+  viewer._rvmActiveHierarchySelection = null;
   try { viewer.selection?.clearSelection?.(); } catch (_) {}
   if (root) updateSelectedCount(root, 0);
   if (!options.keepPanel) {
@@ -128,26 +135,28 @@ function clearLeafSelection(viewer, root = null, options = {}) {
   }
 }
 
-function renderDetails(root, object, point) {
+function renderDetails(root, object, point, selectionObjects = [object]) {
   const panel = root?.querySelector?.('#rvm-attributes-panel');
   if (!panel) return;
   const data = object?.userData || {};
   const props = data.browserRvmProperties || {};
   const attrs = data.browserRvmAttributes || props.attributes || data.attributes || {};
-  const box = safeBox(object);
+  const box = safeBoxForObjects(selectionObjects);
   const size = box ? box.getSize(new THREE.Vector3()) : null;
+  const owner = nativeOwnerName(object);
   const rows = [
-    ['Picked', props.displayName || data.displayName || object?.name || object?.uuid || '-'],
-    ['Source path', props.sourcePath || data.sourcePath || '-'],
-    ['Type', props.type || data.type || attrs.TYPE || '-'],
+    ['Picked', selectionObjects.length > 1 && owner ? owner : (props.displayName || data.displayName || object?.name || object?.uuid || '-')],
+    ['Source path', attrs.RVM_OWNER_PATH || props.sourcePath || data.sourcePath || '-'],
+    ['Type', selectionObjects.length > 1 ? 'Group' : (props.type || data.type || attrs.TYPE || '-')],
     ['Kind', props.kind || data.kind || attrs.RVM_PRIMITIVE_KIND || '-'],
     ['Render primitive', props.effectiveRenderPrimitive || data.effectiveRenderPrimitive || data.renderKind || data.renderPrimitive || '-'],
-    ['Matched meshes', 1],
-    ['Selection mode', 'Leaf object'],
+    ['Matched meshes', selectionObjects.length],
+    ['Selection mode', selectionObjects.length > 1 ? 'Native RVM owner group' : 'Leaf object'],
     ['Size', size ? `${fmt(size.x)} × ${fmt(size.y)} × ${fmt(size.z)}` : '-'],
     ['Pick point', point ? `${fmt(point.x)}, ${fmt(point.y)}, ${fmt(point.z)}` : '-'],
   ];
-  const attrRows = Object.entries(attrs || {}).slice(0, 28).map(([key, value]) => [key, value]);
+  const groupAttrs = selectionObjects.length > 1 && owner ? { ...attrs, NAME: owner, TYPE: 'Group', RVM_GROUP_OBJECT_COUNT: String(selectionObjects.length) } : attrs;
+  const attrRows = Object.entries(groupAttrs || {}).slice(0, 28).map(([key, value]) => [key, value]);
   panel.innerHTML = `
     <div class="rvm-canvas-selection-card">
       <div class="rvm-tree-selection-title">Canvas selection</div>
@@ -212,6 +221,44 @@ function canonicalIdFor(viewer, object, renderId) {
     || renderId;
 }
 
+function attrsFor(object) {
+  const data = object?.userData || {};
+  const props = data.browserRvmProperties || {};
+  return data.browserRvmAttributes || props.attributes || data.attributes || {};
+}
+
+function nativeOwnerKey(object) {
+  const attrs = attrsFor(object);
+  return String(attrs.RVM_NATIVE_CONTAINER_PARENT || attrs.RVM_OWNER_PATH || '').trim();
+}
+
+function nativeOwnerName(object) {
+  const attrs = attrsFor(object);
+  return String(attrs.RVM_OWNER_NAME || attrs.RVM_REVIEW_NAME || '').trim();
+}
+
+function isComponentOwnerSelectable(object) {
+  const attrs = attrsFor(object);
+  const type = String(attrs.TYPE || object?.userData?.type || '').toUpperCase();
+  const owner = nativeOwnerName(object).toUpperCase();
+  if (GROUP_SELECTABLE_TYPES.has(type)) return true;
+  if (/^\/(PS|SL)-/.test(owner)) return true;
+  return /\b(FLANGE|GASK|VALVE|ELBOW|BEND|TEE|OLET|REDUCER|NOZZLE|CAP|STRAINER|SUPPORT|INSTRUMENT)\b/.test(owner);
+}
+
+function nativeOwnerGroupObjects(viewer, object) {
+  if (!isComponentOwnerSelectable(object)) return [object];
+  const key = nativeOwnerKey(object);
+  if (!viewer?.modelGroup || !key) return [object];
+  const out = [];
+  viewer.modelGroup.traverse?.((item) => {
+    if (out.length >= MAX_NATIVE_OWNER_GROUP_OBJECTS) return;
+    if (!(item?.isMesh || item?.isLine || item?.isLineSegments || item?.isPoints) || item.visible === false) return;
+    if (nativeOwnerKey(item) === key) out.push(item);
+  });
+  return out.length > 1 ? out : [object];
+}
+
 function currentMode(viewer) {
   return String(viewer?._rvmInteractionMode || viewer?._navMode || 'select').trim().toLowerCase();
 }
@@ -223,6 +270,16 @@ function safeBox(object) {
   } catch (_) {
     return null;
   }
+}
+
+function safeBoxForObjects(objects = []) {
+  const box = new THREE.Box3();
+  let any = false;
+  for (const object of objects) {
+    const item = safeBox(object);
+    if (item && !item.isEmpty()) { box.union(item); any = true; }
+  }
+  return any ? box : null;
 }
 
 function updateSelectedCount(root, count) {
