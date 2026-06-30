@@ -22,11 +22,13 @@ const input=`<CAESARII><PIPINGMODEL>
 
 const categorized=inputXmlToCategorizedInputXml(input,{sourceName:'sample.txt'});
 assert.match(categorized,/CategorizedInputXML/);
+assert.match(categorized,/schema="categorized-inputxml\/v2"/);
+assert.match(categorized,/<LineBlocks>/);
+assert.match(categorized,/<LineBlocks>[\s\S]*<ProcessBlock scope="line">/);
+assert.match(categorized,/<LineBlocks>[\s\S]*<MaterialBlock scope="line">/);
 assert.match(categorized,/NameBlock/);
 assert.match(categorized,/RouteGeometryBlock/);
 assert.match(categorized,/SectionDimensionBlock/);
-assert.match(categorized,/ProcessBlock/);
-assert.match(categorized,/MaterialBlock/);
 assert.match(categorized,/DerivedBlock/);
 assert.match(categorized,/DerivedCoordinateBlock/);
 assert.match(categorized,/BendBlock/);
@@ -62,6 +64,11 @@ assert.doesNotMatch(categorized,/<DISPLACEMENTS DISP_NUM="2"/);
 assert.doesNotMatch(categorized,/<FORCESMOMENTS FORCMNT_NUM="2"/);
 assert.doesNotMatch(categorized,/<AllowableStressBlock>/);
 assert.equal((categorized.match(/<Element /g)||[]).length,2,'open-tag-only PIPINGELEMENT rows remain visible as elements');
+
+const elementBodies=[...categorized.matchAll(/<Element\b[\s\S]*?<\/Element>/g)].map((match)=>match[0]);
+assert.ok(elementBodies.length>=2);
+assert.ok(elementBodies.every((body)=>!body.includes('<ProcessBlock')),'ProcessBlock must not be emitted inside Element');
+assert.ok(elementBodies.every((body)=>!body.includes('<MaterialBlock')),'MaterialBlock must not be emitted inside Element');
 
 const roundTrip=categorizedInputXmlToInputXml(categorized);
 assert.match(roundTrip,/PIPINGELEMENT FROM_NODE="30\.000000" TO_NODE="35\.000000"/);
