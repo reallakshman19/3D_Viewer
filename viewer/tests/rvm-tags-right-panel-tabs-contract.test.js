@@ -18,12 +18,18 @@ const renderer = read('tabs/viewer3d-rvm-tab-renderer.js');
 const deferredLoader = read('tabs/RvmDeferredBridgeLoader.js');
 const tagTools = read('tabs/RvmTagToolsBridge.js');
 const rightTabs = read('tabs/RvmRightPanelTabsBridge.js');
+const rightPartition = read('tabs/RvmRightPanelPartitionBridge.js');
+const dynamicCheckbox = read('tabs/RvmHierarchyDynamicChildCheckboxBridge.js');
 const workerFirst = read('rvm-viewer/RvmBrowserRvmWorkerFirstBridge.js');
 const tagStore = read('rvm/RvmTagXmlStore.js');
 
 assert.ok(renderer.includes('RvmRightPanelTabsBridge.js?v=20260629-rvm-right-panel-tabs-1'), 'renderer must eagerly install right-panel tabs');
 assert.ok(renderer.includes('RvmTagToolsBridge.js?v=20260630-rvm-tag-tools-2'), 'renderer must eagerly install tag tools');
 assert.ok(deferredLoader.includes("id: 'right-panel-tabs'"), 'deferred loader must retry right-panel tabs after model load');
+assert.ok(deferredLoader.includes("id: 'right-panel-partition'"), 'deferred loader must retry strict right-panel partition after model load');
+assert.ok(deferredLoader.includes('RvmRightPanelPartitionBridge.js?v=20260630-rvm-right-panel-partition-1'), 'deferred loader must import right-panel partition bridge with cache key');
+assert.ok(deferredLoader.includes("id: 'hierarchy-dynamic-child-checkbox'"), 'deferred loader must install dynamic child checkbox bridge after model load');
+assert.ok(deferredLoader.includes('RvmHierarchyDynamicChildCheckboxBridge.js?v=20260630-rvm-hierarchy-dynamic-child-checkbox-1'), 'deferred loader must cache-bust dynamic child checkbox bridge');
 assert.ok(deferredLoader.includes("id: 'tag-tools'"), 'deferred loader must retry tag tools after model load');
 
 assert.ok(rightTabs.includes('__PCF_GLB_RVM_RIGHT_PANEL_TABS__'), 'right-panel tabs must publish the requested global API');
@@ -35,6 +41,19 @@ for (const tabId of ["id: 'properties'", "id: 'tags'", "id: 'diagnostics'", "id:
   assert.ok(rightTabs.includes(tabId), `right-panel tabs must define stable tab ${tabId}`);
 }
 assert.ok(rightTabs.includes('panel.appendChild(node)'), 'right-panel tabs must move existing legacy nodes instead of cloning them');
+assert.ok(rightPartition.includes('RvmRightPanelPartitionBridge'), 'right partition bridge source must be readable');
+assert.ok(rightPartition.includes('20260630-rvm-right-panel-partition-1'), 'right partition bridge must expose version');
+assert.ok(rightPartition.includes('#rvm-tags-panel'), 'right partition bridge must explicitly route Tags panel');
+assert.ok(rightPartition.includes('#rvm-browser-parse-diagnostics'), 'right partition bridge must explicitly route browser diagnostics panel');
+assert.ok(rightPartition.includes('#rvm-attributes-panel'), 'right partition bridge must keep selected entity/properties separate');
+assert.ok(rightPartition.includes('sanitizeTab(root, \'tags\''), 'right partition bridge must sanitize accidental diagnostics inside Tags');
+assert.ok(rightPartition.includes('sanitizeTab(root, \'diagnostics\''), 'right partition bridge must sanitize accidental Tags inside Diagnostics');
+assert.ok(dynamicCheckbox.includes('20260630-rvm-hierarchy-dynamic-child-checkbox-1'), 'dynamic child checkbox bridge must expose version');
+assert.ok(dynamicCheckbox.includes('ensureRowCheckbox'), 'dynamic child checkbox bridge must inject missing row checkboxes');
+assert.ok(dynamicCheckbox.includes('onCheckboxChange'), 'dynamic child checkbox bridge must listen to checkbox changes');
+assert.ok(dynamicCheckbox.includes('querySelectorAll(\':scope li[data-node-id] [data-rvm-hierarchy-row-checkbox]\')'), 'dynamic child checkbox bridge must cascade selection to children');
+assert.ok(dynamicCheckbox.includes('indeterminate'), 'dynamic child checkbox bridge must maintain partial parent state');
+
 assert.ok(tab.includes('id="rvm-attributes-panel"'), 'RVM shell must preserve legacy attributes panel id');
 assert.ok(tab.includes('id="rvm-browser-parse-diagnostics"'), 'RVM shell must preserve legacy browser diagnostics id');
 
@@ -69,4 +88,4 @@ assert.ok(workerFirst.includes('class="rvm-tree-node"'), 'worker-first RVM tree 
 assert.ok(workerFirst.includes('data-rvm-visibility-toggle'), 'worker-first RVM tree must expose row visibility controls');
 assert.doesNotMatch(workerFirst, /class="rvm-tree-row"/, 'worker-first RVM tree must not revive legacy .rvm-tree-row buttons');
 
-console.log('RVM tag tools, right-panel tabs, and unified tree contracts passed');
+console.log('RVM tag tools, right-panel tabs/partition, dynamic child checkboxes, and unified tree contracts passed');
