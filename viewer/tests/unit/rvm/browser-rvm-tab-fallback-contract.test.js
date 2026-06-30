@@ -23,7 +23,7 @@ async function run() {
     'The RVM tab diagnostics version must identify the format-neutral shared source-kind path.'
   );
   assert.match(tabSource, /beforeRenderInstructions[\s\S]*__PCF_GLB_RVM_ZONE_LOD_LABELS__/, 'The direct RVM branch must pass the pre-render zone/LOD instruction hook.');
-  assert.match(tabSource, /buildFlatNodeTree[\s\S]*flat:\s*true/, 'The RVM tab must render manifest nodes as flat selectable rows before Navis hierarchy bridge upgrades it.');
+  assert.match(tabSource, /renderLoadedHierarchyTree\(root, payload, \{\s*limit:\s*RVM_TREE_RENDER_LIMIT,\s*recursive:\s*true,\s*sourceKind:\s*'rvm'/, 'The RVM tab must render native RVM parent/child hierarchy from manifest nodes.');
   assert.doesNotMatch(tabSource, /RvmSupportIndexAttributeBridge|RvmSupportSymbols|applyRvmSupportSymbolSettings|getRvmSupportSymbolSettings/, 'The RVM tab must not import retired support runtime/index/symbol engines.');
   assert.doesNotMatch(tabSource, /rvm-support-scale|rvm-support-labels|Support\s*<input/, 'The RVM tab shell must not expose retired support scale or support label controls.');
   assert.match(tabSource, /Embedded InputXML markers skipped/, 'The RVM diagnostics panel must expose skipped embedded InputXML support marker count.');
