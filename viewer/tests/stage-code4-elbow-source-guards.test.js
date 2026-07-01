@@ -33,7 +33,6 @@ const banned = [
   'code 11 complete',
   'Review parity',
   'Navis parity',
-  'GAS/RMSS evidence',
 ];
 
 function read(file) {
@@ -47,6 +46,7 @@ const preview = read('viewer/stage/render/StagePreviewGeometry.js');
 assert.ok(sample.includes('nativeCode: 4'));
 assert.ok(sample.includes('recordType: \'RVM_PRIMITIVE\''));
 assert.ok(sample.includes('not binary decoded'));
+assert.ok(sample.includes('not GAS/RMSS evidence'));
 assert.ok(plan.includes('STAGE_CODE4_ELBOW_NATIVE_PARAMS_REQUIRED'));
 assert.ok(plan.includes('hasCode4ElbowMetadata'));
 assert.ok(plan.includes('hasCompleteElbowParams'));
