@@ -10,6 +10,8 @@ const files = [
   'viewer/stage/ui/JsonViewerHierarchyTree.js',
   'viewer/stage/ui/JsonViewerPropertiesPanel.js',
   'viewer/stage/ui/JsonViewerDiagnosticsPanel.js',
+  'viewer/stage/worker/StageWorkerClient.js',
+  'viewer/stage/worker/StageWorkerJob.js',
   'viewer/tests/viewer3d-json-tab-shell.test.js',
 ];
 const guardedSourceFiles = files.filter((file) => !file.endsWith('.test.js'));
@@ -24,6 +26,7 @@ const blacklist = [
   'BrowserRvmTransformParser',
   'BrowserRvmHierarchyTransformParser',
   'three',
+  'indexedDB',
 ];
 
 function read(file) {
@@ -35,9 +38,11 @@ const rendererSource = read('viewer/tabs/viewer3d-json-tab-renderer.js');
 const shellSource = read('viewer/stage/ui/JsonViewerShell.js');
 const diagnosticsSource = read('viewer/stage/ui/JsonViewerDiagnosticsPanel.js');
 const propertiesSource = read('viewer/stage/ui/JsonViewerPropertiesPanel.js');
+const workerClientSource = read('viewer/stage/worker/StageWorkerClient.js');
+const workerJobSource = read('viewer/stage/worker/StageWorkerJob.js');
 const css = read('viewer/tabs/viewer3d-json-tab.css');
 const index = read('viewer/index.html');
-const combined = [tabSource, rendererSource, shellSource, diagnosticsSource, propertiesSource].join('\n');
+const combined = [tabSource, rendererSource, shellSource, diagnosticsSource, propertiesSource, workerClientSource, workerJobSource].join('\n');
 
 assert.match(combined, /3D Json Viewer/);
 assert.match(combined, /Open Stage JSON/);
@@ -47,13 +52,16 @@ assert.match(combined, /Phase 3: browser stage worker/);
 assert.match(combined, /validateRvmStageModel/);
 assert.match(tabSource + rendererSource, /RvmStageModelContract\.js/);
 assert.match(rendererSource, /sample-rvm-stage-model-v1\.js/);
+assert.match(rendererSource, /StageWorkerClient\.js/);
+assert.match(rendererSource, /StageWorkerJob\.js/);
+assert.match(rendererSource, /activeJobId/);
+assert.match(diagnosticsSource, /worker:/);
 assert.match(shellSource, /openRvmButton\.disabled = true/);
 assert.match(index, /3D Json Viewer/);
 
 for (const token of blacklist) {
   for (const file of guardedSourceFiles) assert.equal(read(file).includes(token), false, `${file} contains ${token}`);
 }
-
 for (const file of files) {
   const lineCount = read(file).split('\n').length;
   assert.ok(lineCount < 300, `${file} has ${lineCount} lines`);
@@ -63,11 +71,9 @@ assert.ok(css.split('\n').length < 300, 'CSS line count must stay under 300');
 for (const className of ['json-viewer-shell', 'json-viewer-toolbar', 'json-viewer-body', 'json-viewer-canvas-host', 'json-viewer-status-strip']) {
   assert.ok(css.includes(className), `CSS missing ${className}`);
 }
-
 for (const token of ['severityCounts', 'fallbackCounts', 'renderKindCounts', 'validation:']) {
   assert.ok(diagnosticsSource.includes(token), `Diagnostics missing ${token}`);
 }
-
 for (const token of ['confidence.geometry', 'confidence.semantic', 'primitive count', 'bboxWorld', 'renderPolicy']) {
   assert.ok(propertiesSource.includes(token), `Properties missing ${token}`);
 }
