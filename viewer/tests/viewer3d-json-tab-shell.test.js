@@ -47,8 +47,8 @@ const combined = [tabSource, rendererSource, shellSource, diagnosticsSource, pro
 assert.match(combined, /3D Json Viewer/);
 assert.match(combined, /Open Stage JSON/);
 assert.match(combined, /Load Sample/);
-assert.match(combined, /Open RVM/);
-assert.match(combined, /Phase 3: browser stage worker/);
+assert.match(combined, /Open RVM \(dry-run\)/);
+assert.match(combined, /preflight only/);
 assert.match(combined, /validateRvmStageModel/);
 assert.match(tabSource + rendererSource, /RvmStageModelContract\.js/);
 assert.match(rendererSource, /sample-rvm-stage-model-v1\.js/);
@@ -56,7 +56,9 @@ assert.match(rendererSource, /StageWorkerClient\.js/);
 assert.match(rendererSource, /StageWorkerJob\.js/);
 assert.match(rendererSource, /activeJobId/);
 assert.match(diagnosticsSource, /worker:/);
-assert.match(shellSource, /openRvmButton\.disabled = true/);
+assert.match(shellSource, /rvmFileInput/);
+assert.doesNotMatch(shellSource, /openRvmButton\.disabled = true/);
+assert.doesNotMatch(shellSource, /Loaded RVM/);
 assert.match(index, /3D Json Viewer/);
 
 for (const token of blacklist) {
