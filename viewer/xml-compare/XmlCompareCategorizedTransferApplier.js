@@ -2,9 +2,10 @@ export const XML_COMPARE_CATEGORIZED_TRANSFER_APPLIER_SCHEMA='xml-compare-catego
 
 const clean=(value)=>String(value??'').trim();
 const NODE_REF_ATTRS=Object.freeze(['NODE','NODE_NUM','nodeNumber','nodeRef']);
+const OPEN_TAG='(?:[^"\'>]|"[^"]*"|\'[^\']*\')*';
 
-function tagRe(tag=''){return new RegExp(`<${tag}\\b[^>]*(?:\\/>|>[\\s\\S]*?<\\/${tag}>)`,'i');}
-function tagReGlobal(tag=''){return new RegExp(`<${tag}\\b[^>]*(?:\\/>|>[\\s\\S]*?<\\/${tag}>)`,'gi');}
+function tagRe(tag=''){return new RegExp(`<${tag}\\b${OPEN_TAG}(?:\\/>|>[\\s\\S]*?<\\/${tag}>)`,'i');}
+function tagReGlobal(tag=''){return new RegExp(`<${tag}\\b${OPEN_TAG}(?:\\/>|>[\\s\\S]*?<\\/${tag}>)`,'gi');}
 function attrsOf(tag=''){
   const out={};
   String(tag).replace(/([A-Za-z_][\w:.-]*)\s*=\s*("([^"]*)"|'([^']*)')/g,(_,key,_q,dq,sq)=>{out[key]=dq??sq??'';return _;});
@@ -15,14 +16,14 @@ function elementAttrs(open=''){return attrsOf(open);}
 function elementKey(attrs={}){return clean(attrs.elementKey)||`${clean(attrs.fromNode||attrs.FROM_NODE)}->${clean(attrs.toNode||attrs.TO_NODE)}`;}
 function splitLines(xml=''){
   const text=String(xml??''),rows=[];
-  const re=/<Line\b[^>]*>[\s\S]*?<\/Line>/gi;
-  let match;while((match=re.exec(text)))rows.push({start:match.index,end:match.index+match[0].length,xml:match[0],open:match[0].match(/^<Line\b[^>]*>/i)?.[0]||''});
+  const re=new RegExp(`<Line\\b${OPEN_TAG}>[\\s\\S]*?<\\/Line>`,'gi');
+  let match;while((match=re.exec(text)))rows.push({start:match.index,end:match.index+match[0].length,xml:match[0],open:match[0].match(new RegExp(`^<Line\\b${OPEN_TAG}>`,'i'))?.[0]||''});
   return rows;
 }
 function splitElements(lineXml=''){
   const rows=[];
-  const re=/<Element\b[^>]*>[\s\S]*?<\/Element>/gi;
-  let match;while((match=re.exec(String(lineXml))))rows.push({start:match.index,end:match.index+match[0].length,xml:match[0],open:match[0].match(/^<Element\b[^>]*>/i)?.[0]||''});
+  const re=new RegExp(`<Element\\b${OPEN_TAG}>[\\s\\S]*?<\\/Element>`,'gi');
+  let match;while((match=re.exec(String(lineXml))))rows.push({start:match.index,end:match.index+match[0].length,xml:match[0],open:match[0].match(new RegExp(`^<Element\\b${OPEN_TAG}>`,'i'))?.[0]||''});
   return rows;
 }
 function findLine(xml='',lineId=''){
@@ -76,7 +77,7 @@ function updateLine(xml='',lineId='',updater=(line)=>line){
 }
 function ensureLineBlocks(lineXml=''){
   if(/<LineBlocks\b/i.test(lineXml))return lineXml;
-  return lineXml.replace(/(<Line\b[^>]*>)/i,'$1\n  <LineBlocks>\n  </LineBlocks>');
+  return lineXml.replace(new RegExp(`(<Line\\b${OPEN_TAG}>)`,'i'),'$1\n  <LineBlocks>\n  </LineBlocks>');
 }
 function updateLineBlocks(lineXml='',blocks=[],policy='replace'){
   let out=ensureLineBlocks(lineXml);
