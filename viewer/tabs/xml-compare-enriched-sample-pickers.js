@@ -3,8 +3,8 @@ import { loadXmlCompareEnrichedSample } from './xml-compare-enriched-samples-dat
 const STYLE_ID='xml-compare-enriched-sample-pickers-style';
 const ROW_ATTR='data-xml-compare-enriched-sample-pickers';
 const SAMPLES=Object.freeze({
-  a:{label:'BM_CII Source → Line-wise workflow',fileName:'BM_CII_INPUT_SOURCE_FILE_enriched.xml',title:'Open Source sample in Line-wise XML Enrichment workflow'},
-  b:{label:'BM_CII Target → Line-wise workflow',fileName:'BM_CII_LINEBASIS_INPUT_TARGET_FILE_enriched.xml',title:'Open Target sample in Line-wise XML Enrichment workflow'}
+  a:{label:'BM_CII Source → Line-wise workflow',fileName:'BM_CII_INPUT_SOURCE FILE_sideloaded_categorized_enriched.xml',title:'Open Source sample in Line-wise XML Enrichment workflow'},
+  b:{label:'BM_CII Target → Line-wise workflow',fileName:'BM_CII_LINEBASIS_INPUT_TARGET FILE_categorized_enriched.xml',title:'Open Target sample in Line-wise XML Enrichment workflow'}
 });
 
 function injectStyle(){
