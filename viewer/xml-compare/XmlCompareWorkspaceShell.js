@@ -6,7 +6,7 @@ import { renderXmlCompareDiagnosticsPanelHtml } from './XmlCompareDiagnosticsPan
 import { renderXmlCompareDebugPanelHtml } from './XmlCompareDebugPanel.js';
 import { renderXmlCompareLogScreenHtml } from './XmlCompareLogScreen.js';
 
-export const XML_COMPARE_WORKSPACE_SHELL_SCHEMA='xml-compare-workspace-shell/v11';
+export const XML_COMPARE_WORKSPACE_SHELL_SCHEMA='xml-compare-workspace-shell/v12';
 
 let loadDiagnosticsPromise=null;
 let loadSamplePickersPromise=null;
@@ -36,7 +36,7 @@ function loadCategorizedConverter(){
 function loadTableCategorizedXml(){
   if(typeof document==='undefined')return;
   if(loadTableCategorizedPromise)return;
-  loadTableCategorizedPromise=import('../tabs/xml-compare-table-categorized-runtime.js?v=20260701-table-categorized-engine-pilot-1').catch(()=>null);
+  loadTableCategorizedPromise=import('../tabs/xml-compare-table-categorized-runtime.js?v=20260701-table-categorized-export-handoff-1').catch(()=>null);
 }
 
 function loadToolbarGate(){
