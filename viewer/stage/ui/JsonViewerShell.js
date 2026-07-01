@@ -37,8 +37,8 @@ export function createJsonViewerShell(root) {
   fileInput.accept = '.json,application/json';
   fileInput.hidden = true;
 
-  const openRvmButton = button('json-viewer-button', 'Open RVM (dry-run)', 'open-rvm');
-  openRvmButton.title = 'Open RVM — preflight only; parser not implemented';
+  const openRvmButton = button('json-viewer-button', 'Open RVM', 'open-rvm');
+  openRvmButton.title = 'Open RVM through staged parser handoff when available; diagnostics are shown for unsupported binaries';
   const rvmFileInput = el('input', 'json-viewer-file-input');
   rvmFileInput.type = 'file';
   rvmFileInput.accept = '.rvm';
