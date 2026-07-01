@@ -1,11 +1,11 @@
 import { graphChildren } from './table-categorized-xml-graph-builder.js';
 import { CREATION_MODE_OPTIONS, LEVEL_TYPE_OPTIONS, previewResolver } from './table-categorized-xml-profile-designer.js';
-import { PS_MAPPING_TABLE_2_COORDINATE_LOOKUP_PROFILE, PS_MAPPING_TABLE_2_SHADOW_PROFILE } from './table-categorized-xml-pilot-profiles.js';
+import { PS_MAPPING_TABLE_2_SHADOW_PROFILE } from './table-categorized-xml-pilot-profiles.js';
 import { activeSource, sourceSummaryRows } from './table-categorized-xml-source-manager.js';
 import { renderTableCategorizedStagePreview } from './table-categorized-xml-stage-preview.js';
 import { hasBlockingValidation } from './table-categorized-xml-validation.js';
 
-export const TABLE_CATEGORIZED_XML_SHELL_SCHEMA='table-categorized-xml-shell/v10';
+export const TABLE_CATEGORIZED_XML_SHELL_SCHEMA='table-categorized-xml-shell/v11';
 export const TABLE_CATEGORIZED_XML_BUTTON_ATTR='data-xml-compare-table-categorized-open';
 export const TABLE_CATEGORIZED_XML_POPUP_ATTR='data-xml-compare-table-categorized-popup';
 export const TABLE_CATEGORIZED_XML_TABS=Object.freeze([
@@ -24,13 +24,6 @@ export const TABLE_CATEGORIZED_SETUP_TABS=Object.freeze([
   ['quality','🟨 Quality','Checks, warnings, and audit proof'],
   ['output','🟩 Output','XML, downloads, and canvas link'],
   ['recipe','⚙ Recipe','Save, load, version, and reuse mappings']
-]);
-const OPTION_GROUPS=Object.freeze([
-  ['source','🟦','Source','Raw tables and starting recipe',[['✓','Source Table','headers, rows, source id'],['✓','Recipe / Preset','Table 2, two-source, blank']]],
-  ['mapping','🟪','Mapping','How rows become graph data',[['●','Grouping Strategy','base key, coordinate group, both'],['✓','Column Mapping','primary key, type, value, coordinates'],['⚙','Rule Builder','trim, regex, concat, classifier, parser'],['⚙','Join Another Table','lookup / coordinate enrichment']]],
-  ['structure','🟧','Structure','Shape of the categorized graph',[['⚙','Model Split','one model, per source, per column'],['⚙','Graph Structure','family, item, feature, value levels'],['⚙','More Nested Levels','parent → many children → many details']]],
-  ['quality','🟨','Quality','Warnings, blockers, and audit proof',[['⚙','Checks','blockers, warnings, audit trail']]],
-  ['output','🟩','Output','XML, graph JSON, profile JSON, audit',[['⚙','XML Names','tags, attributes, text values'],['⚙','Export','XML, graph JSON, profile JSON, audit']]]
 ]);
 
 const esc=(value)=>String(value??'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll("'",'&#039;');
@@ -51,7 +44,7 @@ export function renderTableCategorizedXmlButtonHtml(){
 export function renderTableCategorizedXmlShellHtml(state={}){
   const view={activeTab:'source',sources:[],activeSourceId:'S1',profile:PS_MAPPING_TABLE_2_SHADOW_PROFILE,exportStatus:'',...state};
   view.activeSetupTab=state.activeSetupTab||setupTabForWorkflowTab(view.activeTab);
-  return `<div class="table-categorized-xml-backdrop" ${TABLE_CATEGORIZED_XML_POPUP_ATTR}><section class="table-categorized-xml-dialog" role="dialog" aria-modal="true" aria-label="Table to Categorized XML"><header><div><h3>Table to Categorized XML</h3><p>Build a categorized graph from any table. XML is only one export from that graph.</p></div><button type="button" data-table-categorized-close>Close</button></header>${renderTabStrip(view.activeTab)}${renderSetupTabStrip(view.activeSetupTab)}<main class="table-categorized-xml-body table-categorized-xml-with-preview"><section class="table-categorized-xml-workflow-pane">${renderSetupTabBody(view)}</section>${renderTableCategorizedStagePreview(view)}</main><footer><span>Tabs guide the major workflow; collapsible panels keep each step simple.</span><button type="button" data-table-categorized-close>Close</button></footer></section></div>`;
+  return `<div class="table-categorized-xml-backdrop" ${TABLE_CATEGORIZED_XML_POPUP_ATTR}><section class="table-categorized-xml-dialog" role="dialog" aria-modal="true" aria-label="Table to Categorized XML"><header><div><h3>Table to Categorized XML</h3><p>Build a categorized graph from any table. XML is only one export from that graph.</p></div><button type="button" data-table-categorized-close>Close</button></header>${renderTabStrip(view.activeTab)}${renderSetupTabStrip(view.activeSetupTab)}<main class="table-categorized-xml-body table-categorized-xml-with-preview"><section class="table-categorized-xml-workflow-pane">${renderSetupTabBody(view)}</section>${renderTableCategorizedStagePreview(view)}</main><footer><span>One UI, horizontal setup tabs, and collapsible details. The categorized graph remains the master model.</span><button type="button" data-table-categorized-close>Close</button></footer></section></div>`;
 }
 
 export function renderTabStrip(activeTab='source'){
@@ -81,57 +74,204 @@ export function renderTabBody(view={}){
   return renderSetupTabBody({...view,activeSetupTab:view.activeSetupTab||setupTabForWorkflowTab(view.activeTab)});
 }
 
-export function renderSourceSetup(view={}){
-  return renderSourceSetupPanels(view);
-}
+export function renderSourceSetup(view={}){return renderSourceSetupPanels(view);}
+export function renderLevelDesigner(view={}){return renderFieldsSetupPanels(view);}
 
 function renderSourceSetupPanels(view={}){
   const sources=view.sources?.length?view.sources:[view.source].filter(Boolean);
   const active=activeSource({sources,activeSourceId:view.activeSourceId})||view.source||{};
   const actions=`<div class="table-categorized-xml-actions"><button type="button" data-table-categorized-action="add-source">Add Table</button><button type="button" data-table-categorized-action="remove-source">Remove Table</button><button type="button" data-table-categorized-action="rename-source">Rename Table</button><button type="button" data-table-categorized-action="parse">Read Active Table</button><button type="button" data-table-categorized-action="clear">Clear Active Table</button><button type="button" data-table-categorized-action="load-sample">Load PS Mapping Table 2 Sample</button><button type="button" data-table-categorized-action="load-coordinate-sample">Load Coordinate Lookup Sample</button><button type="button" data-table-categorized-action="build-graph" ${(sources||[]).some((s)=>s.rows?.length)?'':'disabled'}>Build Preview Graph</button></div>`;
   const activeEditor=`<section class="table-categorized-xml-subcard"><h4>Active table</h4><label>Table ID<select data-table-categorized-active-source>${sources.map((s)=>`<option ${s.sourceId===active.sourceId?'selected':''}>${esc(s.sourceId)}</option>`).join('')}</select></label><label>Table Name<input data-table-categorized-source-name value="${esc(active.sourceName||'')}"></label><label>Paste table text<textarea data-table-categorized-source-text>${esc(active.sourceText||'')}</textarea></label><div class="table-categorized-xml-actions"><label class="table-categorized-file">Import CSV / TXT<input type="file" accept=".csv,.txt,text/csv,text/plain" data-table-categorized-file></label><button type="button" data-table-categorized-action="parse">Read Active Table</button></div></section>`;
-  return setupBody('source','Import Table','Add one or more table sources. Parsed rows stay as evidence; graph nodes are created later.',panel('source','Source Tables','Add, select, paste, and read table data.',renderSourceTable(sources,view.activeSourceId)+actions+activeEditor,true)+panel('source','Parsed Rows','Raw table preview exactly as imported.',renderRawPreview(active),true)+panel('source','Source Messages','Parse warnings and input messages.',renderDiagnostics(active),false));
+  return setupBody('source','Import Table','Add one or more table sources. Parsed rows stay as evidence; graph nodes are created later.',[
+    panel('source','Source Tables','Add, select, paste, and read table data.',renderSourceTable(sources,view.activeSourceId)+actions+activeEditor,true),
+    renderImportSettingsPanel(),
+    renderColumnCleanupPanel(),
+    panel('source','Parsed Rows','Raw table preview exactly as imported.',renderRawPreview(active),true),
+    panel('source','Source Messages','Parse warnings and input messages.',renderDiagnostics(active),false)
+  ].join(''));
 }
 
 function renderFieldsSetupPanels({sources=[],activeSourceId='S1'}={}){
-  return setupBody('fields','Fields','Map table columns to generic categorized graph roles. Full data typing is reserved for a later phase.',panel('fields','Column Mapping','Map table columns to generic graph roles.',renderColumnMappingSummary(sources,activeSourceId),true)+placeholderPanel('fields','Data Types / Units','Configure text, number, coordinate, and unit handling in a later phase.')+placeholderPanel('fields','Defaults / Blank Handling','Configure blank values, invalid values, and default fallbacks in a later phase.')+placeholderPanel('fields','Calculated Fields','Define derived columns and formulas in a later phase.'));
+  return setupBody('fields','Fields','Map table columns to generic categorized graph roles. Full data typing remains UI-shell only in this phase.',[
+    panel('fields','Column Mapping','Map table columns to generic graph roles.',renderColumnMappingSummary(sources,activeSourceId),true),
+    renderDataTypesPanel(),
+    renderDefaultsPanel(),
+    renderCalculatedFieldsPanel()
+  ].join(''));
 }
 
 function renderRelationshipsSetupPanels({profile=PS_MAPPING_TABLE_2_SHADOW_PROFILE,sources=[]}={}){
-  return setupBody('relationships','Relationships','Define keys, joins, and parent-child links without changing graph generation logic in this phase.',placeholderPanel('relationships','Primary / Composite Keys','Configure primary, item, detail, and composite keys in a later phase.',true)+placeholderPanel('relationships','Parent / Child Links','Configure parent key, child key, foreign key, and cardinality in a later phase.')+panel('relationships','Join Another Table','Use another source table for coordinate or metadata lookup.',renderJoinEditor(profile,sources),false)+placeholderPanel('relationships','Duplicate / Missing Match Rules','Configure duplicate match, missing parent, and orphan row policies in a later phase.'));
+  return setupBody('relationships','Relationships','Define keys, joins, and parent-child links without changing graph generation logic in this phase.',[
+    renderPrimaryKeysPanel(),
+    renderParentChildLinksPanel(),
+    renderJoinPanel(profile,sources),
+    renderDuplicateMatchRulesPanel()
+  ].join(''));
 }
 
 function renderStructureSetupPanels({profile=PS_MAPPING_TABLE_2_SHADOW_PROFILE,sources=[],graph=null,validationResults=[]}={}){
-  const root=profile.levelDefinitions?.[0]||{};
-  const partition=root.children?.[0]||{};
   const previewPanel=graph?panel('structure','Preview Graph','Document → model split → groups → items → details.',renderGraphPreviewBody(graph,validationResults),true):'';
-  return setupBody('structure','Structure','Review the graph levels and hierarchy below the single document root.',previewPanel+panel('structure','Graph Structure','Edit the hierarchy without exposing every internal field at once.',renderRootEditor(root,partition)+renderLevelTabs('Parent',partition.children||[],['x','y','z'])+renderLevelTabs('Child',partition.children?.[0]?.children||[],['a','b','c'])+renderLevelTabs('GrandChild',partition.children?.[0]?.children?.[0]?.children||[],['a','b','c']),true)+panel('structure','Model Split','Choose how rows are divided below one document root.',renderRootPartitionEditor(profile,sources),false)+panel('structure','More Nested Levels','Supports parent → many children → many grandchildren structures.',renderRecursiveList(profile),false)+placeholderPanel('structure','Sort Order','Configure group, item, detail, numeric, natural, and custom sort ordering in a later phase.'));
+  return setupBody('structure','Structure','Review the graph levels and hierarchy below the single document root.',[
+    previewPanel,
+    renderTreeEditorPlaceholderPanel(profile),
+    renderRootPartitionPanel(profile,sources),
+    renderAddMoveDeleteLevelsPanel(),
+    panel('structure','More Nested Levels','Supports parent → many children → many grandchildren structures.',renderRecursiveList(profile),false),
+    renderSortOrderPanel()
+  ].join(''));
 }
 
 function renderRulesSetupPanels({profile=PS_MAPPING_TABLE_2_SHADOW_PROFILE,sources=[],activeSourceId='S1'}={}){
   const sample=(sources[0]?.rows||[])[0]||null;
-  return setupBody('rules','Rules','Transform, group, filter, and classify values before they become graph data.',panel('rules','Rule Builder','Readable wrapper over resolver rules such as trim, regex, concat, classifier, and parser.',renderResolverEditor(profile,sources,activeSourceId,sample),true)+panel('rules','Grouping Strategy / Coordinate Grouping','Choose how rows become final groups.',renderGroupingSummary(profile),true)+placeholderPanel('rules','Filters / Conditions','Configure include rows, exclude rows, and create-node-only-when rules in a later phase.')+placeholderPanel('rules','Fallbacks','Configure if blank, if no match, and fallback value behavior in a later phase.')+placeholderPanel('rules','Classifiers','Configure dictionary mapping and type grouping in a later phase.'));
+  return setupBody('rules','Rules','Transform, group, filter, and classify values before they become graph data.',[
+    panel('rules','Rule Builder','Readable wrapper over resolver rules such as trim, regex, concat, classifier, and parser.',renderResolverEditor(profile,sources,activeSourceId,sample)+fieldSet('Rule test shell',[inputControl('Rule Chain Order','1, 2, 3'),inputControl('Test Selected Row','row-1'),inputControl('Preview Affected Rows','first 50 rows'),inputControl('Regex Test Box','^(.+?)\\.\\d+$'),inputControl('Split Text','delimiter'),inputControl('Replace Text','find → replace'),inputControl('Prefix / Suffix','prefix / suffix'),inputControl('Concat Parts','column + literal + rule')]),true),
+    renderFiltersPanel(),
+    renderFallbacksPanel(),
+    renderClassifiersPanel(),
+    renderCoordinateGroupingPanel(profile)
+  ].join(''));
 }
 
 function renderQualitySetupPanels({validationResults=[],exportResult=null,profileValidation=[]}={}){
-  return setupBody('quality','Check','Review required checks, warnings, validation settings, and audit proof.',renderValidationPanels(validationResults,exportResult)+placeholderPanel('quality','Validation Settings','Configure blocker, warning, and info severity mapping in a later phase.',false)+panel('quality','Setup Checks','Profile and mapping setup messages.',renderProfileValidation(profileValidation)||'<p>No setup messages.</p>',false));
+  return setupBody('quality','Check','Review required checks, warnings, validation settings, and audit proof.',[
+    renderRequiredChecksPanel(validationResults,exportResult),
+    renderValidationSettingsPanel(),
+    renderWarningsPanel(validationResults),
+    panel('quality','Audit Trail','Proof of how rows became graph nodes.',(renderProfileValidation(profileValidation)||'<p>No setup messages.</p>')+'<p>Audit is generated with export and records row → rule → graph → XML proof.</p>',false)
+  ].join(''));
 }
 
 function renderOutputSetupPanels(view={}){
-  const output=renderOutputPanels(view);
-  return setupBody('output','Export','Review XML names, output shape, downloads, and explicit canvas links.',output);
+  return setupBody('output','Export','Review XML names, output shape, downloads, and explicit canvas links.',renderOutputPanels(view));
 }
 
 function renderRecipeSetupPanels({profile=PS_MAPPING_TABLE_2_SHADOW_PROFILE}={}){
-  return setupBody('recipe','Recipe','Save, load, version, and reuse mappings without changing profile persistence in this phase.',panel('recipe','Recipe / Preset','Choose a starting recipe. This stays generic; PS Mapping Table 2 is only one preset.',renderProfileHeader(profile),true)+placeholderPanel('recipe','Save / Load Recipe','Save, load, duplicate, and reset reusable recipes in a later phase.')+placeholderPanel('recipe','Recipe Version / Notes','Track recipe version, description, and author notes in a later phase.')+placeholderPanel('recipe','Import / Export Recipe JSON','Import and export recipe JSON through the existing profile controls.'));
+  return setupBody('recipe','Recipe','Save, load, version, and reuse mappings without changing profile persistence in this phase.',[
+    panel('recipe','Recipe / Preset','Choose a starting recipe. This stays generic; PS Mapping Table 2 is only one preset.',renderProfileHeader(profile),true),
+    renderSaveLoadRecipePanel(),
+    renderRecipeVersionNotesPanel(profile),
+    renderRecipeJsonPanel()
+  ].join(''));
 }
 
-export function renderLevelDesigner(view={}){
-  return renderFieldsSetupPanels(view);
+function renderImportSettingsPanel(){
+  return panel('source','Import Settings','File parsing options. UI shell only; parser behavior is unchanged.',fieldSet('Import specification',[selectControl('File Type / Paste Mode',['Paste text','CSV file','TXT file','Fixed width'],0),inputControl('Delimiter',','),selectControl('Header Row',['Yes','No'],0),inputControl('Skip Rows','0'),selectControl('Encoding',['UTF-8','UTF-16','Windows-1252'],0),selectControl('Trim Blank Rows',['Yes','No'],0),selectControl('Duplicate Header Handling',['Warn','Auto-rename','Block import'],0),inputControl('Source Table ID','S1'),selectControl('Source Table Role',['Primary source','Lookup source','Reference source'],0)]),false);
 }
 
-function renderMappingOptionIndex(){
-  return `<div class="table-categorized-option-groups">${OPTION_GROUPS.map(([group,icon,title,summary,items])=>`<section class="table-categorized-option-group is-${esc(group)}"><h5>${esc(icon)} ${esc(title)}</h5><p>${esc(summary)}</p>${items.map(([status,itemTitle,itemSummary])=>`<button type="button" class="table-categorized-option-chip"><b>${esc(status)} ${esc(itemTitle)}</b><small>${esc(itemSummary)}</small></button>`).join('')}</section>`).join('')}</div>`;
+function renderColumnCleanupPanel(){
+  return panel('source','Column Cleanup','Column naming and source-table cleanup. UI shell only.',fieldSet('Column cleanup',[inputControl('Column Rename','OldName → NewName'),inputControl('Include / Exclude Columns','include: A,B,C / exclude: Notes'),selectControl('Trim Empty Columns',['Yes','No'],0),selectControl('Column Alias Handling',['Keep aliases','Normalize aliases','Warn on alias conflict'],0)]),false);
+}
+
+function renderDataTypesPanel(){
+  return panel('fields','Data Types / Units','Detect and choose field types and units. UI shell only.',fieldSet('Type profile',[inputControl('Detected Type','text'),selectControl('Selected Type',['Text','Number','Date','Boolean','Coordinate'],0),selectControl('Text / Number / Date / Boolean / Coordinate',['Text','Number','Date','Boolean','Coordinate'],0),inputControl('Unit','mm'),selectControl('Required / Optional',['Required','Optional'],1),inputControl('Alias Names','primary_key, item_key')]),false);
+}
+
+function renderDefaultsPanel(){
+  return panel('fields','Defaults / Blank Handling','Blank, invalid value, and default handling. UI shell only.',fieldSet('Default policy',[selectControl('Blank Policy',['Allow blank','Warning','Block export','Use default'],1),selectControl('Invalid Value Policy',['Warning','Block export','Use default'],0),inputControl('Default Value',''),inputControl('Alias Names','short name, long name')]),false);
+}
+
+function renderCalculatedFieldsPanel(){
+  return panel('fields','Calculated Fields','Calculated field shell for future derived columns.',fieldSet('Calculated field',[inputControl('Calculated Column Formula','concat(primaryKey, "__", coordinateGroup)'),inputControl('Output Field Name','calculatedKey'),selectControl('Evaluation Timing',['Before grouping','After grouping','Before export'],0)]),false);
+}
+
+function renderPrimaryKeysPanel(){
+  return panel('relationships','Primary / Composite Keys','Key definitions for table relationships. UI shell only.',fieldSet('Key builder',[inputControl('Primary Key','Primary item key'),inputControl('Composite Key Parts','LineNo + Zone + Sequence'),inputControl('Item Key','Row ID / item ID'),inputControl('Detail Key','Type + value')]),true);
+}
+
+function renderParentChildLinksPanel(){
+  return panel('relationships','Parent / Child Links','Relationship link shell for parent-child graph assembly.',fieldSet('Relationship links',[inputControl('Parent Key','Parent ID'),inputControl('Child Key','Child ID'),inputControl('Foreign Key','Parent ID on child row'),selectControl('Cardinality',['one-to-one','one-to-many','many-to-one','many-to-many'],1)]),false);
+}
+
+function renderJoinPanel(profile,sources){
+  return panel('relationships','Join Another Table','Use another source table for lookup or coordinate enrichment.',renderJoinEditor(profile,sources)+fieldSet('Join shell',[selectControl('Join Type',['left','inner','full'],0),selectControl('Match Method',['exact','case-insensitive','trimmed','regex key','coordinate proximity'],0)]),false);
+}
+
+function renderDuplicateMatchRulesPanel(){
+  return panel('relationships','Duplicate / Missing Match Rules','Duplicate, missing parent, and orphan policies. UI shell only.',fieldSet('Match policies',[selectControl('Duplicate Key Policy',['Warning','Keep first','Keep last','Block export','Create multiple'],0),selectControl('Missing Parent Policy',['Warning','Create orphan bucket','Block export'],0),selectControl('Orphan Row Policy',['Keep with warning','Drop from export','Block export'],0)]),false);
+}
+
+function renderTreeEditorPlaceholderPanel(profile){
+  const root=profile.levelDefinitions?.[0]||{};
+  const partition=root.children?.[0]||{};
+  return panel('structure','Graph Levels / Tree Editor','Recursive level tree shell. Editing behavior is reserved for a later phase.',renderRootEditor(root,partition)+fieldSet('Selected level editor',[inputControl('Selected Level','Group'),buttonRow(['Add Child Level','Add Sibling Level','Duplicate Level','Move Up','Move Down','Delete Level']),inputControl('Level Name','Group'),inputControl('XML Tag','Group'),inputControl('Create From Column / Rule','column or resolver'),inputControl('Key Rule','primary key rule'),inputControl('Display Rule','display name rule'),inputControl('Create Only When','condition'),inputControl('Sort By','key / source row / custom')]),true);
+}
+
+function renderRootPartitionPanel(profile,sources){
+  return panel('structure','Model Split','Choose how rows are divided below one document root.',renderRootPartitionEditor(profile,sources)+fieldSet('Model split strategy',[selectControl('Model Split Strategy',['one model','per source','per column','per rule'],0)]),false);
+}
+
+function renderAddMoveDeleteLevelsPanel(){
+  return panel('structure','Add / Move / Delete Levels','Level maintenance shell for future recursive editor behavior.',fieldSet('Level actions',[buttonRow(['Add Child Level','Add Sibling Level','Duplicate Level','Move Up','Move Down','Delete Level'])]),false);
+}
+
+function renderSortOrderPanel(){
+  return panel('structure','Sort Order','Output order controls. UI shell only.',fieldSet('Sort controls',[selectControl('Sort Groups By Key',['Yes','No'],0),selectControl('Sort Items By Source Row Order',['Yes','No'],0),selectControl('Sort Details By Priority',['Yes','No'],0),selectControl('Natural Sort',['Yes','No'],0),selectControl('Numeric Sort',['Yes','No'],1),inputControl('Custom Order List','Group, Item, Detail, Value')]),false);
+}
+
+function renderFiltersPanel(){
+  return panel('rules','Filters / Conditions','Conditional include/exclude and create-only rules. UI shell only.',fieldSet('Conditions',[inputControl('Include Rows Where','Mandatory = YES'),inputControl('Exclude Rows Where','Status = Ignore'),inputControl('Create Level Only When','key is not blank'),inputControl('Create Field Only When','value is not blank')]),false);
+}
+
+function renderFallbacksPanel(){
+  return panel('rules','Fallbacks','Fallback behavior for blank values and no-match cases. UI shell only.',fieldSet('Fallback rules',[selectControl('If Blank',['Warning','Use fallback value','Skip field','Block export'],0),selectControl('If No Match',['Warning','Use fallback value','Create unknown bucket','Block export'],0),inputControl('Fallback Value','UNKNOWN')]),false);
+}
+
+function renderClassifiersPanel(){
+  return panel('rules','Classifiers','Dictionary/classifier shell for mapping source values to graph values.',fieldSet('Classifier setup',[textareaControl('Classifier Dictionary','GUIDE → Guide\nLS → Line Stop'),selectControl('Classifier Match Method',['exact','case-insensitive','trimmed','regex key'],1)]),false);
+}
+
+function renderCoordinateGroupingPanel(profile){
+  const tolerance=profile.coordinateCluster?.tolerance??2;
+  return panel('rules','Coordinate Grouping','Coordinate clustering controls. UI shell only.',fieldSet('Coordinate grouping',[inputControl('Coordinate Tolerance',tolerance),inputControl('Coordinate Rounding','3 decimals'),selectControl('Coordinate Unit Conversion',['none','m to mm','inch to mm'],0),selectControl('Cluster Method',['max-axis-delta','euclidean','exact xyz'],0)]),false);
+}
+
+function renderRequiredChecksPanel(results=[],exportResult=null){
+  const existing=renderValidationPanels(results,exportResult);
+  return panel('quality','Required Checks','Required columns, levels, and uniqueness checks.',existing+fieldSet('Required check configuration',[inputControl('Required Columns','primary key, type, value'),inputControl('Required Levels','Document, Model Split, Group, Item'),selectControl('Unique Key Checks',['Enabled','Disabled'],0),selectControl('Missing Parent Checks',['Warning','Block export'],0),selectControl('Duplicate Key Checks',['Warning','Block export'],0),selectControl('Invalid Number Checks',['Warning','Block export'],0),selectControl('Invalid Coordinate Checks',['Warning','Block export'],0)]),true);
+}
+
+function renderValidationSettingsPanel(){
+  return panel('quality','Validation Settings','Severity and export-blocking settings. UI shell only.',fieldSet('Severity mapping',[selectControl('Rule Failure Severity',['BLOCKER','WARNING','INFO'],1),selectControl('Export Blocking Rules',['Block on BLOCKER only','Block on WARNING and BLOCKER'],0),selectControl('Blocker / Warning / Info Mapping',['Default mapping','Strict mapping','Lenient mapping'],0)]),false);
+}
+
+function renderWarningsPanel(results=[]){
+  const warnings=results.filter((item)=>item.severity==='WARNING');
+  return panel('quality','Warnings','Warning-level messages and optional data issues.',warnings.length?`<ul>${warnings.map((item)=>`<li>${esc(item.gate)} — ${esc(item.message)}</li>`).join('')}</ul>`:'<p>No warnings yet.</p>',false);
+}
+
+function renderXmlNamesPanel(){
+  return panel('output','XML Names','Configure user-facing XML names. UI shell only.',fieldSet('XML names',[inputControl('XML Root Tag','CategorizedTableXml'),inputControl('Partition Tag','RootPartition'),inputControl('Level Tag Names','Group, Item, Detail'),inputControl('Field Tag Names','key, displayName, value')]),false);
+}
+
+function renderXmlShapePanel(){
+  return panel('output','XML Shape','XML output shape controls. UI shell only.',`<section class="table-categorized-xml-subcard"><h4>Single-root rule</h4><p><b>One XML document root only.</b></p><p>Logical splits are child partitions below the root.</p></section>${fieldSet('XML shape',[selectControl('Attribute vs Element',['Element','Attribute','Mixed'],0),selectControl('Text Node vs Child Element',['Child element','Text node'],0),inputControl('Element Order','configured order'),selectControl('Empty Value Policy',['omit','empty tag','warning'],1),inputControl('Namespace',''),inputControl('Schema Version','v1'),selectControl('Indentation',['2 spaces','4 spaces','tabs','minified'],0),selectControl('CDATA Option',['Off','On for text fields'],0)])}`,false);
+}
+
+function renderSaveLoadRecipePanel(){
+  return panel('recipe','Save / Load Recipe','Recipe lifecycle controls. UI shell only.',fieldSet('Recipe lifecycle',[buttonRow(['Save Recipe','Load Recipe','Duplicate Recipe','Reset Recipe'])]),false);
+}
+
+function renderRecipeVersionNotesPanel(profile){
+  return panel('recipe','Recipe Version / Notes','Recipe metadata shell.',fieldSet('Recipe metadata',[inputControl('Recipe Name',profile.displayName||''),inputControl('Recipe ID',profile.profileId||''),inputControl('Version','1.0.0'),textareaControl('Description','Reusable table-to-graph mapping recipe'),textareaControl('Author Notes','')]),false);
+}
+
+function renderRecipeJsonPanel(){
+  return panel('recipe','Import / Export Recipe JSON','Import/export and compare recipe JSON. UI shell only.',fieldSet('Recipe JSON',[buttonRow(['Import Recipe JSON','Export Recipe JSON','Compare Recipe Changes'])]),false);
+}
+
+function renderOutputPanels(view={}){
+  if(!view.graph)return `${renderXmlNamesPanel()}${renderXmlShapePanel()}${panel('output','Download Files','Build Preview Graph first.','<p>Build Preview Graph first.</p>',true)}${panel('output','Canvas Link','Canvas handoff is disabled until export is ready.','<p>Not ready.</p>',false)}`;
+  if(hasBlockingValidation(view.validationResults))return `${renderXmlNamesPanel()}${renderXmlShapePanel()}${panel('output','Blocked','Export is blocked by validation.',renderValidation(view.validationResults,view.exportResult),true)}`;
+  const enabled=Boolean(view.exportResult?.ok);
+  const xml=enabled?view.exportResult.xmlText:'Export artifact is not available.';
+  const downloads=`<p>Exports are generated from the categorized graph only.</p>${view.exportStatus?`<div class="table-categorized-xml-subcard"><b>Status:</b> ${esc(view.exportStatus)}</div>`:''}<div class="table-categorized-xml-actions"><button type="button" data-table-categorized-download="xml" ${enabled?'':'disabled'}>Download Categorized XML</button><button type="button" data-table-categorized-download="graph" ${enabled?'':'disabled'}>Download Graph JSON</button><button type="button" data-table-categorized-download="profile" ${enabled?'':'disabled'}>Download Recipe JSON</button><button type="button" data-table-categorized-download="diagnostics" ${enabled?'':'disabled'}>Download Diagnostics JSON</button><button type="button" data-table-categorized-download="audit" ${enabled?'':'disabled'}>Download Audit JSON</button></div><h4>XML Preview</h4><pre class="table-categorized-xml-preview">${esc(xml)}</pre>`;
+  const canvas=`<p>Canvas handoff requires an explicit click.</p><div class="table-categorized-xml-actions"><button type="button" data-table-categorized-action="send-source" ${enabled?'':'disabled'}>Send to SourceXML Canvas</button><button type="button" data-table-categorized-action="send-target" ${enabled?'':'disabled'}>Send to TargetXML Canvas</button></div>`;
+  return `${renderXmlNamesPanel()}${renderXmlShapePanel()}${panel('output','Download Files','XML, graph JSON, recipe JSON, diagnostics, and audit.',downloads,true)}${panel('output','Canvas Link','Send generated XML to SourceXML or TargetXML canvas.',canvas,false)}`;
+}
+
+function renderSourceTable(sources=[],activeId=''){
+  const rows=sourceSummaryRows(sources).map((s)=>`<tr class="${s.sourceId===activeId?'is-active':''}"><td>${esc(s.sourceId)}</td><td>${esc(s.sourceName)}</td><td>${s.rows}</td><td>${s.columns}</td><td>${esc(s.sourceType)}</td><td>${esc(s.status)}</td></tr>`).join('');
+  return `<section class="table-categorized-xml-subcard"><h4>Parsed Tables</h4><table><thead><tr><th>ID</th><th>Table Name</th><th>Rows</th><th>Columns</th><th>Type</th><th>Status</th></tr></thead><tbody>${rows||'<tr><td colspan="6">No tables yet.</td></tr>'}</tbody></table></section>`;
 }
 
 function renderProfileHeader(profile){
@@ -140,22 +280,22 @@ function renderProfileHeader(profile){
 
 function renderGroupingSummary(profile){
   const tolerance=profile.coordinateCluster?.tolerance??2;
-  return `<section class="table-categorized-xml-subcard"><h4>Grouping Strategy</h4><p>Group rows by base key, coordinate group, or both. The PS preset uses base key + coordinate group; custom recipes can use different columns and names.</p><label><input type="radio" name="table-categorized-grouping"> Base key only</label><label><input type="radio" name="table-categorized-grouping"> Coordinate group only</label><label><input type="radio" name="table-categorized-grouping" checked> Base key + coordinate group</label><label>Coordinate tolerance<input value="${esc(tolerance)}"></label></section>`;
+  return `<section class="table-categorized-xml-subcard"><h4>Grouping Strategy</h4><p>Group rows by base key, coordinate group, or both. The preset can use base key + coordinate group; custom recipes can use different columns and names.</p><label><input type="radio" name="table-categorized-grouping"> Base key only</label><label><input type="radio" name="table-categorized-grouping"> Coordinate group only</label><label><input type="radio" name="table-categorized-grouping" checked> Base key + coordinate group</label><label>Coordinate tolerance<input value="${esc(tolerance)}"></label></section>`;
 }
 
 function renderColumnMappingSummary(sources=[],activeSourceId='S1'){
   const active=sources.find((s)=>s.sourceId===activeSourceId)||sources[0]||{};
   const cols=active.headers||['PS NO','DTXR','Support Gap','X','Y','Z'];
   const pick=(label,preferred)=>`<label>${esc(label)}<select>${cols.map((c)=>`<option ${c===preferred?'selected':''}>${esc(c)}</option>`).join('')}</select></label>`;
-  return `<section class="table-categorized-xml-subcard"><h4>Column Mapping</h4><p>Use generic roles so this works beyond PS tagging.</p>${pick('Primary item key','PS NO')}${pick('Type / feature','DTXR')}${pick('Value / measure','Support Gap')}${pick('X coordinate','X')}${pick('Y coordinate','Y')}${pick('Z coordinate','Z')}</section>`;
+  return `<section class="table-categorized-xml-subcard"><h4>Column Mapping</h4><p>Use generic roles so this works beyond one preset.</p>${pick('Primary key','PS NO')}${pick('Type / feature','DTXR')}${pick('Value / measure','Support Gap')}${pick('X coordinate','X')}${pick('Y coordinate','Y')}${pick('Z coordinate','Z')}</section>`;
 }
 
 function renderRootPartitionEditor(profile,sources){
-  return `<section class="table-categorized-xml-subcard"><h4>Model Split <small>(RootPartition)</small></h4><p>Choose how rows are divided below the single document root.</p><label>Split Method<select data-root-partition-mode><option ${profile.rootPartitionMode==='static'?'selected':''}>static</option><option ${profile.rootPartitionMode==='perSource'?'selected':''}>perSource</option><option ${profile.rootPartitionMode==='perColumn'?'selected':''}>perColumn</option><option ${profile.rootPartitionMode==='perResolver'?'selected':''}>perResolver</option></select></label><label>Single Bucket Key<input data-root-partition-key value="${esc(profile.rootPartitions?.[0]?.key||'MODEL_SIDE')}"></label><label>Tables Included<input data-root-partition-scope value="${esc((profile.rootPartitions?.[0]?.sourceScope||sources.map((s)=>s.sourceId)).join(' '))}"></label><label>Split By Column / Rule <small>(advanced)</small><input value="${esc(profile.rootPartitionResolver?.column||'')}"></label></section>`;
+  return `<section class="table-categorized-xml-subcard"><h4>Model Split <small>advanced: RootPartition</small></h4><p>Choose how rows are divided below the single document root.</p><label>Split Method<select data-root-partition-mode><option ${profile.rootPartitionMode==='static'?'selected':''}>static</option><option ${profile.rootPartitionMode==='perSource'?'selected':''}>perSource</option><option ${profile.rootPartitionMode==='perColumn'?'selected':''}>perColumn</option><option ${profile.rootPartitionMode==='perResolver'?'selected':''}>perResolver</option></select></label><label>Single Bucket Key<input data-root-partition-key value="${esc(profile.rootPartitions?.[0]?.key||'MODEL_SIDE')}"></label><label>Tables Included<input data-root-partition-scope value="${esc((profile.rootPartitions?.[0]?.sourceScope||sources.map((s)=>s.sourceId)).join(' '))}"></label><label>Split By Column / Rule <small>advanced</small><input value="${esc(profile.rootPartitionResolver?.column||'')}"></label></section>`;
 }
 
 function renderRootEditor(root,partition){
-  return `<section class="table-categorized-xml-subcard"><h4>Document Setup</h4><label>Document Name<input data-root-field="displayName" value="${esc(root.displayName||'CategorizedTableGraph')}"></label><label>Document XML Tag <small>(advanced)</small><input data-root-field="xmlTag" value="${esc(root.xmlTag||root.levelId||'CategorizedTableGraph')}"></label>${selectHtml('Node Kind <small>(advanced)</small>','data-root-field="levelType"',root.levelType,LEVEL_TYPE_OPTIONS)}${selectHtml('Create Node When <small>(advanced)</small>','data-root-field="creationMode"',root.creationMode,CREATION_MODE_OPTIONS)}<label><input type="checkbox" data-root-document ${root.documentRoot?'checked':''}> Single Document Root</label><label>Document Key<input data-root-field="key" value="${esc(root.key||'CategorizedTableGraph')}"></label><label>First Group Name (slot x)<input data-parent-name="0" value="${esc(labelForLevel(partition.children?.[0])||'Parent (x)')}"></label><label>First Group Name (slot y)<input data-parent-name="1" value="${esc(labelForLevel(partition.children?.[1])||'Parent (y)')}"></label><label>First Group Name (slot z)<input data-parent-name="2" value="${esc(labelForLevel(partition.children?.[2])||'Parent (z)')}"></label></section>`;
+  return `<section class="table-categorized-xml-subcard"><h4>Document Setup</h4><label>Document Name<input data-root-field="displayName" value="${esc(root.displayName||'CategorizedTableGraph')}"></label><label>Document XML Tag <small>advanced</small><input data-root-field="xmlTag" value="${esc(root.xmlTag||root.levelId||'CategorizedTableGraph')}"></label>${selectHtml('Node Kind <small>advanced</small>','data-root-field="levelType"',root.levelType,LEVEL_TYPE_OPTIONS)}${selectHtml('Create Node When <small>advanced</small>','data-root-field="creationMode"',root.creationMode,CREATION_MODE_OPTIONS)}<label><input type="checkbox" data-root-document ${root.documentRoot?'checked':''}> Single Document Root</label><label>Document Key<input data-root-field="key" value="${esc(root.key||'CategorizedTableGraph')}"></label><label>First Group Name (slot x)<input data-parent-name="0" value="${esc(labelForLevel(partition.children?.[0])||'Parent (x)')}"></label><label>First Group Name (slot y)<input data-parent-name="1" value="${esc(labelForLevel(partition.children?.[1])||'Parent (y)')}"></label><label>First Group Name (slot z)<input data-parent-name="2" value="${esc(labelForLevel(partition.children?.[2])||'Parent (z)')}"></label></section>`;
 }
 
 function renderLevelTabs(label,levels=[],tabs=[]){
@@ -164,7 +304,7 @@ function renderLevelTabs(label,levels=[],tabs=[]){
 }
 
 function renderLevelCard(title,level={},index,label){
-  return `<div class="table-categorized-xml-subcard"><h4>${esc(title)}</h4><label>Group / Item Name<input data-${label.toLowerCase()}-name="${index}" value="${esc(labelForLevel(level)||title)}"></label><label>XML Tag <small>(advanced)</small><input value="${esc(level.xmlTag||level.levelId||'')}"></label>${selectHtml('What This Level Represents','',level.levelType,LEVEL_TYPE_OPTIONS)}${selectHtml('Create One Node For','',level.creationMode,CREATION_MODE_OPTIONS)}<small>Relationship: parent owns this level.</small><label>Display Text From Column / Rule<input value="${esc(resolverSummary(level.displayNameResolver)||'S1.PS NO')}"></label><label>Unique Key From Column / Rule<input value="${esc(resolverSummary(level.keyResolver)||'S1.PS NO')}"></label><small>Extra fields and values will be edited in the Rule Builder.</small><label>Child Level Names<input value="${esc((level.children||[]).map(labelForLevel).join(', '))}"></label></div>`;
+  return `<div class="table-categorized-xml-subcard"><h4>${esc(title)}</h4><label>Group / Item Name<input data-${label.toLowerCase()}-name="${index}" value="${esc(labelForLevel(level)||title)}"></label><label>XML Tag <small>advanced</small><input value="${esc(level.xmlTag||level.levelId||'')}"></label>${selectHtml('What This Level Represents','',level.levelType,LEVEL_TYPE_OPTIONS)}${selectHtml('Create One Node For','',level.creationMode,CREATION_MODE_OPTIONS)}<small>Relationship: parent owns this level.</small><label>Display Text From Column / Rule<input value="${esc(resolverSummary(level.displayNameResolver)||'S1.PS NO')}"></label><label>Unique Key From Column / Rule<input value="${esc(resolverSummary(level.keyResolver)||'S1.PS NO')}"></label><small>Extra fields and values are represented in Rule Builder.</small><label>Child Level Names<input value="${esc((level.children||[]).map(labelForLevel).join(', '))}"></label></div>`;
 }
 
 function renderRecursiveList(profile){
@@ -182,15 +322,15 @@ function renderResolverEditor(profile,sources,activeSourceId,sample){
   const active=sources.find((s)=>s.sourceId===activeSourceId)||sources[0]||{};
   const cols=active.headers||['PS NO','X','Y','Z'];
   const preview=previewResolver(profile.levelDefinitions?.[0]?.children?.[0]?.children?.[0]?.keyResolver,sample);
-  return `<section class="table-categorized-xml-subcard"><h4>Rule Builder <small>(Resolver Rules)</small></h4><label>Rule Source Table<select data-resolver-source>${sources.map((s)=>`<option ${s.sourceId===activeSourceId?'selected':''}>${esc(s.sourceId)}</option>`).join('')||'<option>S1</option>'}</select></label><label>Column<select data-resolver-column>${cols.map((c)=>`<option>${esc(c)}</option>`).join('')}</select></label><label>Rule Type<select data-resolver-op><option>literal</option><option selected>trim</option><option>uppercase</option><option>lowercase</option><option>regexExtract</option><option>concat</option><option>numberParser</option><option>classifier</option><option>coordinateCluster</option><option>fallback</option></select></label><label>Combine Values In This Order<input value="Column: S1.PS NO | Literal: __ | coordinateCluster S2.X/S2.Y/S2.Z"></label><label>Coordinate Grouping Setup<input value="S2,X,Y,Z,mm,2,3"></label><p>Final key preview: <b>${esc(preview||'—')}</b></p></section>`;
+  return `<section class="table-categorized-xml-subcard"><h4>Rule Builder <small>advanced: Resolver Rules</small></h4><label>Rule Source Table<select data-resolver-source>${sources.map((s)=>`<option ${s.sourceId===activeSourceId?'selected':''}>${esc(s.sourceId)}</option>`).join('')||'<option>S1</option>'}</select></label><label>Column<select data-resolver-column>${cols.map((c)=>`<option>${esc(c)}</option>`).join('')}</select></label><label>Rule Type<select data-resolver-op><option>literal</option><option selected>trim</option><option>uppercase</option><option>lowercase</option><option>regexExtract</option><option>concat</option><option>numberParser</option><option>classifier</option><option>coordinateCluster</option><option>fallback</option></select></label><label>Combine Values In This Order<input value="Column + Literal + Resolver"></label><label>Coordinate Grouping Setup<input value="Source,X,Y,Z,mm,2,3"></label><p>Final key preview: <b>${esc(preview||'—')}</b></p></section>`;
 }
 
 function renderProfileValidation(items=[]){return items.length?`<section class="table-categorized-xml-subcard"><h4>Setup Checks</h4><ul>${items.map((d)=>`<li class="is-${esc(d.severity).toLowerCase()}">${esc(d.severity)} ${esc(d.gate)} — ${esc(d.message)}</li>`).join('')}</ul></section>`:'';}
 
 export function renderGraphPreview(graph=null,validationResults=[]){
-  if(hasBlockingValidation(validationResults))return `<section class="table-categorized-xml-card"><h4>Structure</h4><p>Graph preview is blocked by a failed rule. Open Check Rules for details.</p></section>`;
+  if(hasBlockingValidation(validationResults))return `<section class="table-categorized-xml-card" data-setup-body="structure"><h4>Structure</h4><p>Graph preview is blocked by a failed rule. Open Check Rules for details.</p></section>`;
   const body=graph?renderGraphPreviewBody(graph,validationResults):'<p>Build Preview Graph to create the categorized graph.</p>';
-  return setupBody('structure','Structure','This is the categorized graph that exports to XML.',panel('structure','Preview Graph','Document → model split → groups → items → details.',body,true)+panel('structure','Model Split','Advanced split settings are edited in Mapping Studio.',renderRootPartitionEditor(PS_MAPPING_TABLE_2_SHADOW_PROFILE,[]),false));
+  return setupBody('structure','Structure','This is the categorized graph that exports to XML.',panel('structure','Preview Graph','Document → model split → groups → items → details.',body,true)+renderRootPartitionPanel(PS_MAPPING_TABLE_2_SHADOW_PROFILE,[]));
 }
 
 function renderGraphPreviewBody(graph,validationResults=[]){
@@ -200,29 +340,17 @@ function renderGraphPreviewBody(graph,validationResults=[]){
 }
 
 export function renderValidation(results=[],exportResult=null){
-  return setupBody('quality','Check','Review required checks, warnings, and audit proof.',renderValidationPanels(results,exportResult));
+  return setupBody('quality','Check','Review required checks, warnings, and audit proof.',renderRequiredChecksPanel(results,exportResult)+renderValidationSettingsPanel()+renderWarningsPanel(results)+panel('quality','Audit Trail','Proof of how rows became graph nodes.','<p>Audit is generated with export.</p>',false));
 }
 
 function renderValidationPanels(results=[],exportResult=null){
-  if(!results.length)return `${panel('quality','Required Checks','No check results yet. Read a source table and build the preview graph.','<p>No check results yet.</p>',true)}${panel('quality','Warnings','Optional data and fallback messages appear here.','<p>No warnings yet.</p>',false)}${panel('quality','Audit Trail','Proof of how rows became graph nodes.','<p>Audit is generated with export.</p>',false)}`;
+  if(!results.length)return '<p>No check results yet.</p>';
   const rows=results.map((item)=>`<tr class="is-${esc(item.severity).toLowerCase()}"><td>${esc(item.gate)}</td><td>${esc(item.severity)}</td><td>${esc(item.status)}</td><td>${esc(item.message)}</td><td>${esc(item.ref)}</td></tr>`).join('');
   const status=exportResult?.ok?'Export allowed.':'Export blocked or not generated.';
-  return `${panel('quality','Required Checks',status,`<table><thead><tr><th>Rule / Gate</th><th>Severity</th><th>Status</th><th>Message</th><th>Source / Graph Ref</th></tr></thead><tbody>${rows}</tbody></table>`,true)}${panel('quality','Warnings','Review warning-level messages before export.','<p>Warnings are shown in the table above when present.</p>',false)}${panel('quality','Audit Trail','Download the audit JSON from Export.','<p>Audit package is produced with export artifacts.</p>',false)}`;
+  return `<p>${esc(status)}</p><table><thead><tr><th>Rule / Gate</th><th>Severity</th><th>Status</th><th>Message</th><th>Source / Graph Ref</th></tr></thead><tbody>${rows}</tbody></table>`;
 }
 
-export function renderExportLink(view={}){
-  return renderOutputSetupPanels(view);
-}
-
-function renderOutputPanels(view={}){
-  if(!view.graph)return `${panel('output','XML Names','Tags, attributes, and text values are generated from the active recipe.','<p>Open XML preview to verify names before download.</p>',false)}${placeholderPanel('output','XML Shape','Configure attribute vs element, empty value policy, order, namespace, and schema version in a later phase.')}${panel('output','Download Files','Build Preview Graph first.','<p>Build Preview Graph first.</p>',true)}${panel('output','Canvas Link','Canvas handoff is disabled until export is ready.','<p>Not ready.</p>',false)}`;
-  if(hasBlockingValidation(view.validationResults))return `${panel('quality','Blocked','Export is blocked by validation.',renderValidation(view.validationResults,view.exportResult),true)}`;
-  const enabled=Boolean(view.exportResult?.ok);
-  const xml=enabled?view.exportResult.xmlText:'Export artifact is not available.';
-  const downloads=`<p>Exports are generated from the categorized graph only.</p>${view.exportStatus?`<div class="table-categorized-xml-subcard"><b>Status:</b> ${esc(view.exportStatus)}</div>`:''}<div class="table-categorized-xml-actions"><button type="button" data-table-categorized-download="xml" ${enabled?'':'disabled'}>Download Categorized XML</button><button type="button" data-table-categorized-download="graph" ${enabled?'':'disabled'}>Download Graph JSON</button><button type="button" data-table-categorized-download="profile" ${enabled?'':'disabled'}>Download Recipe JSON</button><button type="button" data-table-categorized-download="diagnostics" ${enabled?'':'disabled'}>Download Diagnostics JSON</button><button type="button" data-table-categorized-download="audit" ${enabled?'':'disabled'}>Download Audit JSON</button></div><h4>XML Preview</h4><pre class="table-categorized-xml-preview">${esc(xml)}</pre>`;
-  const canvas=`<p>Canvas handoff requires an explicit click.</p><div class="table-categorized-xml-actions"><button type="button" data-table-categorized-action="send-source" ${enabled?'':'disabled'}>Send to SourceXML Canvas</button><button type="button" data-table-categorized-action="send-target" ${enabled?'':'disabled'}>Send to TargetXML Canvas</button></div>`;
-  return `${panel('output','XML Names','Tags, attributes, and text values are generated from the active recipe.','<p>Open XML preview to verify names before download.</p>',false)}${placeholderPanel('output','XML Shape','Configure attribute vs element, empty value policy, order, namespace, and schema version in a later phase.')}${panel('output','Download Files','XML, graph JSON, recipe JSON, diagnostics, and audit.',downloads,true)}${panel('output','Canvas Link','Send generated XML to SourceXML or TargetXML canvas.',canvas,false)}`;
-}
+export function renderExportLink(view={}){return renderOutputSetupPanels(view);}
 
 export function renderRawPreview(source){
   if(!source?.headers?.length)return '<section class="table-categorized-xml-subcard"><h4>Raw Table Preview</h4><p>Read the active table to preview raw rows.</p></section>';
@@ -237,8 +365,12 @@ export function renderDiagnostics(source){
   return `<section class="table-categorized-xml-subcard"><h4>Messages</h4><ul>${diagnostics.map((item)=>`<li class="is-${esc(item.severity).toLowerCase()}"><b>${esc(item.severity)}</b> ${esc(item.code)} — ${esc(item.message)}</li>`).join('')}</ul></section>`;
 }
 
+function fieldSet(title,controls){return `<section class="table-categorized-xml-subcard"><h4>${esc(title)}</h4>${controls.join('')}</section>`;}
+function inputControl(label,value=''){return `<label>${esc(label)}<input value="${esc(value)}" disabled></label>`;}
+function textareaControl(label,value=''){return `<label>${esc(label)}<textarea disabled>${esc(value)}</textarea></label>`;}
+function selectControl(label,options=[],selectedIndex=0){return `<label>${esc(label)}<select disabled>${options.map((option,index)=>`<option ${index===selectedIndex?'selected':''}>${esc(option)}</option>`).join('')}</select></label>`;}
+function buttonRow(labels=[]){return `<div class="table-categorized-xml-actions">${labels.map((label)=>`<button type="button" disabled>${esc(label)}</button>`).join('')}</div>`;}
 function setupBody(group,title,summary,body){return `<section class="table-categorized-xml-card" data-setup-body="${esc(group)}"><h4>${esc(title)}</h4><p>${esc(summary)}</p>${body}</section>`;}
-function placeholderPanel(group,title,summary,open=false){return panel(group,title,summary,`<p>${esc(summary)}</p>`,open);}
 function panel(group,title,summary,body,open=false){return `<details class="table-categorized-panel is-${esc(group)}" data-panel-group="${esc(group)}" ${open?'open':''}><summary><b>${esc(title)}</b><small>${esc(summary)}</small></summary><div class="table-categorized-panel-body">${body}</div></details>`;}
 function selectHtml(label,attr,value,options){return `<label>${label}<select ${attr}>${options.map((o)=>`<option ${o===value?'selected':''}>${esc(o)}</option>`).join('')}</select></label>`;}
 function labelForLevel(level){return level?.displayName||level?.key||level?.levelId||'';}
