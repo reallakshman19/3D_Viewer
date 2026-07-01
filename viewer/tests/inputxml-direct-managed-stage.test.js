@@ -14,6 +14,7 @@ import './xml-compare-canvas-host.test.js';
 import './xml-compare-canvas-state-activation.test.js';
 import './xml-compare-canvas-record-interaction.test.js';
 import './xml-compare-connector-overlay.test.js';
+import './xml-compare-connector-candidates.test.js';
 import './xml-compare-graph-core.test.js';
 import './xml-compare-graph-renderers.test.js';
 import './xml-compare-sideload-enricher.test.js';

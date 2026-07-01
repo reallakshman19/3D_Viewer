@@ -6,7 +6,7 @@ import { renderXmlCompareDiagnosticsPanelHtml } from './XmlCompareDiagnosticsPan
 import { renderXmlCompareDebugPanelHtml } from './XmlCompareDebugPanel.js';
 import { renderXmlCompareLogScreenHtml } from './XmlCompareLogScreen.js';
 
-export const XML_COMPARE_WORKSPACE_SHELL_SCHEMA='xml-compare-workspace-shell/v10';
+export const XML_COMPARE_WORKSPACE_SHELL_SCHEMA='xml-compare-workspace-shell/v11';
 
 let loadDiagnosticsPromise=null;
 let loadSamplePickersPromise=null;
@@ -77,8 +77,8 @@ function sideCard(side,title,data={},navState=null,manualState=null){
   })}</section>`;
 }
 
-function connectorLane(matchMap=null,manualState=null){
-  return renderXmlCompareGraphConnectorLaneHtml({matchMap,manualState});
+function connectorLane(matchMap=null,manualState=null,connectorCandidates=null){
+  return renderXmlCompareGraphConnectorLaneHtml({matchMap,manualState,connectorCandidates});
 }
 
 export function renderXmlCompareWorkspaceShellHtml({
@@ -88,7 +88,8 @@ export function renderXmlCompareWorkspaceShellHtml({
   diagnostics=[],
   navStates={},
   matchMap=null,
-  manualConnectors=[]
+  manualConnectors=[],
+  connectorCandidates=null
 }={}){
   loadTabDiagnostics();
   loadSamplePickers();
@@ -100,7 +101,7 @@ export function renderXmlCompareWorkspaceShellHtml({
   return `<section class="xml-compare-workspace-shell is-rebuilt" data-xml-compare-workspace-shell data-xml-compare-workspace-shell-schema="${XML_COMPARE_WORKSPACE_SHELL_SCHEMA}">
     <div class="xml-compare-workspace-grid is-two-canvas">
       ${sideCard('source','Source',source||{},navStates.source,manualState)}
-      ${connectorLane(matchMap,manualState)}
+      ${connectorLane(matchMap,manualState,connectorCandidates)}
       ${sideCard('target','Target',target||{},navStates.target,manualState)}
     </div>
     <div class="xml-compare-bottom-tabs">
