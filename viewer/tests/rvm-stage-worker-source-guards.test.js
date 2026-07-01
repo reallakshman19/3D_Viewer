@@ -4,6 +4,7 @@ import test from 'node:test';
 
 const workerSourceUrl = new URL('../stage/worker/stage-worker.js', import.meta.url);
 const runtimeSourceUrl = new URL('../stage/worker/StageWorkerRuntime.js', import.meta.url);
+const preflightSourceUrl = new URL('../stage/worker/StageRvmBinaryPreflight.js', import.meta.url);
 const sampleJobUrl = new URL('../stage/samples/sample-stage-worker-job-v1.js', import.meta.url);
 
 test('browser worker entry contains self.onmessage', () => {
@@ -11,12 +12,12 @@ test('browser worker entry contains self.onmessage', () => {
 });
 
 test('worker source avoids forbidden imports and globals', () => {
-  const source = `${readText(workerSourceUrl)}\n${readText(runtimeSourceUrl)}`;
+  const source = `${readText(workerSourceUrl)}\n${readText(runtimeSourceUrl)}\n${readText(preflightSourceUrl)}`;
   for (const pattern of forbiddenPatterns()) assert.doesNotMatch(source, pattern);
 });
 
 test('new worker shell JS files remain under 300 lines', () => {
-  for (const url of [workerSourceUrl, runtimeSourceUrl, sampleJobUrl]) {
+  for (const url of [workerSourceUrl, runtimeSourceUrl, preflightSourceUrl, sampleJobUrl]) {
     assert.ok(readText(url).split('\n').length < 300, `${url.pathname} exceeds line limit`);
   }
 });
@@ -32,6 +33,9 @@ function forbiddenPatterns() {
     /from\s+['"][^'"]*three[^'"]*['"]/,
     /\bindexedDB\b/,
     /\bnew\s+Worker\b/,
+    /parseRvm/,
+    /readRvm/,
+    /RvmParser/,
     /RvmDeferredBridgeLoader/,
     /RvmSupportGeometryBridge/,
     /RvmPrimitiveFallbackBridge/,
