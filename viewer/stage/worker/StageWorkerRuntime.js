@@ -8,6 +8,7 @@ import {
   validateRvmStageModel,
   validateStageWorkerOutput,
 } from '../contracts/RvmStageModelContract.js';
+import { buildStageRenderPlan } from '../render/StageRenderPlan.js';
 import { scanRvmBinaryDiagnostics } from '../parser/RvmDiagnosticsScanner.js';
 import { parseRvmBinaryToStageModel } from '../parser/RvmBinaryStageParser.js';
 import { createRvmBinaryPreflightReport } from './StageRvmBinaryPreflight.js';
@@ -138,15 +139,7 @@ function createManifestForJob(job, stageModel) {
 }
 
 function buildDryRunRenderPlan(model, quality) {
-  const normalizedQuality = normalizeRenderQuality(quality);
-  const entries = (model.primitives || []).map((primitive, index) => buildRenderEntry(model, primitive, normalizedQuality, index));
-  return {
-    schema: 'StageRenderPlan.v1',
-    source: { schema: model.schema, fileName: model.source?.fileName || '', fileHash: model.source?.fileHash || '', quality: normalizedQuality },
-    entries,
-    summary: summarizeRenderEntries(entries),
-    diagnostics: [],
-  };
+  return buildStageRenderPlan(model, quality);
 }
 
 function buildRenderEntry(model, primitive, quality, index) {
@@ -179,29 +172,21 @@ function summarizeEntry(summary, entry) {
   if (entry.output === 'hidden') summary.hidden += 1;
 }
 
-function emit(runtime, messages, message) {
-  messages.push(message);
-  runtime?.onMessage?.(message);
+function stageModelArtifact() {
+  return { href: 'stage-model.json', schema: 'RvmStageModel.v1', role: 'source-stage-model', required: true };
 }
 
 function sourceFromJobAndModel(job, stageModel) {
-  return {
-    fileName: job?.fileName || stageModel.source?.fileName || '',
-    fileSize: Number(job?.fileSize ?? stageModel.source?.fileSize) || 0,
-    fileHash: stageModel.source?.fileHash || job?.fileHash || '',
-    units: stageModel.source?.units || 'm',
-    coordinateBasis: stageModel.source?.coordinateBasis || 'rvm-native',
-  };
-}
-
-function stageModelArtifact() {
-  return { id: 'artifact-stage-model', kind: 'stage-model-json', href: 'stage-model.json', schema: 'RvmStageModel.v1', byteLength: 0, required: true };
+  return { fileName: job?.fileName || stageModel?.source?.fileName || '', fileHash: job?.fileHash || stageModel?.source?.fileHash || '', schema: stageModel?.schema || 'RvmStageModel.v1' };
 }
 
 function startPayload(job) {
-  return { jobId: job?.jobId || '', kind: job?.kind || '', fileName: job?.fileName || '', fileSize: Number(job?.fileSize) || 0, fileHash: job?.fileHash || '' };
+  return { jobId: job?.jobId || '', kind: job?.kind || '', fileName: job?.fileName || '', fileSize: job?.fileSize || 0 };
 }
 
-function increment(target, key) {
-  target[key] = (target[key] || 0) + 1;
+function emit(runtime, messages, message) {
+  messages.push(message);
+  if (runtime?.onMessage) runtime.onMessage(message);
 }
+
+function increment(target, key) { target[key] = (target[key] || 0) + 1; }
