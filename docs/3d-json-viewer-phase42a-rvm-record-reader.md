@@ -24,4 +24,4 @@ Future GAS/RMSS diagnostics can compare scanner counts with record-reader eviden
 
 ## Old RVM Viewer modules remain forbidden
 
-The record reader is independent of old viewer parser, bridge, renderer, and hotfix modules. It also avoids UI, render, style, cache, Three.js, and IndexedDB dependencies.
+The record reader is independent of old viewer parser, bridge, renderer, and hotfix modules. It also avoids UI, render, style, browser cache, and browser 3D library dependencies.
