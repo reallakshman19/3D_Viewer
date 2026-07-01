@@ -369,29 +369,6 @@ function enrichedOptionsForWeightMatch(config) {
   };
 }
 
-function preferredWeightValue(issue) {
-  const best = issue?.candidates?.[0];
-  const value = Number(selectedWeight(best));
-  return Number.isFinite(value) && value > 0 && !best?.zeroFallback ? value : 0;
-}
-
-function applyPreferredWeightsByDefault(issues, config, onSaveConfig, ensureOverrides) {
-  const overrides = ensureOverrides(config);
-  overrides.rigidWeight = { ...(overrides.rigidWeight || {}) };
-  let applied = 0;
-  for (const issue of issues || []) {
-    const value = preferredWeightValue(issue);
-    if (!issue?.key || value <= 0) continue;
-    overrides.rigidWeight[issue.key] = value;
-    issue.weight = value;
-    issue.mapped = true;
-    issue.weightSource = 'preferred-auto';
-    applied += 1;
-  }
-  if (applied > 0) onSaveConfig(config);
-  return applied;
-}
-
 function widthTh(label, widthPx) {
   return `<th style="min-width:${widthPx}px;width:${widthPx}px;resize:horizontal;overflow:auto;white-space:nowrap;">${esc(label)}</th>`;
 }
@@ -562,14 +539,13 @@ export function bindXmlCiiWeightMatchPhase(detailEl, { xmlFile, stagedJsonText, 
       if (!hasWeightMasterRows(cfg)) { localIssues = []; renderWeightMasterBlocked(contentEl); status('Weight master not ready', 'bad'); return; }
       const geometryXml = applyXmlCiiStagedGeometryAuthority(enriched.xmlText || xmlText, jsonText, { config: cfg }).xmlText;
       localIssues = applyNodeMeta(collectXmlCiiWeightMatchRows(geometryXml, jsonText, cfg), geometryXml).map(cleanRow).filter(Boolean).map((row) => applyXmlCiiFlangeWeightFallbackToIssue(rerankWithRating(row, cfg), cfg));
-      const autoApplied = applyPreferredWeightsByDefault(localIssues, cfg, onSaveConfig, ensureOverrides);
       const mapped = localIssues.filter((row) => row.mapped).length;
       const suggested = localIssues.filter((row) => row.candidates?.[0]?.preferred).length;
       const flange = localIssues.filter((row) => row.candidates?.[0]?.flangeWeightFallback).length;
       const inferred = localIssues.filter((row) => row.candidates?.[0]?.inferredWeight && !row.candidates?.[0]?.zeroFallback && !row.candidates?.[0]?.flangeWeightFallback).length;
       const zero = localIssues.filter((row) => row.candidates?.[0]?.zeroFallback).length;
       const unresolved = localIssues.length - mapped - suggested - flange - inferred - zero;
-      status(`${autoApplied} auto-applied · ${mapped} mapped · ${suggested} exact · ${flange} flange fallback · ${inferred} inferred · ${zero} zero fallback · ${unresolved} unresolved · ${localIssues.length} shown${stagedSource?.label ? ` · ${stagedSource.label}` : ''}`, (zero || unresolved) ? 'bad' : 'ok');
+      status(`${mapped} mapped · ${suggested} exact · ${flange} flange fallback · ${inferred} inferred · ${zero} zero fallback · ${unresolved} unresolved · ${localIssues.length} shown${stagedSource?.label ? ` · ${stagedSource.label}` : ''}`, (zero || unresolved) ? 'bad' : 'ok');
       drawRows(localIssues);
       // Persist to cache (strip heavy ranking objects; rerankWithRating re-derives them on restore)
       const _cacheable = localIssues.map((row) => { const { ranking: _r, ...rest } = row; return rest; });

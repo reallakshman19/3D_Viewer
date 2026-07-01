@@ -276,6 +276,13 @@ function xmlCiiWorkflowBindMasters(body, root, state) {
       xmlCiiWorkflowScheduleRenderPhase(root, state, 'Saved master rows. Refreshing...');
     });
   });
+  body.querySelectorAll('[data-native-use-line-template]').forEach((button) => {
+    button.addEventListener('click', () => {
+      const select = button.parentElement?.querySelector('[data-native-line-template]');
+      services.master.applyLineListMappingTemplate(select?.value || '');
+      xmlCiiWorkflowScheduleRenderPhase(root, state, 'Applied mapped row template. Refreshing...');
+    });
+  });
   body.querySelectorAll('[data-native-clear-master]').forEach((button) => {
     button.addEventListener('click', () => {
       services.master.clear(button.dataset.nativeClearMaster);

@@ -14,6 +14,21 @@ function text(value) {
   return isBlankDensityValue(raw) ? '' : raw;
 }
 
+export function resolveDensityRangeToMax(value) {
+  const raw = text(value);
+  if (!raw) return '';
+  const withoutCommas = raw.replace(/,/g, '');
+  if (Number.isFinite(Number(withoutCommas))) return raw;
+  const pair = withoutCommas.match(/^(-?\d+(?:\.\d+)?)\s*(?:-|\/|\bto\b)\s*(-?\d+(?:\.\d+)?)$/i);
+  if (pair) {
+    const left = Number(pair[1]);
+    const right = Number(pair[2]);
+    if (Number.isFinite(left) && Number.isFinite(right)) return String(Math.max(left, right));
+  }
+  const values = (withoutCommas.match(/\d+(?:\.\d+)?/g) || []).map(Number).filter(Number.isFinite);
+  return values.length > 1 ? String(Math.max(...values)) : raw;
+}
+
 function upper(value) {
   return text(value).toUpperCase();
 }
@@ -35,6 +50,13 @@ function readOverride(processOverride, key) {
   return text(processOverride[key]);
 }
 
+function densityResult(value, source, phase, selected) {
+  const raw = text(value);
+  const resolved = resolveDensityRangeToMax(raw);
+  const resolvedSource = raw && resolved && raw !== resolved ? `${source}-range-max` : source;
+  return { value: resolved, source: resolvedSource, phase, selected };
+}
+
 const DENSITY_ALIASES = Object.freeze({
   density: Object.freeze(['density', 'Density', 'DENSITY', 'FluidDensity', 'Fluid Density', 'Density kg/m3', 'kg/m3']),
   densityMixed: Object.freeze(['densityMixed', 'Density Mixed', 'Mixed Density', 'Mixed kg/m3', 'Density (Mixed)', 'Mixed']),
@@ -45,7 +67,7 @@ const DENSITY_ALIASES = Object.freeze({
 
 export function resolveLineListDensity(row, processOverride = null) {
   const overrideDensity = readOverride(processOverride, 'density');
-  if (overrideDensity) return { value: overrideDensity, source: 'override', phase: '', selected: 'density' };
+  if (overrideDensity) return densityResult(overrideDensity, 'override', '', 'density');
 
   const direct = readRowValue(row, DENSITY_ALIASES.density);
   const mixed = readRowValue(row, DENSITY_ALIASES.densityMixed);
@@ -53,13 +75,16 @@ export function resolveLineListDensity(row, processOverride = null) {
   const liquid = readRowValue(row, DENSITY_ALIASES.densityLiquid);
   const phase = upper(readRowValue(row, DENSITY_ALIASES.phase));
 
-  if ((phase.startsWith('M') || phase.includes('MIX')) && mixed) return { value: mixed, source: 'linelist-density-mixed', phase, selected: 'densityMixed' };
-  if ((phase.startsWith('G') || phase.includes('GAS')) && gas) return { value: gas, source: 'linelist-density-gas', phase, selected: 'densityGas' };
-  if ((phase.startsWith('L') || phase.includes('LIQ')) && liquid) return { value: liquid, source: 'linelist-density-liquid', phase, selected: 'densityLiquid' };
+  if (phase.startsWith('M') || phase.includes('MIX')) {
+    if (mixed) return densityResult(mixed, 'linelist-density-mixed', phase, 'densityMixed');
+    if (liquid) return densityResult(liquid, 'linelist-density-liquid-fallback', phase, 'densityLiquid');
+  }
+  if ((phase.startsWith('G') || phase.includes('GAS')) && gas) return densityResult(gas, 'linelist-density-gas', phase, 'densityGas');
+  if ((phase.startsWith('L') || phase.includes('LIQ')) && liquid) return densityResult(liquid, 'linelist-density-liquid', phase, 'densityLiquid');
 
-  if (direct) return { value: direct, source: 'linelist-density', phase, selected: 'density' };
-  if (mixed) return { value: mixed, source: 'linelist-density-mixed', phase, selected: 'densityMixed' };
-  if (gas) return { value: gas, source: 'linelist-density-gas', phase, selected: 'densityGas' };
-  if (liquid) return { value: liquid, source: 'linelist-density-liquid', phase, selected: 'densityLiquid' };
+  if (direct) return densityResult(direct, 'linelist-density', phase, 'density');
+  if (mixed) return densityResult(mixed, 'linelist-density-mixed', phase, 'densityMixed');
+  if (gas) return densityResult(gas, 'linelist-density-gas', phase, 'densityGas');
+  if (liquid) return densityResult(liquid, 'linelist-density-liquid', phase, 'densityLiquid');
   return { value: '', source: 'none', phase, selected: '' };
 }

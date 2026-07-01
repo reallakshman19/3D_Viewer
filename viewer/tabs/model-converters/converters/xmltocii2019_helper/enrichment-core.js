@@ -12,7 +12,6 @@ import { resolveBranchProcessData } from '../../../../converters/xml-cii2019-cor
 import { buildStagedDtxrIndex, resolveXmlCiiNodeDtxr } from '../../../../converters/xml-cii2019-core/dtxr-resolver.js';
 import { xmlCiiDtxrPsForNode, xmlCiiDtxrPosForNode, buildStagedDtxrPositionIndex, xmlCiiCalibrateDtxrPositionIndex } from '../../../../converters/xml-cii2019-core/dtxr-resolver.js';
 import {
-  findWeightMasterMatch,
   collectXmlCiiZeroRigidWeightIssues,
   applyXmlCiiRigidWeightOverrides,
   scoreXmlCiiWeightCandidates,
@@ -650,17 +649,10 @@ export async function enrichXmlForCii2019(xmlTextVal, stagedJsonText, options = 
       const manualRigidWeight = isXmlCiiRigidNode(node)
         ? xmlCiiRigidWeightOverrideForNode(branchName, node, config)
         : null;
-      const weightMatch = manualRigidWeight === null
-        ? findWeightMasterMatch({ boreMm: branchBore, rating: branchRating, lengthMm }, config)
-        : null;
       if (manualRigidWeight !== null) {
         xmlSetText(document, node, 'Weight', String(manualRigidWeight));
         stats.weightAnnotations += 1;
         diagnostics.push({ type: 'rigid-weight-manual-override', nodeNumber: xmlText(node, 'NodeNumber'), branchName, boreMm: branchBore, rating: branchRating, lengthMm, weight: manualRigidWeight });
-      } else if (weightMatch) {
-        xmlSetText(document, node, 'Weight', String(weightMatch.weight));
-        stats.weightAnnotations += 1;
-        diagnostics.push({ type: 'weight-master-match', nodeNumber: xmlText(node, 'NodeNumber'), branchName, boreMm: branchBore, rating: branchRating, lengthMm, weight: weightMatch.weight, lengthDelta: weightMatch.lengthDelta });
       }
     });
   }

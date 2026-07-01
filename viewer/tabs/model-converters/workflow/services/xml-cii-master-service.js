@@ -31,6 +31,11 @@ export function createXmlCiiMasterService(getBridge, invalidateSnapshot) {
       invalidate();
       return result;
     },
+    applyLineListMappingTemplate(fileName) {
+      const result = bridge()?.applyPopupLineListMappingTemplate?.(fileName) || null;
+      invalidate();
+      return result;
+    },
     clear(masterKey) {
       const result = bridge()?.clearPopupMaster?.(masterKey) || null;
       invalidate();
@@ -56,4 +61,3 @@ export function createXmlCiiMasterService(getBridge, invalidateSnapshot) {
     },
   };
 }
-

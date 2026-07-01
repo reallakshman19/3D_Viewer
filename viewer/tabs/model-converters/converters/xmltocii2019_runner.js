@@ -1,7 +1,6 @@
 import { decodeTextUtf8, encodeTextUtf8, baseNameWithoutExtension } from '../core/output-utils.js';
 import { collectXmlCiiZeroRigidWeightIssues, applyXmlCiiRigidWeightOverrides } from '../../../converters/xml-cii2019-core/weight-match-model.js?v=20260626-weight-review-2';
 import { applyXmlCiiFlangeWeightFallbackToIssues } from '../../../converters/xml-cii2019-core/flange-weight-fallback.js?v=20260620-flange-fallback-1';
-import { applyXmlCiiAutoRigidWeightsFromIssues } from '../../../converters/xml-cii2019-core/rigid-weight-auto-apply.js?v=20260625-length-auto-weight-1';
 import { applyXmlCiiStagedGeometryAuthority } from '../../../converters/xml-cii2019-core/staged-geometry-authority.js?v=20260625-length-auto-weight-1';
 import { buildXmlCiiNodeResolverIndex } from '../../../converters/xml-cii2019-core/sideload-resolver.js';
 import { resolveManualRestraintRows } from '../../../converters/xml-cii2019-core/sideload-restraints.js';
@@ -181,16 +180,7 @@ export async function run(context) {
   enriched.config = mergeRuntimeOverridesIntoConfig(enriched.config, liveSupportConfig);
   applyStagedGeometryAuthorityToEnriched(enriched, stagedJsonText);
   const rigidReviewLogLines = [];
-  let rigidWeightIssues = applyXmlCiiFlangeWeightFallbackToIssues(collectXmlCiiZeroRigidWeightIssues(enriched.xmlText, stagedJsonText, enriched.config), enriched.config);
-  const autoWeights = applyXmlCiiAutoRigidWeightsFromIssues(enriched.xmlText, rigidWeightIssues);
-  if (autoWeights.appliedCount > 0) {
-    enriched.xmlText = autoWeights.xmlText;
-    enriched.stats.rigidWeightAutoApplied = (enriched.stats.rigidWeightAutoApplied || 0) + autoWeights.appliedCount;
-    enriched.stats.weightAnnotations = (enriched.stats.weightAnnotations || 0) + autoWeights.appliedCount;
-    enriched.diagnostics.push(...autoWeights.appliedRows);
-    rigidWeightIssues = autoWeights.remainingIssues;
-    rigidReviewLogLines.push(`Component zero-weight auto-applied: ${autoWeights.appliedCount} resolved component weight(s).`);
-  }
+  const rigidWeightIssues = applyXmlCiiFlangeWeightFallbackToIssues(collectXmlCiiZeroRigidWeightIssues(enriched.xmlText, stagedJsonText, enriched.config), enriched.config);
 
   if (rigidWeightIssues.length > 0 && typeof runValues.openXmlCiiZeroRigidWeightPopup === 'function') {
     context.setStatus(`Review needed: ${rigidWeightIssues.length} component weight(s) are zero.`, 'running');

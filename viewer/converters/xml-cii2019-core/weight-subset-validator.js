@@ -146,6 +146,45 @@ export function ensureValidatorConfig(config) {
   return config.weight;
 }
 
+function positiveNumber(...values) {
+  for (const value of values) {
+    const numeric = Number(value);
+    if (Number.isFinite(numeric) && numeric > 0) return numeric;
+  }
+  return null;
+}
+
+function candidateLengthClass(candidate) {
+  if (!candidate || candidate.zeroFallback) return 'unknown';
+  const method = text(candidate.weightMethod).toLowerCase();
+  if (method.includes('extrapolat')) return 'extrapolated';
+  if (method.includes('interpolat')) return 'interpolated';
+  if (method.includes('exact') || method.includes('standard') || method.includes('fallback')) return 'standard';
+  return 'standard';
+}
+
+function candidateExpected(issue) {
+  const candidates = Array.isArray(issue?.candidates) ? issue.candidates : [];
+  const candidate = candidates.find((row) => row?.preferred && !row?.zeroFallback) || candidates.find((row) => !row?.zeroFallback) || null;
+  if (!candidate) return null;
+  const weight = positiveNumber(candidate.selectedWeight, candidate.suggestedWeight, candidate.weight, candidate.masterWeight, candidate.directWeight);
+  if (!weight) return null;
+  return {
+    weight,
+    family: text(candidate.candidateClass?.family).toUpperCase(),
+    lengthClass: candidateLengthClass(candidate),
+  };
+}
+
+function issueFamily(issue, dtxrClass, candidateFamily) {
+  if (candidateFamily) return candidateFamily;
+  const dtxr = text(issue?.dtxr);
+  const componentType = text(issue?.componentType).toUpperCase();
+  if (/\b(FLAN|FLANGED|WELDNECK|WNFL)\b/.test(componentType) || /\b(FLANGE|FLANGED)\b/i.test(dtxr)) return 'FLANGE';
+  if (componentType === 'RIGID' && !dtxrClass?.matched) return '';
+  return 'VALVE';
+}
+
 export function validateWeightSubsets(issues, masterRows, config) {
   ensureValidatorConfig(config);
   
@@ -169,26 +208,29 @@ export function validateWeightSubsets(issues, masterRows, config) {
   return (issues || []).map(issue => {
     const boreMm = Number(issue.boreMm);
     const lengthMm = Number(issue.lengthMm);
-    const matchedWeight = Number(issue.weight || (issue.candidates?.[0]?.selectedWeight) || 0);
+    const candidateBase = candidateExpected(issue);
+    const matchedWeight = positiveNumber(issue.weight, candidateBase?.weight) || 0;
     const rating = normalizedRating(issue.rating);
     
     const dtxr = text(issue.dtxr);
     const dtxrClass = classifyDtxrRobust(dtxr, config);
-    const componentType = text(issue.componentType).toUpperCase();
-    const family = /\b(FLAN|FLANGED|WELDNECK|WNFL)\b/.test(componentType) || /\b(FLANGE|FLANGED)\b/i.test(dtxr) ? 'FLANGE' : 'VALVE';
+    const family = issueFamily(issue, dtxrClass, candidateBase?.family || '');
     
-    let expectedBase = null;
+    let expectedBase = candidateBase?.weight || null;
+    let expectedSource = candidateBase ? 'candidate' : 'subset';
     
     // Find subset
-    const subsetRows = parsedMaster.filter(r => 
+    const subsetRows = family ? parsedMaster.filter(r => 
       Math.abs(r.bore - boreMm) < 1 &&
       r.rating === rating &&
       (family === 'VALVE' ? r.family === 'VALVE' : r.family === family)
-    );
+    ) : [];
 
-    const lengthClass = classifySubsetEntry(lengthMm, subsetRows.map(r => r.length), config);
+    const lengthClass = candidateBase
+      ? { type: candidateBase.lengthClass, extrapolationRatio: 1 }
+      : classifySubsetEntry(lengthMm, subsetRows.map(r => r.length), config);
     
-    if (subsetRows.length > 0) {
+    if (!expectedBase && subsetRows.length > 0) {
       expectedBase = interpolateWeightFromSubset(lengthMm, subsetRows, config);
     }
     
@@ -202,13 +244,14 @@ export function validateWeightSubsets(issues, masterRows, config) {
           const vblBase = interpolateWeightFromSubset(lengthMm, vblSubset, config);
           if (vblBase) {
              expectedBase = vblBase * numberOr(config.weight.fullBoreFallbackFactor, 1.3);
+             expectedSource = 'subset-full-bore';
           }
         }
       }
     }
     
     let expectedFactored = expectedBase;
-    if (expectedFactored && family === 'VALVE') {
+    if (expectedFactored && family === 'VALVE' && expectedSource !== 'candidate') {
       expectedFactored = applySpecialFactorsToExpected(expectedFactored, dtxr, issue.nodeName, config);
     }
     
@@ -230,6 +273,7 @@ export function validateWeightSubsets(issues, masterRows, config) {
       validatorExtrapolationRatio: lengthClass.extrapolationRatio,
       validatorExpectedBase: expectedBase,
       validatorExpectedFactored: expectedFactored,
+      validatorExpectedSource: expectedSource,
       validatorMatchedWeight: matchedWeight,
       validatorDeviationPct: deviationPct,
       validatorIsOdd: isOdd,

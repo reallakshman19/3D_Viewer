@@ -38,8 +38,8 @@ assert.ok(
 
 assert.ok(
   weightRendererSource.includes('skipAutoWeightMatch: true') &&
-  weightRendererSource.includes('Use weight extrapolation') &&
-  weightRendererSource.includes('Rejected by length') &&
+  weightRendererSource.includes('Build Weight Data') &&
+  weightRendererSource.includes('renderRejectedChip') &&
   weightRendererSource.includes('selectedWeight'),
   'Weight Match renderer must avoid dry-run auto-weight pollution and show extrapolated/rejected candidates.'
 );
