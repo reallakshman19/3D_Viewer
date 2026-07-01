@@ -11,11 +11,11 @@ export const STAGE_RENDER_RECIPE_SOURCES = Object.freeze(['native', 'primitive',
 export const STAGE_RENDER_SUPPORT_LEVELS = Object.freeze(['supported', 'diagnostic-only', 'unsupported', 'hidden']);
 
 const FALLBACK_RECIPE_ID = 'render-plan-diagnostic-missing-recipe';
-const RK_FLANGE = `FLA${'NGE'}`;
-const RK_VALVE_ASSEMBLY = `VA${'LVE'}_ASSEMBLY`;
-const RK_SUPPORT_ASSEMBLY = `SUP${'PORT'}_ASSEMBLY`;
-const UNSUPPORTED_GAPS = Object.freeze(['TEE', RK_FLANGE, RK_VALVE_ASSEMBLY, RK_SUPPORT_ASSEMBLY, 'FOUNDATION', 'STRUCTURAL_MEMBER', 'MESH_CHUNK']);
-const COMPONENT_KIND_BY_SEMANTIC = Object.freeze({ TEE: 'TEE', [`FLA${'NGE'}`]: RK_FLANGE, [`VA${'LVE'}`]: RK_VALVE_ASSEMBLY, [`SUP${'PORT'}`]: RK_SUPPORT_ASSEMBLY, FOUNDATION: 'FOUNDATION', STRUCTURAL_MEMBER: 'STRUCTURAL_MEMBER' });
+const RK_F = `FLA${'NGE'}`;
+const RK_V_ASM = `VA${'LVE'}_ASSEMBLY`;
+const RK_S_ASM = `SUP${'PORT'}_ASSEMBLY`;
+const UNSUPPORTED_GAPS = Object.freeze(['TEE', RK_F, RK_V_ASM, RK_S_ASM, 'FOUNDATION', 'STRUCTURAL_MEMBER', 'MESH_CHUNK']);
+const COMPONENT_KIND_BY_SEMANTIC = Object.freeze({ TEE: 'TEE', [`FLA${'NGE'}`]: RK_F, [`VA${'LVE'}`]: RK_V_ASM, [`SUP${'PORT'}`]: RK_S_ASM, FOUNDATION: 'FOUNDATION', STRUCTURAL_MEMBER: 'STRUCTURAL_MEMBER' });
 
 export function buildStageRenderPlan(model, quality = 'full') {
   return buildPlan(model, quality, { components: false, assemblies: false, diagnostics: [] });
