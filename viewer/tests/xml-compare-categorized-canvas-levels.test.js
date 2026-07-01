@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { detectXmlCompareProfile, XML_COMPARE_PROFILE_TYPES } from '../xml-compare/XmlCompareProfileDetector.js';
 import { createXmlCompareLoadIntake } from '../xml-compare/XmlCompareLoadIntake.js';
 import { createXmlCompareCanvasLevelModel } from '../xml-compare/XmlCompareCanvasLevelModel.js';
+import { renderXmlCompareGraphCanvasHtml } from '../xml-compare/XmlCompareGraphCanvas.js';
 
 const xml=`<?xml version="1.0" encoding="UTF-8"?>
 <CategorizedInputXML schema="categorized-inputxml/v3" sourceName="BM_CII_INPUT_SOURCE.xml">
@@ -50,8 +51,13 @@ assert.equal(lineView.levelId,'line');
 assert.ok(lineView.fields.includes('pipingClass'));
 const nodeView=createXmlCompareCanvasLevelModel({side:'source',fileName:'BM_CII_INPUT_SOURCE_categorized_enriched.xml',profile:detected.type,records:intake.records,selection:{levelId:'node',displayField:'nodeNumber',keyField:'elementKey'}});
 assert.equal(nodeView.levelId,'node');
+assert.equal(nodeView.layout,'cards');
 assert.equal(nodeView.records.length,1);
 assert.ok(nodeView.fields.includes('temperature2'));
+const html=renderXmlCompareGraphCanvasHtml({side:'target',title:'Target',data:{fileName:'BM_CII_INPUT_SOURCE_categorized_enriched.xml',profile:detected.type,levelView:nodeView,records:intake.records}});
+assert.match(html,/is-level-cards/);
+assert.match(html,/xml-compare-level-card/);
+assert.doesNotMatch(html,/No line\/node records loaded/);
 const evidenceView=createXmlCompareCanvasLevelModel({side:'source',fileName:'BM_CII_INPUT_SOURCE_categorized_enriched.xml',profile:detected.type,records:intake.records,selection:{levelId:'evidence',displayField:'evidenceKind',keyField:'elementKey'}});
 assert.equal(evidenceView.levelId,'evidence');
 assert.ok(evidenceView.records.length>=3);
