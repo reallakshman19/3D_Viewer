@@ -6,7 +6,7 @@ import { renderXmlCompareDiagnosticsPanelHtml } from './XmlCompareDiagnosticsPan
 import { renderXmlCompareDebugPanelHtml } from './XmlCompareDebugPanel.js';
 import { renderXmlCompareLogScreenHtml } from './XmlCompareLogScreen.js';
 
-export const XML_COMPARE_WORKSPACE_SHELL_SCHEMA='xml-compare-workspace-shell/v8';
+export const XML_COMPARE_WORKSPACE_SHELL_SCHEMA='xml-compare-workspace-shell/v9';
 
 let loadDiagnosticsPromise=null;
 let loadSamplePickersPromise=null;
@@ -41,7 +41,7 @@ function loadToolbarGate(){
 function loadTransferApplyRuntime(){
   if(typeof document==='undefined')return;
   if(loadTransferApplyPromise)return;
-  loadTransferApplyPromise=import('../tabs/xml-compare-transfer-apply-runtime.js?v=20260701-transfer-apply-1').catch(()=>null);
+  loadTransferApplyPromise=import('../tabs/xml-compare-transfer-apply-runtime.js?v=20260701-transfer-selection-aware-1').catch(()=>null);
 }
 
 const esc=(v)=>String(v??'')
