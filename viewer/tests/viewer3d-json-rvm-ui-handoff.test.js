@@ -16,13 +16,16 @@ const handoffSource = fs.readFileSync(path.join(root, 'viewer/stage/ui/RvmUiHand
 const parserSuccess = {
   ok: true,
   stageModel: { schema: 'RvmStageModel.v1' },
-  parserReportSummary: { supportedSlice: 'synthetic-mvp', primitiveCount: 1 },
+  rvmParserReport: { schema: 'RvmBinaryParserReport.v1', records: { decodedPrimitiveCount: 1 }, decodedCodes: { 8: 1 } },
+  rvmDiagnosticsReport: { schema: 'RvmDiagnosticsReport.v1', counts: { prim: 2 }, nativeCodeCounts: { 8: 1 } },
 };
 const success = classifyRvmWorkerResult(parserSuccess);
 assert.equal(success.kind, 'parser-success');
 assert.equal(success.statusText, 'RVM parsed into staged model');
 assert.equal(success.warning, RVM_MVP_WARNING);
 assert.ok(createRvmUiDiagnostics(parserSuccess).some((item) => item.message.includes('MVP parser slice')));
+assert.ok(createRvmUiDiagnostics(parserSuccess).some((item) => item.code === 'STAGE_RVM_PARSER_SUMMARY'));
+assert.ok(createRvmUiDiagnostics(parserSuccess).some((item) => item.code === 'STAGE_RVM_DIAGNOSTICS_SUMMARY'));
 
 const diagnosticsOnly = classifyRvmWorkerResult({ ok: false, error: { code: 'STAGE_RVM_PARSING_NOT_IMPLEMENTED', context: { rvmDiagnosticsSummary: { prim: 2 } } } });
 assert.equal(diagnosticsOnly.kind, 'diagnostics-only');
@@ -33,11 +36,11 @@ assert.equal(preflightFailed.kind, 'preflight-failed');
 assert.equal(preflightFailed.statusText, 'RVM preflight failed');
 
 const summary = summarizeRvmUiHandoff({
-  error: { context: { preflightSummary: { valid: true }, rvmDiagnosticsSummary: { code4: 1 }, parserReportSummary: { records: 4 } } },
+  error: { context: { preflightSummary: { valid: true }, rvmDiagnosticsReport: { counts: { code4: 1 } }, rvmParserReport: { records: { decodedPrimitiveCount: 1 } } } },
 });
 assert.deepEqual(summary.preflightSummary, { valid: true });
-assert.deepEqual(summary.diagnosticsReportSummary, { code4: 1 });
-assert.deepEqual(summary.parserReportSummary, { records: 4 });
+assert.deepEqual(summary.diagnosticsReportSummary.counts, { code4: 1 });
+assert.deepEqual(summary.parserReportSummary.records, { decodedPrimitiveCount: 1 });
 
 assert.ok(shellSource.includes("'Open RVM'"));
 assert.equal(shellSource.includes('Open RVM (dry-run)'), false);
