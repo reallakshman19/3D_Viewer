@@ -8,7 +8,7 @@ import { renderXmlCompareLogScreenHtml } from './XmlCompareLogScreen.js';
 import { createXmlCompareTransferPreview } from './XmlCompareTransferPreview.js';
 import { renderXmlCompareTransferPreviewPanelHtml } from './XmlCompareTransferPreviewPanel.js';
 
-export const XML_COMPARE_WORKSPACE_SHELL_SCHEMA='xml-compare-workspace-shell/v13';
+export const XML_COMPARE_WORKSPACE_SHELL_SCHEMA='xml-compare-workspace-shell/v14';
 
 let loadDiagnosticsPromise=null;
 let loadSamplePickersPromise=null;
@@ -39,7 +39,7 @@ function loadCategorizedConverter(){
 function loadTableCategorizedXml(){
   if(typeof document==='undefined')return;
   if(loadTableCategorizedPromise)return;
-  loadTableCategorizedPromise=import('../tabs/xml-compare-table-categorized-runtime.js?v=20260701-table-categorized-export-handoff-1').catch(()=>null);
+  loadTableCategorizedPromise=import('../tabs/xml-compare-table-categorized-runtime.js?v=20260701-table-categorized-profile-designer-1').catch(()=>null);
 }
 
 function loadToolbarGate(){
