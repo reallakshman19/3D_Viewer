@@ -5,15 +5,25 @@ import { activeSource, sourceSummaryRows } from './table-categorized-xml-source-
 import { renderTableCategorizedStagePreview } from './table-categorized-xml-stage-preview.js';
 import { hasBlockingValidation } from './table-categorized-xml-validation.js';
 
-export const TABLE_CATEGORIZED_XML_SHELL_SCHEMA='table-categorized-xml-shell/v8';
+export const TABLE_CATEGORIZED_XML_SHELL_SCHEMA='table-categorized-xml-shell/v9';
 export const TABLE_CATEGORIZED_XML_BUTTON_ATTR='data-xml-compare-table-categorized-open';
 export const TABLE_CATEGORIZED_XML_POPUP_ATTR='data-xml-compare-table-categorized-popup';
 export const TABLE_CATEGORIZED_XML_TABS=Object.freeze([
-  ['source','1 Import','Tables'],
-  ['levels','2 Map','Rules'],
-  ['graph','3 Structure','Graph'],
+  ['source','1 Import Table','Tables'],
+  ['levels','2 Map Fields & Rules','Rules'],
+  ['graph','3 Build Structure','Graph'],
   ['validation','4 Check','Quality'],
   ['export','5 Export','Files / Canvas']
+]);
+export const TABLE_CATEGORIZED_SETUP_TABS=Object.freeze([
+  ['source','🟦 Source','Import settings and raw table rows'],
+  ['fields','🟪 Fields','Column mapping and data types'],
+  ['relationships','🟧 Relationships','Keys, joins, and parent-child links'],
+  ['structure','🟨 Structure','Graph levels and hierarchy'],
+  ['rules','🟫 Rules','Transform, filter, fallback, and grouping rules'],
+  ['quality','🟨 Quality','Checks, warnings, and audit proof'],
+  ['output','🟩 Output','XML, downloads, and canvas link'],
+  ['recipe','⚙ Recipe','Save, load, version, and reuse mappings']
 ]);
 const OPTION_GROUPS=Object.freeze([
   ['source','🟦','Source','Raw tables and starting recipe',[['✓','Source Table','headers, rows, source id'],['✓','Recipe / Preset','Table 2, two-source, blank']]],
@@ -25,17 +35,33 @@ const OPTION_GROUPS=Object.freeze([
 
 const esc=(value)=>String(value??'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll("'",'&#039;');
 
+export function setupTabForWorkflowTab(activeTab){
+  if(activeTab==='source')return 'source';
+  if(activeTab==='levels')return 'fields';
+  if(activeTab==='graph')return 'structure';
+  if(activeTab==='validation')return 'quality';
+  if(activeTab==='export')return 'output';
+  return 'fields';
+}
+
 export function renderTableCategorizedXmlButtonHtml(){
   return `<button type="button" class="xml-compare-table-categorized-btn" ${TABLE_CATEGORIZED_XML_BUTTON_ATTR}>Table to Categorized XML</button>`;
 }
 
 export function renderTableCategorizedXmlShellHtml(state={}){
   const view={activeTab:'source',sources:[],activeSourceId:'S1',profile:PS_MAPPING_TABLE_2_SHADOW_PROFILE,exportStatus:'',...state};
-  return `<div class="table-categorized-xml-backdrop" ${TABLE_CATEGORIZED_XML_POPUP_ATTR}><section class="table-categorized-xml-dialog" role="dialog" aria-modal="true" aria-label="Table to Categorized XML"><header><div><h3>Table to Categorized XML</h3><p>Build a categorized graph from any table. XML is only one export from that graph.</p></div><button type="button" data-table-categorized-close>Close</button></header>${renderTabStrip(view.activeTab)}<main class="table-categorized-xml-body table-categorized-xml-with-preview"><section class="table-categorized-xml-workflow-pane">${renderTabBody(view)}</section>${renderTableCategorizedStagePreview(view)}</main><footer><span>Tabs guide the major workflow; collapsible panels keep each step simple.</span><button type="button" data-table-categorized-close>Close</button></footer></section></div>`;
+  view.activeSetupTab=state.activeSetupTab||setupTabForWorkflowTab(view.activeTab);
+  return `<div class="table-categorized-xml-backdrop" ${TABLE_CATEGORIZED_XML_POPUP_ATTR}><section class="table-categorized-xml-dialog" role="dialog" aria-modal="true" aria-label="Table to Categorized XML"><header><div><h3>Table to Categorized XML</h3><p>Build a categorized graph from any table. XML is only one export from that graph.</p></div><button type="button" data-table-categorized-close>Close</button></header>${renderTabStrip(view.activeTab)}${renderSetupTabStrip(view.activeSetupTab)}<main class="table-categorized-xml-body table-categorized-xml-with-preview"><section class="table-categorized-xml-workflow-pane">${renderTabBody(view)}</section>${renderTableCategorizedStagePreview(view)}</main><footer><span>Tabs guide the major workflow; collapsible panels keep each step simple.</span><button type="button" data-table-categorized-close>Close</button></footer></section></div>`;
 }
 
 export function renderTabStrip(activeTab='source'){
   return `<nav class="table-categorized-xml-tabs" aria-label="Table categorizer workflow">${TABLE_CATEGORIZED_XML_TABS.map(([id,title,subtitle])=>`<button type="button" data-table-categorized-tab="${esc(id)}" class="${activeTab===id?'is-active':''}"><b>${esc(title)}</b><small>${esc(subtitle)}</small></button>`).join('')}</nav>`;
+}
+
+export function renderSetupTabStrip(activeSetupTab='source'){
+  const ids=new Set(TABLE_CATEGORIZED_SETUP_TABS.map(([id])=>id));
+  const activeId=ids.has(activeSetupTab)?activeSetupTab:'source';
+  return `<nav class="table-categorized-setup-tabs" aria-label="Table categorizer setup categories" role="tablist">${TABLE_CATEGORIZED_SETUP_TABS.map(([id,label,subtitle])=>`<button type="button" data-table-categorized-setup-tab="${esc(id)}" class="${activeId===id?'is-active':''}" aria-selected="${activeId===id?'true':'false'}" role="tab"><b>${esc(label)}</b><small>${esc(subtitle)}</small></button>`).join('')}</nav>`;
 }
 
 export function renderTabBody(view={}){
