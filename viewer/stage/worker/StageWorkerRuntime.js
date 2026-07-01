@@ -8,6 +8,7 @@ import {
   validateRvmStageModel,
   validateStageWorkerOutput,
 } from '../contracts/RvmStageModelContract.js';
+import { createRvmBinaryPreflightReport } from './StageRvmBinaryPreflight.js';
 
 export function createStageWorkerRuntime(options = {}) {
   return {
@@ -21,7 +22,7 @@ export async function runStageWorkerJob(runtime, job) {
   if (runtime?.initialized) emit(runtime, messages, createStageWorkerMessage('STAGE_WORKER_READY', { phase: 'idle' }));
   emit(runtime, messages, createStageWorkerMessage('STAGE_WORKER_START', startPayload(job)));
   if (job?.kind === 'stage-json') return runStageJsonJob(runtime, messages, job);
-  if (job?.kind === 'rvm-binary') return fail(runtime, messages, 'RVM binary parsing is not implemented in the staged worker shell.', 'STAGE_RVM_PARSING_NOT_IMPLEMENTED', { jobId: job?.jobId || '', kind: job?.kind || '' });
+  if (job?.kind === 'rvm-binary') return runRvmBinaryJob(runtime, messages, job);
   return fail(runtime, messages, `Unsupported stage worker job kind: ${job?.kind}`, 'STAGE_WORKER_UNSUPPORTED_JOB_KIND', { jobId: job?.jobId || '', kind: job?.kind || '' });
 }
 
@@ -54,6 +55,14 @@ async function runStageJsonJob(runtime, messages, job) {
   emit(runtime, messages, createStageWorkerMessage('STAGE_WORKER_STAGE_READY', { schema: parsed.stageModel.schema, primitiveCount: parsed.stageModel.primitives.length }));
   emit(runtime, messages, createStageWorkerMessage('STAGE_WORKER_PACKAGE_READY', { schema: manifest.schema, artifactCount: manifest.artifacts.length }));
   return acceptedOutput(runtime, messages, parsed.stageModel, manifest, renderPlan, job);
+}
+
+function runRvmBinaryJob(runtime, messages, job) {
+  emit(runtime, messages, createStageWorkerProgress('reading-file', { loaded: 1, total: 2, percent: 50, message: 'Reading RVM binary job envelope' }));
+  emit(runtime, messages, createStageWorkerProgress('hashing-source', { loaded: 2, total: 2, percent: 100, message: 'Validating RVM binary source identity' }));
+  const preflight = createRvmBinaryPreflightReport(job);
+  if (!preflight.valid) return fail(runtime, messages, 'RVM binary preflight failed.', 'STAGE_RVM_PREFLIGHT_FAILED', { preflight });
+  return fail(runtime, messages, 'RVM binary parsing is not implemented in the staged worker shell.', 'STAGE_RVM_PARSING_NOT_IMPLEMENTED', { preflight: preflight.summary, warnings: preflight.warnings });
 }
 
 function acceptedOutput(runtime, messages, stageModel, manifest, renderPlan, job) {
