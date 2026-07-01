@@ -1,6 +1,7 @@
 import {
   RVM_STAGE_SCHEMA,
   isBbox6,
+  isMatrix3x4,
   normalizeRenderQuality,
 } from '../contracts/RvmStageModelContract.js';
 import { getStageRenderRecipeForPrimitive } from '../contracts/StageRenderRecipes.js';
@@ -41,7 +42,8 @@ export function classifyStageRenderSupport(input = {}) {
   if (renderKind === 'UNKNOWN_DIAGNOSTIC') return support('diagnostic-only', 'bbox', 'diagnostic-fallback', ['STAGE_RENDER_DIAGNOSTIC_ONLY']);
   if (UNSUPPORTED_GAPS.includes(renderKind)) return unsupportedSupport(renderKind, input);
   if (renderKind === 'FACET_GROUP') return classifyFacetGroup(input);
-  if (['CYLINDER', 'BOX', 'ELBOW'].includes(renderKind) && hasNativeGeometry(input.primitive || input)) return support('supported', 'procedural', 'native', []);
+  if (renderKind === 'ELBOW') return classifyElbow(input);
+  if (['CYLINDER', 'BOX'].includes(renderKind) && hasNativeGeometry(input.primitive || input)) return support('supported', 'procedural', 'native', []);
   return support('diagnostic-only', 'bbox', 'diagnostic-fallback', ['STAGE_RENDER_KIND_NOT_SUPPORTED']);
 }
 
@@ -113,6 +115,13 @@ function classifyFacetGroup(input) {
     : support('diagnostic-only', 'bbox', 'diagnostic-fallback', ['STAGE_FACET_METADATA_REQUIRED']);
 }
 
+function classifyElbow(input) {
+  const primitive = input.primitive || input;
+  return hasNativeGeometry(primitive) && hasCode4ElbowMetadata(primitive) && hasCompleteElbowParams(primitive) && hasNativeTransformBounds(primitive)
+    ? support('supported', 'procedural', 'native', [])
+    : support('diagnostic-only', 'bbox', 'diagnostic-fallback', ['STAGE_CODE4_ELBOW_NATIVE_PARAMS_REQUIRED']);
+}
+
 function support(supportLevel, output, recipeSource, reasonCodes) {
   return { supportLevel, output, recipeSource, diagnosticOnly: ['diagnostic-only', 'unsupported'].includes(supportLevel), hidden: supportLevel === 'hidden', reasonCodes };
 }
@@ -130,10 +139,14 @@ function renderDiagnostic(primitive, message) { return { severity: 'warning', co
 function planSource(model, quality) { return { schema: model?.schema || RVM_STAGE_SCHEMA, fileName: model?.source?.fileName || '', fileHash: model?.source?.fileHash || '', quality }; }
 function pickBbox(primitive, component) { return primitive?.transform?.bboxWorld || primitive?.bboxWorld || component?.bboxWorld || null; }
 function hasNativeGeometry(item) { return item?.native?.decoded !== false && ['native', 'derived'].includes(item?.confidence?.geometry); }
+function hasCode4ElbowMetadata(primitive) { return primitive?.native?.code === 4 && primitive?.nativeRecord?.recordType === 'RVM_PRIMITIVE' && primitive?.nativeRecord?.nativeCode === 4 && primitive?.nativeRecord?.decoded === true && primitive?.nativeGeometry?.provenance === 'native'; }
+function hasCompleteElbowParams(primitive) { const params = primitive?.nativeGeometry?.nativeParams || primitive?.nativeParams || primitive?.params || {}; return positive(params.radius) && positive(params.bendRadius) && positive(params.angleDeg); }
+function hasNativeTransformBounds(primitive) { const geometry = primitive?.nativeGeometry || {}; return isMatrix3x4(geometry.transform3x4) && isBbox6(geometry.bboxLocal) && isBbox6(geometry.bboxWorld); }
 function nativeRef(primitive) { return hasNativeGeometry(primitive) ? { type: 'primitive-native', id: primitive.id || '', recordOffset: primitive.native?.recordOffset ?? null } : null; }
 function facetRef(primitive) { return primitive?.facetMetadata || (primitive?.params?.facets ? { type: 'facet-count', count: primitive.params.facets } : null); }
 function chunkRef(primitive) { return primitive?.geometryChunk || primitive?.native?.geometryChunk || null; }
 function renderId(value) { return `render-${String(value).padStart(6, '0')}`; }
+function positive(value) { return Number.isFinite(Number(value)) && Number(value) > 0; }
 
 function summarizeEntries(entries) {
   const summary = { totalEntries: entries.length, byEntryKind: init(STAGE_RENDER_ENTRY_KINDS), byRenderKind: {}, byRecipe: {}, byOutput: {}, bySupportLevel: init(STAGE_RENDER_SUPPORT_LEVELS), unsupportedRenderKinds: [], diagnosticOnly: 0, hidden: 0, componentEntries: 0, assemblyEntries: 0, primitiveEntries: 0 };
