@@ -40,8 +40,23 @@ function setInputFile(input,file){
 function openLinewiseWorkflow(){
   const button=document.querySelector('[data-xml-compare-categorized-open]');
   if(!button)return null;
-  button.click();
-  return document.querySelector('[data-xml-compare-categorized-popup]');
+  let popup=document.querySelector('[data-xml-compare-categorized-popup]');
+  if(!popup){button.click();popup=document.querySelector('[data-xml-compare-categorized-popup]');}
+  return popup;
+}
+
+function importControl(){
+  return document.querySelector('[data-xml-compare-categorized-popup] input[data-xml-compare-categorized-import]');
+}
+
+function ensureImportTab(){
+  const popup=openLinewiseWorkflow();
+  if(!popup)return null;
+  let input=importControl();
+  if(input)return input;
+  popup.querySelector('[data-xml-compare-linewise-tab="import"]')?.click();
+  input=importControl();
+  return input||null;
 }
 
 function selectCanvasSide(side){
@@ -51,10 +66,9 @@ function selectCanvasSide(side){
 }
 
 function importIntoLinewiseWorkflow(file,side){
-  openLinewiseWorkflow();
-  selectCanvasSide(side);
-  const input=document.querySelector('[data-xml-compare-categorized-popup] input[data-xml-compare-categorized-import]');
+  const input=ensureImportTab();
   if(!input)return false;
+  selectCanvasSide(side);
   setInputFile(input,file);
   return true;
 }
@@ -117,3 +131,4 @@ function install(){
 }
 
 install();
+export const _test=Object.freeze({importControl,ensureImportTab,openLinewiseWorkflow});

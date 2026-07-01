@@ -8,7 +8,7 @@ import { renderXmlCompareLogScreenHtml } from './XmlCompareLogScreen.js';
 import { createXmlCompareTransferPreview } from './XmlCompareTransferPreview.js';
 import { renderXmlCompareTransferPreviewPanelHtml } from './XmlCompareTransferPreviewPanel.js';
 
-export const XML_COMPARE_WORKSPACE_SHELL_SCHEMA='xml-compare-workspace-shell/v16';
+export const XML_COMPARE_WORKSPACE_SHELL_SCHEMA='xml-compare-workspace-shell/v17';
 
 let loadDiagnosticsPromise=null;
 let loadSamplePickersPromise=null;
@@ -20,7 +20,7 @@ let loadCandidateReviewPromise=null;
 let loadLinewiseInfoRulePromise=null;
 
 function loadTabDiagnostics(){if(typeof document==='undefined')return;if(loadDiagnosticsPromise)return;loadDiagnosticsPromise=import('../tabs/xml-compare-load-diagnostics-runtime.js?v=20260628-xml-compare-load-diagnostics-3').catch(()=>null);}
-function loadSamplePickers(){if(typeof document==='undefined')return;if(loadSamplePickersPromise)return;loadSamplePickersPromise=import('../tabs/xml-compare-enriched-sample-pickers.js?v=20260630-samples-through-linewise-2').catch(()=>null);}
+function loadSamplePickers(){if(typeof document==='undefined')return;if(loadSamplePickersPromise)return;loadSamplePickersPromise=import('../tabs/xml-compare-enriched-sample-pickers.js?v=20260701-linewise-sample-import-tab-1').catch(()=>null);}
 function loadCategorizedConverter(){if(typeof document==='undefined')return;if(loadCategorizedConverterPromise)return;loadCategorizedConverterPromise=import('../tabs/xml-compare-categorized-converter-runtime.js?v=20260630-clean-workflow-ui-1').catch(()=>null);}
 function loadTableCategorizedXml(){if(typeof document==='undefined')return;if(loadTableCategorizedPromise)return;loadTableCategorizedPromise=import('../tabs/xml-compare-table-categorized-runtime.js?v=20260701-table-categorized-multisource-1').catch(()=>null);}
 function loadToolbarGate(){if(typeof document==='undefined')return;if(loadToolbarGatePromise)return;loadToolbarGatePromise=import('../tabs/xml-compare-linewise-toolbar-gate.js?v=20260701-table-categorized-source-setup-1').catch(()=>null);}
