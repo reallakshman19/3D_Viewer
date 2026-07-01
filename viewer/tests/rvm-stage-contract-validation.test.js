@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
+  createDiagnosticFallback,
   createGeometryChunkRef,
   createNativeRecordRef,
   validateRvmStageModel,
@@ -21,6 +22,22 @@ test('diagnostic fallback sample validates', () => {
   const diagnostic = model.primitives.at(-1);
   assert.equal(diagnostic.diagnosticFallback.visible, true);
   assertModelValid(model);
+});
+
+test('native recipe source requires native geometry metadata', () => {
+  const model = createSampleNativeGeometryStageModelV1();
+  delete model.primitives[0].nativeGeometry;
+  assertModelError(model, 'STAGE_NATIVE_GEOMETRY_MISSING_METADATA');
+});
+
+test('visible diagnostic fallback cannot keep non-diagnostic render kind', () => {
+  const model = createSampleNativeGeometryStageModelV1();
+  const primitive = model.primitives[0];
+  primitive.diagnosticFallback = createDiagnosticFallback({ kind: 'not-implemented', visible: true, message: 'Fallback only.' });
+  primitive.recipeSource = { source: 'diagnostic-fallback', output: 'bbox', recipeId: 'diagnostic-bbox' };
+  primitive.confidence.geometry = 'diagnostic';
+  primitive.renderKind = 'CYLINDER';
+  assertModelError(model, 'STAGE_DIAGNOSTIC_FALLBACK_RENDER_KIND');
 });
 
 test('MESH_CHUNK without geometryChunk cannot claim native full output', () => {
