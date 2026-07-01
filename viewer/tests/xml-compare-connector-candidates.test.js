@@ -17,13 +17,19 @@ const target={
     {uid:'t-2',nodeNumber:'120',lineNo:'L-900',dtxrPs:'PS-300',dtxrPos:'ANCHOR'}
   ]
 };
-const model=createXmlCompareConnectorCandidateModel({source,target});
-assert.equal(model.schema,'xml-compare-connector-candidate-model/v2');
-assert.equal(model.summary.candidateCount,1);
-assert.equal(model.candidates[0].sourceUid,'s-1');
-assert.equal(model.candidates[0].targetUid,'t-1');
-assert.equal(model.candidates[0].sourceField,'dtxrPs');
-assert.equal(model.candidates[0].type,'CANDIDATE');
+const disabledModel=createXmlCompareConnectorCandidateModel({source,target});
+assert.equal(disabledModel.schema,'xml-compare-connector-candidate-model/v3');
+assert.equal(disabledModel.summary.enabled,false);
+assert.equal(disabledModel.summary.candidateCount,0);
+assert.equal(disabledModel.candidates.length,0);
+
+const enabledModel=createXmlCompareConnectorCandidateModel({source,target,enabled:true});
+assert.equal(enabledModel.summary.enabled,true);
+assert.equal(enabledModel.summary.candidateCount,1);
+assert.equal(enabledModel.candidates[0].sourceUid,'s-1');
+assert.equal(enabledModel.candidates[0].targetUid,'t-1');
+assert.equal(enabledModel.candidates[0].sourceField,'dtxrPs');
+assert.equal(enabledModel.candidates[0].type,'CANDIDATE');
 
 const workspace=createXmlCompareWorkspaceModel({
   fileA:{name:'A.xml',size:10},
@@ -32,12 +38,14 @@ const workspace=createXmlCompareWorkspaceModel({
   textB:'<CAESARII><PIPINGMODEL><PIPINGELEMENT FROM_NODE="110" TO_NODE="120"><DTXR_PS>PS-100</DTXR_PS></PIPINGELEMENT></PIPINGMODEL></CAESARII>',
   canvasState:{levelViews:{source:{levelId:'node',keyField:'dtxrPs'},target:{levelId:'node',keyField:'dtxrPs'}}}
 });
-assert.equal(workspace.connectorCandidates.summary.candidateCount,1);
-assert.ok(workspace.logs.some((entry)=>entry.code==='XML-COMPARE-CANDIDATES'));
+assert.equal(workspace.connectorCandidates.summary.candidateCount,0);
+assert.equal(workspace.connectorCandidates.summary.enabled,false);
+assert.equal(workspace.logs.some((entry)=>entry.code==='XML-COMPARE-CANDIDATES'),false);
 
-const html=renderXmlCompareGraphConnectorLaneHtml({connectorCandidates:model});
-assert.match(html,/Candidate/);
-assert.match(html,/PS-100/);
-assert.match(html,/CAND/);
+const html=renderXmlCompareGraphConnectorLaneHtml({connectorCandidates:disabledModel});
+assert.match(html,/Manual-first mode/);
+assert.doesNotMatch(html,/Accept/);
+assert.doesNotMatch(html,/Reject/);
+assert.doesNotMatch(html,/PS-100/);
 
 console.log('xml-compare-connector-candidates: all assertions passed');
