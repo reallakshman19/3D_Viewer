@@ -40,10 +40,13 @@ export function createEmptyCategorizerProfile(overrides={}){
   return Object.freeze({
     schema:UNIVERSAL_CATEGORIZER_PROFILE_V1,
     profileId:String(overrides.profileId||'universal-table-categorizer-profile'),
-    displayName:String(overrides.displayName||'Universal Table Categorizer Profile'),
-    importSources:Object.freeze([]),
+    projectName:String(overrides.projectName||overrides.displayName||'Universal Table Categorizer Profile'),
+    sources:Object.freeze([]),
     resolverPipelines:Object.freeze([]),
-    levelDefinitions:Object.freeze([]),
+    levels:Object.freeze([]),
+    joins:Object.freeze([]),
+    coordinateResolvers:Object.freeze([]),
+    validationRules:Object.freeze([]),
     exportProfiles:Object.freeze([])
   });
 }
