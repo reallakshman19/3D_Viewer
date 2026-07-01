@@ -1,6 +1,7 @@
 export * from './StageConstants.js';
 export * from './StageDiagnostics.js';
 export * from './StageFactory.js';
+export * from './StageGeometryChunkContract.js';
 export * from './StageIdentity.js';
 export * from './StageNativeGeometryContract.js';
 export * from './StagePackageManifest.js';
