@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 
 import { exportCategorizedGraphArtifacts } from '../xml-compare/table-categorizer/table-categorized-xml-exporter.js';
 import { buildCategorizedGraph } from '../xml-compare/table-categorizer/table-categorized-xml-graph-builder.js';
+import { createBlankUniversalProfile } from '../xml-compare/table-categorizer/table-categorized-xml-profile-designer.js';
 import { PS_MAPPING_TABLE_2_SAMPLE, PS_MAPPING_TABLE_2_SHADOW_PROFILE } from '../xml-compare/table-categorizer/table-categorized-xml-pilot-profiles.js';
 import { parseTableSource } from '../xml-compare/table-categorizer/table-categorized-xml-source-parser.js';
 import { TABLE_CATEGORIZED_XML_BUTTON_ATTR, renderTableCategorizedXmlButtonHtml, renderTableCategorizedXmlShellHtml } from '../xml-compare/table-categorizer/table-categorized-xml-shell.js';
@@ -25,9 +26,21 @@ assert.ok(beforeExportShell.includes('Run Pilot Graph Build first.'));
 assert.ok(!beforeExportShell.includes('data-table-categorized-action="send-source"'));
 
 const levelShell=renderTableCategorizedXmlShellHtml({activeTab:'levels'});
-assert.ok(levelShell.includes('PS Mapping Table 2 Shadow Profile'));
+assert.ok(levelShell.includes('Editable Universal Profile / Level Designer v1'));
+assert.ok(levelShell.includes('Root Level editor'));
+assert.ok(levelShell.includes('Parent level editor'));
+assert.ok(levelShell.includes('Child level editor'));
+assert.ok(levelShell.includes('GrandChild level editor'));
+assert.ok(levelShell.includes('Recursive Next Level editor'));
+assert.ok(levelShell.includes('Basic Resolver Editor'));
+assert.ok(levelShell.includes('Download Profile JSON'));
 assert.ok(levelShell.includes('SupportFamily'));
 assert.ok(levelShell.includes('SupportOccurrence'));
+assert.ok(!levelShell.includes('parentTabs'));
+
+const blankLevelShell=renderTableCategorizedXmlShellHtml({activeTab:'levels',profile:createBlankUniversalProfile()});
+assert.ok(blankLevelShell.includes('Blank Universal Profile'));
+assert.ok(blankLevelShell.includes('Parent (x)'));
 
 const source=parseTableSource(PS_MAPPING_TABLE_2_SAMPLE,{sourceName:'Table 2 - Model PS Data'});
 const graph=buildCategorizedGraph(PS_MAPPING_TABLE_2_SHADOW_PROFILE,[source]);
@@ -50,6 +63,7 @@ assert.ok(exportShell.includes('XML Preview'));
 assert.ok(exportShell.includes('&lt;CategorizedTableXml'));
 assert.ok(exportShell.includes('Download Categorized XML'));
 assert.ok(exportShell.includes('Download Graph JSON'));
+assert.ok(exportShell.includes('Download Profile JSON'));
 assert.ok(exportShell.includes('Send to SourceXML Canvas'));
 assert.ok(exportShell.includes('Send to TargetXML Canvas'));
 assert.ok(!exportShell.includes('CategorizedInputXML'));
