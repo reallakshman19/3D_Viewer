@@ -3,7 +3,7 @@ import { graphChildren } from './table-categorized-xml-graph-builder.js';
 import { PS_MAPPING_TABLE_2_SHADOW_PROFILE } from './table-categorized-xml-pilot-profiles.js';
 import { hasBlockingValidation } from './table-categorized-xml-validation.js';
 
-export const TABLE_CATEGORIZED_XML_SHELL_SCHEMA='table-categorized-xml-shell/v2';
+export const TABLE_CATEGORIZED_XML_SHELL_SCHEMA='table-categorized-xml-shell/v3';
 export const TABLE_CATEGORIZED_XML_BUTTON_ATTR='data-xml-compare-table-categorized-open';
 export const TABLE_CATEGORIZED_XML_POPUP_ATTR='data-xml-compare-table-categorized-popup';
 
@@ -12,23 +12,21 @@ export const TABLE_CATEGORIZED_XML_TABS=Object.freeze([
   ['levels','Level Designer','Read-only pilot profile'],
   ['graph','Graph Preview','Canonical graph'],
   ['validation','Validation','Gate results'],
-  ['export','Export / Link','Disabled in this phase']
+  ['export','Export / Link','XML, JSON, audit, canvas']
 ]);
 
 const esc=(value)=>String(value??'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll("'",'&#039;');
 
-export function renderTableCategorizedXmlButtonHtml(){
-  return `<button type="button" class="xml-compare-table-categorized-btn" ${TABLE_CATEGORIZED_XML_BUTTON_ATTR}>Table to Categorized XML</button>`;
-}
+export function renderTableCategorizedXmlButtonHtml(){return `<button type="button" class="xml-compare-table-categorized-btn" ${TABLE_CATEGORIZED_XML_BUTTON_ATTR}>Table to Categorized XML</button>`;}
 
 export function renderTableCategorizedXmlShellHtml(state={}){
-  const view={activeTab:'source',sourceText:'',sourceName:'Pasted Source 1',profile:PS_MAPPING_TABLE_2_SHADOW_PROFILE,...state};
+  const view={activeTab:'source',sourceText:'',sourceName:'Pasted Source 1',profile:PS_MAPPING_TABLE_2_SHADOW_PROFILE,exportStatus:'',...state};
   return `<div class="table-categorized-xml-backdrop" ${TABLE_CATEGORIZED_XML_POPUP_ATTR}>
     <section class="table-categorized-xml-dialog" role="dialog" aria-modal="true" aria-label="Table to Categorized XML">
-      <header><div><h3>Table to Categorized XML</h3><p>Shadow-mode / preview-only universal table import. No XML export or canvas handoff is generated in Phase 3-5.</p></div><button type="button" data-table-categorized-close>Close</button></header>
+      <header><div><h3>Table to Categorized XML</h3><p>Canonical graph is the master model. XML is one export artifact only.</p></div><button type="button" data-table-categorized-close>Close</button></header>
       ${renderTabStrip(view.activeTab)}
       <main class="table-categorized-xml-body">${renderTabBody(view)}</main>
-      <footer><span>Phase 3-5: resolver engine, canonical graph preview, and validation gates only.</span><button type="button" data-table-categorized-close>Close</button></footer>
+      <footer><span>Phase 6-7: explicit artifact export and canvas handoff only.</span><button type="button" data-table-categorized-close>Close</button></footer>
     </section>
   </div>`;
 }
@@ -41,8 +39,8 @@ export function renderTabBody(view={}){
   if(view.activeTab==='source')return renderSourceSetup(view);
   if(view.activeTab==='levels')return renderLevelDesigner(view.profile);
   if(view.activeTab==='graph')return renderGraphPreview(view.graph,view.validationResults);
-  if(view.activeTab==='validation')return renderValidation(view.validationResults);
-  if(view.activeTab==='export')return renderExportPlaceholder();
+  if(view.activeTab==='validation')return renderValidation(view.validationResults,view.exportResult);
+  if(view.activeTab==='export')return renderExportLink(view);
   return renderLevelDesigner(view.profile);
 }
 
@@ -66,19 +64,24 @@ export function renderLevelDesigner(profile=PS_MAPPING_TABLE_2_SHADOW_PROFILE){
 
 export function renderGraphPreview(graph=null,validationResults=[]){
   if(hasBlockingValidation(validationResults))return `<section class="table-categorized-xml-card"><h4>Graph Preview</h4><p>Graph preview blocked by BLOCKER validation gate. Open Validation for details.</p></section>`;
-  if(!graph)return `<section class="table-categorized-xml-card"><h4>Graph Preview</h4><p>Run Pilot Graph Build to create the canonical categorized graph. No XML is generated.</p></section>`;
+  if(!graph)return `<section class="table-categorized-xml-card"><h4>Graph Preview</h4><p>Run Pilot Graph Build to create the canonical categorized graph.</p></section>`;
   const roots=(graph.nodes||[]).filter((node)=>!node.parentId);
-  return `<section class="table-categorized-xml-card"><h4>Graph Preview</h4><p>Canonical categorized graph is the master model. XML remains disabled.</p><div class="table-categorized-xml-subcard">${roots.map((node)=>renderNodeTree(graph,node)).join('')}</div></section>`;
+  return `<section class="table-categorized-xml-card"><h4>Graph Preview</h4><p>Canonical categorized graph is the master model.</p><div class="table-categorized-xml-actions"><button type="button" data-table-categorized-tab="export">Go to Export / Link</button></div><div class="table-categorized-xml-subcard">${roots.map((node)=>renderNodeTree(graph,node)).join('')}</div></section>`;
 }
 
-export function renderValidation(results=[]){
+export function renderValidation(results=[],exportResult=null){
   if(!results.length)return `<section class="table-categorized-xml-card"><h4>Validation</h4><p>No validation results yet. Parse a source and run the pilot graph build.</p></section>`;
   const rows=results.map((item)=>`<tr class="is-${esc(item.severity).toLowerCase()}"><td>${esc(item.gate)}</td><td>${esc(item.severity)}</td><td>${esc(item.status)}</td><td>${esc(item.message)}</td><td>${esc(item.ref)}</td></tr>`).join('');
-  return `<section class="table-categorized-xml-card"><h4>Validation</h4><table><thead><tr><th>Gate</th><th>Severity</th><th>Status</th><th>Message</th><th>Source/Graph Ref</th></tr></thead><tbody>${rows}</tbody></table></section>`;
+  const status=exportResult?.ok?'Export allowed.':'Export blocked or not generated.';
+  return `<section class="table-categorized-xml-card"><h4>Validation</h4><p>${esc(status)}</p><table><thead><tr><th>Gate</th><th>Severity</th><th>Status</th><th>Message</th><th>Source/Graph Ref</th></tr></thead><tbody>${rows}</tbody></table></section>`;
 }
 
-export function renderExportPlaceholder(){
-  return `<section class="table-categorized-xml-card"><h4>Export / Link</h4><p>Disabled in Phase 3-5. XML export and canvas handoff are later phases.</p><div class="table-categorized-xml-actions"><button type="button" disabled>Send to SourceXML Canvas</button><button type="button" disabled>Send to TargetXML Canvas</button><button type="button" disabled>Download XML</button><button type="button" disabled>Download Categorized XML</button></div></section>`;
+export function renderExportLink(view={}){
+  if(!view.graph)return `<section class="table-categorized-xml-card"><h4>Export / Link</h4><p>Run Pilot Graph Build first.</p></section>`;
+  if(hasBlockingValidation(view.validationResults))return `<section class="table-categorized-xml-card"><h4>Export / Link</h4><p>Export blocked by validation.</p>${renderValidation(view.validationResults,view.exportResult)}</section>`;
+  const enabled=Boolean(view.exportResult?.ok);
+  const xml=enabled?view.exportResult.xmlText:'Export artifact is not available.';
+  return `<section class="table-categorized-xml-card"><h4>Export / Link</h4><p>XML preview and artifact downloads are generated from the canonical graph only. Canvas handoff requires explicit click.</p>${view.exportStatus?`<div class="table-categorized-xml-subcard"><b>Status:</b> ${esc(view.exportStatus)}</div>`:''}<div class="table-categorized-xml-actions"><button type="button" data-table-categorized-action="send-source" ${enabled?'':'disabled'}>Send to SourceXML Canvas</button><button type="button" data-table-categorized-action="send-target" ${enabled?'':'disabled'}>Send to TargetXML Canvas</button><button type="button" data-table-categorized-download="xml" ${enabled?'':'disabled'}>Download Categorized XML</button><button type="button" data-table-categorized-download="graph" ${enabled?'':'disabled'}>Download Graph JSON</button><button type="button" data-table-categorized-download="profile" ${enabled?'':'disabled'}>Download Profile JSON</button><button type="button" data-table-categorized-download="diagnostics" ${enabled?'':'disabled'}>Download Diagnostics JSON</button><button type="button" data-table-categorized-download="audit" ${enabled?'':'disabled'}>Download Audit JSON</button></div><h4>XML Preview</h4><pre class="table-categorized-xml-preview">${esc(xml)}</pre></section>`;
 }
 
 export function renderSourceList(source){
