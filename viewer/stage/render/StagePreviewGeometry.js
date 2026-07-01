@@ -54,7 +54,7 @@ function facetProxy(bbox) {
 
 function elbowObject(entry, primitive) {
   const bbox = entry.bboxWorld;
-  const params = primitive?.params || {};
+  const params = primitive?.nativeGeometry?.nativeParams || primitive?.nativeParams || primitive?.params || {};
   const tubeRadius = Number(params.radius);
   const bendRadius = Number(params.bendRadius);
   const angleDeg = Number(params.angleDeg || 90);
