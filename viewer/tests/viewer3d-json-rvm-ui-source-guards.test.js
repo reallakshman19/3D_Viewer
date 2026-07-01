@@ -18,6 +18,9 @@ const guarded = [
 const banned = [
   'viewer/stage/parser/',
   'indexedDB',
+  'parseRvm',
+  'readRvm',
+  'RvmParser',
   'RvmDeferredBridgeLoader',
   'RvmSupportGeometryBridge',
   'RvmPrimitiveFallbackBridge',
