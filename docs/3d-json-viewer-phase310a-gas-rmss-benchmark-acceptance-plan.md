@@ -47,7 +47,7 @@ The diagnostics report must record file name, file size, stable file hash, byte 
 
 ### 2. Binary preflight
 
-A binary preflight report must exist. It should report file identity, byte length, extension warning status, size consistency, and header/sniff warnings. Preflight success does not mean parsing is complete.
+A binary preflight report must exist. It should report file identity, byte length, extension warning status, size consistency, and header/sniff warnings. Preflight success does not mean staged parsing is complete.
 
 ### 3. Record-count diagnostics
 
