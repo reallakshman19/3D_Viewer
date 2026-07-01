@@ -7,6 +7,14 @@ import {
   STAGE_SEMANTIC_CONFIDENCE,
   STAGE_SEMANTIC_TYPES,
 } from './StageConstants.js';
+import {
+  validateComponentAssemblyRef,
+  validateDiagnosticFallback,
+  validateGeometryChunkRef,
+  validateNativeGeometryMetadata,
+  validateNativeRecordRef,
+  validateRecipeSource,
+} from './StageNativeGeometryContract.js';
 
 export function validateRvmStageModel(model) {
   const errors = [];
@@ -50,6 +58,7 @@ export function validateStageComponent(component, componentIds = new Set(), erro
   validateOptionalBbox(component.bboxWorld, `component ${component.id || '?'} bboxWorld`, errors);
   validateConfidence(component.confidence, `component ${component.id || '?'}`, errors);
   validateRenderPolicy(component.renderPolicy, `component ${component.id || '?'}`, errors);
+  validateComponentGeometryContract(component, errors);
   return errors;
 }
 
@@ -65,6 +74,7 @@ export function validateStagePrimitive(primitive, primitiveIds = new Set(), comp
   validateConfidence(primitive.confidence, `primitive ${primitive.id || '?'}`, errors);
   validateRenderKind(primitive, errors);
   validateSemanticOnlyFallback(primitive, errors);
+  validatePrimitiveGeometryContract(primitive, errors);
   return errors;
 }
 
@@ -110,6 +120,7 @@ function validateReferences(model, nodeIds, componentIds, primitiveIds, errors) 
   for (const component of model.components || []) {
     if (!nodeIds.has(component.nodeId)) errors.push(`component ${component.id || '?'} nodeId is unknown: ${component.nodeId}`);
     for (const id of component.primitiveIds || []) if (!primitiveIds.has(id)) errors.push(`component ${component.id || '?'} primitiveId is unknown: ${id}`);
+    validateAssemblyReferences(component, componentIds, primitiveIds, errors);
   }
   for (const primitive of model.primitives || []) {
     if (!nodeIds.has(primitive.nodeId)) errors.push(`primitive ${primitive.id || '?'} nodeId is unknown: ${primitive.nodeId}`);
@@ -131,7 +142,10 @@ function validatePrimitiveTransform(primitive, errors) {
   const transform = primitive.transform || {};
   validateOptionalBbox(transform.bboxLocal, `primitive ${primitive.id || '?'} transform.bboxLocal`, errors);
   validateOptionalBbox(transform.bboxWorld, `primitive ${primitive.id || '?'} transform.bboxWorld`, errors);
+  validateOptionalBbox(primitive.bboxLocal, `primitive ${primitive.id || '?'} bboxLocal`, errors);
+  validateOptionalBbox(primitive.bboxWorld, `primitive ${primitive.id || '?'} bboxWorld`, errors);
   if (transform.matrix3x4 && !isMatrix3x4(transform.matrix3x4)) errors.push(`primitive ${primitive.id || '?'} transform.matrix3x4 must have 12 finite numbers`);
+  if (primitive.transform3x4 && !isMatrix3x4(primitive.transform3x4)) errors.push(`primitive ${primitive.id || '?'} transform3x4 must have 12 finite numbers`);
 }
 
 function validateRenderKind(primitive, errors) {
@@ -145,8 +159,66 @@ function validateSemanticOnlyFallback(primitive, errors) {
   errors.push(`STAGE_FALLBACK_SEMANTIC_ONLY_GEOMETRY primitive ${primitive.id || '?'} semantic-only geometry must not choose visible geometry`);
 }
 
+function validatePrimitiveGeometryContract(primitive, errors) {
+  collect(errors, validateOptional(primitive.nativeRecord, validateNativeRecordRef, `primitive ${primitive.id || '?'} nativeRecord`).errors);
+  if (primitive.nativeParams !== undefined && (!primitive.nativeParams || typeof primitive.nativeParams !== 'object' || Array.isArray(primitive.nativeParams))) errors.push(`primitive ${primitive.id || '?'} nativeParams must be an object`);
+  collect(errors, validateOptional(primitive.geometryChunk, validateGeometryChunkRef, `primitive ${primitive.id || '?'} geometryChunk`).errors);
+  collect(errors, validateOptional(primitive.diagnosticFallback, validateDiagnosticFallback, `primitive ${primitive.id || '?'} diagnosticFallback`).errors);
+  if (primitive.nativeGeometry) collect(errors, validateNativeGeometryMetadata(primitive.nativeGeometry, `primitive ${primitive.id || '?'} nativeGeometry`).errors);
+  validateRecipeSource(primitive.recipeSource, `primitive ${primitive.id || '?'} recipeSource`, errors);
+  validateNativeClaim(primitive, errors);
+  validateChunkAndFacetClaim(primitive, errors);
+  validateDiagnosticNativeConflict(primitive, errors);
+}
+
+function validateComponentGeometryContract(component, errors) {
+  collect(errors, validateOptional(component.componentAssembly, validateComponentAssemblyRef, `component ${component.id || '?'} componentAssembly`).errors);
+  collect(errors, validateOptional(component.diagnosticFallback, validateDiagnosticFallback, `component ${component.id || '?'} diagnosticFallback`).errors);
+  validateRecipeSource(component.recipeSource, `component ${component.id || '?'} recipeSource`, errors);
+}
+
+function validateNativeClaim(primitive, errors) {
+  if (primitive.recipeSource?.source !== 'native') return;
+  if (!validateNativeRecordRef(primitive.nativeRecord, 'nativeRecord').valid) errors.push(`STAGE_NATIVE_GEOMETRY_MISSING_RECORD primitive ${primitive.id || '?'} native recipeSource requires nativeRecord`);
+  if (!primitive.nativeParams || typeof primitive.nativeParams !== 'object' || Array.isArray(primitive.nativeParams)) errors.push(`STAGE_NATIVE_GEOMETRY_MISSING_PARAMS primitive ${primitive.id || '?'} native recipeSource requires nativeParams`);
+  if (!validateNativeGeometryMetadata(primitive.nativeGeometry, 'nativeGeometry').valid) errors.push(`STAGE_NATIVE_GEOMETRY_MISSING_METADATA primitive ${primitive.id || '?'} native recipeSource requires nativeGeometry metadata`);
+}
+
+function validateChunkAndFacetClaim(primitive, errors) {
+  if (!claimsNativeOrFull(primitive)) return;
+  if (primitive.renderKind === 'MESH_CHUNK' && !validateGeometryChunkRef(primitive.geometryChunk, 'geometryChunk').valid) errors.push(`STAGE_GEOMETRY_CHUNK_REQUIRED primitive ${primitive.id || '?'} MESH_CHUNK requires geometryChunk metadata`);
+  if (primitive.renderKind === 'FACET_GROUP' && !hasFacetMetadata(primitive) && !validateGeometryChunkRef(primitive.geometryChunk, 'geometryChunk').valid) errors.push(`STAGE_FACET_METADATA_REQUIRED primitive ${primitive.id || '?'} FACET_GROUP requires decoded facet metadata or geometryChunk metadata`);
+}
+
+function validateDiagnosticNativeConflict(primitive, errors) {
+  if (!primitive.diagnosticFallback?.visible) return;
+  if (primitive.recipeSource?.source === 'native') errors.push(`STAGE_DIAGNOSTIC_FALLBACK_NATIVE_CLAIM primitive ${primitive.id || '?'} visible diagnostic fallback must not claim native geometry`);
+  if (primitive.renderKind !== 'UNKNOWN_DIAGNOSTIC') errors.push(`STAGE_DIAGNOSTIC_FALLBACK_RENDER_KIND primitive ${primitive.id || '?'} visible diagnostic fallback must use UNKNOWN_DIAGNOSTIC render semantics`);
+  if (primitive.confidence?.geometry !== 'diagnostic') errors.push(`STAGE_DIAGNOSTIC_FALLBACK_CONFIDENCE primitive ${primitive.id || '?'} visible diagnostic fallback must use diagnostic geometry confidence`);
+}
+
+function validateAssemblyReferences(component, componentIds, primitiveIds, errors) {
+  const assembly = component.componentAssembly;
+  if (!assembly) return;
+  if (assembly.componentId && !componentIds.has(assembly.componentId)) errors.push(`component ${component.id || '?'} componentAssembly.componentId is unknown: ${assembly.componentId}`);
+  for (const id of assembly.componentIds || []) if (!componentIds.has(id)) errors.push(`component ${component.id || '?'} componentAssembly.componentId is unknown: ${id}`);
+  for (const id of assembly.primitiveIds || []) if (!primitiveIds.has(id)) errors.push(`component ${component.id || '?'} componentAssembly.primitiveId is unknown: ${id}`);
+}
+
+function claimsNativeOrFull(primitive) {
+  const source = primitive.recipeSource?.source;
+  if (source === 'native' || source === 'geometry-chunk') return true;
+  if (primitive.recipeSource?.quality === 'full' || primitive.recipeSource?.output === 'procedural') return true;
+  return primitive.recipeSource?.recipeId?.includes('native') || false;
+}
+
+function hasFacetMetadata(primitive) {
+  const facets = primitive.nativeParams?.facets ?? primitive.params?.facets ?? primitive.facetMetadata?.facets;
+  return Number.isFinite(facets) ? facets > 0 : Boolean(facets && typeof facets === 'object');
+}
+
 function hasFallbackDiagnostic(primitive) {
-  return (primitive.diagnostics || []).some((item) => item?.code?.startsWith('STAGE_FALLBACK_') && item?.fallback);
+  return Boolean(primitive.diagnosticFallback) || (primitive.diagnostics || []).some((item) => item?.code?.startsWith('STAGE_FALLBACK_') && item?.fallback);
 }
 
 function validateConfidence(confidence, label, errors) {
@@ -166,8 +238,16 @@ function validateOptionalBbox(value, label, errors) {
   if (value && !isBbox6(value)) errors.push(`STAGE_INVALID_BBOX ${label} must be [minX,minY,minZ,maxX,maxY,maxZ]`);
 }
 
+function validateOptional(value, validator, label) {
+  return value === undefined ? { valid: true, errors: [] } : validator(value, label);
+}
+
 function validateOptionalIdArray(value, label, errors) {
   if (value !== undefined && !Array.isArray(value)) errors.push(`${label} must be an array`);
+}
+
+function collect(errors, nextErrors) {
+  errors.push(...nextErrors);
 }
 
 function push(errors, message) {
