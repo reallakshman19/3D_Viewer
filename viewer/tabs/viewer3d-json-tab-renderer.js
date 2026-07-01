@@ -29,26 +29,13 @@ function activatePanel(handles, panel) {
   handles.diagnosticsPanel.hidden = !showDiagnostics;
 }
 
-function defaultSelection(model) {
-  return model ? { type: 'root', id: model.hierarchy?.rootId || 'node-root' } : null;
-}
-
-function updateRenderPlan(state) {
-  state.renderPlan = state.model ? buildStageRenderPlan(state.model, state.renderQuality) : null;
-}
+function defaultSelection(model) { return model ? { type: 'root', id: model.hierarchy?.rootId || 'node-root' } : null; }
+function updateRenderPlan(state) { state.renderPlan = state.model ? buildStageRenderPlan(state.model, state.renderQuality) : null; }
 
 function previewText(plan) {
   if (!plan) return EMPTY_CANVAS_TEXT;
   const byOutput = plan.summary?.byOutput || {};
-  return [
-    STAGE_RENDER_PLAN_SCHEMA,
-    `Quality: ${plan.source.quality}`,
-    `Entries: ${plan.summary.totalEntries}`,
-    `Procedural: ${byOutput.procedural || 0}`,
-    `BBox/diagnostic: ${byOutput.bbox || 0}`,
-    `Hidden: ${plan.summary.hidden}`,
-    `Diagnostic-only: ${plan.summary.diagnosticOnly}`,
-  ].join('\n');
+  return [STAGE_RENDER_PLAN_SCHEMA, `Quality: ${plan.source.quality}`, `Entries: ${plan.summary.totalEntries}`, `Procedural: ${byOutput.procedural || 0}`, `BBox/diagnostic: ${byOutput.bbox || 0}`, `Hidden: ${plan.summary.hidden}`, `Diagnostic-only: ${plan.summary.diagnosticOnly}`].join('\n');
 }
 
 function ensureWorkerClient(handles, state) {
@@ -56,32 +43,19 @@ function ensureWorkerClient(handles, state) {
   return state.workerClient;
 }
 
-function disposeWorkerClient(state) {
-  state.workerClient?.dispose();
-  state.workerClient = null;
-}
+function disposeWorkerClient(state) { state.workerClient?.dispose(); state.workerClient = null; }
 
 function handleWorkerMessage(message, handles, state) {
   const payload = message?.payload || {};
   if (message?.type === 'STAGE_WORKER_START' && payload.jobId && payload.jobId !== state.activeJobId) return;
   state.workerDiagnostics.push(workerMessageDiagnostic(message));
-  state.statusText = workerStatusText(message);
+  state.statusText = message?.type === 'STAGE_WORKER_PROGRESS' ? `${payload.phase || 'worker'}: ${payload.message || ''}` : (message?.type || 'STAGE_WORKER_MESSAGE').replace('STAGE_WORKER_', '');
   updateStatus(handles, state);
-}
-
-function workerStatusText(message) {
-  const payload = message?.payload || {};
-  if (message?.type === 'STAGE_WORKER_PROGRESS') return `${payload.phase || 'worker'}: ${payload.message || ''}`;
-  return (message?.type || 'STAGE_WORKER_MESSAGE').replace('STAGE_WORKER_', '');
 }
 
 function workerMessageDiagnostic(message) {
   const payload = message?.payload || {};
-  return {
-    severity: message?.type === 'STAGE_WORKER_ERROR' ? 'error' : 'info',
-    code: message?.type || 'STAGE_WORKER_MESSAGE',
-    message: payload.message || payload.phase || payload.code || message?.type || 'worker message',
-  };
+  return { severity: message?.type === 'STAGE_WORKER_ERROR' ? 'error' : 'info', code: message?.type || 'STAGE_WORKER_MESSAGE', message: payload.message || payload.phase || payload.code || message?.type || 'worker message' };
 }
 
 function ensurePreviewRenderer(handles, state) {
@@ -111,14 +85,8 @@ function renderPreview(handles, state) {
   }
 }
 
-function disposePreview(state) {
-  disposeStageThreePreviewRenderer(state.previewRenderer);
-  state.previewRenderer = null;
-}
-
-function previewDiagnostic(error) {
-  return { severity: 'error', code: 'STAGE_PREVIEW_RENDER_FAILED', message: error?.message || String(error) };
-}
+function disposePreview(state) { disposeStageThreePreviewRenderer(state.previewRenderer); state.previewRenderer = null; }
+function previewDiagnostic(error) { return { severity: 'error', code: 'STAGE_PREVIEW_RENDER_FAILED', message: error?.message || String(error) }; }
 
 function updateStatus(handles, state) {
   const model = state.model;
@@ -141,9 +109,7 @@ function acceptModel(model, sourceName, state) {
   state.previewDiagnostics = [];
   state.previewFitPending = true;
   if (!validation.valid) {
-    state.model = null;
-    state.renderPlan = null;
-    state.selectedRef = null;
+    state.model = null; state.renderPlan = null; state.selectedRef = null;
     state.validationErrors = validation.errors;
     state.activePanel = 'diagnostics';
     state.statusText = 'Invalid staged model';
@@ -166,20 +132,14 @@ function renderSidePanels(handles, state) {
   activatePanel(handles, state.activePanel);
 }
 
-function renderAll(handles, state) {
-  renderPreview(handles, state);
-  renderSidePanels(handles, state);
-}
+function renderAll(handles, state) { renderPreview(handles, state); renderSidePanels(handles, state); }
 
 function applyPreviewSelection(ref, handles, state) {
   if (!ref?.type || !ref?.id) return;
   state.selectedRef = ref;
   state.activePanel = 'properties';
   state.statusText = `Selected ${ref.type} ${ref.id}`;
-  if (state.previewRenderer) {
-    state.previewRenderer.selectedRef = ref;
-    updateStagePreviewSelection(state.previewRenderer, state.model);
-  }
+  if (state.previewRenderer) { state.previewRenderer.selectedRef = ref; updateStagePreviewSelection(state.previewRenderer, state.model); }
   renderSidePanels(handles, state);
 }
 
@@ -194,9 +154,7 @@ function applyWorkerResult(result, sourceName, handles, state) {
 }
 
 function applyWorkerFailure(result, handles, state) {
-  state.model = null;
-  state.renderPlan = null;
-  state.selectedRef = null;
+  state.model = null; state.renderPlan = null; state.selectedRef = null;
   state.validationErrors = result?.validationErrors || [];
   state.workerDiagnostics.push({ severity: 'error', code: result?.error?.code || 'STAGE_WORKER_FAILED', message: result?.error?.message || 'Stage worker failed' });
   state.activePanel = 'diagnostics';
@@ -205,46 +163,26 @@ function applyWorkerFailure(result, handles, state) {
 }
 
 function runPreviewCommand(action, handles, state) {
-  if (!state.model || !state.renderPlan || !state.previewRenderer) {
-    state.statusText = `${action} requested — no preview loaded`;
-    renderAll(handles, state);
-    return;
-  }
-  if (action === 'fit') {
-    fitStagePreviewToRenderPlan(state.previewRenderer, state.renderPlan);
-    state.statusText = 'Fit applied to preview';
-  }
-  if (action === 'reset') {
-    resetStagePreview(state.previewRenderer);
-    state.statusText = 'Preview camera reset';
-  }
+  if (!state.model || !state.renderPlan || !state.previewRenderer) { state.statusText = `${action} requested — no preview loaded`; return renderAll(handles, state); }
+  if (action === 'fit') { fitStagePreviewToRenderPlan(state.previewRenderer, state.renderPlan); state.statusText = 'Fit applied to preview'; }
+  if (action === 'reset') { resetStagePreview(state.previewRenderer); state.statusText = 'Preview camera reset'; }
   updateStatus(handles, state);
 }
 
 function loadSample(handles, state) {
-  try {
-    state.workerDiagnostics = [];
-    state.activeJobId = '';
-    acceptModel(createSampleRvmStageModelV1(), SAMPLE_SOURCE_NAME, state);
-  } catch (error) {
-    state.model = null;
-    state.renderPlan = null;
-    state.selectedRef = null;
+  try { state.workerDiagnostics = []; state.activeJobId = ''; acceptModel(createSampleRvmStageModelV1(), SAMPLE_SOURCE_NAME, state); }
+  catch (error) {
+    state.model = null; state.renderPlan = null; state.selectedRef = null;
     state.validationErrors = [`Sample load failed: ${error?.message || error}`];
-    state.activePanel = 'diagnostics';
-    state.sourceFileName = SAMPLE_SOURCE_NAME;
-    state.statusText = 'Sample load failed';
+    state.activePanel = 'diagnostics'; state.sourceFileName = SAMPLE_SOURCE_NAME; state.statusText = 'Sample load failed';
   }
   renderAll(handles, state);
 }
 
 async function loadStageFile(file, handles, state) {
   disposeWorkerClient(state);
-  state.model = null;
-  state.renderPlan = null;
-  state.selectedRef = null;
-  state.workerDiagnostics = [];
-  state.previewDiagnostics = [];
+  state.model = null; state.renderPlan = null; state.selectedRef = null;
+  state.workerDiagnostics = []; state.previewDiagnostics = [];
   state.statusText = `reading-file: ${file.name}`;
   renderAll(handles, state);
   const text = await file.text();
@@ -255,9 +193,7 @@ async function loadStageFile(file, handles, state) {
     if (state.activeJobId === job.jobId) applyWorkerResult(result, file.name, handles, state);
   } catch (error) {
     if (state.activeJobId === job.jobId) applyWorkerFailure({ error: { code: 'STAGE_WORKER_CLIENT_ERROR', message: error?.message || String(error) } }, handles, state);
-  } finally {
-    handles.fileInput.value = '';
-  }
+  } finally { handles.fileInput.value = ''; }
 }
 
 function wireEvents(handles, state) {
@@ -269,26 +205,10 @@ function wireEvents(handles, state) {
     if (action === 'show-diagnostics') state.activePanel = 'diagnostics';
     if (!['load-sample', 'fit', 'reset'].includes(action)) renderAll(handles, state);
   };
-  const onFileChange = (event) => {
-    const file = event.target.files?.[0];
-    if (file) loadStageFile(file, handles, state);
-  };
-  const onQualityChange = () => {
-    state.renderQuality = normalizeRenderQuality(handles.qualitySelect.value);
-    state.statusText = `Render quality: ${state.renderQuality}`;
-    updateRenderPlan(state);
-    renderAll(handles, state);
-  };
-  const onTreeClick = (event) => {
-    const row = event.target.closest?.('[data-ref-type][data-ref-id]');
-    if (row) applyPreviewSelection({ type: row.dataset.refType, id: row.dataset.refId }, handles, state);
-  };
-  const onRightTabClick = (event) => {
-    const panel = event.target?.dataset?.panel;
-    if (!panel) return;
-    state.activePanel = panel;
-    renderSidePanels(handles, state);
-  };
+  const onFileChange = (event) => { const file = event.target.files?.[0]; if (file) loadStageFile(file, handles, state); };
+  const onQualityChange = () => { state.renderQuality = normalizeRenderQuality(handles.qualitySelect.value); state.statusText = `Render quality: ${state.renderQuality}`; updateRenderPlan(state); renderAll(handles, state); };
+  const onTreeClick = (event) => { const row = event.target.closest?.('[data-ref-type][data-ref-id]'); if (row) applyPreviewSelection({ type: row.dataset.refType, id: row.dataset.refId }, handles, state); };
+  const onRightTabClick = (event) => { const panel = event.target?.dataset?.panel; if (panel) { state.activePanel = panel; renderSidePanels(handles, state); } };
   handles.toolbar.addEventListener('click', onToolbarClick);
   handles.fileInput.addEventListener('change', onFileChange);
   handles.qualitySelect.addEventListener('change', onQualityChange);
@@ -314,9 +234,5 @@ export function renderViewer3DJson(root) {
   handles.qualitySelect.value = state.renderQuality;
   const cleanup = wireEvents(handles, state);
   renderAll(handles, state);
-  return () => {
-    cleanup();
-    disposeWorkerClient(state);
-    disposePreview(state);
-  };
+  return () => { cleanup(); disposeWorkerClient(state); disposePreview(state); };
 }
