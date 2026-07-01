@@ -7,6 +7,7 @@ import {
   STAGE_SEMANTIC_CONFIDENCE,
   STAGE_SEMANTIC_TYPES,
 } from './StageConstants.js';
+import { validateGeometryChunk as validateChunkMetadata } from './StageGeometryChunkContract.js';
 import {
   validateComponentAssemblyRef,
   validateDiagnosticFallback,
@@ -30,7 +31,8 @@ export function validateRvmStageModel(model) {
   const primitiveIds = new Set();
   for (const primitive of model.primitives || []) validateStagePrimitive(primitive, primitiveIds, componentIds, errors);
 
-  validateReferences(model, nodeIds, componentIds, primitiveIds, errors);
+  const chunkIds = validateModelGeometryChunks(model, nodeIds, componentIds, primitiveIds, errors);
+  validateReferences(model, nodeIds, componentIds, primitiveIds, chunkIds, errors);
   return { valid: errors.length === 0, errors };
 }
 
@@ -110,13 +112,22 @@ function validateStageModelShape(model, errors) {
   if (!model.source || typeof model.source !== 'object') errors.push('source object is required');
   if (!model.hierarchy || typeof model.hierarchy !== 'object') errors.push('hierarchy object is required');
   if (!Array.isArray(model.hierarchy?.nodes)) errors.push('hierarchy.nodes must be an array');
-  for (const key of ['materials', 'components', 'primitives', 'geometryChunks']) {
-    if (!Array.isArray(model[key])) errors.push(`${key} must be an array`);
-  }
+  for (const key of ['materials', 'components', 'primitives', 'geometryChunks']) if (!Array.isArray(model[key])) errors.push(`${key} must be an array`);
   if (model.diagnostics?.schema !== RVM_STAGE_DIAGNOSTICS_SCHEMA) errors.push(`diagnostics.schema must be ${RVM_STAGE_DIAGNOSTICS_SCHEMA}`);
 }
 
-function validateReferences(model, nodeIds, componentIds, primitiveIds, errors) {
+function validateModelGeometryChunks(model, nodeIds, componentIds, primitiveIds, errors) {
+  const chunkIds = new Set();
+  for (const chunk of model.geometryChunks || []) {
+    collect(errors, validateChunkMetadata(chunk, `geometryChunk ${chunk?.id || '?'}`).errors);
+    if (chunk?.id && chunkIds.has(chunk.id)) errors.push(`STAGE_GEOMETRY_CHUNK_DUPLICATE_ID duplicate geometry chunk id: ${chunk.id}`);
+    if (chunk?.id) chunkIds.add(chunk.id);
+    validateChunkOwnership(chunk, nodeIds, componentIds, primitiveIds, errors);
+  }
+  return chunkIds;
+}
+
+function validateReferences(model, nodeIds, componentIds, primitiveIds, chunkIds, errors) {
   for (const component of model.components || []) {
     if (!nodeIds.has(component.nodeId)) errors.push(`component ${component.id || '?'} nodeId is unknown: ${component.nodeId}`);
     for (const id of component.primitiveIds || []) if (!primitiveIds.has(id)) errors.push(`component ${component.id || '?'} primitiveId is unknown: ${id}`);
@@ -124,6 +135,8 @@ function validateReferences(model, nodeIds, componentIds, primitiveIds, errors) 
   }
   for (const primitive of model.primitives || []) {
     if (!nodeIds.has(primitive.nodeId)) errors.push(`primitive ${primitive.id || '?'} nodeId is unknown: ${primitive.nodeId}`);
+    validatePrimitiveChunkReference(primitive, chunkIds, errors);
+    validateChunkAndFacetClaim(primitive, chunkIds, errors);
   }
 }
 
@@ -167,7 +180,6 @@ function validatePrimitiveGeometryContract(primitive, errors) {
   if (primitive.nativeGeometry) collect(errors, validateNativeGeometryMetadata(primitive.nativeGeometry, `primitive ${primitive.id || '?'} nativeGeometry`).errors);
   validateRecipeSource(primitive.recipeSource, `primitive ${primitive.id || '?'} recipeSource`, errors);
   validateNativeClaim(primitive, errors);
-  validateChunkAndFacetClaim(primitive, errors);
   validateDiagnosticNativeConflict(primitive, errors);
 }
 
@@ -184,10 +196,16 @@ function validateNativeClaim(primitive, errors) {
   if (!validateNativeGeometryMetadata(primitive.nativeGeometry, 'nativeGeometry').valid) errors.push(`STAGE_NATIVE_GEOMETRY_MISSING_METADATA primitive ${primitive.id || '?'} native recipeSource requires nativeGeometry metadata`);
 }
 
-function validateChunkAndFacetClaim(primitive, errors) {
+function validatePrimitiveChunkReference(primitive, chunkIds, errors) {
+  if (!primitive.geometryChunk || validateChunkMetadata(primitive.geometryChunk).valid) return;
+  const ref = validateGeometryChunkRef(primitive.geometryChunk, 'geometryChunk');
+  if (ref.valid && !chunkIds.has(primitive.geometryChunk.id)) errors.push(`STAGE_GEOMETRY_CHUNK_UNKNOWN_ID primitive ${primitive.id || '?'} geometryChunk id is unknown: ${primitive.geometryChunk.id}`);
+}
+
+function validateChunkAndFacetClaim(primitive, chunkIds, errors) {
   if (!claimsNativeOrFull(primitive)) return;
-  if (primitive.renderKind === 'MESH_CHUNK' && !validateGeometryChunkRef(primitive.geometryChunk, 'geometryChunk').valid) errors.push(`STAGE_GEOMETRY_CHUNK_REQUIRED primitive ${primitive.id || '?'} MESH_CHUNK requires geometryChunk metadata`);
-  if (primitive.renderKind === 'FACET_GROUP' && !hasFacetMetadata(primitive) && !validateGeometryChunkRef(primitive.geometryChunk, 'geometryChunk').valid) errors.push(`STAGE_FACET_METADATA_REQUIRED primitive ${primitive.id || '?'} FACET_GROUP requires decoded facet metadata or geometryChunk metadata`);
+  if (primitive.renderKind === 'MESH_CHUNK' && !hasValidChunkReference(primitive, chunkIds)) errors.push(`STAGE_GEOMETRY_CHUNK_REQUIRED primitive ${primitive.id || '?'} MESH_CHUNK requires geometryChunk metadata`);
+  if (primitive.renderKind === 'FACET_GROUP' && !hasFacetMetadata(primitive) && !hasValidChunkReference(primitive, chunkIds)) errors.push(`STAGE_FACET_METADATA_REQUIRED primitive ${primitive.id || '?'} FACET_GROUP requires decoded facet metadata or geometryChunk metadata`);
 }
 
 function validateDiagnosticNativeConflict(primitive, errors) {
@@ -205,11 +223,23 @@ function validateAssemblyReferences(component, componentIds, primitiveIds, error
   for (const id of assembly.primitiveIds || []) if (!primitiveIds.has(id)) errors.push(`component ${component.id || '?'} componentAssembly.primitiveId is unknown: ${id}`);
 }
 
+function validateChunkOwnership(chunk, nodeIds, componentIds, primitiveIds, errors) {
+  for (const id of chunk?.ownership?.nodeIds || []) if (!nodeIds.has(id)) errors.push(`geometryChunk ${chunk.id || '?'} ownership.nodeId is unknown: ${id}`);
+  for (const id of chunk?.ownership?.componentIds || []) if (!componentIds.has(id)) errors.push(`geometryChunk ${chunk.id || '?'} ownership.componentId is unknown: ${id}`);
+  for (const id of chunk?.ownership?.primitiveIds || []) if (!primitiveIds.has(id)) errors.push(`geometryChunk ${chunk.id || '?'} ownership.primitiveId is unknown: ${id}`);
+}
+
 function claimsNativeOrFull(primitive) {
   const source = primitive.recipeSource?.source;
   if (source === 'native' || source === 'geometry-chunk') return true;
   if (primitive.recipeSource?.quality === 'full' || primitive.recipeSource?.output === 'procedural') return true;
   return primitive.recipeSource?.recipeId?.includes('native') || false;
+}
+
+function hasValidChunkReference(primitive, chunkIds) {
+  if (!primitive.geometryChunk) return false;
+  if (validateChunkMetadata(primitive.geometryChunk).valid) return true;
+  return validateGeometryChunkRef(primitive.geometryChunk).valid && chunkIds.has(primitive.geometryChunk.id);
 }
 
 function hasFacetMetadata(primitive) {
@@ -229,9 +259,7 @@ function validateConfidence(confidence, label, errors) {
 
 function validateRenderPolicy(policy, label, errors) {
   if (!policy || typeof policy !== 'object') return errors.push(`STAGE_MISSING_RENDER_POLICY ${label} renderPolicy is required`);
-  for (const quality of STAGE_RENDER_QUALITIES) {
-    if (typeof policy[quality] !== 'string' || !policy[quality]) errors.push(`STAGE_MISSING_RENDER_POLICY ${label} renderPolicy.${quality} is required`);
-  }
+  for (const quality of STAGE_RENDER_QUALITIES) if (typeof policy[quality] !== 'string' || !policy[quality]) errors.push(`STAGE_MISSING_RENDER_POLICY ${label} renderPolicy.${quality} is required`);
 }
 
 function validateOptionalBbox(value, label, errors) {
