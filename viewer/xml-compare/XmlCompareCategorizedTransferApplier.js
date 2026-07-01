@@ -1,7 +1,6 @@
 export const XML_COMPARE_CATEGORIZED_TRANSFER_APPLIER_SCHEMA='xml-compare-categorized-transfer-applier/v1';
 
 const clean=(value)=>String(value??'').trim();
-const esc=(value)=>String(value??'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll("'",'&apos;');
 const NODE_REF_ATTRS=Object.freeze(['NODE','NODE_NUM','nodeNumber','nodeRef']);
 
 function tagRe(tag=''){return new RegExp(`<${tag}\\b[^>]*(?:\\/>|>[\\s\\S]*?<\\/${tag}>)`,'i');}
@@ -33,11 +32,10 @@ function findLine(xml='',lineId=''){
 function findElement(xml='',elementKeyValue=''){
   const wanted=clean(elementKeyValue);
   for(const line of splitLines(xml)){
-    for(const element of splitElements(line.xml))if(elementKey(elementAttrs(element.open))===wanted)return {...element,line};
+    for(const element of splitElements(line.xml))if(elementKey(elementAttrs(element.open))===wanted)return {...element,start:line.start+element.start,end:line.start+element.end,line};
   }
   return null;
 }
-function innerXml(block=''){return String(block).replace(/^<[^>]+>/,'').replace(/<\/[^>]+>\s*$/,'');}
 function findBlock(container='',blockName=''){return String(container).match(tagRe(blockName))?.[0]||'';}
 function findBlocks(container='',blockNames=[]){return blockNames.map((name)=>findBlock(container,name)).filter(Boolean);}
 function removeBlocks(container='',blockNames=[]){let out=String(container);for(const name of blockNames)out=out.replace(tagReGlobal(name),'');return out;}
@@ -47,12 +45,13 @@ function insertBeforeClosing(container='',closeTag='',content=''){
   if(index<0)return `${container}\n${content}`;
   return `${container.slice(0,index)}${content}\n${container.slice(index)}`;
 }
+function escapeRegExp(value=''){return String(value).replace(/[.*+?^${}()|[\]\\]/g,'\\$&');}
 function rewriteNodeReferences(block='',sourceNode='',targetNode=''){
   const from=clean(sourceNode),to=clean(targetNode);
   if(!from||!to)return block;
   let out=String(block);
   for(const attr of NODE_REF_ATTRS){
-    out=out.replace(new RegExp(`(${attr}\\s*=\\s*["'])${from.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')}(?:\\.0+)?(["'])`,'gi'),`$1${to}$2`);
+    out=out.replace(new RegExp(`(${attr}\\s*=\\s*["'])${escapeRegExp(from)}(?:\\.0+)?(["'])`,'gi'),`$1${to}$2`);
   }
   return out;
 }
@@ -93,7 +92,10 @@ function sourceBlocksByElement(sourceXml='',elementKeyValue='',blockNames=[]){co
 function sourceBlocksByLine(sourceXml='',lineId='',blockNames=[]){const found=findLine(sourceXml,lineId);return found?findBlocks(found.xml,blockNames):[];}
 function sourceNodeBlocks(sourceXml='',sourceNode='',blockNames=[]){
   const blocks=[];
-  for(const line of splitLines(sourceXml))for(const element of splitElements(line.xml))for(const blockName of blockNames){const block=findBlock(element.xml,blockName);if(block&&new RegExp(`\\b(?:NODE|NODE_NUM|nodeNumber|nodeRef)\\s*=\\s*["']${clean(sourceNode)}(?:\\.0+)?["']`,'i').test(block))blocks.push(block);}
+  for(const line of splitLines(sourceXml))for(const element of splitElements(line.xml))for(const blockName of blockNames){
+    const block=findBlock(element.xml,blockName);
+    if(block&&new RegExp(`\\b(?:NODE|NODE_NUM|nodeNumber|nodeRef)\\s*=\\s*["']${escapeRegExp(clean(sourceNode))}(?:\\.0+)?["']`,'i').test(block))blocks.push(block);
+  }
   return blocks;
 }
 export function applyNodeBlockTransfer(targetXml='',sourceXml='',plan={},options={}){
