@@ -37,10 +37,12 @@ export function createJsonViewerShell(root) {
   fileInput.accept = '.json,application/json';
   fileInput.hidden = true;
 
-  const openRvmButton = button('json-viewer-button', 'Open RVM', 'open-rvm');
-  openRvmButton.disabled = true;
-  openRvmButton.title = 'Phase 3: browser stage worker';
-  openRvmButton.setAttribute('aria-disabled', 'true');
+  const openRvmButton = button('json-viewer-button', 'Open RVM (dry-run)', 'open-rvm');
+  openRvmButton.title = 'Open RVM — preflight only; parser not implemented';
+  const rvmFileInput = el('input', 'json-viewer-file-input');
+  rvmFileInput.type = 'file';
+  rvmFileInput.accept = '.rvm';
+  rvmFileInput.hidden = true;
 
   const qualityLabel = el('label', 'json-viewer-quality-label', 'Render Quality');
   const qualitySelect = el('select', 'json-viewer-quality-select');
@@ -55,7 +57,7 @@ export function createJsonViewerShell(root) {
   const fitButton = button('json-viewer-button', 'Fit', 'fit');
   const resetButton = button('json-viewer-button', 'Reset', 'reset');
   const diagnosticsButton = button('json-viewer-button', 'Diagnostics', 'show-diagnostics');
-  toolbar.append(openStageButton, loadSampleButton, fileInput, openRvmButton, qualityLabel, fitButton, resetButton, diagnosticsButton);
+  toolbar.append(openStageButton, loadSampleButton, fileInput, openRvmButton, rvmFileInput, qualityLabel, fitButton, resetButton, diagnosticsButton);
 
   const body = el('div', 'json-viewer-body');
   const leftPanel = el('aside', 'json-viewer-left-panel');
@@ -106,6 +108,8 @@ export function createJsonViewerShell(root) {
     openStageButton,
     loadSampleButton,
     fileInput,
+    openRvmButton,
+    rvmFileInput,
     qualitySelect,
     fitButton,
     resetButton,
