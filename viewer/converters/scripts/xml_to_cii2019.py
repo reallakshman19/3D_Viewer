@@ -1137,12 +1137,21 @@ def _build_bend_payload(model: ConversionModel) -> list[str]:
 
 
 def _rigid_weight_for_edge(edge: Edge) -> float:
-    """Return the RIGID auxiliary weight for an edge; missing XML weight stays zero."""
+    """Return the RIGID auxiliary weight for an edge.
+
+    Parameters expected:
+    - `edge`: a converted branch edge with parsed endpoint nodes.
+
+    Outputs passed:
+    - Weight from the edge owner node only; a zero/missing owner weight stays zero.
+
+    Fallback:
+    - `RIGID -> FLAN` remains a RIGID auxiliary edge, but it uses the FLAN/to-node
+      weight so an upstream RIGID weight cannot populate a blank flange edge.
+    """
     if edge.to_node.rigid == 2:
         return edge.to_node.weight
     if edge.from_node.rigid == 2 and edge.to_node.component_type == "FLAN":
-        if abs(edge.from_node.weight) > 1e-12:
-            return edge.from_node.weight
         return edge.to_node.weight
     return 0.0
 
