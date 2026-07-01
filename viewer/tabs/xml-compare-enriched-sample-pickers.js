@@ -1,4 +1,4 @@
-import { loadXmlCompareEnrichedSample } from './xml-compare-enriched-samples-data.js';
+import { loadXmlCompareEnrichedSample } from './xml-compare-enriched-samples-data.js?v=20260701-bm-cii-categorized-samples-1';
 
 const STYLE_ID='xml-compare-enriched-sample-pickers-style';
 const ROW_ATTR='data-xml-compare-enriched-sample-pickers';
