@@ -1,7 +1,8 @@
-export const XML_COMPARE_LINEWISE_TOOLBAR_GATE_SCHEMA='xml-compare-linewise-toolbar-gate/v1';
+export const XML_COMPARE_LINEWISE_TOOLBAR_GATE_SCHEMA='xml-compare-linewise-toolbar-gate/v2';
 
 const STYLE_ID='xml-compare-linewise-toolbar-gate-style';
 const WORKFLOW_BUTTON='data-xml-compare-categorized-open';
+const TABLE_WORKFLOW_BUTTON='data-xml-compare-table-categorized-open';
 
 function injectStyle(){
   let style=document.getElementById(STYLE_ID);
@@ -10,7 +11,7 @@ function injectStyle(){
     style.id=STYLE_ID;
     document.head.append(style);
   }
-  style.textContent=`.xml-compare-toolbar{gap:8px}.xml-compare-toolbar>label.xml-compare-file-btn,.xml-compare-toolbar>button:not([${WORKFLOW_BUTTON}]){position:absolute!important;width:1px!important;height:1px!important;overflow:hidden!important;clip:rect(0 0 0 0)!important;clip-path:inset(50%)!important;white-space:nowrap!important;opacity:0!important;pointer-events:none!important}.xml-compare-toolbar>[${WORKFLOW_BUTTON}]{min-width:min(420px,100%);justify-content:center}`;
+  style.textContent=`.xml-compare-toolbar{gap:8px}.xml-compare-toolbar>label.xml-compare-file-btn,.xml-compare-toolbar>button:not([${WORKFLOW_BUTTON}]):not([${TABLE_WORKFLOW_BUTTON}]){position:absolute!important;width:1px!important;height:1px!important;overflow:hidden!important;clip:rect(0 0 0 0)!important;clip-path:inset(50%)!important;white-space:nowrap!important;opacity:0!important;pointer-events:none!important}.xml-compare-toolbar>[${WORKFLOW_BUTTON}],.xml-compare-toolbar>[${TABLE_WORKFLOW_BUTTON}]{min-width:min(360px,100%);justify-content:center}`;
 }
 
 function categorizedFile(file){
