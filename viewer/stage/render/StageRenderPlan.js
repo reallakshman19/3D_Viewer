@@ -98,7 +98,7 @@ function buildAssemblyEntries(model, quality, offset) {
 }
 
 function createEntry(entryKind, options) {
-  const hidden = options.hidden ?? options.output === 'hidden' || options.supportLevel === 'hidden';
+  const hidden = options.hidden ?? (options.output === 'hidden' || options.supportLevel === 'hidden');
   return { id: options.id || '', entryKind, sourceRef: options.sourceRef || { type: entryKind, id: options[`${entryKind}Id`] || '' }, nodeId: options.nodeId || '', componentId: options.componentId || '', primitiveId: options.primitiveId || '', renderKind: options.renderKind || 'UNKNOWN_DIAGNOSTIC', semanticType: options.semanticType || 'UNKNOWN', recipeId: options.recipeId || FALLBACK_RECIPE_ID, recipeSource: options.recipeSource || 'diagnostic-fallback', supportLevel: options.supportLevel || 'diagnostic-only', output: options.output || 'bbox', diagnosticOnly: Boolean(options.diagnosticOnly), hidden, bboxWorld: options.bboxWorld || null, reasonCodes: options.reasonCodes || [], nativeGeometryRef: options.nativeGeometryRef || null, facetMetadataRef: options.facetMetadataRef || null, geometryChunkRef: options.geometryChunkRef || null };
 }
 
