@@ -32,8 +32,12 @@ for(const [id,label] of TABLE_CATEGORIZED_SETUP_TABS){
   assert.ok(shell.includes(`data-table-categorized-setup-tab="${id}"`), `setup tab marker missing: ${id}`);
 }
 
+const setupTabButtonTag=(html,id)=>html.match(new RegExp(`<button[^>]*data-table-categorized-setup-tab="${id}"[^>]*>`))?.[0]||'';
 const assertActiveSetupTab=(html,id)=>{
-  assert.match(html,new RegExp(`data-table-categorized-setup-tab="${id}" class="is-active" aria-selected="true"`));
+  const tag=setupTabButtonTag(html,id);
+  assert.ok(tag, `setup tab button missing: ${id}`);
+  assert.ok(tag.includes('class="is-active"'), `setup tab is not active: ${id}`);
+  assert.ok(tag.includes('aria-selected="true"'), `active setup tab is not selected: ${id}`);
 };
 assert.equal(setupTabForWorkflowTab('source'),'source');
 assert.equal(setupTabForWorkflowTab('levels'),'fields');
