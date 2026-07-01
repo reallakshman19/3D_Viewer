@@ -19,7 +19,7 @@ The only supported layout is:
 
 ## What remains unsupported
 
-This phase does not decode code 11, does not prove GAS/RMSS/Navis/Review parity, does not infer geometry from names, and does not claim full code-4 coverage. Unsupported payloads return `decoded.ok: false` with reason codes.
+This phase does not decode code 11, does not prove benchmark compatibility, does not infer geometry from names, and does not claim full code-4 coverage. Unsupported payloads return `decoded.ok: false` with reason codes.
 
 ## Report guarantees
 
