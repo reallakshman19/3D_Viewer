@@ -62,6 +62,10 @@ function workerMessageDiagnostic(message) {
   return { severity: message?.type === 'STAGE_WORKER_ERROR' ? 'error' : 'info', code: message?.type || 'STAGE_WORKER_MESSAGE', message: payload.message || payload.phase || payload.code || message?.type || 'worker message' };
 }
 
+function appendWorkerMessages(result, state) {
+  for (const message of result?.messages || []) state.workerDiagnostics.push(workerMessageDiagnostic(message));
+}
+
 function ensurePreviewRenderer(handles, state) {
   if (!state.previewRenderer) {
     state.previewRenderer = createStageThreePreviewRenderer(handles.canvasHost);
@@ -152,6 +156,7 @@ function applyPreviewSelection(ref, handles, state) {
 }
 
 function applyWorkerResult(result, sourceName, handles, state) {
+  appendWorkerMessages(result, state);
   if (!result?.ok) return applyWorkerFailure(result, handles, state);
   const accepted = acceptModel(result.stageModel, sourceName, state);
   const planCheck = validateStageRenderPlan(result.renderPlan);
@@ -162,6 +167,7 @@ function applyWorkerResult(result, sourceName, handles, state) {
 }
 
 function applyWorkerFailure(result, handles, state) {
+  appendWorkerMessages(result, state);
   state.model = null; state.renderPlan = null; state.selectedRef = null;
   state.validationErrors = result?.validationErrors || [];
   state.workerDiagnostics.push({ severity: 'error', code: result?.error?.code || 'STAGE_WORKER_FAILED', message: result?.error?.message || 'Stage worker failed' });
