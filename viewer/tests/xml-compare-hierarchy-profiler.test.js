@@ -10,7 +10,7 @@ const records=[
 ];
 
 const profile=createXmlCompareHierarchyProfile({side:'source',fileName:'a_enriched.xml',profile:'xml-cii2019-enriched-xml',records,summary:{recordCount:3,lineCount:2,nodeCount:3}});
-assert.equal(profile.schema,'xml-compare-hierarchy-profile/v1');
+assert.equal(profile.schema,'xml-compare-hierarchy-profile/v2');
 assert.deepEqual(profile.levels.map((level)=>level.levelId),['root','branch','node','evidence']);
 assert.equal(profile.levels.find((level)=>level.levelId==='branch').recordCount,2);
 assert.ok(profile.levels.find((level)=>level.levelId==='node').fields.includes('nodeNumber'));
@@ -35,5 +35,22 @@ assert.match(html,/Branch \(2\)/);
 assert.match(html,/data-xml-compare-level-select="levelId"/);
 assert.match(html,/branchName/);
 assert.match(html,/lineNo/);
+
+const categorizedRecords=[
+  {uid:'line:1',levelHint:'line',branchName:'/L1',lineNo:'/L1',pipingClass:'31441C4',rating:'31441',elementCount:'1'},
+  {uid:'element:1',levelHint:'element',elementKey:'10->20',fromNode:'10',toNode:'20',deltaX:'500',elementLengthMm:'500',materialName:'A106 B'},
+  {uid:'node:1',levelHint:'node',nodeNumber:'10',role:'FROM',elementKey:'10->20',globalX:'1',temperature2:'95.377998',restraintCount:'1'},
+  {uid:'evidence:1',levelHint:'evidence',evidenceKind:'RestraintsBlock',nodeNumber:'10',elementKey:'10->20',itemCount:'1'}
+];
+const categorizedProfile=createXmlCompareHierarchyProfile({side:'source',fileName:'sample_categorized_enriched.xml',profile:'categorized-inputxml',records:categorizedRecords,summary:{recordCount:4}});
+assert.deepEqual(categorizedProfile.levels.map((level)=>level.levelId),['root','line','element','node','evidence']);
+assert.ok(categorizedProfile.levels.find((level)=>level.levelId==='line').fields.includes('pipingClass'));
+assert.ok(categorizedProfile.levels.find((level)=>level.levelId==='element').fields.includes('deltaX'));
+assert.ok(categorizedProfile.levels.find((level)=>level.levelId==='node').fields.includes('temperature2'));
+assert.ok(categorizedProfile.levels.find((level)=>level.levelId==='evidence').fields.includes('evidenceKind'));
+const elementView=createXmlCompareCanvasLevelModel({side:'source',fileName:'sample_categorized_enriched.xml',profile:'categorized-inputxml',records:categorizedRecords,selection:{levelId:'element',displayField:'elementKey',keyField:'elementKey'}});
+assert.equal(elementView.levelId,'element');
+assert.equal(elementView.layout,'cards');
+assert.equal(elementView.records.length,1);
 
 console.log('xml-compare-hierarchy-profiler: all assertions passed');
