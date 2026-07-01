@@ -8,6 +8,7 @@ const files = [
   'viewer/stage/worker/StageWorkerRuntime.js',
   'viewer/stage/samples/sample-rvm-diagnostics-binary-v1.js',
   'viewer/tests/rvm-diagnostics-scanner.test.js',
+  'viewer/tests/rvm-diagnostics-scanner-evidence.test.js',
   'viewer/tests/rvm-stage-worker-rvm-diagnostics.test.js',
   'viewer/tests/rvm-diagnostics-scanner-source-guards.test.js',
 ];
@@ -50,8 +51,13 @@ const runtime = read('viewer/stage/worker/StageWorkerRuntime.js');
 assert.match(scanner, /DataView/);
 assert.match(scanner, /scanRvmBinaryDiagnostics/);
 assert.match(scanner, /RvmDiagnosticsReport\.v1/);
+assert.match(scanner, /candidateOnly/);
+assert.match(scanner, /confirmedRecords/);
+assert.match(scanner, /unmatchedCntb/);
+assert.match(scanner, /suspiciousNativeCodes/);
 assert.match(runtime, /scanRvmBinaryDiagnostics/);
 assert.match(runtime, /rvmDiagnosticsReport/);
+assert.match(runtime, /rvmDiagnosticsSummary/);
 assert.match(runtime, /STAGE_RVM_PARSING_NOT_IMPLEMENTED/);
 assert.doesNotMatch(scanner, /RvmStageModel\.v1/);
 assert.doesNotMatch(scanner, /renderPlan/);
