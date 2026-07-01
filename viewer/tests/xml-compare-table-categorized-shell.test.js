@@ -5,7 +5,7 @@ import { buildCategorizedGraph } from '../xml-compare/table-categorizer/table-ca
 import { createBlankUniversalProfile } from '../xml-compare/table-categorizer/table-categorized-xml-profile-designer.js';
 import { PS_MAPPING_COORDINATE_LOOKUP_SAMPLE, PS_MAPPING_TABLE_2_COORDINATE_LOOKUP_PROFILE, PS_MAPPING_TABLE_2_MODEL_SAMPLE, PS_MAPPING_TABLE_2_SAMPLE, PS_MAPPING_TABLE_2_SHADOW_PROFILE } from '../xml-compare/table-categorizer/table-categorized-xml-pilot-profiles.js';
 import { parseTableSource } from '../xml-compare/table-categorizer/table-categorized-xml-source-parser.js';
-import { TABLE_CATEGORIZED_XML_BUTTON_ATTR, renderTableCategorizedXmlButtonHtml, renderTableCategorizedXmlShellHtml } from '../xml-compare/table-categorizer/table-categorized-xml-shell.js';
+import { TABLE_CATEGORIZED_SETUP_TABS, TABLE_CATEGORIZED_XML_BUTTON_ATTR, renderSetupTabStrip, renderTableCategorizedXmlButtonHtml, renderTableCategorizedXmlShellHtml, setupTabForWorkflowTab } from '../xml-compare/table-categorizer/table-categorized-xml-shell.js';
 import { runCategorizerValidation } from '../xml-compare/table-categorizer/table-categorized-xml-validation.js';
 
 const button=renderTableCategorizedXmlButtonHtml();
@@ -15,16 +15,38 @@ assert.ok(button.includes(TABLE_CATEGORIZED_XML_BUTTON_ATTR));
 const shell=renderTableCategorizedXmlShellHtml();
 assert.ok(shell.includes('Table to Categorized XML'));
 assert.ok(shell.includes('Build a categorized graph from any table'));
-assert.ok(shell.includes('1 Import'));
-assert.ok(shell.includes('2 Map'));
-assert.ok(shell.includes('3 Structure'));
+assert.ok(shell.includes('1 Import Table'));
+assert.ok(shell.includes('2 Map Fields & Rules'));
+assert.ok(shell.includes('3 Build Structure'));
 assert.ok(shell.includes('4 Check'));
 assert.ok(shell.includes('5 Export'));
+assert.ok(shell.includes('table-categorized-setup-tabs'));
 assert.ok(shell.includes('Live Preview'));
 assert.ok(shell.includes('Base Key'));
 assert.ok(shell.includes('Final Group'));
 assert.ok(shell.includes('<details'));
 assert.ok(shell.includes('data-panel-group="source"'));
+
+for(const [id,label] of TABLE_CATEGORIZED_SETUP_TABS){
+  assert.ok(shell.includes(label.replace(/^\S+\s+/u,'')), `setup tab label missing: ${label}`);
+  assert.ok(shell.includes(`data-table-categorized-setup-tab="${id}"`), `setup tab marker missing: ${id}`);
+}
+
+const assertActiveSetupTab=(html,id)=>{
+  assert.match(html,new RegExp(`data-table-categorized-setup-tab="${id}" class="is-active" aria-selected="true"`));
+};
+assert.equal(setupTabForWorkflowTab('source'),'source');
+assert.equal(setupTabForWorkflowTab('levels'),'fields');
+assert.equal(setupTabForWorkflowTab('graph'),'structure');
+assert.equal(setupTabForWorkflowTab('validation'),'quality');
+assert.equal(setupTabForWorkflowTab('export'),'output');
+assertActiveSetupTab(renderTableCategorizedXmlShellHtml({activeTab:'source'}),'source');
+assertActiveSetupTab(renderTableCategorizedXmlShellHtml({activeTab:'levels'}),'fields');
+assertActiveSetupTab(renderTableCategorizedXmlShellHtml({activeTab:'graph'}),'structure');
+assertActiveSetupTab(renderTableCategorizedXmlShellHtml({activeTab:'validation'}),'quality');
+assertActiveSetupTab(renderTableCategorizedXmlShellHtml({activeTab:'export'}),'output');
+assertActiveSetupTab(renderTableCategorizedXmlShellHtml({activeTab:'source',activeSetupTab:'recipe'}),'recipe');
+assertActiveSetupTab(renderSetupTabStrip('fields'),'fields');
 
 const s1=parseTableSource(PS_MAPPING_TABLE_2_MODEL_SAMPLE,{sourceId:'S1',sourceName:'Table 2 Model Data'});
 const s2=parseTableSource(PS_MAPPING_COORDINATE_LOOKUP_SAMPLE,{sourceId:'S2',sourceName:'Coordinate Lookup'});
