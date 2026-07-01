@@ -17,10 +17,12 @@ export function classifyRvmWorkerResult(result = {}) {
 
 export function summarizeRvmUiHandoff(result = {}) {
   const context = result?.error?.context || result?.context || {};
+  const parserReport = context.rvmParserReport || context.parserReport || result?.rvmParserReport || result?.parserReport;
+  const diagnosticsReport = context.rvmDiagnosticsReport || result?.rvmDiagnosticsReport;
   return {
-    parserReportSummary: context.parserReportSummary || result?.parserReport?.summary || result?.parserReportSummary || null,
-    diagnosticsReportSummary: context.rvmDiagnosticsSummary || context.rvmDiagnosticsReport?.summary || null,
-    preflightSummary: context.preflightSummary || context.preflight?.summary || context.preflight || null,
+    parserReportSummary: context.parserReportSummary || context.rvmParserSummary || result?.parserReportSummary || result?.rvmParserSummary || summarizeParserReport(parserReport),
+    diagnosticsReportSummary: context.rvmDiagnosticsSummary || result?.rvmDiagnosticsSummary || summarizeDiagnosticsReport(diagnosticsReport),
+    preflightSummary: context.preflightSummary || context.preflight?.summary || context.preflight || result?.preflightSummary || null,
   };
 }
 
@@ -37,6 +39,32 @@ export function createRvmUiDiagnostics(result = {}) {
 
 export function isRvmParserSuccess(result = {}) {
   return classifyRvmWorkerResult(result).kind === 'parser-success';
+}
+
+function summarizeParserReport(report) {
+  if (!report) return null;
+  if (report.summary) return report.summary;
+  return {
+    schema: report.schema || '',
+    mode: report.mode || '',
+    parserComplete: report.parserComplete === true,
+    visualParityClaimed: report.visualParityClaimed === true,
+    records: report.records || {},
+    decodedCodes: report.decodedCodes || {},
+    unsupportedCodes: report.unsupportedCodes || {},
+  };
+}
+
+function summarizeDiagnosticsReport(report) {
+  if (!report) return null;
+  if (report.summary) return report.summary;
+  return {
+    schema: report.schema || '',
+    byteLength: Number(report.source?.byteLength) || 0,
+    counts: report.counts || {},
+    nativeCodeCounts: report.nativeCodeCounts || {},
+    hierarchy: report.hierarchy || {},
+  };
 }
 
 function info(code, message) {
