@@ -153,7 +153,7 @@ function sourceFromJobAndModel(job, stageModel) {
   return {
     fileName: job?.fileName || stageModel.source?.fileName || '',
     fileSize: Number(job?.fileSize ?? stageModel.source?.fileSize) || 0,
-    fileHash: job?.fileHash || stageModel.source?.fileHash || '',
+    fileHash: stageModel.source?.fileHash || job?.fileHash || '',
     units: stageModel.source?.units || 'm',
     coordinateBasis: stageModel.source?.coordinateBasis || 'rvm-native',
   };
