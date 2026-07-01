@@ -6,11 +6,12 @@ import { renderXmlCompareDiagnosticsPanelHtml } from './XmlCompareDiagnosticsPan
 import { renderXmlCompareDebugPanelHtml } from './XmlCompareDebugPanel.js';
 import { renderXmlCompareLogScreenHtml } from './XmlCompareLogScreen.js';
 
-export const XML_COMPARE_WORKSPACE_SHELL_SCHEMA='xml-compare-workspace-shell/v9';
+export const XML_COMPARE_WORKSPACE_SHELL_SCHEMA='xml-compare-workspace-shell/v10';
 
 let loadDiagnosticsPromise=null;
 let loadSamplePickersPromise=null;
 let loadCategorizedConverterPromise=null;
+let loadTableCategorizedPromise=null;
 let loadToolbarGatePromise=null;
 let loadTransferApplyPromise=null;
 
@@ -32,10 +33,16 @@ function loadCategorizedConverter(){
   loadCategorizedConverterPromise=import('../tabs/xml-compare-categorized-converter-runtime.js?v=20260630-clean-workflow-ui-1').catch(()=>null);
 }
 
+function loadTableCategorizedXml(){
+  if(typeof document==='undefined')return;
+  if(loadTableCategorizedPromise)return;
+  loadTableCategorizedPromise=import('../tabs/xml-compare-table-categorized-runtime.js?v=20260701-table-categorized-source-setup-1').catch(()=>null);
+}
+
 function loadToolbarGate(){
   if(typeof document==='undefined')return;
   if(loadToolbarGatePromise)return;
-  loadToolbarGatePromise=import('../tabs/xml-compare-linewise-toolbar-gate.js?v=20260630-single-workflow-button-1').catch(()=>null);
+  loadToolbarGatePromise=import('../tabs/xml-compare-linewise-toolbar-gate.js?v=20260701-table-categorized-source-setup-1').catch(()=>null);
 }
 
 function loadTransferApplyRuntime(){
@@ -86,6 +93,7 @@ export function renderXmlCompareWorkspaceShellHtml({
   loadTabDiagnostics();
   loadSamplePickers();
   loadCategorizedConverter();
+  loadTableCategorizedXml();
   loadToolbarGate();
   loadTransferApplyRuntime();
   const manualState=createManualState(manualConnectors,navStates);
