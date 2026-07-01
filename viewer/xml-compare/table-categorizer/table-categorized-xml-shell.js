@@ -5,7 +5,7 @@ import { activeSource, sourceSummaryRows } from './table-categorized-xml-source-
 import { renderTableCategorizedStagePreview } from './table-categorized-xml-stage-preview.js';
 import { hasBlockingValidation } from './table-categorized-xml-validation.js';
 
-export const TABLE_CATEGORIZED_XML_SHELL_SCHEMA='table-categorized-xml-shell/v9';
+export const TABLE_CATEGORIZED_XML_SHELL_SCHEMA='table-categorized-xml-shell/v10';
 export const TABLE_CATEGORIZED_XML_BUTTON_ATTR='data-xml-compare-table-categorized-open';
 export const TABLE_CATEGORIZED_XML_POPUP_ATTR='data-xml-compare-table-categorized-popup';
 export const TABLE_CATEGORIZED_XML_TABS=Object.freeze([
@@ -51,7 +51,7 @@ export function renderTableCategorizedXmlButtonHtml(){
 export function renderTableCategorizedXmlShellHtml(state={}){
   const view={activeTab:'source',sources:[],activeSourceId:'S1',profile:PS_MAPPING_TABLE_2_SHADOW_PROFILE,exportStatus:'',...state};
   view.activeSetupTab=state.activeSetupTab||setupTabForWorkflowTab(view.activeTab);
-  return `<div class="table-categorized-xml-backdrop" ${TABLE_CATEGORIZED_XML_POPUP_ATTR}><section class="table-categorized-xml-dialog" role="dialog" aria-modal="true" aria-label="Table to Categorized XML"><header><div><h3>Table to Categorized XML</h3><p>Build a categorized graph from any table. XML is only one export from that graph.</p></div><button type="button" data-table-categorized-close>Close</button></header>${renderTabStrip(view.activeTab)}${renderSetupTabStrip(view.activeSetupTab)}<main class="table-categorized-xml-body table-categorized-xml-with-preview"><section class="table-categorized-xml-workflow-pane">${renderTabBody(view)}</section>${renderTableCategorizedStagePreview(view)}</main><footer><span>Tabs guide the major workflow; collapsible panels keep each step simple.</span><button type="button" data-table-categorized-close>Close</button></footer></section></div>`;
+  return `<div class="table-categorized-xml-backdrop" ${TABLE_CATEGORIZED_XML_POPUP_ATTR}><section class="table-categorized-xml-dialog" role="dialog" aria-modal="true" aria-label="Table to Categorized XML"><header><div><h3>Table to Categorized XML</h3><p>Build a categorized graph from any table. XML is only one export from that graph.</p></div><button type="button" data-table-categorized-close>Close</button></header>${renderTabStrip(view.activeTab)}${renderSetupTabStrip(view.activeSetupTab)}<main class="table-categorized-xml-body table-categorized-xml-with-preview"><section class="table-categorized-xml-workflow-pane">${renderSetupTabBody(view)}</section>${renderTableCategorizedStagePreview(view)}</main><footer><span>Tabs guide the major workflow; collapsible panels keep each step simple.</span><button type="button" data-table-categorized-close>Close</button></footer></section></div>`;
 }
 
 export function renderTabStrip(activeTab='source'){
@@ -64,45 +64,70 @@ export function renderSetupTabStrip(activeSetupTab='source'){
   return `<nav class="table-categorized-setup-tabs" aria-label="Table categorizer setup categories" role="tablist">${TABLE_CATEGORIZED_SETUP_TABS.map(([id,label,subtitle])=>`<button type="button" data-table-categorized-setup-tab="${esc(id)}" class="${activeId===id?'is-active':''}" aria-selected="${activeId===id?'true':'false'}" role="tab"><b>${esc(label)}</b><small>${esc(subtitle)}</small></button>`).join('')}</nav>`;
 }
 
+export function renderSetupTabBody(view={}){
+  const setupTab=view.activeSetupTab||setupTabForWorkflowTab(view.activeTab);
+  if(setupTab==='source')return renderSourceSetupPanels(view);
+  if(setupTab==='fields')return renderFieldsSetupPanels(view);
+  if(setupTab==='relationships')return renderRelationshipsSetupPanels(view);
+  if(setupTab==='structure')return renderStructureSetupPanels(view);
+  if(setupTab==='rules')return renderRulesSetupPanels(view);
+  if(setupTab==='quality')return renderQualitySetupPanels(view);
+  if(setupTab==='output')return renderOutputSetupPanels(view);
+  if(setupTab==='recipe')return renderRecipeSetupPanels(view);
+  return renderFieldsSetupPanels(view);
+}
+
 export function renderTabBody(view={}){
-  if(view.activeTab==='source')return renderSourceSetup(view);
-  if(view.activeTab==='levels')return renderLevelDesigner(view);
-  if(view.activeTab==='graph')return renderGraphPreview(view.graph,view.validationResults);
-  if(view.activeTab==='validation')return renderValidation(view.validationResults,view.exportResult);
-  if(view.activeTab==='export')return renderExportLink(view);
-  return renderLevelDesigner(view);
+  return renderSetupTabBody({...view,activeSetupTab:view.activeSetupTab||setupTabForWorkflowTab(view.activeTab)});
 }
 
 export function renderSourceSetup(view={}){
+  return renderSourceSetupPanels(view);
+}
+
+function renderSourceSetupPanels(view={}){
   const sources=view.sources?.length?view.sources:[view.source].filter(Boolean);
   const active=activeSource({sources,activeSourceId:view.activeSourceId})||view.source||{};
   const actions=`<div class="table-categorized-xml-actions"><button type="button" data-table-categorized-action="add-source">Add Table</button><button type="button" data-table-categorized-action="remove-source">Remove Table</button><button type="button" data-table-categorized-action="rename-source">Rename Table</button><button type="button" data-table-categorized-action="parse">Read Active Table</button><button type="button" data-table-categorized-action="clear">Clear Active Table</button><button type="button" data-table-categorized-action="load-sample">Load PS Mapping Table 2 Sample</button><button type="button" data-table-categorized-action="load-coordinate-sample">Load Coordinate Lookup Sample</button><button type="button" data-table-categorized-action="build-graph" ${(sources||[]).some((s)=>s.rows?.length)?'':'disabled'}>Build Preview Graph</button></div>`;
   const activeEditor=`<section class="table-categorized-xml-subcard"><h4>Active table</h4><label>Table ID<select data-table-categorized-active-source>${sources.map((s)=>`<option ${s.sourceId===active.sourceId?'selected':''}>${esc(s.sourceId)}</option>`).join('')}</select></label><label>Table Name<input data-table-categorized-source-name value="${esc(active.sourceName||'')}"></label><label>Paste table text<textarea data-table-categorized-source-text>${esc(active.sourceText||'')}</textarea></label><div class="table-categorized-xml-actions"><label class="table-categorized-file">Import CSV / TXT<input type="file" accept=".csv,.txt,text/csv,text/plain" data-table-categorized-file></label><button type="button" data-table-categorized-action="parse">Read Active Table</button></div></section>`;
-  return `<section class="table-categorized-xml-card"><h4>Import Table</h4><p>Add one or more table sources. Parsed rows stay as evidence; graph nodes are created later.</p>${panel('source','Source Tables','Add, select, paste, and read table data.',renderSourceTable(sources,view.activeSourceId)+actions+activeEditor,true)}${panel('source','Parsed Rows','Raw table preview exactly as imported.',renderRawPreview(active),true)}${panel('source','Source Messages','Parse warnings and input messages.',renderDiagnostics(active),false)}</section>`;
+  return setupBody('source','Import Table','Add one or more table sources. Parsed rows stay as evidence; graph nodes are created later.',panel('source','Source Tables','Add, select, paste, and read table data.',renderSourceTable(sources,view.activeSourceId)+actions+activeEditor,true)+panel('source','Parsed Rows','Raw table preview exactly as imported.',renderRawPreview(active),true)+panel('source','Source Messages','Parse warnings and input messages.',renderDiagnostics(active),false));
 }
 
-function renderSourceTable(sources=[],activeId=''){
-  const rows=sourceSummaryRows(sources).map((s)=>`<tr class="${s.sourceId===activeId?'is-active':''}"><td>${esc(s.sourceId)}</td><td>${esc(s.sourceName)}</td><td>${s.rows}</td><td>${s.columns}</td><td>${esc(s.sourceType)}</td><td>${esc(s.status)}</td></tr>`).join('');
-  return `<section class="table-categorized-xml-subcard"><h4>Parsed Tables</h4><table><thead><tr><th>ID</th><th>Table Name</th><th>Rows</th><th>Columns</th><th>Type</th><th>Status</th></tr></thead><tbody>${rows||'<tr><td colspan="6">No tables yet.</td></tr>'}</tbody></table></section>`;
+function renderFieldsSetupPanels({sources=[],activeSourceId='S1'}={}){
+  return setupBody('fields','Fields','Map table columns to generic categorized graph roles. Full data typing is reserved for a later phase.',panel('fields','Column Mapping','Map table columns to generic graph roles.',renderColumnMappingSummary(sources,activeSourceId),true)+placeholderPanel('fields','Data Types / Units','Configure text, number, coordinate, and unit handling in a later phase.')+placeholderPanel('fields','Defaults / Blank Handling','Configure blank values, invalid values, and default fallbacks in a later phase.')+placeholderPanel('fields','Calculated Fields','Define derived columns and formulas in a later phase.'));
 }
 
-export function renderLevelDesigner({profile=PS_MAPPING_TABLE_2_SHADOW_PROFILE,sources=[],activeSourceId='S1',profileValidation=[]}={}){
+function renderRelationshipsSetupPanels({profile=PS_MAPPING_TABLE_2_SHADOW_PROFILE,sources=[]}={}){
+  return setupBody('relationships','Relationships','Define keys, joins, and parent-child links without changing graph generation logic in this phase.',placeholderPanel('relationships','Primary / Composite Keys','Configure primary, item, detail, and composite keys in a later phase.',true)+placeholderPanel('relationships','Parent / Child Links','Configure parent key, child key, foreign key, and cardinality in a later phase.')+panel('relationships','Join Another Table','Use another source table for coordinate or metadata lookup.',renderJoinEditor(profile,sources),false)+placeholderPanel('relationships','Duplicate / Missing Match Rules','Configure duplicate match, missing parent, and orphan row policies in a later phase.'));
+}
+
+function renderStructureSetupPanels({profile=PS_MAPPING_TABLE_2_SHADOW_PROFILE,sources=[],graph=null,validationResults=[]}={}){
   const root=profile.levelDefinitions?.[0]||{};
   const partition=root.children?.[0]||{};
+  const previewPanel=graph?panel('structure','Preview Graph','Document → model split → groups → items → details.',renderGraphPreviewBody(graph,validationResults),true):'';
+  return setupBody('structure','Structure','Review the graph levels and hierarchy below the single document root.',previewPanel+panel('structure','Graph Structure','Edit the hierarchy without exposing every internal field at once.',renderRootEditor(root,partition)+renderLevelTabs('Parent',partition.children||[],['x','y','z'])+renderLevelTabs('Child',partition.children?.[0]?.children||[],['a','b','c'])+renderLevelTabs('GrandChild',partition.children?.[0]?.children?.[0]?.children||[],['a','b','c']),true)+panel('structure','Model Split','Choose how rows are divided below one document root.',renderRootPartitionEditor(profile,sources),false)+panel('structure','More Nested Levels','Supports parent → many children → many grandchildren structures.',renderRecursiveList(profile),false)+placeholderPanel('structure','Sort Order','Configure group, item, detail, numeric, natural, and custom sort ordering in a later phase.'));
+}
+
+function renderRulesSetupPanels({profile=PS_MAPPING_TABLE_2_SHADOW_PROFILE,sources=[],activeSourceId='S1'}={}){
   const sample=(sources[0]?.rows||[])[0]||null;
-  const mappingPanels=[
-    panel('source','Configuration Options','All capability is visible; only the selected group needs attention.',renderMappingOptionIndex(),true),
-    panel('source','Recipe / Preset','Choose a starting recipe. This stays generic; PS Mapping Table 2 is only one preset.',renderProfileHeader(profile),false),
-    panel('mapping','Grouping Strategy','Choose how rows become final groups.',renderGroupingSummary(profile),true),
-    panel('mapping','Column Mapping','Map table columns to generic graph roles.',renderColumnMappingSummary(sources,activeSourceId),false),
-    panel('mapping','Rule Builder','Readable wrapper over resolver rules such as trim, regex, concat, classifier, and parser.',renderResolverEditor(profile,sources,activeSourceId,sample),false),
-    panel('mapping','Join Another Table','Use another source table for coordinate or metadata lookup.',renderJoinEditor(profile,sources),false),
-    panel('structure','Model Split','Choose how rows are divided below one document root.',renderRootPartitionEditor(profile,sources),false),
-    panel('structure','Graph Structure','Edit the hierarchy without exposing every internal field at once.',renderRootEditor(root,partition)+renderLevelTabs('Parent',partition.children||[],['x','y','z'])+renderLevelTabs('Child',partition.children?.[0]?.children||[],['a','b','c'])+renderLevelTabs('GrandChild',partition.children?.[0]?.children?.[0]?.children||[],['a','b','c']),false),
-    panel('structure','More Nested Levels','Supports parent → many children → many grandchildren structures.',renderRecursiveList(profile),false),
-    panel('quality','Setup Checks','Profile and mapping setup messages.',renderProfileValidation(profileValidation)||'<p>No setup messages.</p>',false)
-  ].join('');
-  return `<section class="table-categorized-xml-card"><h4>Mapping Studio</h4><p>Tell the builder how table rows become a graph. User-friendly labels are shown first; advanced Universal Profile / Level Designer v1 terms stay in context.</p>${mappingPanels}<div class="table-categorized-xml-actions"><button type="button" data-table-categorized-action="apply-profile">Apply Mapping</button><button type="button" data-table-categorized-action="build-graph" ${sources.some((s)=>s.rows?.length)?'':'disabled'}>Build Preview Graph</button></div></section>`;
+  return setupBody('rules','Rules','Transform, group, filter, and classify values before they become graph data.',panel('rules','Rule Builder','Readable wrapper over resolver rules such as trim, regex, concat, classifier, and parser.',renderResolverEditor(profile,sources,activeSourceId,sample),true)+panel('rules','Grouping Strategy / Coordinate Grouping','Choose how rows become final groups.',renderGroupingSummary(profile),true)+placeholderPanel('rules','Filters / Conditions','Configure include rows, exclude rows, and create-node-only-when rules in a later phase.')+placeholderPanel('rules','Fallbacks','Configure if blank, if no match, and fallback value behavior in a later phase.')+placeholderPanel('rules','Classifiers','Configure dictionary mapping and type grouping in a later phase.'));
+}
+
+function renderQualitySetupPanels({validationResults=[],exportResult=null,profileValidation=[]}={}){
+  return setupBody('quality','Check','Review required checks, warnings, validation settings, and audit proof.',renderValidationPanels(validationResults,exportResult)+placeholderPanel('quality','Validation Settings','Configure blocker, warning, and info severity mapping in a later phase.',false)+panel('quality','Setup Checks','Profile and mapping setup messages.',renderProfileValidation(profileValidation)||'<p>No setup messages.</p>',false));
+}
+
+function renderOutputSetupPanels(view={}){
+  const output=renderOutputPanels(view);
+  return setupBody('output','Export','Review XML names, output shape, downloads, and explicit canvas links.',output);
+}
+
+function renderRecipeSetupPanels({profile=PS_MAPPING_TABLE_2_SHADOW_PROFILE}={}){
+  return setupBody('recipe','Recipe','Save, load, version, and reuse mappings without changing profile persistence in this phase.',panel('recipe','Recipe / Preset','Choose a starting recipe. This stays generic; PS Mapping Table 2 is only one preset.',renderProfileHeader(profile),true)+placeholderPanel('recipe','Save / Load Recipe','Save, load, duplicate, and reset reusable recipes in a later phase.')+placeholderPanel('recipe','Recipe Version / Notes','Track recipe version, description, and author notes in a later phase.')+placeholderPanel('recipe','Import / Export Recipe JSON','Import and export recipe JSON through the existing profile controls.'));
+}
+
+export function renderLevelDesigner(view={}){
+  return renderFieldsSetupPanels(view);
 }
 
 function renderMappingOptionIndex(){
@@ -164,25 +189,39 @@ function renderProfileValidation(items=[]){return items.length?`<section class="
 
 export function renderGraphPreview(graph=null,validationResults=[]){
   if(hasBlockingValidation(validationResults))return `<section class="table-categorized-xml-card"><h4>Structure</h4><p>Graph preview is blocked by a failed rule. Open Check Rules for details.</p></section>`;
-  const body=graph?(()=>{const roots=(graph.nodes||[]).filter((node)=>!node.parentId);return `<p>This is the categorized graph that exports to XML. Use the live preview panel for row-by-row proof.</p><div class="table-categorized-xml-actions"><button type="button" data-table-categorized-tab="export">Go to Export / Link</button></div><div class="table-categorized-xml-subcard">${roots.map((node)=>renderNodeTree(graph,node)).join('')}</div>`;})():'<p>Build Preview Graph to create the categorized graph.</p>';
-  return `<section class="table-categorized-xml-card"><h4>Structure</h4>${panel('structure','Preview Graph','Document → model split → groups → items → details.',body,true)}${panel('structure','Model Split','Advanced split settings are edited in Mapping Studio.',renderRootPartitionEditor(PS_MAPPING_TABLE_2_SHADOW_PROFILE,[]),false)}</section>`;
+  const body=graph?renderGraphPreviewBody(graph,validationResults):'<p>Build Preview Graph to create the categorized graph.</p>';
+  return setupBody('structure','Structure','This is the categorized graph that exports to XML.',panel('structure','Preview Graph','Document → model split → groups → items → details.',body,true)+panel('structure','Model Split','Advanced split settings are edited in Mapping Studio.',renderRootPartitionEditor(PS_MAPPING_TABLE_2_SHADOW_PROFILE,[]),false));
+}
+
+function renderGraphPreviewBody(graph,validationResults=[]){
+  if(hasBlockingValidation(validationResults))return '<p>Graph preview is blocked by a failed rule. Open Check Rules for details.</p>';
+  const roots=(graph.nodes||[]).filter((node)=>!node.parentId);
+  return `<p>This is the categorized graph that exports to XML. Use the live preview panel for row-by-row proof.</p><div class="table-categorized-xml-actions"><button type="button" data-table-categorized-tab="export">Go to Export / Link</button></div><div class="table-categorized-xml-subcard">${roots.map((node)=>renderNodeTree(graph,node)).join('')}</div>`;
 }
 
 export function renderValidation(results=[],exportResult=null){
-  if(!results.length)return `<section class="table-categorized-xml-card"><h4>Check</h4>${panel('quality','Required Checks','No check results yet. Read a source table and build the preview graph.','<p>No check results yet.</p>',true)}${panel('quality','Warnings','Optional data and fallback messages appear here.','<p>No warnings yet.</p>',false)}${panel('quality','Audit Trail','Proof of how rows became graph nodes.','<p>Audit is generated with export.</p>',false)}</section>`;
+  return setupBody('quality','Check','Review required checks, warnings, and audit proof.',renderValidationPanels(results,exportResult));
+}
+
+function renderValidationPanels(results=[],exportResult=null){
+  if(!results.length)return `${panel('quality','Required Checks','No check results yet. Read a source table and build the preview graph.','<p>No check results yet.</p>',true)}${panel('quality','Warnings','Optional data and fallback messages appear here.','<p>No warnings yet.</p>',false)}${panel('quality','Audit Trail','Proof of how rows became graph nodes.','<p>Audit is generated with export.</p>',false)}`;
   const rows=results.map((item)=>`<tr class="is-${esc(item.severity).toLowerCase()}"><td>${esc(item.gate)}</td><td>${esc(item.severity)}</td><td>${esc(item.status)}</td><td>${esc(item.message)}</td><td>${esc(item.ref)}</td></tr>`).join('');
   const status=exportResult?.ok?'Export allowed.':'Export blocked or not generated.';
-  return `<section class="table-categorized-xml-card"><h4>Check</h4>${panel('quality','Required Checks',status,`<table><thead><tr><th>Rule / Gate</th><th>Severity</th><th>Status</th><th>Message</th><th>Source / Graph Ref</th></tr></thead><tbody>${rows}</tbody></table>`,true)}${panel('quality','Warnings','Review warning-level messages before export.','<p>Warnings are shown in the table above when present.</p>',false)}${panel('quality','Audit Trail','Download the audit JSON from Export.','<p>Audit package is produced with export artifacts.</p>',false)}</section>`;
+  return `${panel('quality','Required Checks',status,`<table><thead><tr><th>Rule / Gate</th><th>Severity</th><th>Status</th><th>Message</th><th>Source / Graph Ref</th></tr></thead><tbody>${rows}</tbody></table>`,true)}${panel('quality','Warnings','Review warning-level messages before export.','<p>Warnings are shown in the table above when present.</p>',false)}${panel('quality','Audit Trail','Download the audit JSON from Export.','<p>Audit package is produced with export artifacts.</p>',false)}`;
 }
 
 export function renderExportLink(view={}){
-  if(!view.graph)return `<section class="table-categorized-xml-card"><h4>Export</h4>${panel('output','Download Files','Build Preview Graph first.','<p>Build Preview Graph first.</p>',true)}${panel('output','Canvas Link','Canvas handoff is disabled until export is ready.','<p>Not ready.</p>',false)}</section>`;
-  if(hasBlockingValidation(view.validationResults))return `<section class="table-categorized-xml-card"><h4>Export</h4>${panel('quality','Blocked','Export is blocked by validation.',renderValidation(view.validationResults,view.exportResult),true)}</section>`;
+  return renderOutputSetupPanels(view);
+}
+
+function renderOutputPanels(view={}){
+  if(!view.graph)return `${panel('output','XML Names','Tags, attributes, and text values are generated from the active recipe.','<p>Open XML preview to verify names before download.</p>',false)}${placeholderPanel('output','XML Shape','Configure attribute vs element, empty value policy, order, namespace, and schema version in a later phase.')}${panel('output','Download Files','Build Preview Graph first.','<p>Build Preview Graph first.</p>',true)}${panel('output','Canvas Link','Canvas handoff is disabled until export is ready.','<p>Not ready.</p>',false)}`;
+  if(hasBlockingValidation(view.validationResults))return `${panel('quality','Blocked','Export is blocked by validation.',renderValidation(view.validationResults,view.exportResult),true)}`;
   const enabled=Boolean(view.exportResult?.ok);
   const xml=enabled?view.exportResult.xmlText:'Export artifact is not available.';
   const downloads=`<p>Exports are generated from the categorized graph only.</p>${view.exportStatus?`<div class="table-categorized-xml-subcard"><b>Status:</b> ${esc(view.exportStatus)}</div>`:''}<div class="table-categorized-xml-actions"><button type="button" data-table-categorized-download="xml" ${enabled?'':'disabled'}>Download Categorized XML</button><button type="button" data-table-categorized-download="graph" ${enabled?'':'disabled'}>Download Graph JSON</button><button type="button" data-table-categorized-download="profile" ${enabled?'':'disabled'}>Download Recipe JSON</button><button type="button" data-table-categorized-download="diagnostics" ${enabled?'':'disabled'}>Download Diagnostics JSON</button><button type="button" data-table-categorized-download="audit" ${enabled?'':'disabled'}>Download Audit JSON</button></div><h4>XML Preview</h4><pre class="table-categorized-xml-preview">${esc(xml)}</pre>`;
   const canvas=`<p>Canvas handoff requires an explicit click.</p><div class="table-categorized-xml-actions"><button type="button" data-table-categorized-action="send-source" ${enabled?'':'disabled'}>Send to SourceXML Canvas</button><button type="button" data-table-categorized-action="send-target" ${enabled?'':'disabled'}>Send to TargetXML Canvas</button></div>`;
-  return `<section class="table-categorized-xml-card"><h4>Export</h4>${panel('output','XML Names','Tags, attributes, and text values are generated from the active recipe.','<p>Open XML preview to verify names before download.</p>',false)}${panel('output','Download Files','XML, graph JSON, recipe JSON, diagnostics, and audit.',downloads,true)}${panel('output','Canvas Link','Send generated XML to SourceXML or TargetXML canvas.',canvas,false)}</section>`;
+  return `${panel('output','XML Names','Tags, attributes, and text values are generated from the active recipe.','<p>Open XML preview to verify names before download.</p>',false)}${placeholderPanel('output','XML Shape','Configure attribute vs element, empty value policy, order, namespace, and schema version in a later phase.')}${panel('output','Download Files','XML, graph JSON, recipe JSON, diagnostics, and audit.',downloads,true)}${panel('output','Canvas Link','Send generated XML to SourceXML or TargetXML canvas.',canvas,false)}`;
 }
 
 export function renderRawPreview(source){
@@ -198,6 +237,8 @@ export function renderDiagnostics(source){
   return `<section class="table-categorized-xml-subcard"><h4>Messages</h4><ul>${diagnostics.map((item)=>`<li class="is-${esc(item.severity).toLowerCase()}"><b>${esc(item.severity)}</b> ${esc(item.code)} — ${esc(item.message)}</li>`).join('')}</ul></section>`;
 }
 
+function setupBody(group,title,summary,body){return `<section class="table-categorized-xml-card" data-setup-body="${esc(group)}"><h4>${esc(title)}</h4><p>${esc(summary)}</p>${body}</section>`;}
+function placeholderPanel(group,title,summary,open=false){return panel(group,title,summary,`<p>${esc(summary)}</p>`,open);}
 function panel(group,title,summary,body,open=false){return `<details class="table-categorized-panel is-${esc(group)}" data-panel-group="${esc(group)}" ${open?'open':''}><summary><b>${esc(title)}</b><small>${esc(summary)}</small></summary><div class="table-categorized-panel-body">${body}</div></details>`;}
 function selectHtml(label,attr,value,options){return `<label>${label}<select ${attr}>${options.map((o)=>`<option ${o===value?'selected':''}>${esc(o)}</option>`).join('')}</select></label>`;}
 function labelForLevel(level){return level?.displayName||level?.key||level?.levelId||'';}
@@ -206,4 +247,4 @@ function resolverSummary(r){return r?.op?`${r.sourceId?`${r.sourceId}.`:''}${r.c
 function walk(items,path,fn){items.forEach((level,index)=>{const p=[...path,index];fn(level,p);walk(level.children||[],p,fn);});}
 function renderNodeTree(graph,node,depth=0){const fields=Object.entries(node.fields||{}).filter(([key])=>key!=='documentRoot').map(([key,value])=>`${key}=${Array.isArray(value)?value.join(' '):value}`).join(', ');const line=`${'  '.repeat(depth)}- ${node.levelType} ${node.key} · ${node.displayName} · refs: ${(node.sourceRefs||[]).join(', ')}${fields?` · ${fields}`:''}`;const children=graphChildren(graph,node.id).map((child)=>renderNodeTree(graph,child,depth+1)).join('');return `<pre class="table-categorized-xml-tree">${esc(line)}</pre>${children}`;}
 
-export const _test=Object.freeze({esc,levelGroupLabel,panel});
+export const _test=Object.freeze({esc,levelGroupLabel,panel,setupBody});
