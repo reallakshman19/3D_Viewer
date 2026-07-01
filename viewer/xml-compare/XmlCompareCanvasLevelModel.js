@@ -1,0 +1,9 @@
+import { createXmlCompareHierarchyProfile } from './XmlCompareHierarchyProfiler.js';
+export const XML_COMPARE_CANVAS_LEVEL_MODEL_SCHEMA='xml-compare-canvas-level-model/v1';
+const clean=(v)=>String(v??'').trim();
+function has(level,field){return (level?.fields||[]).includes(clean(field));}
+function pickField(level,requested='',fallback=[]){const req=clean(requested);if(req&&has(level,req))return req;return fallback.find((f)=>has(level,f))||level?.fields?.[0]||'';}
+function pickLevel(profile,requested=''){const req=clean(requested);return profile.levels.find((level)=>level.levelId===req)||profile.levels.find((level)=>level.levelId==='node')||profile.levels[0]||null;}
+function selectionFor(level,selection={}){return Object.freeze({levelId:level?.levelId||'',displayField:pickField(level,selection.displayField,['displayName','nodeNumber','branchName','value','fileName']),keyField:pickField(level,selection.keyField,['key','nodeNumber','branchName','value','uid'])});}
+export function createXmlCompareCanvasLevelModel({side='source',fileName='',profile='unknown',records=[],summary={},selection={}}={}){const hierarchyProfile=createXmlCompareHierarchyProfile({side,fileName,profile,records,summary});const active=pickLevel(hierarchyProfile,selection.levelId);const picked=selectionFor(active,selection);return Object.freeze({schema:XML_COMPARE_CANVAS_LEVEL_MODEL_SCHEMA,side:clean(side)||'source',hierarchyProfile,levelId:picked.levelId,label:active?.label||'',levelType:active?.levelType||'',fields:Object.freeze(active?.fields||[]),records:Object.freeze(active?.records||[]),displayField:picked.displayField,keyField:picked.keyField,layout:picked.levelId==='node'?'line-node':'cards'});}
+export const _test=Object.freeze({clean,has,pickField,pickLevel,selectionFor});
