@@ -89,6 +89,6 @@ assert.match(response.logs.stdout.join('\n'), /richGeometryComponents=/);
 
 const xmlCompareGate = runXmlCompareArchitectureGate();
 assert.equal(xmlCompareGate.ok, true);
-assert.ok(xmlCompareGate.checkedModuleCount >= 22, 'XML Compare architecture gate covers load intake modules');
+assert.ok(xmlCompareGate.checkedModuleCount >= 22, 'XML Compare architecture gate covers enriched canvas intake modules');
 
 console.log('inputxml-direct-managed-stage: all assertions passed');
