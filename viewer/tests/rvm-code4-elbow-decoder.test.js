@@ -9,7 +9,12 @@ import {
   summarizeRvmCode4DecodeReport,
   validateRvmCode4DecodeReport,
 } from '../stage/parser/RvmCode4ElbowDecoder.js';
-import { createSampleRvmCode4ElbowBinaryV1, expectedSampleRvmCode4NativeParams } from '../stage/samples/sample-rvm-code4-elbow-binary-v1.js';
+import {
+  createMalformedSampleRvmCode4ElbowBinaryV1,
+  createSampleRvmCode4ElbowBinaryV1,
+  expectedSampleRvmCode4NativeParams,
+  expectedSampleRvmCode4PrimSlice,
+} from '../stage/samples/sample-rvm-code4-elbow-binary-v1.js';
 
 test('code 4 decoder exports exist', () => {
   assert.equal(RVM_CODE4_ELBOW_DECODER_SCHEMA, 'RvmCode4ElbowDecodeReport.v1');
@@ -46,11 +51,23 @@ test('short payload is rejected', () => {
   assert.ok(report.layout.reasonCodes.includes('CODE4_PAYLOAD_TOO_SHORT'));
 });
 
+test('malformed synthetic fixture is rejected safely', () => {
+  const job = createMalformedSampleRvmCode4ElbowBinaryV1();
+  const recordReaderReport = readRvmRecordEvidence(job);
+  const report = decodeRvmCode4ElbowPayload({ ...job, primSlice: recordReaderReport.primPayloadSlices[0], recordReaderReport });
+  assert.equal(report.decoded.ok, false);
+  assert.ok(report.layout.reasonCodes.includes('CODE4_PAYLOAD_TOO_SHORT'));
+});
+
 test('synthetic code 4 fixture decodes MVP layout', () => {
-  const report = decodeRvmCode4ElbowPayload(sampleInput());
+  const input = sampleInput();
+  assert.deepEqual(input.primSlice, expectedSampleRvmCode4PrimSlice());
+  const report = decodeRvmCode4ElbowPayload(input);
   assert.equal(report.decoded.ok, true, report.layout.reasonCodes.join(', '));
   assert.equal(report.layout.supported, true);
   assert.deepEqual(roundParams(report.decoded.nativeParams), roundParams(expectedSampleRvmCode4NativeParams()));
+  assert.equal(report.decoded.nativeParams.provenance, 'code4-mvp-layout');
+  assert.equal(report.decoded.nativeParams.layoutName, RVM_CODE4_ELBOW_LAYOUTS.mvpFloat32TransformBboxParams);
   assert.equal(report.decoded.transform3x4.length, 12);
   assert.deepEqual(report.decoded.bboxLocal, [0, 0, -0.25, 1.5, 1.5, 0.25]);
 });
@@ -95,5 +112,5 @@ function sampleInput() {
 }
 
 function roundParams(params) {
-  return Object.fromEntries(Object.entries(params).map(([key, value]) => [key, Number(value.toFixed(6))]));
+  return Object.fromEntries(Object.entries(params).map(([key, value]) => [key, typeof value === 'number' ? Number(value.toFixed(6)) : value]));
 }
