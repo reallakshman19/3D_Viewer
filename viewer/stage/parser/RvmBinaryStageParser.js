@@ -31,7 +31,8 @@ export function parseRvmBinaryToStageModel(input = {}) {
     if (!bytes.byteLength) return fail(report, 'STAGE_RVM_PARSER_EMPTY_BINARY', 'binary byteLength must be greater than zero');
     const evidence = readRvmRecordEvidence(input);
     applyRecordEvidence(report, evidence);
-    const parsed = evidence.primPayloadSlices.map((slice) => decodePrimitive(input, slice, report));
+    const slices = Array.isArray(evidence.primPayloadSlices) ? evidence.primPayloadSlices : [];
+    const parsed = slices.map((slice) => decodePrimitive(input, slice, report));
     const decoded = parsed.filter((item) => item.decoded);
     const unsupported = parsed.filter((item) => !item.decoded);
     if (!report.records.balancedHierarchy || decoded.length < 1) return { ok: false, report, errors: report.errors, warnings: report.warnings };
@@ -97,7 +98,8 @@ function decodeCode4(input, slice, report) {
 }
 
 function decodeCode8(arrayBuffer, slice, report) {
-  const view = new DataView(byteView(arrayBuffer).buffer);
+  const bytes = byteView(arrayBuffer);
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   const start = slice.offset + 12;
   if (slice.candidatePayloadLength < 80) return unsupportedPrimitive(slice, report, 'short-code8-payload');
   const transform3x4 = readF32Array(view, start, 12);
