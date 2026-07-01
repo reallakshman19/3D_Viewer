@@ -81,8 +81,9 @@ test('summarizeRvmBinaryParserReport returns deterministic summary', () => {
     decodedPrimitiveCount: 1,
     unsupportedPrimitiveCount: 1,
     diagnosticPrimitiveCount: 1,
-    decodedCodes: { 8: 1 },
+    decodedCodes: { 4: 0, 8: 1 },
     unsupportedCodes: { 99: 1 },
+    decoderSummaries: [],
     errorCount: 0,
     warningCount: 0,
   });
