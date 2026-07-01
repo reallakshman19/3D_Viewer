@@ -6,12 +6,13 @@ import { renderXmlCompareDiagnosticsPanelHtml } from './XmlCompareDiagnosticsPan
 import { renderXmlCompareDebugPanelHtml } from './XmlCompareDebugPanel.js';
 import { renderXmlCompareLogScreenHtml } from './XmlCompareLogScreen.js';
 
-export const XML_COMPARE_WORKSPACE_SHELL_SCHEMA='xml-compare-workspace-shell/v7';
+export const XML_COMPARE_WORKSPACE_SHELL_SCHEMA='xml-compare-workspace-shell/v8';
 
 let loadDiagnosticsPromise=null;
 let loadSamplePickersPromise=null;
 let loadCategorizedConverterPromise=null;
 let loadToolbarGatePromise=null;
+let loadTransferApplyPromise=null;
 
 function loadTabDiagnostics(){
   if(typeof document==='undefined')return;
@@ -35,6 +36,12 @@ function loadToolbarGate(){
   if(typeof document==='undefined')return;
   if(loadToolbarGatePromise)return;
   loadToolbarGatePromise=import('../tabs/xml-compare-linewise-toolbar-gate.js?v=20260630-single-workflow-button-1').catch(()=>null);
+}
+
+function loadTransferApplyRuntime(){
+  if(typeof document==='undefined')return;
+  if(loadTransferApplyPromise)return;
+  loadTransferApplyPromise=import('../tabs/xml-compare-transfer-apply-runtime.js?v=20260701-transfer-apply-1').catch(()=>null);
 }
 
 const esc=(v)=>String(v??'')
@@ -80,6 +87,7 @@ export function renderXmlCompareWorkspaceShellHtml({
   loadSamplePickers();
   loadCategorizedConverter();
   loadToolbarGate();
+  loadTransferApplyRuntime();
   const manualState=createManualState(manualConnectors,navStates);
   return `<section class="xml-compare-workspace-shell is-rebuilt" data-xml-compare-workspace-shell data-xml-compare-workspace-shell-schema="${XML_COMPARE_WORKSPACE_SHELL_SCHEMA}">
     <div class="xml-compare-workspace-grid is-two-canvas">
