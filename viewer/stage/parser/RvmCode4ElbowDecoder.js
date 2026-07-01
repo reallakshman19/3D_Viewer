@@ -36,7 +36,7 @@ export function decodeRvmCode4ElbowPayload(input = {}) {
     if (payloadReasons.length) return reject(report, payloadReasons);
     report.layout.supported = true;
     report.layout.reasonCodes = ['CODE4_MVP_LAYOUT_SUPPORTED'];
-    report.decoded = { ok: true, nativeCode: 4, nativeParams: { radius: params[0], bendRadius: params[1], angleDeg: params[2], sweepRadians: params[3] }, transform3x4, bboxLocal, bboxWorld: [...bboxLocal] };
+    report.decoded = { ok: true, nativeCode: 4, nativeParams: nativeParams(params, report.layout.name), transform3x4, bboxLocal, bboxWorld: [...bboxLocal] };
   } catch (error) {
     reject(report, ['CODE4_DECODER_FAILED']);
     report.errors.push(message('STAGE_RVM_CODE4_DECODER_FAILED', error?.message || String(error), 'error'));
@@ -109,6 +109,10 @@ function reject(report, reasonCodes) {
 
 function readF32Array(view, offset, count) {
   return Array.from({ length: count }, (_, index) => readF32(view, offset + index * 4));
+}
+
+function nativeParams(params, layoutName) {
+  return { radius: params[0], bendRadius: params[1], angleDeg: params[2], sweepRadians: params[3], layoutName, provenance: 'code4-mvp-layout' };
 }
 
 function readF32(view, offset) {
