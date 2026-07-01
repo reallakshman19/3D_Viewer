@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict';
+import './xml-compare-hierarchy-profiler.test.js';
 
 import { createXmlCompareLoadIntake } from '../xml-compare/XmlCompareLoadIntake.js';
 import { createXmlCompareWorkspaceModel } from '../xml-compare/XmlCompareWorkspaceModel.js';
+import { applyXmlCompareCanvasAction, createXmlCompareCanvasState } from '../xml-compare/XmlCompareCanvasStateController.js';
 
 const xml = [
   '<CAESARII><PIPINGMODEL>',
@@ -31,6 +33,8 @@ assert.equal(workspace.source.records.length, 2);
 assert.equal(workspace.source.summary.recordCount, 2);
 assert.equal(workspace.source.summary.pipingElementCount, 2);
 assert.equal(workspace.source.summary.restraintCount, 2);
+assert.equal(workspace.source.levelView.levelId, 'node');
+assert.ok(workspace.source.levelProfile.levels.some((level)=>level.levelId==='branch'));
 assert.match(workspace.logs[0].message, /2 load record/);
 
 const enrichedXml = [
@@ -53,6 +57,14 @@ assert.equal(enrichedWorkspace.source.summary.recordCount, 2);
 assert.equal(enrichedWorkspace.source.summary.lineCount, 1);
 assert.equal(enrichedWorkspace.source.records[0].lineNo, 'L-100');
 assert.equal(enrichedWorkspace.source.records[0].nodeNumber, '10');
+
+let canvasState=createXmlCompareCanvasState();
+canvasState=applyXmlCompareCanvasAction(canvasState,{type:'set-level-view',side:'source',selection:{levelId:'branch',displayField:'branchName',keyField:'lineNo'}});
+const branchWorkspace=createXmlCompareWorkspaceModel({ fileA: { name: 'a_enriched.xml', size: enrichedXml.length }, textA: enrichedXml, canvasState });
+assert.equal(branchWorkspace.source.levelView.levelId, 'branch');
+assert.equal(branchWorkspace.source.levelView.layout, 'cards');
+assert.equal(branchWorkspace.source.records.length, 1);
+assert.equal(branchWorkspace.source.records[0].branchName, '/ASIM-1835-6-P881/B1');
 
 const enrichedStage = JSON.stringify({
   schema: 'xml-cii2019-enriched-stage/v1',
