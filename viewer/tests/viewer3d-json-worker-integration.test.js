@@ -39,12 +39,12 @@ const client = read('viewer/stage/worker/StageWorkerClient.js');
 const runtime = read('viewer/stage/worker/StageWorkerRuntime.js');
 const diagnostics = read('viewer/stage/ui/JsonViewerDiagnosticsPanel.js');
 const shell = read('viewer/stage/ui/JsonViewerShell.js');
-const combined = [tab, job, client, runtime, diagnostics, shell].join('\n');
 
 assert.match(tab, /StageWorkerClient\.js/);
 assert.match(tab, /StageWorkerJob\.js/);
 assert.match(tab, /createStageJsonWorkerJob/);
-assert.match(tab, /createStageWorkerClient/);
+assert.match(tab, /createRvmBinaryWorkerJob/);
+assert.match(tab, /arrayBuffer/);
 assert.match(tab, /activeJobId/);
 assert.match(tab, /workerDiagnostics/);
 assert.match(tab, /disposeWorkerClient/);
@@ -53,12 +53,18 @@ assert.match(tab, /reading-file/);
 assert.match(runtime, /building-diagnostics/);
 assert.match(runtime, /STAGE_WORKER_STAGE_READY/);
 assert.match(runtime, /STAGE_WORKER_PACKAGE_READY/);
+assert.match(runtime, /STAGE_RVM_PARSING_NOT_IMPLEMENTED/);
+assert.match(runtime, /STAGE_RVM_PREFLIGHT_FAILED/);
 assert.match(diagnostics, /worker:/);
 assert.match(tab, /createSampleRvmStageModelV1/);
 assert.match(tab, /loadSample/);
-assert.match(shell, /openRvmButton\.disabled = true/);
+assert.match(shell, /Open RVM \(dry-run\)/);
+assert.match(shell, /preflight only/);
+assert.doesNotMatch(shell, /openRvmButton\.disabled = true/);
 assert.match(client, /terminate/);
+assert.match(client, /onMessage/);
 assert.match(job, /StageWorkerJob\.v1/);
+assert.match(job, /rvm-binary/);
 
 for (const token of banned) {
   for (const file of sourceFiles) assert.equal(read(file).includes(token), false, `${file} contains ${token}`);
