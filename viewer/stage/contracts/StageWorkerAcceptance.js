@@ -81,9 +81,15 @@ function validateModelDependentContracts(input, errors, warnings) {
   const recipeResult = validateStageRenderRecipesForModel(input.stageModel);
   if (!recipeResult.valid) errors.push(...prefix('renderRecipes', recipeResult.errors));
   validateDiagnosticsHandoff(input.stageModel, input.diagnostics, errors, warnings);
-  const renderPlan = input.renderPlan || buildStageRenderPlan(input.stageModel, 'full');
+  const renderPlan = compatibleRenderPlan(input);
   const planResult = validateStageRenderPlan(renderPlan);
   if (!planResult.valid) errors.push(...prefix('renderPlan', planResult.errors));
+}
+
+function compatibleRenderPlan(input) {
+  const supplied = input.renderPlan;
+  if (supplied?.entries?.every?.((entry) => entry?.entryKind && entry?.sourceRef)) return supplied;
+  return buildStageRenderPlan(input.stageModel, supplied?.source?.quality || 'full');
 }
 
 function validateFailedOrCancelled(messages, errors) {
