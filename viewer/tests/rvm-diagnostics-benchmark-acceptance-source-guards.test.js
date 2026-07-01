@@ -14,8 +14,8 @@ const lineLimitFiles = [
 ];
 
 test('diagnostics benchmark acceptance sources avoid forbidden imports and tokens', () => {
-  const source = guardedFiles.map(readText).join('\n');
-  for (const token of forbiddenTokens()) assert.equal(source.includes(token), false, `forbidden token found: ${token}`);
+  const source = guardedFiles.map(readText).join('\n').toLowerCase();
+  for (const token of forbiddenTokens()) assert.equal(source.includes(token.toLowerCase()), false, `forbidden token found: ${token}`);
 });
 
 test('new diagnostics benchmark acceptance JS files remain under 300 lines', () => {
