@@ -25,6 +25,7 @@ export function createRvmBinaryWorkerJob(options = {}) {
     fileSize: Number(options.fileSize ?? byteLength) || 0,
     fileHash: options.fileHash || '',
     arrayBuffer: options.arrayBuffer,
+    byteLength,
     createdAt: options.createdAt || new Date().toISOString(),
   };
 }
@@ -52,7 +53,7 @@ export function summarizeStageWorkerJob(job) {
     fileSize: Number(job?.fileSize) || 0,
     fileHash: job?.fileHash || '',
     hasText: typeof job?.text === 'string' && job.text.length > 0,
-    byteLength: byteLengthOf(job?.arrayBuffer),
+    byteLength: byteLengthOf(job?.arrayBuffer) || Number(job?.byteLength) || 0,
   };
 }
 
