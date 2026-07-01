@@ -36,7 +36,7 @@ function loadCategorizedConverter(){
 function loadTableCategorizedXml(){
   if(typeof document==='undefined')return;
   if(loadTableCategorizedPromise)return;
-  loadTableCategorizedPromise=import('../tabs/xml-compare-table-categorized-runtime.js?v=20260701-table-categorized-source-setup-1').catch(()=>null);
+  loadTableCategorizedPromise=import('../tabs/xml-compare-table-categorized-runtime.js?v=20260701-table-categorized-engine-pilot-1').catch(()=>null);
 }
 
 function loadToolbarGate(){
