@@ -2,7 +2,9 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
   createDiagnosticFallback,
-  createGeometryChunkRef,
+  createGeometryAttributeRef,
+  createGeometryBufferView,
+  createGeometryChunk,
   createNativeRecordRef,
   validateRvmStageModel,
 } from '../stage/contracts/RvmStageModelContract.js';
@@ -64,7 +66,7 @@ test('MESH_CHUNK with geometryChunk metadata can claim geometry chunk output', (
   const primitive = model.primitives[0];
   primitive.renderKind = 'MESH_CHUNK';
   primitive.recipeSource = { source: 'geometry-chunk', quality: 'full', output: 'mesh-chunk', recipeId: 'mesh-chunk' };
-  primitive.geometryChunk = createGeometryChunkRef({ id: 'chunk-mesh-001', byteLength: 256, primitiveIds: [primitive.id] });
+  primitive.geometryChunk = createValidMeshChunkForPrimitive(primitive);
   assertModelValid(model);
 });
 
@@ -96,6 +98,24 @@ test('invalid primitive bboxLocal and bboxWorld fail', () => {
   assertModelError(model, 'bboxLocal');
   assertModelError(model, 'bboxWorld');
 });
+
+function createValidMeshChunkForPrimitive(primitive) {
+  const vertex = createGeometryBufferView({ id: 'bv-test-mesh-position', role: 'vertex', componentType: 'float32', count: 4 });
+  const index = createGeometryBufferView({ id: 'bv-test-mesh-index', role: 'index', componentType: 'uint16', count: 6 });
+  return createGeometryChunk({
+    id: 'chunk-test-mesh-001',
+    kind: 'mesh',
+    encoding: 'inline-metadata-only',
+    ownership: { nodeIds: [primitive.nodeId], componentIds: [primitive.componentId], primitiveIds: [primitive.id] },
+    buffers: [vertex, index],
+    attributes: {
+      position: createGeometryAttributeRef({ kind: 'position', bufferViewId: vertex.id, componentType: 'float32', itemSize: 3, count: 4 }),
+      index: createGeometryAttributeRef({ kind: 'index', bufferViewId: index.id, componentType: 'uint16', itemSize: 1, count: 6 }),
+    },
+    bboxLocal: primitive.transform.bboxLocal,
+    bboxWorld: primitive.transform.bboxWorld,
+  });
+}
 
 function assertModelValid(model) {
   const result = validateRvmStageModel(model);
