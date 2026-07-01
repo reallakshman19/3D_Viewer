@@ -5,8 +5,10 @@ import { renderXmlCompareDetailsPanelHtml } from './XmlCompareDetailsPanel.js';
 import { renderXmlCompareDiagnosticsPanelHtml } from './XmlCompareDiagnosticsPanel.js';
 import { renderXmlCompareDebugPanelHtml } from './XmlCompareDebugPanel.js';
 import { renderXmlCompareLogScreenHtml } from './XmlCompareLogScreen.js';
+import { createXmlCompareTransferPreview } from './XmlCompareTransferPreview.js';
+import { renderXmlCompareTransferPreviewPanelHtml } from './XmlCompareTransferPreviewPanel.js';
 
-export const XML_COMPARE_WORKSPACE_SHELL_SCHEMA='xml-compare-workspace-shell/v12';
+export const XML_COMPARE_WORKSPACE_SHELL_SCHEMA='xml-compare-workspace-shell/v13';
 
 let loadDiagnosticsPromise=null;
 let loadSamplePickersPromise=null;
@@ -106,6 +108,7 @@ export function renderXmlCompareWorkspaceShellHtml({
   loadTransferApplyRuntime();
   loadCandidateReviewRuntime();
   const manualState=createManualState(manualConnectors,navStates);
+  const transferPreview=createXmlCompareTransferPreview({source,target,manualConnectors});
   return `<section class="xml-compare-workspace-shell is-rebuilt" data-xml-compare-workspace-shell data-xml-compare-workspace-shell-schema="${XML_COMPARE_WORKSPACE_SHELL_SCHEMA}">
     <div class="xml-compare-workspace-grid is-two-canvas">
       ${sideCard('source','Source',source||{},navStates.source,manualState)}
@@ -114,6 +117,7 @@ export function renderXmlCompareWorkspaceShellHtml({
     </div>
     <div class="xml-compare-bottom-tabs">
       ${renderXmlCompareDetailsPanelHtml({})}
+      ${renderXmlCompareTransferPreviewPanelHtml(transferPreview)}
       ${renderXmlCompareLogScreenHtml(logs)}
       ${renderXmlCompareDiagnosticsPanelHtml({diagnostics})}
       ${renderXmlCompareDebugPanelHtml({source,target,logs,diagnostics,manualConnectors})}
