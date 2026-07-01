@@ -11,6 +11,7 @@ import {
 const root = path.resolve(new URL('../..', import.meta.url).pathname);
 const rendererSource = fs.readFileSync(path.join(root, 'viewer/tabs/viewer3d-json-tab-renderer.js'), 'utf8');
 const shellSource = fs.readFileSync(path.join(root, 'viewer/stage/ui/JsonViewerShell.js'), 'utf8');
+const handoffSource = fs.readFileSync(path.join(root, 'viewer/stage/ui/RvmUiHandoff.js'), 'utf8');
 
 const parserSuccess = {
   ok: true,
@@ -42,9 +43,9 @@ assert.ok(shellSource.includes("'Open RVM'"));
 assert.equal(shellSource.includes('Open RVM (dry-run)'), false);
 assert.ok(rendererSource.includes("applyWorkerResult(result, file.name, handles, state, 'rvm-binary')"));
 assert.ok(rendererSource.includes('Worker accepted Stage JSON'));
-assert.ok(rendererSource.includes('RVM parsed into staged model'));
+assert.ok(handoffSource.includes('RVM parsed into staged model'));
 for (const forbidden of ['Native RVM support complete', 'Loaded RVM', 'Navis parity', 'Review parity', 'code 11 complete']) {
-  assert.equal((rendererSource + shellSource).includes(forbidden), false, forbidden);
+  assert.equal((rendererSource + shellSource + handoffSource).includes(forbidden), false, forbidden);
 }
 
 console.log('3D Json Viewer RVM UI handoff tests passed');
