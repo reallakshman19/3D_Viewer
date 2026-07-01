@@ -1,8 +1,12 @@
-export const XML_COMPARE_LINEWISE_TOOLBAR_GATE_SCHEMA='xml-compare-linewise-toolbar-gate/v2';
+import { installTableCategorizedSetupTabNavigation } from '../xml-compare/table-categorizer/table-categorized-xml-controller.js';
+
+export const XML_COMPARE_LINEWISE_TOOLBAR_GATE_SCHEMA='xml-compare-linewise-toolbar-gate/v3';
 
 const STYLE_ID='xml-compare-linewise-toolbar-gate-style';
 const WORKFLOW_BUTTON='data-xml-compare-categorized-open';
 const TABLE_WORKFLOW_BUTTON='data-xml-compare-table-categorized-open';
+
+let tableCategorizedNavigationHandle=null;
 
 function injectStyle(){
   let style=document.getElementById(STYLE_ID);
@@ -63,6 +67,7 @@ function gateRawXmlLoad(event){
 function install(){
   if(typeof document==='undefined')return;
   injectStyle();
+  tableCategorizedNavigationHandle ||= installTableCategorizedSetupTabNavigation(document);
   document.addEventListener('change',gateRawXmlLoad,{capture:true});
   new MutationObserver(()=>injectStyle()).observe(document.body,{childList:true,subtree:true});
 }

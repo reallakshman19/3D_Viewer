@@ -5,7 +5,7 @@ import { activeSource, sourceSummaryRows } from './table-categorized-xml-source-
 import { renderTableCategorizedStagePreview } from './table-categorized-xml-stage-preview.js';
 import { hasBlockingValidation } from './table-categorized-xml-validation.js';
 
-export const TABLE_CATEGORIZED_XML_SHELL_SCHEMA='table-categorized-xml-shell/v11';
+export const TABLE_CATEGORIZED_XML_SHELL_SCHEMA='table-categorized-xml-shell/v12';
 export const TABLE_CATEGORIZED_XML_BUTTON_ATTR='data-xml-compare-table-categorized-open';
 export const TABLE_CATEGORIZED_XML_POPUP_ATTR='data-xml-compare-table-categorized-popup';
 export const TABLE_CATEGORIZED_XML_TABS=Object.freeze([
@@ -154,114 +154,35 @@ function renderRecipeSetupPanels({profile=PS_MAPPING_TABLE_2_SHADOW_PROFILE}={})
   ].join(''));
 }
 
-function renderImportSettingsPanel(){
-  return panel('source','Import Settings','File parsing options. UI shell only; parser behavior is unchanged.',fieldSet('Import specification',[selectControl('File Type / Paste Mode',['Paste text','CSV file','TXT file','Fixed width'],0),inputControl('Delimiter',','),selectControl('Header Row',['Yes','No'],0),inputControl('Skip Rows','0'),selectControl('Encoding',['UTF-8','UTF-16','Windows-1252'],0),selectControl('Trim Blank Rows',['Yes','No'],0),selectControl('Duplicate Header Handling',['Warn','Auto-rename','Block import'],0),inputControl('Source Table ID','S1'),selectControl('Source Table Role',['Primary source','Lookup source','Reference source'],0)]),false);
-}
-
-function renderColumnCleanupPanel(){
-  return panel('source','Column Cleanup','Column naming and source-table cleanup. UI shell only.',fieldSet('Column cleanup',[inputControl('Column Rename','OldName → NewName'),inputControl('Include / Exclude Columns','include: A,B,C / exclude: Notes'),selectControl('Trim Empty Columns',['Yes','No'],0),selectControl('Column Alias Handling',['Keep aliases','Normalize aliases','Warn on alias conflict'],0)]),false);
-}
-
-function renderDataTypesPanel(){
-  return panel('fields','Data Types / Units','Detect and choose field types and units. UI shell only.',fieldSet('Type profile',[inputControl('Detected Type','text'),selectControl('Selected Type',['Text','Number','Date','Boolean','Coordinate'],0),selectControl('Text / Number / Date / Boolean / Coordinate',['Text','Number','Date','Boolean','Coordinate'],0),inputControl('Unit','mm'),selectControl('Required / Optional',['Required','Optional'],1),inputControl('Alias Names','primary_key, item_key')]),false);
-}
-
-function renderDefaultsPanel(){
-  return panel('fields','Defaults / Blank Handling','Blank, invalid value, and default handling. UI shell only.',fieldSet('Default policy',[selectControl('Blank Policy',['Allow blank','Warning','Block export','Use default'],1),selectControl('Invalid Value Policy',['Warning','Block export','Use default'],0),inputControl('Default Value',''),inputControl('Alias Names','short name, long name')]),false);
-}
-
-function renderCalculatedFieldsPanel(){
-  return panel('fields','Calculated Fields','Calculated field shell for future derived columns.',fieldSet('Calculated field',[inputControl('Calculated Column Formula','concat(primaryKey, "__", coordinateGroup)'),inputControl('Output Field Name','calculatedKey'),selectControl('Evaluation Timing',['Before grouping','After grouping','Before export'],0)]),false);
-}
-
-function renderPrimaryKeysPanel(){
-  return panel('relationships','Primary / Composite Keys','Key definitions for table relationships. UI shell only.',fieldSet('Key builder',[inputControl('Primary Key','Primary item key'),inputControl('Composite Key Parts','LineNo + Zone + Sequence'),inputControl('Item Key','Row ID / item ID'),inputControl('Detail Key','Type + value')]),true);
-}
-
-function renderParentChildLinksPanel(){
-  return panel('relationships','Parent / Child Links','Relationship link shell for parent-child graph assembly.',fieldSet('Relationship links',[inputControl('Parent Key','Parent ID'),inputControl('Child Key','Child ID'),inputControl('Foreign Key','Parent ID on child row'),selectControl('Cardinality',['one-to-one','one-to-many','many-to-one','many-to-many'],1)]),false);
-}
-
-function renderJoinPanel(profile,sources){
-  return panel('relationships','Join Another Table','Use another source table for lookup or coordinate enrichment.',renderJoinEditor(profile,sources)+fieldSet('Join shell',[selectControl('Join Type',['left','inner','full'],0),selectControl('Match Method',['exact','case-insensitive','trimmed','regex key','coordinate proximity'],0)]),false);
-}
-
-function renderDuplicateMatchRulesPanel(){
-  return panel('relationships','Duplicate / Missing Match Rules','Duplicate, missing parent, and orphan policies. UI shell only.',fieldSet('Match policies',[selectControl('Duplicate Key Policy',['Warning','Keep first','Keep last','Block export','Create multiple'],0),selectControl('Missing Parent Policy',['Warning','Create orphan bucket','Block export'],0),selectControl('Orphan Row Policy',['Keep with warning','Drop from export','Block export'],0)]),false);
-}
-
-function renderTreeEditorPlaceholderPanel(profile){
-  const root=profile.levelDefinitions?.[0]||{};
-  const partition=root.children?.[0]||{};
-  return panel('structure','Graph Levels / Tree Editor','Recursive level tree shell. Editing behavior is reserved for a later phase.',renderRootEditor(root,partition)+fieldSet('Selected level editor',[inputControl('Selected Level','Group'),buttonRow(['Add Child Level','Add Sibling Level','Duplicate Level','Move Up','Move Down','Delete Level']),inputControl('Level Name','Group'),inputControl('XML Tag','Group'),inputControl('Create From Column / Rule','column or resolver'),inputControl('Key Rule','primary key rule'),inputControl('Display Rule','display name rule'),inputControl('Create Only When','condition'),inputControl('Sort By','key / source row / custom')]),true);
-}
-
-function renderRootPartitionPanel(profile,sources){
-  return panel('structure','Model Split','Choose how rows are divided below one document root.',renderRootPartitionEditor(profile,sources)+fieldSet('Model split strategy',[selectControl('Model Split Strategy',['one model','per source','per column','per rule'],0)]),false);
-}
-
-function renderAddMoveDeleteLevelsPanel(){
-  return panel('structure','Add / Move / Delete Levels','Level maintenance shell for future recursive editor behavior.',fieldSet('Level actions',[buttonRow(['Add Child Level','Add Sibling Level','Duplicate Level','Move Up','Move Down','Delete Level'])]),false);
-}
-
-function renderSortOrderPanel(){
-  return panel('structure','Sort Order','Output order controls. UI shell only.',fieldSet('Sort controls',[selectControl('Sort Groups By Key',['Yes','No'],0),selectControl('Sort Items By Source Row Order',['Yes','No'],0),selectControl('Sort Details By Priority',['Yes','No'],0),selectControl('Natural Sort',['Yes','No'],0),selectControl('Numeric Sort',['Yes','No'],1),inputControl('Custom Order List','Group, Item, Detail, Value')]),false);
-}
-
-function renderFiltersPanel(){
-  return panel('rules','Filters / Conditions','Conditional include/exclude and create-only rules. UI shell only.',fieldSet('Conditions',[inputControl('Include Rows Where','Mandatory = YES'),inputControl('Exclude Rows Where','Status = Ignore'),inputControl('Create Level Only When','key is not blank'),inputControl('Create Field Only When','value is not blank')]),false);
-}
-
-function renderFallbacksPanel(){
-  return panel('rules','Fallbacks','Fallback behavior for blank values and no-match cases. UI shell only.',fieldSet('Fallback rules',[selectControl('If Blank',['Warning','Use fallback value','Skip field','Block export'],0),selectControl('If No Match',['Warning','Use fallback value','Create unknown bucket','Block export'],0),inputControl('Fallback Value','UNKNOWN')]),false);
-}
-
-function renderClassifiersPanel(){
-  return panel('rules','Classifiers','Dictionary/classifier shell for mapping source values to graph values.',fieldSet('Classifier setup',[textareaControl('Classifier Dictionary','GUIDE → Guide\nLS → Line Stop'),selectControl('Classifier Match Method',['exact','case-insensitive','trimmed','regex key'],1)]),false);
-}
-
-function renderCoordinateGroupingPanel(profile){
-  const tolerance=profile.coordinateCluster?.tolerance??2;
-  return panel('rules','Coordinate Grouping','Coordinate clustering controls. UI shell only.',fieldSet('Coordinate grouping',[inputControl('Coordinate Tolerance',tolerance),inputControl('Coordinate Rounding','3 decimals'),selectControl('Coordinate Unit Conversion',['none','m to mm','inch to mm'],0),selectControl('Cluster Method',['max-axis-delta','euclidean','exact xyz'],0)]),false);
-}
-
-function renderRequiredChecksPanel(results=[],exportResult=null){
-  const existing=renderValidationPanels(results,exportResult);
-  return panel('quality','Required Checks','Required columns, levels, and uniqueness checks.',existing+fieldSet('Required check configuration',[inputControl('Required Columns','primary key, type, value'),inputControl('Required Levels','Document, Model Split, Group, Item'),selectControl('Unique Key Checks',['Enabled','Disabled'],0),selectControl('Missing Parent Checks',['Warning','Block export'],0),selectControl('Duplicate Key Checks',['Warning','Block export'],0),selectControl('Invalid Number Checks',['Warning','Block export'],0),selectControl('Invalid Coordinate Checks',['Warning','Block export'],0)]),true);
-}
-
-function renderValidationSettingsPanel(){
-  return panel('quality','Validation Settings','Severity and export-blocking settings. UI shell only.',fieldSet('Severity mapping',[selectControl('Rule Failure Severity',['BLOCKER','WARNING','INFO'],1),selectControl('Export Blocking Rules',['Block on BLOCKER only','Block on WARNING and BLOCKER'],0),selectControl('Blocker / Warning / Info Mapping',['Default mapping','Strict mapping','Lenient mapping'],0)]),false);
-}
-
-function renderWarningsPanel(results=[]){
-  const warnings=results.filter((item)=>item.severity==='WARNING');
-  return panel('quality','Warnings','Warning-level messages and optional data issues.',warnings.length?`<ul>${warnings.map((item)=>`<li>${esc(item.gate)} — ${esc(item.message)}</li>`).join('')}</ul>`:'<p>No warnings yet.</p>',false);
-}
-
-function renderXmlNamesPanel(){
-  return panel('output','XML Names','Configure user-facing XML names. UI shell only.',fieldSet('XML names',[inputControl('XML Root Tag','CategorizedTableXml'),inputControl('Partition Tag','RootPartition'),inputControl('Level Tag Names','Group, Item, Detail'),inputControl('Field Tag Names','key, displayName, value')]),false);
-}
-
-function renderXmlShapePanel(){
-  return panel('output','XML Shape','XML output shape controls. UI shell only.',`<section class="table-categorized-xml-subcard"><h4>Single-root rule</h4><p><b>One XML document root only.</b></p><p>Logical splits are child partitions below the root.</p></section>${fieldSet('XML shape',[selectControl('Attribute vs Element',['Element','Attribute','Mixed'],0),selectControl('Text Node vs Child Element',['Child element','Text node'],0),inputControl('Element Order','configured order'),selectControl('Empty Value Policy',['omit','empty tag','warning'],1),inputControl('Namespace',''),inputControl('Schema Version','v1'),selectControl('Indentation',['2 spaces','4 spaces','tabs','minified'],0),selectControl('CDATA Option',['Off','On for text fields'],0)])}`,false);
-}
-
-function renderSaveLoadRecipePanel(){
-  return panel('recipe','Save / Load Recipe','Recipe lifecycle controls. UI shell only.',fieldSet('Recipe lifecycle',[buttonRow(['Save Recipe','Load Recipe','Duplicate Recipe','Reset Recipe'])]),false);
-}
-
-function renderRecipeVersionNotesPanel(profile){
-  return panel('recipe','Recipe Version / Notes','Recipe metadata shell.',fieldSet('Recipe metadata',[inputControl('Recipe Name',profile.displayName||''),inputControl('Recipe ID',profile.profileId||''),inputControl('Version','1.0.0'),textareaControl('Description','Reusable table-to-graph mapping recipe'),textareaControl('Author Notes','')]),false);
-}
-
-function renderRecipeJsonPanel(){
-  return panel('recipe','Import / Export Recipe JSON','Import/export and compare recipe JSON. UI shell only.',fieldSet('Recipe JSON',[buttonRow(['Import Recipe JSON','Export Recipe JSON','Compare Recipe Changes'])]),false);
-}
+function renderImportSettingsPanel(){return panel('source','Import Settings','File parsing options. UI shell only; parser behavior is unchanged.',fieldSet('Import specification',[selectControl('File Type / Paste Mode',['Paste text','CSV file','TXT file','Fixed width'],0),inputControl('Delimiter',','),selectControl('Header Row',['Yes','No'],0),inputControl('Skip Rows','0'),selectControl('Encoding',['UTF-8','UTF-16','Windows-1252'],0),selectControl('Trim Blank Rows',['Yes','No'],0),selectControl('Duplicate Header Handling',['Warn','Auto-rename','Block import'],0),inputControl('Source Table ID','S1'),selectControl('Source Table Role',['Primary source','Lookup source','Reference source'],0)]),false);}
+function renderColumnCleanupPanel(){return panel('source','Column Cleanup','Column naming and source-table cleanup. UI shell only.',fieldSet('Column cleanup',[inputControl('Column Rename','OldName → NewName'),inputControl('Include / Exclude Columns','include: A,B,C / exclude: Notes'),selectControl('Trim Empty Columns',['Yes','No'],0),selectControl('Column Alias Handling',['Keep aliases','Normalize aliases','Warn on alias conflict'],0)]),false);}
+function renderDataTypesPanel(){return panel('fields','Data Types / Units','Detect and choose field types and units. UI shell only.',fieldSet('Type profile',[inputControl('Detected Type','text'),selectControl('Selected Type',['Text','Number','Date','Boolean','Coordinate'],0),selectControl('Text / Number / Date / Boolean / Coordinate',['Text','Number','Date','Boolean','Coordinate'],0),inputControl('Unit','mm'),selectControl('Required / Optional',['Required','Optional'],1),inputControl('Alias Names','primary_key, item_key')]),false);}
+function renderDefaultsPanel(){return panel('fields','Defaults / Blank Handling','Blank, invalid value, and default handling. UI shell only.',fieldSet('Default policy',[selectControl('Blank Policy',['Allow blank','Warning','Block export','Use default'],1),selectControl('Invalid Value Policy',['Warning','Block export','Use default'],0),inputControl('Default Value',''),inputControl('Alias Names','short name, long name')]),false);}
+function renderCalculatedFieldsPanel(){return panel('fields','Calculated Fields','Calculated field shell for future derived columns.',fieldSet('Calculated field',[inputControl('Calculated Column Formula','concat(primaryKey, "__", coordinateGroup)'),inputControl('Output Field Name','calculatedKey'),selectControl('Evaluation Timing',['Before grouping','After grouping','Before export'],0)]),false);}
+function renderPrimaryKeysPanel(){return panel('relationships','Primary / Composite Keys','Key definitions for table relationships. UI shell only.',fieldSet('Key builder',[inputControl('Primary Key','Primary item key'),inputControl('Composite Key Parts','LineNo + Zone + Sequence'),inputControl('Item Key','Row ID / item ID'),inputControl('Detail Key','Type + value')]),true);}
+function renderParentChildLinksPanel(){return panel('relationships','Parent / Child Links','Relationship link shell for parent-child graph assembly.',fieldSet('Relationship links',[inputControl('Parent Key','Parent ID'),inputControl('Child Key','Child ID'),inputControl('Foreign Key','Parent ID on child row'),selectControl('Cardinality',['one-to-one','one-to-many','many-to-one','many-to-many'],1)]),false);}
+function renderJoinPanel(profile,sources){return panel('relationships','Join Another Table','Use another source table for lookup or coordinate enrichment.',renderJoinEditor(profile,sources)+fieldSet('Join shell',[selectControl('Join Type',['left','inner','full'],0),selectControl('Match Method',['exact','case-insensitive','trimmed','regex key','coordinate proximity'],0)]),false);}
+function renderDuplicateMatchRulesPanel(){return panel('relationships','Duplicate / Missing Match Rules','Duplicate, missing parent, and orphan policies. UI shell only.',fieldSet('Match policies',[selectControl('Duplicate Key Policy',['Warning','Keep first','Keep last','Block export','Create multiple'],0),selectControl('Missing Parent Policy',['Warning','Create orphan bucket','Block export'],0),selectControl('Orphan Row Policy',['Keep with warning','Drop from export','Block export'],0)]),false);}
+function renderTreeEditorPlaceholderPanel(profile){const root=profile.levelDefinitions?.[0]||{};const partition=root.children?.[0]||{};return panel('structure','Graph Levels / Tree Editor','Recursive level tree shell. Editing behavior is reserved for a later phase.',renderRootEditor(root,partition)+fieldSet('Selected level editor',[inputControl('Selected Level','Group'),buttonRow(['Add Child Level','Add Sibling Level','Duplicate Level','Move Up','Move Down','Delete Level']),inputControl('Level Name','Group'),inputControl('XML Tag','Group'),inputControl('Create From Column / Rule','column or resolver'),inputControl('Key Rule','primary key rule'),inputControl('Display Rule','display name rule'),inputControl('Create Only When','condition'),inputControl('Sort By','key / source row / custom')]),true);}
+function renderRootPartitionPanel(profile,sources){return panel('structure','Model Split','Choose how rows are divided below one document root.',renderRootPartitionEditor(profile,sources)+fieldSet('Model split strategy',[selectControl('Model Split Strategy',['one model','per source','per column','per rule'],0)]),false);}
+function renderAddMoveDeleteLevelsPanel(){return panel('structure','Add / Move / Delete Levels','Level maintenance shell for future recursive editor behavior.',fieldSet('Level actions',[buttonRow(['Add Child Level','Add Sibling Level','Duplicate Level','Move Up','Move Down','Delete Level'])]),false);}
+function renderSortOrderPanel(){return panel('structure','Sort Order','Output order controls. UI shell only.',fieldSet('Sort controls',[selectControl('Sort Groups By Key',['Yes','No'],0),selectControl('Sort Items By Source Row Order',['Yes','No'],0),selectControl('Sort Details By Priority',['Yes','No'],0),selectControl('Natural Sort',['Yes','No'],0),selectControl('Numeric Sort',['Yes','No'],1),inputControl('Custom Order List','Group, Item, Detail, Value')]),false);}
+function renderFiltersPanel(){return panel('rules','Filters / Conditions','Conditional include/exclude and create-only rules. UI shell only.',fieldSet('Conditions',[inputControl('Include Rows Where','Mandatory = YES'),inputControl('Exclude Rows Where','Status = Ignore'),inputControl('Create Level Only When','key is not blank'),inputControl('Create Field Only When','value is not blank')]),false);}
+function renderFallbacksPanel(){return panel('rules','Fallbacks','Fallback behavior for blank values and no-match cases. UI shell only.',fieldSet('Fallback rules',[selectControl('If Blank',['Warning','Use fallback value','Skip field','Block export'],0),selectControl('If No Match',['Warning','Use fallback value','Create unknown bucket','Block export'],0),inputControl('Fallback Value','UNKNOWN')]),false);}
+function renderClassifiersPanel(){return panel('rules','Classifiers','Dictionary/classifier shell for mapping source values to graph values.',fieldSet('Classifier setup',[textareaControl('Classifier Dictionary','GUIDE → Guide\nLS → Line Stop'),selectControl('Classifier Match Method',['exact','case-insensitive','trimmed','regex key'],1)]),false);}
+function renderCoordinateGroupingPanel(profile){const tolerance=profile.coordinateCluster?.tolerance??2;return panel('rules','Coordinate Grouping','Coordinate clustering controls. UI shell only.',fieldSet('Coordinate grouping',[inputControl('Coordinate Tolerance',tolerance),inputControl('Coordinate Rounding','3 decimals'),selectControl('Coordinate Unit Conversion',['none','m to mm','inch to mm'],0),selectControl('Cluster Method',['max-axis-delta','euclidean','exact xyz'],0)]),false);}
+function renderRequiredChecksPanel(results=[],exportResult=null){return panel('quality','Required Checks','Required columns, levels, and uniqueness checks.',renderValidationPanels(results,exportResult)+fieldSet('Required check configuration',[inputControl('Required Columns','primary key, type, value'),inputControl('Required Levels','Document, Model Split, Group, Item'),selectControl('Unique Key Checks',['Enabled','Disabled'],0),selectControl('Missing Parent Checks',['Warning','Block export'],0),selectControl('Duplicate Key Checks',['Warning','Block export'],0),selectControl('Invalid Number Checks',['Warning','Block export'],0),selectControl('Invalid Coordinate Checks',['Warning','Block export'],0)]),true);}
+function renderValidationSettingsPanel(){return panel('quality','Validation Settings','Severity and export-blocking settings. UI shell only.',fieldSet('Severity mapping',[selectControl('Rule Failure Severity',['BLOCKER','WARNING','INFO'],1),selectControl('Export Blocking Rules',['Block on BLOCKER only','Block on WARNING and BLOCKER'],0),selectControl('Blocker / Warning / Info Mapping',['Default mapping','Strict mapping','Lenient mapping'],0)]),false);}
+function renderWarningsPanel(results=[]){const warnings=results.filter((item)=>item.severity==='WARNING');return panel('quality','Warnings','Warning-level messages and optional data issues.',warnings.length?`<ul>${warnings.map((item)=>`<li>${esc(item.gate)} — ${esc(item.message)}</li>`).join('')}</ul>`:'<p>No warnings yet.</p>',false);}
+function renderXmlNamesPanel(){return panel('output','XML Names','Configure user-facing XML names. UI shell only.',fieldSet('XML names',[inputControl('XML Root Tag','CategorizedTableXml'),inputControl('Partition Tag','RootPartition'),inputControl('Level Tag Names','Group, Item, Detail'),inputControl('Field Tag Names','key, displayName, value')]),false);}
+function renderXmlShapePanel(){return panel('output','XML Shape','XML output shape controls. UI shell only.',`<section class="table-categorized-xml-subcard"><h4>Single-root rule</h4><p><b>One XML document root only.</b></p><p>Logical splits are child partitions below the root.</p></section>${fieldSet('XML shape',[selectControl('Attribute vs Element',['Element','Attribute','Mixed'],0),selectControl('Text Node vs Child Element',['Child element','Text node'],0),inputControl('Element Order','configured order'),selectControl('Empty Value Policy',['omit','empty tag','warning'],1),inputControl('Namespace',''),inputControl('Schema Version','v1'),selectControl('Indentation',['2 spaces','4 spaces','tabs','minified'],0),selectControl('CDATA Option',['Off','On for text fields'],0)])}`,false);}
+function renderSaveLoadRecipePanel(){return panel('recipe','Save / Load Recipe','Recipe lifecycle controls. UI shell only.',fieldSet('Recipe lifecycle',[buttonRow(['Save Recipe','Load Recipe','Duplicate Recipe','Reset Recipe'])]),false);}
+function renderRecipeVersionNotesPanel(profile){return panel('recipe','Recipe Version / Notes','Recipe metadata shell.',fieldSet('Recipe metadata',[inputControl('Recipe Name',profile.displayName||''),inputControl('Recipe ID',profile.profileId||''),inputControl('Version','1.0.0'),textareaControl('Description','Reusable table-to-graph mapping recipe'),textareaControl('Author Notes','')]),false);}
+function renderRecipeJsonPanel(){return panel('recipe','Import / Export Recipe JSON','Import/export and compare recipe JSON. UI shell only.',fieldSet('Recipe JSON',[buttonRow(['Import Recipe JSON','Export Recipe JSON','Compare Recipe Changes'])]),false);}
 
 function renderOutputPanels(view={}){
   if(!view.graph)return `${renderXmlNamesPanel()}${renderXmlShapePanel()}${panel('output','Download Files','Build Preview Graph first.','<p>Build Preview Graph first.</p>',true)}${panel('output','Canvas Link','Canvas handoff is disabled until export is ready.','<p>Not ready.</p>',false)}`;
-  if(hasBlockingValidation(view.validationResults))return `${renderXmlNamesPanel()}${renderXmlShapePanel()}${panel('output','Blocked','Export is blocked by validation.',renderValidation(view.validationResults,view.exportResult),true)}`;
+  if(hasBlockingValidation(view.validationResults))return `${renderXmlNamesPanel()}${renderXmlShapePanel()}${panel('output','Blocked','Export is blocked by validation.',renderValidationPanels(view.validationResults,view.exportResult),true)}`;
   const enabled=Boolean(view.exportResult?.ok);
   const xml=enabled?view.exportResult.xmlText:'Export artifact is not available.';
   const downloads=`<p>Exports are generated from the categorized graph only.</p>${view.exportStatus?`<div class="table-categorized-xml-subcard"><b>Status:</b> ${esc(view.exportStatus)}</div>`:''}<div class="table-categorized-xml-actions"><button type="button" data-table-categorized-download="xml" ${enabled?'':'disabled'}>Download Categorized XML</button><button type="button" data-table-categorized-download="graph" ${enabled?'':'disabled'}>Download Graph JSON</button><button type="button" data-table-categorized-download="profile" ${enabled?'':'disabled'}>Download Recipe JSON</button><button type="button" data-table-categorized-download="diagnostics" ${enabled?'':'disabled'}>Download Diagnostics JSON</button><button type="button" data-table-categorized-download="audit" ${enabled?'':'disabled'}>Download Audit JSON</button></div><h4>XML Preview</h4><pre class="table-categorized-xml-preview">${esc(xml)}</pre>`;
@@ -273,97 +194,23 @@ function renderSourceTable(sources=[],activeId=''){
   const rows=sourceSummaryRows(sources).map((s)=>`<tr class="${s.sourceId===activeId?'is-active':''}"><td>${esc(s.sourceId)}</td><td>${esc(s.sourceName)}</td><td>${s.rows}</td><td>${s.columns}</td><td>${esc(s.sourceType)}</td><td>${esc(s.status)}</td></tr>`).join('');
   return `<section class="table-categorized-xml-subcard"><h4>Parsed Tables</h4><table><thead><tr><th>ID</th><th>Table Name</th><th>Rows</th><th>Columns</th><th>Type</th><th>Status</th></tr></thead><tbody>${rows||'<tr><td colspan="6">No tables yet.</td></tr>'}</tbody></table></section>`;
 }
-
-function renderProfileHeader(profile){
-  return `<section class="table-categorized-xml-subcard"><h4>Recipe / Preset</h4><label>Recipe Name<input data-profile-field="displayName" value="${esc(profile.displayName)}"></label><label>Recipe ID <small>(advanced)</small><input data-profile-field="profileId" value="${esc(profile.profileId)}"></label><label>Start From<select data-profile-template><option>Blank Universal Profile</option><option ${profile.profileId==='ps-mapping-table-2-shadow-profile'?'selected':''}>PS Mapping Table 2 Shadow Profile</option><option ${profile.profileId==='ps-mapping-table-2-coordinate-lookup-profile'?'selected':''}>PS Mapping Table 2 + Coordinate Lookup Profile</option></select></label><div class="table-categorized-xml-actions"><button type="button" data-table-categorized-action="new-blank-profile">New Blank Recipe</button><button type="button" data-table-categorized-action="load-ps-template">Load PS Table 2 Recipe</button><button type="button" data-table-categorized-action="load-two-source-template">Load Two-Table Coordinate Recipe</button><label class="table-categorized-file">Import Recipe JSON<input type="file" accept=".json,application/json" data-table-categorized-profile-file></label><button type="button" data-table-categorized-download="profile">Download Recipe JSON</button><button type="button" data-table-categorized-action="reset-profile">Reset</button></div></section>`;
-}
-
-function renderGroupingSummary(profile){
-  const tolerance=profile.coordinateCluster?.tolerance??2;
-  return `<section class="table-categorized-xml-subcard"><h4>Grouping Strategy</h4><p>Group rows by base key, coordinate group, or both. The preset can use base key + coordinate group; custom recipes can use different columns and names.</p><label><input type="radio" name="table-categorized-grouping"> Base key only</label><label><input type="radio" name="table-categorized-grouping"> Coordinate group only</label><label><input type="radio" name="table-categorized-grouping" checked> Base key + coordinate group</label><label>Coordinate tolerance<input value="${esc(tolerance)}"></label></section>`;
-}
-
-function renderColumnMappingSummary(sources=[],activeSourceId='S1'){
-  const active=sources.find((s)=>s.sourceId===activeSourceId)||sources[0]||{};
-  const cols=active.headers||['PS NO','DTXR','Support Gap','X','Y','Z'];
-  const pick=(label,preferred)=>`<label>${esc(label)}<select>${cols.map((c)=>`<option ${c===preferred?'selected':''}>${esc(c)}</option>`).join('')}</select></label>`;
-  return `<section class="table-categorized-xml-subcard"><h4>Column Mapping</h4><p>Use generic roles so this works beyond one preset.</p>${pick('Primary key','PS NO')}${pick('Type / feature','DTXR')}${pick('Value / measure','Support Gap')}${pick('X coordinate','X')}${pick('Y coordinate','Y')}${pick('Z coordinate','Z')}</section>`;
-}
-
-function renderRootPartitionEditor(profile,sources){
-  return `<section class="table-categorized-xml-subcard"><h4>Model Split <small>advanced: RootPartition</small></h4><p>Choose how rows are divided below the single document root.</p><label>Split Method<select data-root-partition-mode><option ${profile.rootPartitionMode==='static'?'selected':''}>static</option><option ${profile.rootPartitionMode==='perSource'?'selected':''}>perSource</option><option ${profile.rootPartitionMode==='perColumn'?'selected':''}>perColumn</option><option ${profile.rootPartitionMode==='perResolver'?'selected':''}>perResolver</option></select></label><label>Single Bucket Key<input data-root-partition-key value="${esc(profile.rootPartitions?.[0]?.key||'MODEL_SIDE')}"></label><label>Tables Included<input data-root-partition-scope value="${esc((profile.rootPartitions?.[0]?.sourceScope||sources.map((s)=>s.sourceId)).join(' '))}"></label><label>Split By Column / Rule <small>advanced</small><input value="${esc(profile.rootPartitionResolver?.column||'')}"></label></section>`;
-}
-
-function renderRootEditor(root,partition){
-  return `<section class="table-categorized-xml-subcard"><h4>Document Setup</h4><label>Document Name<input data-root-field="displayName" value="${esc(root.displayName||'CategorizedTableGraph')}"></label><label>Document XML Tag <small>advanced</small><input data-root-field="xmlTag" value="${esc(root.xmlTag||root.levelId||'CategorizedTableGraph')}"></label>${selectHtml('Node Kind <small>advanced</small>','data-root-field="levelType"',root.levelType,LEVEL_TYPE_OPTIONS)}${selectHtml('Create Node When <small>advanced</small>','data-root-field="creationMode"',root.creationMode,CREATION_MODE_OPTIONS)}<label><input type="checkbox" data-root-document ${root.documentRoot?'checked':''}> Single Document Root</label><label>Document Key<input data-root-field="key" value="${esc(root.key||'CategorizedTableGraph')}"></label><label>First Group Name (slot x)<input data-parent-name="0" value="${esc(labelForLevel(partition.children?.[0])||'Parent (x)')}"></label><label>First Group Name (slot y)<input data-parent-name="1" value="${esc(labelForLevel(partition.children?.[1])||'Parent (y)')}"></label><label>First Group Name (slot z)<input data-parent-name="2" value="${esc(labelForLevel(partition.children?.[2])||'Parent (z)')}"></label></section>`;
-}
-
-function renderLevelTabs(label,levels=[],tabs=[]){
-  const friendly=levelGroupLabel(label);
-  return `<section class="table-categorized-xml-subcard"><h4>${esc(friendly)} <small>(${esc(label)} level editor)</small></h4><div class="table-categorized-xml-actions">${tabs.map((tab)=>`<button type="button">${esc(friendly)} (${esc(tab)})</button>`).join('')}</div>${tabs.map((tab,index)=>renderLevelCard(`${friendly} (${tab})`,levels[index],index,label)).join('')}</section>`;
-}
-
-function renderLevelCard(title,level={},index,label){
-  return `<div class="table-categorized-xml-subcard"><h4>${esc(title)}</h4><label>Group / Item Name<input data-${label.toLowerCase()}-name="${index}" value="${esc(labelForLevel(level)||title)}"></label><label>XML Tag <small>advanced</small><input value="${esc(level.xmlTag||level.levelId||'')}"></label>${selectHtml('What This Level Represents','',level.levelType,LEVEL_TYPE_OPTIONS)}${selectHtml('Create One Node For','',level.creationMode,CREATION_MODE_OPTIONS)}<small>Relationship: parent owns this level.</small><label>Display Text From Column / Rule<input value="${esc(resolverSummary(level.displayNameResolver)||'S1.PS NO')}"></label><label>Unique Key From Column / Rule<input value="${esc(resolverSummary(level.keyResolver)||'S1.PS NO')}"></label><small>Extra fields and values are represented in Rule Builder.</small><label>Child Level Names<input value="${esc((level.children||[]).map(labelForLevel).join(', '))}"></label></div>`;
-}
-
-function renderRecursiveList(profile){
-  const rows=[];
-  walk(profile.levelDefinitions||[],[],(level,path)=>{if(path.length>=4)rows.push(`<tr><td>${path.join(' > ')}</td><td>${esc(labelForLevel(level))}</td><td>${esc(level.levelType)}</td><td>${esc(level.creationMode)}</td><td>${esc(resolverSummary(level.keyResolver))}</td><td>Edit / Delete / Add Child</td></tr>`);});
-  return `<section class="table-categorized-xml-subcard"><h4>More Nested Levels</h4><p>Use this for parent → many children → many grandchildren structures.</p><table><thead><tr><th>Path</th><th>Name</th><th>Kind</th><th>Create One For</th><th>Key Rule</th><th>Actions</th></tr></thead><tbody>${rows.join('')||'<tr><td colspan="6">No extra nested levels yet.</td></tr>'}</tbody></table></section>`;
-}
-
-function renderJoinEditor(profile,sources){
-  const joins=profile.joins||[];
-  return `<section class="table-categorized-xml-subcard"><h4>Join Another Table</h4><p>Use joins when coordinates or extra metadata are in another source table.</p><table><thead><tr><th>Join ID</th><th>Left Table</th><th>Left Key</th><th>Right Table</th><th>Right Key</th><th>Join Type</th><th>Duplicate Rule</th><th>Missing Rule</th></tr></thead><tbody>${joins.map((j)=>`<tr><td>${esc(j.joinId)}</td><td>${esc(j.leftSourceId)}</td><td>${esc(j.leftKeyResolver?.column)}</td><td>${esc(j.rightSourceId)}</td><td>${esc(j.rightKeyResolver?.column)}</td><td>${esc(j.joinType)}</td><td>${esc(j.duplicatePolicy)}</td><td>${esc(j.missingPolicy)}</td></tr>`).join('')||'<tr><td colspan="8">No table joins defined.</td></tr>'}</tbody></table><small>Available tables: ${esc(sources.map((s)=>s.sourceId).join(', '))}</small></section>`;
-}
-
-function renderResolverEditor(profile,sources,activeSourceId,sample){
-  const active=sources.find((s)=>s.sourceId===activeSourceId)||sources[0]||{};
-  const cols=active.headers||['PS NO','X','Y','Z'];
-  const preview=previewResolver(profile.levelDefinitions?.[0]?.children?.[0]?.children?.[0]?.keyResolver,sample);
-  return `<section class="table-categorized-xml-subcard"><h4>Rule Builder <small>advanced: Resolver Rules</small></h4><label>Rule Source Table<select data-resolver-source>${sources.map((s)=>`<option ${s.sourceId===activeSourceId?'selected':''}>${esc(s.sourceId)}</option>`).join('')||'<option>S1</option>'}</select></label><label>Column<select data-resolver-column>${cols.map((c)=>`<option>${esc(c)}</option>`).join('')}</select></label><label>Rule Type<select data-resolver-op><option>literal</option><option selected>trim</option><option>uppercase</option><option>lowercase</option><option>regexExtract</option><option>concat</option><option>numberParser</option><option>classifier</option><option>coordinateCluster</option><option>fallback</option></select></label><label>Combine Values In This Order<input value="Column + Literal + Resolver"></label><label>Coordinate Grouping Setup<input value="Source,X,Y,Z,mm,2,3"></label><p>Final key preview: <b>${esc(preview||'—')}</b></p></section>`;
-}
-
+function renderProfileHeader(profile){return `<section class="table-categorized-xml-subcard"><h4>Recipe / Preset</h4><label>Recipe Name<input data-profile-field="displayName" value="${esc(profile.displayName)}"></label><label>Recipe ID <small>(advanced)</small><input data-profile-field="profileId" value="${esc(profile.profileId)}"></label><label>Start From<select data-profile-template><option>Blank Universal Profile</option><option ${profile.profileId==='ps-mapping-table-2-shadow-profile'?'selected':''}>PS Mapping Table 2 Shadow Profile</option><option ${profile.profileId==='ps-mapping-table-2-coordinate-lookup-profile'?'selected':''}>PS Mapping Table 2 + Coordinate Lookup Profile</option></select></label><div class="table-categorized-xml-actions"><button type="button" data-table-categorized-action="new-blank-profile">New Blank Recipe</button><button type="button" data-table-categorized-action="load-ps-template">Load PS Table 2 Recipe</button><button type="button" data-table-categorized-action="load-two-source-template">Load Two-Table Coordinate Recipe</button><label class="table-categorized-file">Import Recipe JSON<input type="file" accept=".json,application/json" data-table-categorized-profile-file></label><button type="button" data-table-categorized-download="profile">Download Recipe JSON</button><button type="button" data-table-categorized-action="reset-profile">Reset</button></div></section>`;}
+function renderGroupingSummary(profile){const tolerance=profile.coordinateCluster?.tolerance??2;return `<section class="table-categorized-xml-subcard"><h4>Grouping Strategy</h4><p>Group rows by base key, coordinate group, or both. The preset can use base key + coordinate group; custom recipes can use different columns and names.</p><label><input type="radio" name="table-categorized-grouping"> Base key only</label><label><input type="radio" name="table-categorized-grouping"> Coordinate group only</label><label><input type="radio" name="table-categorized-grouping" checked> Base key + coordinate group</label><label>Coordinate tolerance<input value="${esc(tolerance)}"></label></section>`;}
+function renderColumnMappingSummary(sources=[],activeSourceId='S1'){const active=sources.find((s)=>s.sourceId===activeSourceId)||sources[0]||{};const cols=active.headers||['PS NO','DTXR','Support Gap','X','Y','Z'];const pick=(label,preferred)=>`<label>${esc(label)}<select>${cols.map((c)=>`<option ${c===preferred?'selected':''}>${esc(c)}</option>`).join('')}</select></label>`;return `<section class="table-categorized-xml-subcard"><h4>Column Mapping</h4><p>Use generic roles so this works beyond one preset.</p>${pick('Primary key','PS NO')}${pick('Type / feature','DTXR')}${pick('Value / measure','Support Gap')}${pick('X coordinate','X')}${pick('Y coordinate','Y')}${pick('Z coordinate','Z')}</section>`;}
+function renderRootPartitionEditor(profile,sources){return `<section class="table-categorized-xml-subcard"><h4>Model Split <small>advanced: RootPartition</small></h4><p>Choose how rows are divided below the single document root.</p><label>Split Method<select data-root-partition-mode><option ${profile.rootPartitionMode==='static'?'selected':''}>static</option><option ${profile.rootPartitionMode==='perSource'?'selected':''}>perSource</option><option ${profile.rootPartitionMode==='perColumn'?'selected':''}>perColumn</option><option ${profile.rootPartitionMode==='perResolver'?'selected':''}>perResolver</option></select></label><label>Single Bucket Key<input data-root-partition-key value="${esc(profile.rootPartitions?.[0]?.key||'MODEL_SIDE')}"></label><label>Tables Included<input data-root-partition-scope value="${esc((profile.rootPartitions?.[0]?.sourceScope||sources.map((s)=>s.sourceId)).join(' '))}"></label><label>Split By Column / Rule <small>advanced</small><input value="${esc(profile.rootPartitionResolver?.column||'')}"></label></section>`;}
+function renderRootEditor(root,partition){return `<section class="table-categorized-xml-subcard"><h4>Document Setup</h4><label>Document Name<input data-root-field="displayName" value="${esc(root.displayName||'CategorizedTableGraph')}"></label><label>Document XML Tag <small>advanced</small><input data-root-field="xmlTag" value="${esc(root.xmlTag||root.levelId||'CategorizedTableGraph')}"></label>${selectHtml('Node Kind <small>advanced</small>','data-root-field="levelType"',root.levelType,LEVEL_TYPE_OPTIONS)}${selectHtml('Create Node When <small>advanced</small>','data-root-field="creationMode"',root.creationMode,CREATION_MODE_OPTIONS)}<label><input type="checkbox" data-root-document ${root.documentRoot?'checked':''}> Single Document Root</label><label>Document Key<input data-root-field="key" value="${esc(root.key||'CategorizedTableGraph')}"></label><label>First Group Name (slot x)<input data-parent-name="0" value="${esc(labelForLevel(partition.children?.[0])||'Parent (x)')}"></label><label>First Group Name (slot y)<input data-parent-name="1" value="${esc(labelForLevel(partition.children?.[1])||'Parent (y)')}"></label><label>First Group Name (slot z)<input data-parent-name="2" value="${esc(labelForLevel(partition.children?.[2])||'Parent (z)')}"></label></section>`;}
+function renderRecursiveList(profile){const rows=[];walk(profile.levelDefinitions||[],[],(level,path)=>{if(path.length>=4)rows.push(`<tr><td>${path.join(' > ')}</td><td>${esc(labelForLevel(level))}</td><td>${esc(level.levelType)}</td><td>${esc(level.creationMode)}</td><td>${esc(resolverSummary(level.keyResolver))}</td><td>Edit / Delete / Add Child</td></tr>`);});return `<section class="table-categorized-xml-subcard"><h4>More Nested Levels</h4><p>Use this for parent → many children → many grandchildren structures.</p><table><thead><tr><th>Path</th><th>Name</th><th>Kind</th><th>Create One For</th><th>Key Rule</th><th>Actions</th></tr></thead><tbody>${rows.join('')||'<tr><td colspan="6">No extra nested levels yet.</td></tr>'}</tbody></table></section>`;}
+function renderJoinEditor(profile,sources){const joins=profile.joins||[];return `<section class="table-categorized-xml-subcard"><h4>Join Another Table</h4><p>Use joins when coordinates or extra metadata are in another source table.</p><table><thead><tr><th>Join ID</th><th>Left Table</th><th>Left Key</th><th>Right Table</th><th>Right Key</th><th>Join Type</th><th>Duplicate Rule</th><th>Missing Rule</th></tr></thead><tbody>${joins.map((j)=>`<tr><td>${esc(j.joinId)}</td><td>${esc(j.leftSourceId)}</td><td>${esc(j.leftKeyResolver?.column)}</td><td>${esc(j.rightSourceId)}</td><td>${esc(j.rightKeyResolver?.column)}</td><td>${esc(j.joinType)}</td><td>${esc(j.duplicatePolicy)}</td><td>${esc(j.missingPolicy)}</td></tr>`).join('')||'<tr><td colspan="8">No table joins defined.</td></tr>'}</tbody></table><small>Available tables: ${esc(sources.map((s)=>s.sourceId).join(', '))}</small></section>`;}
+function renderResolverEditor(profile,sources,activeSourceId,sample){const active=sources.find((s)=>s.sourceId===activeSourceId)||sources[0]||{};const cols=active.headers||['PS NO','X','Y','Z'];const preview=previewResolver(profile.levelDefinitions?.[0]?.children?.[0]?.children?.[0]?.keyResolver,sample);return `<section class="table-categorized-xml-subcard"><h4>Rule Builder <small>advanced: Resolver Rules</small></h4><label>Rule Source Table<select data-resolver-source>${sources.map((s)=>`<option ${s.sourceId===activeSourceId?'selected':''}>${esc(s.sourceId)}</option>`).join('')||'<option>S1</option>'}</select></label><label>Column<select data-resolver-column>${cols.map((c)=>`<option>${esc(c)}</option>`).join('')}</select></label><label>Rule Type<select data-resolver-op><option>literal</option><option selected>trim</option><option>uppercase</option><option>lowercase</option><option>regexExtract</option><option>concat</option><option>numberParser</option><option>classifier</option><option>coordinateCluster</option><option>fallback</option></select></label><label>Combine Values In This Order<input value="Column + Literal + Resolver"></label><label>Coordinate Grouping Setup<input value="Source,X,Y,Z,mm,2,3"></label><p>Final key preview: <b>${esc(preview||'—')}</b></p></section>`;}
 function renderProfileValidation(items=[]){return items.length?`<section class="table-categorized-xml-subcard"><h4>Setup Checks</h4><ul>${items.map((d)=>`<li class="is-${esc(d.severity).toLowerCase()}">${esc(d.severity)} ${esc(d.gate)} — ${esc(d.message)}</li>`).join('')}</ul></section>`:'';}
 
-export function renderGraphPreview(graph=null,validationResults=[]){
-  if(hasBlockingValidation(validationResults))return `<section class="table-categorized-xml-card" data-setup-body="structure"><h4>Structure</h4><p>Graph preview is blocked by a failed rule. Open Check Rules for details.</p></section>`;
-  const body=graph?renderGraphPreviewBody(graph,validationResults):'<p>Build Preview Graph to create the categorized graph.</p>';
-  return setupBody('structure','Structure','This is the categorized graph that exports to XML.',panel('structure','Preview Graph','Document → model split → groups → items → details.',body,true)+renderRootPartitionPanel(PS_MAPPING_TABLE_2_SHADOW_PROFILE,[]));
-}
-
-function renderGraphPreviewBody(graph,validationResults=[]){
-  if(hasBlockingValidation(validationResults))return '<p>Graph preview is blocked by a failed rule. Open Check Rules for details.</p>';
-  const roots=(graph.nodes||[]).filter((node)=>!node.parentId);
-  return `<p>This is the categorized graph that exports to XML. Use the live preview panel for row-by-row proof.</p><div class="table-categorized-xml-actions"><button type="button" data-table-categorized-tab="export">Go to Export / Link</button></div><div class="table-categorized-xml-subcard">${roots.map((node)=>renderNodeTree(graph,node)).join('')}</div>`;
-}
-
-export function renderValidation(results=[],exportResult=null){
-  return setupBody('quality','Check','Review required checks, warnings, and audit proof.',renderRequiredChecksPanel(results,exportResult)+renderValidationSettingsPanel()+renderWarningsPanel(results)+panel('quality','Audit Trail','Proof of how rows became graph nodes.','<p>Audit is generated with export.</p>',false));
-}
-
-function renderValidationPanels(results=[],exportResult=null){
-  if(!results.length)return '<p>No check results yet.</p>';
-  const rows=results.map((item)=>`<tr class="is-${esc(item.severity).toLowerCase()}"><td>${esc(item.gate)}</td><td>${esc(item.severity)}</td><td>${esc(item.status)}</td><td>${esc(item.message)}</td><td>${esc(item.ref)}</td></tr>`).join('');
-  const status=exportResult?.ok?'Export allowed.':'Export blocked or not generated.';
-  return `<p>${esc(status)}</p><table><thead><tr><th>Rule / Gate</th><th>Severity</th><th>Status</th><th>Message</th><th>Source / Graph Ref</th></tr></thead><tbody>${rows}</tbody></table>`;
-}
-
+export function renderGraphPreview(graph=null,validationResults=[]){if(hasBlockingValidation(validationResults))return `<section class="table-categorized-xml-card" data-setup-body="structure"><h4>Structure</h4><p>Graph preview is blocked by a failed rule. Open Check Rules for details.</p></section>`;const body=graph?renderGraphPreviewBody(graph,validationResults):'<p>Build Preview Graph to create the categorized graph.</p>';return setupBody('structure','Structure','This is the categorized graph that exports to XML.',panel('structure','Preview Graph','Document → model split → groups → items → details.',body,true)+renderRootPartitionPanel(PS_MAPPING_TABLE_2_SHADOW_PROFILE,[]));}
+function renderGraphPreviewBody(graph,validationResults=[]){if(hasBlockingValidation(validationResults))return '<p>Graph preview is blocked by a failed rule. Open Check Rules for details.</p>';const roots=(graph.nodes||[]).filter((node)=>!node.parentId);return `<p>This is the categorized graph that exports to XML. Use the live preview panel for row-by-row proof.</p><div class="table-categorized-xml-actions"><button type="button" data-table-categorized-tab="export">Go to Export / Link</button></div><div class="table-categorized-xml-subcard">${roots.map((node)=>renderNodeTree(graph,node)).join('')}</div>`;}
+export function renderValidation(results=[],exportResult=null){return setupBody('quality','Check','Review required checks, warnings, and audit proof.',renderRequiredChecksPanel(results,exportResult)+renderValidationSettingsPanel()+renderWarningsPanel(results)+panel('quality','Audit Trail','Proof of how rows became graph nodes.','<p>Audit is generated with export.</p>',false));}
+function renderValidationPanels(results=[],exportResult=null){if(!results.length)return '<p>No check results yet.</p>';const rows=results.map((item)=>`<tr class="is-${esc(item.severity).toLowerCase()}"><td>${esc(item.gate)}</td><td>${esc(item.severity)}</td><td>${esc(item.status)}</td><td>${esc(item.message)}</td><td>${esc(item.ref)}</td></tr>`).join('');const status=exportResult?.ok?'Export allowed.':'Export blocked or not generated.';return `<p>${esc(status)}</p><table><thead><tr><th>Rule / Gate</th><th>Severity</th><th>Status</th><th>Message</th><th>Source / Graph Ref</th></tr></thead><tbody>${rows}</tbody></table>`;}
 export function renderExportLink(view={}){return renderOutputSetupPanels(view);}
-
-export function renderRawPreview(source){
-  if(!source?.headers?.length)return '<section class="table-categorized-xml-subcard"><h4>Raw Table Preview</h4><p>Read the active table to preview raw rows.</p></section>';
-  const head=`<tr><th>Row</th>${source.headers.map((header)=>`<th>${esc(header)}</th>`).join('')}</tr>`;
-  const body=(source.rows||[]).slice(0,50).map((row)=>`<tr><td>${esc(row.rowId)}</td>${source.headers.map((_,index)=>`<td>${esc(row.rawCells[index]??'')}</td>`).join('')}</tr>`).join('');
-  return `<section class="table-categorized-xml-subcard"><h4>Raw Table Preview</h4><div class="table-categorized-xml-scroll"><table><thead>${head}</thead><tbody>${body||'<tr><td>No rows parsed.</td></tr>'}</tbody></table></div></section>`;
-}
-
-export function renderDiagnostics(source){
-  const diagnostics=source?.diagnostics||[];
-  if(!diagnostics.length)return '<section class="table-categorized-xml-subcard"><h4>Messages</h4><p>No messages yet.</p></section>';
-  return `<section class="table-categorized-xml-subcard"><h4>Messages</h4><ul>${diagnostics.map((item)=>`<li class="is-${esc(item.severity).toLowerCase()}"><b>${esc(item.severity)}</b> ${esc(item.code)} — ${esc(item.message)}</li>`).join('')}</ul></section>`;
-}
+export function renderRawPreview(source){if(!source?.headers?.length)return '<section class="table-categorized-xml-subcard"><h4>Raw Table Preview</h4><p>Read the active table to preview raw rows.</p></section>';const head=`<tr><th>Row</th>${source.headers.map((header)=>`<th>${esc(header)}</th>`).join('')}</tr>`;const body=(source.rows||[]).slice(0,50).map((row)=>`<tr><td>${esc(row.rowId)}</td>${source.headers.map((_,index)=>`<td>${esc(row.rawCells[index]??'')}</td>`).join('')}</tr>`).join('');return `<section class="table-categorized-xml-subcard"><h4>Raw Table Preview</h4><div class="table-categorized-xml-scroll"><table><thead>${head}</thead><tbody>${body||'<tr><td>No rows parsed.</td></tr>'}</tbody></table></div></section>`;}
+export function renderDiagnostics(source){const diagnostics=source?.diagnostics||[];if(!diagnostics.length)return '<section class="table-categorized-xml-subcard"><h4>Messages</h4><p>No messages yet.</p></section>';return `<section class="table-categorized-xml-subcard"><h4>Messages</h4><ul>${diagnostics.map((item)=>`<li class="is-${esc(item.severity).toLowerCase()}"><b>${esc(item.severity)}</b> ${esc(item.code)} — ${esc(item.message)}</li>`).join('')}</ul></section>`;}
 
 function fieldSet(title,controls){return `<section class="table-categorized-xml-subcard"><h4>${esc(title)}</h4>${controls.join('')}</section>`;}
 function inputControl(label,value=''){return `<label>${esc(label)}<input value="${esc(value)}" disabled></label>`;}
