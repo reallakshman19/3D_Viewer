@@ -1,9 +1,12 @@
 import { TABLE_CATEGORIZED_SETUP_TABS, TABLE_CATEGORIZED_XML_TABS, renderTableCategorizedXmlShellHtml, setupTabForWorkflowTab } from './table-categorized-xml-shell.js';
 
-export const TABLE_CATEGORIZED_XML_CONTROLLER_SCHEMA='table-categorized-xml-controller/v1';
+export const TABLE_CATEGORIZED_XML_CONTROLLER_SCHEMA='table-categorized-xml-controller/v2';
 
 const SETUP_TAB_IDS=new Set(TABLE_CATEGORIZED_SETUP_TABS.map(([id])=>id));
 const WORKFLOW_TAB_IDS=new Set(TABLE_CATEGORIZED_XML_TABS.map(([id])=>id));
+const POPUP_SELECTOR='[data-xml-compare-table-categorized-popup]';
+const ACTIVE_WORKFLOW_SELECTOR='[data-table-categorized-tab].is-active';
+const ACTIVE_SETUP_SELECTOR='[data-table-categorized-setup-tab].is-active';
 
 export function nextTableCategorizedNavigationState(state={},action={}){
   if(action.type==='setup-tab'){
@@ -29,6 +32,12 @@ export function tableCategorizedNavigationActionFromTarget(target){
     return {type:'workflow-tab',activeTab:workflowButton.dataset.tableCategorizedTab};
   }
   return null;
+}
+
+export function tableCategorizedNavigationStateFromPopup(popup,state={}){
+  const activeTab=popup?.querySelector?.(ACTIVE_WORKFLOW_SELECTOR)?.dataset?.tableCategorizedTab||state.activeTab||'source';
+  const activeSetupTab=popup?.querySelector?.(ACTIVE_SETUP_SELECTOR)?.dataset?.tableCategorizedSetupTab||state.activeSetupTab||setupTabForWorkflowTab(activeTab);
+  return {...state,activeTab,activeSetupTab};
 }
 
 export function handleTableCategorizedNavigationClick(event,state={},render){
@@ -57,5 +66,25 @@ export function wireTableCategorizedSetupTabNavigation(container,{state={},rende
     setState:(nextState={})=>{currentState={...nextState};},
     render:()=>applyRender(currentState),
     destroy:()=>container?.removeEventListener?.('click',onClick)
+  };
+}
+
+export function installTableCategorizedSetupTabNavigation(root,initialState={}){
+  if(!root?.addEventListener)return {destroy(){},getState:()=>({...initialState})};
+  let currentState={...initialState};
+  const onClick=(event)=>{
+    const popup=event?.target?.closest?.(POPUP_SELECTOR);
+    if(!popup)return;
+    const popupState=tableCategorizedNavigationStateFromPopup(popup,currentState);
+    const result=handleTableCategorizedNavigationClick(event,popupState,(nextState)=>{
+      currentState=nextState;
+      popup.outerHTML=renderTableCategorizedXmlShellHtml(nextState);
+    });
+    if(result.handled)currentState=result.state;
+  };
+  root.addEventListener('click',onClick);
+  return {
+    getState:()=>currentState,
+    destroy:()=>root.removeEventListener?.('click',onClick)
   };
 }
