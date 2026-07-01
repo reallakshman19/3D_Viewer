@@ -12,14 +12,14 @@ const requiredPhrases = [
   'diagnostics-only',
   'code 4',
   'code 11',
-  'CNTB',
-  'CNTE',
-  'PRIM',
+  'cntb',
+  'cnte',
+  'prim',
   'no stage model',
   'no render plan',
   'no geometry chunks',
   'semantic-only',
-  'old RVM Viewer',
+  'old rvm viewer',
 ];
 
 const prohibitedClaims = [
@@ -31,7 +31,7 @@ const prohibitedClaims = [
 
 test('benchmark planning files contain required acceptance phrases', () => {
   const text = combinedText();
-  for (const phrase of requiredPhrases) assert.ok(text.includes(phrase.toLowerCase()), `missing phrase: ${phrase}`);
+  for (const phrase of requiredPhrases) assert.ok(text.includes(phrase), `missing phrase: ${phrase}`);
 });
 
 test('benchmark planning files avoid unsupported implementation claims', () => {
