@@ -123,10 +123,14 @@ function validateCounts(report, bench, errors) {
 function validateNativeCodeCounts(report, bench, errors) {
   const nativeCodeCounts = report.nativeCodeCounts || report.diagnosticsReport?.nativeCodeCounts;
   if (!nativeCodeCounts || typeof nativeCodeCounts !== 'object') return add(errors, 'MISSING_NATIVE_CODE_COUNTS', 'nativeCodeCounts are required');
-  if (bench.expectedMinimums.code4 > 0 && !hasCode(nativeCodeCounts, 4)) add(errors, 'MISSING_COUNT', 'nativeCodeCounts[4] is required', { key: 'code4' });
-  if (bench.expectedMinimums.code11 > 0 && !hasCode(nativeCodeCounts, 11)) add(errors, 'MISSING_COUNT', 'nativeCodeCounts[11] is required', { key: 'code11' });
-  validateMinimum('code4', codeCount(nativeCodeCounts, 4), bench.expectedMinimums.code4, errors);
-  validateMinimum('code11', codeCount(nativeCodeCounts, 11), bench.expectedMinimums.code11, errors);
+  validateNativeCodeMinimum(nativeCodeCounts, 4, 'code4', bench.expectedMinimums.code4, errors);
+  validateNativeCodeMinimum(nativeCodeCounts, 11, 'code11', bench.expectedMinimums.code11, errors);
+}
+
+function validateNativeCodeMinimum(nativeCodeCounts, code, key, minimum, errors) {
+  if (minimum <= 0 && !hasCode(nativeCodeCounts, code)) return;
+  if (minimum > 0 && !hasCode(nativeCodeCounts, code)) return add(errors, 'MISSING_COUNT', `nativeCodeCounts[${code}] is required`, { key });
+  validateMinimum(key, codeCount(nativeCodeCounts, code), minimum, errors);
 }
 
 function validateMinimum(key, actual, minimum, errors) {
