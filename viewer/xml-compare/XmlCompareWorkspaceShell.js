@@ -6,7 +6,7 @@ import { renderXmlCompareDiagnosticsPanelHtml } from './XmlCompareDiagnosticsPan
 import { renderXmlCompareDebugPanelHtml } from './XmlCompareDebugPanel.js';
 import { renderXmlCompareLogScreenHtml } from './XmlCompareLogScreen.js';
 
-export const XML_COMPARE_WORKSPACE_SHELL_SCHEMA='xml-compare-workspace-shell/v11';
+export const XML_COMPARE_WORKSPACE_SHELL_SCHEMA='xml-compare-workspace-shell/v12';
 
 let loadDiagnosticsPromise=null;
 let loadSamplePickersPromise=null;
@@ -14,6 +14,7 @@ let loadCategorizedConverterPromise=null;
 let loadTableCategorizedPromise=null;
 let loadToolbarGatePromise=null;
 let loadTransferApplyPromise=null;
+let loadCandidateReviewPromise=null;
 
 function loadTabDiagnostics(){
   if(typeof document==='undefined')return;
@@ -49,6 +50,12 @@ function loadTransferApplyRuntime(){
   if(typeof document==='undefined')return;
   if(loadTransferApplyPromise)return;
   loadTransferApplyPromise=import('../tabs/xml-compare-transfer-apply-runtime.js?v=20260701-transfer-selection-aware-1').catch(()=>null);
+}
+
+function loadCandidateReviewRuntime(){
+  if(typeof document==='undefined')return;
+  if(loadCandidateReviewPromise)return;
+  loadCandidateReviewPromise=import('../tabs/xml-compare-candidate-review-runtime.js?v=20260701-candidate-review-1').catch(()=>null);
 }
 
 const esc=(v)=>String(v??'')
@@ -97,6 +104,7 @@ export function renderXmlCompareWorkspaceShellHtml({
   loadTableCategorizedXml();
   loadToolbarGate();
   loadTransferApplyRuntime();
+  loadCandidateReviewRuntime();
   const manualState=createManualState(manualConnectors,navStates);
   return `<section class="xml-compare-workspace-shell is-rebuilt" data-xml-compare-workspace-shell data-xml-compare-workspace-shell-schema="${XML_COMPARE_WORKSPACE_SHELL_SCHEMA}">
     <div class="xml-compare-workspace-grid is-two-canvas">
