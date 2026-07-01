@@ -10,6 +10,7 @@ const files = [
   'viewer/stage/ui/JsonViewerHierarchyTree.js',
   'viewer/stage/ui/JsonViewerPropertiesPanel.js',
   'viewer/stage/ui/JsonViewerDiagnosticsPanel.js',
+  'viewer/stage/ui/RvmUiHandoff.js',
   'viewer/stage/worker/StageWorkerClient.js',
   'viewer/stage/worker/StageWorkerJob.js',
   'viewer/tests/viewer3d-json-tab-shell.test.js',
@@ -36,20 +37,24 @@ function read(file) {
 const tabSource = read('viewer/tabs/viewer3d-json-tab.js');
 const rendererSource = read('viewer/tabs/viewer3d-json-tab-renderer.js');
 const shellSource = read('viewer/stage/ui/JsonViewerShell.js');
+const handoffSource = read('viewer/stage/ui/RvmUiHandoff.js');
 const diagnosticsSource = read('viewer/stage/ui/JsonViewerDiagnosticsPanel.js');
 const propertiesSource = read('viewer/stage/ui/JsonViewerPropertiesPanel.js');
 const workerClientSource = read('viewer/stage/worker/StageWorkerClient.js');
 const workerJobSource = read('viewer/stage/worker/StageWorkerJob.js');
 const css = read('viewer/tabs/viewer3d-json-tab.css');
 const index = read('viewer/index.html');
-const combined = [tabSource, rendererSource, shellSource, diagnosticsSource, propertiesSource, workerClientSource, workerJobSource].join('\n');
+const combined = [tabSource, rendererSource, shellSource, handoffSource, diagnosticsSource, propertiesSource, workerClientSource, workerJobSource].join('\n');
 
 assert.match(combined, /3D Json Viewer/);
 assert.match(combined, /Open Stage JSON/);
 assert.match(combined, /Load Sample/);
-assert.match(combined, /Open RVM \(dry-run\)/);
-assert.match(combined, /preflight only/);
-assert.match(combined, /validateRvmStageModel/);
+assert.match(shellSource, /Open RVM/);
+assert.doesNotMatch(shellSource, /Open RVM \(dry-run\)/);
+assert.match(handoffSource, /RVM parsed into staged model/);
+assert.match(handoffSource, /RVM diagnostics only/);
+assert.match(handoffSource, /RVM preflight failed/);
+assert.match(rendererSource, /validateRvmStageModel/);
 assert.match(tabSource + rendererSource, /RvmStageModelContract\.js/);
 assert.match(rendererSource, /sample-rvm-stage-model-v1\.js/);
 assert.match(rendererSource, /StageWorkerClient\.js/);
