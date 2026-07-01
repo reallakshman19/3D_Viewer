@@ -4,7 +4,7 @@ This phase adds a deterministic acceptance harness for diagnostics-only RVM benc
 
 ## Diagnostics acceptance is not parser acceptance
 
-A diagnostics report can show useful evidence without proving that the RVM parser is complete. The harness accepts only the diagnostic evidence required for benchmark-gate review. A valid harness result always remains diagnostics-only, parser-incomplete, and not visually ready.
+A diagnostics report can show useful evidence without proving parser completion. The harness accepts only the diagnostic evidence required for benchmark-gate review. A valid harness result always remains diagnostics-only, parser-incomplete, and not visually ready.
 
 ## GAS/RMSS checks must be deterministic
 
@@ -28,4 +28,4 @@ Future fixture runs should generate diagnostics reports and pass them to `evalua
 
 ## Old RVM Viewer imports remain forbidden
 
-The harness is independent from old RVM Viewer parser, bridge, renderer, and hotfix modules. It imports no parser, worker, contract, sample, renderer, UI, Three.js, IndexedDB, or legacy viewer modules.
+The harness is independent from old RVM Viewer parser, bridge, renderer, and hotfix modules. It imports no parser, worker, contract, sample, renderer, UI, browser 3D library, browser cache, or legacy viewer modules.
