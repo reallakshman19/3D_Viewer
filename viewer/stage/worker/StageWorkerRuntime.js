@@ -8,7 +8,7 @@ import {
   validateRvmStageModel,
   validateStageWorkerOutput,
 } from '../contracts/RvmStageModelContract.js';
-import { scanRvmBinaryDiagnostics } from '../parser/RvmDiagnosticsScanner.js';
+import { scanRvmBinaryDiagnostics, summarizeRvmDiagnostics, validateRvmDiagnosticsReport } from '../parser/RvmDiagnosticsScanner.js';
 import { createRvmBinaryPreflightReport } from './StageRvmBinaryPreflight.js';
 
 export function createStageWorkerRuntime(options = {}) {
@@ -65,11 +65,15 @@ function runRvmBinaryJob(runtime, messages, job) {
   if (!preflight.valid) return fail(runtime, messages, 'RVM binary preflight failed.', 'STAGE_RVM_PREFLIGHT_FAILED', { preflight });
   emit(runtime, messages, createStageWorkerProgress('parsing-records', { loaded: 3, total: 4, percent: 75, message: 'Scanning conservative RVM record diagnostics' }));
   const rvmDiagnosticsReport = scanRvmBinaryDiagnostics({ ...job, preflightSummary: preflight.summary });
+  const rvmDiagnosticsSummary = summarizeRvmDiagnostics(rvmDiagnosticsReport);
+  const diagnosticsValidation = validateRvmDiagnosticsReport(rvmDiagnosticsReport);
   emit(runtime, messages, createStageWorkerProgress('building-diagnostics', { loaded: 4, total: 4, percent: 100, message: 'Building diagnostics-only RVM report' }));
   return fail(runtime, messages, 'RVM binary parsing is not implemented in the staged worker shell.', 'STAGE_RVM_PARSING_NOT_IMPLEMENTED', {
     preflight: preflight.summary,
     preflightSummary: preflight.summary,
     rvmDiagnosticsReport,
+    rvmDiagnosticsSummary,
+    diagnosticsAcceptanceSummary: { valid: diagnosticsValidation.valid, errorCount: diagnosticsValidation.errors.length, candidateOnly: true, confirmedRecords: 0 },
     warnings: [...preflight.warnings, ...rvmDiagnosticsReport.warnings],
   });
 }
