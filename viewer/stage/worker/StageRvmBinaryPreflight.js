@@ -73,8 +73,8 @@ function validateSizeConsistency(input, errors) {
 }
 
 function sniffHeader(arrayBuffer, warnings) {
-  if (!isArrayBufferLike(arrayBuffer) || byteLengthOf(arrayBuffer) === 0) return;
-  const bytes = new Uint8Array(arrayBuffer, 0, Math.min(byteLengthOf(arrayBuffer), 8));
+  const bytes = firstBytes(arrayBuffer, 8);
+  if (!bytes.length) return;
   const text = String.fromCharCode(...bytes).replace(/\0/g, '').trim();
   if (!text || !/RVM|AVEVA|PDMS/i.test(text)) push(warnings, STAGE_RVM_BINARY_PREFLIGHT_CODES.UNKNOWN_HEADER, 'RVM header is not recognized by light preflight sniffing');
 }
@@ -95,11 +95,17 @@ function requireText(value, label, errors, code) {
 }
 
 function isArrayBufferLike(value) {
-  return value instanceof ArrayBuffer || Number.isFinite(value?.byteLength);
+  return value instanceof ArrayBuffer || ArrayBuffer.isView(value);
 }
 
 function byteLengthOf(value) {
   return isArrayBufferLike(value) ? value.byteLength : 0;
+}
+
+function firstBytes(value, limit) {
+  if (value instanceof ArrayBuffer) return new Uint8Array(value, 0, Math.min(value.byteLength, limit));
+  if (ArrayBuffer.isView(value)) return new Uint8Array(value.buffer, value.byteOffset, Math.min(value.byteLength, limit));
+  return new Uint8Array(0);
 }
 
 function push(target, code, message) {
