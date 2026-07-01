@@ -1,6 +1,6 @@
 import { applyCategorizedTransferPlan } from '../xml-compare/XmlCompareCategorizedTransferApplier.js';
 
-export const XML_COMPARE_TRANSFER_APPLY_RUNTIME_SCHEMA='xml-compare-transfer-apply-runtime/v1';
+export const XML_COMPARE_TRANSFER_APPLY_RUNTIME_SCHEMA='xml-compare-transfer-apply-runtime/v2';
 
 const STYLE_ID='xml-compare-transfer-apply-runtime-style';
 const CACHE=globalThis.__xmlCompareTransferApplyCache ||= {a:null,b:null};
@@ -50,6 +50,23 @@ function parsePreviewPlan(pane){
   try{return JSON.parse(pre.textContent||'');}catch{return null;}
 }
 
+function selectedBlockNamesFromPane(pane){
+  const selected=[];
+  const select=pane?.querySelector?.('select[multiple]');
+  if(!select)return [];
+  for(const option of [...select.selectedOptions]){
+    const label=clean(option.parentElement?.label||option.closest?.('optgroup')?.label||'');
+    if(label&&!selected.includes(label))selected.push(label);
+  }
+  return selected;
+}
+
+function normalizePlanForSelection(plan={},pane=null){
+  const selectedBlocks=selectedBlockNamesFromPane(pane);
+  if(!selectedBlocks.length)return {...plan,selectedBlocks:[]};
+  return {...plan,selectedBlocks};
+}
+
 function activeScopePane(popup,scope='node'){
   return popup?.querySelector?.(`.xml-compare-scope-body.is-${scope}-scope`)||null;
 }
@@ -74,7 +91,7 @@ function addApplyActionsToPane(pane,scope){
   const actions=document.createElement('div');
   actions.className='xml-compare-transfer-apply-actions';
   actions.dataset.xmlCompareTransferApplyActions='true';
-  actions.innerHTML=`<button type="button" data-xml-compare-action="apply-scoped-transfer" data-xml-compare-transfer-scope="${scope}">Apply ${scope} transfer to Target B</button><button type="button" data-xml-compare-action="export-scoped-transfer" data-xml-compare-transfer-scope="${scope}">Download transferred Target XML</button>`;
+  actions.innerHTML=`<button type="button" data-xml-compare-action="apply-scoped-transfer" data-xml-compare-transfer-scope="${scope}">Apply selected ${scope} block(s) to Target B</button><button type="button" data-xml-compare-action="export-scoped-transfer" data-xml-compare-transfer-scope="${scope}">Download selected transferred Target XML</button>`;
   const details=pane.querySelector('details');
   if(details)details.after(actions);else pane.append(actions);
 }
@@ -112,6 +129,7 @@ export function applyTransferPreviewToTarget({sourceText='',targetText='',previe
   if(!isCategorized(sourceText))throw new Error('Source A must be CategorizedInputXML before transfer apply.');
   if(!isCategorized(targetText))throw new Error('Target B must be CategorizedInputXML before transfer apply.');
   if(!previewPlan||typeof previewPlan!=='object')throw new Error('Transfer preview plan is missing.');
+  if(!Array.isArray(previewPlan.selectedBlocks)||!previewPlan.selectedBlocks.length)throw new Error('Select at least one transfer block before applying.');
   return applyCategorizedTransferPlan(targetText,sourceText,previewPlan,{policy});
 }
 
@@ -119,21 +137,23 @@ async function handleTransferAction(event,button){
   const popup=button.closest('[data-xml-compare-automap-popup]');
   const scope=selectedScopeFromButton(button);
   const pane=activeScopePane(popup,scope);
-  const plan=parsePreviewPlan(pane);
-  if(!plan){setRuntimeMessage(popup,`No ${scope} transfer preview plan found.`, 'error');return;}
+  const previewPlan=parsePreviewPlan(pane);
+  const plan=normalizePlanForSelection(previewPlan,pane);
+  if(!previewPlan){setRuntimeMessage(popup,`No ${scope} transfer preview plan found.`, 'error');return;}
   const sourceText=await textFromSide('a');
   const targetText=await textFromSide('b');
   const result=applyTransferPreviewToTarget({sourceText,targetText,previewPlan:plan,policy:'replace'});
   const updated=result.audit?.filter((row)=>row.status==='updated').length||0;
   const skipped=result.audit?.filter((row)=>row.status==='skipped').length||0;
+  const selectedBlocks=plan.selectedBlocks?.join(', ')||'none';
   const name=transferredFileName(fileNameFor('b'));
   if(button.dataset.xmlCompareAction==='export-scoped-transfer'){
     downloadText(name,result.xml);
-    setRuntimeMessage(popup,`Downloaded ${name}. Updated ${updated}, skipped ${skipped}.`);
+    setRuntimeMessage(popup,`Downloaded ${name}. Blocks: ${selectedBlocks}. Updated ${updated}, skipped ${skipped}.`);
     return;
   }
   loadTargetXml(result.xml,name);
-  setTimeout(()=>setRuntimeMessage(document.querySelector('[data-xml-compare-automap-popup]')||popup,`Applied ${scope} transfer to Target B. Updated ${updated}, skipped ${skipped}.`),50);
+  setTimeout(()=>setRuntimeMessage(document.querySelector('[data-xml-compare-automap-popup]')||popup,`Applied ${scope} transfer to Target B. Blocks: ${selectedBlocks}. Updated ${updated}, skipped ${skipped}.`),50);
 }
 
 function install(){
@@ -153,4 +173,4 @@ function install(){
 
 install();
 
-export const _test=Object.freeze({isCategorized,transferredFileName,parsePreviewPlan,applyTransferPreviewToTarget});
+export const _test=Object.freeze({isCategorized,transferredFileName,parsePreviewPlan,selectedBlockNamesFromPane,normalizePlanForSelection,applyTransferPreviewToTarget});
