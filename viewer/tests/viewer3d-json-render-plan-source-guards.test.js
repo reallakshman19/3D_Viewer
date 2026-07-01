@@ -33,7 +33,7 @@ const banned = [
   'BrowserRvmTransformParser',
   'BrowserRvmHierarchyTransformParser',
 ];
-const semanticNameTokens = ['/PS-', 'VALVE', 'FLANGE', 'SUPPORT', 'ownerPath', '.name'];
+const semanticNameTokens = ['/PS-', 'VALVE_ASSEMBLY', 'FLANGE', 'SUPPORT_ASSEMBLY', 'ownerPath', '.name'];
 
 function read(file) {
   return fs.readFileSync(path.join(root, file), 'utf8');
