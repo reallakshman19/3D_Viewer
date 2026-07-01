@@ -21,16 +21,12 @@ export function validateRvmStageModel(model) {
   const errors = [];
   if (!model || typeof model !== 'object') return invalid('model must be an object');
   validateStageModelShape(model, errors);
-
   const nodeIds = new Set([model.hierarchy?.rootId || 'node-root']);
   for (const node of model.hierarchy?.nodes || []) validateStageNode(node, nodeIds, errors);
-
   const componentIds = new Set();
   for (const component of model.components || []) validateStageComponent(component, componentIds, errors);
-
   const primitiveIds = new Set();
   for (const primitive of model.primitives || []) validateStagePrimitive(primitive, primitiveIds, componentIds, errors);
-
   const chunkIds = validateModelGeometryChunks(model, nodeIds, componentIds, primitiveIds, errors);
   validateReferences(model, nodeIds, componentIds, primitiveIds, chunkIds, errors);
   return { valid: errors.length === 0, errors };
@@ -175,12 +171,18 @@ function validateSemanticOnlyFallback(primitive, errors) {
 function validatePrimitiveGeometryContract(primitive, errors) {
   collect(errors, validateOptional(primitive.nativeRecord, validateNativeRecordRef, `primitive ${primitive.id || '?'} nativeRecord`).errors);
   if (primitive.nativeParams !== undefined && (!primitive.nativeParams || typeof primitive.nativeParams !== 'object' || Array.isArray(primitive.nativeParams))) errors.push(`primitive ${primitive.id || '?'} nativeParams must be an object`);
-  collect(errors, validateOptional(primitive.geometryChunk, validateGeometryChunkRef, `primitive ${primitive.id || '?'} geometryChunk`).errors);
+  validatePrimitiveGeometryChunkObject(primitive, errors);
   collect(errors, validateOptional(primitive.diagnosticFallback, validateDiagnosticFallback, `primitive ${primitive.id || '?'} diagnosticFallback`).errors);
   if (primitive.nativeGeometry) collect(errors, validateNativeGeometryMetadata(primitive.nativeGeometry, `primitive ${primitive.id || '?'} nativeGeometry`).errors);
   validateRecipeSource(primitive.recipeSource, `primitive ${primitive.id || '?'} recipeSource`, errors);
   validateNativeClaim(primitive, errors);
   validateDiagnosticNativeConflict(primitive, errors);
+}
+
+function validatePrimitiveGeometryChunkObject(primitive, errors) {
+  if (primitive.geometryChunk === undefined) return;
+  if (validateChunkMetadata(primitive.geometryChunk).valid) return;
+  collect(errors, validateGeometryChunkRef(primitive.geometryChunk, `primitive ${primitive.id || '?'} geometryChunk`).errors);
 }
 
 function validateComponentGeometryContract(component, errors) {
