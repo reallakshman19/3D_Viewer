@@ -9,6 +9,7 @@ import {
   validateStageWorkerOutput,
 } from '../contracts/RvmStageModelContract.js';
 import { scanRvmBinaryDiagnostics } from '../parser/RvmDiagnosticsScanner.js';
+import { parseRvmBinaryToStageModel } from '../parser/RvmBinaryStageParser.js';
 import { createRvmBinaryPreflightReport } from './StageRvmBinaryPreflight.js';
 
 export function createStageWorkerRuntime(options = {}) {
@@ -59,22 +60,37 @@ async function runStageJsonJob(runtime, messages, job) {
 }
 
 function runRvmBinaryJob(runtime, messages, job) {
-  emit(runtime, messages, createStageWorkerProgress('reading-file', { loaded: 1, total: 4, percent: 25, message: 'Reading RVM binary job envelope' }));
-  emit(runtime, messages, createStageWorkerProgress('hashing-source', { loaded: 2, total: 4, percent: 50, message: 'Validating RVM binary source identity' }));
+  emit(runtime, messages, createStageWorkerProgress('reading-file', { loaded: 1, total: 6, percent: 17, message: 'Reading RVM binary job envelope' }));
+  emit(runtime, messages, createStageWorkerProgress('hashing-source', { loaded: 2, total: 6, percent: 33, message: 'Validating RVM binary source identity' }));
   const preflight = createRvmBinaryPreflightReport(job);
   if (!preflight.valid) return fail(runtime, messages, 'RVM binary preflight failed.', 'STAGE_RVM_PREFLIGHT_FAILED', { preflight });
-  emit(runtime, messages, createStageWorkerProgress('parsing-records', { loaded: 3, total: 4, percent: 75, message: 'Scanning conservative RVM record diagnostics' }));
+  emit(runtime, messages, createStageWorkerProgress('parsing-records', { loaded: 3, total: 6, percent: 50, message: 'Scanning conservative RVM record diagnostics' }));
   const rvmDiagnosticsReport = scanRvmBinaryDiagnostics({ ...job, preflightSummary: preflight.summary });
-  emit(runtime, messages, createStageWorkerProgress('building-diagnostics', { loaded: 4, total: 4, percent: 100, message: 'Building diagnostics-only RVM report' }));
-  return fail(runtime, messages, 'RVM binary parsing is not implemented in the staged worker shell.', 'STAGE_RVM_PARSING_NOT_IMPLEMENTED', {
+  emit(runtime, messages, createStageWorkerProgress('building-hierarchy', { loaded: 4, total: 6, percent: 67, message: 'Recovering MVP hierarchy evidence' }));
+  emit(runtime, messages, createStageWorkerProgress('decoding-primitives', { loaded: 5, total: 6, percent: 83, message: 'Decoding MVP supported primitive subset' }));
+  const parser = parseRvmBinaryToStageModel({ ...job, preflightSummary: preflight.summary, diagnosticsReport: rvmDiagnosticsReport });
+  emit(runtime, messages, createStageWorkerProgress('building-diagnostics', { loaded: 6, total: 6, percent: 100, message: 'Building RVM parser diagnostics' }));
+  if (!parser.ok) return rvmNotImplemented(runtime, messages, preflight, rvmDiagnosticsReport, parser);
+  const modelResult = validateRvmStageModel(parser.stageModel);
+  if (!modelResult.valid) return fail(runtime, messages, 'Parsed RVM stage model failed validation.', 'STAGE_RVM_STAGE_MODEL_VALIDATION_FAILED', { preflightSummary: preflight.summary, rvmDiagnosticsReport, rvmParserReport: parser.report, validationErrors: modelResult.errors });
+  const manifest = createManifestForJob(job, parser.stageModel);
+  const renderPlan = buildDryRunRenderPlan(parser.stageModel, 'full');
+  emit(runtime, messages, createStageWorkerMessage('STAGE_WORKER_STAGE_READY', { schema: parser.stageModel.schema, primitiveCount: parser.stageModel.primitives.length }));
+  emit(runtime, messages, createStageWorkerMessage('STAGE_WORKER_PACKAGE_READY', { schema: manifest.schema, artifactCount: manifest.artifacts.length }));
+  return acceptedOutput(runtime, messages, parser.stageModel, manifest, renderPlan, job, { rvmDiagnosticsReport, rvmParserReport: parser.report, preflightSummary: preflight.summary });
+}
+
+function rvmNotImplemented(runtime, messages, preflight, rvmDiagnosticsReport, parser) {
+  return fail(runtime, messages, 'RVM binary parsing is not implemented for this binary in the staged worker shell.', 'STAGE_RVM_PARSING_NOT_IMPLEMENTED', {
     preflight: preflight.summary,
     preflightSummary: preflight.summary,
     rvmDiagnosticsReport,
-    warnings: [...preflight.warnings, ...rvmDiagnosticsReport.warnings],
+    rvmParserReport: parser.report,
+    warnings: [...preflight.warnings, ...rvmDiagnosticsReport.warnings, ...parser.warnings],
   });
 }
 
-function acceptedOutput(runtime, messages, stageModel, manifest, renderPlan, job) {
+function acceptedOutput(runtime, messages, stageModel, manifest, renderPlan, job, extra = {}) {
   const output = {
     source: sourceFromJobAndModel(job, stageModel),
     messages,
@@ -82,10 +98,11 @@ function acceptedOutput(runtime, messages, stageModel, manifest, renderPlan, job
     stageModel,
     diagnostics: stageModel.diagnostics,
     renderPlan,
+    ...extra,
   };
   const acceptance = validateStageWorkerOutput(output);
   if (!acceptance.valid) return fail(runtime, messages, 'Stage worker acceptance failed.', 'STAGE_WORKER_ACCEPTANCE_FAILED', { errors: acceptance.errors });
-  return createStageWorkerResult({ messages, stageModel, manifest, renderPlan, diagnostics: stageModel.diagnostics, acceptance });
+  return createStageWorkerResult({ messages, stageModel, manifest, renderPlan, diagnostics: stageModel.diagnostics, acceptance, ...extra });
 }
 
 function parseStageJson(job) {
