@@ -1,14 +1,11 @@
 import { validateRvmStageModel, normalizeRenderQuality, RVM_STAGE_SCHEMA } from '../stage/contracts/RvmStageModelContract.js';
 import { createSampleRvmStageModelV1 } from '../stage/samples/sample-rvm-stage-model-v1.js';
-import { buildStageRenderPlan, STAGE_RENDER_PLAN_SCHEMA } from '../stage/render/StageRenderPlan.js';
+import { buildStageRenderPlan, STAGE_RENDER_PLAN_SCHEMA, validateStageRenderPlan } from '../stage/render/StageRenderPlan.js';
+import { createStageJsonWorkerJob } from '../stage/worker/StageWorkerJob.js';
+import { createStageWorkerClient } from '../stage/worker/StageWorkerClient.js';
 import {
-  createStageThreePreviewRenderer,
-  renderStagePreview,
-  disposeStageThreePreviewRenderer,
-  fitStagePreviewToRenderPlan,
-  resetStagePreview,
-  updateStagePreviewSelection,
-  setStagePreviewSelectionCallback,
+  createStageThreePreviewRenderer, renderStagePreview, disposeStageThreePreviewRenderer,
+  fitStagePreviewToRenderPlan, resetStagePreview, updateStagePreviewSelection, setStagePreviewSelectionCallback,
 } from '../stage/render/StageThreePreviewRenderer.js';
 import { createJsonViewerShell } from '../stage/ui/JsonViewerShell.js';
 import { renderHierarchyTree } from '../stage/ui/JsonViewerHierarchyTree.js';
@@ -21,7 +18,7 @@ const SAMPLE_SOURCE_NAME = 'sample-rvm-stage-model-v1.js';
 function diagnosticCount(state) {
   const modelMessages = Array.isArray(state.model?.diagnostics?.messages) ? state.model.diagnostics.messages.length : 0;
   const planMessages = Array.isArray(state.renderPlan?.diagnostics) ? state.renderPlan.diagnostics.length : 0;
-  return modelMessages + planMessages + state.validationErrors.length + state.previewDiagnostics.length;
+  return modelMessages + planMessages + state.validationErrors.length + state.previewDiagnostics.length + state.workerDiagnostics.length;
 }
 
 function activatePanel(handles, panel) {
@@ -33,8 +30,7 @@ function activatePanel(handles, panel) {
 }
 
 function defaultSelection(model) {
-  if (!model) return null;
-  return { type: 'root', id: model.hierarchy?.rootId || 'node-root' };
+  return model ? { type: 'root', id: model.hierarchy?.rootId || 'node-root' } : null;
 }
 
 function updateRenderPlan(state) {
@@ -53,6 +49,39 @@ function previewText(plan) {
     `Hidden: ${plan.summary.hidden}`,
     `Diagnostic-only: ${plan.summary.diagnosticOnly}`,
   ].join('\n');
+}
+
+function ensureWorkerClient(handles, state) {
+  if (!state.workerClient) state.workerClient = createStageWorkerClient({ onMessage: (message) => handleWorkerMessage(message, handles, state) });
+  return state.workerClient;
+}
+
+function disposeWorkerClient(state) {
+  state.workerClient?.dispose();
+  state.workerClient = null;
+}
+
+function handleWorkerMessage(message, handles, state) {
+  const payload = message?.payload || {};
+  if (message?.type === 'STAGE_WORKER_START' && payload.jobId && payload.jobId !== state.activeJobId) return;
+  state.workerDiagnostics.push(workerMessageDiagnostic(message));
+  state.statusText = workerStatusText(message);
+  updateStatus(handles, state);
+}
+
+function workerStatusText(message) {
+  const payload = message?.payload || {};
+  if (message?.type === 'STAGE_WORKER_PROGRESS') return `${payload.phase || 'worker'}: ${payload.message || ''}`;
+  return (message?.type || 'STAGE_WORKER_MESSAGE').replace('STAGE_WORKER_', '');
+}
+
+function workerMessageDiagnostic(message) {
+  const payload = message?.payload || {};
+  return {
+    severity: message?.type === 'STAGE_WORKER_ERROR' ? 'error' : 'info',
+    code: message?.type || 'STAGE_WORKER_MESSAGE',
+    message: payload.message || payload.phase || payload.code || message?.type || 'worker message',
+  };
 }
 
 function ensurePreviewRenderer(handles, state) {
@@ -132,7 +161,7 @@ function acceptModel(model, sourceName, state) {
 function renderSidePanels(handles, state) {
   renderHierarchyTree(handles.hierarchyList, state.model, state.selectedRef);
   renderProperties(handles.propertiesPanel, state.model, state.selectedRef);
-  renderDiagnostics(handles.diagnosticsPanel, state.model?.diagnostics, state.validationErrors, [...(state.renderPlan?.diagnostics || []), ...state.previewDiagnostics]);
+  renderDiagnostics(handles.diagnosticsPanel, state.model?.diagnostics, state.validationErrors, [...(state.renderPlan?.diagnostics || []), ...state.previewDiagnostics], state.workerDiagnostics);
   updateStatus(handles, state);
   activatePanel(handles, state.activePanel);
 }
@@ -154,6 +183,27 @@ function applyPreviewSelection(ref, handles, state) {
   renderSidePanels(handles, state);
 }
 
+function applyWorkerResult(result, sourceName, handles, state) {
+  if (!result?.ok) return applyWorkerFailure(result, handles, state);
+  const accepted = acceptModel(result.stageModel, sourceName, state);
+  const planCheck = validateStageRenderPlan(result.renderPlan);
+  if (accepted && planCheck.valid && result.renderPlan?.source?.quality === state.renderQuality) state.renderPlan = result.renderPlan;
+  if (!planCheck.valid) state.workerDiagnostics.push({ severity: 'warning', code: 'STAGE_WORKER_RENDER_PLAN_FALLBACK', message: planCheck.errors.join('; ') });
+  state.statusText = 'Worker accepted Stage JSON';
+  renderAll(handles, state);
+}
+
+function applyWorkerFailure(result, handles, state) {
+  state.model = null;
+  state.renderPlan = null;
+  state.selectedRef = null;
+  state.validationErrors = result?.validationErrors || [];
+  state.workerDiagnostics.push({ severity: 'error', code: result?.error?.code || 'STAGE_WORKER_FAILED', message: result?.error?.message || 'Stage worker failed' });
+  state.activePanel = 'diagnostics';
+  state.statusText = 'Worker rejected Stage JSON';
+  renderAll(handles, state);
+}
+
 function runPreviewCommand(action, handles, state) {
   if (!state.model || !state.renderPlan || !state.previewRenderer) {
     state.statusText = `${action} requested — no preview loaded`;
@@ -173,6 +223,8 @@ function runPreviewCommand(action, handles, state) {
 
 function loadSample(handles, state) {
   try {
+    state.workerDiagnostics = [];
+    state.activeJobId = '';
     acceptModel(createSampleRvmStageModelV1(), SAMPLE_SOURCE_NAME, state);
   } catch (error) {
     state.model = null;
@@ -187,21 +239,24 @@ function loadSample(handles, state) {
 }
 
 async function loadStageFile(file, handles, state) {
-  state.statusText = `Loading ${file.name}…`;
-  updateStatus(handles, state);
+  disposeWorkerClient(state);
+  state.model = null;
+  state.renderPlan = null;
+  state.selectedRef = null;
+  state.workerDiagnostics = [];
+  state.previewDiagnostics = [];
+  state.statusText = `reading-file: ${file.name}`;
+  renderAll(handles, state);
+  const text = await file.text();
+  const job = createStageJsonWorkerJob({ text, fileName: file.name, fileSize: file.size });
+  state.activeJobId = job.jobId;
   try {
-    acceptModel(JSON.parse(await file.text()), file.name, state);
+    const result = await ensureWorkerClient(handles, state).run(job);
+    if (state.activeJobId === job.jobId) applyWorkerResult(result, file.name, handles, state);
   } catch (error) {
-    state.model = null;
-    state.renderPlan = null;
-    state.selectedRef = null;
-    state.validationErrors = [`Malformed JSON: ${error?.message || error}`];
-    state.activePanel = 'diagnostics';
-    state.sourceFileName = file.name;
-    state.statusText = 'JSON load failed';
+    if (state.activeJobId === job.jobId) applyWorkerFailure({ error: { code: 'STAGE_WORKER_CLIENT_ERROR', message: error?.message || String(error) } }, handles, state);
   } finally {
     handles.fileInput.value = '';
-    renderAll(handles, state);
   }
 }
 
@@ -226,8 +281,7 @@ function wireEvents(handles, state) {
   };
   const onTreeClick = (event) => {
     const row = event.target.closest?.('[data-ref-type][data-ref-id]');
-    if (!row) return;
-    applyPreviewSelection({ type: row.dataset.refType, id: row.dataset.refId }, handles, state);
+    if (row) applyPreviewSelection({ type: row.dataset.refType, id: row.dataset.refId }, handles, state);
   };
   const onRightTabClick = (event) => {
     const panel = event.target?.dataset?.panel;
@@ -252,23 +306,17 @@ function wireEvents(handles, state) {
 export function renderViewer3DJson(root) {
   const handles = createJsonViewerShell(root);
   const state = {
-    model: null,
-    renderPlan: null,
-    previewRenderer: null,
-    previewDiagnostics: [],
-    previewFitPending: false,
-    sourceFileName: '',
-    selectedRef: null,
-    validationErrors: [],
-    renderQuality: 'full',
-    activePanel: 'properties',
-    statusText: 'Ready',
+    model: null, renderPlan: null, previewRenderer: null, workerClient: null,
+    previewDiagnostics: [], workerDiagnostics: [], previewFitPending: false,
+    activeJobId: '', sourceFileName: '', selectedRef: null, validationErrors: [],
+    renderQuality: 'full', activePanel: 'properties', statusText: 'Ready',
   };
   handles.qualitySelect.value = state.renderQuality;
   const cleanup = wireEvents(handles, state);
   renderAll(handles, state);
   return () => {
     cleanup();
+    disposeWorkerClient(state);
     disposePreview(state);
   };
 }
