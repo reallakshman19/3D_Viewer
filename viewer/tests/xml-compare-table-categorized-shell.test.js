@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 
-import { handleTableCategorizedNavigationClick, nextTableCategorizedNavigationState } from '../xml-compare/table-categorizer/table-categorized-xml-controller.js';
+import { handleTableCategorizedNavigationClick, installTableCategorizedSetupTabNavigation, nextTableCategorizedNavigationState, tableCategorizedNavigationStateFromPopup } from '../xml-compare/table-categorizer/table-categorized-xml-controller.js';
 import { exportCategorizedGraphArtifacts } from '../xml-compare/table-categorizer/table-categorized-xml-exporter.js';
 import { buildCategorizedGraph } from '../xml-compare/table-categorizer/table-categorized-xml-graph-builder.js';
 import { createBlankUniversalProfile } from '../xml-compare/table-categorizer/table-categorized-xml-profile-designer.js';
@@ -25,6 +25,13 @@ const assertShellBasics=(html)=>{
   assert.ok(html.includes('table-categorized-setup-tabs'));
 };
 const fakeTarget=(selector,dataset)=>({closest:(query)=>query===selector?{dataset}:null});
+const fakePopup=(workflowTab,setupTab)=>({
+  querySelector(selector){
+    if(selector==='[data-table-categorized-tab].is-active')return {dataset:{tableCategorizedTab:workflowTab}};
+    if(selector==='[data-table-categorized-setup-tab].is-active')return {dataset:{tableCategorizedSetupTab:setupTab}};
+    return null;
+  }
+});
 
 const button=renderTableCategorizedXmlButtonHtml();
 assert.ok(button.includes('Table to Categorized XML'));
@@ -55,6 +62,7 @@ assert.ok(renderSetupTabStrip('fields').includes('aria-selected="true"'));
 
 assert.deepEqual(nextTableCategorizedNavigationState({activeTab:'levels',activeSetupTab:'fields'},{type:'setup-tab',setupTab:'relationships'}),{activeTab:'levels',activeSetupTab:'relationships'});
 assert.deepEqual(nextTableCategorizedNavigationState({activeTab:'levels',activeSetupTab:'relationships'},{type:'workflow-tab',activeTab:'graph'}),{activeTab:'graph',activeSetupTab:'structure'});
+assert.deepEqual(tableCategorizedNavigationStateFromPopup(fakePopup('levels','relationships'),{}),{activeTab:'levels',activeSetupTab:'relationships'});
 let rendered='';
 const setupClick=handleTableCategorizedNavigationClick({target:fakeTarget('[data-table-categorized-setup-tab]',{tableCategorizedSetupTab:'relationships'}),preventDefault(){}},{activeTab:'levels',activeSetupTab:'fields'},(next)=>{rendered=renderTableCategorizedXmlShellHtml(next);});
 assert.ok(setupClick.handled);
@@ -70,6 +78,26 @@ const workflowClick=handleTableCategorizedNavigationClick({target:fakeTarget('[d
 assert.equal(workflowClick.state.activeTab,'graph');
 assert.equal(workflowClick.state.activeSetupTab,'structure');
 assertActiveSetupTab(rendered,'structure');
+
+let registeredClick=null;
+let removedClick=null;
+let outerHtml='';
+const livePopup={
+  querySelector:fakePopup('levels','fields').querySelector,
+  set outerHTML(value){outerHtml=value;},
+  get outerHTML(){return outerHtml;}
+};
+const liveRoot={
+  addEventListener(type,handler){if(type==='click')registeredClick=handler;},
+  removeEventListener(type,handler){if(type==='click')removedClick=handler;}
+};
+const installHandle=installTableCategorizedSetupTabNavigation(liveRoot,{activeTab:'levels',activeSetupTab:'fields'});
+assert.ok(registeredClick);
+registeredClick({target:{closest(selector){if(selector==='[data-xml-compare-table-categorized-popup]')return livePopup;if(selector==='[data-table-categorized-setup-tab]')return {dataset:{tableCategorizedSetupTab:'relationships'}};return null;}},preventDefault(){}});
+assert.equal(installHandle.getState().activeSetupTab,'relationships');
+assert.ok(outerHtml.includes('data-setup-body="relationships"'));
+installHandle.destroy();
+assert.ok(removedClick);
 
 const s1=parseTableSource(PS_MAPPING_TABLE_2_MODEL_SAMPLE,{sourceId:'S1',sourceName:'Table 2 Model Data'});
 const s2=parseTableSource(PS_MAPPING_COORDINATE_LOOKUP_SAMPLE,{sourceId:'S2',sourceName:'Coordinate Lookup'});
