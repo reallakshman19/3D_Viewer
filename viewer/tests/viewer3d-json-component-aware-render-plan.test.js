@@ -44,12 +44,12 @@ assert.deepEqual({
 }, {
   totalEntries: 12,
   byEntryKind: { primitive: 8, component: 4, assembly: 0, diagnostic: 0 },
-  bySupportLevel: { supported: 7, 'diagnostic-only': 1, unsupported: 4, hidden: 0 },
-  byOutput: { procedural: 6, 'mesh-chunk': 1, bbox: 5 },
+  bySupportLevel: { supported: 6, 'diagnostic-only': 2, unsupported: 4, hidden: 0 },
+  byOutput: { procedural: 5, 'mesh-chunk': 1, bbox: 6 },
   primitiveEntries: 8,
   componentEntries: 4,
   assemblyEntries: 0,
-  diagnosticOnly: 5,
+  diagnosticOnly: 6,
   hidden: 0,
   unsupportedRenderKinds: [RK_F, 'FOUNDATION', RK_S, 'TEE'],
 });
