@@ -5,6 +5,7 @@ export function createStageWorkerClient(options = {}) {
   return {
     workerUrl: options.workerUrl || './stage-worker.js',
     workerFactory: typeof options.workerFactory === 'function' ? options.workerFactory : null,
+    onMessage: typeof options.onMessage === 'function' ? options.onMessage : null,
     runtime: options.runtime || null,
     runJob: options.runJob || runStageWorkerJob,
     timeoutMs: Number(options.timeoutMs) || 0,
@@ -57,7 +58,7 @@ function createBrowserWorker(client) {
 function wireWorker(worker, client, done, timer) {
   worker.onmessage = (event) => {
     const data = event.data || {};
-    if (data.kind === 'stage-worker-message') client.messages.push(data.message);
+    if (data.kind === 'stage-worker-message') recordMessage(client, data.message);
     if (data.kind === 'stage-worker-result') {
       clearTimeout(timer);
       done(attachMessages(data.result, client.messages));
@@ -74,10 +75,15 @@ function wrapRuntime(client) {
   return {
     ...client.runtime,
     onMessage(message) {
-      client.messages.push(message);
+      recordMessage(client, message);
       original?.(message);
     },
   };
+}
+
+function recordMessage(client, message) {
+  client.messages.push(message);
+  client.onMessage?.(message);
 }
 
 function withTimeout(work, timeoutMs, onTimeout) {
