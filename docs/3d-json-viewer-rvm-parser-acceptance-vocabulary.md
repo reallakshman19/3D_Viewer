@@ -6,7 +6,7 @@ This vocabulary defines strict terms for future RVM parser acceptance. It suppor
 
 Meaning: A shallow source-integrity check for file identity, size, hash, byte length, extension warnings, and header/sniff warnings.
 
-Does not mean: The RVM parser is complete, records are decoded, or visual rendering is implemented.
+Does not mean: Parser completion, decoded records, or visual rendering support.
 
 Evidence required: File name, file size, file hash, byte length, preflight status, errors, and warnings.
 
@@ -86,7 +86,7 @@ Evidence required: Native record reference, native params, valid transform, vali
 
 Meaning: Metadata describing future mesh/facet/point/line geometry buffers, attributes, material ranges, bboxes, diagnostics, and ownership links.
 
-Does not mean: Raw vertex arrays are embedded or code 11 rendering is complete.
+Does not mean: Raw vertex arrays are embedded or code 11 visual support is finished.
 
 Evidence required: Valid StageGeometryChunk metadata, ownership references, required position/index attributes where applicable, bboxes, and diagnostics.
 
