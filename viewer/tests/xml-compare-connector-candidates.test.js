@@ -18,7 +18,7 @@ const target={
   ]
 };
 const model=createXmlCompareConnectorCandidateModel({source,target});
-assert.equal(model.schema,'xml-compare-connector-candidate-model/v1');
+assert.equal(model.schema,'xml-compare-connector-candidate-model/v2');
 assert.equal(model.summary.candidateCount,1);
 assert.equal(model.candidates[0].sourceUid,'s-1');
 assert.equal(model.candidates[0].targetUid,'t-1');
