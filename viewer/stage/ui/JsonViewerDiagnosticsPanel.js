@@ -23,7 +23,7 @@ function messageText(message) {
   return `${code}${message.message || message.text || 'Diagnostic message'}`;
 }
 
-export function renderDiagnostics(target, diagnostics, validationErrors = [], renderPlanDiagnostics = []) {
+export function renderDiagnostics(target, diagnostics, validationErrors = [], renderPlanDiagnostics = [], workerDiagnostics = []) {
   target.replaceChildren();
   const title = document.createElement('h2');
   title.className = 'json-viewer-panel-title';
@@ -40,6 +40,7 @@ export function renderDiagnostics(target, diagnostics, validationErrors = [], re
   const list = document.createElement('ul');
   list.className = 'json-viewer-diagnostics-list';
   for (const error of validationErrors) addMessage(list, 'is-error', `validation: ${error}`);
+  for (const item of workerDiagnostics) addMessage(list, `is-${item.severity || 'info'}`, `worker: ${messageText(item)}`);
   for (const item of renderPlanDiagnostics) addMessage(list, `is-${item.severity || 'warning'}`, `render-plan: ${messageText(item)}`);
 
   const messages = Array.isArray(diagnostics?.messages) ? diagnostics.messages : [];
@@ -48,7 +49,7 @@ export function renderDiagnostics(target, diagnostics, validationErrors = [], re
     addMessage(list, `is-${severity}`, messageText(message));
   }
 
-  if (!validationErrors.length && !renderPlanDiagnostics.length && !messages.length) {
+  if (!validationErrors.length && !workerDiagnostics.length && !renderPlanDiagnostics.length && !messages.length) {
     addMessage(list, 'is-info', diagnostics ? 'No diagnostics messages reported.' : 'Diagnostics summary placeholder');
   }
   target.append(title, summary, list);
