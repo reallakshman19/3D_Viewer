@@ -8,7 +8,6 @@ export function createStageWorkerClient(options = {}) {
     runtime: options.runtime || null,
     runJob: options.runJob || runStageWorkerJob,
     timeoutMs: Number(options.timeoutMs) || 0,
-    onMessage: typeof options.onMessage === 'function' ? options.onMessage : null,
     worker: null,
     messages: [],
     disposed: false,
@@ -58,10 +57,7 @@ function createBrowserWorker(client) {
 function wireWorker(worker, client, done, timer) {
   worker.onmessage = (event) => {
     const data = event.data || {};
-    if (data.kind === 'stage-worker-message') {
-      client.messages.push(data.message);
-      client.onMessage?.(data.message);
-    }
+    if (data.kind === 'stage-worker-message') client.messages.push(data.message);
     if (data.kind === 'stage-worker-result') {
       clearTimeout(timer);
       done(attachMessages(data.result, client.messages));
@@ -79,7 +75,6 @@ function wrapRuntime(client) {
     ...client.runtime,
     onMessage(message) {
       client.messages.push(message);
-      client.onMessage?.(message);
       original?.(message);
     },
   };
