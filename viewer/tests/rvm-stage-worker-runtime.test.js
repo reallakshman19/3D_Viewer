@@ -50,19 +50,44 @@ test('invalid stage model returns controlled validation error', async () => {
   assert.ok(result.validationErrors.length > 0);
 });
 
-test('rvm-binary job returns explicit not-implemented failure', async () => {
+test('rvm-binary job with valid preflight returns explicit not-implemented failure', async () => {
   const result = await runStageWorkerJob(createStageWorkerRuntime(), createSampleRvmBinaryWorkerJobV1());
   assert.equal(result.ok, false);
   assert.equal(result.error.code, 'STAGE_RVM_PARSING_NOT_IMPLEMENTED');
+  assert.equal(result.stageModel, undefined);
 });
 
-test('all emitted messages validate through worker protocol contract', async () => {
+test('rvm-binary job with invalid preflight returns preflight failure', async () => {
+  const job = { ...createSampleRvmBinaryWorkerJobV1(), fileHash: '', arrayBuffer: new ArrayBuffer(0), fileSize: 0 };
+  const result = await runStageWorkerJob(createStageWorkerRuntime(), job);
+  assert.equal(result.ok, false);
+  assert.equal(result.error.code, 'STAGE_RVM_PREFLIGHT_FAILED');
+  assert.ok(result.error.context.preflight.errors.length >= 1);
+});
+
+test('rvm-binary runtime never emits STAGE_READY or PACKAGE_READY', async () => {
+  const result = await runStageWorkerJob(createStageWorkerRuntime(), createSampleRvmBinaryWorkerJobV1());
+  const types = new Set(result.messages.map((message) => message.type));
+  assert.equal(types.has('STAGE_WORKER_STAGE_READY'), false);
+  assert.equal(types.has('STAGE_WORKER_PACKAGE_READY'), false);
+});
+
+test('all emitted stage-json messages validate through worker protocol contract', async () => {
   const result = await runStageWorkerJob(createStageWorkerRuntime(), createSampleStageJsonWorkerJobV1());
-  for (const message of result.messages) {
+  assertMessagesValid(result.messages);
+});
+
+test('all emitted rvm-binary messages validate through worker protocol contract', async () => {
+  const result = await runStageWorkerJob(createStageWorkerRuntime(), createSampleRvmBinaryWorkerJobV1());
+  assertMessagesValid(result.messages);
+});
+
+function assertMessagesValid(messages) {
+  for (const message of messages) {
     const validation = validateStageWorkerMessage(message);
     assert.equal(validation.valid, true, validation.errors.join('\n'));
   }
-});
+}
 
 function assertHasTypes(messages, types) {
   const actual = new Set(messages.map((message) => message.type));

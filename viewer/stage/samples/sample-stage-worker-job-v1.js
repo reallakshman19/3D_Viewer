@@ -1,24 +1,28 @@
+import {
+  createRvmBinaryWorkerJob,
+  createStageJsonWorkerJob,
+} from '../worker/StageWorkerJob.js';
 import { createSampleRvmStageModelV1 } from './sample-rvm-stage-model-v1.js';
 
 export function createSampleStageJsonWorkerJobV1() {
   const model = createSampleRvmStageModelV1();
-  return {
+  const text = JSON.stringify(model);
+  return createStageJsonWorkerJob({
     jobId: 'job-000001',
-    kind: 'stage-json',
     fileName: 'sample-rvm-stage-model-v1.json',
-    fileSize: JSON.stringify(model).length,
+    fileSize: text.length,
     fileHash: model.source.fileHash,
-    text: JSON.stringify(model),
-  };
+    text,
+  });
 }
 
 export function createSampleRvmBinaryWorkerJobV1() {
-  return {
+  const arrayBuffer = new ArrayBuffer(8);
+  return createRvmBinaryWorkerJob({
     jobId: 'job-000002',
-    kind: 'rvm-binary',
     fileName: 'sample-unparsed.rvm',
-    fileSize: 8,
+    fileSize: arrayBuffer.byteLength,
     fileHash: 'sha256-sample-unparsed-rvm',
-    arrayBuffer: new ArrayBuffer(8),
-  };
+    arrayBuffer,
+  });
 }
