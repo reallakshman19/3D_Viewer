@@ -8,7 +8,6 @@ import {
   STAGE_SEMANTIC_TYPES,
 } from './StageConstants.js';
 import {
-  STAGE_GEOMETRY_PROVENANCE,
   validateComponentAssemblyRef,
   validateDiagnosticFallback,
   validateGeometryChunkRef,
@@ -182,6 +181,7 @@ function validateNativeClaim(primitive, errors) {
   if (primitive.recipeSource?.source !== 'native') return;
   if (!validateNativeRecordRef(primitive.nativeRecord, 'nativeRecord').valid) errors.push(`STAGE_NATIVE_GEOMETRY_MISSING_RECORD primitive ${primitive.id || '?'} native recipeSource requires nativeRecord`);
   if (!primitive.nativeParams || typeof primitive.nativeParams !== 'object' || Array.isArray(primitive.nativeParams)) errors.push(`STAGE_NATIVE_GEOMETRY_MISSING_PARAMS primitive ${primitive.id || '?'} native recipeSource requires nativeParams`);
+  if (!validateNativeGeometryMetadata(primitive.nativeGeometry, 'nativeGeometry').valid) errors.push(`STAGE_NATIVE_GEOMETRY_MISSING_METADATA primitive ${primitive.id || '?'} native recipeSource requires nativeGeometry metadata`);
 }
 
 function validateChunkAndFacetClaim(primitive, errors) {
@@ -193,7 +193,8 @@ function validateChunkAndFacetClaim(primitive, errors) {
 function validateDiagnosticNativeConflict(primitive, errors) {
   if (!primitive.diagnosticFallback?.visible) return;
   if (primitive.recipeSource?.source === 'native') errors.push(`STAGE_DIAGNOSTIC_FALLBACK_NATIVE_CLAIM primitive ${primitive.id || '?'} visible diagnostic fallback must not claim native geometry`);
-  if (!['UNKNOWN_DIAGNOSTIC', undefined].includes(primitive.renderKind) && primitive.confidence?.geometry !== 'diagnostic') errors.push(`STAGE_DIAGNOSTIC_FALLBACK_RENDER_KIND primitive ${primitive.id || '?'} visible diagnostic fallback must use diagnostic render semantics`);
+  if (primitive.renderKind !== 'UNKNOWN_DIAGNOSTIC') errors.push(`STAGE_DIAGNOSTIC_FALLBACK_RENDER_KIND primitive ${primitive.id || '?'} visible diagnostic fallback must use UNKNOWN_DIAGNOSTIC render semantics`);
+  if (primitive.confidence?.geometry !== 'diagnostic') errors.push(`STAGE_DIAGNOSTIC_FALLBACK_CONFIDENCE primitive ${primitive.id || '?'} visible diagnostic fallback must use diagnostic geometry confidence`);
 }
 
 function validateAssemblyReferences(component, componentIds, primitiveIds, errors) {
