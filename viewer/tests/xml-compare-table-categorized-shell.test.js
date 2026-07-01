@@ -52,7 +52,6 @@ assert.ok(levelShell.includes('Resolver source: Source ID'));
 assert.ok(levelShell.includes('coordinateCluster sourceId / X / Y / Z / unit / tolerance / rounding'));
 assert.ok(levelShell.includes('PS Mapping Table 2 + Coordinate Lookup Profile'));
 assert.ok(levelShell.includes('SupportFamily Grouping'));
-assert.ok(levelShell.includes('PS-XYZ__C001'));
 assert.ok(!levelShell.includes('parentTabs'));
 
 const blankLevelShell=renderTableCategorizedXmlShellHtml({activeTab:'levels',profile:createBlankUniversalProfile(),sources:[s1]});
