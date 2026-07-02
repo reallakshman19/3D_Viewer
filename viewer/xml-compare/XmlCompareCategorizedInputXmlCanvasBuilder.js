@@ -7,29 +7,44 @@ const uniq=(items)=>Object.freeze([...new Set((items||[]).map(clean).filter(Bool
 const textTags=(node)=>Object.fromEntries((node?.children||[]).filter((child)=>!(child.children||[]).length&&clean(child.text)).map((child)=>[child.name,decode(child.text)]));
 const stripCdata=(xml='')=>String(xml||'').replace(/<!\[CDATA\[[\s\S]*?\]\]>/g,'');
 const parseAttrs=(text='')=>{const attrs={};String(text||'').replace(/([A-Za-z_][\w:.-]*)\s*=\s*("([^"]*)"|'([^']*)')/g,(_,key,_q,dq,sq)=>{attrs[key]=decode(dq??sq??'');return _;});return attrs;};
+function tagEnd(xml,start){let quote='',i=start+1;for(;i<String(xml||'').length;i+=1){const ch=xml[i];if(quote){if(ch===quote)quote='';continue;}if(ch==='"'||ch==="'"){quote=ch;continue;}if(ch==='>')return i;}return -1;}
 function parseXmlLite(xml=''){
+  const source=String(xml||'');
   const root={name:'#document',attrs:{},children:[],text:'',cdata:''};
   const stack=[root];
-  const re=/<!\[CDATA\[([\s\S]*?)\]\]>|<!--([\s\S]*?)-->|<([^>]+)>/g;
-  let last=0,match;
-  while((match=re.exec(String(xml||'')))){
-    const parent=stack[stack.length-1];
-    if(match.index>last)parent.text+=String(xml).slice(last,match.index);
-    if(match[1]!=null){parent.cdata+=(parent.cdata?'\n':'')+match[1];last=re.lastIndex;continue;}
-    if(match[2]!=null){last=re.lastIndex;continue;}
-    const raw=clean(match[3]);
-    if(!raw||raw.startsWith('?')||raw.startsWith('!')){last=re.lastIndex;continue;}
-    if(raw.startsWith('/')){const closeName=raw.slice(1).split(/\s+/)[0];while(stack.length>1){const node=stack.pop();if(node.name===closeName)break;}last=re.lastIndex;continue;}
-    const selfClosing=/\/$/.test(raw);
-    const tagRaw=selfClosing?raw.slice(0,-1).trim():raw;
+  let i=0,last=0;
+  const appendText=(end)=>{if(end>last)stack[stack.length-1].text+=source.slice(last,end);};
+  while(i<source.length){
+    const lt=source.indexOf('<',i);
+    if(lt<0)break;
+    if(source.startsWith('<![CDATA[',lt)){
+      appendText(lt);
+      const end=source.indexOf(']]>',lt+9);
+      const stop=end<0?source.length:end;
+      stack[stack.length-1].cdata+=(stack[stack.length-1].cdata?'\n':'')+source.slice(lt+9,stop);
+      i=end<0?source.length:end+3;last=i;continue;
+    }
+    if(source.startsWith('<!--',lt)){
+      appendText(lt);
+      const end=source.indexOf('-->',lt+4);
+      i=end<0?source.length:end+3;last=i;continue;
+    }
+    appendText(lt);
+    const end=tagEnd(source,lt);
+    if(end<0)break;
+    const raw=clean(source.slice(lt+1,end));
+    if(!raw||raw.startsWith('?')||raw.startsWith('!')){i=end+1;last=i;continue;}
+    if(raw.startsWith('/')){const closeName=raw.slice(1).split(/\s+/)[0];while(stack.length>1){const node=stack.pop();if(node.name===closeName)break;}i=end+1;last=i;continue;}
+    const selfClosing=/\/\s*$/.test(raw);
+    const tagRaw=selfClosing?raw.replace(/\/\s*$/,'').trim():raw;
     const name=tagRaw.split(/\s+/)[0];
     const attrText=tagRaw.slice(name.length);
-    const node={name,attrs:parseAttrs(attrText),children:[],text:'',cdata:'',parent};
-    parent.children.push(node);
+    const node={name,attrs:parseAttrs(attrText),children:[],text:'',cdata:'',parent:stack[stack.length-1]};
+    stack[stack.length-1].children.push(node);
     if(!selfClosing)stack.push(node);
-    last=re.lastIndex;
+    i=end+1;last=i;
   }
-  if(last<String(xml||'').length)stack[stack.length-1].text+=String(xml||'').slice(last);
+  if(last<source.length)stack[stack.length-1].text+=source.slice(last);
   return root;
 }
 const children=(node,name=null)=>Object.freeze((node?.children||[]).filter((child)=>!name||child.name===name));
@@ -80,7 +95,7 @@ export function createCategorizedInputXmlCanvasModel({sourceName='',xmlText='',s
       let elementEvidenceCount=0;
       elementNodes.forEach((node,nodeIdx)=>{
         const nIndex=nodeIdx+1,attrs=node.attrs||{},nodeNumber=decode(attrs.nodeNumber),role=decode(attrs.role)||'NODE',nKey=`${lineNo||lKey}/${eKey}/${role}/${nodeNumber||nIndex}`,nodeUidKey=escKey(`${role}:${nodeNumber||nIndex}`),nFields=leafFields(node),point=nodePoint(nFields),blockNames=uniq(directBlockNames(node));
-        const nr={uid:`categorized:node:${uidKey}:${eUidKey}:${nodeUidKey}`,levelId:'node',recordKind:'NODE',lineKey:lKey,lineNo,branchName,elementKey:eKey,nodeNumber,role,displayName:`${role} ${nodeNumber||nIndex}`,key:nKey,globalX:point.globalX,globalY:point.globalY,globalZ:point.globalZ,coordinateBasisNode:nFields.CoordinateBasisNode||nFields.BasisNode||'',...temperatureFields(nFields),restraintCount:countIn(node,'RESTRAINT'),displacementsCount:countIn(node,'DISPLACEMENTS'),forcesMomentsCount:countIn(node,'FORCESMOMENTS'),sifCount:countIn(node,'SIF'),detectedBlockNames:blockNames,position:point.position,points:point.position?[point.position]:[],sourceRefs:Object.freeze([sourceRef(detectedSourceName,lIndex,eIndex,nIndex)])};
+        const nr={uid:`categorized:node:${uidKey}:${eUidKey}:${nodeUidKey}`,levelId:'node',recordKind:'NODE',lineKey:lKey,lineNo,branchName,elementKey:eKey,nodeNumber,role,displayName:`${role} ${nodeNumber||nIndex}`,key:nKey,globalX:point.globalX,globalY:point.globalY,globalZ:point.globalZ,coordinateBasisNode:nFields.GLOBAL_COORD_BASIS_NODE||nFields.CoordinateBasisNode||nFields.BasisNode||'',...temperatureFields(nFields),restraintCount:countIn(node,'RESTRAINT'),displacementsCount:countIn(node,'DISPLACEMENTS'),forcesMomentsCount:countIn(node,'FORCESMOMENTS'),sifCount:countIn(node,'SIF'),detectedBlockNames:blockNames,position:point.position,points:point.position?[point.position]:[],sourceRefs:Object.freeze([sourceRef(detectedSourceName,lIndex,eIndex,nIndex)])};
         nodeRecords.push(Object.freeze(nr));nodeTotal+=1;lineNodeCount+=1;hierarchy.elementToNodes[`${lKey}|${eKey}`].push(nKey);hierarchy.nodeToEvidence[`${lKey}|${eKey}|${nKey}`]=[];
         for(const block of children(node)){
           if(!/Block$|Blocks$/i.test(block.name))continue;
@@ -98,10 +113,10 @@ export function createCategorizedInputXmlCanvasModel({sourceName='',xmlText='',s
   const levels=Object.freeze([
     makeLevel('lineBlock','LineBlock',lineRecords,lineRecords.length>60?'compact-list':'tiles',fieldsFor(lineRecords,['displayName','lineNo','branchName','elementCount','nodeCount','evidenceCount','detectedBlockNames'])),
     makeLevel('element','Element',elementRecords,elementRecords.length>80?'grouped-compact-tree':'grouped-tree',fieldsFor(elementRecords,['displayName','elementKey','fromNode','toNode','lineNo','DELTA_X','DELTA_Y','DELTA_Z','ElementLengthMm','MaterialName','nodeCount','evidenceCount'])),
-    makeLevel('node','Node',nodeRecords,nodeRecords.length>120?'grouped-compact-tree':'grouped-tree',fieldsFor(nodeRecords,['displayName','nodeNumber','role','elementKey','lineNo','globalX','globalY','globalZ','restraintCount','displacementsCount','forcesMomentsCount','sifCount'])),
+    makeLevel('node','Node',nodeRecords,nodeRecords.length>120?'grouped-compact-tree':'grouped-tree',fieldsFor(nodeRecords,['displayName','nodeNumber','role','elementKey','lineNo','globalX','globalY','globalZ','coordinateBasisNode','restraintCount','displacementsCount','forcesMomentsCount','sifCount'])),
     makeLevel('nodeEvidence','Node Evidence',evidenceRecords,'grouped-compact-tree',fieldsFor(evidenceRecords,['displayName','evidenceKind','blockName','itemCount','nodeNumber','role','elementKey','lineNo']))
   ]);
   const summary=Object.freeze({schema,sourceName:detectedSourceName,recordCount:allRecords.length,lineBlockCount:lineRecords.length,lineCount:lineRecords.length,elementCount:elementTotal,nodeCount:nodeTotal,evidenceCount:evidenceTotal,pipingElementCount:(stripCdata(xmlText).match(/<PIPINGELEMENT\b/gi)||[]).length,detectedBlockNames:uniq([...lineRecords.flatMap((r)=>r.detectedBlockNames),...elementRecords.flatMap((r)=>r.childBlockNames),...nodeRecords.flatMap((r)=>r.detectedBlockNames)])});
   return Object.freeze({schema:XML_COMPARE_CATEGORIZED_INPUTXML_CANVAS_MODEL_SCHEMA,sourceName:detectedSourceName,profile:'categorized-inputxml',side:clean(side)||'source',rootTag,levels,records:allRecords,hierarchy:Object.freeze(hierarchy),summary,diagnostics:Object.freeze(diagnostics)});
 }
-export const _test=Object.freeze({clean,decode,stripCdata,parseAttrs,parseXmlLite,children,descendants,firstText,lineKey,elementKey,itemCount,compactFields});
+export const _test=Object.freeze({clean,decode,stripCdata,parseAttrs,parseXmlLite,children,descendants,firstText,lineKey,elementKey,itemCount,compactFields,tagEnd});
