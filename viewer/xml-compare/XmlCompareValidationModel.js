@@ -75,7 +75,8 @@ function pool(side={}){
 function activeLayer(source={},target={},layer='current'){
   const resolved=normalizeValidationLayer(layer);
   if(resolved!=='current')return resolved;
-  return normalizeValidationLayer(source?.levelView?.levelId||target?.levelView?.levelId||'node')==='current'?'node':normalizeValidationLayer(source?.levelView?.levelId||target?.levelView?.levelId||'node');
+  const view=normalizeValidationLayer(source?.levelView?.levelId||target?.levelView?.levelId||'node');
+  return view==='current'?'node':view;
 }
 function matchesLayer(record={},layer='node'){
   const allowed=LEVELS[layer]||LEVELS.node;
@@ -99,7 +100,7 @@ function coordStatus(srss,tol){return srss<=tol?'OK':'MISMATCH';}
 function coordRow(sourceRecord,nearest,sourceCoordinate,expected,toleranceMm){
   if(!sourceCoordinate)return {sourceUid:clean(sourceRecord?.uid),sourceLabel:label(sourceRecord),status:'MISSING_SOURCE_COORDINATE'};
   if(!nearest)return {sourceUid:clean(sourceRecord?.uid),sourceLabel:label(sourceRecord),sourceCoordinate,expectedTargetCoordinate:expected,status:'NO_TARGET_NEARBY'};
-  const a=nearest.coordinate,dx:a.x-expected.x,dy:a.y-expected.y,dz:a.z-expected.z;
+  const a=nearest.coordinate,dx=a.x-expected.x,dy=a.y-expected.y,dz=a.z-expected.z;
   return {sourceUid:clean(sourceRecord?.uid),targetUid:clean(nearest.record?.uid),sourceLabel:label(sourceRecord),targetLabel:label(nearest.record),sourceCoordinate,expectedTargetCoordinate:expected,actualTargetCoordinate:a,deltaX:dx,deltaY:dy,deltaZ:dz,srss:nearest.srss,status:coordStatus(nearest.srss,toleranceMm)};
 }
 function summarizeRows(rows=[],sourceCount=0,targetCount=0){
@@ -110,9 +111,10 @@ function fieldCompareRows(sourceAnchor,targetAnchor,compareFields=[]){
   // TODO: contains, starts-with, ends-with, regex, regex-position, token-set, dictionary mapping.
   return (compareFields||[]).map((field)=>{const s=readRecordField(sourceAnchor,field),t=readRecordField(targetAnchor,field),sn=normText(s),tn=normText(t);const sv=num(s),tv=num(t),numeric=sv!=null&&tv!=null;return {sourceUid:clean(sourceAnchor?.uid),targetUid:clean(targetAnchor?.uid),sourceLabel:label(sourceAnchor),targetLabel:label(targetAnchor),field,sourceValue:s??'',targetValue:t??'',valueType:numeric?'number':'text',delta:numeric?tv-sv:null,status:sn===tn?'OK':'MISMATCH'};});
 }
+function publicBase(base={}){return {validationLayer:base.validationLayer,compareFields:base.compareFields,coordinateGroup:base.coordinateGroup,toleranceMm:base.toleranceMm,anchor:base.anchor};}
 function fieldCompareModel(args,base,diagnostics=[]){
   const rows=base.sourceAnchor&&base.targetAnchor?fieldCompareRows(base.sourceAnchor,base.targetAnchor,args.compareFields):[];
-  return {...base,schema:XML_COMPARE_VALIDATION_MODEL_SCHEMA,mode:'field-compare',rows:Object.freeze(rows),summary:Object.freeze({...emptySummary(rows.length?1:0,rows.length?1:0),validatedCount:rows.length,okCount:rows.filter((r)=>r.status==='OK').length,mismatchCount:rows.filter((r)=>r.status==='MISMATCH').length}),diagnostics:Object.freeze(diagnostics)};
+  return {...publicBase(base),schema:XML_COMPARE_VALIDATION_MODEL_SCHEMA,mode:'field-compare',rows:Object.freeze(rows),summary:Object.freeze({...emptySummary(rows.length?1:0,rows.length?1:0),validatedCount:rows.length,okCount:rows.filter((r)=>r.status==='OK').length,mismatchCount:rows.filter((r)=>r.status==='MISMATCH').length}),diagnostics:Object.freeze(diagnostics)};
 }
 export function createXmlCompareValidationModel({source=null,target=null,matchMap=null,compareFields=[],validationLayer='current',toleranceMm=1}={}){
   const fields=Object.freeze((compareFields||[]).map(clean).filter(Boolean));
@@ -124,7 +126,7 @@ export function createXmlCompareValidationModel({source=null,target=null,matchMa
   if(!anchors.sourceAnchor||!anchors.targetAnchor)return fieldCompareModel({compareFields:fields},base,['ANCHOR_MISSING']);
   if(!coordinateGroup)return fieldCompareModel({compareFields:fields},base,[]);
   const transform=createAnchorTransform({sourceAnchor:anchors.sourceAnchor,targetAnchor:anchors.targetAnchor,coordinateGroup});
-  if(!transform)return {...base,schema:XML_COMPARE_VALIDATION_MODEL_SCHEMA,mode:'coordinate-transform-nearest',rows:Object.freeze([]),anchor:{...base.anchor},summary:Object.freeze(emptySummary(layerSet.sourceRecords.length,layerSet.targetRecords.length)),diagnostics:Object.freeze(['ANCHOR_COORDINATE_MISSING'])};
+  if(!transform)return {...publicBase(base),schema:XML_COMPARE_VALIDATION_MODEL_SCHEMA,mode:'coordinate-transform-nearest',rows:Object.freeze([]),anchor:{...base.anchor},summary:Object.freeze(emptySummary(layerSet.sourceRecords.length,layerSet.targetRecords.length)),diagnostics:Object.freeze(['ANCHOR_COORDINATE_MISSING'])};
   const rows=layerSet.sourceRecords.map((record)=>{const sc=recordCoordinate(record,coordinateGroup),expected=applyAnchorTransform(sc,transform),nearest=findNearestTargetRecord({expectedCoordinate:expected,targetRecords:layerSet.targetRecords,coordinateGroup});return coordRow(record,nearest,sc,expected,tolerance);});
   return {schema:XML_COMPARE_VALIDATION_MODEL_SCHEMA,mode:'coordinate-transform-nearest',validationLayer:layerSet.validationLayer,compareFields:fields,coordinateGroup,toleranceMm:tolerance,anchor:Object.freeze({...base.anchor,sourceCoordinate:transform.sourceCoordinate,targetCoordinate:transform.targetCoordinate,offset:transform.offset}),rows:Object.freeze(rows),summary:Object.freeze(summarizeRows(rows,layerSet.sourceRecords.length,layerSet.targetRecords.length)),diagnostics:Object.freeze([])};
 }
