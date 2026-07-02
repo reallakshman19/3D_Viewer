@@ -22,8 +22,8 @@ assert.ok(xyz.sourceRefs.includes('S2:1'));
 
 const validation=runCategorizerValidation({profile:PS_MAPPING_TABLE_2_COORDINATE_LOOKUP_PROFILE,sources:[s1,s2],graph});
 const exported=exportCategorizedGraphArtifacts({graph,profile:PS_MAPPING_TABLE_2_COORDINATE_LOOKUP_PROFILE,validationResults:validation,sources:[s1,s2]});
-assert.equal((exported.xmlText.match(/<CategorizedTableXml\b/g)||[]).length,1);
-assert.ok(exported.xmlText.includes('<RootPartition key="MODEL_SIDE"'));
+assert.equal((exported.xmlText.match(/<categorizedTableGraph\b/g)||[]).length,1);
+assert.ok(exported.xmlText.includes('<rootPartition key="MODEL_SIDE"'));
 assert.ok(exported.xmlText.includes('sourceRefs="S1:1'));
 assert.ok(JSON.parse(exported.auditJson).sourceSummary.length===2);
 
