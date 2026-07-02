@@ -1,4 +1,4 @@
-export const XML_COMPARE_TRANSFER_PREVIEW_SCHEMA='xml-compare-transfer-preview/v2';
+export const XML_COMPARE_TRANSFER_PREVIEW_SCHEMA='xml-compare-transfer-preview/v1';
 const SKIP=new Set(['uid','raw','points','position','baseRecords','hierarchy','levelProfile','levelView','intake','adapter','diagnostics']);
 const NODE_IDENTITY_FIELDS=Object.freeze(['lineNo','elementKey','nodeNumber','role']);
 const SEMANTIC_NODE_BLOCK_ORDER=Object.freeze(['DerivedCoordinateBlock','TemperatureBlock','RestraintsBlock','DisplacementsBlock','ForcesMomentsBlock','SifBlock','MiscBlock']);
