@@ -15,7 +15,7 @@ const exportResult=exportCategorizedGraphArtifacts({graph,profile:PS_MAPPING_TAB
 const sourceArtifact=createCanvasHandoffArtifact({exportResult,graph,profile:PS_MAPPING_TABLE_2_SHADOW_PROFILE,targetCanvas:'source'});
 assert.equal(sourceArtifact.targetCanvas,'source');
 assert.equal(sourceArtifact.origin,'table-to-categorized-xml');
-assert.ok(sourceArtifact.xmlText.includes('<CategorizedTableXml'));
+assert.ok(sourceArtifact.xmlText.includes('<categorizedTableGraph'));
 assert.ok(sourceArtifact.graphJson.nodes.length>0);
 assert.equal(sourceArtifact.profileJson.profileId,'ps-mapping-table-2-shadow-profile');
 assert.ok(Array.isArray(sourceArtifact.diagnostics));
