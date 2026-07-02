@@ -7,9 +7,9 @@ import {
   validateStageWorkerOutput,
 } from '../contracts/RvmStageModelContract.js';
 import { buildStageRenderPlan } from '../render/StageRenderPlan.js';
-import { scanRvmBinaryDiagnostics } from '../parser/RvmDiagnosticsScanner.js';
-import { parseRvmBinaryToStageModel } from '../parser/RvmBinaryStageParser.js';
 import { createRvmBinaryPreflightReport } from './StageRvmBinaryPreflight.js';
+import { classifyStageJsonInput } from './StageJsonInputClassifier.js';
+import { runStageRvmEvidencePipeline } from './StageRvmEvidencePipeline.js';
 
 export function createStageWorkerRuntime(options = {}) {
   return {
@@ -46,6 +46,8 @@ async function runStageJsonJob(runtime, messages, job) {
   emit(runtime, messages, createStageWorkerProgress('reading-file', { loaded: 1, total: 3, percent: 33, message: 'Reading stage JSON job text' }));
   const parsed = parseStageJson(job);
   if (!parsed.ok) return fail(runtime, messages, parsed.error.message, parsed.error.code, parsed.error.context);
+  const classified = classifyStageJsonInput(parsed.stageModel);
+  if (classified.kind === 'att-managed-hierarchy') return fail(runtime, messages, classified.message, classified.code, { jobId: job?.jobId || '', fileName: job?.fileName || '' });
 
   const modelResult = validateRvmStageModel(parsed.stageModel);
   if (!modelResult.valid) return invalidModel(runtime, messages, modelResult.errors, job);
@@ -63,30 +65,17 @@ function runRvmBinaryJob(runtime, messages, job) {
   emit(runtime, messages, createStageWorkerProgress('hashing-source', { loaded: 2, total: 6, percent: 33, message: 'Validating RVM binary source identity' }));
   const preflight = createRvmBinaryPreflightReport(job);
   if (!preflight.valid) return fail(runtime, messages, 'RVM binary preflight failed.', 'STAGE_RVM_PREFLIGHT_FAILED', { preflight });
-  emit(runtime, messages, createStageWorkerProgress('parsing-records', { loaded: 3, total: 6, percent: 50, message: 'Scanning conservative RVM record diagnostics' }));
-  const rvmDiagnosticsReport = scanRvmBinaryDiagnostics({ ...job, preflightSummary: preflight.summary });
-  emit(runtime, messages, createStageWorkerProgress('building-hierarchy', { loaded: 4, total: 6, percent: 67, message: 'Recovering MVP hierarchy evidence' }));
-  emit(runtime, messages, createStageWorkerProgress('decoding-primitives', { loaded: 5, total: 6, percent: 83, message: 'Decoding MVP supported primitive subset' }));
-  const parser = parseRvmBinaryToStageModel({ ...job, preflightSummary: preflight.summary, diagnosticsReport: rvmDiagnosticsReport });
-  emit(runtime, messages, createStageWorkerProgress('building-diagnostics', { loaded: 6, total: 6, percent: 100, message: 'Building RVM parser diagnostics' }));
-  if (!parser.ok) return rvmNotImplemented(runtime, messages, preflight, rvmDiagnosticsReport, parser);
-  const modelResult = validateRvmStageModel(parser.stageModel);
-  if (!modelResult.valid) return fail(runtime, messages, 'Parsed RVM stage model failed validation.', 'STAGE_RVM_STAGE_MODEL_VALIDATION_FAILED', { preflightSummary: preflight.summary, rvmDiagnosticsReport, rvmParserReport: parser.report, validationErrors: modelResult.errors });
-  const manifest = createManifestForJob(job, parser.stageModel);
-  const renderPlan = buildDryRunRenderPlan(parser.stageModel, 'full');
-  emit(runtime, messages, createStageWorkerMessage('STAGE_WORKER_STAGE_READY', { schema: parser.stageModel.schema, primitiveCount: parser.stageModel.primitives.length }));
+  emit(runtime, messages, createStageWorkerProgress('parsing-records', { loaded: 3, total: 6, percent: 50, message: 'Reading wide-tag RVM native records' }));
+  emit(runtime, messages, createStageWorkerProgress('building-hierarchy', { loaded: 4, total: 6, percent: 67, message: 'Building native RVM record ledger' }));
+  emit(runtime, messages, createStageWorkerProgress('decoding-primitives', { loaded: 5, total: 6, percent: 83, message: 'Decoding native primitive evidence' }));
+  const pipeline = runStageRvmEvidencePipeline(job);
+  emit(runtime, messages, createStageWorkerProgress('building-diagnostics', { loaded: 6, total: 6, percent: 100, message: 'Building RVM evidence StageModel diagnostics' }));
+  if (!pipeline.ok) return fail(runtime, messages, pipeline.message, pipeline.code, { preflightSummary: preflight.summary, validationErrors: pipeline.validationErrors || [], readerReport: pipeline.readerReport, nativeRecordLedger: pipeline.nativeRecordLedger, primitiveDecodeReport: pipeline.primitiveDecodeReport });
+  const manifest = createManifestForJob(job, pipeline.stageModel);
+  const renderPlan = buildDryRunRenderPlan(pipeline.stageModel, 'full');
+  emit(runtime, messages, createStageWorkerMessage('STAGE_WORKER_STAGE_READY', { schema: pipeline.stageModel.schema, primitiveCount: pipeline.stageModel.primitives.length }));
   emit(runtime, messages, createStageWorkerMessage('STAGE_WORKER_PACKAGE_READY', { schema: manifest.schema, artifactCount: manifest.artifacts.length }));
-  return acceptedOutput(runtime, messages, parser.stageModel, manifest, renderPlan, job, { rvmDiagnosticsReport, rvmParserReport: parser.report, preflightSummary: preflight.summary });
-}
-
-function rvmNotImplemented(runtime, messages, preflight, rvmDiagnosticsReport, parser) {
-  return fail(runtime, messages, 'RVM binary parsing is not implemented for this binary in the staged worker shell.', 'STAGE_RVM_PARSING_NOT_IMPLEMENTED', {
-    preflight: preflight.summary,
-    preflightSummary: preflight.summary,
-    rvmDiagnosticsReport,
-    rvmParserReport: parser.report,
-    warnings: [...preflight.warnings, ...rvmDiagnosticsReport.warnings, ...parser.warnings],
-  });
+  return acceptedOutput(runtime, messages, pipeline.stageModel, manifest, renderPlan, job, { preflightSummary: preflight.summary, readerReport: pipeline.readerReport, nativeRecordLedger: pipeline.nativeRecordLedger, primitiveDecodeReport: pipeline.primitiveDecodeReport, rvmEvidenceValidation: pipeline.validation });
 }
 
 function acceptedOutput(runtime, messages, stageModel, manifest, renderPlan, job, extra = {}) {
@@ -108,10 +97,7 @@ function parseStageJson(job) {
   try {
     return { ok: true, stageModel: JSON.parse(String(job?.text || '')) };
   } catch (error) {
-    return {
-      ok: false,
-      error: { message: error?.message || 'Malformed stage JSON.', code: 'STAGE_JSON_PARSE_FAILED', context: { jobId: job?.jobId || '', fileName: job?.fileName || '' } },
-    };
+    return { ok: false, error: { message: error?.message || 'Malformed stage JSON.', code: 'STAGE_JSON_PARSE_FAILED', context: { jobId: job?.jobId || '', fileName: job?.fileName || '' } } };
   }
 }
 
@@ -127,38 +113,11 @@ function fail(runtime, messages, message, code, context) {
 }
 
 function createManifestForJob(job, stageModel) {
-  return createStagePackageManifest({
-    source: sourceFromJobAndModel(job, stageModel),
-    converterVersion: 'stage-worker-shell-dry-run-v1',
-    artifacts: [stageModelArtifact()],
-    chunks: [],
-    diagnostics: { href: 'diagnostics.json', schema: 'RvmStageDiagnostics.v1', required: true },
-  });
+  return createStagePackageManifest({ source: sourceFromJobAndModel(job, stageModel), converterVersion: 'stage-worker-rvm-evidence-v1', artifacts: [stageModelArtifact()], chunks: [], diagnostics: { href: 'diagnostics.json', schema: 'RvmStageDiagnostics.v1', required: true } });
 }
 
-function buildDryRunRenderPlan(model, quality) {
-  return buildStageRenderPlan(model, quality);
-}
-
-function stageModelArtifact() {
-  return { id: 'artifact-stage-model', kind: 'stage-model-json', href: 'stage-model.json', schema: 'RvmStageModel.v1', byteLength: 0, required: true };
-}
-
-function sourceFromJobAndModel(job, stageModel) {
-  return {
-    fileName: job?.fileName || stageModel?.source?.fileName || '',
-    fileSize: Number(job?.fileSize ?? stageModel?.source?.fileSize) || 0,
-    fileHash: stageModel?.source?.fileHash || job?.fileHash || '',
-    units: stageModel?.source?.units || 'm',
-    coordinateBasis: stageModel?.source?.coordinateBasis || 'rvm-native',
-  };
-}
-
-function startPayload(job) {
-  return { jobId: job?.jobId || '', kind: job?.kind || '', fileName: job?.fileName || '', fileSize: Number(job?.fileSize) || 0, fileHash: job?.fileHash || '' };
-}
-
-function emit(runtime, messages, message) {
-  messages.push(message);
-  if (runtime?.onMessage) runtime.onMessage(message);
-}
+function buildDryRunRenderPlan(model, quality) { return buildStageRenderPlan(model, quality); }
+function stageModelArtifact() { return { id: 'artifact-stage-model', kind: 'stage-model-json', href: 'stage-model.json', schema: 'RvmStageModel.v1', byteLength: 0, required: true }; }
+function sourceFromJobAndModel(job, stageModel) { return { fileName: job?.fileName || stageModel?.source?.fileName || '', fileSize: Number(job?.fileSize ?? stageModel?.source?.fileSize) || 0, fileHash: stageModel?.source?.fileHash || job?.fileHash || '', units: stageModel?.source?.units || 'm', coordinateBasis: stageModel?.source?.coordinateBasis || 'rvm-native' }; }
+function startPayload(job) { return { jobId: job?.jobId || '', kind: job?.kind || '', fileName: job?.fileName || '', fileSize: Number(job?.fileSize) || 0, fileHash: job?.fileHash || '' }; }
+function emit(runtime, messages, message) { messages.push(message); if (runtime?.onMessage) runtime.onMessage(message); }
