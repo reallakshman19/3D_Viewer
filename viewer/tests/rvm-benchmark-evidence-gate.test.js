@@ -51,11 +51,35 @@ test('diagnostics scanner and record-reader counts are reflected', () => {
   assert.equal(result.counts.code11Candidates, 1);
 });
 
-test('parser decoded code 4 and decoder summaries are reflected', () => {
+test('parser decoded code 4 and direct decoder summaries are reflected', () => {
   const result = evaluateRvmBenchmarkEvidence(workerInput(), benchmarkCase());
   assert.equal(result.counts.code4Candidates, 2);
   assert.equal(result.counts.code4DecodeSuccess, 1);
   assert.equal(result.counts.code4DecodeFailure, 1);
+});
+
+test('parser report decoder summaries are reflected', () => {
+  const base = workerInput();
+  const input = {
+    ...base,
+    code4DecoderSummaries: [],
+    parserReport: { ...base.parserReport, decoderSummaries: [{ decodedOk: true }, { decodedOk: false }] },
+  };
+  const result = evaluateRvmBenchmarkEvidence(input, benchmarkCase());
+  assert.equal(result.counts.code4DecodeSuccess, 1);
+  assert.equal(result.counts.code4DecodeFailure, 1);
+});
+
+test('worker parser report decoder summaries are reflected', () => {
+  const base = workerInput();
+  const input = {
+    ...base,
+    code4DecoderSummaries: [],
+    workerResult: { ...base.workerResult, rvmParserReport: { ...base.workerResult.rvmParserReport, decoderSummaries: [{ decodedOk: true }] } },
+  };
+  const result = evaluateRvmBenchmarkEvidence(input, benchmarkCase());
+  assert.equal(result.counts.code4DecodeSuccess, 1);
+  assert.equal(result.counts.code4DecodeFailure, 0);
 });
 
 test('code 11 candidates are evidence-only', () => {
