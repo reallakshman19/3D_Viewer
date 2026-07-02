@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { createXmlCompareLineNodeHierarchy } from '../xml-compare/XmlCompareLineNodeHierarchy.js';
 import { createXmlComparePnmAutoMap } from '../xml-compare/XmlComparePnmAutoMapper.js';
 import { renderXmlCompareAutoMapPopupHtml, _test as popupTest } from '../xml-compare/XmlCompareAutoMapPopup.js';
+import { createCategorizedInputXmlCanvasModel } from '../xml-compare/XmlCompareCategorizedInputXmlCanvasBuilder.js';
 
 const sourceHierarchy=createXmlCompareLineNodeHierarchy([
   {uid:'SRC-1',lineNo:'L-1',points:[{x:0,y:0,z:0},{x:10,y:0,z:0}],position:{x:0,y:0,z:0},attributes:{from:'10',to:'20',FROM_NODE:'10.000000',TO_NODE:'20.000000',FROM_GLOBAL_X:'100.000000',FROM_GLOBAL_Y:'200.000000',FROM_GLOBAL_Z:'300.000000',DELTA_X:'10.000000',DELTA_Y:'0.000000',DELTA_Z:'0.000000',DIAMETER:'114.300000',Temperature1:'120',Pressure1:'700','COMPONENT-ATTRIBUTE2':'120','COMPONENT-ATTRIBUTE1':'700',TEMP_EXP_C1:'120',PRESSURE1:'700',DESIGN_PRESSURE:'900',INSUL_THICK:'50',MATERIAL_NAME:'A106 B',PIPELINE_REFERENCE:'PIPE-A'}},
@@ -120,4 +121,27 @@ assert.equal(linePlan[0].targetLine,'L-9');
 assert.ok(linePlan[0].selectedBlocks.includes('ProcessBlock'));
 assert.ok(linePlan[0].selectedBlocks.includes('MaterialBlock'));
 assert.equal(linePlan[0].fields.Temperature1,'120');
+
+const sourceCatXml=`<CategorizedInputXML schema="categorized-inputxml/v3"><Line id="LINENO1"><LineBlock><LineNo>LINENO1</LineNo></LineBlock><Element fromNode="10" toNode="20" elementKey="10-&gt;20"><NodesBlock><Node nodeNumber="10" role="FROM"><DerivedCoordinateBlock><FROM_GLOBAL_X>1</FROM_GLOBAL_X><FROM_GLOBAL_Y>2</FROM_GLOBAL_Y><FROM_GLOBAL_Z>3</FROM_GLOBAL_Z></DerivedCoordinateBlock><TemperatureBlock><Temperature1>120</Temperature1></TemperatureBlock><RestraintsBlock><RESTRAINT NODE="10" TYPE="7"/></RestraintsBlock><DisplacementsBlock /><ForcesMomentsBlock /><SifBlock /></Node></NodesBlock></Element><Element fromNode="20" toNode="30" elementKey="20-&gt;30"><NodesBlock><Node nodeNumber="10" role="FROM"><MiscBlock><NOTE>wrong element same node number</NOTE></MiscBlock></Node></NodesBlock></Element></Line></CategorizedInputXML>`;
+const targetCatXml=`<CategorizedInputXML schema="categorized-inputxml/v3"><Line id="LINENO1"><Element fromNode="100" toNode="200" elementKey="100-&gt;200"><NodesBlock><Node nodeNumber="100" role="FROM"><DerivedCoordinateBlock><FROM_GLOBAL_X>1</FROM_GLOBAL_X><FROM_GLOBAL_Y>2</FROM_GLOBAL_Y><FROM_GLOBAL_Z>3</FROM_GLOBAL_Z></DerivedCoordinateBlock></Node></NodesBlock></Element></Line></CategorizedInputXML>`;
+const catSource=createCategorizedInputXmlCanvasModel({xmlText:sourceCatXml,sourceName:'source.xml',side:'source'});
+const catTarget=createCategorizedInputXmlCanvasModel({xmlText:targetCatXml,sourceName:'target.xml',side:'target'});
+const catSourceNode=catSource.records.find((record)=>record.levelId==='node'&&record.elementKey==='10->20'&&record.nodeNumber==='10');
+const catTargetNode=catTarget.records.find((record)=>record.levelId==='node'&&record.nodeNumber==='100');
+const catMap=createXmlComparePnmAutoMap({sourceRecords:[catSourceNode],targetRecords:[catTargetNode]});
+const catMapWithRequest={...catMap,request:{scope:'node',sourceUid:catSourceNode.uid,targetUid:catTargetNode.uid}};
+const catRows=popupTest.matchedRows(catMapWithRequest,[catSourceNode],[catTargetNode]);
+const catBlocks=popupTest.nodeBlocksForRows(catRows,{records:[catSourceNode],baseRecords:catSource.records});
+assert.deepEqual(catBlocks.map((block)=>block.blockName),['DerivedCoordinateBlock','TemperatureBlock','RestraintsBlock','DisplacementsBlock','ForcesMomentsBlock','SifBlock']);
+assert.ok(!catBlocks.some((block)=>block.blockName==='MiscBlock'));
+const catHtml=renderXmlCompareAutoMapPopupHtml({matchMap:catMapWithRequest,source:{records:[catSourceNode],baseRecords:catSource.records},target:{records:[catTargetNode]}});
+assert.match(catHtml,/DerivedCoordinateBlock/);
+assert.match(catHtml,/TemperatureBlock/);
+assert.match(catHtml,/RestraintsBlock/);
+assert.match(catHtml,/DisplacementsBlock/);
+assert.match(catHtml,/ForcesMomentsBlock/);
+assert.match(catHtml,/SifBlock/);
+assert.doesNotMatch(catHtml,/wrong element same node number/);
+const noBlocksHtml=renderXmlCompareAutoMapPopupHtml({matchMap:catMapWithRequest,source:{records:[catSourceNode]},target:{records:[catTargetNode]}});
+assert.match(noBlocksHtml,/No node-owned blocks found for selected node identity/);
 console.log('xml-compare-automap-popup: all assertions passed');
