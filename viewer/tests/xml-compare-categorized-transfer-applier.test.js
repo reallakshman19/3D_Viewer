@@ -68,17 +68,17 @@ assert.equal(legacyNodeResult.audit[0].status,'updated');
 assert.match(legacyNodeResult.xml,/<RestraintsBlock><RESTRAINT NODE="1000" TYPE="7" TAG="PS-10"\/><\/RestraintsBlock>/);
 assert.doesNotMatch(legacyNodeResult.xml,/NODE="10" TYPE="7"/);
 
-const scopedNodeResult=applyCategorizedTransferPlan(targetXml,sourceXml,{transferScope:'node',selectedBlocks:['RestraintsBlock'],approvedPairIds:['case-restraints'],pairs:[{id:'pair-35-1030',approvedCaseIds:['case-restraints'],sourceNode:'35',sourceRole:'TO',targetNode:'1030',targetRole:'TO',sourceElement:'30->35',targetElement:'1020->1030'}]});
+const caseId='node:0:30->35:35->1020->1030:1030:RestraintsBlock';
+const scopedNodeResult=applyCategorizedTransferPlan(targetXml,sourceXml,{transferScope:'node',selectedBlocks:['RestraintsBlock'],approvedPairIds:[caseId],pairs:[{id:'pair-35-1030',approvedCaseIds:[caseId],sourceNode:'35',sourceRole:'TO',targetNode:'1030',targetRole:'TO',sourceElement:'30->35',targetElement:'1020->1030'}]});
 assert.equal(scopedNodeResult.audit[0].status,'updated');
 assert.equal(scopedNodeResult.audit[0].changedBlocks[0].status,'replaced');
 assert.match(scopedNodeResult.xml,/<Node nodeNumber="1030" role="TO">[\s\S]*<RESTRAINT NODE="1030" TYPE="17"\/>[\s\S]*<RESTRAINT NODE="1030" TYPE="1"\/>[\s\S]*<RESTRAINT NODE="1030" TYPE="3"\/>[\s\S]*<\/Node>/);
 assert.doesNotMatch(scopedNodeResult.xml,/<Node nodeNumber="1030" role="TO">[\s\S]*NODE="35/);
 assert.match(scopedNodeResult.xml,/<Node nodeNumber="1020" role="FROM"><RestraintsBlock\/><\/Node>/,'FROM node block must remain unchanged');
 
-const skippedByApproval=applyCategorizedTransferPlan(targetXml,sourceXml,{transferScope:'node',selectedBlocks:['RestraintsBlock'],approvedPairIds:['different-case'],pairs:[{id:'pair-35-1030',approvedCaseIds:['case-restraints'],sourceNode:'35',targetNode:'1030',sourceElement:'30->35',targetElement:'1020->1030'}]});
+const skippedByApproval=applyCategorizedTransferPlan(targetXml,sourceXml,{transferScope:'node',selectedBlocks:['RestraintsBlock'],approvedPairIds:['different-case'],pairs:[{id:'pair-35-1030',approvedCaseIds:[caseId],sourceNode:'35',targetNode:'1030',sourceElement:'30->35',targetElement:'1020->1030'}]});
 assert.equal(skippedByApproval.audit[0].reason,'not-approved');
 assert.doesNotMatch(skippedByApproval.xml,/TYPE="1"/);
-
 const unsupported=applyCategorizedTransferPlan(targetXml,sourceXml,{transferScope:'unknown'});
 assert.equal(unsupported.audit[0].status,'skipped');
 assert.equal(unsupported.audit[0].reason,'unsupported-transfer-scope');
