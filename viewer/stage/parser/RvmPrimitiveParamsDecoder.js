@@ -1,6 +1,6 @@
 import { bboxDimensions } from './RvmPrimitiveTransformMath.js';
 
-export const RVM_PRIMITIVE_PARAM_SUPPORTED_CODES = Object.freeze([2, 4, 8, 9]);
+export const RVM_PRIMITIVE_PARAM_SUPPORTED_CODES = Object.freeze([2, 4, 8, 9, 11]);
 
 export function isSupportedPrimitiveCode(code) {
   return RVM_PRIMITIVE_PARAM_SUPPORTED_CODES.includes(Number(code));
@@ -12,6 +12,7 @@ export function decodeRvmPrimitiveParams(code, values = [], context = {}) {
   if (nativeCode === 4) return decodeCircularTorus(values);
   if (nativeCode === 2) return decodeBox(context.localBbox);
   if (nativeCode === 9) return decodeSphere(values);
+  if (nativeCode === 11) return { decoded: false, reason: 'code11-routed-to-facet-group-decoder' };
   return { decoded: false, reason: 'unsupported-native-code' };
 }
 
