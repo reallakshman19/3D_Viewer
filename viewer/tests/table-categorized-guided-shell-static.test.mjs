@@ -20,6 +20,13 @@ assert.ok(!shell.includes('renderTableCategorizedStagePreview'));
 
 assert.ok(shell.includes('data-table-categorized-step'));
 assert.ok(shell.includes('data-table-categorized-tab'));
+assert.ok(runtime.includes("activeStep:'table'"));
+assert.ok(runtime.includes('const TAB_TO_STEP=Object.freeze'));
+assert.ok(runtime.includes('const STEP_TO_TAB=Object.freeze'));
+assert.ok(runtime.includes('function setActiveStep(step)'));
+assert.ok(runtime.includes("closest('[data-table-categorized-step]')"));
+assert.ok(runtime.includes('dataset.tableCategorizedStep'));
+assert.ok(runtime.includes('setActiveStep(step)'));
 assert.ok(runtime.includes('installTableCategorizedRuntime'));
 assert.ok(runtime.includes('let runtimeInstalled=false'));
 assert.equal(runtime.includes('function install(){'),false);
