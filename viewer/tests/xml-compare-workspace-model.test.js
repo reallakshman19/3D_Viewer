@@ -24,4 +24,26 @@ assert.match(html,/A_enriched_staged\.json/);
 assert.match(html,/B_enriched\.xml/);
 assert.match(html,/Auto Map Selected Node/);
 assert.match(html,/TOPOLOGY-MISSING-COMPONENT/);
+
+const categorizedXml=`<CategorizedInputXML schema="categorized-inputxml/v3" sourceName="cat.xml"><Line id="LINENO1"><LineBlock><LineNo>LINENO1</LineNo></LineBlock><Element fromNode="10" toNode="20" elementKey="10->20"><NodesBlock><Node nodeNumber="10" role="FROM"><DerivedCoordinateBlock><FROM_GLOBAL_X>1</FROM_GLOBAL_X><FROM_GLOBAL_Y>2</FROM_GLOBAL_Y><FROM_GLOBAL_Z>3</FROM_GLOBAL_Z></DerivedCoordinateBlock></Node><Node nodeNumber="20" role="TO"><DerivedCoordinateBlock><TO_GLOBAL_X>4</TO_GLOBAL_X><TO_GLOBAL_Y>2</TO_GLOBAL_Y><TO_GLOBAL_Z>3</TO_GLOBAL_Z></DerivedCoordinateBlock></Node></NodesBlock></Element><Element fromNode="20" toNode="30" elementKey="20->30"><NodesBlock><Node nodeNumber="30" role="TO"><DerivedCoordinateBlock><TO_GLOBAL_X>8</TO_GLOBAL_X><TO_GLOBAL_Y>2</TO_GLOBAL_Y><TO_GLOBAL_Z>3</TO_GLOBAL_Z></DerivedCoordinateBlock></Node></NodesBlock></Element></Line></CategorizedInputXML>`;
+const categorizedNodeModel=createXmlCompareWorkspaceModel({fileA:{name:'cat_categorized_enriched.xml'},textA:categorizedXml,canvasState:{levelViews:{source:{levelId:'node',displayField:'nodeNumber',keyField:'elementKey'}}}});
+assert.equal(categorizedNodeModel.source.profile,'categorized-inputxml');
+assert.equal(categorizedNodeModel.source.levelView.levelId,'node');
+assert.equal(categorizedNodeModel.source.levelView.layout,'grouped-tree');
+assert.equal(categorizedNodeModel.source.records.length,3,'selected Node level must expose node records, not base line-node hierarchy records');
+assert.ok(categorizedNodeModel.source.records.every((record)=>record.levelId==='node'));
+assert.deepEqual([...new Set(categorizedNodeModel.source.records.map((record)=>record.elementKey))],['10->20','20->30']);
+const categorizedNodeHtml=renderXmlCompareWorkspaceShellHtml({source:categorizedNodeModel.source,target:categorizedNodeModel.target,logs:categorizedNodeModel.logs,diagnostics:categorizedNodeModel.diagnostics,matchMap:categorizedNodeModel.matchMap});
+assert.match(categorizedNodeHtml,/Element 10-&gt;20/);
+assert.match(categorizedNodeHtml,/Element 20-&gt;30/);
+assert.doesNotMatch(categorizedNodeHtml,/Element Unspecified/);
+
+const categorizedElementModel=createXmlCompareWorkspaceModel({fileA:{name:'cat_categorized_enriched.xml'},textA:categorizedXml,canvasState:{levelViews:{source:{levelId:'element',displayField:'elementKey',keyField:'lineNo'}}}});
+assert.equal(categorizedElementModel.source.levelView.levelId,'element');
+assert.equal(categorizedElementModel.source.records.length,2);
+assert.ok(categorizedElementModel.source.records.every((record)=>record.levelId==='element'));
+const categorizedElementHtml=renderXmlCompareWorkspaceShellHtml({source:categorizedElementModel.source,target:categorizedElementModel.target,logs:categorizedElementModel.logs,diagnostics:categorizedElementModel.diagnostics,matchMap:categorizedElementModel.matchMap});
+assert.match(categorizedElementHtml,/xml-compare-dynamic-tree/);
+assert.match(categorizedElementHtml,/Element 10-&gt;20/);
+
 console.log('xml-compare-workspace-model: all assertions passed');
