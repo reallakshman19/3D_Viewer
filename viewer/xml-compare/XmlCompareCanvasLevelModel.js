@@ -1,5 +1,5 @@
 import { createXmlCompareHierarchyProfile } from './XmlCompareHierarchyProfiler.js';
-export const XML_COMPARE_CANVAS_LEVEL_MODEL_SCHEMA='xml-compare-canvas-level-model/v3';
+export const XML_COMPARE_CANVAS_LEVEL_MODEL_SCHEMA='xml-compare-canvas-level-model/v2';
 const clean=(v)=>String(v??'').trim();
 const aliasLevel=(levelId)=>{const id=clean(levelId);if(id==='line')return 'lineBlock';if(id==='evidence')return 'nodeEvidence';return id;};
 function has(level,field){return (level?.fields||[]).includes(clean(field));}
