@@ -1,6 +1,7 @@
+import { previewStageForSetupTab } from './table-categorized-xml-stage-preview.js';
 import { TABLE_CATEGORIZED_SETUP_TABS, TABLE_CATEGORIZED_XML_TABS, renderTableCategorizedXmlShellHtml, setupTabForWorkflowTab } from './table-categorized-xml-shell.js';
 
-export const TABLE_CATEGORIZED_XML_CONTROLLER_SCHEMA='table-categorized-xml-controller/v2';
+export const TABLE_CATEGORIZED_XML_CONTROLLER_SCHEMA='table-categorized-xml-controller/v3';
 
 const SETUP_TAB_IDS=new Set(TABLE_CATEGORIZED_SETUP_TABS.map(([id])=>id));
 const WORKFLOW_TAB_IDS=new Set(TABLE_CATEGORIZED_XML_TABS.map(([id])=>id));
@@ -12,12 +13,13 @@ export function nextTableCategorizedNavigationState(state={},action={}){
   if(action.type==='setup-tab'){
     const activeSetupTab=String(action.setupTab||'');
     if(!SETUP_TAB_IDS.has(activeSetupTab))return state;
-    return {...state,activeSetupTab};
+    return {...state,activeSetupTab,activePreviewStage:previewStageForSetupTab(activeSetupTab)};
   }
   if(action.type==='workflow-tab'){
     const activeTab=String(action.activeTab||'');
     if(!WORKFLOW_TAB_IDS.has(activeTab))return state;
-    return {...state,activeTab,activeSetupTab:setupTabForWorkflowTab(activeTab)};
+    const activeSetupTab=setupTabForWorkflowTab(activeTab);
+    return {...state,activeTab,activeSetupTab,activePreviewStage:previewStageForSetupTab(activeSetupTab)};
   }
   return state;
 }
@@ -37,7 +39,8 @@ export function tableCategorizedNavigationActionFromTarget(target){
 export function tableCategorizedNavigationStateFromPopup(popup,state={}){
   const activeTab=popup?.querySelector?.(ACTIVE_WORKFLOW_SELECTOR)?.dataset?.tableCategorizedTab||state.activeTab||'source';
   const activeSetupTab=popup?.querySelector?.(ACTIVE_SETUP_SELECTOR)?.dataset?.tableCategorizedSetupTab||state.activeSetupTab||setupTabForWorkflowTab(activeTab);
-  return {...state,activeTab,activeSetupTab};
+  const activePreviewStage=state.activePreviewStage||previewStageForSetupTab(activeSetupTab);
+  return {...state,activeTab,activeSetupTab,activePreviewStage};
 }
 
 export function handleTableCategorizedNavigationClick(event,state={},render){
