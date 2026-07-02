@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { readRvmWideRecords } from '../viewer/stage/parser/RvmWideRecordReader.js';
 import { buildRvmNativeRecordLedger } from '../viewer/stage/parser/RvmNativeRecordLedgerBuilder.js';
 import { buildRvmPrimitiveDecodeReport } from '../viewer/stage/parser/RvmPrimitiveDecodeReportBuilder.js';
+import { summarizeFacetGroupsFromDecodeReport } from '../viewer/stage/parser/RvmFacetGroupPayloadDecoder.js';
 import { summarizeRvmPrimitiveDecodeReport } from '../viewer/stage/contracts/RvmPrimitiveDecodeContract.js';
 
 async function main(argv) {
@@ -31,6 +32,7 @@ function parseArgs(argv) {
 
 function printSummary(report) {
   const summary = summarizeRvmPrimitiveDecodeReport(report);
+  const facetGroup = summarizeFacetGroupsFromDecodeReport(report);
   console.log(JSON.stringify({
     primitiveRecordCount: summary.coverage.primitiveRecordCount,
     decodedCount: summary.coverage.decodedCount,
@@ -39,6 +41,7 @@ function printSummary(report) {
     decodedByCode: summary.coverage.decodedByCode,
     unsupportedByCode: summary.coverage.unsupportedByCode,
     failedByCode: summary.coverage.failedByCode,
+    facetGroup,
     parserComplete: summary.parserComplete,
     visualParityClaimed: summary.visualParityClaimed,
     warnings: summary.warningCount,

@@ -1,3 +1,5 @@
+import { validateRvmFacetGroupEvidence } from './RvmFacetGroupDecodeContract.js';
+
 export const RVM_PRIMITIVE_DECODE_REPORT_SCHEMA = 'RvmPrimitiveDecodeReport.v1';
 export const RVM_PRIMITIVE_DECODE_REPORT_VERSION = '20260702-rvm-primitive-decode-report-v1';
 
@@ -59,6 +61,13 @@ function validateDecoded(item, errors) {
   if (!isBbox(item.localBbox) || !isBbox(item.worldBbox)) errors.push('decoded local/world bbox must be finite bbox arrays');
   if (item.geometryBasis?.source !== 'rvm-native-primitive') errors.push('decoded.geometryBasis.source must be rvm-native-primitive');
   if (item.geometryBasis?.renderReady !== false) errors.push('decoded.geometryBasis.renderReady must be false');
+  if (Number(item.nativeCode) === 11) validateFacetEvidence(item, errors);
+}
+
+function validateFacetEvidence(item, errors) {
+  if (item.geometryBasis?.confidence !== 'native-facet-evidence') errors.push('decoded code 11 confidence must be native-facet-evidence');
+  const validation = validateRvmFacetGroupEvidence(item.facetGroup);
+  if (!validation.valid) errors.push(...validation.errors.map((error) => `facetGroup: ${error}`));
 }
 
 function validateUnsupported(item, errors) {
