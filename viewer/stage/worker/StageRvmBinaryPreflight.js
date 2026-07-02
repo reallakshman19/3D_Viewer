@@ -73,10 +73,10 @@ function validateSizeConsistency(input, errors) {
 }
 
 function sniffHeader(arrayBuffer, warnings) {
-  const bytes = firstBytes(arrayBuffer, 8);
-  if (!bytes.length) return;
+  const bytes = firstBytes(arrayBuffer, 16);
+  if (!bytes.length || isWideHead(bytes)) return;
   const text = String.fromCharCode(...bytes).replace(/\0/g, '').trim();
-  if (!text || !/RVM|AVEVA|PDMS/i.test(text)) push(warnings, STAGE_RVM_BINARY_PREFLIGHT_CODES.UNKNOWN_HEADER, 'RVM header is not recognized by light preflight sniffing');
+  if (!text || !/RVM|AVEVA|PDMS|HEAD/i.test(text)) push(warnings, STAGE_RVM_BINARY_PREFLIGHT_CODES.UNKNOWN_HEADER, 'RVM header is not recognized by light preflight sniffing');
 }
 
 function summarizeInput(input, errors, warnings) {
@@ -88,6 +88,11 @@ function summarizeInput(input, errors, warnings) {
     byteLength: byteLengthOf(input?.arrayBuffer),
     code: errors.length ? errors[0].code : (warnings[0]?.code || STAGE_RVM_BINARY_PREFLIGHT_CODES.OK),
   };
+}
+
+function isWideHead(bytes) {
+  return bytes.length >= 16 && bytes[3] === 0x48 && bytes[7] === 0x45 && bytes[11] === 0x41 && bytes[15] === 0x44
+    && bytes[0] === 0 && bytes[1] === 0 && bytes[2] === 0 && bytes[4] === 0 && bytes[5] === 0 && bytes[6] === 0;
 }
 
 function requireText(value, label, errors, code) {
