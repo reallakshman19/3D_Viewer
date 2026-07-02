@@ -13,7 +13,7 @@ export function decodeRvmFacetGroupPayload(input = {}) {
   if (!header.ok) return failed(record, header.reason, header.diagnostic);
   const base = decodeFacetBase(view, record);
   if (!base.ok) return failed(record, base.reason, base.diagnostic);
-  const stream = decodeFacetStream(view, base.streamOffset, record.recordEndOffset, input.limits || LIMITS);
+  const stream = decodeFacetStream(view, base, record.recordEndOffset, input.limits || LIMITS);
   if (!stream.ok) return failed(record, stream.reason, stream.diagnostic);
   return decoded(record, base, stream.evidence);
 }
@@ -40,8 +40,8 @@ function decodeFacetBase(view, record) {
   return { ok: true, transform3x4, matrix3x3: transform3x4.slice(0, 9), origin: { x: transform3x4[9] || 0, y: transform3x4[10] || 0, z: transform3x4[11] || 0 }, localBbox, worldBbox, streamOffset: record.recordOffset + 32 + 18 * 4 };
 }
 
-function decodeFacetStream(view, offset, end, limits) {
-  const state = { view, offset, end, limits: { ...LIMITS, ...limits }, vertices: [], normals: [], faces: [], polygonCount: 0, contourCount: 0 };
+function decodeFacetStream(view, base, end, limits) {
+  const state = { view, offset: base.streamOffset, end, transform3x4: base.transform3x4, limits: { ...LIMITS, ...limits }, vertices: [], normals: [], faces: [], polygonCount: 0, contourCount: 0 };
   try {
     state.polygonCount = readUint(state);
     if (!validCount(state.polygonCount, 1, state.limits.maxPolygons)) return streamBad('facet-polygon-count-cap', state);
