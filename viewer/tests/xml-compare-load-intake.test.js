@@ -54,6 +54,14 @@ assert.equal(enrichedWorkspace.source.summary.lineCount, 1);
 assert.equal(enrichedWorkspace.source.records[0].lineNo, 'L-100');
 assert.equal(enrichedWorkspace.source.records[0].nodeNumber, '10');
 
+const categorized=`<CategorizedInputXML schema="categorized-inputxml/v3" sourceName="coord.xml"><Line id="L1"><LineBlock><LineNo>L1</LineNo></LineBlock><Element fromNode="10" toNode="20" elementKey="10-&gt;20"><NodesBlock><Node nodeNumber="10" role="FROM" elementKey="10-&gt;20"><DerivedCoordinateBlock><FROM_GLOBAL_X>1.000</FROM_GLOBAL_X><FROM_GLOBAL_Y>2.000</FROM_GLOBAL_Y><FROM_GLOBAL_Z>3.000</FROM_GLOBAL_Z><GLOBAL_COORD_BASIS_NODE>10</GLOBAL_COORD_BASIS_NODE></DerivedCoordinateBlock></Node></NodesBlock></Element></Line></CategorizedInputXML>`;
+const coordinateIntake=createXmlCompareLoadIntake({name:'coord_categorized_enriched.xml',text:categorized,profile:'categorized-inputxml'});
+const coordinateNode=coordinateIntake.records.find((record)=>record.levelId==='node');
+assert.equal(coordinateNode.globalX,'1.000');
+assert.equal(coordinateNode.globalY,'2.000');
+assert.equal(coordinateNode.globalZ,'3.000');
+assert.equal(coordinateNode.coordinateBasisNode,'10');
+
 const enrichedStage = JSON.stringify({
   schema: 'xml-cii2019-enriched-stage/v1',
   source: 'stage.json',
