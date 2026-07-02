@@ -19,6 +19,9 @@ assert.ok(shell.includes('<details'));
 assert.ok(shell.includes('<summary>'));
 assert.ok(shell.includes('data-table-categorized-disclosure'));
 assert.ok(shell.includes('data-table-categorized-step'));
+assert.ok(shell.includes('DELIMITER_MODE_OPTIONS'));
+assert.ok(shell.includes('data-table-categorized-delimiter-mode'));
+assert.ok(shell.includes('function renderDelimiterSelect'));
 assert.ok(!shell.includes('TABLE_CATEGORIZED_SETUP_TABS=Object.freeze([\n  ['));
 assert.ok(!shell.includes('renderTableCategorizedStagePreview'));
 
@@ -36,6 +39,8 @@ assert.ok(runtime.includes('function setActiveStep(step)'));
 assert.ok(runtime.includes("closest('[data-table-categorized-step]')"));
 assert.ok(runtime.includes('dataset.tableCategorizedStep'));
 assert.ok(runtime.includes('setActiveStep(step)'));
+assert.ok(runtime.includes("closest('[data-table-categorized-delimiter-mode]')"));
+assert.ok(runtime.includes('delimiterMode:delimiter.value'));
 assert.ok(runtime.includes('installTableCategorizedRuntime'));
 assert.ok(runtime.includes('let runtimeInstalled=false'));
 assert.equal(runtime.includes('function install(){'),false);
@@ -45,4 +50,4 @@ for(const banned of ['table-categorized-xml-source-parser.js.bak','table-categor
   assert.equal(shell.includes(banned)||runtime.includes(banned),false);
 }
 
-console.log('table-categorized-guided-shell-static: disclosure cleanup assertions passed');
+console.log('table-categorized-guided-shell-static: delimiter UI assertions passed');
