@@ -141,9 +141,13 @@ function chooseEvidenceLevel(categories, claims) {
 }
 
 function getDecoderSummaries(input) {
-  const direct = input.code4DecoderSummaries || input.decoderSummaries || [];
-  const worker = input.workerResult?.code4DecoderSummaries || [];
-  return [...array(direct), ...array(worker)];
+  return [
+    ...array(input.code4DecoderSummaries),
+    ...array(input.decoderSummaries),
+    ...array(input.parserReport?.decoderSummaries),
+    ...array(input.workerResult?.code4DecoderSummaries),
+    ...array(input.workerResult?.rvmParserReport?.decoderSummaries),
+  ];
 }
 
 function hasCode4DecoderEvidence(input) { return getDecoderSummaries(input).length > 0; }
