@@ -11,3 +11,4 @@ export * from './StageWorkerAcceptance.js';
 export * from './StageWorkerProtocol.js';
 export * from './RvmNativeRecordLedgerContract.js';
 export * from './RvmPrimitiveDecodeContract.js';
+export * from './RvmFacetGroupDecodeContract.js';
