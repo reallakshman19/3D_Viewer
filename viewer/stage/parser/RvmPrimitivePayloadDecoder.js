@@ -1,4 +1,5 @@
 import { nativeKindForCode, readWideTag } from './RvmWideRecordReader.js';
+import { decodeRvmFacetGroupPayload } from './RvmFacetGroupPayloadDecoder.js';
 import { decodeRvmPrimitiveParams, isSupportedPrimitiveCode } from './RvmPrimitiveParamsDecoder.js';
 import { columnScales, isFiniteBbox, isMatrix3x4, normalizeBbox, transformLocalBbox } from './RvmPrimitiveTransformMath.js';
 
@@ -7,6 +8,7 @@ export const RVM_PRIMITIVE_PAYLOAD_DECODER_VERSION = '20260702-rvm-primitive-pay
 export function decodeRvmPrimitivePayload(input = {}) {
   const record = input.primitiveRecord || {};
   if (!isSupportedPrimitiveCode(record.nativeCode)) return unsupported(record, 'unsupported-native-code');
+  if (Number(record.nativeCode) === 11) return decodeRvmFacetGroupPayload(input);
   const view = dataViewOf(input.arrayBuffer);
   const header = validateHeader(view, record);
   if (!header.ok) return failed(record, header.reason, header.diagnostic);
