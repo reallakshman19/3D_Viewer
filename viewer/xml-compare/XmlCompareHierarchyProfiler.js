@@ -1,4 +1,4 @@
-export const XML_COMPARE_HIERARCHY_PROFILER_SCHEMA='xml-compare-hierarchy-profile/v3';
+export const XML_COMPARE_HIERARCHY_PROFILER_SCHEMA='xml-compare-hierarchy-profile/v2';
 const clean=(v)=>String(v??'').trim();
 const uniq=(items)=>Object.freeze([...new Set((items||[]).map(clean).filter(Boolean))]);
 const val=(record={},field='')=>field.includes('.')?field.split('.').reduce((obj,key)=>obj?.[key],record):record?.[field];
