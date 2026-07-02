@@ -1,17 +1,19 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import {
-  STAGE_RVM_BINARY_PREFLIGHT_CODES,
-  createRvmBinaryPreflightReport,
-  summarizeRvmBinaryPreflight,
-  validateRvmBinaryPreflight,
-} from '../stage/worker/StageRvmBinaryPreflight.js';
+import { STAGE_RVM_BINARY_PREFLIGHT_CODES, createRvmBinaryPreflightReport, summarizeRvmBinaryPreflight, validateRvmBinaryPreflight } from '../stage/worker/StageRvmBinaryPreflight.js';
 
 test('valid tiny RVM binary preflight passes with warning summary', () => {
   const report = createRvmBinaryPreflightReport(validInput());
   assert.equal(report.valid, true, report.errors.map((item) => item.message).join('\n'));
   assert.ok(report.warnings.length >= 0);
   assert.equal(summarizeRvmBinaryPreflight(report).byteLength, 8);
+});
+
+test('wide-tag HEAD preflight is recognized without unknown-header warning', () => {
+  const report = createRvmBinaryPreflightReport({ ...validInput(), fileSize: 16, arrayBuffer: wideHeadBuffer() });
+  assert.equal(report.valid, true, report.errors.map((item) => item.message).join('\n'));
+  assert.equal(report.summary.code, STAGE_RVM_BINARY_PREFLIGHT_CODES.OK);
+  assert.equal(report.warnings.some((item) => item.code === STAGE_RVM_BINARY_PREFLIGHT_CODES.UNKNOWN_HEADER), false);
 });
 
 test('missing fileHash fails', () => {
@@ -43,13 +45,14 @@ test('unknown header warns, not fatal', () => {
 });
 
 function validInput() {
-  return {
-    jobId: 'job-rvm-preflight-001',
-    fileName: 'sample.rvm',
-    fileSize: 8,
-    fileHash: 'sha256-rvm-preflight',
-    arrayBuffer: new ArrayBuffer(8),
-  };
+  return { jobId: 'job-rvm-preflight-001', fileName: 'sample.rvm', fileSize: 8, fileHash: 'sha256-rvm-preflight', arrayBuffer: new ArrayBuffer(8) };
+}
+
+function wideHeadBuffer() {
+  const buffer = new ArrayBuffer(16);
+  const view = new DataView(buffer);
+  [...'HEAD'].forEach((char, index) => view.setUint32(index * 4, char.charCodeAt(0), false));
+  return buffer;
 }
 
 function assertPreflightError(input, code) {
