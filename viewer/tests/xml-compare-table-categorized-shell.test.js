@@ -26,6 +26,9 @@ excludesAll(shell,['(a) 🟦 Source','(b) 🟪 Fields','Base Key','Coordinate Gr
 assert.equal((shell.match(/class="is-primary"/g)||[]).length,1,'one primary CTA is visible for the active step');
 insideDisclosure(shell,'source-options','Load Coordinate Sample');
 insideDisclosure(shell,'source-options','Load Two-source Template');
+insideDisclosure(shell,'source-options','Delimiter');
+insideDisclosure(shell,'source-options','data-table-categorized-delimiter-mode');
+includesAll(shell,['Auto-detect','Comma','Pipe','Semicolon','Whitespace']);
 
 for(const term of ['Resolver','LevelDefinition','RootPartition','GraphNode','SourceRefs','Validation gate','Canonical graph']){
   assert.equal(shell.includes(term),false,`default shell exposes internal term ${term}`);
@@ -37,6 +40,9 @@ const validationResults=runCategorizerValidation({profile:PS_MAPPING_TABLE_2_SHA
 const exportResult=exportCategorizedGraphArtifacts({graph,profile:PS_MAPPING_TABLE_2_SHADOW_PROFILE,validationResults,sources:[source]});
 
 assert.deepEqual(createTableCategorizedStepStatus({sources:[source],graph,validationResults,exportResult}).export,'complete');
+const commaShell=renderTableCategorizedXmlShellHtml({sources:[{...source,delimiterMode:'comma'}],activeSourceId:'S1'});
+includesAll(commaShell,['value="comma" selected','data-table-categorized-delimiter-mode']);
+
 const columnsHtml=renderTableCategorizedXmlShellHtml({activeStep:'columns',sources:[source],profile:PS_MAPPING_TABLE_2_SHADOW_PROFILE});
 includesAll(columnsHtml,['Columns detected','Confirm Columns','Column details','PS NO','DTXR']);
 insideDisclosure(columnsHtml,'column-details','XML format');
@@ -65,4 +71,4 @@ assert.equal(levelPathKey([0,0,0]),'0.0.0');
 assert.equal(levelChildCount(recursiveProfile.levelDefinitions[0]),1);
 assert.equal(flattenLevelDefinitions(recursiveProfile.levelDefinitions).length,3);
 
-console.log('xml-compare-table-categorized-shell: disclosure cleanup assertions passed');
+console.log('xml-compare-table-categorized-shell: disclosure and delimiter assertions passed');
