@@ -4,7 +4,7 @@ import { exportCategorizedGraphArtifacts } from '../xml-compare/table-categorize
 import { buildCategorizedGraph } from '../xml-compare/table-categorizer/table-categorized-xml-graph-builder.js';
 import { PS_MAPPING_TABLE_2_SAMPLE, PS_MAPPING_TABLE_2_SHADOW_PROFILE } from '../xml-compare/table-categorizer/table-categorized-xml-pilot-profiles.js';
 import { parseTableSource } from '../xml-compare/table-categorizer/table-categorized-xml-source-parser.js';
-import { TABLE_CATEGORIZED_XML_STAGE_PREVIEW_STYLE_ID, buildStagePreviewModel, previewStageForSetupTab, renderTableCategorizedStagePreview } from '../xml-compare/table-categorizer/table-categorized-xml-stage-preview.js';
+import { TABLE_CATEGORIZED_XML_STAGE_PREVIEW_STYLE_ID, buildStagePreviewModel, injectStagePreviewStyle, previewStageForSetupTab, renderTableCategorizedStagePreview } from '../xml-compare/table-categorizer/table-categorized-xml-stage-preview.js';
 import { runCategorizerValidation } from '../xml-compare/table-categorizer/table-categorized-xml-validation.js';
 
 const source=parseTableSource(PS_MAPPING_TABLE_2_SAMPLE,{sourceId:'S1',sourceName:'Table 2 - Model PS Data'});
@@ -19,6 +19,26 @@ assert.equal(previewStageForSetupTab('structure'),'graph');
 assert.equal(previewStageForSetupTab('quality'),'graph');
 assert.equal(previewStageForSetupTab('output'),'xml');
 assert.equal(previewStageForSetupTab('recipe'),'base');
+
+const fakeDocument={
+  styleNode:null,
+  getElementById(id){return this.styleNode?.id===id?this.styleNode:null;},
+  createElement(tag){return {tagName:tag,id:'',textContent:''};},
+  head:{append(node){fakeDocument.styleNode=node;}}
+};
+globalThis.document=fakeDocument;
+injectStagePreviewStyle();
+assert.equal(fakeDocument.styleNode.id,TABLE_CATEGORIZED_XML_STAGE_PREVIEW_STYLE_ID);
+assert.ok(fakeDocument.styleNode.textContent.includes('.table-categorized-xml-tabs button small'));
+assert.ok(fakeDocument.styleNode.textContent.includes('font-size:0.5em'));
+assert.ok(fakeDocument.styleNode.textContent.includes('button.is-status-ready'));
+assert.ok(fakeDocument.styleNode.textContent.includes('rgba(34,197,94'));
+assert.ok(fakeDocument.styleNode.textContent.includes('button.is-status-review'));
+assert.ok(fakeDocument.styleNode.textContent.includes('rgba(245,158,11'));
+assert.ok(fakeDocument.styleNode.textContent.includes('button.is-status-blocked'));
+assert.ok(fakeDocument.styleNode.textContent.includes('rgba(239,68,68'));
+assert.ok(fakeDocument.styleNode.textContent.includes('.table-categorized-setup-tabs button.is-disabled'));
+delete globalThis.document;
 
 const baseModel=buildStagePreviewModel({activeTab:'levels',sources:[source],activeSourceId:'S1',profile:PS_MAPPING_TABLE_2_SHADOW_PROFILE},'family');
 assert.equal(baseModel.rows.length,6);
