@@ -1,4 +1,4 @@
-export const CATEGORIZED_INPUTXML_CONVERTER_SCHEMA='categorized-inputxml-converter/v6';
+export const CATEGORIZED_INPUTXML_CONVERTER_SCHEMA='categorized-inputxml-converter/v7';
 
 const esc=(value)=>String(value??'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll("'",'&apos;');
 const clean=(value)=>String(value??'').trim();
@@ -13,7 +13,7 @@ const BLOCK_FIELDS=Object.freeze({
   TemperatureBlock:['TEMP_EXP_C1','TEMP_EXP_C2','TEMP_EXP_C3','TEMP_EXP_C4','TEMP_EXP_C5','TEMP_EXP_C6','TEMP_EXP_C7','TEMP_EXP_C8','TEMP_EXP_C9'],
   MaterialBlock:['MATERIAL_NUM','MATERIAL_NAME','CORR_ALLOW','MODULUS','HOT_MOD1','HOT_MOD2','HOT_MOD3','HOT_MOD4','HOT_MOD5','HOT_MOD6','HOT_MOD7','HOT_MOD8','HOT_MOD9','POISSONS','PIPE_DENSITY','MILL_TOL_PLUS','MILL_TOL_MINUS','SEAM_WELD'],
   FromCoordinateBlock:['FROM_GLOBAL_X','FROM_GLOBAL_Y','FROM_GLOBAL_Z','GLOBAL_COORD_BASIS_NODE'],
-  ToCoordinateBlock:['TO_GLOBAL_X','TO_GLOBAL_Y','TO_GLOBAL_Z','TO_GLOBAL_COORD_BASIS_NODE']
+  ToCoordinateBlock:['TO_GLOBAL_X','TO_GLOBAL_Y','TO_GLOBAL_Z','GLOBAL_COORD_BASIS_NODE']
 });
 const CHILD_BLOCKS=Object.freeze({BEND:'BendBlock',RIGID:'RigidBlock',FLANGES:'FlangeBlock'});
 const NODE_BLOCKS=Object.freeze({RESTRAINT:'RestraintsBlock',DISPLACEMENTS:'DisplacementsBlock',FORCESMOMENTS:'ForcesMomentsBlock'});
