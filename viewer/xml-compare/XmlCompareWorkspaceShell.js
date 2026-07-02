@@ -1,6 +1,6 @@
 import { renderXmlCompareGraphCanvasHtml } from './XmlCompareGraphCanvas.js';
 import { renderXmlCompareGraphConnectorLaneHtml } from './XmlCompareGraphConnectorLane.js';
-import { renderXmlCompareAutoMapPopupHtml } from './XmlCompareAutoMapPopup.js?v=20260702-selected-item-compare-fields-1';
+import { renderXmlCompareAutoMapPopupHtml } from './XmlCompareAutoMapPopup.js?v=20260702-transfer-node-owned-blocks-1';
 import { renderXmlCompareDetailsPanelHtml } from './XmlCompareDetailsPanel.js';
 import { renderXmlCompareDiagnosticsPanelHtml } from './XmlCompareDiagnosticsPanel.js';
 import { renderXmlCompareDebugPanelHtml } from './XmlCompareDebugPanel.js';
