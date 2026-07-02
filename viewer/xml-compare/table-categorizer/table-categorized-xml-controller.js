@@ -131,7 +131,7 @@ function syncSourceDraftFromPopup(popup,state={}){
   const activeSourceId=popup.querySelector('[data-table-categorized-active-source]')?.value||state.activeSourceId||'S1';
   const sourceName=popup.querySelector('[data-table-categorized-source-name]')?.value;
   const sourceText=popup.querySelector('[data-table-categorized-source-text]')?.value;
-  if(sourceName===undefined&&sourceText===undefined)return {...state,activeSourceId};
+  if(sourceName===undefined&&sourceText===undefined)return state;
   const sources=ensureSources(state.sources,state.source,activeSourceId).map((source)=>source.sourceId===activeSourceId?{...source,sourceName:sourceName??source.sourceName,sourceText:sourceText??source.sourceText}:source);
   return {...state,sources,activeSourceId};
 }
