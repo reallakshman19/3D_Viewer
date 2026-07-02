@@ -12,14 +12,14 @@ const validationResults=runCategorizerValidation({profile:PS_MAPPING_TABLE_2_SHA
 const result=exportCategorizedGraphArtifacts({graph,profile:PS_MAPPING_TABLE_2_SHADOW_PROFILE,validationResults,sources:[source]});
 
 assert.equal(result.ok,true);
-assert.equal((result.xmlText.match(/<CategorizedTableXml\b/g)||[]).length,1);
-assert.ok(result.xmlText.trim().endsWith('</CategorizedTableXml>'));
-assert.ok(result.xmlText.includes('<RootPartition key="MODEL_SIDE"'));
-assert.ok(result.xmlText.includes('<SupportFamily key="PS-XYZ__C001"'));
-assert.ok(result.xmlText.includes('<SupportOccurrence key="PS-XYZ.10"'));
-assert.ok(result.xmlText.includes('<SupportFeature key="PS-XYZ.1_GUIDE"'));
-assert.ok(result.xmlText.includes('<Gap key="PS-XYZ.1_GUIDE_Gap"'));
-assert.ok(result.xmlText.indexOf('<SupportFeature key="PS-XYZ.1_GUIDE"')<result.xmlText.indexOf('<Gap key="PS-XYZ.1_GUIDE_Gap"'));
+assert.equal((result.xmlText.match(/<categorizedTableGraph\b/g)||[]).length,1);
+assert.ok(result.xmlText.trim().endsWith('</categorizedTableGraph>'));
+assert.ok(result.xmlText.includes('<rootPartition key="MODEL_SIDE"'));
+assert.ok(result.xmlText.includes('<supportFamily key="PS-XYZ__C001"'));
+assert.ok(result.xmlText.includes('<supportOccurrence key="PS-XYZ.10"'));
+assert.ok(result.xmlText.includes('<supportFeature key="PS-XYZ.1_GUIDE"'));
+assert.ok(result.xmlText.includes('<gap key="PS-XYZ.1_GUIDE_Gap"'));
+assert.ok(result.xmlText.indexOf('<supportFeature key="PS-XYZ.1_GUIDE"')<result.xmlText.indexOf('<gap key="PS-XYZ.1_GUIDE_Gap"'));
 assert.equal(result.xmlText.includes('keyResolver'),false);
 assert.equal(result.xmlText.includes('fieldResolvers'),false);
 assert.equal(result.xmlText.includes('<CategorizedInputXML'),false);
@@ -36,6 +36,15 @@ const escapedGraph={...graph,documentRootNodeIds:['root'],nodes:[
 const escaped=exportCategorizedGraphArtifacts({graph:escapedGraph,profile:PS_MAPPING_TABLE_2_SHADOW_PROFILE,validationResults:[],sources:[source]});
 assert.ok(escaped.xmlText.includes('A&amp;B&lt;root&gt;&quot;&apos;'));
 assert.equal(xmlAttr('&<>"\''),'&amp;&lt;&gt;&quot;&apos;');
+
+const customProfile={...PS_MAPPING_TABLE_2_SHADOW_PROFILE,levelDefinitions:[{levelId:'categorizedTableGraph',xmlTag:'CustomRoot',levelType:'container',creationMode:'static',key:'Root',documentRoot:true,children:[{levelId:'rootPartition',xmlTag:'ModelSection',levelType:'partition',creationMode:'static',key:'MODEL_SIDE',children:[{levelId:'supportOccurrence',xmlTag:'Support',levelType:'occurrence',creationMode:'one-per-row'}]}]}]};
+const customGraph=buildCategorizedGraph(customProfile,[source]);
+const custom=exportCategorizedGraphArtifacts({graph:customGraph,profile:customProfile,validationResults:[],sources:[source]});
+assert.ok(custom.xmlText.includes('<Support '));
+assert.ok(!custom.xmlText.includes('<supportOccurrence'));
+assert.equal((custom.xmlText.match(/<CustomRoot /g)||[]).length,1);
+assert.equal((custom.xmlText.match(/<\/CustomRoot>/g)||[]).length,1);
+assert.ok(custom.xmlText.includes('<ModelSection '));
 
 const graphJson=JSON.parse(result.graphJson);
 const profileJson=JSON.parse(result.profileJson);
