@@ -28,6 +28,10 @@ assert.ok(runtime.includes("doc.addEventListener('change',changeHandler,{capture
 assert.ok(runtime.includes('new MutationObserver(()=>injectButton(doc))'));
 assert.ok(runtime.includes('installTableCategorizedRuntime();'));
 assert.equal(runtime.includes('function install(){'),false);
+assert.equal(runtime.includes("document.addEventListener('click',clickHandler"),false);
+assert.equal(runtime.includes("document.addEventListener('input',inputHandler"),false);
+assert.equal(runtime.includes("document.addEventListener('change',changeHandler"),false);
+assert.equal(runtime.includes('new MutationObserver(()=>injectButton()).observe'),false);
 
 assert.ok(shell.includes('let loadTableCategorizedPromise=null'));
 assert.ok(shell.includes('if(loadTableCategorizedPromise)return'));
