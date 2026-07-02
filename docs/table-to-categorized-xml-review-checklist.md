@@ -27,6 +27,15 @@
 - [ ] Existing parser/graph/export/canvas behavior is preserved.
 - [ ] Runtime ownership guard from PR #707 remains intact.
 
+## Progressive disclosure checklist
+
+- [ ] One primary CTA is visible per step.
+- [ ] Secondary/expert controls are inside inline disclosures.
+- [ ] No separate Advanced tab/page exists.
+- [ ] Default UI avoids internal implementation terms.
+- [ ] Canvas and comparison actions remain explicit and user-triggered.
+- [ ] Parser/graph/export/canvas behavior is unchanged.
+
 ## UI checklist
 
 - [ ] `Table to Categorized XML` appears near `Line-wise XML Enrichment / Categorized XML`.
