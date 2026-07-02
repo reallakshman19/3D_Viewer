@@ -18,17 +18,23 @@
 - [ ] Runtime installation is idempotent.
 - [ ] No duplicate document-level click/change/input handlers are registered for the builder.
 
+## Guided shell checklist
+
+- [ ] Table-to-Categorized UI has one visible 5-step flow.
+- [ ] Default UI does not show competing workflow/setup/preview tab systems.
+- [ ] One primary CTA appears per step.
+- [ ] Right-side preview follows the active step.
+- [ ] Existing parser/graph/export/canvas behavior is preserved.
+- [ ] Runtime ownership guard from PR #707 remains intact.
+
 ## UI checklist
 
 - [ ] `Table to Categorized XML` appears near `Line-wise XML Enrichment / Categorized XML`.
 - [ ] Existing line-wise categorized XML workflow still opens and behaves as before.
-- [ ] The new shell is labeled shadow-mode / preview-only.
 - [ ] The shell opens and closes cleanly.
-- [ ] The shell contains Source Setup, Level Designer, Graph Preview, Validation, and Export / Link sections.
-- [ ] Only Source Setup is active for Phase 0-2.
-- [ ] Placeholder sections state: `Coming in later phase — no graph generation yet.`
-- [ ] Export / Link buttons are disabled.
-- [ ] Export / Link states that XML export and canvas handoff are disabled in Phase 0-2.
+- [ ] The visible flow is `1 Table → 2 Columns → 3 Structure → 4 Preview → 5 Export`.
+- [ ] Locked/not-ready steps explain what must happen first.
+- [ ] Export / Link actions remain explicit and do not auto-mutate canvases.
 
 ## Source import checklist
 
@@ -59,15 +65,13 @@
 
 ## Non-mutation checklist
 
-- [ ] SourceXML canvas is not mutated.
-- [ ] TargetXML canvas is not mutated.
-- [ ] No categorized XML is generated.
-- [ ] No XML download is enabled.
-- [ ] No resolver pipeline runs.
-- [ ] No graph nodes are generated.
-- [ ] No graph edges are generated.
-- [ ] No PS Mapping comparison is implemented.
-- [ ] No PSNM integration is implemented.
+- [ ] SourceXML canvas is not mutated automatically.
+- [ ] TargetXML canvas is not mutated automatically.
+- [ ] Resolver pipeline behavior is not changed by the shell revamp.
+- [ ] Graph builder behavior is not changed by the shell revamp.
+- [ ] XML exporter behavior is not changed by the shell revamp.
+- [ ] PS Mapping comparison behavior is not changed by the shell revamp.
+- [ ] PSNM integration is not introduced.
 
 ## Validation gate checklist for future phases
 
