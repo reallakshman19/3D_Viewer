@@ -10,3 +10,4 @@ export * from './StageValidation.js';
 export * from './StageWorkerAcceptance.js';
 export * from './StageWorkerProtocol.js';
 export * from './RvmNativeRecordLedgerContract.js';
+export * from './RvmPrimitiveDecodeContract.js';
