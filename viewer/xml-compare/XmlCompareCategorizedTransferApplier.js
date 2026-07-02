@@ -1,4 +1,4 @@
-export const XML_COMPARE_CATEGORIZED_TRANSFER_APPLIER_SCHEMA='xml-compare-categorized-transfer-applier/v1';
+export const XML_COMPARE_CATEGORIZED_TRANSFER_APPLIER_SCHEMA='xml-compare-categorized-transfer-applier/v2';
 
 const clean=(value)=>String(value??'').trim();
 const NODE_REF_ATTRS=Object.freeze(['NODE','NODE_NUM','nodeNumber','nodeRef']);
@@ -26,6 +26,12 @@ function splitElements(lineXml=''){
   let match;while((match=re.exec(String(lineXml))))rows.push({start:match.index,end:match.index+match[0].length,xml:match[0],open:match[0].match(new RegExp(`^<Element\\b${OPEN_TAG}>`,'i'))?.[0]||''});
   return rows;
 }
+function splitNodes(elementXml=''){
+  const rows=[];
+  const re=new RegExp(`<Node\\b${OPEN_TAG}>[\\s\\S]*?<\\/Node>`,'gi');
+  let match;while((match=re.exec(String(elementXml))))rows.push({start:match.index,end:match.index+match[0].length,xml:match[0],open:match[0].match(new RegExp(`^<Node\\b${OPEN_TAG}>`,'i'))?.[0]||''});
+  return rows;
+}
 function findLine(xml='',lineId=''){
   const wanted=clean(lineId);
   return splitLines(xml).find((line)=>lineIdFromOpen(line.open)===wanted)||null;
@@ -37,9 +43,23 @@ function findElement(xml='',elementKeyValue=''){
   }
   return null;
 }
+function nodeNumberFromOpen(open=''){const attrs=attrsOf(open);return clean(attrs.nodeNumber||attrs.NODE||attrs.NODE_NUM||attrs.nodeRef||'').replace(/\.0+$/,'');}
+function nodeRoleFromOpen(open=''){return clean(attrsOf(open).role||attrsOf(open).ROLE||'');}
+function findNodeInElement(elementXml='',nodeNumber='',role=''){
+  const wanted=clean(nodeNumber).replace(/\.0+$/,''),wantedRole=clean(role);
+  if(!wanted)return null;
+  for(const node of splitNodes(elementXml)){
+    if(nodeNumberFromOpen(node.open)!==wanted)continue;
+    if(wantedRole&&nodeRoleFromOpen(node.open)&&nodeRoleFromOpen(node.open)!==wantedRole)continue;
+    return node;
+  }
+  return null;
+}
 function findBlock(container='',blockName=''){return String(container).match(tagRe(blockName))?.[0]||'';}
 function findBlocks(container='',blockNames=[]){return blockNames.map((name)=>findBlock(container,name)).filter(Boolean);}
 function removeBlocks(container='',blockNames=[]){let out=String(container);for(const name of blockNames)out=out.replace(tagReGlobal(name),'');return out;}
+function blockNameOf(block=''){return clean(String(block).match(/^<([A-Za-z_][\w:.-]*)\b/)?.[1]||'');}
+function blockSummary(block=''){const name=blockNameOf(block),count=(String(block).match(/<[A-Za-z_][\w:.-]*\b/g)||[]).length-1;return {blockName:name,itemCount:Math.max(0,count),xml:clean(block)};}
 function replaceRange(text='',start=0,end=0,replacement=''){return `${text.slice(0,start)}${replacement}${text.slice(end)}`;}
 function insertBeforeClosing(container='',closeTag='',content=''){
   const index=container.lastIndexOf(closeTag);
@@ -63,17 +83,24 @@ function mergePolicyTarget(target='',incoming='',blockNames=[],policy='replace')
   if(policy==='skip-existing'&&blockNames.some((block)=>findBlock(target,block)))return target;
   return insertBeforeClosing(removeBlocks(target,blockNames),'</Element>',`\n${cleanIncoming}`);
 }
+function mergePolicyNode(nodeXml='',incomingBlocks=[],blockNames=[],policy='replace'){
+  const incoming=clean(incomingBlocks.join('\n'));
+  if(!incoming)return nodeXml;
+  if(policy==='append')return insertBeforeClosing(nodeXml,'</Node>',`\n${incoming}`);
+  if(policy==='skip-existing'&&blockNames.some((block)=>findBlock(nodeXml,block)))return nodeXml;
+  return insertBeforeClosing(removeBlocks(nodeXml,blockNames),'</Node>',`\n${incoming}`);
+}
 function updateElement(xml='',elementKeyValue='',updater=(element)=>element){
   const found=findElement(xml,elementKeyValue);
   if(!found)return {xml,updated:false,reason:'target-element-not-found'};
   const next=updater(found.xml);
-  return {xml:replaceRange(xml,found.start,found.end,next),updated:next!==found.xml};
+  return {xml:replaceRange(xml,found.start,found.end,next),updated:next!==found.xml,before:found.xml,after:next};
 }
 function updateLine(xml='',lineId='',updater=(line)=>line){
   const found=findLine(xml,lineId);
   if(!found)return {xml,updated:false,reason:'target-line-not-found'};
   const next=updater(found.xml);
-  return {xml:replaceRange(xml,found.start,found.end,next),updated:next!==found.xml};
+  return {xml:replaceRange(xml,found.start,found.end,next),updated:next!==found.xml,before:found.xml,after:next};
 }
 function ensureLineBlocks(lineXml=''){
   if(/<LineBlocks\b/i.test(lineXml))return lineXml;
@@ -91,27 +118,69 @@ function updateLineBlocks(lineXml='',blocks=[],policy='replace'){
 }
 function sourceBlocksByElement(sourceXml='',elementKeyValue='',blockNames=[]){const found=findElement(sourceXml,elementKeyValue);return found?findBlocks(found.xml,blockNames):[];}
 function sourceBlocksByLine(sourceXml='',lineId='',blockNames=[]){const found=findLine(sourceXml,lineId);return found?findBlocks(found.xml,blockNames):[];}
-function sourceNodeBlocks(sourceXml='',sourceNode='',blockNames=[]){
+function directNodeBlocks(elementXml='',sourceNode='',blockNames=[],role=''){
+  const node=findNodeInElement(elementXml,sourceNode,role);
+  return node?findBlocks(node.xml,blockNames):[];
+}
+function legacyElementNodeBlocks(elementXml='',sourceNode='',blockNames=[]){
   const blocks=[];
-  for(const line of splitLines(sourceXml))for(const element of splitElements(line.xml))for(const blockName of blockNames){
-    const block=findBlock(element.xml,blockName);
+  for(const blockName of blockNames){
+    const block=findBlock(elementXml,blockName);
     if(block&&new RegExp(`\\b(?:NODE|NODE_NUM|nodeNumber|nodeRef)\\s*=\\s*["']${escapeRegExp(clean(sourceNode))}(?:\\.0+)?["']`,'i').test(block))blocks.push(block);
   }
   return blocks;
 }
+function sourceNodeBlocks(sourceXml='',sourceNode='',blockNames=[],sourceElement='',sourceRole=''){
+  const blocks=[];
+  const candidateElements=[];
+  if(clean(sourceElement)){const found=findElement(sourceXml,sourceElement);if(found)candidateElements.push(found);}
+  if(!candidateElements.length)for(const line of splitLines(sourceXml))candidateElements.push(...splitElements(line.xml));
+  for(const element of candidateElements){
+    const direct=directNodeBlocks(element.xml,sourceNode,blockNames,sourceRole);
+    if(direct.length)blocks.push(...direct);
+    else blocks.push(...legacyElementNodeBlocks(element.xml,sourceNode,blockNames));
+  }
+  return blocks;
+}
+function targetBlockSnapshot(elementXml='',targetNode='',targetRole='',blockNames=[]){
+  const node=findNodeInElement(elementXml,targetNode,targetRole);
+  const container=node?.xml||elementXml;
+  return blockNames.map((name)=>({blockName:name,before:findBlock(container,name)}));
+}
+function updateNodeInElement(elementXml='',targetNode='',targetRole='',incomingBlocks=[],blockNames=[],policy='replace'){
+  const node=findNodeInElement(elementXml,targetNode,targetRole);
+  if(!node)return {xml:mergePolicyTarget(elementXml,incomingBlocks.join('\n'),blockNames,policy),updated:true,reason:'target-node-not-found-used-element-fallback',beforeBlocks:targetBlockSnapshot(elementXml,targetNode,targetRole,blockNames)};
+  const beforeBlocks=targetBlockSnapshot(elementXml,targetNode,targetRole,blockNames);
+  const nextNode=mergePolicyNode(node.xml,incomingBlocks,blockNames,policy);
+  return {xml:replaceRange(elementXml,node.start,node.end,nextNode),updated:nextNode!==node.xml,beforeBlocks};
+}
+function changedBlocks(beforeBlocks=[],afterElement='',targetNode='',targetRole='',blockNames=[]){
+  const node=findNodeInElement(afterElement,targetNode,targetRole);
+  const container=node?.xml||afterElement;
+  return blockNames.map((name)=>{
+    const before=beforeBlocks.find((row)=>row.blockName===name)?.before||'';
+    const after=findBlock(container,name)||'';
+    const status=!before&&after?'added':before&&after&&before!==after?'replaced':before&&!after?'removed':'unchanged';
+    return {blockName:name,status,before:blockSummary(before),after:blockSummary(after)};
+  });
+}
 export function applyNodeBlockTransfer(targetXml='',sourceXml='',plan={},options={}){
   const blockNames=Array.isArray(plan.selectedBlocks)?plan.selectedBlocks:[];
+  const approvedPairIds=new Set(Array.isArray(plan.approvedPairIds)?plan.approvedPairIds.map(clean).filter(Boolean):[]);
   let xml=String(targetXml??'');
   const audit=[];
-  for(const pair of plan.pairs||[]){
-    const sourceNode=clean(pair.sourceNode),targetNode=clean(pair.targetNode);
-    const blocks=sourceNodeBlocks(sourceXml,sourceNode,blockNames).map((block)=>rewriteNodeReferences(block,sourceNode,targetNode));
-    const targetElementKey=clean(pair.targetElement)||'';
-    if(!blocks.length){audit.push({scope:'node',sourceNode,targetNode,status:'skipped',reason:'no-source-node-blocks'});continue;}
-    if(!targetElementKey){audit.push({scope:'node',sourceNode,targetNode,status:'skipped',reason:'target-element-required'});continue;}
-    const result=updateElement(xml,targetElementKey,(element)=>mergePolicyTarget(element,blocks.join('\n'),blockNames,options.policy||'replace'));
+  for(const [index,pair] of (plan.pairs||[]).entries()){
+    const pairId=clean(pair.id||pair.pairId||`${pair.sourceNode || ''}->${pair.targetNode || ''}:${pair.targetElement || ''}`)||String(index);
+    if(approvedPairIds.size&&!approvedPairIds.has(pairId)){audit.push({scope:'node',pairId,status:'skipped',reason:'not-approved'});continue;}
+    const sourceNode=clean(pair.sourceNode),targetNode=clean(pair.targetNode),sourceElement=clean(pair.sourceElement),targetElementKey=clean(pair.targetElement)||'',sourceRole=clean(pair.sourceRole),targetRole=clean(pair.targetRole||sourceRole);
+    const blocks=sourceNodeBlocks(sourceXml,sourceNode,blockNames,sourceElement,sourceRole).map((block)=>rewriteNodeReferences(block,sourceNode,targetNode));
+    if(!blocks.length){audit.push({scope:'node',pairId,sourceNode,targetNode,status:'skipped',reason:'no-source-node-blocks'});continue;}
+    if(!targetElementKey){audit.push({scope:'node',pairId,sourceNode,targetNode,status:'skipped',reason:'target-element-required'});continue;}
+    let beforeBlocks=[];
+    const result=updateElement(xml,targetElementKey,(element)=>{const next=updateNodeInElement(element,targetNode,targetRole,blocks,blockNames,options.policy||'replace');beforeBlocks=next.beforeBlocks||[];return next.xml;});
     xml=result.xml;
-    audit.push({scope:'node',sourceNode,targetNode,targetElement:targetElementKey,status:result.updated?'updated':'unchanged',blocks:blockNames});
+    const changed=result.after?changedBlocks(beforeBlocks,result.after,targetNode,targetRole,blockNames):[];
+    audit.push({scope:'node',pairId,sourceNode,targetNode,sourceElement,targetElement:targetElementKey,status:result.updated?'updated':'unchanged',blocks:blockNames,changedBlocks:changed});
   }
   return {xml,audit};
 }
@@ -150,4 +219,4 @@ export function applyCategorizedTransferPlan(targetXml='',sourceXml='',plan={},o
   if(scope==='line')return applyLineBlockTransfer(targetXml,sourceXml,plan,options);
   return {xml:String(targetXml??''),audit:[{scope,status:'skipped',reason:'unsupported-transfer-scope'}]};
 }
-export const _test=Object.freeze({attrsOf,lineIdFromOpen,elementKey,splitLines,splitElements,findLine,findElement,findBlock,findBlocks,rewriteNodeReferences,sourceNodeBlocks,sourceBlocksByElement,sourceBlocksByLine,applyCategorizedTransferPlan});
+export const _test=Object.freeze({attrsOf,lineIdFromOpen,elementKey,splitLines,splitElements,splitNodes,findLine,findElement,findNodeInElement,findBlock,findBlocks,rewriteNodeReferences,sourceNodeBlocks,sourceBlocksByElement,sourceBlocksByLine,applyCategorizedTransferPlan,blockSummary,changedBlocks});
