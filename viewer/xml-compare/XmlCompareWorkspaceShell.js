@@ -1,6 +1,6 @@
 import { renderXmlCompareGraphCanvasHtml } from './XmlCompareGraphCanvas.js';
 import { renderXmlCompareGraphConnectorLaneHtml } from './XmlCompareGraphConnectorLane.js';
-import { renderXmlCompareAutoMapPopupHtml } from './XmlCompareAutoMapPopup.js?v=20260702-transfer-approval-preview-1';
+import { renderXmlCompareAutoMapPopupHtml } from './XmlCompareAutoMapPopup.js?v=20260702-physical-node-block-transfer-1';
 import { renderXmlCompareDetailsPanelHtml } from './XmlCompareDetailsPanel.js';
 import { renderXmlCompareDiagnosticsPanelHtml } from './XmlCompareDiagnosticsPanel.js';
 import { renderXmlCompareDebugPanelHtml } from './XmlCompareDebugPanel.js';
@@ -9,7 +9,7 @@ import { createXmlCompareTransferPreview } from './XmlCompareTransferPreview.js'
 import { renderXmlCompareTransferPreviewPanelHtml } from './XmlCompareTransferPreviewPanel.js';
 import { availableCompareFields, normalizeCompareFields } from './XmlCompareFieldCompareModel.js';
 
-export const XML_COMPARE_WORKSPACE_SHELL_SCHEMA='xml-compare-workspace-shell/v20';
+export const XML_COMPARE_WORKSPACE_SHELL_SCHEMA='xml-compare-workspace-shell/v21';
 
 let loadDiagnosticsPromise=null;
 let loadSamplePickersPromise=null;

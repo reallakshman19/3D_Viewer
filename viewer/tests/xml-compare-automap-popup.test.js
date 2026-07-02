@@ -46,6 +46,37 @@ assert.match(html,/DisplacementsBlock/);
 assert.match(html,/Source available \/ Target available/);
 assert.match(html,/Source available \/ Target missing/);
 assert.doesNotMatch(html,/MiscBlock/);
+
+const src35To={uid:'S-30-35-TO',levelId:'node',lineNo:'LINENO1',elementKey:'30->35',nodeNumber:'35',role:'TO',position:{x:0,y:0,z:0},points:[{x:0,y:0,z:0}]};
+const src35From={uid:'S-35-70-FROM',levelId:'node',lineNo:'LINENO1',elementKey:'35->70',nodeNumber:'35',role:'FROM',position:{x:25,y:0,z:0},points:[{x:25,y:0,z:0}]};
+const tgt1030To={uid:'T-1020-1030-TO',levelId:'node',lineNo:'LINENO1',elementKey:'1020->1030',nodeNumber:'1030',role:'TO',position:{x:0,y:0,z:0},points:[{x:0,y:0,z:0}]};
+const tgt1030From={uid:'T-1030-1040-FROM',levelId:'node',lineNo:'LINENO1',elementKey:'1030->1040',nodeNumber:'1030',role:'FROM',position:{x:25,y:0,z:0},points:[{x:25,y:0,z:0}]};
+const physicalRow={index:6,source:src35From,target:tgt1030From,sourceFields:{globalX:'23227.580'},targetFields:{globalX:'123227.602'},delta:{dx:0,dy:0,dz:25,srss:25,maxAbs:25},match:{}};
+const physicalSourceEvidence=[
+  {uid:'S-30-35-TO-R',levelId:'nodeEvidence',recordKind:'NODE_EVIDENCE',lineNo:'LINENO1',elementKey:'30->35',nodeNumber:'35',role:'TO',blockName:'RestraintsBlock',evidenceKind:'RestraintsBlock',itemCount:3,compactFields:{TYPE:'17,1,3'}},
+  {uid:'S-35-70-FROM-R',levelId:'nodeEvidence',recordKind:'NODE_EVIDENCE',lineNo:'LINENO1',elementKey:'35->70',nodeNumber:'35',role:'FROM',blockName:'RestraintsBlock',evidenceKind:'RestraintsBlock',itemCount:0,compactFields:{}},
+  {uid:'S-35-70-FROM-D',levelId:'nodeEvidence',recordKind:'NODE_EVIDENCE',lineNo:'LINENO1',elementKey:'35->70',nodeNumber:'35',role:'FROM',blockName:'DerivedCoordinateBlock',evidenceKind:'DerivedCoordinateBlock',itemCount:4,compactFields:{globalX:'23227.580'}}
+];
+const physicalTargetEvidence=[
+  {uid:'T-1020-1030-TO-R',levelId:'nodeEvidence',recordKind:'NODE_EVIDENCE',lineNo:'LINENO1',elementKey:'1020->1030',nodeNumber:'1030',role:'TO',blockName:'RestraintsBlock',evidenceKind:'RestraintsBlock',itemCount:2,compactFields:{TYPE:'17,3'}},
+  {uid:'T-1030-1040-FROM-R',levelId:'nodeEvidence',recordKind:'NODE_EVIDENCE',lineNo:'LINENO1',elementKey:'1030->1040',nodeNumber:'1030',role:'FROM',blockName:'RestraintsBlock',evidenceKind:'RestraintsBlock',itemCount:0,compactFields:{}},
+  {uid:'T-1030-1040-FROM-D',levelId:'nodeEvidence',recordKind:'NODE_EVIDENCE',lineNo:'LINENO1',elementKey:'1030->1040',nodeNumber:'1030',role:'FROM',blockName:'DerivedCoordinateBlock',evidenceKind:'DerivedCoordinateBlock',itemCount:4,compactFields:{globalX:'123227.602'}}
+];
+const physicalCases=popupTest.nodeTransferCases([physicalRow],{records:[src35From],baseRecords:[src35To,src35From,...physicalSourceEvidence]},{records:[tgt1030From],baseRecords:[tgt1030To,tgt1030From,...physicalTargetEvidence]});
+const restraintCase=physicalCases.find((item)=>item.blockName==='RestraintsBlock');
+assert.equal(restraintCase.sourceElement,'30->35');
+assert.equal(restraintCase.sourceRole,'TO');
+assert.equal(restraintCase.targetElement,'1020->1030');
+assert.equal(restraintCase.targetRole,'TO');
+assert.equal(restraintCase.resolution,'physical-node-block-occurrence');
+const physicalPlan=popupTest.nodeTransferPlan([physicalRow],[],['RestraintsBlock'],physicalCases);
+assert.equal(physicalPlan.length,1);
+assert.equal(physicalPlan[0].sourceElement,'30->35');
+assert.equal(physicalPlan[0].sourceRole,'TO');
+assert.equal(physicalPlan[0].targetElement,'1020->1030');
+assert.equal(physicalPlan[0].targetRole,'TO');
+assert.deepEqual(physicalPlan[0].selectedBlocks,['RestraintsBlock']);
+assert.ok(physicalPlan[0].approvedCaseIds[0].includes('30->35:35->1020->1030:1030:RestraintsBlock'));
 const noBlocks=renderXmlCompareAutoMapPopupHtml({matchMap:request,source:{records:[sourceNode]},target:{records:[targetNode]}});
 assert.match(noBlocks,/No node-owned blocks found for selected node identity/);
 console.log('xml-compare-automap-popup: all assertions passed');
