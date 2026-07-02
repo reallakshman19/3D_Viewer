@@ -110,7 +110,7 @@ function compatibleEnd(nextOffset, ledgerEndOffset, byteLength) { return nextOff
 function validCount(value, min, max) { return Number.isInteger(value) && value >= min && value <= max; }
 function streamBad(reason, state) { return { ok: false, reason, diagnostic: diag('RVM_FACET_STREAM_LIMIT', reason, 'warning', { polygonCount: state.polygonCount, contourCount: state.contourCount, vertexCount: state.vertices.length }) }; }
 function bad(reason, code, message) { return { ok: false, reason, diagnostic: diag(code, message, 'error') }; }
-function dataViewOf(value) { if (value instanceof ArrayBuffer) return new DataView(value); if (ArrayBuffer.isView(value)) return new DataView(value.buffer, value.byteOffset, value.byteLength); return new DataView(value.buffer, value.byteOffset, value.byteLength); }
+function dataViewOf(value) { if (value instanceof ArrayBuffer) return new DataView(value); if (ArrayBuffer.isView(value)) return new DataView(value.buffer, value.byteOffset, value.byteLength); return new DataView(new ArrayBuffer(0)); }
 function diag(code, message, severity, ref = {}) { return { severity, code, message, ref }; }
 function numberOrZero(value) { const number = Number(value); return Number.isFinite(number) ? number : 0; }
 function round(value) { return Math.round(Number(value) * 1e6) / 1e6; }
