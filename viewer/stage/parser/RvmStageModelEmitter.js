@@ -16,13 +16,13 @@ export function buildRvmStageModelFromEvidence(input = {}) {
   model.hierarchy.nodes = stageNodes(ledger, model.hierarchy.rootId);
   model.primitives = stagePrimitives(ledger, decodeReport, model.hierarchy.rootId);
   attachPrimitiveIds(model.hierarchy.nodes, model.primitives, model.hierarchy.rootId);
-  model.diagnostics.items.push(...stageDiagnostics(ledger, decodeReport));
+  model.diagnostics = stageDiagnostics(model.primitives);
   return model;
 }
 
 export function summarizeRvmStageModelEmission(stageModel) {
   const primitives = Array.isArray(stageModel?.primitives) ? stageModel.primitives : [];
-  return { schema: stageModel?.schema || RVM_STAGE_SCHEMA, sourceKind: stageModel?.source?.kind || '', attAvailable: stageModel?.source?.attAvailable === true, parserComplete: stageModel?.parser?.parserComplete === true, visualParityClaimed: stageModel?.parser?.visualParityClaimed === true, stageNodeCount: Array.isArray(stageModel?.hierarchy?.nodes) ? stageModel.hierarchy.nodes.length : 0, stagePrimitiveCount: primitives.length, decodedPrimitiveCount: primitives.filter((p) => p.geometryDecoded === true).length, unsupportedPrimitiveCount: primitives.filter((p) => p.decodeStatus === 'unsupported-diagnostic').length, failedPrimitiveCount: primitives.filter((p) => p.decodeStatus === 'failed-diagnostic').length, decodedByCode: countBy(primitives.filter((p) => p.geometryDecoded === true), 'nativeCode'), unsupportedByCode: countBy(primitives.filter((p) => p.decodeStatus === 'unsupported-diagnostic'), 'nativeCode'), failedByCode: countBy(primitives.filter((p) => p.decodeStatus === 'failed-diagnostic'), 'nativeCode'), diagnosticCount: stageModel?.diagnostics?.items?.length || 0 };
+  return { schema: stageModel?.schema || RVM_STAGE_SCHEMA, sourceKind: stageModel?.source?.kind || '', attAvailable: stageModel?.source?.attAvailable === true, parserComplete: stageModel?.parser?.parserComplete === true, visualParityClaimed: stageModel?.parser?.visualParityClaimed === true, stageNodeCount: Array.isArray(stageModel?.hierarchy?.nodes) ? stageModel.hierarchy.nodes.length : 0, stagePrimitiveCount: primitives.length, decodedPrimitiveCount: primitives.filter((p) => p.geometryDecoded === true).length, unsupportedPrimitiveCount: primitives.filter((p) => p.decodeStatus === 'unsupported-diagnostic').length, failedPrimitiveCount: primitives.filter((p) => p.decodeStatus === 'failed-diagnostic').length, decodedByCode: countBy(primitives.filter((p) => p.geometryDecoded === true), 'nativeCode'), unsupportedByCode: countBy(primitives.filter((p) => p.decodeStatus === 'unsupported-diagnostic'), 'nativeCode'), failedByCode: countBy(primitives.filter((p) => p.decodeStatus === 'failed-diagnostic'), 'nativeCode'), diagnosticCount: stageModel?.diagnostics?.messages?.length || 0 };
 }
 
 function parserMetadata(readerReport, ledger, decodeReport) {
@@ -68,21 +68,16 @@ function nativeRecord(entry, ledgerRecord, decoded) {
   return { source: 'rvm-binary', recordType: Number(entry.nativeCode) === 11 ? 'RVM_FACET_GROUP' : 'RVM_PRIMITIVE', recordOffset: Number(entry.recordOffset) || Number(ledgerRecord?.recordOffset) || 0, nativeCode: Number(entry.nativeCode), recordLength: Math.max(0, Number(entry.recordEndOffset || ledgerRecord?.recordEndOffset) - Number(entry.recordOffset || ledgerRecord?.recordOffset)), decoded };
 }
 
-function sourceRef(entry, ledgerRecord) {
-  return { kind: 'rvm-prim', recordOffset: Number(entry.recordOffset) || Number(ledgerRecord?.recordOffset) || 0, recordEndOffset: Number(entry.recordEndOffset) || Number(ledgerRecord?.recordEndOffset) || 0, parentPath: entry.parentPath || ledgerRecord?.parentPath || '/' };
+function stageDiagnostics(primitives) {
+  const messages = primitives.filter((primitive) => primitive.geometryDecoded === false).map((primitive) => ({ severity: primitive.decodeStatus === 'failed-diagnostic' ? 'error' : 'warning', code: 'STAGE_FALLBACK_UNDECODED_NATIVE_PRIMITIVE', message: primitive.diagnosticFallback?.message || `Unsupported RVM primitive code ${primitive.nativeCode}`, ref: { primitiveId: primitive.id, nodeId: primitive.nodeId, nativeCode: primitive.nativeCode, recordOffset: primitive.source?.recordOffset }, fallback: { reason: primitive.decodeStatus, renderKind: primitive.renderKind, recipe: primitive.recipeSource?.recipeId } }));
+  return { schema: 'RvmStageDiagnostics.v1', severityCounts: countSeverity(messages), nativeCodeCounts: countBy(messages.map((m) => m.ref), 'nativeCode'), renderKindCounts: countBy(messages.map((m) => m.fallback), 'renderKind'), semanticTypeCounts: {}, fallbackCounts: countBy(messages.map((m) => m.fallback), 'reason'), messages };
 }
 
-function attachPrimitiveIds(nodes, primitives, rootId) {
-  const byId = new Map(nodes.map((node) => [node.id, node]));
-  for (const primitive of primitives) if (primitive.nodeId !== rootId) byId.get(primitive.nodeId)?.primitiveIds.push(primitive.id);
-}
-
-function stageDiagnostics(ledger, report) {
-  return [...(ledger.diagnostics || []), ...(ledger.warnings || []), ...(ledger.errors || []), ...(report.diagnostics || []), ...(report.warnings || []), ...(report.errors || [])];
-}
-
+function sourceRef(entry, ledgerRecord) { return { kind: 'rvm-prim', recordOffset: Number(entry.recordOffset) || Number(ledgerRecord?.recordOffset) || 0, recordEndOffset: Number(entry.recordEndOffset) || Number(ledgerRecord?.recordEndOffset) || 0, parentPath: entry.parentPath || ledgerRecord?.parentPath || '/' }; }
+function attachPrimitiveIds(nodes, primitives, rootId) { const byId = new Map(nodes.map((node) => [node.id, node])); for (const primitive of primitives) if (primitive.nodeId !== rootId) byId.get(primitive.nodeId)?.primitiveIds.push(primitive.id); }
 function renderKindFor(code) { return ({ 2: 'BOX', 4: 'ELBOW', 8: 'CYLINDER', 9: 'SPHERE', 11: 'FACET_GROUP' })[Number(code)] || 'UNKNOWN_DIAGNOSTIC'; }
 function rvmOnlySemantic() { return { source: 'rvm-only', confidence: 'limited' }; }
 function countBy(items, key) { return items.reduce((out, item) => { const text = String(item?.[key] ?? ''); if (text) out[text] = (out[text] || 0) + 1; return out; }, {}); }
+function countSeverity(messages) { return { info: 0, warning: messages.filter((m) => m.severity === 'warning').length, error: messages.filter((m) => m.severity === 'error').length }; }
 function weakNodeName(node) { return !node?.name || /^CNTB_\d+$/i.test(String(node.name)); }
 function diag(code, message, severity = 'info') { return { code, message, severity }; }
