@@ -32,7 +32,7 @@ assert.match(tab, /arrayBuffer/);
 assert.match(tab, /hashArrayBuffer/);
 assert.match(tab, /RVM binary selected/);
 assert.match(tab, /RVM StageModel generated successfully/);
-assert.match(tab, /Download RvmStageModel JSON/);
+assert.match(tab, /buildStageModelDownload/);
 assert.match(tab, /clearLoadedModel/);
 assert.match(tab, /model = null/);
 assert.match(tab, /renderPlan = null/);
