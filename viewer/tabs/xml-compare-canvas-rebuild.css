@@ -208,6 +208,56 @@
   stroke-dasharray: 4 3;
 }
 
+.xml-compare-compare-field-controls {
+  width: 100%;
+  display: grid;
+  gap: 7px;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(148, 163, 184, 0.14);
+}
+
+.xml-compare-compare-field-controls label {
+  display: grid;
+  gap: 4px;
+  color: #bfdbfe;
+  font-size: 11px;
+}
+
+.xml-compare-compare-field-controls select {
+  width: 100%;
+  border: 1px solid rgba(96, 165, 250, 0.28);
+  border-radius: 8px;
+  background: #020617;
+  color: #dbeafe;
+  padding: 6px;
+}
+
+.xml-compare-compare-field-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.xml-compare-compare-field-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: 1px solid rgba(125, 211, 252, 0.28);
+  border-radius: 999px;
+  padding: 4px 6px;
+  color: #e0f2fe;
+  background: rgba(15, 23, 42, 0.72);
+  font-size: 10px;
+}
+
+.xml-compare-compare-field-pill button {
+  border: 0;
+  background: transparent;
+  color: #fca5a5;
+  padding: 0 2px;
+}
+
 .xml-compare-graph-canvas.is-tiles,
 .xml-compare-graph-canvas.is-compact-list,
 .xml-compare-graph-canvas.is-grouped-tree,
@@ -236,15 +286,15 @@
 
 .xml-compare-dynamic-tile-board {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-  gap: 10px;
+  grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+  gap: 8px;
   align-items: stretch;
 }
 
 .xml-compare-dynamic-list {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(132px, 1fr));
-  gap: 8px;
+  grid-template-columns: repeat(auto-fill, minmax(118px, 1fr));
+  gap: 7px;
   align-items: stretch;
 }
 
@@ -293,12 +343,12 @@
   position: static;
   transform: none;
   width: auto;
-  min-height: 66px;
+  min-height: 38px;
   align-items: flex-start;
-  justify-content: flex-start;
-  gap: 3px;
-  border-radius: 12px;
-  padding: 8px 9px;
+  justify-content: center;
+  gap: 2px;
+  border-radius: 10px;
+  padding: 7px 8px;
   text-align: left;
 }
 
@@ -312,19 +362,23 @@
   max-width: 100%;
 }
 
+.xml-compare-graph-canvas .xml-compare-dynamic-tile.xml-compare-graph-node b {
+  font-size: 11px;
+  line-height: 1.15;
+}
+
+.xml-compare-graph-canvas .xml-compare-dynamic-tile.xml-compare-graph-node span {
+  font-size: 9px;
+  opacity: 0.78;
+}
+
 .xml-compare-graph-canvas .xml-compare-dynamic-tile.xml-compare-graph-node small {
-  display: block;
-  max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: #cbd5e1;
-  font-size: 10px;
+  display: none;
 }
 
 .xml-compare-graph-canvas .xml-compare-dynamic-tile.xml-compare-graph-node.is-compact {
-  min-height: 48px;
-  padding: 6px 8px;
+  min-height: 34px;
+  padding: 6px 7px;
 }
 
 .xml-compare-dynamic-evidence-row {
@@ -340,6 +394,6 @@
   }
   .xml-compare-dynamic-tile-board,
   .xml-compare-dynamic-list {
-    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(112px, 1fr));
   }
 }
