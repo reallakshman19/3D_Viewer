@@ -4,7 +4,7 @@ import { isFiniteBbox, isMatrix3x4, normalizeBbox, normalizeBboxFromPoints, tran
 
 export const RVM_FACET_GROUP_PAYLOAD_DECODER_VERSION = '20260702-rvm-code11-facet-decoder-v1';
 
-const LIMITS = Object.freeze({ maxPolygons: 400, maxContours: 96, maxVerticesPerContour: 4096, maxVertices: 16000 });
+const LIMITS = Object.freeze({ maxPolygons: 5000, maxContours: 1000, maxVerticesPerContour: 10000, maxVertices: 200000 });
 
 export function decodeRvmFacetGroupPayload(input = {}) {
   const record = input.primitiveRecord || {};
@@ -110,7 +110,7 @@ function compatibleEnd(nextOffset, ledgerEndOffset, byteLength) { return nextOff
 function validCount(value, min, max) { return Number.isInteger(value) && value >= min && value <= max; }
 function streamBad(reason, state) { return { ok: false, reason, diagnostic: diag('RVM_FACET_STREAM_LIMIT', reason, 'warning', { polygonCount: state.polygonCount, contourCount: state.contourCount, vertexCount: state.vertices.length }) }; }
 function bad(reason, code, message) { return { ok: false, reason, diagnostic: diag(code, message, 'error') }; }
-function dataViewOf(value) { if (value instanceof ArrayBuffer) return new DataView(value); if (ArrayBuffer.isView(value)) return new DataView(value.buffer, value.byteOffset, value.byteLength); return new DataView(new ArrayBuffer(0)); }
+function dataViewOf(value) { if (value instanceof ArrayBuffer) return new DataView(value); if (ArrayBuffer.isView(value)) return new DataView(value.buffer, value.byteOffset, value.byteLength); return new DataView(value.buffer, value.byteOffset, value.byteLength); }
 function diag(code, message, severity, ref = {}) { return { severity, code, message, ref }; }
 function numberOrZero(value) { const number = Number(value); return Number.isFinite(number) ? number : 0; }
 function round(value) { return Math.round(Number(value) * 1e6) / 1e6; }
