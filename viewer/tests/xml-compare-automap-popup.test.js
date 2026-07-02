@@ -6,18 +6,16 @@ import { renderXmlCompareAutoMapPopupHtml, _test as popupTest } from '../xml-com
 
 const sourceHierarchy=createXmlCompareLineNodeHierarchy([
   {uid:'SRC-1',lineNo:'L-1',points:[{x:0,y:0,z:0},{x:10,y:0,z:0}],position:{x:0,y:0,z:0},attributes:{from:'10',to:'20',FROM_NODE:'10.000000',TO_NODE:'20.000000',FROM_GLOBAL_X:'100.000000',FROM_GLOBAL_Y:'200.000000',FROM_GLOBAL_Z:'300.000000',DELTA_X:'10.000000',DELTA_Y:'0.000000',DELTA_Z:'0.000000',DIAMETER:'114.300000',Temperature1:'120',Pressure1:'700','COMPONENT-ATTRIBUTE2':'120','COMPONENT-ATTRIBUTE1':'700',TEMP_EXP_C1:'120',PRESSURE1:'700',DESIGN_PRESSURE:'900',INSUL_THICK:'50',MATERIAL_NAME:'A106 B',PIPELINE_REFERENCE:'PIPE-A'}},
-  {uid:'SRC-2',lineNo:'L-1',points:[{x:10,y:0,z:0},{x:20,y:0,z:0}],position:{x:10,y:0,z:0},attributes:{FROM_NODE:'20.000000',TO_NODE:'30.000000',DELTA_X:'10.000000',DELTA_Y:'0.000000',DELTA_Z:'0.000000',DIAMETER:'114.300000',Temperature1:'121',Pressure1:'701',HYDRO_PRESSURE:'1200'}}
+  {uid:'SRC-2',lineNo:'L-1',points:[{x:10,y:0,z:0},{x:20,y:0,z:0}],position:{x:10,y:0,z:0},attributes:{FROM_NODE:'20.000000',TO_NODE:'30.000000',FROM_GLOBAL_X:'110.000000',FROM_GLOBAL_Y:'200.000000',FROM_GLOBAL_Z:'300.000000',DELTA_X:'10.000000',DELTA_Y:'0.000000',DELTA_Z:'0.000000',DIAMETER:'114.300000',Temperature1:'121',Pressure1:'701',HYDRO_PRESSURE:'1200'}}
 ]);
 const targetHierarchy=createXmlCompareLineNodeHierarchy([
-  {uid:'TGT-1',lineNo:'L-9',points:[{x:1000,y:500,z:0},{x:1010,y:500,z:0}],position:{x:1000,y:500,z:0},attributes:{from:'1000',to:'1010',FROM_NODE:'1000.000000',TO_NODE:'1010.000000',Temperature1:'',Pressure1:''}},
-  {uid:'TGT-2',lineNo:'L-9',points:[{x:1010,y:500,z:0},{x:1020,y:500,z:0}],position:{x:1010,y:500,z:0},attributes:{FROM_NODE:'1010.000000',TO_NODE:'1020.000000',Temperature1:'',Pressure1:''}}
+  {uid:'TGT-1',lineNo:'L-9',points:[{x:1000,y:500,z:0},{x:1010,y:500,z:0}],position:{x:1000,y:500,z:0},attributes:{from:'1000',to:'1010',FROM_NODE:'1000.000000',TO_NODE:'1010.000000',FROM_GLOBAL_X:'100.250000',FROM_GLOBAL_Y:'200.000000',FROM_GLOBAL_Z:'301.000000',Temperature1:'120',Pressure1:''}},
+  {uid:'TGT-2',lineNo:'L-9',points:[{x:1010,y:500,z:0},{x:1020,y:500,z:0}],position:{x:1010,y:500,z:0},attributes:{FROM_NODE:'1010.000000',TO_NODE:'1020.000000',FROM_GLOBAL_X:'110.000000',FROM_GLOBAL_Y:'200.500000',FROM_GLOBAL_Z:'300.000000',Temperature1:'121',Pressure1:''}}
 ]);
-
 assert.equal(sourceHierarchy.records[0].transferFields.Temperature1,'120');
 assert.equal(sourceHierarchy.records[0].transferFields.Pressure1,'700');
 assert.equal(sourceHierarchy.records[0].sourceAttributes.DESIGN_PRESSURE,'900');
 assert.equal(sourceHierarchy.records[0].sourceAttributes.INSUL_THICK,'50');
-
 const childFields=popupTest.normalizedChildFields(sourceHierarchy.records[0]);
 assert.equal(childFields.DESIGN_PRESSURE,'900');
 assert.equal(childFields.INSUL_THICK,'50');
@@ -37,15 +35,14 @@ assert.equal(popupTest.fieldBlock('node','FROM_GLOBAL_X'),'GlobalCoordinateBlock
 assert.equal(popupTest.fieldBlock('element','INSUL_THICK'),'SectionDimensionBlock');
 assert.equal(popupTest.fieldBlock('line','Pressure1'),'ProcessBlock');
 assert.equal(popupTest.fieldBlock('line','MATERIAL_NAME'),'MaterialBlock');
-
 const matchMap=createXmlComparePnmAutoMap({sourceRecords:sourceHierarchy.records,targetRecords:targetHierarchy.records});
-const matchMapWithRequest={...matchMap,request:{scope:'node',sourceUid:sourceHierarchy.records[0].uid,targetUid:targetHierarchy.records[0].uid}};
+const matchMapWithRequest={...matchMap,request:{scope:'node',sourceUid:sourceHierarchy.records[0].uid,targetUid:targetHierarchy.records[0].uid,compareFields:['FROM_GLOBAL_X','FROM_GLOBAL_Y','FROM_GLOBAL_Z','Temperature1']}};
 const rows=popupTest.matchedRows(matchMapWithRequest,sourceHierarchy.records,targetHierarchy.records);
-const html=renderXmlCompareAutoMapPopupHtml({matchMap:matchMapWithRequest,source:{records:sourceHierarchy.records},target:{records:targetHierarchy.records}});
-
+const html=renderXmlCompareAutoMapPopupHtml({matchMap:matchMapWithRequest,source:{records:sourceHierarchy.records},target:{records:targetHierarchy.records},compareFields:['FROM_GLOBAL_X','FROM_GLOBAL_Y','FROM_GLOBAL_Z','Temperature1']});
 assert.match(html,/Auto Map Review/);
-assert.match(html,/Matched Nodes/);
-assert.match(html,/Node pair\(s\)/);
+assert.match(html,/Matched Items/);
+assert.doesNotMatch(html,/Matched Nodes/);
+assert.match(html,/item pair\(s\)/);
 assert.match(html,/Max Δ SRSS/);
 assert.match(html,/Select ≤ limit/);
 assert.match(html,/Transfer scope:/);
@@ -72,9 +69,13 @@ assert.match(html,/all-inferred-element-pairs/);
 assert.match(html,/Line scope owns ProcessBlock and MaterialBlock/);
 assert.match(html,/preview-only/);
 assert.match(html,/data-xml-compare-node-pair/);
+assert.match(html,/FROM_GLOBAL_X/);
+assert.match(html,/FROM_GLOBAL_Y/);
+assert.match(html,/FROM_GLOBAL_Z/);
+assert.match(html,/0\.250000 \/ abs 0\.250000/);
+assert.match(html,/String fields use basic normalized comparison only/);
 assert.doesNotMatch(html,/<option value="from">from<\/option>/);
 assert.doesNotMatch(html,/<option value="to">to<\/option>/);
-
 const nodeFields=popupTest.scopedFields(rows,'node');
 const elementFields=popupTest.scopedFields(rows,'element');
 const lineFields=popupTest.scopedFields(rows,'line');
@@ -92,7 +93,6 @@ assert.ok(!lineFields.includes('DELTA_X'));
 assert.ok(!lineFields.includes('DIAMETER'));
 assert.ok(!lineFields.includes('from'));
 assert.ok(!lineFields.includes('to'));
-
 const inferred=popupTest.inferElementPairsFromNodePairs(rows);
 assert.equal(inferred.length,2);
 assert.deepEqual(inferred.map((pair)=>pair.sourceElement),['10->20','20->30']);
@@ -100,7 +100,6 @@ assert.deepEqual(inferred.map((pair)=>pair.targetElement),['1000->1010','1010->1
 assert.deepEqual(inferred[0].endpointMap,{10:'1000',20:'1010'});
 assert.equal(inferred[0].sourceFields.DELTA_X,'10.000000');
 assert.equal(inferred[0].sourceFields.DIAMETER,'114.300000');
-
 const nodePlan=popupTest.nodeTransferPlan(rows,nodeFields);
 assert.equal(nodePlan.length,3);
 assert.equal(nodePlan[0].targetNode,'1000');
@@ -121,5 +120,4 @@ assert.equal(linePlan[0].targetLine,'L-9');
 assert.ok(linePlan[0].selectedBlocks.includes('ProcessBlock'));
 assert.ok(linePlan[0].selectedBlocks.includes('MaterialBlock'));
 assert.equal(linePlan[0].fields.Temperature1,'120');
-
 console.log('xml-compare-automap-popup: all assertions passed');
