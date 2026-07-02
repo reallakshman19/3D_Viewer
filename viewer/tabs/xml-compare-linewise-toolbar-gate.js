@@ -1,13 +1,12 @@
-import { installTableCategorizedSetupTabNavigation } from '../xml-compare/table-categorizer/table-categorized-xml-controller.js';
-
-export const XML_COMPARE_LINEWISE_TOOLBAR_GATE_SCHEMA='xml-compare-linewise-toolbar-gate/v4';
+export const XML_COMPARE_LINEWISE_TOOLBAR_GATE_SCHEMA='xml-compare-linewise-toolbar-gate/v5-runtime-ownership';
 
 const STYLE_ID='xml-compare-linewise-toolbar-gate-style';
 const WORKFLOW_BUTTON='data-xml-compare-categorized-open';
 const CONVERTER_SHORTCUT_BUTTON='data-xml-compare-categorized-converter-shortcut';
 const TABLE_WORKFLOW_BUTTON='data-xml-compare-table-categorized-open';
 
-let tableCategorizedNavigationHandle=null;
+let installed=false;
+let toolbarObserver=null;
 
 function injectStyle(){
   let style=document.getElementById(STYLE_ID);
@@ -38,6 +37,18 @@ function setWorkflowSide(side){const radio=document.querySelector(`[data-xml-com
 async function importIntoWorkflow(file,side){openWorkflow();setWorkflowSide(side);const input=document.querySelector('[data-xml-compare-categorized-popup] input[data-xml-compare-categorized-import]');if(!input)throw new Error('Line-wise workflow import input not found');const copy=new File([await file.text()],file.name,{type:file.type||'application/xml'});setInputFile(input,copy);}
 function gateRawXmlLoad(event){const input=event.target?.closest?.('input[data-xml-compare-load]');if(!input)return;const file=input.files?.[0];if(!file||categorizedFile(file))return;event.preventDefault();event.stopImmediatePropagation();const side=input.dataset.xmlCompareLoad==='b'?'b':'a';input.value='';importIntoWorkflow(file,side).catch((error)=>console.error('[XML Compare Line-wise Gate] failed to route raw XML to workflow',error));}
 function clickShortcut(event){const button=event.target?.closest?.(`[${CONVERTER_SHORTCUT_BUTTON}]`);if(!button)return;event.preventDefault();event.stopPropagation();openWorkflow();}
-function install(){if(typeof document==='undefined')return;injectStyle();ensureShortcutButton();tableCategorizedNavigationHandle ||= installTableCategorizedSetupTabNavigation(document);document.addEventListener('change',gateRawXmlLoad,{capture:true});document.addEventListener('click',clickShortcut,{capture:true});new MutationObserver(()=>{injectStyle();ensureShortcutButton();}).observe(document.body,{childList:true,subtree:true});}
-install();
-export const _test=Object.freeze({ensureShortcutButton,openWorkflow});
+export function installXmlCompareLinewiseToolbarGate(doc=globalThis.document){
+  if(installed||!doc?.addEventListener)return false;
+  installed=true;
+  injectStyle();
+  ensureShortcutButton();
+  doc.addEventListener('change',gateRawXmlLoad,{capture:true});
+  doc.addEventListener('click',clickShortcut,{capture:true});
+  if(typeof MutationObserver!=='undefined'&&doc.body){
+    toolbarObserver=new MutationObserver(()=>{injectStyle();ensureShortcutButton();});
+    toolbarObserver.observe(doc.body,{childList:true,subtree:true});
+  }
+  return true;
+}
+installXmlCompareLinewiseToolbarGate();
+export const _test=Object.freeze({ensureShortcutButton,openWorkflow,installXmlCompareLinewiseToolbarGate,getToolbarObserver:()=>toolbarObserver});

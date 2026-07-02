@@ -11,6 +11,13 @@
 - [ ] The future XML export rule uses one XML document root.
 - [ ] Logical root partitions are documented as children of the document root.
 
+## Runtime ownership checklist
+
+- [ ] Table-to-Categorized popup has one runtime/state owner.
+- [ ] Toolbar gate does not install Table-to-Categorized setup navigation.
+- [ ] Runtime installation is idempotent.
+- [ ] No duplicate document-level click/change/input handlers are registered for the builder.
+
 ## UI checklist
 
 - [ ] `Table to Categorized XML` appears near `Line-wise XML Enrichment / Categorized XML`.
