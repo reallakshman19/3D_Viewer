@@ -5,7 +5,7 @@ import { activeSource, sourceSummaryRows } from './table-categorized-xml-source-
 import { renderTableCategorizedStagePreview } from './table-categorized-xml-stage-preview.js';
 import { hasBlockingValidation } from './table-categorized-xml-validation.js';
 
-export const TABLE_CATEGORIZED_XML_SHELL_SCHEMA='table-categorized-xml-shell/v17-consolidated-recursive-generic-compare';
+export const TABLE_CATEGORIZED_XML_SHELL_SCHEMA='table-categorized-xml-shell/v18-sequenced-tabs-color-status';
 export const TABLE_CATEGORIZED_XML_BUTTON_ATTR='data-xml-compare-table-categorized-open';
 export const TABLE_CATEGORIZED_XML_POPUP_ATTR='data-xml-compare-table-categorized-popup';
 export const TABLE_CATEGORIZED_XML_TABS=Object.freeze([
@@ -16,17 +16,18 @@ export const TABLE_CATEGORIZED_XML_TABS=Object.freeze([
   ['export','5 Export','Files / Canvas']
 ]);
 export const TABLE_CATEGORIZED_SETUP_TABS=Object.freeze([
-  ['source','🟦 Source','Import settings and raw table rows'],
-  ['fields','🟪 Fields','Column mapping and data types'],
-  ['relationships','🟧 Relationships','Keys, joins, and parent-child links'],
-  ['structure','🟨 Structure','Graph levels and hierarchy'],
-  ['rules','🟫 Rules','Transform, filter, fallback, and grouping rules'],
-  ['quality','🟨 Quality','Checks, warnings, and audit proof'],
-  ['output','🟩 Output','XML, downloads, and canvas link'],
-  ['recipe','⚙ Recipe','Save, load, version, and reuse mappings']
+  ['source','(a) 🟦 Source','Import settings and raw table rows'],
+  ['fields','(b) 🟪 Fields','Column mapping and data types'],
+  ['relationships','(c) 🟧 Relationships','Keys, joins, and parent-child links'],
+  ['structure','(d) 🟨 Structure','Graph levels and hierarchy'],
+  ['rules','(e) 🟫 Rules','Transform, filter, fallback, and grouping rules'],
+  ['quality','(f) 🟨 Quality','Checks, warnings, and audit proof'],
+  ['output','(g) 🟩 Output','XML, downloads, and canvas link'],
+  ['recipe','(h) ⚙ Recipe','Save, load, version, and reuse mappings']
 ]);
 
 const STATUS_VALUES=new Set(['ready','review','pending','optional','locked','blocked']);
+const STATUS_COLORS=Object.freeze({ready:'#22c55e',review:'#38bdf8',pending:'#f59e0b',optional:'#94a3b8',locked:'#64748b',blocked:'#ef4444'});
 const esc=(value)=>String(value??'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll("'",'&#039;');
 const safeStatus=(status)=>STATUS_VALUES.has(status)?status:'optional';
 const sourcesForView=(view={})=>view.sources?.length?view.sources:[view.source].filter(Boolean);
@@ -40,7 +41,8 @@ const hasExport=(view={})=>Boolean(view.exportResult?.ok);
 
 export function statusBadge(status,label=status){
   const safe=safeStatus(String(status||'optional'));
-  return `<span class="table-categorized-status is-${esc(safe)}" data-table-categorized-status="${esc(safe)}">${esc(label||safe)}</span>`;
+  const color=STATUS_COLORS[safe]||STATUS_COLORS.optional;
+  return `<span class="table-categorized-status is-${esc(safe)}" data-table-categorized-status="${esc(safe)}" title="${esc(label||safe)}" aria-label="${esc(label||safe)}" style="display:inline-block;width:.72em;height:.72em;border-radius:999px;background:${esc(color)};box-shadow:0 0 0 2px rgba(255,255,255,.12);vertical-align:middle"></span>`;
 }
 
 function setupTabStatus(id,view={}){
@@ -72,7 +74,7 @@ export function renderTableCategorizedXmlShellHtml(state={}){
   const view={activeTab:'source',sources:[],activeSourceId:'S1',profile:PS_MAPPING_TABLE_2_SHADOW_PROFILE,exportStatus:'',compareCanvas:{},...state};
   view.compareCanvas=view.compareCanvas||{};
   view.activeSetupTab=state.activeSetupTab||setupTabForWorkflowTab(view.activeTab);
-  return `<div class="table-categorized-xml-backdrop" ${TABLE_CATEGORIZED_XML_POPUP_ATTR}><section class="table-categorized-xml-dialog" role="dialog" aria-modal="true" aria-label="Table to Categorized XML"><header><div><h3>Table to Categorized XML</h3><p>Build a categorized graph from any table. XML is only one export from that graph.</p></div><button type="button" data-table-categorized-close>Close</button></header>${renderTabStrip(view.activeTab)}${renderSetupTabStrip(view.activeSetupTab,view)}<main class="table-categorized-xml-body table-categorized-xml-with-preview"><section class="table-categorized-xml-workflow-pane">${renderSetupTabBody(view)}</section>${renderTableCategorizedStagePreview(view)}</main><footer><span>One UI, horizontal setup tabs, recursive graph levels, collapsible details, and text status badges. The categorized graph remains the master model.</span><button type="button" data-table-categorized-close>Close</button></footer></section></div>`;
+  return `<div class="table-categorized-xml-backdrop" ${TABLE_CATEGORIZED_XML_POPUP_ATTR}><section class="table-categorized-xml-dialog" role="dialog" aria-modal="true" aria-label="Table to Categorized XML"><header><div><h3>Table to Categorized XML</h3><p>Build a categorized graph from any table. XML is only one export from that graph.</p></div><button type="button" data-table-categorized-close>Close</button></header>${renderTabStrip(view.activeTab)}${renderSetupTabStrip(view.activeSetupTab,view)}<main class="table-categorized-xml-body table-categorized-xml-with-preview"><section class="table-categorized-xml-workflow-pane">${renderSetupTabBody(view)}</section>${renderTableCategorizedStagePreview(view)}</main><footer><span>One UI, sequenced setup tabs, color status dots, recursive graph levels, and text proof. The categorized graph remains the master model.</span><button type="button" data-table-categorized-close>Close</button></footer></section></div>`;
 }
 
 export function renderTabStrip(activeTab='source'){
@@ -82,7 +84,7 @@ export function renderTabStrip(activeTab='source'){
 export function renderSetupTabStrip(activeSetupTab='source',view={}){
   const ids=new Set(TABLE_CATEGORIZED_SETUP_TABS.map(([id])=>id));
   const activeId=ids.has(activeSetupTab)?activeSetupTab:'source';
-  return `<nav class="table-categorized-setup-tabs" aria-label="Table categorizer setup categories" role="tablist">${TABLE_CATEGORIZED_SETUP_TABS.map(([id,label,subtitle])=>`<button type="button" data-table-categorized-setup-tab="${esc(id)}" class="${activeId===id?'is-active':''}" aria-selected="${activeId===id?'true':'false'}" role="tab"><b>${esc(label)} ${statusBadge(setupTabStatus(id,view))}</b><small>${esc(subtitle)}</small></button>`).join('')}</nav>`;
+  return `<nav class="table-categorized-setup-tabs" aria-label="Table categorizer setup categories" role="tablist">${TABLE_CATEGORIZED_SETUP_TABS.map(([id,label,subtitle])=>{const status=setupTabStatus(id,view);return `<button type="button" data-table-categorized-setup-tab="${esc(id)}" data-setup-status="${esc(status)}" class="${activeId===id?'is-active':''} is-status-${esc(status)}" aria-selected="${activeId===id?'true':'false'}" role="tab"><b>${esc(label)} ${statusBadge(status)}</b><small>${esc(subtitle)}</small></button>`;}).join('')}</nav>`;
 }
 
 export function renderSetupTabBody(view={}){
@@ -104,10 +106,11 @@ export function renderLevelDesigner(view={}){return renderFieldsSetupPanels(view
 function renderSourceSetupPanels(view={}){
   const sources=sourcesForView(view);
   const active=activeSource({sources,activeSourceId:view.activeSourceId})||view.source||{};
-  const actions=`<div class="table-categorized-xml-actions"><button type="button" data-table-categorized-action="add-source">Add Table</button><button type="button" data-table-categorized-action="remove-source">Remove Table</button><button type="button" data-table-categorized-action="rename-source">Rename Table</button><button type="button" data-table-categorized-action="parse">Read Active Table</button><button type="button" data-table-categorized-action="clear">Clear Active Table</button><button type="button" data-table-categorized-action="load-sample">Load PS Mapping Table 2 Sample</button><button type="button" data-table-categorized-action="load-coordinate-sample">Load Coordinate Lookup Sample</button><button type="button" data-table-categorized-action="build-graph" ${sources.some(sourceHasRows)?'':'disabled'}>Build Preview Graph</button></div>`;
+  const actions=`<div class="table-categorized-xml-actions"><button type="button" data-table-categorized-action="load-sample">Load PS Mapping Table 2 Sample</button><button type="button" data-table-categorized-action="load-coordinate-sample">Load Coordinate Lookup Sample</button><button type="button" data-table-categorized-action="parse">Read Active Table</button><button type="button" data-table-categorized-action="build-graph" ${sources.some(sourceHasRows)?'':'disabled'}>Build Preview Graph</button><button type="button" data-table-categorized-action="add-source">Add Table</button><button type="button" data-table-categorized-action="rename-source" disabled>Rename Table</button><button type="button" data-table-categorized-action="remove-source">Remove Table</button><button type="button" data-table-categorized-action="clear">Clear Active Table</button></div>`;
   const activeEditor=`<section class="table-categorized-xml-subcard"><h4>Active table</h4><label>Table ID<select data-table-categorized-active-source>${sources.map((s)=>`<option ${s.sourceId===active.sourceId?'selected':''}>${esc(s.sourceId)}</option>`).join('')}</select></label><label>Table Name<input data-table-categorized-source-name value="${esc(active.sourceName||'')}"></label><label>Paste table text<textarea data-table-categorized-source-text>${esc(active.sourceText||'')}</textarea></label><div class="table-categorized-xml-actions"><label class="table-categorized-file">Import CSV / TXT<input type="file" accept=".csv,.txt,text/csv,text/plain" data-table-categorized-file></label><button type="button" data-table-categorized-action="parse">Read Active Table</button></div></section>`;
+  const actionMessage=view.sourceActionMessage?`<section class="table-categorized-xml-subcard"><h4>Action Result</h4><p>${esc(view.sourceActionMessage)}</p></section>`:'';
   return setupBody('source','Import Table','Add one or more table sources. Parsed rows stay as evidence; graph nodes are created later.',[
-    panel('source','Source Tables','Add, select, paste, and read table data.',renderSourceTable(sources,view.activeSourceId)+actions+activeEditor,{open:true,status:sources.some(sourceHasRows)?'ready':'pending'}),
+    panel('source','Source Tables','Load sample, parse source text, and build the preview graph.',renderSourceTable(sources,view.activeSourceId)+actions+actionMessage+activeEditor,{open:true,status:sources.some(sourceHasRows)?'ready':'pending'}),
     renderImportSettingsPanel(),renderColumnCleanupPanel(),
     panel('source','Parsed Rows','Raw table preview exactly as imported.',renderRawPreview(active),{open:true,status:sourceHasRows(active)?'ready':'pending'}),
     panel('source','Source Messages','Parse warnings and input messages.',renderDiagnostics(active),{status:active?.diagnostics?.length?'ready':'optional'})
