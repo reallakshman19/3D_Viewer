@@ -1,6 +1,6 @@
 import { renderXmlCompareGraphCanvasHtml } from './XmlCompareGraphCanvas.js';
 import { renderXmlCompareGraphConnectorLaneHtml } from './XmlCompareGraphConnectorLane.js';
-import { renderXmlCompareAutoMapPopupHtml } from './XmlCompareAutoMapPopup.js?v=20260702-transfer-node-owned-blocks-1';
+import { renderXmlCompareAutoMapPopupHtml } from './XmlCompareAutoMapPopup.js?v=20260702-transfer-approval-preview-1';
 import { renderXmlCompareDetailsPanelHtml } from './XmlCompareDetailsPanel.js';
 import { renderXmlCompareDiagnosticsPanelHtml } from './XmlCompareDiagnosticsPanel.js';
 import { renderXmlCompareDebugPanelHtml } from './XmlCompareDebugPanel.js';
@@ -9,7 +9,7 @@ import { createXmlCompareTransferPreview } from './XmlCompareTransferPreview.js'
 import { renderXmlCompareTransferPreviewPanelHtml } from './XmlCompareTransferPreviewPanel.js';
 import { availableCompareFields, normalizeCompareFields } from './XmlCompareFieldCompareModel.js';
 
-export const XML_COMPARE_WORKSPACE_SHELL_SCHEMA='xml-compare-workspace-shell/v19';
+export const XML_COMPARE_WORKSPACE_SHELL_SCHEMA='xml-compare-workspace-shell/v20';
 
 let loadDiagnosticsPromise=null;
 let loadSamplePickersPromise=null;
@@ -24,8 +24,8 @@ function loadTabDiagnostics(){if(typeof document==='undefined')return;if(loadDia
 function loadSamplePickers(){if(typeof document==='undefined')return;if(loadSamplePickersPromise)return;loadSamplePickersPromise=import('../tabs/xml-compare-enriched-sample-pickers.js?v=20260701-bm-cii-categorized-samples-1').catch(()=>null);}
 function loadCategorizedConverter(){if(typeof document==='undefined')return;if(loadCategorizedConverterPromise)return;loadCategorizedConverterPromise=import('../tabs/xml-compare-categorized-converter-runtime.js?v=20260630-clean-workflow-ui-1').catch(()=>null);}
 function loadTableCategorizedXml(){if(typeof document==='undefined')return;if(loadTableCategorizedPromise)return;loadTableCategorizedPromise=import('../tabs/xml-compare-table-categorized-runtime.js?v=20260702-table-categorized-compare-canvas-preview-1').catch(()=>null);}
-function loadToolbarGate(){if(typeof document==='undefined')return;if(loadToolbarGatePromise)return;loadToolbarGatePromise=import('../tabs/xml-compare-linewise-toolbar-gate.js?v=20260701-table-categorized-source-setup-1').catch(()=>null);}
-function loadTransferApplyRuntime(){if(typeof document==='undefined')return;if(loadTransferApplyPromise)return;loadTransferApplyPromise=import('../tabs/xml-compare-transfer-apply-runtime.js?v=20260701-transfer-selection-aware-1').catch(()=>null);}
+function loadToolbarGate(){if(typeof document==='undefined')return;if(loadToolbarGatePromise)return;loadToolbarGatePromise=import('../tabs/xml-compare-linewise-toolbar-gate.js?v=20260702-categorized-converter-shortcut-1').catch(()=>null);}
+function loadTransferApplyRuntime(){if(typeof document==='undefined')return;if(loadTransferApplyPromise)return;loadTransferApplyPromise=import('../tabs/xml-compare-transfer-apply-runtime.js?v=20260702-approved-transfer-preview-1').catch(()=>null);}
 function loadCandidateReviewRuntime(){if(typeof document==='undefined')return;if(loadCandidateReviewPromise)return;loadCandidateReviewPromise=import('../tabs/xml-compare-candidate-review-runtime.js?v=20260701-candidate-review-1').catch(()=>null);}
 function loadLinewiseInfoRuleRuntime(){if(typeof document==='undefined')return;if(loadLinewiseInfoRulePromise)return;loadLinewiseInfoRulePromise=import('../tabs/xml-compare-linewise-info-rule-runtime.js?v=20260701-linewise-rule-info-1').catch(()=>null);}
 
