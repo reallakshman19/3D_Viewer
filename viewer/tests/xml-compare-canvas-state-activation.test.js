@@ -31,5 +31,7 @@ assert.ok(model.logs.some((entry)=>entry.code==='XML-COMPARE-CANVAS-FIT-ALL'));
 const html=renderXmlCompareWorkspaceShellHtml(model);
 assert.match(html,/data-xml-compare-nav-mode="orbit" class="is-active"/);
 assert.match(html,/data-xml-compare-record-uid="A-1"/);
-assert.match(html,/Auto Map Selected Node/);
+assert.match(html,/Auto Map Selected/);
+assert.doesNotMatch(html,/Auto Map Selected Node/);
+assert.doesNotMatch(html,/Auto Map Selected Line/);
 console.log('xml-compare-canvas-state-activation: all assertions passed');
