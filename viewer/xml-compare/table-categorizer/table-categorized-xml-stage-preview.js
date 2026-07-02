@@ -29,7 +29,7 @@ export function previewStageForSetupTab(activeSetupTab){
 }
 
 export function previewContextForSetupTab(activeSetupTab){
-  if(activeSetupTab==='source')return 'Rows exactly as imported; no graph is created yet.';
+  if(activeSetupTab==='source')return 'Showing raw rows for the selected source.';
   if(activeSetupTab==='fields')return 'Column mapping proof: selected fields become graph keys and values.';
   if(activeSetupTab==='relationships')return 'Relationship proof: item key + coordinate group become the final group.';
   if(activeSetupTab==='structure')return 'Graph proof: document root, model split, groups, items, and details.';
@@ -37,13 +37,13 @@ export function previewContextForSetupTab(activeSetupTab){
   if(activeSetupTab==='quality')return 'Check proof: graph and validation context.';
   if(activeSetupTab==='output')return 'Output proof: XML generated only from the categorized graph.';
   if(activeSetupTab==='recipe')return 'Recipe proof: profile settings used by the mapping.';
-  return 'Rows exactly as imported; no graph is created yet.';
+  return 'Showing raw rows for the selected source.';
 }
 
 export function renderTableCategorizedStagePreview(view={}){
   const stage=view.activePreviewStage||view.previewStage||defaultPreviewStage(view);
   const model=buildStagePreviewModel(view,stage);
-  return `<aside class="table-categorized-stage-preview" aria-label="Live Preview"><header class="table-categorized-stage-header"><div class="table-categorized-stage-heading"><b>Live Preview</b><span>${esc(model.title)}</span></div>${renderStageTabs(stage)}</header>${renderStageBody(model)}${renderStageDiagnostics(model)}</aside>`;
+  return `<aside class="table-categorized-stage-preview" aria-label="Live Preview - ${esc(model.title)} ${esc(model.context)}"><header class="table-categorized-stage-header"><div class="table-categorized-stage-heading"><b>Live Preview</b><span>${esc(model.title)}</span></div>${renderStageTabs(stage)}</header>${renderStageBody(model)}${renderStageDiagnostics(model)}</aside>`;
 }
 
 export function buildStagePreviewModel(view={},stage='raw'){
@@ -59,37 +59,13 @@ export function buildStagePreviewModel(view={},stage='raw'){
   const baseRows=resolverRows(rows,familyParts.baseResolver,profile,sources,'Common group key');
   const clusterRows=resolverRows(rows,familyParts.clusterResolver,profile,sources,'Coordinate group');
   const familyRows=resolverRows(rows,familyLevel.keyResolver,profile,sources,'Final group');
-  return Object.freeze({
-    stage,
-    title:stageTitle(stage),
-    context:previewContextForSetupTab(view.activeSetupTab),
-    sources,
-    source:active,
-    rows,
-    profile,
-    graph:view.graph||null,
-    exportResult:view.exportResult||null,
-    familyLevel,
-    occurrenceLevel,
-    featureLevel,
-    gapLevel,
-    baseResolver:familyParts.baseResolver,
-    clusterResolver:familyParts.clusterResolver,
-    baseRows,
-    clusterRows,
-    familyRows,
-    diagnostics:collectPreviewDiagnostics([baseRows,clusterRows,familyRows])
-  });
+  return Object.freeze({stage,title:stageTitle(stage),context:previewContextForSetupTab(view.activeSetupTab),sources,source:active,rows,profile,graph:view.graph||null,exportResult:view.exportResult||null,familyLevel,occurrenceLevel,featureLevel,gapLevel,baseResolver:familyParts.baseResolver,clusterResolver:familyParts.clusterResolver,baseRows,clusterRows,familyRows,diagnostics:collectPreviewDiagnostics([baseRows,clusterRows,familyRows])});
 }
 
 export function injectStagePreviewStyle(){
   if(typeof document==='undefined')return;
   let style=document.getElementById(TABLE_CATEGORIZED_XML_STAGE_PREVIEW_STYLE_ID);
-  if(!style){
-    style=document.createElement('style');
-    style.id=TABLE_CATEGORIZED_XML_STAGE_PREVIEW_STYLE_ID;
-    document.head.append(style);
-  }
+  if(!style){style=document.createElement('style');style.id=TABLE_CATEGORIZED_XML_STAGE_PREVIEW_STYLE_ID;document.head.append(style);}
   style.textContent=`
 .table-categorized-xml-dialog{width:min(1680px,calc(100vw - 24px));max-width:none}
 .table-categorized-xml-body.table-categorized-xml-with-preview{display:grid!important;grid-template-columns:minmax(0,1fr) minmax(440px,34vw);gap:14px;align-items:start;overflow:auto}
@@ -111,7 +87,7 @@ function activeSourceFromView(sources,activeSourceId){return sources.find((sourc
 function sampleRows(source,limit){return (source?.rows||[]).slice(0,Math.max(1,Number(limit)||6));}
 function renderStageTabs(activeStage){return `<nav class="table-categorized-stage-tabs" aria-label="Live preview tabs">${TABLE_CATEGORIZED_XML_STAGE_TABS.map(([id,label])=>`<button type="button" data-table-categorized-preview-stage="${esc(id)}" class="${id===activeStage?'is-active':''}">${esc(label)}</button>`).join('')}</nav>`;}
 function renderStageBody(model){if(model.stage==='raw')return renderRawRows(model);if(model.stage==='base')return renderBaseRows(model);if(model.stage==='cluster')return renderClusterRows(model);if(model.stage==='family')return renderFamilyRows(model);if(model.stage==='graph')return renderGraphStage(model);if(model.stage==='xml')return renderXmlStage(model);return renderFamilyRows(model);}
-function renderRawRows(model){const headers=preferredHeaders(model.source?.headers||[]);if(!model.rows.length)return `<section class="table-categorized-stage-card"><h5>Rows</h5><p>Load a sample or read a pasted table to preview raw rows.</p></section>`;return `<section class="table-categorized-stage-card"><h5>Rows</h5><div class="table-categorized-proof-note"><b>Source evidence only.</b><small>These are the rows exactly as read. No graph node has been created yet.</small></div>${table(['RowId',...headers],model.rows.map((row)=>[row.rowId,...headers.map((header)=>row.rawByHeader?.[header]??'')]))}</section>`;}
+function renderRawRows(model){const headers=preferredHeaders(model.source?.headers||[]);if(!model.rows.length)return `<section class="table-categorized-stage-card"><h5>Rows / Imported Rows</h5><p>Load a sample or read a pasted table to preview raw rows.</p></section>`;return `<section class="table-categorized-stage-card"><h5>Rows / Imported Rows</h5><div class="table-categorized-proof-note"><b>Source evidence only.</b><small>These are the rows exactly as read. No graph node has been created yet.</small></div>${table(['RowId',...headers],model.rows.map((row)=>[row.rowId,...headers.map((header)=>row.rawByHeader?.[header]??'')]))}</section>`;}
 function renderBaseRows(model){if(!model.rows.length)return `<section class="table-categorized-stage-card"><h5>Column Mapping Proof</h5><p>Load or paste a table first.</p></section>`;return `<section class="table-categorized-stage-card"><h5>Column Mapping Proof</h5><div class="table-categorized-proof-note"><b>Selected field:</b> PS NO → Common Group Key<small>Example: PS-XYZ.1, PS-XYZ.2, and PS-XYZ.10 become the common group PS-XYZ. Advanced rule is hidden from the main view.</small></div>${table(['RowId','Source column','Table value','Common group key','Meaning'],model.rows.map((row,index)=>[row.rowId,'PS NO',cell(row,'PS NO'),model.baseRows[index]?.value||'',baseMeaning(cell(row,'PS NO'),model.baseRows[index]?.value)]))}</section>`;}
 function renderClusterRows(model){const contract=clusterContract(model);if(!model.rows.length)return `<section class="table-categorized-stage-card"><h5>Coordinate Group Proof</h5><p>Load or paste a table first.</p></section>`;return `<section class="table-categorized-stage-card"><h5>Coordinate Group Proof</h5><div class="table-categorized-proof-note"><b>Selected fields:</b> X + Y + Z → Coordinate Group<small>Rows with nearby coordinates share one coordinate bucket. Unit ${esc(contract.unit||'mm')}, tolerance ${esc(contract.tolerance??'')}.</small></div>${table(['RowId','Item Key','X/Y/Z','Coordinate group','Status'],model.rows.map((row,index)=>[row.rowId,cell(row,'PS NO'),coordinateText(row,contract.axisMapping),model.clusterRows[index]?.value||'',statusText(model.clusterRows[index])]))}</section>`;}
 function renderFamilyRows(model){if(!model.rows.length)return `<section class="table-categorized-stage-card"><h5>Final Group Proof</h5><p>Load or paste a table first.</p></section>`;return `<section class="table-categorized-stage-card"><h5>Final Group Proof</h5><div class="table-categorized-proof-note"><b>Final group = Common Group Key + Coordinate Group.</b><small>This is the parent group that will contain child items and details.</small></div>${table(['RowId','Item Key','Common group key','Coordinate group','Final group','Status'],model.rows.map((row,index)=>[row.rowId,cell(row,'PS NO'),model.baseRows[index]?.value||'',model.clusterRows[index]?.value||'',model.familyRows[index]?.value||'',statusText(model.familyRows[index])]))}${renderFamilySummary(model)}</section>`;}
