@@ -15,11 +15,11 @@ assert.ok(graphState.exportResult?.ok);
 
 const xmlArtifact=createTableCategorizedDownloadArtifact(graphState,'xml');
 assert.equal(xmlArtifact.ok,true);
-assert.ok(xmlArtifact.text.includes('<CategorizedTableXml'));
+assert.ok(xmlArtifact.text.includes('<categorizedTableGraph'));
 assert.equal(createTableCategorizedDownloadArtifact(graphState,'bad-kind').ok,false);
 
 const rendered=renderTableCategorizedXmlShellHtml({...graphState,activeStep:'preview'});
-assert.ok(rendered.includes('Graph built:'));
+assert.ok(rendered.includes('Structure preview ready:'));
 assert.ok(rendered.includes('data-table-categorized-step="preview"'));
 
 console.log('xml-compare-table-categorized-controller: guided shell compatibility assertions passed');

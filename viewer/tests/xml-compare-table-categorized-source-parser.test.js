@@ -36,6 +36,22 @@ const mismatch=parseTableSource('A\tB\n1\t2\t3\n4\t5');
 assert.ok(codes(mismatch).includes('row_1_column_count_mismatch'));
 assert.equal(buildSourceSummary(mismatch).status,'Parsed with warnings');
 
+const duplicate=parseTableSource('A|A|B\n1|2|3',{sourceId:'S1',delimiterMode:'pipe'});
+assert.ok(codes(duplicate).includes('duplicate_header_preserved'));
+assert.deepEqual(duplicate.headers,['A','A','B']);
+assert.equal(new Set(duplicate.columnIds).size,3);
+assert.equal(duplicate.rows[0].rawCells[0],'1');
+assert.equal(duplicate.rows[0].rawCells[1],'2');
+assert.equal(duplicate.rows[0].rawByColumnId[duplicate.columnIds[0]],'1');
+assert.equal(duplicate.rows[0].rawByColumnId[duplicate.columnIds[1]],'2');
+
+assert.equal(parseTableSource('A,B\n1,2',{delimiterMode:'comma'}).delimiter,'comma');
+assert.equal(parseTableSource('A|B\n1|2',{delimiterMode:'pipe'}).delimiter,'pipe');
+assert.equal(parseTableSource('A\tB\n1\t2',{delimiterMode:'tab'}).delimiter,'tab');
+assert.equal(parseTableSource('A;B\n1;2',{delimiterMode:'semicolon'}).delimiter,'semicolon');
+assert.equal(parseTableSource('A|B\n1|2',{delimiterMode:'auto'}).delimiter,'pipe');
+assert.ok(codes(parseTableSource('A|B\n1|2',{delimiterMode:'bad'})).includes('delimiter_override_invalid'));
+
 const empty=parseTableSource('  \n\n');
 assert.equal(empty.rows.length,0);
 assert.equal(empty.headers.length,0);
