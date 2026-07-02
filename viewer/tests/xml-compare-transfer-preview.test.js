@@ -8,7 +8,7 @@ const source={records:[{uid:'S1',nodeNumber:'10',dtxrPs:'PS-10',componentType:'A
 const target={records:[{uid:'T1',nodeNumber:'10',dtxrPs:'',componentType:'ATTA'}]};
 const links=[{id:'L1',sourceUid:'S1',targetUid:'T1'}];
 const preview=createXmlCompareTransferPreview({source,target,manualConnectors:links});
-assert.equal(preview.schema,'xml-compare-transfer-preview/v2');
+assert.equal(preview.schema,'xml-compare-transfer-preview/v1');
 assert.equal(preview.summary.connectorCount,1);
 assert.equal(preview.summary.previewCount,1);
 assert.equal(preview.rows[0].field,'dtxrPs');
