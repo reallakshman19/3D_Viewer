@@ -30,6 +30,14 @@ const xml=`<?xml version="1.0" encoding="UTF-8"?>
  </Line>
 </CategorizedInputXML>`;
 
+const rawArrowXml=`<CategorizedInputXML schema="categorized-inputxml/v3" sourceName="raw-arrow.xml"><Line id="RAW"><LineBlock><LineNo>RAW</LineNo></LineBlock><Element fromNode="10" toNode="20" elementKey="10->20"><NodesBlock><Node nodeNumber="10" role="FROM" elementKey="10->20"><DerivedCoordinateBlock><FROM_GLOBAL_X>1</FROM_GLOBAL_X><FROM_GLOBAL_Y>2</FROM_GLOBAL_Y><FROM_GLOBAL_Z>3</FROM_GLOBAL_Z><GLOBAL_COORD_BASIS_NODE>10</GLOBAL_COORD_BASIS_NODE></DerivedCoordinateBlock></Node></NodesBlock></Element><OriginalElement><![CDATA[<Element fromNode="999" toNode="1000" elementKey="bad->bad"/>]]></OriginalElement></Line></CategorizedInputXML>`;
+const rawArrowModel=createCategorizedInputXmlCanvasModel({sourceName:'raw-arrow.xml',xmlText:rawArrowXml,side:'source'});
+assert.equal(rawArrowModel.summary.elementCount,1);
+assert.equal(rawArrowModel.records.find((record)=>record.levelId==='element')?.elementKey,'10->20');
+assert.equal(rawArrowModel.records.find((record)=>record.levelId==='node')?.elementKey,'10->20');
+assert.equal(rawArrowModel.records.find((record)=>record.levelId==='node')?.coordinateBasisNode,'10');
+assert.ok(!rawArrowModel.records.some((record)=>record.elementKey==='bad->bad'));
+
 const detected=detectXmlCompareProfile({name:'BM_CII_INPUT_SOURCE_categorized_enriched.xml',text:xml});
 assert.equal(detected.type,XML_COMPARE_PROFILE_TYPES.CATEGORIZED_XML);
 const model=createCategorizedInputXmlCanvasModel({sourceName:'BM_CII_INPUT_SOURCE_categorized_enriched.xml',xmlText:xml,side:'source'});
