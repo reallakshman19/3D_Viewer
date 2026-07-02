@@ -4,8 +4,8 @@ export const XML_COMPARE_LOAD_INTAKE_SCHEMA='xml-compare-load-intake/v3';
 
 const clean=(v)=>String(v??'').trim();
 const toNum=(v)=>{const n=Number(v);return Number.isFinite(n)?n:null;};
-const attr=(tag,name)=>clean(String(tag||'').match(new RegExp(`\s${name}\s*=\s*(?:"([^"]*)"|'([^']*)')`,'i'))?.slice(1).find((v)=>v!=null)||'');
-const child=(body,name)=>clean(String(body||'').match(new RegExp(`<${name}\b[^>]*>([\s\S]*?)<\/${name}>`,'i'))?.[1]||'');
+const attr=(tag,name)=>clean(String(tag||'').match(new RegExp(`\\s${name}\\s*=\\s*(?:"([^"]*)"|'([^']*)')`,'i'))?.slice(1).find((v)=>v!=null)||'');
+const child=(body,name)=>clean(String(body||'').match(new RegExp(`<${name}\\b[^>]*>([\\s\\S]*?)<\\/${name}>`,'i'))?.[1]||'');
 const countMatches=(text,re)=>[...String(text||'').matchAll(re)].length;
 const stripCdata=(text)=>String(text||'').replace(/<!\[CDATA\[[\s\S]*?\]\]>/g,'');
 const pos=(text)=>{const value=clean(text);if(!value)return null;const parts=value.split(/[\s,]+/).map(toNum);return parts.length>=3&&parts.slice(0,3).every((n)=>n!=null)?{x:parts[0],y:parts[1],z:parts[2]}:null;};
