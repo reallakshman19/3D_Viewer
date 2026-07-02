@@ -26,6 +26,8 @@
 - [ ] Stable internal column IDs are available for duplicate headers.
 - [ ] Delimiter override is supported.
 - [ ] Auto delimiter detection still works.
+- [ ] Guided UI exposes delimiter mode before Read Table.
+- [ ] Runtime wires `data-table-categorized-delimiter-mode` into source state.
 
 ## Guided shell checklist
 
