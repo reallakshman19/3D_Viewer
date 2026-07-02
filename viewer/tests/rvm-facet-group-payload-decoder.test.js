@@ -48,16 +48,30 @@ function writePayload(view, offset, record) {
 function writeFacet(view, offset, facet) {
   if (facet.truncated) { view.setUint32(offset, 1, false); view.setUint32(offset + 4, 1, false); view.setUint32(offset + 8, 3, false); return; }
   const vertices = facet.vertices || [[0, 0, 0], [1, 0, 0], [0, 1, 0]];
-  view.setUint32(offset, 1, false); view.setUint32(offset + 4, 1, false); view.setUint32(offset + 8, vertices.length, false);
-  let p = offset + 12;
+  const polygonCount = facet.polygonCount || 1;
+  view.setUint32(offset, polygonCount, false);
+  let p = offset + 4;
+  for (let polygon = 0; polygon < polygonCount; polygon += 1) p = writeFacetPolygon(view, p, vertices);
+}
+
+function writeFacetPolygon(view, offset, vertices) {
+  view.setUint32(offset, 1, false); view.setUint32(offset + 4, vertices.length, false);
+  let p = offset + 8;
   for (const vertex of vertices) for (const value of [...vertex, 0, 0, 1]) { view.setFloat32(p, value, false); p += 4; }
+  return p;
 }
 
 function payloadLength(record) {
   const textLength = new TextEncoder().encode(record.text || '').byteLength;
   const floatLength = record.floats ? record.floats.length * 4 : 0;
-  const facetLength = record.facet ? (record.facet.truncated ? 12 : 12 + (record.facet.vertices || [[0], [0], [0]]).length * 24) : 0;
+  const facetLength = record.facet ? facetPayloadLength(record.facet) : 0;
   return Math.max(textLength, floatLength + facetLength);
+}
+
+function facetPayloadLength(facet) {
+  if (facet.truncated) return 12;
+  const vertices = facet.vertices || [[0], [0], [0]];
+  return 4 + (facet.polygonCount || 1) * (8 + vertices.length * 24);
 }
 
 const facet = makeReport([facetPrimitive()]).report;
@@ -76,6 +90,11 @@ assert.equal(facet.parser.parserComplete, false);
 assert.equal(facet.parser.visualParityClaimed, false);
 assert.equal(validateRvmFacetGroupEvidence(decodedFacet.facetGroup).valid, true);
 assert.equal(validateRvmPrimitiveDecodeReport(facet).valid, true);
+
+const highPolygon = makeReport([facetPrimitive({ polygonCount: 401 })]).report;
+assert.equal(highPolygon.decodedPrimitives[0].facetGroup.polygonCount, 401);
+assert.equal(highPolygon.coverage.decodedByCode['11'], 1);
+assert.deepEqual(highPolygon.coverage.failedByCode, {});
 
 const malformed = makeReport([facetPrimitive({ truncated: true })]).report;
 assert.equal(malformed.unsupportedPrimitives[0].decodeStatus, 'failed-diagnostic');
