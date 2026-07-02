@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
-import { createXmlCompareTransferPreview } from '../xml-compare/XmlCompareTransferPreview.js';
+import { createXmlCompareTransferPreview, getNodeOwnedBlocksForTransfer } from '../xml-compare/XmlCompareTransferPreview.js';
 import { renderXmlCompareTransferPreviewPanelHtml } from '../xml-compare/XmlCompareTransferPreviewPanel.js';
 import { renderXmlCompareWorkspaceShellHtml } from '../xml-compare/XmlCompareWorkspaceShell.js';
+import { createCategorizedInputXmlCanvasModel } from '../xml-compare/XmlCompareCategorizedInputXmlCanvasBuilder.js';
 
 const source={records:[{uid:'S1',nodeNumber:'10',dtxrPs:'PS-10',componentType:'ATTA'}]};
 const target={records:[{uid:'T1',nodeNumber:'10',dtxrPs:'',componentType:'ATTA'}]};
@@ -13,14 +14,42 @@ assert.equal(preview.summary.previewCount,1);
 assert.equal(preview.rows[0].field,'dtxrPs');
 assert.equal(preview.rows[0].sourceValue,'PS-10');
 assert.equal(preview.rows[0].status,'missing-target-value');
-
 const panelHtml=renderXmlCompareTransferPreviewPanelHtml(preview);
 assert.match(panelHtml,/Transfer Preview/);
 assert.match(panelHtml,/PS-10/);
 assert.match(panelHtml,/preview only/);
-
 const shellHtml=renderXmlCompareWorkspaceShellHtml({source,target,manualConnectors:links});
 assert.match(shellHtml,/data-xml-compare-transfer-preview/);
 assert.match(shellHtml,/PS-10/);
 
+const categorizedXml=`<CategorizedInputXML schema="categorized-inputxml/v3"><Line id="LINENO1"><LineBlock><LineNo>LINENO1</LineNo></LineBlock><Element fromNode="10" toNode="20" elementKey="10-&gt;20"><NodesBlock><Node nodeNumber="10" role="FROM"><DerivedCoordinateBlock><FROM_GLOBAL_X>1</FROM_GLOBAL_X><FROM_GLOBAL_Y>2</FROM_GLOBAL_Y><FROM_GLOBAL_Z>3</FROM_GLOBAL_Z></DerivedCoordinateBlock><TemperatureBlock><Temperature1>120</Temperature1></TemperatureBlock><RestraintsBlock><RESTRAINT NODE="10" TYPE="7"/></RestraintsBlock><DisplacementsBlock /><ForcesMomentsBlock /><SifBlock /></Node><Node nodeNumber="20" role="TO"><DerivedCoordinateBlock><TO_GLOBAL_X>4</TO_GLOBAL_X><TO_GLOBAL_Y>2</TO_GLOBAL_Y><TO_GLOBAL_Z>3</TO_GLOBAL_Z></DerivedCoordinateBlock></Node></NodesBlock></Element><Element fromNode="20" toNode="30" elementKey="20-&gt;30"><NodesBlock><Node nodeNumber="10" role="FROM"><MiscBlock><NOTE>wrong element same node number</NOTE></MiscBlock></Node></NodesBlock></Element></Line></CategorizedInputXML>`;
+const targetXml=`<CategorizedInputXML schema="categorized-inputxml/v3"><Line id="LINENO1"><LineBlock><LineNo>LINENO1</LineNo></LineBlock><Element fromNode="100" toNode="200" elementKey="100-&gt;200"><NodesBlock><Node nodeNumber="100" role="FROM"><DerivedCoordinateBlock><FROM_GLOBAL_X>1</FROM_GLOBAL_X><FROM_GLOBAL_Y>2</FROM_GLOBAL_Y><FROM_GLOBAL_Z>3</FROM_GLOBAL_Z></DerivedCoordinateBlock></Node></NodesBlock></Element></Line></CategorizedInputXML>`;
+const categorizedModel=createCategorizedInputXmlCanvasModel({sourceName:'source.xml',xmlText:categorizedXml,side:'source'});
+const targetModel=createCategorizedInputXmlCanvasModel({sourceName:'target.xml',xmlText:targetXml,side:'target'});
+const selectedNode=categorizedModel.records.find((record)=>record.levelId==='node'&&record.elementKey==='10->20'&&record.nodeNumber==='10'&&record.role==='FROM');
+const targetNode=targetModel.records.find((record)=>record.levelId==='node'&&record.nodeNumber==='100');
+assert.ok(selectedNode,'selected categorized node exists');
+assert.ok(targetNode,'target categorized node exists');
+const blocks=getNodeOwnedBlocksForTransfer({selectedNode,records:categorizedModel.records});
+assert.deepEqual(blocks.map((block)=>block.blockName),['DerivedCoordinateBlock','TemperatureBlock','RestraintsBlock','DisplacementsBlock','ForcesMomentsBlock','SifBlock']);
+assert.equal(blocks.find((block)=>block.blockName==='DisplacementsBlock').itemCount,0);
+assert.equal(blocks.find((block)=>block.blockName==='ForcesMomentsBlock').itemCount,0);
+assert.equal(blocks.find((block)=>block.blockName==='SifBlock').itemCount,0);
+assert.ok(!blocks.some((block)=>block.blockName==='MiscBlock'),'same nodeNumber in another element must not match');
+const categorizedPreview=createXmlCompareTransferPreview({source:{records:[selectedNode],baseRecords:categorizedModel.records},target:{records:[targetNode]},manualConnectors:[{id:'CAT-1',sourceUid:selectedNode.uid,targetUid:targetNode.uid}]});
+assert.equal(categorizedPreview.summary.nodeOwnedBlockCount,6);
+assert.equal(categorizedPreview.diagnostics.length,0);
+const categorizedPanel=renderXmlCompareTransferPreviewPanelHtml(categorizedPreview);
+assert.match(categorizedPanel,/Node-owned blocks/);
+assert.match(categorizedPanel,/DerivedCoordinateBlock/);
+assert.match(categorizedPanel,/TemperatureBlock/);
+assert.match(categorizedPanel,/RestraintsBlock/);
+assert.match(categorizedPanel,/DisplacementsBlock/);
+assert.match(categorizedPanel,/ForcesMomentsBlock/);
+assert.match(categorizedPanel,/SifBlock/);
+const blankPreview=createXmlCompareTransferPreview({source:{records:[selectedNode]},target:{records:[targetNode]},manualConnectors:[{id:'CAT-2',sourceUid:selectedNode.uid,targetUid:targetNode.uid}]});
+assert.equal(blankPreview.summary.nodeOwnedBlockCount,0);
+assert.ok(blankPreview.diagnostics.some((diag)=>diag.code==='node_owned_blocks_not_found'));
+const blankPanel=renderXmlCompareTransferPreviewPanelHtml(blankPreview);
+assert.match(blankPanel,/No node-owned blocks found for selected node identity/);
 console.log('xml-compare-transfer-preview: all assertions passed');

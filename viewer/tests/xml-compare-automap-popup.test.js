@@ -1,125 +1,82 @@
 import assert from 'node:assert/strict';
 
-import { createXmlCompareLineNodeHierarchy } from '../xml-compare/XmlCompareLineNodeHierarchy.js';
 import { createXmlComparePnmAutoMap } from '../xml-compare/XmlComparePnmAutoMapper.js';
 import { renderXmlCompareAutoMapPopupHtml, _test as popupTest } from '../xml-compare/XmlCompareAutoMapPopup.js';
 
-const sourceHierarchy=createXmlCompareLineNodeHierarchy([
-  {uid:'SRC-1',lineNo:'L-1',points:[{x:0,y:0,z:0},{x:10,y:0,z:0}],position:{x:0,y:0,z:0},attributes:{from:'10',to:'20',FROM_NODE:'10.000000',TO_NODE:'20.000000',FROM_GLOBAL_X:'100.000000',FROM_GLOBAL_Y:'200.000000',FROM_GLOBAL_Z:'300.000000',DELTA_X:'10.000000',DELTA_Y:'0.000000',DELTA_Z:'0.000000',DIAMETER:'114.300000',Temperature1:'120',Pressure1:'700','COMPONENT-ATTRIBUTE2':'120','COMPONENT-ATTRIBUTE1':'700',TEMP_EXP_C1:'120',PRESSURE1:'700',DESIGN_PRESSURE:'900',INSUL_THICK:'50',MATERIAL_NAME:'A106 B',PIPELINE_REFERENCE:'PIPE-A'}},
-  {uid:'SRC-2',lineNo:'L-1',points:[{x:10,y:0,z:0},{x:20,y:0,z:0}],position:{x:10,y:0,z:0},attributes:{FROM_NODE:'20.000000',TO_NODE:'30.000000',DELTA_X:'10.000000',DELTA_Y:'0.000000',DELTA_Z:'0.000000',DIAMETER:'114.300000',Temperature1:'121',Pressure1:'701',HYDRO_PRESSURE:'1200'}}
-]);
-const targetHierarchy=createXmlCompareLineNodeHierarchy([
-  {uid:'TGT-1',lineNo:'L-9',points:[{x:1000,y:500,z:0},{x:1010,y:500,z:0}],position:{x:1000,y:500,z:0},attributes:{from:'1000',to:'1010',FROM_NODE:'1000.000000',TO_NODE:'1010.000000',Temperature1:'',Pressure1:''}},
-  {uid:'TGT-2',lineNo:'L-9',points:[{x:1010,y:500,z:0},{x:1020,y:500,z:0}],position:{x:1010,y:500,z:0},attributes:{FROM_NODE:'1010.000000',TO_NODE:'1020.000000',Temperature1:'',Pressure1:''}}
-]);
-
-assert.equal(sourceHierarchy.records[0].transferFields.Temperature1,'120');
-assert.equal(sourceHierarchy.records[0].transferFields.Pressure1,'700');
-assert.equal(sourceHierarchy.records[0].sourceAttributes.DESIGN_PRESSURE,'900');
-assert.equal(sourceHierarchy.records[0].sourceAttributes.INSUL_THICK,'50');
-
-const childFields=popupTest.normalizedChildFields(sourceHierarchy.records[0]);
-assert.equal(childFields.DESIGN_PRESSURE,'900');
-assert.equal(childFields.INSUL_THICK,'50');
-assert.equal(childFields.Pressure1,'700');
-assert.equal(childFields.Temperature1,'120');
-assert.equal(childFields.MATERIAL_NAME,'A106 B');
-assert.equal(childFields.from,undefined);
-assert.equal(childFields.to,undefined);
-assert.equal(popupTest.isTransferableField('from'),false);
-assert.equal(popupTest.isTransferableField('to'),false);
-assert.equal(popupTest.fieldScope('FROM_GLOBAL_X'),'node');
-assert.equal(popupTest.fieldScope('DELTA_X'),'element');
-assert.equal(popupTest.fieldScope('DIAMETER'),'element');
-assert.equal(popupTest.fieldScope('Pressure1'),'line');
-assert.equal(popupTest.fieldScope('MATERIAL_NAME'),'line');
-assert.equal(popupTest.fieldBlock('node','FROM_GLOBAL_X'),'GlobalCoordinateBlock');
-assert.equal(popupTest.fieldBlock('element','INSUL_THICK'),'SectionDimensionBlock');
-assert.equal(popupTest.fieldBlock('line','Pressure1'),'ProcessBlock');
-assert.equal(popupTest.fieldBlock('line','MATERIAL_NAME'),'MaterialBlock');
-
-const matchMap=createXmlComparePnmAutoMap({sourceRecords:sourceHierarchy.records,targetRecords:targetHierarchy.records});
-const matchMapWithRequest={...matchMap,request:{scope:'node',sourceUid:sourceHierarchy.records[0].uid,targetUid:targetHierarchy.records[0].uid}};
-const rows=popupTest.matchedRows(matchMapWithRequest,sourceHierarchy.records,targetHierarchy.records);
-const html=renderXmlCompareAutoMapPopupHtml({matchMap:matchMapWithRequest,source:{records:sourceHierarchy.records},target:{records:targetHierarchy.records}});
-
+const sourceNode={uid:'S-N10',levelId:'node',lineNo:'LINENO1',elementKey:'10->20',nodeNumber:'10',role:'FROM',displayName:'FROM 10',position:{x:0,y:0,z:0},points:[{x:0,y:0,z:0}]};
+const targetNode={uid:'T-N100',levelId:'node',lineNo:'LINENO1',elementKey:'100->200',nodeNumber:'100',role:'FROM',displayName:'FROM 100',position:{x:1,y:0,z:0},points:[{x:1,y:0,z:0}]};
+const sourceEvidence=[
+  {uid:'S-E1',levelId:'nodeEvidence',recordKind:'NODE_EVIDENCE',lineNo:'LINENO1',elementKey:'10->20',nodeNumber:'10',role:'FROM',blockName:'DerivedCoordinateBlock',evidenceKind:'DerivedCoordinateBlock',itemCount:4,compactFields:{FROM_GLOBAL_X:'1'}},
+  {uid:'S-E2',levelId:'nodeEvidence',recordKind:'NODE_EVIDENCE',lineNo:'LINENO1',elementKey:'10->20',nodeNumber:'10',role:'FROM',blockName:'RestraintsBlock',evidenceKind:'RestraintsBlock',itemCount:3,compactFields:{TYPE:'7'}},
+  {uid:'S-E3',levelId:'nodeEvidence',recordKind:'NODE_EVIDENCE',lineNo:'LINENO1',elementKey:'10->20',nodeNumber:'10',role:'FROM',blockName:'DisplacementsBlock',evidenceKind:'DisplacementsBlock',itemCount:0,compactFields:{}},
+  {uid:'S-E4',levelId:'nodeEvidence',recordKind:'NODE_EVIDENCE',lineNo:'LINENO1',elementKey:'20->30',nodeNumber:'10',role:'FROM',blockName:'MiscBlock',evidenceKind:'MiscBlock',itemCount:1,compactFields:{NOTE:'other element'}}
+];
+const targetEvidence=[
+  {uid:'T-E1',levelId:'nodeEvidence',recordKind:'NODE_EVIDENCE',lineNo:'LINENO1',elementKey:'100->200',nodeNumber:'100',role:'FROM',blockName:'DerivedCoordinateBlock',evidenceKind:'DerivedCoordinateBlock',itemCount:4,compactFields:{FROM_GLOBAL_X:'2'}},
+  {uid:'T-E2',levelId:'nodeEvidence',recordKind:'NODE_EVIDENCE',lineNo:'LINENO1',elementKey:'100->200',nodeNumber:'100',role:'FROM',blockName:'RestraintsBlock',evidenceKind:'RestraintsBlock',itemCount:2,compactFields:{TYPE:'7'}}
+];
+const matchMap=createXmlComparePnmAutoMap({sourceRecords:[sourceNode],targetRecords:[targetNode]});
+const request={...matchMap,request:{scope:'node',sourceUid:sourceNode.uid,targetUid:targetNode.uid}};
+const rows=popupTest.matchedRows(request,[sourceNode],[targetNode]);
+assert.equal(rows.length,1);
+const cases=popupTest.nodeTransferCases(rows,{records:[sourceNode],baseRecords:[sourceNode,...sourceEvidence]},{records:[targetNode],baseRecords:[targetNode,...targetEvidence]});
+assert.deepEqual(cases.map((item)=>item.blockName),['DerivedCoordinateBlock','RestraintsBlock','DisplacementsBlock']);
+assert.equal(cases.find((item)=>item.blockName==='DerivedCoordinateBlock').status,'replace');
+assert.equal(cases.find((item)=>item.blockName==='RestraintsBlock').status,'replace');
+assert.equal(cases.find((item)=>item.blockName==='DisplacementsBlock').status,'add');
+assert.ok(!cases.some((item)=>item.blockName==='MiscBlock'));
+const plan=popupTest.nodeTransferPlan(rows,[],['RestraintsBlock'],cases);
+assert.equal(plan.length,1);
+assert.equal(plan[0].sourceElement,'10->20');
+assert.equal(plan[0].targetElement,'100->200');
+assert.deepEqual(plan[0].selectedBlocks,['RestraintsBlock']);
+assert.ok(plan[0].approvedCaseIds.some((id)=>id.includes('RestraintsBlock')));
+const html=renderXmlCompareAutoMapPopupHtml({matchMap:request,source:{records:[sourceNode],baseRecords:[sourceNode,...sourceEvidence]},target:{records:[targetNode],baseRecords:[targetNode,...targetEvidence]}});
 assert.match(html,/Auto Map Review/);
-assert.match(html,/Matched Nodes/);
-assert.match(html,/Node pair\(s\)/);
-assert.match(html,/Max Δ SRSS/);
-assert.match(html,/Select ≤ limit/);
-assert.match(html,/Transfer scope:/);
-assert.match(html,/Node blocks/);
-assert.match(html,/Element blocks/);
-assert.match(html,/Line blocks/);
+assert.match(html,/Matched Items/);
 assert.match(html,/Node-owned blocks/);
-assert.match(html,/Element-owned blocks/);
-assert.match(html,/Line-owned blocks/);
-assert.match(html,/GlobalCoordinateBlock/);
-assert.match(html,/RouteGeometryBlock/);
-assert.match(html,/SectionDimensionBlock/);
-assert.match(html,/ProcessBlock/);
-assert.match(html,/MaterialBlock/);
-assert.match(html,/copy-node-owned-blocks/);
-assert.match(html,/copy-element-owned-blocks/);
-assert.match(html,/copy-line-owned-blocks/);
-assert.match(html,/Inferred element pairs: 2/);
-assert.match(html,/10-&gt;20/);
-assert.match(html,/1000-&gt;1010/);
-assert.match(html,/20-&gt;30/);
-assert.match(html,/1010-&gt;1020/);
-assert.match(html,/all-inferred-element-pairs/);
-assert.match(html,/Line scope owns ProcessBlock and MaterialBlock/);
-assert.match(html,/preview-only/);
-assert.match(html,/data-xml-compare-node-pair/);
-assert.doesNotMatch(html,/<option value="from">from<\/option>/);
-assert.doesNotMatch(html,/<option value="to">to<\/option>/);
+assert.match(html,/Add to selection/);
+assert.match(html,/Selected node block\(s\)/);
+assert.match(html,/data-xml-compare-transfer-pair/);
+assert.match(html,/Select all/);
+assert.match(html,/Select none/);
+assert.match(html,/DerivedCoordinateBlock/);
+assert.match(html,/RestraintsBlock/);
+assert.match(html,/DisplacementsBlock/);
+assert.match(html,/Source available \/ Target available/);
+assert.match(html,/Source available \/ Target missing/);
+assert.doesNotMatch(html,/MiscBlock/);
 
-const nodeFields=popupTest.scopedFields(rows,'node');
-const elementFields=popupTest.scopedFields(rows,'element');
-const lineFields=popupTest.scopedFields(rows,'line');
-assert.ok(nodeFields.includes('FROM_GLOBAL_X'));
-assert.ok(!nodeFields.includes('Temperature1'));
-assert.ok(!nodeFields.includes('MATERIAL_NAME'));
-assert.ok(elementFields.includes('DELTA_X'));
-assert.ok(elementFields.includes('DIAMETER'));
-assert.ok(!elementFields.includes('Temperature1'));
-assert.ok(!elementFields.includes('MATERIAL_NAME'));
-assert.ok(lineFields.includes('Temperature1'));
-assert.ok(lineFields.includes('DESIGN_PRESSURE'));
-assert.ok(lineFields.includes('MATERIAL_NAME'));
-assert.ok(!lineFields.includes('DELTA_X'));
-assert.ok(!lineFields.includes('DIAMETER'));
-assert.ok(!lineFields.includes('from'));
-assert.ok(!lineFields.includes('to'));
-
-const inferred=popupTest.inferElementPairsFromNodePairs(rows);
-assert.equal(inferred.length,2);
-assert.deepEqual(inferred.map((pair)=>pair.sourceElement),['10->20','20->30']);
-assert.deepEqual(inferred.map((pair)=>pair.targetElement),['1000->1010','1010->1020']);
-assert.deepEqual(inferred[0].endpointMap,{10:'1000',20:'1010'});
-assert.equal(inferred[0].sourceFields.DELTA_X,'10.000000');
-assert.equal(inferred[0].sourceFields.DIAMETER,'114.300000');
-
-const nodePlan=popupTest.nodeTransferPlan(rows,nodeFields);
-assert.equal(nodePlan.length,3);
-assert.equal(nodePlan[0].targetNode,'1000');
-assert.ok(nodePlan[0].selectedBlocks.includes('GlobalCoordinateBlock'));
-assert.equal(nodePlan[0].fields.Temperature1,undefined);
-const elementPlan=popupTest.elementTransferPlan(rows,elementFields);
-assert.equal(elementPlan.length,2);
-assert.equal(elementPlan[0].sourceElement,'10->20');
-assert.equal(elementPlan[0].targetElement,'1000->1010');
-assert.equal(elementPlan[1].sourceElement,'20->30');
-assert.equal(elementPlan[1].targetElement,'1010->1020');
-assert.ok(elementPlan[0].selectedBlocks.includes('RouteGeometryBlock'));
-assert.equal(elementPlan[0].fields.MATERIAL_NAME,undefined);
-const linePlan=popupTest.lineTransferPlan(rows,lineFields);
-assert.equal(linePlan.length,1);
-assert.equal(linePlan[0].sourceLine,'L-1');
-assert.equal(linePlan[0].targetLine,'L-9');
-assert.ok(linePlan[0].selectedBlocks.includes('ProcessBlock'));
-assert.ok(linePlan[0].selectedBlocks.includes('MaterialBlock'));
-assert.equal(linePlan[0].fields.Temperature1,'120');
-
+const src35To={uid:'S-30-35-TO',levelId:'node',lineNo:'LINENO1',elementKey:'30->35',nodeNumber:'35',role:'TO',position:{x:0,y:0,z:0},points:[{x:0,y:0,z:0}]};
+const src35From={uid:'S-35-70-FROM',levelId:'node',lineNo:'LINENO1',elementKey:'35->70',nodeNumber:'35',role:'FROM',position:{x:25,y:0,z:0},points:[{x:25,y:0,z:0}]};
+const tgt1030To={uid:'T-1020-1030-TO',levelId:'node',lineNo:'LINENO1',elementKey:'1020->1030',nodeNumber:'1030',role:'TO',position:{x:0,y:0,z:0},points:[{x:0,y:0,z:0}]};
+const tgt1030From={uid:'T-1030-1040-FROM',levelId:'node',lineNo:'LINENO1',elementKey:'1030->1040',nodeNumber:'1030',role:'FROM',position:{x:25,y:0,z:0},points:[{x:25,y:0,z:0}]};
+const physicalRow={index:6,source:src35From,target:tgt1030From,sourceFields:{globalX:'23227.580'},targetFields:{globalX:'123227.602'},delta:{dx:0,dy:0,dz:25,srss:25,maxAbs:25},match:{}};
+const physicalSourceEvidence=[
+  {uid:'S-30-35-TO-R',levelId:'nodeEvidence',recordKind:'NODE_EVIDENCE',lineNo:'LINENO1',elementKey:'30->35',nodeNumber:'35',role:'TO',blockName:'RestraintsBlock',evidenceKind:'RestraintsBlock',itemCount:3,compactFields:{TYPE:'17,1,3'}},
+  {uid:'S-35-70-FROM-R',levelId:'nodeEvidence',recordKind:'NODE_EVIDENCE',lineNo:'LINENO1',elementKey:'35->70',nodeNumber:'35',role:'FROM',blockName:'RestraintsBlock',evidenceKind:'RestraintsBlock',itemCount:0,compactFields:{}},
+  {uid:'S-35-70-FROM-D',levelId:'nodeEvidence',recordKind:'NODE_EVIDENCE',lineNo:'LINENO1',elementKey:'35->70',nodeNumber:'35',role:'FROM',blockName:'DerivedCoordinateBlock',evidenceKind:'DerivedCoordinateBlock',itemCount:4,compactFields:{globalX:'23227.580'}}
+];
+const physicalTargetEvidence=[
+  {uid:'T-1020-1030-TO-R',levelId:'nodeEvidence',recordKind:'NODE_EVIDENCE',lineNo:'LINENO1',elementKey:'1020->1030',nodeNumber:'1030',role:'TO',blockName:'RestraintsBlock',evidenceKind:'RestraintsBlock',itemCount:2,compactFields:{TYPE:'17,3'}},
+  {uid:'T-1030-1040-FROM-R',levelId:'nodeEvidence',recordKind:'NODE_EVIDENCE',lineNo:'LINENO1',elementKey:'1030->1040',nodeNumber:'1030',role:'FROM',blockName:'RestraintsBlock',evidenceKind:'RestraintsBlock',itemCount:0,compactFields:{}},
+  {uid:'T-1030-1040-FROM-D',levelId:'nodeEvidence',recordKind:'NODE_EVIDENCE',lineNo:'LINENO1',elementKey:'1030->1040',nodeNumber:'1030',role:'FROM',blockName:'DerivedCoordinateBlock',evidenceKind:'DerivedCoordinateBlock',itemCount:4,compactFields:{globalX:'123227.602'}}
+];
+const physicalCases=popupTest.nodeTransferCases([physicalRow],{records:[src35From],baseRecords:[src35To,src35From,...physicalSourceEvidence]},{records:[tgt1030From],baseRecords:[tgt1030To,tgt1030From,...physicalTargetEvidence]});
+const restraintCase=physicalCases.find((item)=>item.blockName==='RestraintsBlock');
+assert.equal(restraintCase.sourceElement,'30->35');
+assert.equal(restraintCase.sourceRole,'TO');
+assert.equal(restraintCase.targetElement,'1020->1030');
+assert.equal(restraintCase.targetRole,'TO');
+assert.equal(restraintCase.resolution,'physical-node-block-occurrence');
+const physicalPlan=popupTest.nodeTransferPlan([physicalRow],[],['RestraintsBlock'],physicalCases);
+assert.equal(physicalPlan.length,1);
+assert.equal(physicalPlan[0].sourceElement,'30->35');
+assert.equal(physicalPlan[0].sourceRole,'TO');
+assert.equal(physicalPlan[0].targetElement,'1020->1030');
+assert.equal(physicalPlan[0].targetRole,'TO');
+assert.deepEqual(physicalPlan[0].selectedBlocks,['RestraintsBlock']);
+assert.ok(physicalPlan[0].approvedCaseIds[0].includes('30->35:35->1020->1030:1030:RestraintsBlock'));
+const noBlocks=renderXmlCompareAutoMapPopupHtml({matchMap:request,source:{records:[sourceNode]},target:{records:[targetNode]}});
+assert.match(noBlocks,/No node-owned blocks found for selected node identity/);
 console.log('xml-compare-automap-popup: all assertions passed');
