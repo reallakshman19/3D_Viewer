@@ -17,13 +17,20 @@ assert.ok(gate.includes('installXmlCompareLinewiseToolbarGate'));
 assert.ok(gate.includes('if(installed||!doc?.addEventListener)return false'));
 
 assert.ok(runtime.includes('data-xml-compare-table-categorized-open'));
-assert.ok(runtime.includes('function install()')||runtime.includes('installTableCategorizedRuntime'));
-assert.ok(runtime.includes("document.addEventListener('click',clickHandler,{capture:true})"));
-assert.ok(runtime.includes("document.addEventListener('input',inputHandler,{capture:true})"));
-assert.ok(runtime.includes("document.addEventListener('change',changeHandler,{capture:true})"));
+assert.ok(runtime.includes('let runtimeInstalled=false'));
+assert.ok(runtime.includes('let tableCategorizedObserver=null'));
+assert.ok(runtime.includes('export function installTableCategorizedRuntime'));
+assert.ok(runtime.includes('if(runtimeInstalled||!doc?.addEventListener)return false'));
+assert.ok(runtime.includes('runtimeInstalled=true'));
+assert.ok(runtime.includes("doc.addEventListener('click',clickHandler,{capture:true})"));
+assert.ok(runtime.includes("doc.addEventListener('input',inputHandler,{capture:true})"));
+assert.ok(runtime.includes("doc.addEventListener('change',changeHandler,{capture:true})"));
+assert.ok(runtime.includes('new MutationObserver(()=>injectButton(doc))'));
+assert.ok(runtime.includes('installTableCategorizedRuntime();'));
+assert.equal(runtime.includes('function install(){'),false);
 
 assert.ok(shell.includes('let loadTableCategorizedPromise=null'));
 assert.ok(shell.includes('if(loadTableCategorizedPromise)return'));
 assert.ok(shell.includes('xml-compare-table-categorized-runtime.js'));
 
-console.log('table-categorized-runtime-ownership: static ownership assertions passed');
+console.log('table-categorized-runtime-ownership: ownership assertions passed');
