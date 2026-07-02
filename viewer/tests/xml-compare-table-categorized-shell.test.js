@@ -12,6 +12,11 @@ import { runCategorizerValidation } from '../xml-compare/table-categorizer/table
 const includesAll=(html,labels)=>labels.forEach((label)=>assert.ok(html.includes(label), `missing ${label}`));
 const excludesAll=(html,labels)=>labels.forEach((label)=>assert.ok(!html.includes(label), `unexpected ${label}`));
 const setupTabButtonTag=(html,id)=>html.match(new RegExp(`<button[^>]*data-table-categorized-setup-tab="${id}"[^>]*>`))?.[0]||'';
+const setupTabBlock=(html,id)=>{const start=html.indexOf(`data-table-categorized-setup-tab="${id}"`);const end=html.indexOf('</button>',start);return start>=0&&end>=0?html.slice(start,end):'';};
+const panelBlock=(html,title)=>{const summary=html.indexOf(`<summary><b>${title}`);const start=html.lastIndexOf('<details',summary);const end=html.indexOf('</details>',summary);return summary>=0&&start>=0&&end>=0?html.slice(start,end):'';};
+const assertSetupTabStatus=(html,id,status)=>assert.ok(setupTabBlock(html,id).includes(`data-table-categorized-status="${status}"`), `setup ${id} not ${status}`);
+const assertPanelStatus=(html,title,status)=>assert.ok(panelBlock(html,title).includes(`data-panel-status="${status}"`), `panel ${title} not ${status}`);
+const assertStatusLabel=(html,status)=>assert.ok(html.includes(`data-table-categorized-status="${status}"`), `status missing: ${status}`);
 const assertActiveSetupTab=(html,id)=>{
   const tag=setupTabButtonTag(html,id);
   assert.ok(tag, `setup tab button missing: ${id}`);
@@ -40,6 +45,9 @@ assert.ok(button.includes(TABLE_CATEGORIZED_XML_BUTTON_ATTR));
 const shell=renderTableCategorizedXmlShellHtml();
 includesAll(shell,['Table to Categorized XML','Build a categorized graph from any table','1 Import Table','2 Map Fields & Rules','3 Build Structure','4 Check','5 Export','Live Preview','Base Key','Final Group','data-panel-group="source"','data-setup-body="source"']);
 assert.ok(shell.includes('<details'));
+assertSetupTabStatus(shell,'source','pending');
+assertSetupTabStatus(shell,'output','locked');
+assertSetupTabStatus(shell,'quality','pending');
 
 for(const [id,label] of TABLE_CATEGORIZED_SETUP_TABS){
   assert.ok(shell.includes(label.replace(/^\S+\s+/u,'')), `setup tab label missing: ${label}`);
@@ -82,15 +90,8 @@ assertActiveSetupTab(rendered,'structure');
 let registeredClick=null;
 let removedClick=null;
 let outerHtml='';
-const livePopup={
-  querySelector:fakePopup('levels','fields').querySelector,
-  set outerHTML(value){outerHtml=value;},
-  get outerHTML(){return outerHtml;}
-};
-const liveRoot={
-  addEventListener(type,handler){if(type==='click')registeredClick=handler;},
-  removeEventListener(type,handler){if(type==='click')removedClick=handler;}
-};
+const livePopup={querySelector:fakePopup('levels','fields').querySelector,set outerHTML(value){outerHtml=value;},get outerHTML(){return outerHtml;}};
+const liveRoot={addEventListener(type,handler){if(type==='click')registeredClick=handler;},removeEventListener(type,handler){if(type==='click')removedClick=handler;}};
 const installHandle=installTableCategorizedSetupTabNavigation(liveRoot,{activeTab:'levels',activeSetupTab:'fields'});
 assert.ok(registeredClick);
 registeredClick({target:{closest(selector){if(selector==='[data-xml-compare-table-categorized-popup]')return livePopup;if(selector==='[data-table-categorized-setup-tab]')return {dataset:{tableCategorizedSetupTab:'relationships'}};return null;}},preventDefault(){}});
@@ -105,12 +106,17 @@ const s2=parseTableSource(PS_MAPPING_COORDINATE_LOOKUP_SAMPLE,{sourceId:'S2',sou
 const sourceShell=renderTableCategorizedXmlShellHtml({activeTab:'source',activeSetupTab:'source',sources:[s1,s2],activeSourceId:'S2'});
 assertActiveSetupTab(sourceShell,'source');
 assertShellBasics(sourceShell);
+assertSetupTabStatus(sourceShell,'source','ready');
+assertPanelStatus(sourceShell,'Source Tables','ready');
+assertPanelStatus(sourceShell,'Parsed Rows','ready');
 includesAll(sourceShell,['Source Tables','Parsed Tables','Parsed Rows','Source Messages','Import Settings','File Type / Paste Mode','Delimiter','Header Row','Skip Rows','Encoding','Trim Blank Rows','Duplicate Header Handling','Column Cleanup','Column Rename','Include / Exclude Columns','Source Table ID','Source Table Role','Add Table','Remove Table','Read Active Table','Load Coordinate Lookup Sample','Raw Table Preview','Imported Rows','data-panel-group="source"']);
 excludesAll(sourceShell,['Join Another Table','XML Shape']);
 
 const fieldsShell=renderTableCategorizedXmlShellHtml({activeTab:'levels',activeSetupTab:'fields',sources:[s1,s2],activeSourceId:'S1'});
 assertActiveSetupTab(fieldsShell,'fields');
 assertShellBasics(fieldsShell);
+assertSetupTabStatus(fieldsShell,'fields','review');
+assertPanelStatus(fieldsShell,'Column Mapping','review');
 includesAll(fieldsShell,['Column Mapping','Data Types / Units','Detected Type','Selected Type','Text / Number / Date / Boolean / Coordinate','Unit','Required / Optional','Defaults / Blank Handling','Blank Policy','Invalid Value Policy','Default Value','Alias Names','Calculated Fields','Calculated Column Formula','Formula','data-panel-group="fields"']);
 excludesAll(fieldsShell,['Source Messages','Join Another Table','XML Shape']);
 
@@ -135,12 +141,16 @@ excludesAll(rulesShell,['Source Messages','XML Shape']);
 const qualityShellEmpty=renderTableCategorizedXmlShellHtml({activeTab:'validation',activeSetupTab:'quality'});
 assertActiveSetupTab(qualityShellEmpty,'quality');
 assertShellBasics(qualityShellEmpty);
+assertSetupTabStatus(qualityShellEmpty,'quality','pending');
+assertPanelStatus(qualityShellEmpty,'Required Checks','pending');
 includesAll(qualityShellEmpty,['Required Checks','Required Columns','Required Levels','Unique Key Checks','Missing Parent Checks','Duplicate Key Checks','Invalid Number Checks','Invalid Coordinate Checks','Validation Settings','Rule Failure Severity','Blocker / Warning / Info','Blocker / Warning / Info Mapping','Export Blocking Rules','Warnings','Audit Trail','data-panel-group="quality"']);
 excludesAll(qualityShellEmpty,['Source Messages','XML Shape']);
 
 const beforeExportShell=renderTableCategorizedXmlShellHtml({activeTab:'export',activeSetupTab:'output'});
 assertActiveSetupTab(beforeExportShell,'output');
 assertShellBasics(beforeExportShell);
+assertSetupTabStatus(beforeExportShell,'output','locked');
+assertPanelStatus(beforeExportShell,'Download Files','locked');
 includesAll(beforeExportShell,['XML Names','XML Root Tag','Partition Tag','Level Tag Names','Field Tag Names','XML Shape','Attribute vs Element','Text Node vs Child Element','Element Order','Empty Value Policy','Namespace','Schema Version','Indentation','CDATA Option','One XML document root only','Logical splits are child partitions below the root','Download Files','Build Preview Graph first.','Canvas Link','data-panel-group="output"']);
 assert.ok(!beforeExportShell.includes('data-table-categorized-action="send-source"'));
 assert.ok(!beforeExportShell.includes('data-table-categorized-action="send-target"'));
@@ -160,20 +170,40 @@ const validationResults=runCategorizerValidation({profile:PS_MAPPING_TABLE_2_SHA
 const exportResult=exportCategorizedGraphArtifacts({graph,profile:PS_MAPPING_TABLE_2_SHADOW_PROFILE,validationResults,sources:[source]});
 const graphShell=renderTableCategorizedXmlShellHtml({activeTab:'graph',sources:[source],profile:PS_MAPPING_TABLE_2_SHADOW_PROFILE,graph,validationResults});
 assertActiveSetupTab(graphShell,'structure');
+assertSetupTabStatus(graphShell,'structure','ready');
+assertPanelStatus(graphShell,'Preview Graph','ready');
 includesAll(graphShell,['Preview Graph','PS-XYZ__C001','PS-XYZ.10','featureType=GUIDE','Go to Export / Link','Structure']);
 const validationShell=renderTableCategorizedXmlShellHtml({activeTab:'validation',validationResults,exportResult});
 assertActiveSetupTab(validationShell,'quality');
 includesAll(validationShell,['graph_has_single_document_root','required_columns_present','Export allowed.','Warnings','Validation Settings','Audit Trail']);
 const exportShell=renderTableCategorizedXmlShellHtml({activeTab:'export',graph,validationResults,exportResult});
 assertActiveSetupTab(exportShell,'output');
+assertSetupTabStatus(exportShell,'output','ready');
+assertPanelStatus(exportShell,'Download Files','ready');
+assertPanelStatus(exportShell,'Canvas Link','ready');
 includesAll(exportShell,['XML Preview','&lt;CategorizedTableXml','XML View','Download Categorized XML','Download Graph JSON','Download Recipe JSON','Send to SourceXML Canvas','Send to TargetXML Canvas','data-panel-group="output"']);
 assert.ok(!exportShell.includes('CategorizedInputXML'));
 const blockedResults=[{gate:'required_columns_present',severity:'BLOCKER',status:'FAIL',message:'blocked',ref:''}];
+const qualityBlockedShell=renderTableCategorizedXmlShellHtml({activeTab:'validation',activeSetupTab:'quality',graph,validationResults:blockedResults,exportResult:null});
+assertSetupTabStatus(qualityBlockedShell,'quality','blocked');
+assertPanelStatus(qualityBlockedShell,'Required Checks','blocked');
 const blockedShell=renderTableCategorizedXmlShellHtml({activeTab:'export',graph,validationResults:blockedResults,exportResult:null});
 assertActiveSetupTab(blockedShell,'output');
+assertSetupTabStatus(blockedShell,'output','blocked');
+assertPanelStatus(blockedShell,'Download Files','blocked');
 assert.ok(blockedShell.includes('Export is blocked by validation.'));
 assert.ok(blockedShell.includes('data-setup-body="output"'));
 assert.ok(!blockedShell.includes('data-setup-body="quality"'));
 assert.ok(!blockedShell.includes('data-panel-group="quality"'));
 assert.ok(!blockedShell.includes('Download Graph JSON'));
+
+const statusCorpus=[shell,sourceShell,fieldsShell,relationshipsShell,structureShell,rulesShell,qualityShellEmpty,beforeExportShell,recipeShell,graphShell,validationShell,exportShell,qualityBlockedShell,blockedShell].join('');
+for(const status of ['ready','review','pending','optional','locked','blocked'])assertStatusLabel(statusCorpus,status);
+for(const html of [sourceShell,fieldsShell,relationshipsShell,structureShell,rulesShell,qualityShellEmpty,beforeExportShell,recipeShell,graphShell,exportShell,blockedShell]){
+  assertShellBasics(html);
+  assert.ok(html.includes('data-setup-body'));
+  assert.ok(html.includes('data-panel-group'));
+}
+assert.ok(beforeExportShell.includes('One XML document root only'));
+assert.ok(exportShell.includes('One XML document root only'));
 console.log('xml-compare-table-categorized-shell: all assertions passed');
