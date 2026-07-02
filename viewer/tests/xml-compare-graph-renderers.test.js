@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 
-import { renderXmlCompareGraphCanvasHtml } from '../xml-compare/XmlCompareGraphCanvas.js';
+import { renderXmlCompareGraphCanvasHtml, _test as graphTest } from '../xml-compare/XmlCompareGraphCanvas.js';
 import { renderXmlCompareGraphConnectorLaneHtml } from '../xml-compare/XmlCompareGraphConnectorLane.js';
 import { createXmlCompareManualConnectorState, reduceXmlCompareManualConnectorState } from '../xml-compare/XmlCompareManualConnectorState.js';
 
@@ -19,12 +19,23 @@ const cardView={levelId:'branch',label:'Branch',layout:'cards',displayField:'bra
 const cardsHtml=renderXmlCompareGraphCanvasHtml({side:'source',title:'Source',data:{fileName:'A.xml',records:cardView.records,levelView:cardView},manualState});
 assert.match(cardsHtml,/xml-compare-level-card/);
 assert.match(cardsHtml,/data-xml-compare-record-uid="branch:L-100"/);
-const elementView={levelId:'element',label:'Element',layout:'grouped-tree',displayField:'elementKey',keyField:'elementKey',fields:['elementKey','lineNo','fromNode','toNode'],records:[{uid:'categorized:element:L1:10-20',lineNo:'L1',elementKey:'10->20',fromNode:'10',toNode:'20'},{uid:'categorized:element:L2:100-110',lineNo:'L2',elementKey:'100->110',fromNode:'100',toNode:'110'}],hierarchyProfile:{levels:[{levelId:'element',label:'Element',recordCount:2,fields:['elementKey','lineNo']}]} };
+const elementView={levelId:'element',label:'Element',layout:'grouped-tree',displayField:'elementKey',keyField:'elementKey',fields:['elementKey','lineNo','fromNode','toNode','DELTA_X','MaterialName'],records:[{uid:'categorized:element:L1:10-20',lineNo:'L1',elementKey:'10->20',fromNode:'10',toNode:'20',DELTA_X:'1000',MaterialName:'A106 B'},{uid:'categorized:element:L2:100-110',lineNo:'L2',elementKey:'100->110',fromNode:'100',toNode:'110'}],hierarchyProfile:{levels:[{levelId:'element',label:'Element',recordCount:2,fields:['elementKey','lineNo']}]} };
 const groupedHtml=renderXmlCompareGraphCanvasHtml({side:'source',title:'Source',data:{fileName:'cat.xml',profile:'categorized-inputxml',records:elementView.records,levelView:elementView},manualState});
 assert.match(groupedHtml,/xml-compare-dynamic-tree/);
 assert.match(groupedHtml,/xml-compare-dynamic-line-group/);
 assert.match(groupedHtml,/Element 10-&gt;20/);
+assert.match(groupedHtml,/title="lineNo: L1/);
+assert.match(groupedHtml,/DELTA_X: 1000/);
+assert.doesNotMatch(groupedHtml,/<small><b>DELTA_X:<\/b>/);
 assert.match(groupedHtml,/data-xml-compare-record-uid="categorized:element:L1:10-20"/);
+const nodeView={levelId:'node',label:'Node',layout:'grouped-tree',displayField:'nodeNumber',keyField:'elementKey',fields:['nodeNumber','role','elementKey','lineNo','globalX','globalY','globalZ','restraintCount'],records:[{uid:'categorized:node:L1:10-20:FROM:10',lineNo:'L1',elementKey:'10->20',nodeNumber:'10',role:'FROM',globalX:'1',globalY:'2',globalZ:'3',restraintCount:'1'}],hierarchyProfile:{levels:[{levelId:'node',label:'Node',recordCount:1,fields:['nodeNumber','globalX','globalY','globalZ']}]} };
+const nodeHtml=renderXmlCompareGraphCanvasHtml({side:'source',title:'Source',data:{fileName:'cat.xml',profile:'categorized-inputxml',records:nodeView.records,levelView:nodeView},manualState});
+assert.match(nodeHtml,/Node 10/);
+assert.match(nodeHtml,/title="lineNo: L1/);
+assert.match(nodeHtml,/globalX: 1/);
+assert.doesNotMatch(nodeHtml,/<small><b>globalX:<\/b>/);
+assert.match(nodeHtml,/data-xml-compare-record-uid="categorized:node:L1:10-20:FROM:10"/);
+assert.equal(graphTest.recordTooltip(nodeView.records[0],nodeView).includes('globalY: 2'),true);
 const evidenceView={levelId:'nodeEvidence',label:'Node Evidence',layout:'grouped-compact-tree',displayField:'evidenceKind',keyField:'elementKey',fields:['evidenceKind','blockName','lineNo','elementKey','nodeNumber','role','itemCount'],records:[{uid:'categorized:nodeEvidence:L1:10-20:FROM:10:RestraintsBlock',lineNo:'L1',elementKey:'10->20',nodeNumber:'10',role:'FROM',evidenceKind:'RestraintsBlock',blockName:'RestraintsBlock',itemCount:1}],hierarchyProfile:{levels:[{levelId:'nodeEvidence',label:'Node Evidence',recordCount:1,fields:['evidenceKind','blockName']}]} };
 const evidenceHtml=renderXmlCompareGraphCanvasHtml({side:'target',title:'Target',data:{fileName:'cat.xml',profile:'categorized-inputxml',records:evidenceView.records,levelView:evidenceView},manualState});
 assert.match(evidenceHtml,/is-grouped-compact-tree/);
