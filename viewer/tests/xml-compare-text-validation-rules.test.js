@@ -1,7 +1,11 @@
 import assert from 'node:assert/strict';
-import { createDefaultTextRule, normalizeTextMode, normalizeTextValue } from '../xml-compare/XmlCompareTextValidationRules.js';
+import { compareTokenSet, createDefaultTextRule, normalizeTextMode, normalizeTextValue } from '../xml-compare/XmlCompareTextValidationRules.js';
 const rule=createDefaultTextRule('Name');
 assert.equal(rule.mode,'exact-normalized');
 assert.equal(normalizeTextMode('unknown'),'exact-normalized');
 assert.equal(normalizeTextValue(' Hello    World ',{}),'hello world');
+assert.equal(compareTokenSet({sourceValue:'red blue green',targetValue:'green, red, blue',rule:{field:'Tags',mode:'token-set'}}).status,'OK');
+const bad=compareTokenSet({sourceValue:'red blue green',targetValue:'red yellow',rule:{field:'Tags',mode:'token-set'}});
+assert.deepEqual(bad.missingInTarget.sort(),['blue','green']);
+assert.deepEqual(bad.extraInTarget,['yellow']);
 console.log('xml-compare-text-validation-rules: all assertions passed');
