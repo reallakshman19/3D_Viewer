@@ -6,15 +6,16 @@ import { TABLE_CATEGORIZED_SETUP_TABS, TABLE_CATEGORIZED_XML_TABS, isSetupTabEna
 import { parseTableSource } from './table-categorized-xml-source-parser.js';
 import { runCategorizerValidation } from './table-categorized-xml-validation.js';
 
-export const TABLE_CATEGORIZED_XML_CONTROLLER_SCHEMA='table-categorized-xml-controller/v5-workflow-ui-hardening';
+export const TABLE_CATEGORIZED_XML_CONTROLLER_SCHEMA='table-categorized-xml-controller/v6-graph-export-completion';
 
 const SETUP_TAB_IDS=new Set(TABLE_CATEGORIZED_SETUP_TABS.map(([id])=>id));
 const WORKFLOW_TAB_IDS=new Set(TABLE_CATEGORIZED_XML_TABS.map(([id])=>id));
 const PREVIEW_STAGE_IDS=new Set(['raw','base','cluster','family','graph','xml']);
+const DOWNLOAD_KINDS=new Set(['xml','graph','profile','diagnostics','audit']);
+const SOURCE_ACTIONS=new Set(['load-sample','load-coordinate-sample','parse','clear','add-source','remove-source','build-graph']);
 const POPUP_SELECTOR='[data-xml-compare-table-categorized-popup]';
 const ACTIVE_WORKFLOW_SELECTOR='[data-table-categorized-tab].is-active';
 const ACTIVE_SETUP_SELECTOR='[data-table-categorized-setup-tab].is-active';
-const SOURCE_ACTIONS=new Set(['load-sample','load-coordinate-sample','parse','clear','add-source','remove-source','build-graph']);
 
 export function nextTableCategorizedNavigationState(state={},action={}){
   if(action.type==='setup-tab'){
@@ -51,6 +52,38 @@ export function nextTableCategorizedSourceActionState(state={},action={}){
   return state;
 }
 
+export function createTableCategorizedDownloadArtifact(state={},kind=''){
+  const exportResult=state.exportResult||{};
+  if(!DOWNLOAD_KINDS.has(kind))return Object.freeze({ok:false,reason:'Unknown download kind.'});
+  if(!exportResult.ok)return Object.freeze({ok:false,reason:'Export is not ready. Build Preview Graph first.'});
+  const specs={
+    xml:{filename:'table-categorized.xml',mimeType:'application/xml',text:exportResult.xmlText||''},
+    graph:{filename:'table-categorized-graph.json',mimeType:'application/json',text:exportResult.graphJson||''},
+    profile:{filename:'table-categorized-recipe.json',mimeType:'application/json',text:exportResult.profileJson||JSON.stringify(state.profile||{},null,2)},
+    diagnostics:{filename:'table-categorized-diagnostics.json',mimeType:'application/json',text:exportResult.diagnosticsJson||''},
+    audit:{filename:'table-categorized-audit.json',mimeType:'application/json',text:exportResult.auditJson||''}
+  };
+  const artifact=specs[kind];
+  if(!artifact?.text)return Object.freeze({ok:false,reason:'Export is not ready. Build Preview Graph first.'});
+  return Object.freeze({ok:true,...artifact});
+}
+
+export function triggerTableCategorizedDownload(artifact,doc=globalThis.document){
+  if(!artifact?.ok)return artifact;
+  if(!doc?.createElement||typeof Blob==='undefined'||!globalThis.URL?.createObjectURL)return artifact;
+  const blob=new Blob([artifact.text],{type:artifact.mimeType});
+  const url=globalThis.URL.createObjectURL(blob);
+  const anchor=doc.createElement('a');
+  anchor.href=url;
+  anchor.download=artifact.filename;
+  anchor.style.display='none';
+  doc.body?.appendChild?.(anchor);
+  anchor.click?.();
+  anchor.remove?.();
+  globalThis.URL.revokeObjectURL?.(url);
+  return artifact;
+}
+
 export function tableCategorizedNavigationActionFromTarget(target){
   const setupButton=target?.closest?.('[data-table-categorized-setup-tab]');
   if(setupButton?.dataset?.tableCategorizedSetupTab){
@@ -61,6 +94,8 @@ export function tableCategorizedNavigationActionFromTarget(target){
   if(workflowButton?.dataset?.tableCategorizedTab)return {type:'workflow-tab',activeTab:workflowButton.dataset.tableCategorizedTab};
   const previewButton=target?.closest?.('[data-table-categorized-preview-stage]');
   if(previewButton?.dataset?.tableCategorizedPreviewStage)return {type:'preview-stage',previewStage:previewButton.dataset.tableCategorizedPreviewStage};
+  const downloadButton=target?.closest?.('[data-table-categorized-download]');
+  if(downloadButton?.dataset?.tableCategorizedDownload)return {type:'download',kind:downloadButton.dataset.tableCategorizedDownload};
   const actionButton=target?.closest?.('[data-table-categorized-action]');
   const action=actionButton?.dataset?.tableCategorizedAction;
   if(action==='toggle-fullscreen')return {type:'toggle-fullscreen'};
@@ -70,34 +105,33 @@ export function tableCategorizedNavigationActionFromTarget(target){
 
 export function tableCategorizedNavigationStateFromPopup(popup,state={}){
   const activeTab=popup?.querySelector?.(ACTIVE_WORKFLOW_SELECTOR)?.dataset?.tableCategorizedTab||state.activeTab||'source';
-  const requestedSetup=popup?.querySelector?.(ACTIVE_SETUP_SELECTOR)?.dataset?.tableCategorizedSetupTab||state.activeSetupTab||setupTabForWorkflowTab(activeTab);
-  const activeSetupTab=isSetupTabEnabledForWorkflow(activeTab,requestedSetup)?requestedSetup:setupTabForWorkflowTab(activeTab);
+  const wanted=popup?.querySelector?.(ACTIVE_SETUP_SELECTOR)?.dataset?.tableCategorizedSetupTab||state.activeSetupTab||setupTabForWorkflowTab(activeTab);
+  const activeSetupTab=isSetupTabEnabledForWorkflow(activeTab,wanted)?wanted:setupTabForWorkflowTab(activeTab);
   const activePreviewStage=state.activePreviewStage||previewStageForSetupTab(activeSetupTab);
   return syncSourceDraftFromPopup(popup,{...state,activeTab,activeSetupTab,activePreviewStage});
 }
 
-export function handleTableCategorizedNavigationClick(event,state={},render){
+export function handleTableCategorizedNavigationClick(event,state={},render,options={}){
   const action=tableCategorizedNavigationActionFromTarget(event?.target);
   if(!action)return {handled:false,state};
   event.preventDefault?.();
+  if(action.type==='download'){
+    const artifact=createTableCategorizedDownloadArtifact(state,action.kind);
+    if(artifact.ok){
+      if(typeof options.download==='function')options.download(artifact);
+      else triggerTableCategorizedDownload(artifact,options.document||globalThis.document);
+    }
+    return {handled:true,state,action,artifact};
+  }
   const nextState=nextTableCategorizedNavigationState(state,action);
   render?.(nextState);
   return {handled:true,state:nextState,action};
 }
 
-export function wireTableCategorizedSetupTabNavigation(container,{state={},render}={}){
+export function wireTableCategorizedSetupTabNavigation(container,{state={},render,download}={}){
   let currentState={...state};
-  const applyRender=(nextState)=>{
-    currentState=nextState;
-    if(typeof render==='function')render(nextState);
-    else if(container)container.innerHTML=renderTableCategorizedXmlShellHtml(nextState);
-  };
-  const onClick=(event)=>{
-    const popup=event?.target?.closest?.(POPUP_SELECTOR)||container?.querySelector?.(POPUP_SELECTOR)||container;
-    const syncedState=tableCategorizedNavigationStateFromPopup(popup,currentState);
-    const result=handleTableCategorizedNavigationClick(event,syncedState,applyRender);
-    if(result.handled)currentState=result.state;
-  };
+  const applyRender=(nextState)=>{currentState=nextState;if(typeof render==='function')render(nextState);else if(container)container.innerHTML=renderTableCategorizedXmlShellHtml(nextState);};
+  const onClick=(event)=>{const popup=event?.target?.closest?.(POPUP_SELECTOR)||container?.querySelector?.(POPUP_SELECTOR)||container;const syncedState=tableCategorizedNavigationStateFromPopup(popup,currentState);const result=handleTableCategorizedNavigationClick(event,syncedState,applyRender,{download});if(result.handled)currentState=result.state;};
   container?.addEventListener?.('click',onClick);
   return {getState:()=>currentState,setState:(nextState={})=>{currentState={...nextState};},render:()=>applyRender(currentState),destroy:()=>container?.removeEventListener?.('click',onClick)};
 }
@@ -105,26 +139,12 @@ export function wireTableCategorizedSetupTabNavigation(container,{state={},rende
 export function installTableCategorizedSetupTabNavigation(root,initialState={}){
   if(!root?.addEventListener)return {destroy(){},getState:()=>({...initialState})};
   let currentState={...initialState};
-  const onClick=(event)=>{
-    const popup=event?.target?.closest?.(POPUP_SELECTOR);
-    if(!popup)return;
-    const popupState=tableCategorizedNavigationStateFromPopup(popup,currentState);
-    const result=handleTableCategorizedNavigationClick(event,popupState,(nextState)=>{currentState=nextState;popup.outerHTML=renderTableCategorizedXmlShellHtml(nextState);});
-    if(result.handled)currentState=result.state;
-  };
+  const onClick=(event)=>{const popup=event?.target?.closest?.(POPUP_SELECTOR);if(!popup)return;const popupState=tableCategorizedNavigationStateFromPopup(popup,currentState);const result=handleTableCategorizedNavigationClick(event,popupState,(nextState)=>{currentState=nextState;popup.outerHTML=renderTableCategorizedXmlShellHtml(nextState);});if(result.handled)currentState=result.state;};
   root.addEventListener('click',onClick);
   return {getState:()=>currentState,destroy:()=>root.removeEventListener?.('click',onClick)};
 }
 
-function syncSourceDraftFromPopup(popup,state={}){
-  if(!popup?.querySelector)return state;
-  const activeSourceId=popup.querySelector('[data-table-categorized-active-source]')?.value||state.activeSourceId||'S1';
-  const sourceName=popup.querySelector('[data-table-categorized-source-name]')?.value;
-  const sourceText=popup.querySelector('[data-table-categorized-source-text]')?.value;
-  if(sourceName===undefined&&sourceText===undefined)return state;
-  const sources=ensureSources(state.sources,state.source,activeSourceId).map((source)=>source.sourceId===activeSourceId?{...source,sourceName:sourceName??source.sourceName,sourceText:sourceText??source.sourceText}:source);
-  return {...state,sources,activeSourceId};
-}
+function syncSourceDraftFromPopup(popup,state={}){if(!popup?.querySelector)return state;const activeSourceId=popup.querySelector('[data-table-categorized-active-source]')?.value||state.activeSourceId||'S1';const sourceName=popup.querySelector('[data-table-categorized-source-name]')?.value;const sourceText=popup.querySelector('[data-table-categorized-source-text]')?.value;if(sourceName===undefined&&sourceText===undefined)return state;const sources=ensureSources(state.sources,state.source,activeSourceId).map((source)=>source.sourceId===activeSourceId?{...source,sourceName:sourceName??source.sourceName,sourceText:sourceText??source.sourceText}:source);return {...state,sources,activeSourceId};}
 function ensureSources(sources=[],source=null,activeSourceId='S1'){const items=Array.isArray(sources)&&sources.length?sources:(source?[source]:[]);return items.length?items:[emptySource(activeSourceId||'S1')];}
 function emptySource(sourceId='S1',sourceName=`Source ${sourceId}`){return {sourceId,sourceName,sourceType:'pasteText',sourceText:'',headers:[],rows:[],diagnostics:[]};}
 function replaceSource(sources=[],nextSource){return ensureSources(sources,null,nextSource.sourceId).some((source)=>source.sourceId===nextSource.sourceId)?sources.map((source)=>source.sourceId===nextSource.sourceId?nextSource:source):[...sources,nextSource];}
