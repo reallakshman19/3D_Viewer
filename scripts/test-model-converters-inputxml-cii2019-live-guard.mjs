@@ -4,9 +4,11 @@ import { readFileSync } from 'node:fs';
 
 const LIVE_GUARD_VERSION = '20260627-inputxml-cii2019-live-guard-1';
 const SHIM_GUARD_VERSION = '20260629-model-converters-lazy-render-guard-1';
+const TRAILING_MINUS_WORKER_VERSION = '20260629-trailing-minus-xml-1';
 const shim = readFileSync('viewer/tabs/model-converters-tab.js', 'utf8');
 const index = readFileSync('viewer/tabs/model-converters/index.js', 'utf8');
 const tab = readFileSync('viewer/tabs/model-converters/ModelConvertersTab.js', 'utf8');
+const executor = readFileSync('viewer/converters/BrowserConverterExecutor.js', 'utf8');
 
 assert.ok(shim.includes(`MODEL_CONVERTERS_SHIM_VERSION = '${SHIM_GUARD_VERSION}'`), 'model-converters-tab.js must expose the lazy render guard version');
 assert.ok(shim.includes(`./model-converters/index.js?v=${SHIM_GUARD_VERSION}`), 'model-converters-tab.js must lazily bust the public entrypoint');
@@ -22,5 +24,17 @@ assert.ok(tab.includes("entry?.id === 'inputxml_to_cii2019'"), 'live guard must 
 assert.ok(tab.includes('converter.run = inputXmlToCii2019LiveRun'), 'live guard must replace the stale registry runner with the fixed runner');
 assert.ok(tab.includes('installInputXmlCii2019LiveRunnerGuard(); ensureModelConvertersStyles(); renderLegacyModelConvertersTab'), 'live guard must run before legacy adapter renders and binds conversion handlers');
 assert.ok(tab.includes('__INPUTXML_CII2019_LIVE_GUARD_VERSION__'), 'live guard version must be exported for diagnostics/tests');
+assert.ok(executor.includes('normalizeTrailingMinusNumericXmlText'), 'Browser converter executor must expose XML trailing-minus numeric normalization');
+assert.ok(executor.includes(`py-worker.js?v=${TRAILING_MINUS_WORKER_VERSION}`), 'Browser converter executor must bust the worker after trailing-minus normalization');
+assert.ok(executor.includes("'xml_to_cii'"), 'Browser converter executor must normalize XML->CII inputs');
+assert.ok(executor.includes("'inputxml_to_cii2019'"), 'Browser converter executor must normalize InputXML->CII2019 inputs');
+
+const { normalizeTrailingMinusNumericXmlText } = await import('../viewer/converters/BrowserConverterExecutor.js');
+const rawXml = '<Temperature1>50.478-</Temperature1><Pressure1>700</Pressure1><Temperature2>1.2E+03-</Temperature2>';
+assert.equal(
+  normalizeTrailingMinusNumericXmlText(rawXml),
+  '<Temperature1>-50.478</Temperature1><Pressure1>700</Pressure1><Temperature2>-1.2E+03</Temperature2>',
+  'trailing-minus numeric XML text must be normalized before py-worker execution',
+);
 
 console.log('model-converters-inputxml-cii2019-live-guard: all assertions passed');

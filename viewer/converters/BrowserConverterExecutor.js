@@ -10,6 +10,10 @@ import {
   validateConverterWorkerResponse,
 } from './worker-contract.js';
 
+const XML_TRAILING_MINUS_CONVERTERS = new Set(['xml_to_cii', 'inputxml_to_cii2019']);
+const XML_TEXT_ENCODER = typeof TextEncoder !== 'undefined' ? new TextEncoder() : null;
+const XML_TEXT_DECODER = typeof TextDecoder !== 'undefined' ? new TextDecoder('utf-8') : null;
+
 function toText(value) {
   if (value === undefined || value === null) return '';
   return String(value);
@@ -53,8 +57,34 @@ function buildWorkerErrorMessage(event, fallback = 'Converter worker crashed.') 
   ].filter(Boolean).join(' | ');
 }
 
+export function normalizeTrailingMinusNumericXmlText(xmlText) {
+  return toText(xmlText).replace(
+    />(\s*)(\d+(?:\.\d*)?|\.\d+)([eE][+-]?\d+)?-(\s*)</g,
+    (_match, lead, number, exponent = '', tail) => `>${lead}-${number}${exponent}${tail}<`,
+  );
+}
+
+function looksLikeXmlFile(fileSpec) {
+  const name = toText(fileSpec?.name).toLowerCase();
+  return name.endsWith('.xml') || name.endsWith('.input') || name.endsWith('.txt');
+}
+
+function normalizeXmlInputFileSpec(converterId, fileSpec) {
+  if (!XML_TRAILING_MINUS_CONVERTERS.has(converterId)) return fileSpec;
+  if (!fileSpec?.bytes || !looksLikeXmlFile(fileSpec) || !XML_TEXT_DECODER || !XML_TEXT_ENCODER) return fileSpec;
+  const original = XML_TEXT_DECODER.decode(fileSpec.bytes);
+  if (!/^\s*</.test(original)) return fileSpec;
+  const normalized = normalizeTrailingMinusNumericXmlText(original);
+  if (normalized === original) return fileSpec;
+  return { ...fileSpec, bytes: XML_TEXT_ENCODER.encode(normalized).buffer };
+}
+
+export function normalizeConverterInputFiles(converterId, inputFiles) {
+  return (Array.isArray(inputFiles) ? inputFiles : []).map((fileSpec) => normalizeXmlInputFileSpec(converterId, fileSpec));
+}
+
 export function createBrowserConverterExecutor() {
-  const worker = new Worker(new URL('./py-worker.js?v=20260609-worker-diagnostics-1', import.meta.url), {
+  const worker = new Worker(new URL('./py-worker.js?v=20260629-trailing-minus-xml-1', import.meta.url), {
     type: 'module',
   });
 
@@ -142,9 +172,12 @@ export function createBrowserConverterExecutor() {
       'input.dat'
     ).trim() || 'input.dat';
 
-    const inputFiles = Array.isArray(request?.inputFiles) && request.inputFiles.length
-      ? request.inputFiles
-      : [{ role: 'primary', name: sourceName, bytes: sourceArrayBuffer }];
+    const inputFiles = normalizeConverterInputFiles(
+      converterId,
+      Array.isArray(request?.inputFiles) && request.inputFiles.length
+        ? request.inputFiles
+        : [{ role: 'primary', name: sourceName, bytes: sourceArrayBuffer }]
+    );
 
     const transfer = [];
     for (const fileSpec of inputFiles) if (fileSpec?.bytes instanceof ArrayBuffer) transfer.push(fileSpec.bytes);
